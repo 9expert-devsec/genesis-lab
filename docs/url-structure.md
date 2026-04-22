@@ -18,6 +18,7 @@ All routes scaffolded in Phase 1. Legend: 🟢 working shell · 🟡 placeholder
 | `/join-us`                     | 🟡     | Careers                                            |
 | `/search`                      | 🟡     | On-site search                                     |
 | `/career-path-project`         | 🟡     | All career paths                                   |
+| `/portfolio`                   | 🟡     | Project showcase (Phase 3)                         |
 
 ## Pattern URLs (catch-all dispatcher)
 
