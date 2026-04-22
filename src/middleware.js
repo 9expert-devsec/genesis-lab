@@ -1,17 +1,15 @@
 /**
- * Next.js middleware — runs at the edge before matching routes.
+ * Next.js middleware — runs at the Edge before matching routes.
  *
- * Strategy: delegate to NextAuth's `authorized` callback (see auth/options.js),
- * which returns true/false based on session + path. When false, NextAuth
- * auto-redirects to /admin/login.
+ * Imports only the edge-safe `authConfig` (no Mongoose/bcrypt). The
+ * `authorized` callback inside it gates /admin/* on session presence;
+ * on `false`, NextAuth auto-redirects to /admin/login.
  */
+import NextAuth from 'next-auth';
+import { authConfig } from '@/lib/auth/config';
 
-export { auth as middleware } from '@/lib/auth/options';
+export const { auth: middleware } = NextAuth(authConfig);
 
 export const config = {
-  // Match /admin and everything under it, EXCEPT /admin/login (NextAuth handles the redirect).
-  // We exclude Next static assets and the NextAuth route itself.
-  matcher: [
-    '/admin/:path*',
-  ],
+  matcher: ['/admin/:path*'],
 };
