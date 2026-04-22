@@ -93,6 +93,21 @@ When external API returns inconsistent casing, variant envelopes, or odd field
 names, wrap those quirks in a thin adapter layer (`lib/api/<domain>.js`).
 Downstream code sees clean, consistent shapes.
 
+### 4.8 Cache at the right layer
+
+Upstream read-only data (courses, schedules, career paths, programs,
+faqs, contact, promotions) is cached via Next.js ISR with appropriate
+`revalidate` intervals (typically 1 hour). We do NOT mirror upstream
+data into our MongoDB.
+
+Mirroring upstream into our DB is a different pattern for a different
+problem — cross-domain queries, aggregation, offline access — and adds
+infrastructure surface area (cron jobs, data drift, failure recovery)
+without solving any current performance issue at our scale.
+
+When an admin action needs upstream data to refresh immediately, use
+`revalidateTag()` from a Server Action, not a scheduled sync job.
+
 ---
 
 ## 5. Scope — what we are building
@@ -109,7 +124,7 @@ Downstream code sees clean, consistent shapes.
 9. "Online" menu → external redirect to `academy.9experttraining.com`
 10. (reserved)
 
-### MEDIUM priority (10)
+### MEDIUM priority (11)
 1. Promotion (`/promotion`)
 2. Career Path (`/career-path-project` + `/<slug>-career-path`)
 3. Contact (`/contact-us`)
@@ -120,11 +135,15 @@ Downstream code sees clean, consistent shapes.
 8. Join us (`/join-us`)
 9. Course catalog by skill (`/<skill>-all-courses`) — 6 skills
 10. Course catalog by program (`/<program>-all-courses`) — 21 programs
+11. **ผลงานของเรา (portfolio)** — `/portfolio` — visual project showcase
 
 ### Explicitly excluded
-`online-course` (external), `bundle`, `portfolio`, `review`, `receipt`,
-`tax-invoice`, `certificate`, `instructor`, `course-group`, `course-homepage`,
-`technology-area`.
+`online-course` (external), `bundle`, `review`, `receipt`,
+`tax-invoice`, `certificate`, `instructor`, `course-group`,
+`course-homepage`, `technology-area`.
+
+(`portfolio` was previously excluded but was moved back to MEDIUM
+priority on 2026-04-22 based on nav parity with the live site.)
 
 ---
 
@@ -192,4 +211,4 @@ decision no longer holds. Then — and only then — change the code.
 
 ---
 
-*Last ratified: 2026-04-22*
+*Last ratified: 2026-04-22 (Phase 1.6 — added §4.8 cache principle, restored portfolio to MEDIUM priority)*
