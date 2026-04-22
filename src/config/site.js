@@ -25,17 +25,32 @@ export const siteConfig = {
 /**
  * Main navigation — rendered in the public header.
  * `external: true` opens in new tab with rel="noopener".
+ * Items with `children` render as hover dropdowns on desktop and
+ * accordion sections on mobile.
  */
 export const mainNav = [
-  { label: 'หน้าแรก',        href: '/' },
-  { label: 'หลักสูตร',        href: '/training-course' },
-  { label: 'ออนไลน์',         href: siteConfig.academyUrl, external: true },
-  { label: 'ตารางอบรม',       href: '/schedule' },
-  { label: 'โปรโมชั่น',       href: '/promotion' },
-  { label: 'เส้นทางอาชีพ',    href: '/career-path-project' },
-  { label: 'บทความ',          href: '/articles' },
-  { label: 'เกี่ยวกับเรา',    href: '/about-us' },
-  { label: 'ติดต่อเรา',       href: '/contact-us' },
+  {
+    label: 'หลักสูตร',
+    href: '/training-course',
+    children: [
+      { label: 'หลักสูตรทั้งหมด',  href: '/training-course' },
+      { label: 'หลักสูตรออนไลน์', href: siteConfig.academyUrl, external: true },
+      { label: 'เส้นทางอาชีพ',    href: '/career-path-project' },
+    ],
+  },
+  { label: 'ตารางอบรม', href: '/schedule' },
+  { label: 'โปรโมชัน',  href: '/promotion' },
+  { label: 'บทความ',    href: '/articles' },
+  {
+    label: 'เกี่ยวกับเรา',
+    href:  '/about-us',
+    children: [
+      { label: 'เกี่ยวกับ 9Expert', href: '/about-us' },
+      { label: 'ร่วมงานกับเรา',    href: '/join-us' },
+      { label: 'คำถามที่พบบ่อย',   href: '/faq' },
+    ],
+  },
+  { label: 'ติดต่อเรา', href: '/contact-us' },
 ];
 
 /**
