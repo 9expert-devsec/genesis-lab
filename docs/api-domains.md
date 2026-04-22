@@ -10,21 +10,79 @@
 - Auth: `x-api-key: <AI_API_KEY>` header on every request
 - Env vars: `AI_API_BASE`, `AI_API_KEY`
 
+## Verified field shapes (as of 2026-04-22)
+
+The shapes below were observed in responses from the live MSDB API on
+the verification date. Only the fields we actually consume downstream
+are documented; upstream may return more.
+
+### Course (from `/public-course` items, also nested under `schedules[i].course`)
+
+```json
+{
+  "_id": "69267e3bbbad44df87120492",
+  "course_id": "PYTHON-L1",
+  "course_name": "Python Programming",
+  "course_trainingdays": 3,
+  "course_price": 11900,
+  "sort_order": 0,
+  "program": {
+    "_id": "68da61c687a228e4c5f4c2d4",
+    "program_id": "PYTHON",
+    "program_name": "Python",
+    "programiconurl": "https://res.cloudinary.com/ddva7xvdt/image/upload/v1764054427/programs/icons/yo2gj0zs8gmmg7smrgs9.png"
+  },
+  "skills": ["68d4f5b3581cb350290597de"]
+}
+```
+
+Quirks:
+- All top-level field names are `snake_case`, not camelCase.
+- `course_trainingdays` is an integer day count. Format as
+  "N วัน (N×6 ชม.)" — 9Expert's standard is 6 training hours per day.
+- `skills` is an array of ObjectId strings, not objects. We cannot map
+  these to UI skill slugs until the `/skills` endpoint is curl-verified
+  (Phase 2.2).
+- `program.programiconurl` is an already-usable absolute Cloudinary URL.
+
+### Schedule item (from `/schedules`)
+
+Status and type use lowercase strings:
+
+- `status`: `"open"` | `"nearly_full"` | (others TBD)
+- `type`: `"classroom"` | `"hybrid"`
+
+Per Manifesto §4.3 we **do not normalize** these values at the adapter
+layer — each consuming page handles its own casing.
+
+### Career path (from `/career-path`)
+
+```json
+{
+  "slug": "prompt-engineer-career-path",
+  "title": "Prompt Engineer"
+}
+```
+
+Quirk: `slug` **already contains the `-career-path` suffix**. The
+`careerPathHref()` utility in `src/lib/utils.js` is idempotent — it
+detects the existing suffix and avoids double-appending.
+
+### Promotion (from `/promotions`)
+
+Returned under the canonical `{ ok, summary: { total, … }, items }`
+envelope. Field-level shape to be documented when first consumed.
+
 ## Verification status
 
-**⚠️ The integration guide mixes singular/plural paths in examples.** Before
-wiring any page to a domain, run `curl -H "x-api-key: $AI_API_KEY" <url>`
-and pin the path that returns 200. Update the `// curl-verified:` stamp in
-the corresponding `src/lib/api/<domain>.js` adapter.
-
-| Domain           | Adapter file                              | Path (tentative)     | curl-verified |
+| Domain           | Adapter file                              | Path                 | curl-verified |
 | ---------------- | ----------------------------------------- | -------------------- | ------------- |
-| Public courses   | `src/lib/api/public-courses.js`           | `/public-courses`    | ❌ not yet    |
-| Schedules        | `src/lib/api/schedules.js`                | `/schedules`         | ❌ not yet    |
-| Career paths     | `src/lib/api/career-paths.js`             | `/career-path`       | ❌ not yet    |
-| Promotions       | `src/lib/api/promotions.js`               | `/promotions`        | ❌ not yet    |
-| FAQs             | `src/lib/api/faqs.js`                     | `/faqs`              | ❌ not yet    |
-| Contact us       | `src/lib/api/contact-us.js`               | `/contact-us`        | ❌ not yet    |
+| Public courses   | `src/lib/api/public-courses.js`           | `/public-course`     | 2026-04-22    |
+| Schedules        | `src/lib/api/schedules.js`                | `/schedules`         | 2026-04-22    |
+| Career paths     | `src/lib/api/career-paths.js`             | `/career-path`       | 2026-04-22    |
+| Promotions       | `src/lib/api/promotions.js`               | `/promotions`        | 2026-04-22    |
+| FAQs             | `src/lib/api/faqs.js`                     | `/faqs`              | 2026-04-22    |
+| Contact us       | `src/lib/api/contact-us.js`               | `/contact-us`        | 2026-04-22    |
 
 ## Envelope variants
 
@@ -41,7 +99,7 @@ flattens both to `{ items, total }`.
 }
 ```
 
-**Paginated envelope** (career-path, public-courses):
+**Paginated envelope** (career-path, public-course):
 
 ```json
 {
@@ -55,7 +113,7 @@ flattens both to `{ items, total }`.
 
 ## Query parameters — documented examples
 
-### `/public-courses`
+### `/public-course`
 - `?skill=<skill_id>` — filter by skill
 - `?program=<program_id>` — filter by program
 - `?course=<course_id_or_code>` — single course (code like `MSE-L1` works)
