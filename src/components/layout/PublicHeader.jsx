@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ExternalLink, Menu, Search, X } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, ChevronDown, ExternalLink, Menu, Search, X } from 'lucide-react';
 import { Logo } from '@/components/brand/Logo';
-import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
-import { mainNav } from '@/config/site';
+import { mainNav, programs, skills } from '@/config/site';
 import { cn } from '@/lib/utils';
 
 /**
@@ -14,6 +14,11 @@ import { cn } from '@/lib/utils';
  * - Desktop: three-zone flex (logo · nav · actions) with hover dropdowns
  *   driven by Tailwind's `group` variant (no JS state per item)
  * - Mobile (< lg): hamburger drawer; dropdowns become accordions
+ *
+ * Nav item types (see src/config/site.js):
+ *   type: 'mega'  → wide two-column panel pulling programs + skills
+ *   children      → flat list dropdown
+ *   neither       → plain link
  */
 export function PublicHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -31,13 +36,15 @@ export function PublicHeader() {
           className="hidden flex-1 items-center justify-center gap-1 lg:flex"
           aria-label="Primary"
         >
-          {mainNav.map((item) =>
-            item.children ? (
-              <DesktopDropdown key={item.label} item={item} />
-            ) : (
-              <DesktopLink key={item.label} item={item} />
-            )
-          )}
+          {mainNav.map((item) => {
+            if (item.type === 'mega') {
+              return <DesktopMega key={item.label} item={item} />;
+            }
+            if (item.children) {
+              return <DesktopDropdown key={item.label} item={item} />;
+            }
+            return <DesktopLink key={item.label} item={item} />;
+          })}
         </nav>
 
         {/* ── Right-side actions ───────────────────────────────── */}
@@ -51,14 +58,6 @@ export function PublicHeader() {
           </Link>
 
           <ThemeToggle />
-
-          <div className="hidden lg:block">
-            <Button asChild variant="cta" size="sm">
-              <Link href="/registration/in-house">
-                สอบถามหลักสูตรองค์กร
-              </Link>
-            </Button>
-          </div>
 
           {/* Hamburger — mobile only */}
           <button
@@ -114,7 +113,6 @@ function DesktopDropdown({ item }) {
         />
       </Link>
 
-      {/* Panel — CSS-only hover reveal */}
       <div
         className={cn(
           'invisible absolute left-0 top-full z-50 pt-2 opacity-0',
@@ -125,8 +123,8 @@ function DesktopDropdown({ item }) {
       >
         <ul
           className={cn(
-            'min-w-[240px] rounded-9e-lg border bg-[var(--surface)] p-2 shadow-9e-lg',
-            'border-[var(--surface-border)]'
+            'max-h-[70vh] min-w-[240px] overflow-y-auto rounded-9e-lg border p-2 shadow-9e-lg',
+            'bg-[var(--surface)] border-[var(--surface-border)]'
           )}
         >
           {item.children.map((child) => (
@@ -158,6 +156,115 @@ function DesktopDropdown({ item }) {
   );
 }
 
+function DesktopMega({ item }) {
+  return (
+    // `static` so the absolutely-positioned panel anchors to the <header>
+    // instead of this trigger — lets the mega menu span the viewport width.
+    <div className="group static">
+      <Link
+        href={item.href}
+        className="inline-flex items-center gap-1 rounded-9e-sm px-3 py-2 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e group-hover:text-9e-brand"
+      >
+        {item.label}
+        <ChevronDown
+          className="h-3.5 w-3.5 transition-transform duration-9e-micro ease-9e group-hover:rotate-180"
+          strokeWidth={2}
+        />
+      </Link>
+
+      <div
+        className={cn(
+          'invisible absolute left-0 right-0 top-full z-50 pt-2 opacity-0',
+          'transition-[opacity,visibility] duration-9e-micro ease-9e',
+          'group-hover:visible group-hover:opacity-100',
+          'group-focus-within:visible group-focus-within:opacity-100'
+        )}
+      >
+        <div
+          className={cn(
+            'border-t shadow-9e-lg',
+            'bg-[var(--surface)] border-[var(--surface-border)]'
+          )}
+        >
+          <div className="mx-auto grid max-w-[1280px] grid-cols-[2fr_1fr] gap-8 px-6 py-8">
+            {/* Programs column */}
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Programs
+                </h3>
+                <Link
+                  href="/training-course"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-9e-brand hover:underline"
+                >
+                  ดูหลักสูตรทั้งหมด
+                  <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                </Link>
+              </div>
+              <ul className="grid grid-cols-3 gap-2">
+                {programs.map((p) => (
+                  <li key={p.slug}>
+                    <Link
+                      href={`/${p.slug}-all-courses`}
+                      className="flex items-center gap-3 rounded-9e-md p-2 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+                    >
+                      <MegaIcon src={p.icon} alt={p.label} size={32} />
+                      <span className="text-sm text-[var(--text-primary)]">
+                        {p.label}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Skills column */}
+            <div>
+              <div className="mb-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  Skills
+                </h3>
+              </div>
+              <ul className="space-y-1">
+                {skills.map((s) => (
+                  <li key={s.slug}>
+                    <Link
+                      href={`/${s.slug}-all-courses`}
+                      className="flex items-center gap-3 rounded-9e-md p-2 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+                    >
+                      <MegaIcon src={s.icon} alt={s.label} size={40} />
+                      <span className="text-sm font-medium text-[var(--text-primary)]">
+                        {s.label}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MegaIcon({ src, alt, size }) {
+  if (!src) return null;
+  return (
+    <Image
+      src={src}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      className="shrink-0 object-contain"
+      // icon assets may not exist yet — unoptimized keeps this from
+      // hitting the image optimizer during placeholder phase
+      unoptimized
+    />
+  );
+}
+
 // ── Mobile drawer ───────────────────────────────────────────────
 
 function MobileDrawer({ onNavigate }) {
@@ -170,14 +277,26 @@ function MobileDrawer({ onNavigate }) {
         className="mx-auto flex max-w-[1280px] flex-col gap-1 px-4 py-4"
         aria-label="Mobile primary"
       >
-        {mainNav.map((item) =>
-          item.children ? (
-            <MobileAccordion
-              key={item.label}
-              item={item}
-              onNavigate={onNavigate}
-            />
-          ) : (
+        {mainNav.map((item) => {
+          if (item.type === 'mega') {
+            return (
+              <MobileMegaAccordion
+                key={item.label}
+                item={item}
+                onNavigate={onNavigate}
+              />
+            );
+          }
+          if (item.children) {
+            return (
+              <MobileAccordion
+                key={item.label}
+                item={item}
+                onNavigate={onNavigate}
+              />
+            );
+          }
+          return (
             <Link
               key={item.label}
               href={item.href}
@@ -188,19 +307,8 @@ function MobileDrawer({ onNavigate }) {
             >
               {item.label}
             </Link>
-          )
-        )}
-
-        <div className="mt-3 border-t border-[var(--surface-border)] pt-3">
-          <Button asChild variant="cta" size="md" className="w-full">
-            <Link
-              href="/registration/in-house"
-              onClick={onNavigate}
-            >
-              สอบถามหลักสูตรองค์กร
-            </Link>
-          </Button>
-        </div>
+          );
+        })}
       </nav>
     </div>
   );
@@ -249,6 +357,68 @@ function MobileAccordion({ item, onNavigate }) {
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function MobileMegaAccordion({ item, onNavigate }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between rounded-9e-sm px-3 py-3 text-base font-medium text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+      >
+        <span>{item.label}</span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 transition-transform duration-9e-micro ease-9e',
+            open && 'rotate-180'
+          )}
+          strokeWidth={2}
+        />
+      </button>
+      {open && (
+        <div className="ml-3 mt-1 space-y-4 border-l border-[var(--surface-border)] pl-3">
+          <MobileMegaSection title="Programs" items={programs} hrefFor={(x) => `/${x.slug}-all-courses`} onNavigate={onNavigate} />
+          <MobileMegaSection title="Skills"   items={skills}   hrefFor={(x) => `/${x.slug}-all-courses`} onNavigate={onNavigate} />
+          <Link
+            href="/training-course"
+            onClick={onNavigate}
+            className="flex items-center gap-1 px-3 pb-1 text-xs font-medium text-9e-brand hover:underline"
+          >
+            ดูหลักสูตรทั้งหมด
+            <ArrowRight className="h-3 w-3" strokeWidth={2} />
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileMegaSection({ title, items, hrefFor, onNavigate }) {
+  return (
+    <div>
+      <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+        {title}
+      </p>
+      <ul>
+        {items.map((x) => (
+          <li key={x.slug || x.label}>
+            <Link
+              href={hrefFor(x)}
+              onClick={onNavigate}
+              className="flex items-center gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+            >
+              <MegaIcon src={x.icon} alt={x.label} size={24} />
+              <span>{x.label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
