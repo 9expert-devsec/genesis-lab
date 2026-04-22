@@ -49,22 +49,37 @@ export function formatPrice(n) {
 }
 
 /**
- * Build a course slug URL. Legacy pattern: /<slug>-training-course
+ * Build a course URL. Legacy pattern: /<slug>-training-course.
+ *
+ * Idempotent: `slug` may or may not already include the '-training-course'
+ * suffix; we handle both cases so upstream changes don't break links.
  */
 export function courseHref(slug) {
-  return `/${slug}-training-course`;
+  if (!slug) return '/training-course';
+  const s = String(slug);
+  return s.endsWith('-training-course') ? `/${s}` : `/${s}-training-course`;
 }
 
 /**
- * Build a career path slug URL. Legacy pattern: /<slug>-career-path
+ * Build a career path URL. Legacy pattern: /<slug>-career-path.
+ *
+ * Upstream's `slug` field already contains the '-career-path' suffix
+ * (e.g. "prompt-engineer-career-path"), so this helper is idempotent
+ * to avoid producing /foo-career-path-career-path.
  */
 export function careerPathHref(slug) {
-  return `/${slug}-career-path`;
+  if (!slug) return '/career-path-project';
+  const s = String(slug);
+  return s.endsWith('-career-path') ? `/${s}` : `/${s}-career-path`;
 }
 
 /**
- * Build a catalog URL. Legacy pattern: /<slug>-all-courses
+ * Build a catalog URL. Legacy pattern: /<slug>-all-courses.
+ *
+ * Idempotent for the same reason as courseHref / careerPathHref.
  */
 export function catalogHref(slug) {
-  return `/${slug}-all-courses`;
+  if (!slug) return '/training-course';
+  const s = String(slug);
+  return s.endsWith('-all-courses') ? `/${s}` : `/${s}-all-courses`;
 }
