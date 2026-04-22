@@ -83,3 +83,13 @@ export function catalogHref(slug) {
   const s = String(slug);
   return s.endsWith('-all-courses') ? `/${s}` : `/${s}-all-courses`;
 }
+
+/**
+ * Format training duration. Upstream stores integer days; we assume
+ * 6 hours per training day (9Expert's standard course format).
+ */
+export function formatDuration(days) {
+  if (!days || days < 1) return '';
+  const hours = days * 6;
+  return `${days} วัน (${hours} ชม.)`;
+}
