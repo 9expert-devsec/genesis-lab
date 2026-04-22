@@ -1,19 +1,16 @@
 /**
  * Public Courses adapter.
  *
- * Upstream path: TBD — curl-verify before first production use.
- * Integration guide mixes `/public-course` and `/public-courses` in examples.
- * Test both against live API, pin whichever returns 200 + data.
+ * Upstream path: `/public-course` (singular — confirmed by curl
+ * against live MSDB). The integration guide mixes singular and plural
+ * in examples; only the singular form returns 200 + data.
  *
- * curl -H "x-api-key: $AI_API_KEY" https://9exp-sec.com/api/ai/public-courses
- * curl -H "x-api-key: $AI_API_KEY" https://9exp-sec.com/api/ai/public-course
+ * curl-verified: 2026-04-22
  */
 
 import { aiFetch, unwrap } from './client';
 
-// TODO(phase-2): curl-verify the correct path. Update PATH + stamp below.
-// curl-verified: NOT YET
-const PATH = '/public-courses';
+const PATH = '/public-course';
 
 /**
  * List all active public courses.

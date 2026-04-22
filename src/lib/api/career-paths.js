@@ -2,7 +2,7 @@
  * Career Paths adapter.
  *
  * Upstream path: `/career-path` (singular — confirmed by integration guide).
- * curl-verified: NOT YET
+ * curl-verified: 2026-04-22
  */
 
 import { aiFetch, unwrap } from './client';

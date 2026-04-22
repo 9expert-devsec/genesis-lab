@@ -3,7 +3,7 @@
  *
  * Upstream path: `/contact-us` (singular — per integration guide summary).
  * Returns a singleton (single record), not a list.
- * curl-verified: NOT YET
+ * curl-verified: 2026-04-22
  */
 
 import { aiFetch, unwrap } from './client';

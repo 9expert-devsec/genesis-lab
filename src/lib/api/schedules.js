@@ -2,7 +2,7 @@
  * Schedules adapter.
  *
  * Upstream path: `/schedules` (plural — confirmed by integration guide).
- * curl-verified: NOT YET (verify before Phase 2)
+ * curl-verified: 2026-04-22
  */
 
 import { aiFetch, unwrap } from './client';

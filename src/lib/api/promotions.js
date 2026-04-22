@@ -2,7 +2,7 @@
  * Promotions adapter.
  *
  * Upstream path: `/promotions` (plural — per integration guide summary).
- * curl-verified: NOT YET
+ * curl-verified: 2026-04-22
  */
 
 import { aiFetch, unwrap } from './client';
