@@ -20,37 +20,117 @@ export const siteConfig = {
 
   // External academy for online courses (not built here)
   academyUrl: 'https://academy.9experttraining.com',
+
+  // Social
+  facebookUrl: 'https://www.facebook.com/9ExpertTraining',
 };
 
 /**
+ * Skills (6) — used for /<skill>-all-courses catalog routes.
+ * TODO(phase-3): fetch from upstream (whichever endpoint carries skill
+ * metadata) and cache via ISR. curl-verify first — see docs/api-domains.md.
+ * Labels kept in sync with the live site (programming → "Development").
+ */
+export const skills = [
+  { slug: 'power-platform', label: 'Power Platform', icon: '/brand/skill-icons/power-platform.svg' },
+  { slug: 'business',       label: 'Business',       icon: '/brand/skill-icons/business.svg' },
+  { slug: 'data',           label: 'Data',           icon: '/brand/skill-icons/data.svg' },
+  { slug: 'ai',             label: 'AI',             icon: '/brand/skill-icons/ai.svg' },
+  { slug: 'programming',    label: 'Development',    icon: '/brand/skill-icons/developer.svg' },
+  { slug: 'rpa',            label: 'RPA',            icon: '/brand/skill-icons/rpa.svg' },
+];
+
+/**
+ * Programs (21) — used for /<program>-all-courses catalog routes.
+ * TODO(phase-3): fetch from /api/ai/programs and cache via ISR.
+ * curl-verify first — see docs/api-domains.md.
+ */
+export const programs = [
+  { slug: 'power-bi',        label: 'Power BI',         icon: '/brand/program-icons/power-bi.png' },
+  { slug: 'excel',           label: 'Microsoft Excel',  icon: '/brand/program-icons/excel.png' },
+  { slug: 'power-automate',  label: 'Power Automate',   icon: '/brand/program-icons/power-automate.png' },
+  { slug: 'power-apps',      label: 'Power Apps',       icon: '/brand/program-icons/power-apps.png' },
+  { slug: 'canva',           label: 'Canva',            icon: '/brand/program-icons/canva.png' },
+  { slug: 'gen-ai',          label: 'Gen AI',           icon: '/brand/program-icons/gen-ai.png' },
+  { slug: 'copilot-studio',  label: 'Copilot Studio',   icon: '/brand/program-icons/copilot-studio.png' },
+  { slug: 'ai-builder',      label: 'AI Builder',       icon: '/brand/program-icons/ai-builder.png' },
+  { slug: 'make',            label: 'Make.com',         icon: '/brand/program-icons/make.png' },
+  { slug: 'n8n',             label: 'n8n',              icon: '/brand/program-icons/n8n.png' },
+  { slug: 'access',          label: 'Microsoft Access', icon: '/brand/program-icons/access.png' },
+  { slug: '365-copilot',     label: '365 Copilot',      icon: '/brand/program-icons/365-copilot.png' },
+  { slug: 'sql-server',      label: 'SQL Server',       icon: '/brand/program-icons/sql-server.png' },
+  { slug: 'dot-net',         label: '.Net',             icon: '/brand/program-icons/dot-net.png' },
+  { slug: 'powerpoint',      label: 'PowerPoint',       icon: '/brand/program-icons/powerpoint.png' },
+  { slug: 'fabric',          label: 'Fabric',           icon: '/brand/program-icons/fabric.png' },
+  { slug: 'python',          label: 'Python',           icon: '/brand/program-icons/python.png' },
+  { slug: 'uipath',          label: 'UiPath',           icon: '/brand/program-icons/uipath.png' },
+  { slug: 'google-adk',      label: 'Google ADK',       icon: '/brand/program-icons/google-adk.png' },
+  { slug: 'github-copilot',  label: 'GitHub Copilot',   icon: '/brand/program-icons/github-copilot.png' },
+  { slug: 'other',           label: 'ทั่วไป',           icon: '/brand/program-icons/other.png' },
+];
+
+/**
+ * Career paths — hardcoded list for nav.
+ * TODO(phase-3): fetch from /api/ai/career-path and cache via ISR.
+ * curl-verify the endpoint first — see docs/api-domains.md.
+ *
+ * First entry is the "all" landing page (empty slug → /career-path-project).
+ */
+export const careerPaths = [
+  { slug: '',                                        label: 'All Career Path' },
+  { slug: 'prompt-engineer',                         label: 'Prompt Engineer' },
+  { slug: 'business-analytics',                      label: 'Business Analytics' },
+  { slug: 'citizen-developer',                       label: 'Citizen Developer' },
+  { slug: 'rpa-developer',                           label: 'RPA Developer' },
+  { slug: 'accounting-and-finance',                  label: 'Accounting & Finance' },
+  { slug: 'data-analyst',                            label: 'Data Analyst' },
+  { slug: 'data-engineer-bi',                        label: 'Data Engineering & BI' },
+  { slug: 'power-automate-specialist',               label: 'Power Automate Specialist' },
+  { slug: 'web-developer',                           label: 'Web Developer' },
+  { slug: 'visual-communication-and-presentation',   label: 'Visual Communication & Presentation' },
+];
+
+/**
  * Main navigation — rendered in the public header.
- * `external: true` opens in new tab with rel="noopener".
- * Items with `children` render as hover dropdowns on desktop and
- * accordion sections on mobile.
+ *
+ * Three item types:
+ *  - `type: 'mega'`   → header renders a full-width mega menu
+ *                        (pulls `programs` + `skills` directly)
+ *  - `children: [...]` → flat dropdown panel
+ *  - neither           → plain link
+ *
+ * Structure mirrors the live site at 9experttraining.com.
  */
 export const mainNav = [
   {
     label: 'หลักสูตร',
     href: '/training-course',
-    children: [
-      { label: 'หลักสูตรทั้งหมด',  href: '/training-course' },
-      { label: 'หลักสูตรออนไลน์', href: siteConfig.academyUrl, external: true },
-      { label: 'เส้นทางอาชีพ',    href: '/career-path-project' },
-    ],
+    type: 'mega',
   },
-  { label: 'ตารางอบรม', href: '/schedule' },
-  { label: 'โปรโมชัน',  href: '/promotion' },
-  { label: 'บทความ',    href: '/articles' },
   {
-    label: 'เกี่ยวกับเรา',
-    href:  '/about-us',
+    label: 'Career Path',
+    href: '/career-path-project',
+    children: careerPaths.map((c) => ({
+      label: c.label,
+      href: c.slug ? `/${c.slug}-career-path` : '/career-path-project',
+    })),
+  },
+  { label: 'ตารางฝึกอบรม', href: '/schedule' },
+  { label: 'โปรโมชัน',     href: '/promotion' },
+  { label: 'บทความ',       href: '/articles' },
+  { label: 'ผลงานของเรา',  href: '/portfolio' },
+  {
+    label: 'ติดต่อเรา',
+    href: '/contact-us',
     children: [
-      { label: 'เกี่ยวกับ 9Expert', href: '/about-us' },
-      { label: 'ร่วมงานกับเรา',    href: '/join-us' },
-      { label: 'คำถามที่พบบ่อย',   href: '/faq' },
+      { label: 'แผนที่และการเดินทาง',            href: '/contact-us' },
+      { label: 'โรงแรมและร้านอาหารใกล้ 9Expert', href: '/contact-us#nearby' },
+      { label: 'Facebook',                        href: siteConfig.facebookUrl, external: true },
+      { label: 'คำถามที่พบบ่อย',                 href: '/faq' },
+      { label: 'เกี่ยวกับเรา',                    href: '/about-us' },
+      { label: 'ร่วมงานกับเรา',                  href: '/join-us' },
     ],
   },
-  { label: 'ติดต่อเรา', href: '/contact-us' },
 ];
 
 /**
@@ -75,29 +155,3 @@ export const footerNav = {
     { label: 'คำถามที่พบบ่อย', href: '/faq' },
   ],
 };
-
-/**
- * Skills (6) — used for /<skill>-all-courses catalog routes.
- * Source: originally defined upstream. Keep slug IDs in sync with MSDB.
- */
-export const skills = [
-  { slug: 'power-platform', label: 'Power Platform' },
-  { slug: 'business',       label: 'Business' },
-  { slug: 'data',           label: 'Data' },
-  { slug: 'ai',             label: 'AI' },
-  { slug: 'programming',    label: 'Programming' },
-  { slug: 'rpa',            label: 'RPA' },
-];
-
-/**
- * Programs (21) — used for /<program>-all-courses catalog routes.
- * NOTE: List to be filled in during Phase 3 once we curl-verify the
- * /programs endpoint from upstream MSDB. Placeholder shape below.
- */
-export const programs = [
-  // TODO Phase 3: populate from /api/ai/programs (curl-verify first)
-  // { slug: 'power-bi',        label: 'Power BI' },
-  // { slug: 'excel',           label: 'Microsoft Excel' },
-  // { slug: 'power-automate',  label: 'Power Automate' },
-  // ...
-];
