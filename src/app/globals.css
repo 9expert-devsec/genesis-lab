@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────────────────────
+   9Expert CI — Design Tokens as CSS Custom Properties
+   Source of truth: /mnt/skills/user/9expert-brand/SKILL.md
+   These mirror Tailwind theme tokens. Use Tailwind utilities by default;
+   CSS variables are here for edge cases (gradients, inline styles, SVGs).
+   ────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Primary Blues (60% usage) */
+  --9e-brand:        #2486FF;
+  --9e-primary:      #005CFF;
+  --9e-sky:          #48B0FF;
+  --9e-ice:          #F8FAFD;
+
+  /* Accent Lime (10% usage — CTAs, on dark only) */
+  --9e-lime:         #D4F73F;
+  --9e-lime-lt:      #E4FF6B;
+  --9e-lime-dk:      #B8D930;
+
+  /* Supporting */
+  --9e-slate:        #808A95;
+  --9e-navy:         #0D1B2A;
+  --9e-card:         #132638;
+  --9e-border:       #1A2D42;
+
+  /* Semantic aliases */
+  --9e-text-primary:   var(--9e-navy);
+  --9e-text-secondary: var(--9e-slate);
+  --9e-text-on-dark:   #FFFFFF;
+  --9e-text-on-lime:   var(--9e-navy);
+  --9e-bg-light:       var(--9e-ice);
+  --9e-bg-dark:        var(--9e-navy);
+  --9e-cta-bg:         var(--9e-lime);
+  --9e-cta-hover:      var(--9e-lime-lt);
+  --9e-cta-active:     var(--9e-lime-dk);
+
+  /* Motion */
+  --9e-transition-micro:  200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --9e-transition-reveal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --9e-transition-page:   500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Base layer — defaults aligned with dark-mode-first CI
+   ────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    /* next/font injects --font-en and --font-thai on <html> */
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-9e-navy text-9e-ice font-sans antialiased;
+    min-height: 100dvh;
+  }
+
+  /* Focus ring using brand blue — accessible on both light and dark */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-9e-brand ring-offset-2 ring-offset-9e-navy;
+  }
+
+  ::selection {
+    @apply bg-9e-brand/30 text-9e-ice;
+  }
+
+  /* Thai text often needs explicit family — utility for mixed content */
+  :lang(th) {
+    @apply font-thai;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Component primitives — use sparingly; prefer Tailwind utilities
+   ────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Primary CTA — Lime on Navy, the signature 9Expert button */
+  .btn-9e-cta {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-9e-xl bg-9e-lime px-6 py-3
+           font-en font-semibold text-9e-navy
+           transition-all duration-9e-micro ease-9e
+           hover:bg-9e-lime-lt hover:-translate-y-[2px] hover:shadow-9e-md
+           active:bg-9e-lime-dk active:translate-y-0;
+  }
+
+  /* Secondary — outline blue on any background */
+  .btn-9e-outline {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-9e-xl border border-9e-brand bg-transparent px-6 py-3
+           font-en font-semibold text-9e-brand
+           transition-all duration-9e-micro ease-9e
+           hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px];
+  }
+
+  /* Card on dark mode — the standard content container */
+  .card-9e {
+    @apply rounded-9e-lg border border-9e-border bg-9e-card p-6
+           shadow-9e-sm transition-all duration-9e-micro ease-9e
+           hover:-translate-y-[2px] hover:shadow-9e-md;
+  }
+}
