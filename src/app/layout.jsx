@@ -1,5 +1,6 @@
 import { Inter, Noto_Sans_Thai } from 'next/font/google';
 import { siteConfig } from '@/config/site';
+import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -62,7 +63,10 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: '#0D1B2A', // 9e-navy — matches dark-mode-first body bg
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#FFFFFF' },
+    { media: '(prefers-color-scheme: dark)',  color: '#0D1B2A' },
+  ],
   width: 'device-width',
   initialScale: 1,
 };
@@ -84,7 +88,9 @@ export default function RootLayout({ children }) {
           href="https://fonts.cdnfonts.com/css/line-seed-sans-th"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

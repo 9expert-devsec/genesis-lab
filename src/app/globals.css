@@ -4,12 +4,12 @@
 
 /* ──────────────────────────────────────────────────────────────
    9Expert CI — Design Tokens as CSS Custom Properties
-   Source of truth: /mnt/skills/user/9expert-brand/SKILL.md
-   These mirror Tailwind theme tokens. Use Tailwind utilities by default;
-   CSS variables are here for edge cases (gradients, inline styles, SVGs).
+   Raw palette lives on :root (brand hex never changes between themes).
+   Semantic tokens split: :root = light defaults, .dark = dark overrides.
    ────────────────────────────────────────────────────────────── */
 
 :root {
+  /* ── Raw palette (brand hex — same across themes) ── */
   /* Primary Blues (60% usage) */
   --9e-brand:        #2486FF;
   --9e-primary:      #005CFF;
@@ -27,25 +27,44 @@
   --9e-card:         #132638;
   --9e-border:       #1A2D42;
 
-  /* Semantic aliases */
-  --9e-text-primary:   var(--9e-navy);
-  --9e-text-secondary: var(--9e-slate);
-  --9e-text-on-dark:   #FFFFFF;
-  --9e-text-on-lime:   var(--9e-navy);
-  --9e-bg-light:       var(--9e-ice);
-  --9e-bg-dark:        var(--9e-navy);
-  --9e-cta-bg:         var(--9e-lime);
-  --9e-cta-hover:      var(--9e-lime-lt);
-  --9e-cta-active:     var(--9e-lime-dk);
-
   /* Motion */
   --9e-transition-micro:  200ms cubic-bezier(0.4, 0, 0.2, 1);
   --9e-transition-reveal: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --9e-transition-page:   500ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Semantic tokens — LIGHT MODE (default) ── */
+  --page-bg:        #FFFFFF;
+  --page-bg-muted:  #F8FAFD;
+
+  --surface:        #FFFFFF;
+  --surface-muted:  #F8FAFD;
+  --surface-border: rgba(13, 27, 42, 0.08);
+
+  --text-primary:   #0D1B2A;
+  --text-secondary: #465469;
+  --text-muted:     #808A95;
 }
 
+/* ── Semantic tokens — DARK MODE overrides ── */
+.dark {
+  --page-bg:        #0D1B2A;
+  --page-bg-muted:  #132638;
+
+  --surface:        #132638;
+  --surface-muted:  #1A2D42;
+  --surface-border: #1A2D42;
+
+  --text-primary:   #F8FAFD;
+  --text-secondary: #C5CEDA;
+  --text-muted:     #808A95;
+}
+
+/* Native form controls and scrollbars follow the active theme */
+html        { color-scheme: light; }
+html.dark   { color-scheme: dark; }
+
 /* ──────────────────────────────────────────────────────────────
-   Base layer — defaults aligned with dark-mode-first CI
+   Base layer
    ────────────────────────────────────────────────────────────── */
 
 @layer base {
@@ -56,17 +75,24 @@
   }
 
   body {
-    @apply bg-9e-navy text-9e-ice font-sans antialiased;
+    background-color: var(--page-bg);
+    color: var(--text-primary);
     min-height: 100dvh;
+    transition:
+      background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      color            200ms cubic-bezier(0.4, 0, 0.2, 1);
+    @apply font-sans antialiased;
   }
 
-  /* Focus ring using brand blue — accessible on both light and dark */
+  /* Focus ring using brand blue — readable on both light and dark */
   *:focus-visible {
-    @apply outline-none ring-2 ring-9e-brand ring-offset-2 ring-offset-9e-navy;
+    @apply outline-none ring-2 ring-9e-brand ring-offset-2;
+    --tw-ring-offset-color: var(--page-bg);
   }
 
   ::selection {
-    @apply bg-9e-brand/30 text-9e-ice;
+    @apply bg-9e-brand/30;
+    color: var(--text-primary);
   }
 
   /* Thai text often needs explicit family — utility for mixed content */
@@ -80,7 +106,7 @@
    ────────────────────────────────────────────────────────────── */
 
 @layer components {
-  /* Primary CTA — Lime on Navy, the signature 9Expert button */
+  /* Primary CTA — Lime works on any background */
   .btn-9e-cta {
     @apply inline-flex items-center justify-center gap-2
            rounded-9e-xl bg-9e-lime px-6 py-3
@@ -99,10 +125,12 @@
            hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px];
   }
 
-  /* Card on dark mode — the standard content container */
+  /* Theme-aware card */
   .card-9e {
-    @apply rounded-9e-lg border border-9e-border bg-9e-card p-6
+    @apply rounded-9e-lg border p-6
            shadow-9e-sm transition-all duration-9e-micro ease-9e
            hover:-translate-y-[2px] hover:shadow-9e-md;
+    background-color: var(--surface);
+    border-color: var(--surface-border);
   }
 }
