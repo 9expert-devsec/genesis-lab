@@ -4,13 +4,13 @@ import { Button } from '@/components/ui/button';
 import { mainNav } from '@/config/site';
 
 /**
- * Public site header — sticky, navy background, lime CTA.
+ * Public site header — sticky, theme-aware surface, lime CTA.
  * Server Component; no client state yet. Mobile nav toggle will be
  * added later as a Client Component island.
  */
 export function PublicHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-9e-border bg-9e-navy/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-[var(--surface-border)] bg-[var(--page-bg)]/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-6 px-4 py-3 lg:px-6">
         <Logo priority />
 
@@ -22,9 +22,9 @@ export function PublicHeader() {
               target={item.external ? '_blank' : undefined}
               rel={item.external ? 'noopener noreferrer' : undefined}
               className={
-                'px-3 py-2 text-sm font-medium text-9e-ice/80 ' +
+                'px-3 py-2 text-sm font-medium text-[var(--text-secondary)] ' +
                 'rounded-9e-sm transition-colors duration-9e-micro ease-9e ' +
-                'hover:text-9e-ice hover:bg-white/5'
+                'hover:text-9e-brand hover:bg-[var(--surface-muted)]'
               }
             >
               {item.label}

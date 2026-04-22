@@ -19,12 +19,12 @@ export function PagePlaceholder({
         <Construction className="h-6 w-6 text-9e-brand" strokeWidth={1.75} />
       </div>
 
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-9e-lime">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-9e-brand">
         Coming in {phase}
       </p>
-      <h1 className="text-3xl font-bold text-9e-ice md:text-4xl">{title}</h1>
+      <h1 className="text-3xl font-bold text-[var(--text-primary)] md:text-4xl">{title}</h1>
       {description && (
-        <p className="mx-auto mt-3 max-w-[520px] text-base text-9e-slate leading-relaxed">
+        <p className="mx-auto mt-3 max-w-[520px] text-base text-[var(--text-secondary)] leading-relaxed">
           {description}
         </p>
       )}

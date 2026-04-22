@@ -14,7 +14,7 @@ export const metadata = {
  */
 export default function AdminLoginPage() {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-9e-navy p-4">
+    <div className="flex min-h-dvh items-center justify-center bg-[var(--page-bg)] p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 flex justify-center">
           <Logo />
@@ -27,8 +27,8 @@ export default function AdminLoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="rounded-9e-md border border-dashed border-9e-border bg-9e-navy/40 p-4 text-sm text-9e-slate">
-              Login form จะถูกเปิดใช้งานใน <span className="text-9e-lime font-semibold">Phase 2</span>
+            <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--text-secondary)]">
+              Login form จะถูกเปิดใช้งานใน <span className="text-9e-brand font-semibold">Phase 2</span>
               {' '}(react-hook-form + Zod + NextAuth credentials).
             </p>
             <Link

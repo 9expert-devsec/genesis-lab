@@ -1,41 +1,60 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 
 /**
  * 9Expert Logo.
  *
- * Variants map to files in /public/brand/ (copied from 9Expert_CI.zip):
- *   - `white`  → Blue & White logo (for dark backgrounds — default)
- *   - `blue`   → Full Blue logo (for light backgrounds)
- *   - `navy`   → Dark Navy logo (for light/lime backgrounds)
+ * By default the variant follows the active theme:
+ *   - light → Full Blue   (/brand/logo-blue.png)
+ *   - dark  → Blue & White (/brand/logo-white.png)
  *
- * By default links to the homepage. Pass `href={null}` or `asStatic` to
- * render without a link wrapper (e.g., inside a banner, as a static mark).
+ * Pass an explicit `variant` to override (e.g., 'navy' on a lime banner,
+ * 'blue' on a login card that's always light).
+ *
+ * Files in /public/brand/ (copied from 9Expert_CI.zip):
+ *   - `white` → Blue & White logo
+ *   - `blue`  → Full Blue logo
+ *   - `navy`  → Dark Navy logo
  */
+const VARIANT_SRC = {
+  white: '/brand/logo-white.png',
+  blue:  '/brand/logo-blue.png',
+  navy:  '/brand/logo-navy.png',
+};
+
 export function Logo({
-  variant = 'white',
-  width = 120,
-  height = 32,
+  variant,
   href = '/',
   className,
   priority = false,
   alt = '9Expert Training',
 }) {
-  const src = {
-    white: '/brand/logo-white.png',
-    blue:  '/brand/logo-blue.png',
-    navy:  '/brand/logo-navy.png',
-  }[variant] ?? '/brand/logo-white.png';
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Until mounted, pick the light-mode variant to match our default theme
+  // — avoids a flash of the wrong-themed logo on first paint.
+  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'blue';
+  const src = VARIANT_SRC[variant] ?? VARIANT_SRC[themeVariant];
 
   const img = (
     <Image
       src={src}
       alt={alt}
-      width={width}
-      height={height}
+      width={600}
+      height={160}
       priority={priority}
-      className={cn('h-8 w-auto object-contain', className)}
+      sizes="(max-width: 768px) 140px, 180px"
+      className={cn('h-10 md:h-12 w-auto object-contain', className)}
     />
   );
 

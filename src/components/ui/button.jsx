@@ -37,7 +37,7 @@ const buttonVariants = cva(
           'border border-9e-brand text-9e-brand bg-transparent ' +
           'hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px]',
         ghost:
-          'text-9e-ice hover:bg-white/5',
+          'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]',
         link:
           'text-9e-brand underline-offset-4 hover:underline p-0 h-auto',
       },

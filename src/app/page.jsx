@@ -40,7 +40,7 @@ export default function HomePage() {
 function Hero() {
   return (
     <section className="relative overflow-hidden">
-      {/* Signature gradient background */}
+      {/* Signature gradient background — dark in both themes; text below is white */}
       <div
         className="absolute inset-0 bg-9e-gradient-signature opacity-90"
         aria-hidden="true"
@@ -126,14 +126,14 @@ function Highlights() {
 function ComingNext() {
   return (
     <section className="mx-auto max-w-[1280px] px-4 pb-24 lg:px-6">
-      <div className="rounded-9e-xl border border-dashed border-9e-border bg-9e-card/50 p-8 text-center md:p-12">
-        <p className="text-xs font-semibold uppercase tracking-wider text-9e-lime">
+      <div className="rounded-9e-xl border border-dashed border-[var(--surface-border)] bg-[var(--surface-muted)] p-8 text-center md:p-12">
+        <p className="text-xs font-semibold uppercase tracking-wider text-9e-brand">
           Phase 2 (Coming Soon)
         </p>
-        <h2 className="mt-2 text-2xl font-bold text-9e-ice md:text-3xl">
+        <h2 className="mt-2 text-2xl font-bold text-[var(--text-primary)] md:text-3xl">
           คอร์สเรียน · โปรโมชั่น · ตารางอบรม
         </h2>
-        <p className="mx-auto mt-3 max-w-xl text-sm text-9e-slate">
+        <p className="mx-auto mt-3 max-w-xl text-sm text-[var(--text-secondary)]">
           หน้าหลักจะแสดงหลักสูตรยอดนิยม โปรโมชั่นล่าสุด
           และตารางอบรมเดือนนี้ เชื่อมต่อข้อมูลจาก MSDB API
           กำลังทยอยเปิดใช้งานตามลำดับ

@@ -26,12 +26,12 @@ export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-9e-border md:bg-9e-card">
+    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-[var(--surface-border)] md:bg-[var(--surface)]">
       <div className="p-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-9e-slate">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           Admin Panel
         </p>
-        <p className="mt-1 text-base font-bold text-9e-ice">9Expert</p>
+        <p className="mt-1 text-base font-bold text-[var(--text-primary)]">9Expert</p>
       </div>
 
       <nav className="flex-1 px-3 pb-4" aria-label="Admin">
@@ -47,7 +47,7 @@ export function AdminSidebar() {
                     'transition-colors duration-9e-micro ease-9e',
                     active
                       ? 'bg-9e-brand/10 text-9e-brand'
-                      : 'text-9e-slate hover:bg-white/5 hover:text-9e-ice'
+                      : 'text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]'
                   )}
                 >
                   <Icon className="h-4 w-4" strokeWidth={1.75} />
@@ -59,10 +59,10 @@ export function AdminSidebar() {
         </ul>
       </nav>
 
-      <div className="border-t border-9e-border p-3">
+      <div className="border-t border-[var(--surface-border)] p-3">
         <Link
           href="/api/auth/signout"
-          className="flex items-center gap-3 rounded-9e-md px-3 py-2 text-sm text-9e-slate hover:bg-white/5 hover:text-9e-ice"
+          className="flex items-center gap-3 rounded-9e-md px-3 py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]"
         >
           <LogOut className="h-4 w-4" strokeWidth={1.75} />
           ออกจากระบบ
