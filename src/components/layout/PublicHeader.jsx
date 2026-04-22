@@ -115,10 +115,10 @@ function DesktopDropdown({ item }) {
 
       <div
         className={cn(
-          'invisible absolute left-0 top-full z-50 pt-2 opacity-0',
-          'transition-[opacity,visibility] duration-9e-micro ease-9e',
-          'group-hover:visible group-hover:opacity-100',
-          'group-focus-within:visible group-focus-within:opacity-100'
+          'pointer-events-none absolute left-0 top-full z-50 pt-2 opacity-0',
+          'transition-opacity duration-9e-micro ease-9e',
+          'group-hover:pointer-events-auto group-hover:opacity-100',
+          'group-focus-within:pointer-events-auto group-focus-within:opacity-100'
         )}
       >
         <ul
@@ -174,10 +174,10 @@ function DesktopMega({ item }) {
 
       <div
         className={cn(
-          'invisible absolute left-0 right-0 top-full z-50 pt-2 opacity-0',
-          'transition-[opacity,visibility] duration-9e-micro ease-9e',
-          'group-hover:visible group-hover:opacity-100',
-          'group-focus-within:visible group-focus-within:opacity-100'
+          'pointer-events-none absolute left-0 right-0 top-full z-50 pt-2 opacity-0',
+          'transition-opacity duration-9e-micro ease-9e',
+          'group-hover:pointer-events-auto group-hover:opacity-100',
+          'group-focus-within:pointer-events-auto group-focus-within:opacity-100'
         )}
       >
         <div

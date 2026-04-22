@@ -27,9 +27,14 @@ export const siteConfig = {
 
 /**
  * Skills (6) — used for /<skill>-all-courses catalog routes.
+ *
+ * Note: the `programming` slug is intentional — the URL
+ * /programming-all-courses is the legacy route preserved for SEO.
+ * The display label is 'Development' to match live-site terminology.
+ * Do not rename the slug without an SEO migration plan (redirects).
+ *
  * TODO(phase-3): fetch from upstream (whichever endpoint carries skill
  * metadata) and cache via ISR. curl-verify first — see docs/api-domains.md.
- * Labels kept in sync with the live site (programming → "Development").
  */
 export const skills = [
   { slug: 'power-platform', label: 'Power Platform', icon: '/brand/skill-icons/power-platform.svg' },

@@ -19,11 +19,16 @@ export function ThemeToggle({ className }) {
   }, []);
 
   if (!mounted) {
+    // Render a placeholder styled like the light-mode track (sky/40 on
+    // sky/50 border). Matches the post-mount appearance for the default
+    // light theme — no flash on the first render for most visitors.
+    // Returning dark-mode users see a brief flip on hydration (same
+    // category as the Logo variant flip we already accept).
     return (
       <span
         aria-hidden="true"
         className={cn(
-          'inline-block h-7 w-12 rounded-full border border-[var(--surface-border)] bg-[var(--surface-muted)]',
+          'inline-block h-7 w-12 rounded-full border border-9e-sky/50 bg-9e-sky/40',
           className
         )}
       />

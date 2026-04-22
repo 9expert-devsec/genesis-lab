@@ -41,9 +41,11 @@ export function Logo({
     setMounted(true);
   }, []);
 
-  // Until mounted, pick the light-mode variant to match our default theme
-  // — avoids a flash of the wrong-themed logo on first paint.
-  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'blue';
+  // Both themes use the white (Blue & White) logo. The Full Blue variant
+  // washes out against the translucent light-mode header
+  // (bg-[var(--page-bg)]/85 + backdrop-blur). Revisit if the light
+  // header gets a solid background treatment.
+  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'white';
   const src = VARIANT_SRC[variant] ?? VARIANT_SRC[themeVariant];
 
   const img = (
