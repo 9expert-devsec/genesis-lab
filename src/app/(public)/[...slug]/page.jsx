@@ -183,14 +183,12 @@ function CourseDetail({ course, schedules }) {
               )}
             </dl>
             {schedules.length > 0 ? (
-              <a
-                href={schedules[0].signup_url}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link
+                href={`/registration/public?course=${String(course.course_id).toLowerCase()}&class=${schedules[0]._id}`}
                 className="mt-6 block w-full rounded-9e-md bg-9e-brand px-4 py-3 text-center font-semibold text-9e-ice transition-colors duration-9e-micro ease-9e hover:bg-9e-primary"
               >
                 ลงทะเบียนรอบถัดไป
-              </a>
+              </Link>
             ) : (
               <p className="mt-6 text-sm text-[var(--text-secondary)]">
                 ยังไม่มีรอบเปิด — ติดต่อสอบถามทางฝ่ายขาย
@@ -224,14 +222,12 @@ function CourseDetail({ course, schedules }) {
                     </div>
                   </div>
                 </div>
-                <a
-                  href={s.signup_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href={`/registration/public?course=${String(course.course_id).toLowerCase()}&class=${s._id}`}
                   className="inline-flex items-center justify-center rounded-9e-md border border-9e-brand px-4 py-2 text-sm font-semibold text-9e-brand transition-colors duration-9e-micro ease-9e hover:bg-9e-brand hover:text-9e-ice"
                 >
                   ลงทะเบียน
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
