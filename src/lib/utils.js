@@ -85,11 +85,25 @@ export function catalogHref(slug) {
 }
 
 /**
- * Format training duration. Upstream stores integer days; we assume
- * 6 hours per training day (9Expert's standard course format).
+ * Format training duration for display.
+ *
+ * The detail response (/public-course?course_id=X) includes both
+ * `course_trainingdays` and `course_traininghours` — prefer the
+ * explicit hours field when present. The list response omits
+ * `course_traininghours`, so we fall back to `days * 6` (9Expert's
+ * standard is 6 hours per training day).
+ *
+ * Accepts either a course object or a raw day count (legacy callers).
  */
-export function formatDuration(days) {
+export function formatDuration(input) {
+  if (typeof input === 'object' && input !== null) {
+    const days = input.course_trainingdays ?? input.trainingDays;
+    const hours = input.course_traininghours ?? input.trainingHours;
+    if (!days || days < 1) return '';
+    if (hours) return `${days} วัน (${hours} ชม.)`;
+    return `${days} วัน (${days * 6} ชม.)`;
+  }
+  const days = Number(input);
   if (!days || days < 1) return '';
-  const hours = days * 6;
-  return `${days} วัน (${hours} ชม.)`;
+  return `${days} วัน (${days * 6} ชม.)`;
 }

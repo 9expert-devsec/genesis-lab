@@ -21,12 +21,11 @@ export function CourseCard({ course, className }) {
   const {
     course_id:           id,
     course_name:         name,
-    course_trainingdays: days,
     course_price:        price,
     program,
   } = course;
 
-  const duration = formatDuration(days);
+  const duration = formatDuration(course);
   const href = courseHref(id ? String(id).toLowerCase() : '');
   const icon = program?.programiconurl;
   const programLabel = program?.program_name;
