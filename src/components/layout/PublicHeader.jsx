@@ -24,7 +24,7 @@ export function PublicHeader() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--surface-border)] bg-[var(--page-bg)]/85 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-[var(--surface-border)] bg-[var(--page-bg)] backdrop-blur-md">
       <div className="mx-auto flex h-20 max-w-[1280px] items-center gap-4 px-4 lg:px-6">
         {/* ── Logo ─────────────────────────────────────────────── */}
         <div className="flex-none">
