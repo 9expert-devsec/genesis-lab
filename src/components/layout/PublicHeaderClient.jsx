@@ -204,7 +204,7 @@ function DesktopMega({ item, programs }) {
               'bg-[var(--surface)] border-[var(--surface-border)]'
             )}
           >
-            <div className="mx-auto grid max-w-[1280px] grid-cols-[2fr_1fr] gap-8 px-6 py-8">
+            <div className="mx-auto grid max-w-[1280px] grid-cols-[2fr_1fr] gap-6 px-6 py-6">
               {/* Programs column */}
               <div>
                 <div className="mb-4 flex items-center justify-between">
@@ -219,15 +219,15 @@ function DesktopMega({ item, programs }) {
                     <ArrowRight className="h-3 w-3" strokeWidth={2} />
                   </Link>
                 </div>
-                <ul className="grid grid-cols-3 gap-2">
+                <ul className="grid grid-cols-4 gap-1">
                   {programs.map((p) => (
                     <li key={p._id ?? p.program_id}>
                       <Link
                         href={programHref(p)}
-                        className="flex items-center gap-3 rounded-9e-md p-2 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+                        className="flex items-center gap-3 rounded-9e-md p-1.5 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
                       >
-                        <ProgramIcon src={p.programiconurl} size={32} />
-                        <span className="text-sm text-[var(--text-primary)]">
+                        <ProgramIcon src={p.programiconurl} size={24} />
+                        <span className="text-sm leading-tight text-[var(--text-primary)]">
                           {p.program_name}
                         </span>
                       </Link>
@@ -243,12 +243,12 @@ function DesktopMega({ item, programs }) {
                     Skills
                   </h3>
                 </div>
-                <ul className="space-y-1">
+                <ul className="flex flex-col gap-1">
                   {skills.map((s) => (
                     <li key={s.slug}>
                       <Link
                         href={`/${s.slug}-all-courses`}
-                        className="flex items-center gap-3 rounded-9e-md p-2 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+                        className="flex items-center gap-3 rounded-9e-md p-1.5 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
                       >
                         <Image
                           src={s.iconUrl}
