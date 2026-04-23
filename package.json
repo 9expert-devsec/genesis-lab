@@ -33,6 +33,7 @@
     "react-hook-form": "^7.53.0",
     "swr": "^2.2.5",
     "tailwind-merge": "^2.5.4",
+    "thai-address-autocomplete-react": "^1.2.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
