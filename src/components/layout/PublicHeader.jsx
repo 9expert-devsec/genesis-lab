@@ -160,10 +160,13 @@ function DesktopMega({ item }) {
   return (
     // `static` so the absolutely-positioned panel anchors to the <header>
     // instead of this trigger — lets the mega menu span the viewport width.
-    <div className="group static">
+    // `h-20` matches the header row so the trigger's hover area reaches the
+    // panel's top edge with no dead zone (cursor would otherwise lose :hover
+    // crossing the gap between the centered label and the header's bottom).
+    <div className="group static h-20">
       <Link
         href={item.href}
-        className="inline-flex items-center gap-1 rounded-9e-sm px-3 py-2 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e group-hover:text-9e-brand"
+        className="inline-flex h-full items-center gap-1 rounded-9e-sm px-3 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e group-hover:text-9e-brand"
       >
         {item.label}
         <ChevronDown
