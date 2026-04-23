@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { AlertTriangle, Search } from 'lucide-react';
 import { CourseCard } from '@/components/course/CourseCard';
 import { listPublicCourses } from '@/lib/api/public-courses';
-import { skills } from '@/config/site';
+import { skills, findSkillBySlug } from '@/config/site';
 import { cn } from '@/lib/utils';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
@@ -10,31 +10,28 @@ export const metadata = { title: 'หลักสูตรทั้งหมด'
 export default async function Page({ searchParams }) {
   const resolvedParams = (await searchParams) ?? {};
   const skillSlug = typeof resolvedParams.skill === 'string' ? resolvedParams.skill : null;
+  const skill = skillSlug ? findSkillBySlug(skillSlug) : null;
+  const title = skill ? `หลักสูตร ${skill.label}` : 'หลักสูตรทั้งหมด';
 
   let items = [];
   let fetchError = null;
 
   try {
-    const result = await listPublicCourses();
+    // Unknown slug → fall back to the unfiltered list (no 404).
+    const result = await listPublicCourses(
+      skill ? { skill: skill.upstreamId } : undefined
+    );
     items = result.items;
   } catch (err) {
     console.error('[training-course]', err);
     fetchError = err.message;
   }
 
-  // Client-side skill filter (temporary — replace with upstream filter
-  // once /api/ai/skills is curl-verified in Phase 2.2)
-  if (skillSlug && items.length) {
-    // TODO(phase-2.2): replace with upstream skill-ID filter
-    // For now we don't filter, because upstream skill IDs don't match
-    // our UI slugs. Showing all courses until the mapping is resolved.
-  }
-
   return (
     <div className="mx-auto max-w-[1280px] px-4 py-10 lg:px-6 lg:py-16">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-[var(--text-primary)] md:text-4xl">
-          หลักสูตรทั้งหมด
+          {title}
         </h1>
         <p className="mt-2 max-w-2xl text-base text-[var(--text-secondary)]">
           หลักสูตรอบรม Public Class ทั้งหมดของ 9Expert Training — Power Platform, Data, AI,
