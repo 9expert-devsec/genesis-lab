@@ -9,14 +9,16 @@ import {
   publicRegistrationSchema,
   publicRegistrationDefaults,
 } from '@/lib/schemas/register-public';
-import { Input } from '@/components/ui/input';
+import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
+import { CoordinatorFields } from '@/components/registration/CoordinatorFields';
+import { AttendeesList } from '@/components/registration/AttendeesList';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const STORAGE_KEY = 'registration-public-v1';
+const STORAGE_KEY = 'registration-public-v2';
 
 const THAI_MONTHS = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -38,15 +40,7 @@ function formatClassDates(dates) {
   return `${start.getDate()} ${THAI_MONTHS[start.getMonth()]} - ${end.getDate()} ${THAI_MONTHS[end.getMonth()]} ${year}`;
 }
 
-/**
- * Main wizard — owns step state, formData, sessionStorage sync.
- *
- * Three steps:
- *   1. Form input (react-hook-form + Zod)
- *   2. Preview (read-only) + submit
- *   3. Thank-you with reference number
- */
-export function RegisterWizard({ course, classItem, allSchedules }) {
+export function RegisterWizard({ course, schedules, initialClassId }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -54,13 +48,11 @@ export function RegisterWizard({ course, classItem, allSchedules }) {
   const [result, setResult] = useState(null);
   const [restoredFromStorage, setRestoredFromStorage] = useState(null);
 
-  // Restore draft on mount
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        // Only restore if same course — otherwise start fresh
         if (parsed?.courseId === course.course_id) {
           setRestoredFromStorage(parsed);
         } else {
@@ -121,8 +113,8 @@ export function RegisterWizard({ course, classItem, allSchedules }) {
       {currentStep === 1 && (
         <StepForm
           course={course}
-          classItem={classItem}
-          allSchedules={allSchedules}
+          schedules={schedules}
+          initialClassId={initialClassId}
           initialValues={formData ?? restoredFromStorage}
           onSubmit={handleFormSubmit}
         />
@@ -141,7 +133,7 @@ export function RegisterWizard({ course, classItem, allSchedules }) {
       {currentStep === 3 && result && (
         <StepComplete
           referenceNumber={result.referenceNumber}
-          email={formData?.email}
+          email={formData?.coordinator?.email}
         />
       )}
     </div>
@@ -191,27 +183,30 @@ function Stepper({ currentStep }) {
 
 // ── Step 1: Form ─────────────────────────────────────────────────
 
-function StepForm({ course, classItem, allSchedules, initialValues, onSubmit }) {
-  const defaultClass = classItem ?? allSchedules?.[0] ?? null;
-  const [selectedClassId, setSelectedClassId] = useState(
-    initialValues?.classId || defaultClass?._id || ''
+function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }) {
+  const restoredClassId = initialValues?.classId;
+  const [selectedScheduleId, setSelectedScheduleId] = useState(
+    restoredClassId || initialClassId || ''
   );
+  // If the user arrives with draft data, the form was already revealed
+  // previously — auto-open it. Otherwise require an explicit confirm.
+  const [formRevealed, setFormRevealed] = useState(Boolean(initialValues));
 
-  const classById = useMemo(() => {
+  const scheduleById = useMemo(() => {
     const map = new Map();
-    (allSchedules ?? []).forEach((s) => map.set(s._id, s));
-    if (classItem) map.set(classItem._id, classItem);
+    (schedules ?? []).forEach((s) => map.set(s._id, s));
     return map;
-  }, [allSchedules, classItem]);
+  }, [schedules]);
 
-  const activeClass = classById.get(selectedClassId) ?? defaultClass;
-  const activeDateLabel = activeClass ? formatClassDates(activeClass.dates) : '';
+  const activeSchedule = scheduleById.get(selectedScheduleId) ?? null;
+  const activeDateLabel = activeSchedule ? formatClassDates(activeSchedule.dates) : '';
 
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    control,
     formState: { errors },
   } = useForm({
     resolver: zodResolver(publicRegistrationSchema),
@@ -221,21 +216,20 @@ function StepForm({ course, classItem, allSchedules, initialValues, onSubmit }) 
       courseId: course.course_id,
       courseCode: course.course_id,
       courseName: course.course_name,
-      classId: selectedClassId || '',
+      classId: selectedScheduleId || '',
       classDate: activeDateLabel,
       ...(initialValues ?? {}),
     },
   });
 
   const watched = watch();
-  const requestInvoice = watch('requestInvoice');
 
-  // Sync hidden class fields when the user picks a different class
+  // Sync hidden class fields when the user picks a different schedule
   useEffect(() => {
-    const cls = classById.get(selectedClassId);
-    setValue('classId', cls?._id || '');
-    setValue('classDate', cls ? formatClassDates(cls.dates) : '');
-  }, [selectedClassId, classById, setValue]);
+    const sch = scheduleById.get(selectedScheduleId);
+    setValue('classId', sch?._id || '');
+    setValue('classDate', sch ? formatClassDates(sch.dates) : '');
+  }, [selectedScheduleId, scheduleById, setValue]);
 
   // Persist draft to sessionStorage on every change
   useEffect(() => {
@@ -246,159 +240,123 @@ function StepForm({ course, classItem, allSchedules, initialValues, onSubmit }) 
     }
   }, [watched]);
 
-  const showClassPicker = (allSchedules?.length ?? 0) > 1;
+  const handleReveal = () => {
+    if (!selectedScheduleId) return;
+    setFormRevealed(true);
+  };
 
   return (
-    <form
-      className="space-y-8"
-      onSubmit={handleSubmit(onSubmit)}
-      noValidate
-    >
-      <Section title="ข้อมูลคอร์ส">
-        <ReadOnlyRow label="หลักสูตร" value={course.course_name} />
-        <ReadOnlyRow label="รหัสคอร์ส" value={course.course_id} />
-        {showClassPicker ? (
-          <div>
-            <Label className="mb-2 block">เลือกรอบอบรม</Label>
-            <div className="space-y-2">
-              {allSchedules.map((s) => (
-                <label
-                  key={s._id}
-                  className={cn(
-                    'flex cursor-pointer items-center gap-3 rounded-9e-md border p-3',
-                    selectedClassId === s._id
-                      ? 'border-9e-brand bg-9e-brand/5'
-                      : 'border-[var(--surface-border)] hover:border-9e-brand'
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="class-picker"
-                    value={s._id}
-                    checked={selectedClassId === s._id}
-                    onChange={() => setSelectedClassId(s._id)}
-                    className="h-4 w-4 accent-9e-brand"
-                  />
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {formatClassDates(s.dates)}
-                    </div>
-                    <div className="text-xs text-[var(--text-secondary)]">
-                      {s.type === 'hybrid'
-                        ? 'Hybrid (Classroom + MS Teams)'
-                        : 'Classroom'}
-                      {' · '}
-                      {s.status === 'nearly_full' ? 'ใกล้เต็ม' : 'เปิดรับสมัคร'}
-                    </div>
-                  </div>
-                </label>
-              ))}
+    <form className="space-y-8" onSubmit={handleSubmit(onSubmit)} noValidate>
+      <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+        <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
+          เลือกรอบการอบรม
+        </h2>
+        <p className="mb-4 text-xs text-[var(--text-secondary)]">
+          {course.course_name}
+        </p>
+
+        <ScheduleCarousel
+          schedules={schedules}
+          selectedId={selectedScheduleId}
+          onSelect={setSelectedScheduleId}
+        />
+
+        {activeSchedule && (
+          <div className="mt-4 flex items-center justify-between rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+            <div>
+              <div className="font-semibold text-[var(--text-primary)]">
+                {activeDateLabel}
+              </div>
+              <div className="text-xs text-[var(--text-secondary)]">
+                {activeSchedule.type === 'hybrid'
+                  ? 'Hybrid (Classroom + MS Teams)'
+                  : 'Classroom'}
+              </div>
             </div>
-            {errors.classId && (
-              <p className="mt-2 text-xs text-9e-accent">{errors.classId.message}</p>
+            {!formRevealed && (
+              <Button
+                type="button"
+                variant="cta"
+                size="sm"
+                onClick={handleReveal}
+              >
+                ยืนยันรอบอบรม
+                <ArrowRight className="h-4 w-4" />
+              </Button>
             )}
           </div>
-        ) : (
-          <ReadOnlyRow label="รอบอบรม" value={activeDateLabel || '—'} />
         )}
-      </Section>
 
-      <Section title="ข้อมูลผู้เรียน">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="ชื่อ" error={errors.firstName?.message} required>
-            <Input {...register('firstName')} aria-invalid={!!errors.firstName} />
-          </Field>
-          <Field label="นามสกุล" error={errors.lastName?.message} required>
-            <Input {...register('lastName')} aria-invalid={!!errors.lastName} />
-          </Field>
-          <Field label="อีเมล" error={errors.email?.message} required>
-            <Input type="email" {...register('email')} aria-invalid={!!errors.email} />
-          </Field>
-          <Field label="เบอร์โทร" error={errors.phone?.message} required>
-            <Input
-              inputMode="tel"
-              placeholder="0812345678"
-              {...register('phone')}
-              aria-invalid={!!errors.phone}
-            />
-          </Field>
-          <Field label="LINE ID (ถ้ามี)" error={errors.lineId?.message}>
-            <Input {...register('lineId')} />
-          </Field>
-        </div>
-      </Section>
-
-      <Section title="ข้อมูลใบกำกับภาษี (ถ้าต้องการ)">
-        <label className="flex items-center gap-2">
-          <Checkbox {...register('requestInvoice')} />
-          <span className="text-sm text-[var(--text-primary)]">
-            ต้องการใบกำกับภาษี
-          </span>
-        </label>
-        {requestInvoice && (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Field
-              label="ชื่อบริษัท"
-              error={errors.companyName?.message}
-              required
-              className="sm:col-span-2"
-            >
-              <Input
-                {...register('companyName')}
-                aria-invalid={!!errors.companyName}
-              />
-            </Field>
-            <Field
-              label="เลขประจำตัวผู้เสียภาษี (13 หลัก)"
-              error={errors.taxId?.message}
-              required
-            >
-              <Input
-                inputMode="numeric"
-                maxLength={13}
-                {...register('taxId')}
-                aria-invalid={!!errors.taxId}
-              />
-            </Field>
-            <Field
-              label="ที่อยู่"
-              error={errors.address?.message}
-              required
-              className="sm:col-span-2"
-            >
-              <Textarea
-                rows={3}
-                {...register('address')}
-                aria-invalid={!!errors.address}
-              />
-            </Field>
-          </div>
+        {errors.classId && (
+          <p className="mt-2 text-xs text-9e-accent">{errors.classId.message}</p>
         )}
-      </Section>
+      </section>
 
-      <Section title="หมายเหตุเพิ่มเติม">
-        <Field label="" error={errors.notes?.message}>
-          <Textarea
-            rows={3}
-            placeholder="เช่น อาหาร/แพ้อาหาร คำถามเกี่ยวกับหลักสูตร ฯลฯ (ไม่เกิน 500 ตัวอักษร)"
-            maxLength={500}
-            {...register('notes')}
+      {formRevealed && (
+        <>
+          <CoordinatorFields register={register} errors={errors} />
+
+          <AttendeesList
+            control={control}
+            register={register}
+            watch={watch}
+            setValue={setValue}
+            errors={errors}
           />
-        </Field>
-      </Section>
 
-      <div className="flex items-center justify-between gap-4 pt-2">
-        <Link
-          href="/training-course"
-          className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-brand"
-        >
-          ← กลับไปดูหลักสูตร
-        </Link>
-        <Button type="submit" variant="cta">
-          ถัดไป
-          <ArrowRight className="h-4 w-4" />
-        </Button>
-      </div>
+          {/* TODO(2.5a-2): invoice section with Thai address autocomplete */}
+          <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+            <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
+              ข้อมูลใบกำกับภาษี
+            </h2>
+            <p className="mb-4 text-xs text-[var(--text-secondary)]">
+              ระบบใบกำกับภาษีจะเปิดให้ใช้งานในเฟสถัดไป ระหว่างนี้กรุณาแจ้งกับ
+              ทีมขายโดยตรงหากต้องการใบกำกับภาษี
+            </p>
+            <label className="flex cursor-not-allowed items-center gap-2 opacity-60">
+              <Checkbox
+                {...register('requestInvoice')}
+                disabled
+              />
+              <span className="text-sm text-[var(--text-primary)]">
+                ต้องการใบกำกับภาษี (เร็วๆ นี้)
+              </span>
+            </label>
+          </section>
+
+          <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+            <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
+              หมายเหตุเพิ่มเติม
+            </h2>
+            <Label className="sr-only" htmlFor="notes">
+              หมายเหตุ
+            </Label>
+            <Textarea
+              id="notes"
+              rows={3}
+              placeholder="เช่น อาหาร/แพ้อาหาร คำถามเกี่ยวกับหลักสูตร ฯลฯ (ไม่เกิน 500 ตัวอักษร)"
+              maxLength={500}
+              {...register('notes')}
+            />
+            {errors.notes?.message && (
+              <p className="mt-1 text-xs text-9e-accent">{errors.notes.message}</p>
+            )}
+          </section>
+
+          <div className="flex items-center justify-between gap-4 pt-2">
+            <Link
+              href="/training-course"
+              className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-brand"
+            >
+              ← กลับไปดูหลักสูตร
+            </Link>
+            <Button type="submit" variant="cta">
+              ถัดไป
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </>
+      )}
     </form>
   );
 }
@@ -406,6 +364,8 @@ function StepForm({ course, classItem, allSchedules, initialValues, onSubmit }) 
 // ── Step 2: Preview ──────────────────────────────────────────────
 
 function StepPreview({ data, onBack, onConfirm, submitting, error }) {
+  const coord = data.coordinator ?? {};
+  const attendees = data.attendees ?? [];
   return (
     <div className="space-y-8">
       <Section title="ข้อมูลคอร์ส">
@@ -414,20 +374,55 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         <ReadOnlyRow label="รอบอบรม" value={data.classDate || '—'} />
       </Section>
 
-      <Section title="ข้อมูลผู้เรียน">
-        <ReadOnlyRow label="ชื่อ-นามสกุล" value={`${data.firstName} ${data.lastName}`} />
-        <ReadOnlyRow label="อีเมล" value={data.email} />
-        <ReadOnlyRow label="เบอร์โทร" value={data.phone} />
-        {data.lineId && <ReadOnlyRow label="LINE ID" value={data.lineId} />}
+      <Section title="ข้อมูลผู้ประสานงาน">
+        <ReadOnlyRow
+          label="ชื่อ-นามสกุล"
+          value={`${coord.firstName ?? ''} ${coord.lastName ?? ''}`.trim()}
+        />
+        <ReadOnlyRow label="อีเมล" value={coord.email} />
+        <ReadOnlyRow label="เบอร์โทร" value={coord.phone} />
+        {coord.lineId && <ReadOnlyRow label="LINE ID" value={coord.lineId} />}
+        <ReadOnlyRow
+          label="ผู้ประสานงานเข้าอบรม"
+          value={coord.isAttending ? 'ใช่' : 'ไม่'}
+        />
       </Section>
 
-      {data.requestInvoice && (
-        <Section title="ใบกำกับภาษี">
-          <ReadOnlyRow label="ชื่อบริษัท" value={data.companyName} />
-          <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={data.taxId} />
-          <ReadOnlyRow label="ที่อยู่" value={data.address} />
-        </Section>
-      )}
+      <Section title="ข้อมูลผู้เข้าอบรม">
+        <ReadOnlyRow label="จำนวน" value={`${data.attendeesCount} ท่าน`} />
+        {!data.attendeesListProvided ? (
+          <p className="text-sm text-[var(--text-secondary)]">
+            ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
+          </p>
+        ) : (
+          <ol className="space-y-2">
+            {coord.isAttending && (
+              <li className="rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+                <div className="font-semibold">
+                  ท่านที่ 1 · {coord.firstName} {coord.lastName}
+                </div>
+                <div className="text-xs text-[var(--text-secondary)]">
+                  {coord.email} · {coord.phone}
+                </div>
+              </li>
+            )}
+            {attendees.map((a, i) => (
+              <li
+                key={i}
+                className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm"
+              >
+                <div className="font-semibold">
+                  ท่านที่ {coord.isAttending ? i + 2 : i + 1} · {a.firstName}{' '}
+                  {a.lastName}
+                </div>
+                <div className="text-xs text-[var(--text-secondary)]">
+                  {a.email} · {a.phone}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Section>
 
       {data.notes && (
         <Section title="หมายเหตุ">
@@ -444,12 +439,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
       )}
 
       <div className="flex items-center justify-between gap-4 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-          disabled={submitting}
-        >
+        <Button type="button" variant="outline" onClick={onBack} disabled={submitting}>
           แก้ไข
         </Button>
         <Button
@@ -477,10 +467,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 function StepComplete({ referenceNumber, email }) {
   return (
     <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
-      <CheckCircle2
-        className="mx-auto h-16 w-16 text-9e-brand"
-        strokeWidth={1.5}
-      />
+      <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
       <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
         ขอบคุณสำหรับการลงทะเบียน
       </h2>
@@ -519,21 +506,6 @@ function Section({ title, children }) {
       </h2>
       <div className="space-y-3">{children}</div>
     </section>
-  );
-}
-
-function Field({ label, error, required, children, className }) {
-  return (
-    <div className={className}>
-      {label && (
-        <Label className="mb-1.5 block">
-          {label}
-          {required && <span className="ml-0.5 text-9e-accent">*</span>}
-        </Label>
-      )}
-      {children}
-      {error && <p className="mt-1 text-xs text-9e-accent">{error}</p>}
-    </div>
   );
 }
 
