@@ -27,3 +27,31 @@ export async function listSchedules({ date, from, to, courses } = {}) {
   });
   return unwrap(raw);
 }
+
+/**
+ * Fetch upcoming schedules for a specific course.
+ *
+ * @param {string} courseObjectId — upstream MongoDB `_id` (NOT course_id code).
+ *                                  The `/schedules` endpoint uses the `course`
+ *                                  param, which takes an ObjectId — the opposite
+ *                                  convention from `/public-course?course_id=...`.
+ * @param {object} [options]
+ * @param {number} [options.limit=20]
+ *
+ * Upstream auto-filters to status open/nearly_full, non-empty
+ * signup_url, and dates >= today. No client-side filtering needed.
+ *
+ * curl-verified 2026-04-23.
+ */
+export async function listSchedulesByCourse(courseObjectId, options = {}) {
+  if (!courseObjectId) return { items: [], total: 0 };
+  const raw = await aiFetch(PATH, {
+    params: {
+      course: courseObjectId,
+      limit: options.limit ?? 20,
+    },
+    revalidate: 1800,
+    tags: [`schedules:course:${courseObjectId}`],
+  });
+  return unwrap(raw);
+}
