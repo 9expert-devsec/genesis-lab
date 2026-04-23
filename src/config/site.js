@@ -26,24 +26,68 @@ export const siteConfig = {
 };
 
 /**
- * Skills (6) — used for /<skill>-all-courses catalog routes.
+ * Skills — static list with upstream MongoDB _id mapping.
+ *
+ * The _id is what `/public-course?skill=<_id>` accepts for filtering.
+ * The `skill_id` short code (e.g. 'AI', 'DEV') is upstream-internal
+ * and not used for filtering.
+ *
+ * Hardcoded because: skills rarely change; runtime fetching adds
+ * loading states for zero benefit. If this list drifts from upstream,
+ * update here — do not auto-fetch.
+ *
+ * Mapping verified against /api/ai/skills on 2026-04-22.
  *
  * Note: the `programming` slug is intentional — the URL
  * /programming-all-courses is the legacy route preserved for SEO.
  * The display label is 'Development' to match live-site terminology.
  * Do not rename the slug without an SEO migration plan (redirects).
- *
- * TODO(phase-3): fetch from upstream (whichever endpoint carries skill
- * metadata) and cache via ISR. curl-verify first — see docs/api-domains.md.
  */
 export const skills = [
-  { slug: 'power-platform', label: 'Power Platform', icon: '/brand/skill-icons/power-platform.svg' },
-  { slug: 'business',       label: 'Business',       icon: '/brand/skill-icons/business.svg' },
-  { slug: 'data',           label: 'Data',           icon: '/brand/skill-icons/data.svg' },
-  { slug: 'ai',             label: 'AI',             icon: '/brand/skill-icons/ai.svg' },
-  { slug: 'programming',    label: 'Development',    icon: '/brand/skill-icons/developer.svg' },
-  { slug: 'rpa',            label: 'RPA',            icon: '/brand/skill-icons/rpa.svg' },
+  {
+    slug: 'power-platform',
+    upstreamId: '68d3c5af2c6a2f1315c0bcdc',
+    upstreamCode: 'POWERPLATFORM',
+    label: 'Power Platform',
+  },
+  {
+    slug: 'business',
+    upstreamId: '68d4f506581cb350290597c6',
+    upstreamCode: 'BUSINESS',
+    label: 'Business',
+  },
+  {
+    slug: 'data',
+    upstreamId: '68d3c5af2c6a2f1315c0bcdb',
+    upstreamCode: 'DATA',
+    label: 'Data',
+  },
+  {
+    slug: 'ai',
+    upstreamId: '68d4f556581cb350290597d1',
+    upstreamCode: 'AI',
+    label: 'AI',
+  },
+  {
+    slug: 'programming',
+    upstreamId: '68d4f5b3581cb350290597de',
+    upstreamCode: 'DEV',
+    label: 'Development',
+  },
+  {
+    slug: 'rpa',
+    upstreamId: '68d4f493581cb350290597b5',
+    upstreamCode: 'RPA',
+    label: 'RPA',
+  },
 ];
+
+/**
+ * Look up a skill entry by UI slug. Returns null if unknown.
+ */
+export function findSkillBySlug(slug) {
+  return skills.find((s) => s.slug === slug) ?? null;
+}
 
 /**
  * Programs (21) — used for /<program>-all-courses catalog routes.
