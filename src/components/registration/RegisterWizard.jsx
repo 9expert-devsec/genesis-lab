@@ -12,6 +12,7 @@ import {
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { CoordinatorFields } from '@/components/registration/CoordinatorFields';
 import { AttendeesList } from '@/components/registration/AttendeesList';
+import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -223,6 +224,7 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }
   });
 
   const watched = watch();
+  const requestInvoice = watch('requestInvoice');
 
   // Sync hidden class fields when the user picks a different schedule
   useEffect(() => {
@@ -230,6 +232,33 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }
     setValue('classId', sch?._id || '');
     setValue('classDate', sch ? formatClassDates(sch.dates) : '');
   }, [selectedScheduleId, scheduleById, setValue]);
+
+  // Lazy-init the invoice skeleton when the checkbox is first ticked,
+  // and clear it on untick so the schema's `.optional().nullable()`
+  // accepts the "no invoice" state cleanly.
+  useEffect(() => {
+    if (requestInvoice && !watch('invoice')) {
+      setValue('invoice', {
+        type: 'individual',
+        firstName: '',
+        lastName: '',
+        companyName: '',
+        branch: '',
+        taxId: '',
+        address: {
+          addressLine: '',
+          subDistrict: '',
+          district: '',
+          province: '',
+          postalCode: '',
+        },
+      });
+    }
+    if (!requestInvoice) {
+      setValue('invoice', null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestInvoice]);
 
   // Persist draft to sessionStorage on every change
   useEffect(() => {
@@ -304,25 +333,26 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }
             errors={errors}
           />
 
-          {/* TODO(2.5a-2): invoice section with Thai address autocomplete */}
           <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-            <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
-              ข้อมูลใบกำกับภาษี
+            <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
+              ใบกำกับภาษี
             </h2>
-            <p className="mb-4 text-xs text-[var(--text-secondary)]">
-              ระบบใบกำกับภาษีจะเปิดให้ใช้งานในเฟสถัดไป ระหว่างนี้กรุณาแจ้งกับ
-              ทีมขายโดยตรงหากต้องการใบกำกับภาษี
-            </p>
-            <label className="flex cursor-not-allowed items-center gap-2 opacity-60">
-              <Checkbox
-                {...register('requestInvoice')}
-                disabled
-              />
+            <label className="flex cursor-pointer items-center gap-2">
+              <Checkbox {...register('requestInvoice')} />
               <span className="text-sm text-[var(--text-primary)]">
-                ต้องการใบกำกับภาษี (เร็วๆ นี้)
+                ต้องการใบกำกับภาษี
               </span>
             </label>
           </section>
+
+          {requestInvoice && (
+            <InvoiceFields
+              register={register}
+              watch={watch}
+              setValue={setValue}
+              errors={errors}
+            />
+          )}
 
           <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
             <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
@@ -423,6 +453,41 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
           </ol>
         )}
       </Section>
+
+      {data.requestInvoice && data.invoice && (
+        <Section title="ใบกำกับภาษี">
+          <ReadOnlyRow
+            label="ประเภท"
+            value={data.invoice.type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป'}
+          />
+          {data.invoice.type === 'individual' ? (
+            <ReadOnlyRow
+              label="ชื่อ-นามสกุล"
+              value={`${data.invoice.firstName ?? ''} ${data.invoice.lastName ?? ''}`.trim()}
+            />
+          ) : (
+            <>
+              <ReadOnlyRow label="ชื่อบริษัท" value={data.invoice.companyName} />
+              {data.invoice.branch && (
+                <ReadOnlyRow label="สาขา" value={data.invoice.branch} />
+              )}
+            </>
+          )}
+          <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={data.invoice.taxId} />
+          <ReadOnlyRow
+            label="ที่อยู่"
+            value={[
+              data.invoice.address?.addressLine,
+              data.invoice.address?.subDistrict,
+              data.invoice.address?.district,
+              data.invoice.address?.province,
+              data.invoice.address?.postalCode,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          />
+        </Section>
+      )}
 
       {data.notes && (
         <Section title="หมายเหตุ">
