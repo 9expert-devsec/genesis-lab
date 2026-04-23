@@ -49,36 +49,42 @@ export const skills = [
     upstreamId: '68d3c5af2c6a2f1315c0bcdc',
     upstreamCode: 'POWERPLATFORM',
     label: 'Power Platform',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758786278/skills/icons/uharw9ah3z7d7uv6jdwp.svg',
   },
   {
     slug: 'business',
     upstreamId: '68d4f506581cb350290597c6',
     upstreamCode: 'BUSINESS',
     label: 'Business',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758786788/skills/icons/peuyeyhdktdqhs9xobjy.svg',
   },
   {
     slug: 'data',
     upstreamId: '68d3c5af2c6a2f1315c0bcdb',
     upstreamCode: 'DATA',
     label: 'Data',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758785738/skills/icons/zsnmhvevmg6ovrvdq8f2.svg',
   },
   {
     slug: 'ai',
     upstreamId: '68d4f556581cb350290597d1',
     upstreamCode: 'AI',
     label: 'AI',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758786864/skills/icons/rj3ukekodrmfimlfs8m4.svg',
   },
   {
     slug: 'programming',
     upstreamId: '68d4f5b3581cb350290597de',
     upstreamCode: 'DEV',
     label: 'Development',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758786958/skills/icons/d3ssdmq37a0pwt4mjdrc.svg',
   },
   {
     slug: 'rpa',
     upstreamId: '68d4f493581cb350290597b5',
     upstreamCode: 'RPA',
     label: 'RPA',
+    iconUrl: 'https://res.cloudinary.com/ddva7xvdt/image/upload/v1758786404/skills/icons/yzi286mliefr9rvti5kg.svg',
   },
 ];
 

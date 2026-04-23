@@ -250,6 +250,14 @@ function DesktopMega({ item, programs }) {
                         href={`/${s.slug}-all-courses`}
                         className="flex items-center gap-3 rounded-9e-md p-2 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
                       >
+                        <Image
+                          src={s.iconUrl}
+                          alt=""
+                          aria-hidden="true"
+                          width={24}
+                          height={24}
+                          className="h-6 w-6 flex-none object-contain"
+                        />
                         <span className="text-sm font-medium text-[var(--text-primary)]">
                           {s.label}
                         </span>
@@ -456,6 +464,14 @@ function MobileMegaSkillList({ onNavigate }) {
               onClick={onNavigate}
               className="flex items-center gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
             >
+              <Image
+                src={s.iconUrl}
+                alt=""
+                aria-hidden="true"
+                width={24}
+                height={24}
+                className="h-6 w-6 flex-none object-contain"
+              />
               <span>{s.label}</span>
             </Link>
           </li>
