@@ -16,6 +16,69 @@ The shapes below were observed in responses from the live MSDB API on
 the verification date. Only the fields we actually consume downstream
 are documented; upstream may return more.
 
+### Skill (from `/skills` items)
+
+```json
+{
+  "_id": "68d4f556581cb350290597d1",
+  "skill_id": "AI",
+  "skill_name": "AI",
+  "skilliconurl": "https://res.cloudinary.com/ddva7xvdt/image/upload/.../skills/icons/xxxx.svg",
+  "skillcolor": "#dee6f1",
+  "skill_teaser": "Artificial Intelligence",
+  "skill_roadmap_url": "https://...",
+  "programs": [ /* nested programs that belong to this skill */ ]
+}
+```
+
+Quirks:
+- `_id` is the filter key for `/public-course?skill=<_id>`.
+- `skill_id` is a short upstream-internal code (e.g. `AI`, `DEV`,
+  `POWERPLATFORM`). It is **not** usable for upstream filtering and
+  does **not** match our UI slugs — see Skill slug mapping below.
+
+### Program (from `/programs` items)
+
+```json
+{
+  "_id": "68da60bb87a228e4c5f4c2c7",
+  "program_id": "DEV",
+  "program_name": ".NET",
+  "programiconurl": "https://res.cloudinary.com/ddva7xvdt/image/upload/.../programs/icons/yyyy.png",
+  "programcolor": "#482adf",
+  "skills": [ /* nested skills this program belongs to */ ],
+  "skillCount": 1
+}
+```
+
+Quirks:
+- `programiconurl` is an absolute Cloudinary URL — render directly with
+  `next/image` (no `unoptimized`). The Cloudinary host is already in
+  `next.config.mjs` `remotePatterns`.
+- `/programs` returns 27 items today; the live `/programming-all-courses`
+  legacy menu listed 21. Treat upstream as authoritative.
+
+### Skill slug mapping
+
+The 6 UI skill slugs map to upstream `_id`s as follows:
+
+| UI slug          | upstream `skill_id` | upstream `_id`             |
+| ---------------- | ------------------- | -------------------------- |
+| `ai`             | `AI`                | `68d4f556581cb350290597d1` |
+| `business`       | `BUSINESS`          | `68d4f506581cb350290597c6` |
+| `data`           | `DATA`              | `68d3c5af2c6a2f1315c0bcdb` |
+| `power-platform` | `POWERPLATFORM`     | `68d3c5af2c6a2f1315c0bcdc` |
+| `programming`    | `DEV`               | `68d4f5b3581cb350290597de` |
+| `rpa`            | `RPA`               | `68d4f493581cb350290597b5` |
+
+Upstream `skill_id` does NOT match our UI slugs — `power-platform`
+upstream is `POWERPLATFORM` (no dash), and `programming` upstream is
+`DEV` (different label). A `toUpperCase()` transform won't work; we
+keep an explicit lookup in `src/config/site.js` (`findSkillBySlug`).
+We can't rename the upstream codes without breaking their internal
+references, and we can't rename our slugs without an SEO migration
+plan (the URLs `/programming-all-courses` etc. are legacy SEO routes).
+
 ### Course (from `/public-course` items, also nested under `schedules[i].course`)
 
 ```json
@@ -40,9 +103,9 @@ Quirks:
 - All top-level field names are `snake_case`, not camelCase.
 - `course_trainingdays` is an integer day count. Format as
   "N วัน (N×6 ชม.)" — 9Expert's standard is 6 training hours per day.
-- `skills` is an array of ObjectId strings, not objects. We cannot map
-  these to UI skill slugs until the `/skills` endpoint is curl-verified
-  (Phase 2.2).
+- `skills` is an array of ObjectId strings, not objects. Map these to
+  UI skill slugs via the table in "Skill slug mapping" above
+  (`findSkillBySlug` in `src/config/site.js`).
 - `program.programiconurl` is an already-usable absolute Cloudinary URL.
 
 ### Schedule item (from `/schedules`)
@@ -83,6 +146,8 @@ envelope. Field-level shape to be documented when first consumed.
 | Promotions       | `src/lib/api/promotions.js`               | `/promotions`        | 2026-04-22    |
 | FAQs             | `src/lib/api/faqs.js`                     | `/faqs`              | 2026-04-22    |
 | Contact us       | `src/lib/api/contact-us.js`               | `/contact-us`        | 2026-04-22    |
+| Skills           | `src/lib/api/skills.js`                   | `/skills`            | 2026-04-22    |
+| Programs         | `src/lib/api/programs.js`                 | `/programs`          | 2026-04-22    |
 
 ## Envelope variants
 
