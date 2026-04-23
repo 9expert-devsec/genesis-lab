@@ -81,6 +81,9 @@ plan (the URLs `/programming-all-courses` etc. are legacy SEO routes).
 
 ### Course (from `/public-course` items, also nested under `schedules[i].course`)
 
+The **list response** (`/public-course` with no filter or `?skill=X`)
+returns a compact shape:
+
 ```json
 {
   "_id": "69267e3bbbad44df87120492",
@@ -99,14 +102,49 @@ plan (the URLs `/programming-all-courses` etc. are legacy SEO routes).
 }
 ```
 
+The **detail response** (`/public-course?course_id=<X>`) returns a
+richer shape, including fields absent from the list response:
+
+```json
+{
+  "_id": "692d39b52ee07293c9131fd8",
+  "course_id": "COPILOT-STU",
+  "course_name": "AI Agents with Microsoft Copilot Studio",
+  "course_teaser": "เรียนรู้การทำงานของ Microsoft Copilot Studio...",
+  "course_trainingdays": 1,
+  "course_traininghours": 6,
+  "course_price": 7500,
+  "course_cover_url": "https://res.cloudinary.com/.../covers/...png",
+  "course_levels": "2",
+  "sort_order": 0,
+  "program": { "_id": "...", "program_id": "CPS", "program_name": "Copilot Studio", "programiconurl": "..." },
+  "skills": [
+    { "_id": "...", "skill_id": "AI", "skill_name": "AI", "skilliconurl": "...", "skillcolor": "#dee6f1" }
+  ],
+  "previous_course": null,
+  "related_courses": [ /* pre-computed, 2-5 courses */ ]
+}
+```
+
 Quirks:
 - All top-level field names are `snake_case`, not camelCase.
-- `course_trainingdays` is an integer day count. Format as
-  "N วัน (N×6 ชม.)" — 9Expert's standard is 6 training hours per day.
-- `skills` is an array of ObjectId strings, not objects. Map these to
-  UI skill slugs via the table in "Skill slug mapping" above
-  (`findSkillBySlug` in `src/config/site.js`).
-- `program.programiconurl` is an already-usable absolute Cloudinary URL.
+- `course_trainingdays` is an integer day count. The detail response
+  also provides `course_traininghours` — prefer that over computing
+  `days * 6`. The list response does NOT include `course_traininghours`,
+  so fall back to `days * 6` when absent.
+- `skills` shape differs by response:
+  - **List response:** array of ObjectId strings. Map these to UI
+    skill slugs via the table in "Skill slug mapping" above
+    (`findSkillBySlug` in `src/config/site.js`).
+  - **Detail response:** array of full skill objects, including
+    `skilliconurl`, `skillcolor`, `skill_name`, `skill_id`, `_id`.
+    No extra fetch needed to render skill chips.
+- `program.programiconurl` and `course_cover_url` are already-usable
+  absolute Cloudinary URLs.
+- `course_levels` is a string `"1"` | `"2"` | `"3"` (1=Beginner,
+  2=Intermediate, 3=Advanced).
+- `related_courses` is pre-computed by upstream; render as-is, each
+  entry is a list-shape course object.
 
 ### Schedule item (from `/schedules`)
 
@@ -181,18 +219,38 @@ flattens both to `{ items, total }`.
 ### `/public-course`
 - `?skill=<skill_id>` — filter by skill
 - `?program=<program_id>` — filter by program
-- `?course=<course_id_or_code>` — single course (code like `MSE-L1` works)
+- `?course_id=<short_code>` — single course by short code (e.g. `COPILOT-STU`)
 
 ### `/schedules`
 - `?date=YYYY-MM-DD` — single day
 - `?from=YYYY-MM-DD&to=YYYY-MM-DD` — range
 - `?date=YYYY-MM-DD&courses=id1,id2,id3` — specific courses on a day
+- `?course=<objectId>&limit=N` — upcoming schedules for one course
 
 ### `/career-path`
 - `?limit=50` — list (default limit is small)
 - `?q=<query>` — search
 - `?status=all` — include inactive (default is active only)
 - `?slug=<slug>` — single item
+
+## Query parameter conventions
+
+Upstream uses inconsistent identifier parameters between endpoints.
+Verified 2026-04-23.
+
+| Endpoint           | Identifier param | Value type                                    |
+| ------------------ | ---------------- | --------------------------------------------- |
+| `/public-course`   | `course_id`      | Short code string (e.g. `COPILOT-STU`)        |
+| `/schedules`       | `course`         | MongoDB ObjectId (e.g. `69267e3b...`)         |
+
+### Known quirks
+
+- `/public-course?_id=<objectId>` — the `_id` parameter is **silently
+  ignored**. The endpoint returns all 73 courses unfiltered. Always
+  use `course_id` for filtering individual courses.
+- `/schedules` auto-filters to status `open` or `nearly_full`, a
+  non-empty `signup_url`, and `dates >= today`. No need to re-filter
+  client-side.
 
 ## Known quirks (from v1 experience)
 
