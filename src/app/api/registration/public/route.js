@@ -37,6 +37,23 @@ export async function POST(req) {
     headersList.get('x-real-ip') ||
     null;
 
+  // When the coordinator is also an attendee, they fill the first
+  // attendee slot server-side so the attendees[] array always matches
+  // the attendeesCount count the user selected.
+  const attendees = !data.attendeesListProvided
+    ? []
+    : data.coordinator.isAttending
+      ? [
+          {
+            firstName: data.coordinator.firstName,
+            lastName: data.coordinator.lastName,
+            email: data.coordinator.email,
+            phone: data.coordinator.phone,
+          },
+          ...data.attendees,
+        ]
+      : data.attendees;
+
   await dbConnect();
   const doc = await RegisterPublic.create({
     courseId: data.courseId,
@@ -44,14 +61,12 @@ export async function POST(req) {
     courseName: data.courseName,
     classId: data.classId,
     classDate: data.classDate,
-    firstName: data.firstName,
-    lastName: data.lastName,
-    email: data.email,
-    phone: data.phone,
-    lineId: data.lineId || undefined,
-    companyName: data.requestInvoice ? data.companyName : undefined,
-    taxId: data.requestInvoice ? data.taxId : undefined,
-    address: data.requestInvoice ? data.address : undefined,
+    coordinator: data.coordinator,
+    attendeesCount: data.attendeesCount,
+    attendeesListProvided: data.attendeesListProvided,
+    attendees,
+    requestInvoice: Boolean(data.requestInvoice),
+    invoice: data.invoice ?? null,
     notes: data.notes || undefined,
     status: 'pending',
     source: 'web',
@@ -66,24 +81,33 @@ export async function POST(req) {
   const adminDashboardUrl = `${baseUrl}/admin/registrations/${doc._id}`;
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
 
+  // Email templates still use the Phase 2.5a shape (firstName at the
+  // top level). Remap from coordinator until the templates are
+  // rewritten in sub-phase 2.5a-4.
   const userMsg = userConfirmationEmail({
     referenceNumber,
-    firstName: data.firstName,
+    firstName: data.coordinator.firstName,
     courseName: data.courseName || data.courseId,
     classDate: data.classDate,
   });
 
   const adminMsg = adminNotificationEmail({
     referenceNumber,
-    data: { ...data, requestInvoice: Boolean(data.requestInvoice) },
+    data: {
+      ...data,
+      firstName: data.coordinator.firstName,
+      lastName: data.coordinator.lastName,
+      email: data.coordinator.email,
+      phone: data.coordinator.phone,
+      lineId: data.coordinator.lineId,
+      requestInvoice: Boolean(data.requestInvoice),
+    },
     adminDashboardUrl,
   });
 
-  // Fire emails in parallel; do NOT block on failures. Registration is
-  // already persisted by this point.
   const emailPromises = [
     sendEmail({
-      to: data.email,
+      to: data.coordinator.email,
       subject: `ยืนยันการสมัครอบรม ${data.courseName || ''} - ${referenceNumber}`,
       html: userMsg.html,
       text: userMsg.text,
