@@ -36,3 +36,23 @@ export async function getPublicCourse(idOrCode) {
   const { items } = unwrap(raw);
   return items[0] ?? null;
 }
+
+/**
+ * Fetch a single course by its short course_id (e.g. "COPILOT-STU").
+ * Returns the full detail-response shape (see docs/api-domains.md)
+ * or null if not found.
+ *
+ * IMPORTANT: upstream's `/public-course?_id=<objectId>` silently
+ * ignores the parameter and returns all 73 courses unfiltered. Only
+ * `course_id` filter works for fetching individual courses.
+ * curl-verified 2026-04-23.
+ */
+export async function getCourseByCode(courseId) {
+  if (!courseId) return null;
+  const raw = await aiFetch(PATH, {
+    params: { course_id: courseId },
+    tags: [`course:${courseId}`],
+  });
+  const { items } = unwrap(raw);
+  return items?.[0] ?? null;
+}
