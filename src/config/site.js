@@ -90,35 +90,6 @@ export function findSkillBySlug(slug) {
 }
 
 /**
- * Programs (21) — used for /<program>-all-courses catalog routes.
- * TODO(phase-3): fetch from /api/ai/programs and cache via ISR.
- * curl-verify first — see docs/api-domains.md.
- */
-export const programs = [
-  { slug: 'power-bi',        label: 'Power BI',         icon: '/brand/program-icons/power-bi.png' },
-  { slug: 'excel',           label: 'Microsoft Excel',  icon: '/brand/program-icons/excel.png' },
-  { slug: 'power-automate',  label: 'Power Automate',   icon: '/brand/program-icons/power-automate.png' },
-  { slug: 'power-apps',      label: 'Power Apps',       icon: '/brand/program-icons/power-apps.png' },
-  { slug: 'canva',           label: 'Canva',            icon: '/brand/program-icons/canva.png' },
-  { slug: 'gen-ai',          label: 'Gen AI',           icon: '/brand/program-icons/gen-ai.png' },
-  { slug: 'copilot-studio',  label: 'Copilot Studio',   icon: '/brand/program-icons/copilot-studio.png' },
-  { slug: 'ai-builder',      label: 'AI Builder',       icon: '/brand/program-icons/ai-builder.png' },
-  { slug: 'make',            label: 'Make.com',         icon: '/brand/program-icons/make.png' },
-  { slug: 'n8n',             label: 'n8n',              icon: '/brand/program-icons/n8n.png' },
-  { slug: 'access',          label: 'Microsoft Access', icon: '/brand/program-icons/access.png' },
-  { slug: '365-copilot',     label: '365 Copilot',      icon: '/brand/program-icons/365-copilot.png' },
-  { slug: 'sql-server',      label: 'SQL Server',       icon: '/brand/program-icons/sql-server.png' },
-  { slug: 'dot-net',         label: '.Net',             icon: '/brand/program-icons/dot-net.png' },
-  { slug: 'powerpoint',      label: 'PowerPoint',       icon: '/brand/program-icons/powerpoint.png' },
-  { slug: 'fabric',          label: 'Fabric',           icon: '/brand/program-icons/fabric.png' },
-  { slug: 'python',          label: 'Python',           icon: '/brand/program-icons/python.png' },
-  { slug: 'uipath',          label: 'UiPath',           icon: '/brand/program-icons/uipath.png' },
-  { slug: 'google-adk',      label: 'Google ADK',       icon: '/brand/program-icons/google-adk.png' },
-  { slug: 'github-copilot',  label: 'GitHub Copilot',   icon: '/brand/program-icons/github-copilot.png' },
-  { slug: 'other',           label: 'ทั่วไป',           icon: '/brand/program-icons/other.png' },
-];
-
-/**
  * Career paths — hardcoded list for nav.
  * TODO(phase-3): fetch from /api/ai/career-path and cache via ISR.
  * curl-verify the endpoint first — see docs/api-domains.md.
