@@ -1,136 +1,123 @@
-import Link from 'next/link';
-import { AlertTriangle, Search } from 'lucide-react';
-import { CourseCard } from '@/components/course/CourseCard';
-import { listPublicCourses } from '@/lib/api/public-courses';
-import { skills, findSkillBySlug } from '@/config/site';
-import { cn } from '@/lib/utils';
+import { Suspense } from 'react';
+import { AlertTriangle } from 'lucide-react';
+import { getCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
+import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { CourseListClient } from './_components/CourseListClient';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
 
-export default async function Page({ searchParams }) {
-  const resolvedParams = (await searchParams) ?? {};
-  const skillSlug = typeof resolvedParams.skill === 'string' ? resolvedParams.skill : null;
-  const skill = skillSlug ? findSkillBySlug(skillSlug) : null;
-  const title = skill ? `หลักสูตร ${skill.label}` : 'หลักสูตรทั้งหมด';
+/**
+ * `/public-course` list omits `course_cover_url`, `course_teaser`,
+ * `course_levels`, and `course_traininghours`. To render the approved
+ * card design we fan out to `getCourseByCode()` per item in bounded
+ * chunks (concurrency 10) — better than 73 parallel requests, simpler
+ * than a per-card client fetch. Upstream caching in `aiFetch` means
+ * repeated page views are cheap.
+ */
+const COVER_FETCH_CHUNK = 10;
 
+export default async function Page() {
   let items = [];
   let fetchError = null;
 
   try {
-    // Unknown slug → fall back to the unfiltered list (no 404).
-    const result = await listPublicCourses(
-      skill ? { skill: skill.upstreamId } : undefined
-    );
-    items = result.items;
+    const result = await listPublicCourses();
+    items = await enrichWithDetails(result.items);
   } catch (err) {
     console.error('[training-course]', err);
     fetchError = err.message;
   }
 
+  if (fetchError) {
+    return <ErrorState message={fetchError} />;
+  }
+
+  // Suspense boundary — CourseListClient reads useSearchParams, which
+  // under Next 15 forces dynamic rendering without a boundary above it.
   return (
-    <div className="mx-auto max-w-[1280px] px-4 py-10 lg:px-6 lg:py-16">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)] md:text-4xl">
-          {title}
-        </h1>
-        <p className="mt-2 max-w-2xl text-base text-[var(--text-secondary)]">
-          หลักสูตรอบรม Public Class ทั้งหมดของ 9Expert Training — Power Platform, Data, AI,
-          Programming, Business และอื่นๆ
-        </p>
-      </header>
-
-      <SkillFilter active={skillSlug} />
-
-      {fetchError ? (
-        <ErrorState message={fetchError} />
-      ) : items.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <CourseGrid items={items} />
-      )}
-    </div>
+    <Suspense fallback={null}>
+      <CourseListClient items={items} />
+    </Suspense>
   );
 }
 
-function SkillFilter({ active }) {
-  return (
-    <nav className="mb-8 flex flex-wrap gap-2" aria-label="Skill filter">
-      <FilterChip href="/training-course" isActive={!active}>
-        ทั้งหมด
-      </FilterChip>
-      {skills.map((s) => (
-        <FilterChip
-          key={s.slug}
-          href={`/training-course?skill=${s.slug}`}
-          isActive={active === s.slug}
-        >
-          {s.label}
-        </FilterChip>
-      ))}
-    </nav>
-  );
-}
+async function enrichWithDetails(items) {
+  if (!items?.length) return [];
 
-function FilterChip({ href, isActive, children }) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        'inline-flex h-9 items-center rounded-full border px-4 text-sm font-semibold',
-        'transition-all duration-9e-micro ease-9e',
-        isActive
-          ? 'border-9e-brand bg-9e-brand text-9e-ice'
-          : 'border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:border-9e-brand hover:text-9e-brand'
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
+  const detailById = new Map();
+  for (let i = 0; i < items.length; i += COVER_FETCH_CHUNK) {
+    const chunk = items.slice(i, i + COVER_FETCH_CHUNK);
+    const results = await Promise.allSettled(
+      chunk.map((c) => getCourseByCode(c.course_id))
+    );
+    results.forEach((r, idx) => {
+      const code = chunk[idx].course_id;
+      if (r.status === 'fulfilled' && r.value) {
+        detailById.set(code, r.value);
+      } else if (r.status === 'rejected') {
+        console.warn('[training-course] detail fetch failed:', code, r.reason);
+      }
+    });
+  }
 
-function CourseGrid({ items }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {items.map((item) => (
-        <CourseCard key={item._id ?? item.course_id} course={item} />
-      ))}
-    </div>
-  );
-}
+  // Pre-fetch up to 3 upcoming schedules per course so cards can render
+  // signup pills without each one firing its own client-side request.
+  const scheduleById = new Map();
+  for (let i = 0; i < items.length; i += COVER_FETCH_CHUNK) {
+    const chunk = items.slice(i, i + COVER_FETCH_CHUNK);
+    const results = await Promise.allSettled(
+      chunk.map((c) => listSchedulesByCourse(c._id, { limit: 3 }))
+    );
+    results.forEach((r, idx) => {
+      const id = chunk[idx]._id;
+      if (r.status === 'fulfilled') {
+        scheduleById.set(id, r.value.items ?? []);
+      } else {
+        console.warn('[training-course] schedule fetch failed:', id, r.reason);
+      }
+    });
+  }
 
-function EmptyState() {
-  return (
-    <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--surface-muted)]">
-        <Search className="h-5 w-5 text-[var(--text-secondary)]" strokeWidth={1.75} />
-      </div>
-      <p className="text-base font-semibold text-[var(--text-primary)]">
-        ไม่พบหลักสูตรที่ตรงกับเงื่อนไข
-      </p>
-      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        ลองเลือกหมวดหมู่อื่น หรือกลับไปดูหลักสูตรทั้งหมด
-      </p>
-    </div>
-  );
+  return items.map((c) => {
+    const detail = detailById.get(c.course_id);
+    const hoursFromDetail = detail?.course_traininghours ?? null;
+    return {
+      ...c,
+      course_cover_url: detail?.course_cover_url ?? null,
+      course_teaser: detail?.course_teaser ?? null,
+      course_levels: detail?.course_levels ?? null,
+      course_workshop_status: detail?.course_workshop_status ?? null,
+      course_certificate_status: detail?.course_certificate_status ?? null,
+      course_type_public: detail?.course_type_public ?? null,
+      course_type_inhouse: detail?.course_type_inhouse ?? null,
+      course_traininghours:
+        hoursFromDetail ??
+        (c.course_trainingdays ? c.course_trainingdays * 6 : null),
+      // Detail response has full skill objects; fall back to list's ObjectId
+      // strings if detail failed (card filters those out).
+      skills: detail?.skills ?? c.skills,
+      schedules: scheduleById.get(c._id) ?? [],
+    };
+  });
 }
 
 function ErrorState({ message }) {
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-9e-accent/10">
-        <AlertTriangle className="h-5 w-5 text-9e-accent" strokeWidth={1.75} />
+    <div className="mx-auto max-w-[1280px] px-4 py-16 lg:px-6">
+      <div className="mx-auto flex max-w-md flex-col items-center text-center">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-9e-sky/20">
+          <AlertTriangle className="h-5 w-5 text-9e-primary" strokeWidth={1.75} />
+        </div>
+        <p className="text-base font-semibold text-9e-navy">โหลดข้อมูลไม่สำเร็จ</p>
+        <p className="mt-1 text-sm text-9e-slate">
+          กรุณาลองใหม่อีกครั้ง หรือติดต่อเราหากปัญหายังคงอยู่
+        </p>
+        {process.env.NODE_ENV !== 'production' && message && (
+          <pre className="mt-4 max-w-full overflow-x-auto rounded bg-9e-ice p-3 text-left text-xs text-9e-slate">
+            {message}
+          </pre>
+        )}
       </div>
-      <p className="text-base font-semibold text-[var(--text-primary)]">
-        โหลดข้อมูลไม่สำเร็จ
-      </p>
-      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        กรุณาลองใหม่อีกครั้ง หรือติดต่อเราหากปัญหายังคงอยู่
-      </p>
-      {process.env.NODE_ENV !== 'production' && message && (
-        <pre className="mt-4 max-w-full overflow-x-auto rounded bg-[var(--surface-muted)] p-3 text-left text-xs text-[var(--text-secondary)]">
-          {message}
-        </pre>
-      )}
     </div>
   );
 }

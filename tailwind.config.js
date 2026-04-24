@@ -33,9 +33,11 @@ module.exports = {
       // ── Typography ────────────────────────────────────────────────
       // Applied via next/font as CSS variables in src/app/layout.jsx
       fontFamily: {
-        thai: ['var(--font-thai)', '"LINE Seed Sans TH"', '"Noto Sans Thai"', 'Sarabun', 'sans-serif'],
-        en:   ['var(--font-en)', '"Google Sans"', 'Inter', 'Poppins', 'sans-serif'],
-        sans: ['var(--font-en)', 'var(--font-thai)', 'sans-serif'],
+        // Headings — LINE Seed Sans TH first (covers Thai + Latin), Google Sans fallback
+        heading: ['"LINE Seed Sans TH"', 'var(--font-thai)', '"Google Sans"', 'var(--font-en)', 'sans-serif'],
+        thai:    ['"LINE Seed Sans TH"', 'var(--font-thai)', 'sans-serif'],
+        en:      ['"Google Sans"', 'var(--font-en)', 'sans-serif'],
+        sans:    ['"Google Sans"', 'var(--font-en)', '"LINE Seed Sans TH"', 'var(--font-thai)', 'sans-serif'],
       },
 
       // ── Radii ─────────────────────────────────────────────────────
@@ -80,6 +82,7 @@ module.exports = {
       md:  '768px',
       lg:  '1024px',
       xl:  '1280px',
+      '2xl': '1536px',
     },
   },
   plugins: [],

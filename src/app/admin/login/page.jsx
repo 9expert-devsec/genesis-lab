@@ -1,44 +1,38 @@
 import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { LoginForm } from './_components/LoginForm';
 
 export const metadata = {
-  title: 'เข้าสู่ระบบ',
+  title: 'Admin Login',
   robots: { index: false, follow: false },
 };
 
-/**
- * Admin login page.
- * Phase 1: visual shell only. Phase 2: wire react-hook-form + Zod
- * + NextAuth `signIn('credentials', ...)` Server Action.
- */
-export default function AdminLoginPage() {
+export default function Page() {
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[var(--page-bg)] p-4">
+    <div className="min-h-dvh bg-9e-ice flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex justify-center">
-          <Logo />
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center px-6 py-4 bg-white rounded-9e-lg shadow-9e-sm mb-4">
+            <Logo variant="blue" href={null} priority />
+          </div>
+          <h1 className="text-xl font-bold text-9e-navy">9Expert Admin</h1>
+          <p className="text-sm text-9e-slate mt-1">
+            สำหรับเจ้าหน้าที่ 9Expert Training เท่านั้น
+          </p>
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>เข้าสู่ระบบผู้ดูแล</CardTitle>
-            <CardDescription>
-              สำหรับเจ้าหน้าที่ 9Expert Training เท่านั้น
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 text-sm text-[var(--text-secondary)]">
-              Login form จะถูกเปิดใช้งานใน <span className="text-9e-brand font-semibold">Phase 2</span>
-              {' '}(react-hook-form + Zod + NextAuth credentials).
-            </p>
-            <Link
-              href="/"
-              className="mt-4 inline-block text-sm text-9e-brand hover:underline"
-            >
-              ← กลับหน้าแรก
-            </Link>
-          </CardContent>
-        </Card>
+
+        <div className="bg-white rounded-9e-lg shadow-9e-sm border border-[var(--surface-border)] p-8">
+          <LoginForm />
+        </div>
+
+        <p className="text-center mt-6">
+          <Link
+            href="/"
+            className="text-sm text-9e-slate hover:text-9e-primary transition-colors"
+          >
+            ← กลับหน้าหลัก
+          </Link>
+        </p>
       </div>
     </div>
   );

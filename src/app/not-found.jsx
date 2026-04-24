@@ -11,7 +11,7 @@ export default function NotFound() {
         <p className="text-xs font-semibold uppercase tracking-wider text-9e-brand">
           404 — Page not found
         </p>
-        <h1 className="mt-2 text-4xl font-extrabold text-[var(--text-primary)] md:text-5xl">
+        <h1 className="mt-2 text-4xl font-bold text-[var(--text-primary)] md:text-5xl">
           ไม่พบหน้าที่คุณค้นหา
         </h1>
         <p className="mx-auto mt-3 max-w-md text-base text-[var(--text-secondary)]">

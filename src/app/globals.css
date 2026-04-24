@@ -63,6 +63,16 @@
 html        { color-scheme: light; }
 html.dark   { color-scheme: dark; }
 
+/* Hide scrollbars on horizontal scrollers used by carousels —
+   Firefox + IE via scrollbar-width, WebKit via ::-webkit-scrollbar. */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* ──────────────────────────────────────────────────────────────
    Base layer
    ────────────────────────────────────────────────────────────── */
@@ -81,7 +91,21 @@ html.dark   { color-scheme: dark; }
     transition:
       background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
       color            200ms cubic-bezier(0.4, 0, 0.2, 1);
-    @apply font-sans antialiased;
+    @apply font-en antialiased;
+  }
+
+  /* All headings use LINE Seed Sans TH, locked at bold (700) */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold;
+  }
+
+  /* Detail / body text → Google Sans */
+  label, input, select, textarea, button, li, td, th {
+    @apply font-en;
+  }
+
+  p, span {
+    font-family: "Google Sans", var(--font-en), sans-serif !important;
   }
 
   /* Focus ring using brand blue — readable on both light and dark */

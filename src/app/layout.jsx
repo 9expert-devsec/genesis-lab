@@ -1,26 +1,37 @@
-import { Inter, Noto_Sans_Thai } from 'next/font/google';
+import localFont from 'next/font/local';
 import { siteConfig } from '@/config/site';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
-// CI spec calls for Google Sans (restricted) → Inter as primary EN fallback.
-// next/font self-hosts these, which is the Vercel-recommended path.
-// LINE Seed Sans TH is not on Google Fonts — we load it via <link> below,
-// with Noto Sans Thai as the self-hosted safety net.
+// Both families are self-hosted from /public/fonts/ via next/font/local.
+// --font-en  → Google Sans (body / detail / EN)
+// --font-thai → LINE Seed Sans TH (Thai + headings)
 
-const inter = Inter({
-  subsets: ['latin'],
+const googleSans = localFont({
+  src: [
+    { path: '../fonts/GoogleSans-Regular.ttf',        weight: '400', style: 'normal' },
+    { path: '../fonts/GoogleSans-Italic.ttf',         weight: '400', style: 'italic' },
+    { path: '../fonts/GoogleSans-Medium.ttf',         weight: '500', style: 'normal' },
+    { path: '../fonts/GoogleSans-MediumItalic.ttf',   weight: '500', style: 'italic' },
+    { path: '../fonts/GoogleSans-SemiBold.ttf',       weight: '600', style: 'normal' },
+    { path: '../fonts/GoogleSans-Bold.ttf',           weight: '700', style: 'normal' },
+    { path: '../fonts/GoogleSans-BoldItalic.ttf',     weight: '700', style: 'italic' },
+  ],
   variable: '--font-en',
   display: 'swap',
-  weight: ['400', '500', '600', '700', '800'],
 });
 
-const notoSansThai = Noto_Sans_Thai({
-  subsets: ['thai'],
+const lineSeedSansTH = localFont({
+  src: [
+    { path: '../fonts/LINESeedSansTH_W_Th.woff2',  weight: '100', style: 'normal' },
+    { path: '../fonts/LINESeedSansTH_W_Rg.woff2',  weight: '400', style: 'normal' },
+    { path: '../fonts/LINESeedSansTH_W_Bd.woff2',  weight: '700', style: 'normal' },
+    { path: '../fonts/LINESeedSansTH_W_He.woff2',  weight: '800', style: 'normal' },
+    { path: '../fonts/LINESeedSansTH_W_XBd.woff2', weight: '900', style: 'normal' },
+  ],
   variable: '--font-thai',
   display: 'swap',
-  weight: ['400', '500', '600', '700', '800'],
 });
 
 // ── Metadata ─────────────────────────────────────────────────────
@@ -77,18 +88,10 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="th"
-      className={`${inter.variable} ${notoSansThai.variable}`}
+      className={`${googleSans.variable} ${lineSeedSansTH.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        {/* LINE Seed Sans TH — not on Google Fonts, loaded via CDN per CI guide */}
-        <link rel="preconnect" href="https://fonts.cdnfonts.com" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.cdnfonts.com/css/line-seed-sans-th"
-        />
-      </head>
-      <body>
+      <body className="font-en antialiased">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

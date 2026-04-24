@@ -126,6 +126,31 @@ richer shape, including fields absent from the list response:
 }
 ```
 
+### Additional fields on detail response (verified 2026-04-24)
+
+Beyond the minimal shape above, the detail response also carries:
+
+- `course_netprice`: number | null — promotional net price; null when
+  no promotion is active. Show strikethrough over `course_price` when
+  present.
+- `course_type_public`, `course_type_inhouse`: boolean — availability
+  flags. Drive the Classroom / Hybrid / Inhouse pill row.
+- `course_workshop_status`, `course_certificate_status`: boolean —
+  feature flags. Drive the "Workshop" / "e-Certificate" badge row.
+- `course_promote_status`: boolean — is currently promoted.
+- `course_objectives`: string[] — learning objectives (วัตถุประสงค์).
+- `course_target_audience`: string[] — target audience
+  (หลักสูตรนี้เหมาะสำหรับ); may be empty.
+- `course_prerequisites`: string[] — prerequisites (พื้นฐาน).
+- `course_system_requirements`: string[] — system requirements.
+- `training_topics`: `{ title: string, bullets: string[] }[]` — outline
+  chapters, each with its own sub-bullets (หัวข้อการฝึกอบรม). Note the
+  field name has **no** `course_` prefix, unlike the other content
+  arrays above.
+- `course_doc_paths`: string[] — absolute URLs to PDF outlines.
+- `course_lab_paths`: string[] — absolute URLs to lab files.
+- `course_case_study_paths`: string[] — absolute URLs to case studies.
+
 Quirks:
 - All top-level field names are `snake_case`, not camelCase.
 - `course_trainingdays` is an integer day count. The detail response

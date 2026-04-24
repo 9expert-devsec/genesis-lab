@@ -7,6 +7,7 @@ import {
   Users,
   ClipboardList,
   Image as ImageIcon,
+  Star,
   FileText,
   Briefcase,
   LogOut,
@@ -18,6 +19,7 @@ const adminNav = [
   { label: 'บัญชีผู้ดูแล', href: '/admin/accounts',      icon: Users },
   { label: 'การลงทะเบียน', href: '/admin/registrations', icon: ClipboardList },
   { label: 'แบนเนอร์',    href: '/admin/banners',       icon: ImageIcon },
+  { label: 'คอร์สแนะนำ',   href: '/admin/featured-courses', icon: Star },
   { label: 'บทความ',      href: '/admin/articles',      icon: FileText },
   { label: 'ประกาศงาน',   href: '/admin/recruits',      icon: Briefcase },
 ];
