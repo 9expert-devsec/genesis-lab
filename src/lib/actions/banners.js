@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import { Banner } from '@/models/Banner';
 import { bannerSchema } from '@/lib/schemas/banner';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
+import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 
 export async function getBanners() {
   await dbConnect();
@@ -65,6 +66,7 @@ export async function createBanner(formData) {
   await Banner.create(parsed.data);
   revalidatePath('/');
   revalidatePath('/admin/banners');
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -108,6 +110,7 @@ export async function updateBanner(id, formData) {
   await Banner.findByIdAndUpdate(id, parsed.data);
   revalidatePath('/');
   revalidatePath('/admin/banners');
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -120,5 +123,6 @@ export async function deleteBanner(id) {
   await Banner.findByIdAndDelete(id);
   revalidatePath('/');
   revalidatePath('/admin/banners');
+  triggerLandingSync();
   return { ok: true };
 }

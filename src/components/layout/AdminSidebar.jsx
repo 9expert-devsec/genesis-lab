@@ -12,6 +12,7 @@ import {
   MessageSquareQuote,
   FileText,
   Briefcase,
+  Database,
   LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ const adminNav = [
   { label: 'รีวิวแนะนำ',   href: '/admin/featured-reviews', icon: MessageSquareQuote },
   { label: 'บทความ',      href: '/admin/articles',      icon: FileText },
   { label: 'ประกาศงาน',   href: '/admin/recruits',      icon: Briefcase },
+  { label: 'Landing Cache', href: '/admin/landing-cache', icon: Database },
 ];
 
 export function AdminSidebar() {

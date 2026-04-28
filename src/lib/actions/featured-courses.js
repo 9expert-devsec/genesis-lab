@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { FeaturedCourse } from '@/models/FeaturedCourse';
 import { getCourseByCode } from '@/lib/api/public-courses';
+import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 
 export async function getFeaturedCourses() {
   await dbConnect();
@@ -76,6 +77,7 @@ export async function addFeaturedCourse(formData) {
 
   revalidatePath('/');
   revalidatePath('/admin/featured-courses');
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -88,6 +90,7 @@ export async function updateFeaturedCourse(id, formData) {
   await FeaturedCourse.findByIdAndUpdate(id, { sort_order, active });
   revalidatePath('/');
   revalidatePath('/admin/featured-courses');
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -96,5 +99,6 @@ export async function deleteFeaturedCourse(id) {
   await FeaturedCourse.findByIdAndDelete(id);
   revalidatePath('/');
   revalidatePath('/admin/featured-courses');
+  triggerLandingSync();
   return { ok: true };
 }

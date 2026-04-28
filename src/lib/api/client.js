@@ -15,8 +15,14 @@
  *      Each adapter handles its own status semantics.
  */
 
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+
 const BASE = process.env.AI_API_BASE ?? 'https://9exp-sec.com/api/ai';
 const KEY  = process.env.AI_API_KEY;
+// Cap any single upstream call so a stalled API can't hang the
+// landing-page sync job (or a request-time render that falls back
+// to a direct call) for the full Node default.
+const UPSTREAM_TIMEOUT_MS = 10_000;
 
 /**
  * Low-level fetch against the upstream API.
@@ -45,16 +51,20 @@ export async function aiFetch(path, { params, revalidate = 3600, tags } = {}) {
     }
   }
 
-  const res = await fetch(url, {
-    headers: {
-      'x-api-key': KEY,
-      'accept': 'application/json',
+  const res = await fetchWithTimeout(
+    url,
+    {
+      headers: {
+        'x-api-key': KEY,
+        'accept': 'application/json',
+      },
+      next: {
+        revalidate,
+        ...(tags ? { tags: Array.isArray(tags) ? tags : [tags] } : {}),
+      },
     },
-    next: {
-      revalidate,
-      ...(tags ? { tags: Array.isArray(tags) ? tags : [tags] } : {}),
-    },
-  });
+    UPSTREAM_TIMEOUT_MS
+  );
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { FeaturedOnlineCourse } from '@/models/FeaturedOnlineCourse';
+import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 
 const ADMIN_PATH = '/admin/featured-online-courses';
 
@@ -54,6 +55,7 @@ export async function addFeaturedOnlineCourse(formData) {
 
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -66,6 +68,7 @@ export async function updateFeaturedOnlineCourse(id, formData) {
   await FeaturedOnlineCourse.findByIdAndUpdate(id, { sort_order, active });
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -74,5 +77,6 @@ export async function deleteFeaturedOnlineCourse(id) {
   await FeaturedOnlineCourse.findByIdAndDelete(id);
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }

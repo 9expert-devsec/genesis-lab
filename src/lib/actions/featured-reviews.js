@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { FeaturedReview } from '@/models/FeaturedReview';
+import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 
 const ADMIN_PATH = '/admin/featured-reviews';
 
@@ -41,6 +42,7 @@ export async function addFeaturedReview(formData) {
 
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -53,6 +55,7 @@ export async function updateFeaturedReview(id, formData) {
   await FeaturedReview.findByIdAndUpdate(id, { sort_order, active });
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }
 
@@ -61,5 +64,6 @@ export async function deleteFeaturedReview(id) {
   await FeaturedReview.findByIdAndDelete(id);
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
+  triggerLandingSync();
   return { ok: true };
 }

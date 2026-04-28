@@ -237,7 +237,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                           <p className="text-xs font-semibold text-9e-primary dark:text-[#b6c2d4]">
                             {skillPrograms.length} โปรแกรม
                           </p>
-                          <button className="text-xs font-semibold text-9e-primary hover:text-9e-navy dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full">
+                          <button className="text-xs font-semibold text-white bg-9e-primary hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full">
                             ดูหลักสูตรใน Skill นี้
                           </button>
                         </div>

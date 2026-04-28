@@ -9,15 +9,21 @@
  * `aiFetch` client. No auth header is required (public endpoint).
  */
 
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+
 const REVIEWS_URL =
   process.env.NEXT_PUBLIC_REVIEWS_URL ??
   'https://reviews.9experttraining.com/api/public/reviews';
 
+const REVIEWS_TIMEOUT_MS = 10_000;
+
 export async function getAllReviews() {
   try {
-    const res = await fetch(REVIEWS_URL, {
-      next: { revalidate: 3600, tags: ['reviews'] },
-    });
+    const res = await fetchWithTimeout(
+      REVIEWS_URL,
+      { next: { revalidate: 3600, tags: ['reviews'] } },
+      REVIEWS_TIMEOUT_MS
+    );
     if (!res.ok) return [];
     const data = await res.json();
     if (Array.isArray(data)) return data;
