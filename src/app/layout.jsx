@@ -69,7 +69,8 @@ export const metadata = {
     description: siteConfig.description,
   },
   icons: {
-    icon: '/favicon.ico',
+    icon: '/brand/logo-g.ico',
+    shortcut: '/brand/logo-g.ico',
   },
 };
 
