@@ -14,8 +14,8 @@ export const siteConfig = {
   tagline:     'Knowledge Provider',
   slogan:      'อย่าหยุดเรียนรู้',
   motto:       'สอนสไตล์ใช้งานจริง',
-  concept:     'Universe of Learning Technology',
-  description: 'ศูนย์ฝึกอบรมคอมพิวเตอร์มืออาชีพ สอนสไตล์ใช้งานจริง',
+  concept:     'Never Stop Learning',
+  description: 'สอนแบ่งปันความรู้ เทคโนโลยี เพื่อขับเคลื่อนประเทศไทย',
   url:         process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.9experttraining.com',
 
   // External academy for online courses (not built here)
@@ -177,7 +177,7 @@ export const footerNav = {
   ],
   resources: [
     { label: 'บทความ', href: '/articles' },
-    { label: 'โปรโมชั่น', href: '/promotion' },
+    { label: 'โปรโมชัน', href: '/promotion' },
     { label: 'คำถามที่พบบ่อย', href: '/faq' },
   ],
 };

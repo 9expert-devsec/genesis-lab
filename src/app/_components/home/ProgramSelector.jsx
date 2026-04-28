@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Keyboard, Lightbulb } from "lucide-react";
@@ -9,22 +9,50 @@ import { cn } from "@/lib/utils";
 /**
  * Program / Skill selector.
  *
- * Program tab: flat 4-col grid, 16 programs per page, arrow + dot nav.
+ * Program tab: flat grid, page size depends on viewport
+ *   (mobile 10 = 5 rows × 2 cols; desktop 8 = 2 rows × 4 cols).
  * Skill tab: horizontal tab bar of skill categories, then a split pane
  *   (left: skill icon + teaser + count, right: 3-col grid of the
- *    programs that belong to that skill, paginated).
+ *    programs that belong to that skill, 6 per page).
  *
  * Skill→Programs uses `skill.programs[]` which upstream already nests
  * inside each `/skills` item, so no client-side filter on ObjectIds.
  */
 
-const PROGRAMS_PER_PAGE = 16; // Program tab: 4 cols × 4 rows
-const SKILL_PROGRAMS_PER_PAGE = 8; // Skill tab: 3 cols × 3 rows
+const PROGRAMS_PER_PAGE_DESKTOP = 16; // Program tab: 4 cols × 2 rows
+const PROGRAMS_PER_PAGE_MOBILE = 10; // Program tab: 2 cols × 5 rows
+const SKILL_PROGRAMS_PER_PAGE = 8; // Skill tab: 3 cols × 2 rows on all sizes
+const SKILL_PROGRAMS_PER_PAGE_MOBILE = 6;
 
 export function ProgramSelector({ programs = [], skills = [] }) {
   const [tab, setTab] = useState("program");
   const [page, setPage] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState(skills[0] ?? null);
+
+  // Page size flips at the md breakpoint (768px). SSR + initial client
+  // render assume desktop so the static markup stays consistent;
+  // useEffect re-evaluates after mount.
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  const programsPerPage = isMobile
+    ? PROGRAMS_PER_PAGE_MOBILE
+    : PROGRAMS_PER_PAGE_DESKTOP;
+
+    const skillsPerPage = isMobile
+    ? SKILL_PROGRAMS_PER_PAGE_MOBILE
+    : SKILL_PROGRAMS_PER_PAGE;
+
+  // Reset to first page whenever the page-size flips so the user
+  // doesn't land on an empty trailing page after a resize.
+  useEffect(() => {
+    setPage(0);
+  }, [programsPerPage]);
 
   function handleTabChange(newTab) {
     setTab(newTab);
@@ -39,12 +67,12 @@ export function ProgramSelector({ programs = [], skills = [] }) {
   // Program tab — paginate the flat programs list
   const programTotalPages = Math.max(
     1,
-    Math.ceil(programs.length / PROGRAMS_PER_PAGE),
+    Math.ceil(programs.length / programsPerPage),
   );
   const programSafePage = Math.min(page, programTotalPages - 1);
   const programPageItems = programs.slice(
-    programSafePage * PROGRAMS_PER_PAGE,
-    (programSafePage + 1) * PROGRAMS_PER_PAGE,
+    programSafePage * programsPerPage,
+    (programSafePage + 1) * programsPerPage,
   );
 
   // Skill tab — each skill already carries a nested `programs` array
@@ -54,22 +82,22 @@ export function ProgramSelector({ programs = [], skills = [] }) {
   );
   const skillTotalPages = Math.max(
     1,
-    Math.ceil(skillPrograms.length / SKILL_PROGRAMS_PER_PAGE),
+    Math.ceil(skillPrograms.length / skillsPerPage),
   );
   const skillSafePage = Math.min(page, skillTotalPages - 1);
   const skillPageItems = skillPrograms.slice(
-    skillSafePage * SKILL_PROGRAMS_PER_PAGE,
-    (skillSafePage + 1) * SKILL_PROGRAMS_PER_PAGE,
+    skillSafePage * skillsPerPage,
+    (skillSafePage + 1) * skillsPerPage,
   );
 
   return (
-    <section className="bg-[#f8fafd] px-4 py-14 lg:px-6">
-      <div className="mx-auto max-w-[1280px]">
-        <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy">
+    <section className="bg-[#f8fafd] dark:bg-9e-border px-4 py-14 lg:px-6">
+      <div className="mx-auto max-w-[1200px]">
+        <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
           เลือกโปรแกรมที่คุณสนใจเรียน
         </h2>
 
-        <div className="mb-8 flex justify-center gap-4">
+        <div className="mb-8 flex w-full gap-3 sm:justify-center sm:gap-4">
           <TabButton
             active={tab === "program"}
             onClick={() => handleTabChange("program")}
@@ -88,12 +116,12 @@ export function ProgramSelector({ programs = [], skills = [] }) {
 
         {/* ── PROGRAM TAB ──────────────────────────────────────────── */}
         {tab === "program" && (
-          <div className="flex h-[410px] flex-col rounded-2xl bg-[#f8fafd] lg:p-8">
+          <div className="flex flex-col h-[450px]  md:h-[410px] rounded-2xl bg-[#f8fafd] dark:bg-9e-border">
             {programs.length === 0 ? (
               <EmptyState />
             ) : (
               <>
-                <div className="relative">
+                <div className="relative h-[400px] md:h-[320px]">
                   <PrevButton
                     show={programSafePage > 0}
                     onClick={() => setPage((p) => p - 1)}
@@ -127,7 +155,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
 
         {/* ── SKILL TAB ────────────────────────────────────────────── */}
         {tab === "skill" && (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-9e-sm">
+          <div className="overflow-hidden rounded-2xl bg-white shadow-9e-sm dark:bg-9e-navy">
             {skills.length === 0 ? (
               <div className="p-8">
                 <EmptyState />
@@ -135,7 +163,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
             ) : (
               <>
                 {/* Skill category tabs */}
-                <div className="scrollbar-hide flex overflow-x-auto h-[50px] border-b border-gray-200 bg-white">
+                <div className="scrollbar-hide flex overflow-x-auto h-[50px] border-b border-gray-200 bg-white dark:bg-9e-navy dark:border-gray-600">
                   {skills.map((skill) => {
                     const isActive = selectedSkill?._id === skill._id;
                     return (
@@ -146,8 +174,8 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                         className={cn(
                           "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3 text-sm font-semibold transition-all duration-9e-micro ease-9e",
                           isActive
-                            ? "border-9e-primary bg-[#dcdcdc] text-9e-primary"
-                            : "border-transparent text-9e-slate hover:border-gray-300 hover:text-9e-navy",
+                            ? "border-9e-primary bg-[#e9e9e9] text-9e-primary dark:bg-9e-navy dark:text-9e-lime dark:border-9e-lime"
+                            : "border-transparent text-9e-slate hover:border-gray-300 hover:text-9e-navy dark:text-9e-slate dark:hover:border-gray-600 dark:hover:text-white",
                         )}
                       >
                         {skill.skilliconurl && (
@@ -167,9 +195,9 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                 </div>
 
                 {/* Content: left pane (skill info) + right pane (programs) */}
-                <div className="grid h-[360px] grid-cols-1 lg:grid-cols-[360px_1fr]">
+                <div className="grid grid-cols-1 lg:h-[360px] lg:grid-cols-[360px_1fr]">
                   {/* Left: skill summary */}
-                  <div className="flex flex-col min-h-0 h-full gap-4 border-b border-gray-200 p-6 lg:border-b-0 lg:border-r">
+                  <div className="flex flex-col min-h-0 h-full gap-4 border-b border-gray-200 p-6 lg:border-b-0 lg:border-r dark:border-gray-600">
                     {selectedSkill && (
                       <>
                         <div className="flex items-center gap-3">
@@ -194,22 +222,22 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                               />
                             </div>
                           )}
-                          <h3 className="text-lg font-bold text-9e-navy">
+                          <h3 className="text-lg font-bold text-9e-navy dark:text-white">
                             {selectedSkill.skill_name}
                           </h3>
                         </div>
 
                         {selectedSkill.skill_teaser && (
-                          <p className="line-clamp-[7] text-sm leading-relaxed text-9e-slate">
+                          <p className="line-clamp-[7] font-light text-sm leading-relaxed text-9e-slate dark:text-white">
                             {selectedSkill.skill_teaser}
                           </p>
                         )}
 
-                        <div className="mt-auto flex flex-row justify-between">
-                          <p className="text-xs font-semibold text-9e-primary">
+                        <div className="mt-auto flex flex-row justify-between items-center">
+                          <p className="text-xs font-semibold text-9e-primary dark:text-[#b6c2d4]">
                             {skillPrograms.length} โปรแกรม
                           </p>
-                          <button className="text-xs font-semibold text-9e-primary hover:text-9e-navy">
+                          <button className="text-xs font-semibold text-9e-primary hover:text-9e-navy dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full">
                             ดูหลักสูตรใน Skill นี้
                           </button>
                         </div>
@@ -220,7 +248,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                   {/* Right: programs in the selected skill */}
                   <div className="flex flex-col min-h-0 h-full p-6">
                     {skillPrograms.length === 0 ? (
-                      <div className="flex h-full items-center justify-center text-sm text-9e-slate">
+                      <div className="flex h-full items-center justify-center text-sm text-9e-slate dark:text-9e-slate">
                         ไม่มีโปรแกรมใน Skill นี้
                       </div>
                     ) : (
@@ -237,7 +265,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                             compact
                           />
 
-                          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
                             {skillPageItems.map((item) => (
                               <ProgramTileCard
                                 key={item.program_id ?? item._id}
@@ -275,10 +303,10 @@ function TabButton({ active, onClick, children }) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 rounded-full px-8 py-3 text-sm font-bold transition-all duration-9e-micro ease-9e",
+        "flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-all duration-9e-micro ease-9e sm:flex-none sm:px-8",
         active
-          ? "bg-9e-primary text-white shadow-9e-md"
-          : "border border-gray-200 bg-white text-9e-slate hover:border-9e-primary hover:text-9e-primary",
+          ? "bg-9e-primary text-white shadow-9e-md dark:bg-9e-lime dark:text-9e-navy"
+          : "border border-gray-200 bg-white text-9e-slate hover:border-9e-primary hover:text-9e-primary dark:border-gray-600 dark:bg-9e-navy dark:text-9e-slate dark:hover:border-9e-lime dark:hover:text-9e-lime",
       )}
     >
       {children}
@@ -288,8 +316,8 @@ function TabButton({ active, onClick, children }) {
 
 function PrevButton({ show, onClick, compact = false }) {
   if (!show) return null;
-  const size = compact ? "h-8 w-8" : "h-10 w-10";
-  const offset = compact ? "-left-3" : "-left-5";
+  const size = compact ? "h-9 w-9 sm:h-8 sm:w-8" : "h-11 w-11 sm:h-10 sm:w-10";
+  const offset = compact ? "-left-2 md:-left-3" : "-left-2 md:-left-5";
   const iconSize = compact ? 14 : 18;
   return (
     <button
@@ -297,20 +325,20 @@ function PrevButton({ show, onClick, compact = false }) {
       onClick={onClick}
       aria-label="ก่อนหน้า"
       className={cn(
-        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand",
+        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
         size,
         offset,
       )}
     >
-      <ChevronLeft size={iconSize} className="text-9e-ice" />
+      <ChevronLeft size={iconSize} className="text-9e-ice dark:text-9e-navy" />
     </button>
   );
 }
 
 function NextButton({ show, onClick, compact = false }) {
   if (!show) return null;
-  const size = compact ? "h-8 w-8" : "h-10 w-10";
-  const offset = compact ? "-right-3" : "-right-5";
+  const size = compact ? "h-9 w-9 sm:h-8 sm:w-8" : "h-11 w-11 sm:h-10 sm:w-10";
+  const offset = compact ? "-right-2 md:-right-3" : "-right-2 md:-right-5";
   const iconSize = compact ? 14 : 18;
   return (
     <button
@@ -318,12 +346,12 @@ function NextButton({ show, onClick, compact = false }) {
       onClick={onClick}
       aria-label="ถัดไป"
       className={cn(
-        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand",
+        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
         size,
         offset,
       )}
     >
-      <ChevronRight size={iconSize} className="text-9e-ice" />
+      <ChevronRight size={iconSize} className="text-9e-ice dark:text-9e-navy" />
     </button>
   );
 }
@@ -341,8 +369,8 @@ function PageDots({ total, current, onChange, className }) {
           className={cn(
             "rounded-full transition-all duration-9e-micro ease-9e",
             i === current
-              ? "h-2.5 w-6 bg-9e-brand"
-              : "h-2.5 w-2.5 bg-gray-300 hover:bg-9e-sky",
+              ? "h-2.5 w-6 bg-9e-brand dark:bg-9e-lime "
+              : "h-2.5 w-2.5 bg-gray-300 hover:bg-9e-sky dark:hover:bg-9e-lime-lt",
           )}
         />
       ))}
@@ -365,7 +393,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
   return (
     <Link
       href={hrefBuilder(item)}
-      className="group flex items-center gap-3 rounded-xl border-2 border-transparent bg-white px-4 py-3 transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95"
+      className="group flex items-center gap-3 rounded-xl border-2 border-transparent bg-white px-4 py-3 transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95 dark:bg-9e-navy dark:border-gray-600 dark:hover:border-9e-lime"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-9e-ice">
         {icon && (
@@ -379,7 +407,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
           />
         )}
       </div>
-      <span className="line-clamp-1 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary">
+      <span className="line-clamp-1 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary dark:text-white dark:group-hover:text-9e-lime">
         {name}
       </span>
     </Link>
@@ -393,21 +421,21 @@ function ProgramTileCard({ item, hrefBuilder }) {
   return (
     <Link
       href={hrefBuilder(item)}
-      className="group flex flex-col items-center gap-2 rounded-xl border-2 border-transparent bg-white p-4 text-center transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95"
+      className="group flex flex-col items-center gap-2 rounded-xl border-2 border-transparent bg-white p-2 text-center transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95 sm:p-4 dark:bg-9e-border dark:hover:border-9e-lime"
     >
-      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-9e-ice">
+      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-9e-ice sm:h-12 sm:w-12">
         {icon && (
           <Image
             src={icon}
             alt=""
             width={36}
             height={36}
-            className="object-contain"
+            className="h-7 w-7 object-contain sm:h-9 sm:w-9"
             unoptimized
           />
         )}
       </div>
-      <span className="line-clamp-2 text-xs font-semibold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary">
+      <span className="line-clamp-2 w-full text-[0.65rem] font-semibold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary sm:text-xs dark:text-9e-ice dark:group-hover:text-9e-lime">
         {name}
       </span>
     </Link>

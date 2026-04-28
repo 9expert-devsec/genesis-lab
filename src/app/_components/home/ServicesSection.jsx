@@ -24,8 +24,8 @@ const SERVICES = [
 
 export function ServicesSection() {
   return (
-    <section className="bg-9e-gradient-hero px-4 py-14 lg:px-6">
-      <div className="mx-auto max-w-[1280px] text-center">
+    <section className="bg-9e-gradient-hero px-4 py-12 sm:px-6 sm:py-14 lg:px-8 dark:bg-none dark:bg-9e-navy">
+      <div className="mx-auto max-w-[1200px] text-center">
         <h2 className="mb-2 text-2xl font-bold text-white">
           บริการของเรา
         </h2>
@@ -40,15 +40,15 @@ export function ServicesSection() {
             <Link
               key={title}
               href={href}
-              className="group flex flex-col items-center gap-4 rounded-2xl border-2 border-transparent bg-white p-6 text-center shadow-sm transition-all duration-200 ease-9e hover:-translate-y-1 hover:border-9e-sky hover:shadow-9e-md active:scale-95"
+              className="group flex flex-col items-center gap-4 rounded-2xl border-2 border-transparent bg-white dark:bg-9e-card px-4 py-6 text-center shadow-sm transition-all duration-200 ease-9e hover:-translate-y-1 hover:border-9e-sky hover:shadow-9e-md active:scale-95 sm:p-6"
             >
-              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-9e-sky text-9e-primary transition-all duration-200 group-hover:border-9e-primary group-hover:bg-9e-primary group-hover:text-white">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-9e-sky text-9e-primary transition-all duration-200 group-hover:border-9e-primary group-hover:bg-9e-primary group-hover:text-white dark:text-white dark:border-white">
                 <Icon className="h-6 w-6" strokeWidth={1.75} />
               </div>
-              <h3 className="text-base font-bold text-9e-navy transition-colors duration-200 group-hover:text-9e-primary">
+              <h3 className="text-base font-bold text-9e-navy dark:text-white transition-colors duration-200 group-hover:text-9e-primary dark:group-hover:text-9e-sky">
                 {title}
               </h3>
-              <p className="text-sm leading-relaxed text-9e-slate">{desc}</p>
+              <p className="text-sm leading-relaxed text-9e-slate dark:text-[#b6c2d4]">{desc}</p>
             </Link>
           ))}
         </div>

@@ -8,6 +8,8 @@ import {
   ClipboardList,
   Image as ImageIcon,
   Star,
+  Monitor,
+  MessageSquareQuote,
   FileText,
   Briefcase,
   LogOut,
@@ -20,6 +22,8 @@ const adminNav = [
   { label: 'การลงทะเบียน', href: '/admin/registrations', icon: ClipboardList },
   { label: 'แบนเนอร์',    href: '/admin/banners',       icon: ImageIcon },
   { label: 'คอร์สแนะนำ',   href: '/admin/featured-courses', icon: Star },
+  { label: 'คอร์สออนไลน์แนะนำ', href: '/admin/featured-online-courses', icon: Monitor },
+  { label: 'รีวิวแนะนำ',   href: '/admin/featured-reviews', icon: MessageSquareQuote },
   { label: 'บทความ',      href: '/admin/articles',      icon: FileText },
   { label: 'ประกาศงาน',   href: '/admin/recruits',      icon: Briefcase },
 ];

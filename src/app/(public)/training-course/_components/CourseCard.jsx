@@ -5,6 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
 import { cn, courseHref } from "@/lib/utils";
+import ScheduleCard from "@/components/ScheduleCard";
+import {
+  formatScheduleDate,
+  formatStatusFromAPI,
+} from "@/lib/formatScheduleDate";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
 
@@ -60,7 +65,7 @@ export function CourseCard({ course, className }) {
   return (
     <article
       className={cn(
-        "flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm",
+        "flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:bg-9e-navy dark:border-none",
         "transition-all duration-9e-micro ease-9e hover:-translate-y-1 hover:shadow-9e-md",
         className,
       )}
@@ -100,7 +105,7 @@ export function CourseCard({ course, className }) {
             {skillTags.slice(0, 3).map((s) => (
               <span
                 key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 bg-9e-ice px-2 py-0.5 text-xs text-9e-slate"
+                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate dark:border-[#1e3a5f] dark:text-[#94a3b8]"
               >
                 {s.skill_name}
               </span>
@@ -109,9 +114,9 @@ export function CourseCard({ course, className }) {
         )}
 
         {/* Course name with left accent */}
-        <div className="h-[46px]">
+        <div className="h-[52px]">
           <Link href={href}>
-            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-primary pl-2 text-sm font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-primary">
+            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-primary pl-2 text-base font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-primary dark:text-white">
               {name}
             </h3>
           </Link>
@@ -119,13 +124,13 @@ export function CourseCard({ course, className }) {
 
         {/* Teaser */}
         {teaser && (
-          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate">
+          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate dark:text-[#b7c3d4]">
             {teaser}
           </p>
         )}
 
         {/* Duration + Price */}
-        <div className="mb-3 mt-auto flex items-center justify-between text-xs text-9e-slate">
+        <div className="mb-3 mt-auto flex flex-wrap items-center justify-between gap-2 text-xs text-9e-slate dark:text-[#b7c3d4]">
           {days ? (
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" strokeWidth={1.75} />
@@ -134,7 +139,7 @@ export function CourseCard({ course, className }) {
           ) : (
             <span />
           )}
-          <span className="text-sm font-bold text-9e-navy">
+          <span className="text-base font-bold text-9e-navy dark:text-white">
             {!price || Number(price) === 0
               ? "Call .-"
               : `${Number(price).toLocaleString("th-TH")} .-`}
@@ -143,11 +148,11 @@ export function CourseCard({ course, className }) {
 
         {/* Feature badges */}
         {(hasWorkshop || hasCertificate || levelLabel) && (
-          <div className="flex flex-wrap gap-3 text-xs text-9e-slate">
+          <div className="flex flex-wrap gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
             {hasWorkshop && (
               <span className="inline-flex items-center gap-1">
                 <MonitorPlay
-                  className="h-3 w-3 text-9e-primary"
+                  className="h-3 w-3 text-9e-primary dark:text-white"
                   strokeWidth={2}
                 />
                 Workshop
@@ -155,14 +160,14 @@ export function CourseCard({ course, className }) {
             )}
             {hasCertificate && (
               <span className="inline-flex items-center gap-1">
-                <Award className="h-3 w-3 text-9e-primary" strokeWidth={2} />
+                <Award className="h-3 w-3 text-9e-primary dark:text-white" strokeWidth={2} />
                 e-Certificate
               </span>
             )}
             {levelLabel && (
               <span className="inline-flex items-center gap-1">
                 <BarChart2
-                  className="h-3 w-3 text-9e-primary"
+                  className="h-3 w-3 text-9e-primary dark:text-white"
                   strokeWidth={2}
                 />
                 {levelLabel}
@@ -172,48 +177,53 @@ export function CourseCard({ course, className }) {
         )}
       </div>
 
-      {/* ── Expand panel (schedules) — hidden for inhouse-only courses ── */}
-      {!isInhouseOnly && (
+      {/* ── Expand panel (schedules) — hidden for inhouse-only and for
+            courses with no schedules (e.g. online-only). ── */}
+      {!isInhouseOnly && schedules?.length > 0 && (
         <div
           className={cn(
-            "overflow-hidden transition-[max-height] duration-9e-reveal ease-9e",
+            "overflow-hidden transition-[max-height] duration-9e-reveal ease-in-out",
             expanded ? "max-h-96" : "max-h-0",
           )}
         >
-          <div className="border-t border-9e-sky/30 bg-9e-ice/60 px-4 pb-4 pt-3">
-            {schedules.length > 0 ? (
-              <>
-                <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate">
-                  <span>รอบการอบรม</span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-primary shadow-9e-sm" />
-                    Classroom
-                  </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-purple-500 shadow-9e-sm" />
-                    Hybrid
-                  </span>
-                </div>
+          <div className="border-t border-9e-sky/30 bg-[#ffffff] px-4 pb-4 pt-3 dark:bg-9e-navy">
+            <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
+              <span>รอบการอบรม</span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-primary shadow-9e-sm" />
+                Classroom
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-purple-500 shadow-9e-sm" />
+                Hybrid
+              </span>
+            </div>
 
-                <div className="scrollbar-hide flex justify-between overflow-x-auto pb-1 pt-2">
-                  {schedules.slice(0, 3).map((s) => (
-                    <SchedulePill key={s._id} schedule={s} />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="py-1 text-center">
-                <p className="mb-2 text-xs text-9e-slate">
-                  ยังไม่มีรอบอบรมที่เปิดรับสมัคร
-                </p>
-                <Link
-                  href={href}
-                  className="text-xs font-semibold text-9e-primary hover:underline"
-                >
-                  ดูรายละเอียดหลักสูตร →
-                </Link>
-              </div>
-            )}
+            <div className="scrollbar-hide flex flex-nowrap items-start justify-between gap-1.5 overflow-x-auto pb-1 pt-2 sm:gap-2">
+              {schedules.slice(0, 3).map((s, idx) => {
+                const card = (
+                  <ScheduleCard
+                    key={s._id ?? idx}
+                    dateLabel={formatScheduleDate(s)}
+                    type={s.type || "classroom"}
+                    status={formatStatusFromAPI(s.status)}
+                  />
+                );
+                return s.signup_url ? (
+                  <a
+                    key={s._id ?? idx}
+                    href={s.signup_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
+                  >
+                    {card}
+                  </a>
+                ) : (
+                  card
+                );
+              })}
+            </div>
           </div>
           {/* Collapse-only control — small triangle centered at the panel bottom */}
          
@@ -224,17 +234,17 @@ export function CourseCard({ course, className }) {
       {isInhouseOnly ? (
         <Link
           href="/registration/in-house"
-          className="flex w-full items-center justify-center bg-9e-navy px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-navy/90"
+          className="flex w-full items-center justify-center bg-9e-navy px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-navy/90 dark:bg-9e-ice dark:text-9e-navy"
         >
           รับเฉพาะ Inhouse
         </Link>
-      ) : expanded ? (
+      ) : !schedules?.length ? null : expanded ? (
         /* สถานะเมื่อขยายแล้ว: แสดงปุ่มเพื่อหุบเก็บ */
         <button
               type="button"
               onClick={() => setExpanded(false)}
               aria-label="ย่อรอบอบรม"
-              className="text-base text-9e-primary transition-colors hover:text-9e-brand px-4 py-3"
+              className="text-base text-9e-primary transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
             >
               ▲
             </button>
@@ -243,7 +253,7 @@ export function CourseCard({ course, className }) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center justify-center gap-2 bg-9e-primary px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+          className="flex w-full items-center justify-center gap-2 bg-9e-primary px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-in-out hover:bg-9e-brand"
         >
           <span className="text-xs leading-none">▼</span>
           กดเพื่อดูรอบอบรม
@@ -253,91 +263,3 @@ export function CourseCard({ course, className }) {
   );
 }
 
-function SchedulePill({ schedule }) {
-  const { type, status, signup_url: url, dates } = schedule;
-  const { days, month } = formatScheduleDates(dates);
-
-  const isHybrid = type === "hybrid";
-  const borderColor = isHybrid ? "border-purple-400" : "border-9e-sky";
-  const dotColor = isHybrid ? "bg-purple-500" : "bg-9e-primary";
-
-  const isFull = status === "full";
-  const isNearlyFull = status === "nearly_full";
-  const statusBg = isFull
-    ? "bg-red-500"
-    : isNearlyFull
-      ? "bg-amber-400"
-      : "bg-green-500";
-  const statusText = isFull ? "เต็ม" : isNearlyFull ? "ใกล้เต็ม" : "รับสมัคร";
-
-  const Wrapper = url ? "a" : "div";
-  const wrapperProps = url
-    ? { href: url, target: "_blank", rel: "noopener noreferrer" }
-    : {};
-
-  return (
-    <Wrapper
-      {...wrapperProps}
-      className={cn(
-        "relative flex min-w-[80px] shrink-0 flex-col items-center justify-center rounded-2xl border-2 bg-white px-3 pb-2 pt-3 text-center transition-all duration-9e-micro ease-9e",
-        borderColor,
-        url && "hover:-translate-y-0.5 hover:shadow-9e-md",
-      )}
-    >
-      {/* Corner dot — inside the border */}
-      <span
-        className={cn(
-          "absolute left-1.5 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow-9e-sm",
-          dotColor,
-        )}
-      />
-
-      <span className="text-sm font-extrabold leading-none text-9e-navy">
-        {days}
-      </span>
-      <span className="mt-0.5 text-xs font-bold uppercase leading-none text-9e-slate">
-        {month}
-      </span>
-
-      <span
-        className={cn(
-          "mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold text-white",
-          statusBg,
-        )}
-      >
-        {statusText}
-      </span>
-    </Wrapper>
-  );
-}
-
-/**
- * Split a schedule's `dates` array into separate day and month labels
- * so the pill can stack them vertically. Month is taken from the first
- * date (cross-month ranges render as e.g. "30-2 MAY").
- *
- * Examples:
- *   ["2026-05-05…"]                   → { days: "5",    month: "MAY" }
- *   ["2026-05-05…", "2026-05-06…"]    → { days: "5-6",  month: "MAY" }
- */
-function formatScheduleDates(dates) {
-  if (!Array.isArray(dates) || dates.length === 0) {
-    return { days: "", month: "" };
-  }
-  const opts = { timeZone: "Asia/Bangkok" };
-  const first = new Date(dates[0]);
-  const last = new Date(dates[dates.length - 1]);
-  const firstDay = first.toLocaleDateString("en-GB", {
-    ...opts,
-    day: "numeric",
-  });
-  const lastDay = last.toLocaleDateString("en-GB", { ...opts, day: "numeric" });
-  const month = first
-    .toLocaleDateString("en-GB", { ...opts, month: "short" })
-    .toUpperCase();
-  const days =
-    dates.length === 1 || firstDay === lastDay
-      ? firstDay
-      : `${firstDay}-${lastDay}`;
-  return { days, month };
-}

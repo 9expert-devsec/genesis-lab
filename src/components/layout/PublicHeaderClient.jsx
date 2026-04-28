@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight, ChevronDown, ExternalLink, Menu, Search, X } from 'lucide-react';
@@ -22,10 +23,29 @@ import { cn } from '@/lib/utils';
  */
 export function PublicHeaderClient({ programs = [] }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Gate the portal until after first client render — `document.body`
+  // doesn't exist on the server, and the SSR markup must match.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock the page underneath while the drawer is open so iOS rubber-band
+  // and laptop trackpad scroll don't leak through the backdrop.
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [drawerOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[var(--surface-border)] bg-[var(--page-bg)] backdrop-blur-md">
-      <div className="mx-auto flex h-20 max-w-[1280px] items-center gap-4 px-4 lg:px-6">
+    <>
+    <header className="sticky top-0 left-0 right-0 z-50 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
+      <div className="mx-auto flex h-20 max-w-[1200px] items-center gap-4 max-md:px-4">
         {/* ── Logo ─────────────────────────────────────────────── */}
         <div className="flex-none">
           <Logo priority />
@@ -76,11 +96,25 @@ export function PublicHeaderClient({ programs = [] }) {
         </div>
       </div>
 
-      {/* ── Mobile drawer ──────────────────────────────────────── */}
-      {drawerOpen && (
-        <MobileDrawer programs={programs} onNavigate={() => setDrawerOpen(false)} />
-      )}
     </header>
+
+    {/* ── Mobile drawer ──────────────────────────────────────────
+        Rendered through a portal into <body> so the fixed-positioned
+        backdrop and panel escape any stacking context created by the
+        sticky header (z:50) or by transformed/will-changed page
+        sections (carousels, etc.). The drawer's own z-[9999] then
+        only competes with body-level siblings, not with nested
+        contexts that would otherwise cap us at z:50. */}
+    {mounted &&
+      createPortal(
+        <MobileDrawer
+          open={drawerOpen}
+          programs={programs}
+          onClose={() => setDrawerOpen(false)}
+        />,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -290,50 +324,82 @@ function ProgramIcon({ src, size }) {
 
 // ── Mobile drawer ───────────────────────────────────────────────
 
-function MobileDrawer({ programs, onNavigate }) {
+function MobileDrawer({ open, programs, onClose }) {
+  // Always mounted so the translate-x slide animation has a stable
+  // starting position. Pointer events on the backdrop are gated by
+  // `open` so the closed state doesn't intercept clicks.
   return (
-    <div
-      id="mobile-drawer"
-      className="border-t border-[var(--surface-border)] bg-[var(--page-bg)] lg:hidden"
-    >
-      <nav
-        className="mx-auto flex max-w-[1280px] flex-col gap-1 px-4 py-4"
-        aria-label="Mobile primary"
+    <div className="lg:hidden" aria-hidden={!open}>
+      <div
+        className={cn(
+          'fixed inset-0 z-[9998] bg-black/50 transition-opacity duration-9e-reveal ease-9e',
+          open ? 'opacity-100' : 'pointer-events-none opacity-0'
+        )}
+        onClick={onClose}
+      />
+      <aside
+        id="mobile-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="เมนูหลัก"
+        className={cn(
+          'fixed top-0 right-0 z-[9999] flex h-full w-[280px] max-w-[85vw] flex-col',
+          'bg-[var(--page-bg)] shadow-2xl',
+          'transition-transform duration-9e-reveal ease-9e',
+          open ? 'translate-x-0' : 'translate-x-full'
+        )}
       >
-        {mainNav.map((item) => {
-          if (item.type === 'mega') {
+        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-4 py-3">
+          <Logo />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="ปิดเมนู"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+          >
+            <X className="h-5 w-5" strokeWidth={1.75} />
+          </button>
+        </div>
+
+        <nav
+          className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4"
+          aria-label="Mobile primary"
+        >
+          {mainNav.map((item) => {
+            if (item.type === 'mega') {
+              return (
+                <MobileMegaAccordion
+                  key={item.label}
+                  item={item}
+                  programs={programs}
+                  onNavigate={onClose}
+                />
+              );
+            }
+            if (item.children) {
+              return (
+                <MobileAccordion
+                  key={item.label}
+                  item={item}
+                  onNavigate={onClose}
+                />
+              );
+            }
             return (
-              <MobileMegaAccordion
+              <Link
                 key={item.label}
-                item={item}
-                programs={programs}
-                onNavigate={onNavigate}
-              />
+                href={item.href}
+                target={item.external ? '_blank' : undefined}
+                rel={item.external ? 'noopener noreferrer' : undefined}
+                onClick={onClose}
+                className="rounded-9e-sm px-3 py-3 text-base font-medium text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
+              >
+                {item.label}
+              </Link>
             );
-          }
-          if (item.children) {
-            return (
-              <MobileAccordion
-                key={item.label}
-                item={item}
-                onNavigate={onNavigate}
-              />
-            );
-          }
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              target={item.external ? '_blank' : undefined}
-              rel={item.external ? 'noopener noreferrer' : undefined}
-              onClick={onNavigate}
-              className="rounded-9e-sm px-3 py-3 text-base font-medium text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
+          })}
+        </nav>
+      </aside>
     </div>
   );
 }

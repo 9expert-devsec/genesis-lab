@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
  * chevrons. Button visibility tracks `scrollLeft` so the prev arrow
  * doesn't appear at position 0 and the next arrow hides at the end.
  */
-export function CourseCarousel({ courses }) {
+export function CourseCarousel({ courses, CardComponent = CourseCard }) {
   const scrollerRef = useRef(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
@@ -53,10 +53,10 @@ export function CourseCarousel({ courses }) {
       >
         {courses.map((c) => (
           <div
-            key={c._id ?? c.course_id}
-            className="w-[330px] shrink-0 snap-start"
+            key={c._id ?? c.course_id ?? c.o_course_id}
+            className="w-[280px] shrink-0 snap-start sm:w-[310px] md:w-[330px]"
           >
-            <CourseCard course={c} />
+            <CardComponent course={c} />
           </div>
         ))}
       </div>
@@ -66,7 +66,7 @@ export function CourseCarousel({ courses }) {
         aria-label="ก่อนหน้า"
         onClick={() => scrollBy(-300)}
         className={cn(
-          'absolute -left-4 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand',
+          'absolute -left-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
           canPrev ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
@@ -77,7 +77,7 @@ export function CourseCarousel({ courses }) {
         aria-label="ถัดไป"
         onClick={() => scrollBy(300)}
         className={cn(
-          'absolute -right-4 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand',
+          'absolute -right-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
           canNext ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >

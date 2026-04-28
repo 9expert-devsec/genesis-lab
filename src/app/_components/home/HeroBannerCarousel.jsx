@@ -109,7 +109,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   return (
     <section
       ref={sectionRef}
-      className="w-full relative bg-gradient-to-br from-white to-[#E8F4FD] min-[1537px]:py-[16px]"
+      className="w-full relative bg-gradient-to-br from-white to-[#E8F4FD] dark:from-9e-navy dark:to-9e-card min-[1537px]:py-[16px]"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -160,20 +160,20 @@ export function HeroBannerCarousel({ banners: allBanners }) {
               onClick={prev}
               aria-label="ก่อนหน้า"
               className="hidden lg:flex absolute left-4 top-1/2 -translate-y-1/2 z-30
-                w-10 h-10 bg-white/80 hover:bg-white rounded-full shadow-9e-md
+                w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
                 items-center justify-center transition-colors"
             >
-              <ChevronLeft size={20} className="text-9e-navy" />
+              <ChevronLeft size={20} className="text-9e-navy dark:text-white" />
             </button>
             <button
               type="button"
               onClick={next}
               aria-label="ถัดไป"
               className="hidden lg:flex absolute right-4 top-1/2 -translate-y-1/2 z-30
-                w-10 h-10 bg-white/80 hover:bg-white rounded-full shadow-9e-md
+                w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
                 items-center justify-center transition-colors"
             >
-              <ChevronRight size={20} className="text-9e-navy" />
+              <ChevronRight size={20} className="text-9e-navy dark:text-white" />
             </button>
           </>
         )}
@@ -181,20 +181,25 @@ export function HeroBannerCarousel({ banners: allBanners }) {
 
       {/* Dots + Play/Pause — centered on the full section */}
       {total > 1 && (
-        <div className="absolute bottom-5 left-0 right-0 flex justify-center z-20">
-          <div className="flex items-center gap-2 bg-black/25 backdrop-blur-sm px-3 py-2 rounded-full">
+        <div className="absolute bottom-5 left-0 right-0 flex justify-center z-20 px-4">
+          <div className="flex items-center gap-3 bg-black/25 backdrop-blur-sm px-3 py-2 rounded-full">
             {banners.map((_, i) => (
               <button
                 key={i}
                 type="button"
                 aria-label={`ไปยังสไลด์ ${i + 1}`}
                 onClick={() => setCurrent(i)}
-                className={`rounded-full transition-all duration-200 ${
-                  i === current
-                    ? 'w-8 h-3 bg-white shadow-9e-sm'
-                    : 'w-3 h-3 bg-white/50 hover:bg-white/80'
-                }`}
-              />
+                className="relative flex h-9 w-9 items-center justify-center"
+              >
+                <span
+                  aria-hidden
+                  className={`block rounded-full transition-all duration-200 ${
+                    i === current
+                      ? 'w-8 h-2.5 bg-white shadow-9e-sm'
+                      : 'w-2.5 h-2.5 bg-white/50 hover:bg-white/80'
+                  }`}
+                />
+              </button>
             ))}
 
             <span aria-hidden className="w-px h-3 bg-white/40 mx-1" />
@@ -203,13 +208,13 @@ export function HeroBannerCarousel({ banners: allBanners }) {
               type="button"
               onClick={() => setIsPlaying((v) => !v)}
               aria-label={isPlaying ? 'หยุดสไลด์' : 'เล่นสไลด์'}
-              className="w-5 h-5 flex items-center justify-center
+              className="flex h-9 w-9 items-center justify-center
                 text-white hover:text-white/80 transition-colors"
             >
               {showPause ? (
-                <Pause size={12} fill="white" />
+                <Pause size={14} fill="white" />
               ) : (
-                <Play size={12} fill="white" />
+                <Play size={14} fill="white" />
               )}
             </button>
           </div>
@@ -348,12 +353,12 @@ function BannerSlide({ banner, isActive = true }) {
 
               {/* Text: below video on mobile (order-2, centered), left column on desktop (order-1) */}
               <div className="space-y-4 order-2 lg:order-1 text-center lg:text-left">
-                <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy leading-tight">
+                <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight">
                   {banner.title}
                 </h2>
                 {banner.slide_text && (
                   <div
-                    className="text-9e-slate text-sm leading-relaxed"
+                    className="text-9e-slate dark:text-[#94a3b8] text-sm leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: banner.slide_text }}
                   />
                 )}

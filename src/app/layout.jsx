@@ -91,7 +91,7 @@ export default function RootLayout({ children }) {
       className={`${googleSans.variable} ${lineSeedSansTH.variable}`}
       suppressHydrationWarning
     >
-      <body className="font-en antialiased">
+      <body className="font-en antialiased ">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

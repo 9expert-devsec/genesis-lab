@@ -1,11 +1,15 @@
 import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { getCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
+import { getOnlineCourses } from '@/lib/api/online-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { getActiveBanners } from '@/lib/actions/banners';
 import { getActiveFeaturedCourseIds } from '@/lib/actions/featured-courses';
+import { getActiveFeaturedOnlineCourseIds } from '@/lib/actions/featured-online-courses';
+import { getActiveFeaturedReviewIds } from '@/lib/actions/featured-reviews';
+import { getReviewsById } from '@/lib/api/reviews';
 import { siteConfig } from '@/config/site';
 import { HeroBanner } from './_components/home/HeroBanner';
 import { HeroBannerCarousel } from './_components/home/HeroBannerCarousel';
@@ -35,9 +39,10 @@ export const metadata = {
  * own empty/placeholder fallback.
  */
 export default async function HomePage() {
-  const [coursesRes, programsRes, skillsRes, bannersRes] =
+  const [coursesRes, onlineRes, programsRes, skillsRes, bannersRes] =
     await Promise.allSettled([
       listPublicCourses(),
+      getOnlineCourses(),
       listPrograms(),
       listSkills(),
       getActiveBanners(),
@@ -45,6 +50,8 @@ export default async function HomePage() {
 
   const courses =
     coursesRes.status === 'fulfilled' ? coursesRes.value.items : [];
+  const onlineCourses =
+    onlineRes.status === 'fulfilled' ? onlineRes.value.items : [];
   const programs =
     programsRes.status === 'fulfilled' ? programsRes.value.items : [];
   const skills = skillsRes.status === 'fulfilled' ? skillsRes.value.items : [];
@@ -72,17 +79,11 @@ export default async function HomePage() {
   const promotedRaw =
     featuredDetails.length > 0 ? featuredDetails : sorted.slice(0, 8);
 
-  const promotedIds = new Set(promotedRaw.map((c) => c._id));
-  const onlineRaw = sorted
-    .filter((c) => !promotedIds.has(c._id))
-    .slice(0, 8);
-
   // Featured courses are already detail-shape; only enrich what isn't.
   const detailById = new Map(
     featuredDetails.map((d) => [d.course_id, d])
   );
-  const toEnrich =
-    featuredDetails.length > 0 ? onlineRaw : [...promotedRaw, ...onlineRaw];
+  const toEnrich = featuredDetails.length > 0 ? [] : promotedRaw;
 
   const DETAIL_CHUNK = 10;
   for (let i = 0; i < toEnrich.length; i += DETAIL_CHUNK) {
@@ -97,14 +98,11 @@ export default async function HomePage() {
     });
   }
 
-  // ≤ 16 courses we're actually going to render.
-  const displayed = [...promotedRaw, ...onlineRaw];
-
-  // Pre-fetch up to 3 upcoming schedules per displayed course so the
-  // CourseCard expand panel renders the signup pills directly.
+  // Pre-fetch up to 3 upcoming schedules for the new-courses carousel.
+  // Online courses come from /online-course and have no schedules.
   const scheduleMap = new Map();
-  for (let i = 0; i < displayed.length; i += DETAIL_CHUNK) {
-    const chunk = displayed.slice(i, i + DETAIL_CHUNK);
+  for (let i = 0; i < promotedRaw.length; i += DETAIL_CHUNK) {
+    const chunk = promotedRaw.slice(i, i + DETAIL_CHUNK);
     const results = await Promise.allSettled(
       chunk.map((c) => listSchedulesByCourse(c._id, { limit: 3 }))
     );
@@ -150,7 +148,36 @@ export default async function HomePage() {
   };
 
   const newCoursesWithSchedules = promotedRaw.map(enrich);
-  const onlineCoursesWithSchedules = onlineRaw.map(enrich);
+
+  // Online courses are admin-curated via the `featured_online_courses`
+  // collection. Filter the upstream list to only featured-active IDs
+  // and preserve the admin-defined order. Field names stay as
+  // `o_course_*` because OnlineCourseCard reads that shape directly.
+  const featuredOnlineIds = await getActiveFeaturedOnlineCourseIds().catch(
+    () => []
+  );
+  const onlineById = new Map(
+    onlineCourses.map((c) => [
+      typeof c.o_course_id === 'string' ? c.o_course_id.trim() : '',
+      c,
+    ])
+  );
+  const onlineCoursesForSection = featuredOnlineIds
+    .map((id) => onlineById.get(id))
+    .filter(Boolean)
+    .map((c) => ({
+      ...c,
+      skills: Array.isArray(c.skills)
+        ? c.skills
+            .map((s) => (typeof s === 'string' ? skillsById.get(s) : s))
+            .filter(Boolean)
+        : [],
+    }));
+
+  // Featured reviews — admin-curates the IDs, the public reviews API
+  // is the source of truth for the actual content.
+  const featuredReviewIds = await getActiveFeaturedReviewIds().catch(() => []);
+  const reviews = await getReviewsById(featuredReviewIds).catch(() => []);
 
   return (
     <>
@@ -164,10 +191,10 @@ export default async function HomePage() {
         <ServicesSection />
         <ProgramSelector programs={programs} skills={skills} />
         <NewCoursesSection courses={newCoursesWithSchedules} />
-        <OnlineCoursesSection courses={onlineCoursesWithSchedules} />
+        <OnlineCoursesSection courses={onlineCoursesForSection} />
         <InhouseCTA />
-        <TestimonialStats />
-        <BlogSection articles={null} />
+        <TestimonialStats reviews={reviews} />
+        <BlogSection />
         <InstructorQuote />
       </main>
       <PublicFooter />

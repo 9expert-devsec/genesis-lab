@@ -84,6 +84,15 @@ html.dark   { color-scheme: dark; }
     scroll-behavior: smooth;
   }
 
+  /* Prevent stray off-canvas elements (mega panels, decorative blurs)
+     from pushing a horizontal scrollbar onto the viewport. Use `clip`
+     instead of `hidden` — the latter implicitly promotes overflow-y to
+     `auto` (visible+hidden is invalid) which creates a new scroll
+     container and breaks `position: sticky` on the page header. */
+  body {
+    overflow-x: clip;
+  }
+
   body {
     background-color: var(--page-bg);
     color: var(--text-primary);
@@ -156,5 +165,12 @@ html.dark   { color-scheme: dark; }
            hover:-translate-y-[2px] hover:shadow-9e-md;
     background-color: var(--surface);
     border-color: var(--surface-border);
+  }
+
+  /* WCAG 2.5.5 AAA / iOS HIG minimum touch target. Apply to icon-only
+     buttons or links whose visible glyph is smaller than the 44px floor. */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

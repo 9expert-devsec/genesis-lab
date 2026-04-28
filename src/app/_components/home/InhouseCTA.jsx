@@ -8,7 +8,7 @@ export function InhouseCTA() {
         aria-hidden
         className="pointer-events-none absolute right-0 top-0 h-80 w-80 -translate-y-1/2 translate-x-1/4 rounded-full bg-white/5"
       />
-      <div className="relative mx-auto max-w-[1280px] text-center">
+      <div className="relative mx-auto max-w-[1200px] text-center">
         <h2 className="mb-4 text-2xl font-bold text-white lg:text-3xl">
           หากท่านต้องการอบรมภายใน
           <br className="hidden md:block" />
@@ -20,7 +20,7 @@ export function InhouseCTA() {
         </p>
         <Link
           href="/contact-us"
-          className="inline-flex items-center gap-2 rounded-full bg-[#FFB020] px-8 py-4 text-base font-bold text-white shadow-lg transition-colors duration-9e-micro ease-9e hover:bg-[#F5A500]"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime px-8 py-4 text-base font-bold text-9e-navy shadow-lg transition-colors duration-9e-micro ease-9e hover:bg-9e-lime-dk sm:w-auto"
         >
           ขอใบเสนอราคา
           <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
