@@ -71,6 +71,7 @@ export const metadata = {
   icons: {
     icon: '/brand/logo-g.ico',
     shortcut: '/brand/logo-g.ico',
+    apple: '/brand/logo-g.ico',
   },
 };
 

@@ -11,8 +11,8 @@
  */
 export const authConfig = {
   pages: {
-    signIn: '/admin/login',
-    error:  '/admin/login',
+    signIn: '/admin/9x-portal',
+    error:  '/admin/9x-portal',
   },
 
   session: { strategy: 'jwt', maxAge: 60 * 60 * 8 /* 8 hours */ },
@@ -20,8 +20,8 @@ export const authConfig = {
   callbacks: {
     async authorized({ request, auth: session }) {
       const path = request.nextUrl.pathname;
-      // Gate /admin/* except /admin/login
-      if (path.startsWith('/admin') && path !== '/admin/login') {
+      // Gate /admin/* except the login page itself
+      if (path.startsWith('/admin') && path !== '/admin/9x-portal') {
         return Boolean(session?.user);
       }
       return true;
@@ -30,6 +30,7 @@ export const authConfig = {
       if (user) {
         token.id   = user.id;
         token.role = user.role;
+        token.name = user.name;
       }
       return token;
     },
@@ -37,6 +38,7 @@ export const authConfig = {
       if (token && session.user) {
         session.user.id   = token.id;
         session.user.role = token.role;
+        if (token.name) session.user.name = token.name;
       }
       return session;
     },
