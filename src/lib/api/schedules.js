@@ -29,6 +29,26 @@ export async function listSchedules({ date, from, to, courses } = {}) {
 }
 
 /**
+ * Fetch all upcoming schedules across every course.
+ *
+ * Wraps `listSchedules` with `from = today` so we get only future
+ * sessions. Upstream already pre-filters status to `open`/`nearly_full`
+ * and drops rows without a signup_url, so the result is directly
+ * renderable on the public schedule page.
+ *
+ * Items reference their course via the `course` ObjectId (the same
+ * convention `listSchedulesByCourse` reads on the way in). The page
+ * server component re-attaches schedules to course rows by `_id`.
+ */
+export async function getAllSchedules() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return listSchedules({ from: `${yyyy}-${mm}-${dd}` });
+}
+
+/**
  * Fetch upcoming schedules for a specific course.
  *
  * @param {string} courseObjectId — upstream MongoDB `_id` (NOT course_id code).

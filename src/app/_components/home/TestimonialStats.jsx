@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSwipe } from '@/hooks/useSwipe';
 
 const STATS = [
-  { value: '1.5K+', label: 'องค์กร' },
-  { value: '100K+', label: 'ผู้เรียน' },
-  { value: '4.8', label: 'รีวิว', star: true },
-  { value: '200K+', label: 'ผู้ติดตาม' },
+  { value: '5K+', label: 'องค์กร' },
+  { value: '90K+', label: 'ผู้เรียน' },
+  { value: '4.9', label: 'รีวิว', star: true },
+  { value: '700K+', label: 'ผู้ติดตาม' },
+  { value: '73', label: 'หลักสูตร' },
 ];
 
 /**
@@ -36,7 +38,7 @@ export function TestimonialStats({ reviews = [] }) {
 
         <ReviewCarousel reviews={reviews} />
 
-        <div className="grid grid-cols-2 gap-6 text-center md:grid-cols-4">
+        <div className="grid grid-cols-2 text-center md:grid-cols-5">
           {STATS.map((s, i) => (
             <div
               key={s.label}
@@ -168,6 +170,9 @@ function ReviewCarousel({ reviews }) {
   };
   const showArrows = totalSlides > 1;
 
+  const swipeRef = useRef(null);
+  useSwipe(swipeRef, { onSwipeLeft: next, onSwipeRight: prev });
+
   return (
     <div
       className="relative mb-12"
@@ -178,7 +183,11 @@ function ReviewCarousel({ reviews }) {
           shift — the visible slot IS the current card.
           Desktop (visible=3): shift by one card-width so the current
           card lands in the middle slot, with a peek of prev/next. */}
-      <div className="overflow-hidden">
+      <div
+        ref={swipeRef}
+        className="overflow-hidden"
+        style={{ touchAction: 'pan-y', cursor: 'grab' }}
+      >
         <div
           className="flex items-stretch"
           style={{

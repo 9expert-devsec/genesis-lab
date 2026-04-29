@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { useSwipe } from '@/hooks/useSwipe';
 
 /**
  * Public hero banner carousel.
@@ -25,6 +26,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   const [isPointerDown, setIsPointerDown] = useState(false);
   const intervalRef = useRef(null);
   const sectionRef = useRef(null);
+  const trackContainerRef = useRef(null);
   const dragRef = useRef({ startX: 0, isDragging: false, moved: false });
 
   const next = useCallback(() => {
@@ -60,20 +62,30 @@ export function HeroBannerCarousel({ banners: allBanners }) {
     return () => window.removeEventListener('blur', handleBlur);
   }, []);
 
-  // Drag / swipe support — pointer events cover both mouse and touch
+  // Touch swipe — the hook attaches native touch listeners with
+  // { passive: false } on touchmove so iOS Safari doesn't pre-empt
+  // the gesture.
+  useSwipe(trackContainerRef, {
+    onSwipeLeft: next,
+    onSwipeRight: prev,
+  });
+
+  // Mouse drag (desktop only) — pointer events fire for mouse; we
+  // filter by pointerType so touch goes through useSwipe alone.
   function handlePointerDown(e) {
-    // Keep receiving move/up events even if the pointer leaves the container
+    if (e.pointerType !== 'mouse') return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
       // Some browsers throw if called on a non-capturable target — safe to ignore
     }
     dragRef.current = { startX: e.clientX, isDragging: true, moved: false };
-    setIsHovered(true); // treat drag-start as hover (pauses auto-advance)
-    setIsPointerDown(true); // disables track transition for immediate feel
+    setIsHovered(true);
+    setIsPointerDown(true);
   }
 
   function handlePointerMove(e) {
+    if (e.pointerType !== 'mouse') return;
     if (!dragRef.current.isDragging) return;
     if (Math.abs(e.clientX - dragRef.current.startX) > 5) {
       dragRef.current.moved = true;
@@ -81,6 +93,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   }
 
   function handlePointerUp(e) {
+    if (e.pointerType !== 'mouse') return;
     if (!dragRef.current.isDragging) return;
     const diff = e.clientX - dragRef.current.startX;
     dragRef.current.isDragging = false;
@@ -92,8 +105,9 @@ export function HeroBannerCarousel({ banners: allBanners }) {
     }
   }
 
-  // Suppress click events that finish a drag, so links inside slides
-  // don't fire when the user was swiping.
+  // Suppress click events that finish a mouse drag so links inside
+  // slides don't fire when the user was swiping with the mouse. Touch
+  // swipes are already suppressed by preventDefault() inside useSwipe.
   function handleClickCapture(e) {
     if (dragRef.current.moved) {
       e.stopPropagation();
@@ -114,21 +128,23 @@ export function HeroBannerCarousel({ banners: allBanners }) {
       onMouseLeave={() => setIsHovered(false)}
     >
       {/* Container: full-width below 1537px, capped at 1440px and rounded above.
-          Drag/swipe is mobile-only — desktop uses arrows. */}
+          Mobile swipe is handled by useSwipe via trackContainerRef;
+          mouse drag is handled by pointer events filtered to
+          pointerType==='mouse'. */}
       <div
+        ref={trackContainerRef}
         className="relative mx-auto h-[550px] max-sm:h-[700px] overflow-hidden
           min-[1537px]:max-w-[1440px] min-[1537px]:rounded-3xl
           select-none"
-        style={{ touchAction: isMobile ? 'pan-y' : 'auto' }}
-        {...(isMobile
-          ? {
-              onPointerDown: handlePointerDown,
-              onPointerMove: handlePointerMove,
-              onPointerUp: handlePointerUp,
-              onPointerLeave: handlePointerUp,
-              onClickCapture: handleClickCapture,
-            }
-          : null)}
+        style={{
+          touchAction: isMobile ? 'pan-y' : 'auto',
+          cursor: isMobile ? 'grab' : 'auto',
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onClickCapture={handleClickCapture}
       >
         {/* Sliding track — all slides laid out horizontally, transformed into view.
             translateX % is relative to the TRACK'S own width (N × container),

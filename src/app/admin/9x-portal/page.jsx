@@ -13,7 +13,7 @@ export default function Page() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center px-6 py-4 bg-white rounded-9e-lg shadow-9e-sm mb-4">
-            <Logo variant="blue" href={null} priority />
+            <Logo variant="white" href={null} priority />
           </div>
           <h1 className="text-xl font-bold text-9e-navy">9Expert Admin</h1>
           <p className="text-sm text-9e-slate mt-1">

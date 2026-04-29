@@ -148,7 +148,7 @@ export function CourseCard({ course, className }) {
 
         {/* Feature badges */}
         {(hasWorkshop || hasCertificate || levelLabel) && (
-          <div className="flex flex-wrap gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
+          <div className="flex flex-wrap gap-2 text-[11px] text-9e-slate dark:text-[#b7c3d4]">
             {hasWorkshop && (
               <span className="inline-flex items-center gap-1">
                 <MonitorPlay

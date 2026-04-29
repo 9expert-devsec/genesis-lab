@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSwipe } from '@/hooks/useSwipe';
 
 const MOCK_BLOGS = [
   {
@@ -86,11 +87,11 @@ export function BlogSection() {
 function BlogCarousel({ blogs }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const touchStartX = useRef(null);
+  const carouselRef = useRef(null);
   const total = blogs.length;
 
-  // Auto-advance every 3s, pause on hover (desktop) or while a touch is in
-  // progress (mobile). Single-card lists don't loop — nothing to advance to.
+  // Auto-advance every 3s, pause on hover. Single-card lists don't
+  // loop — nothing to advance to.
   useEffect(() => {
     if (isPaused || total <= 1) return undefined;
     const timer = setInterval(() => {
@@ -99,21 +100,14 @@ function BlogCarousel({ blogs }) {
     return () => clearInterval(timer);
   }, [isPaused, total]);
 
-  function onTouchStart(e) {
-    touchStartX.current = e.touches[0].clientX;
-    setIsPaused(true);
-  }
-  function onTouchEnd(e) {
-    if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      setCurrentIndex((i) =>
-        diff > 0 ? (i + 1) % total : (i - 1 + total) % total
-      );
-    }
-    touchStartX.current = null;
-    setIsPaused(false);
-  }
+  // iOS-safe swipe (uses native touchmove with passive:false so iOS
+  // Safari doesn't pre-empt horizontal swipes for vertical scroll).
+  useSwipe(carouselRef, {
+    onSwipeLeft: () =>
+      setCurrentIndex((i) => (total ? (i + 1) % total : 0)),
+    onSwipeRight: () =>
+      setCurrentIndex((i) => (total ? (i - 1 + total) % total : 0)),
+  });
 
   return (
     <div
@@ -122,9 +116,9 @@ function BlogCarousel({ blogs }) {
       onMouseLeave={() => setIsPaused(false)}
     >
       <div
+        ref={carouselRef}
         className="overflow-hidden"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
+        style={{ touchAction: 'pan-y', cursor: 'grab' }}
       >
         <div
           className="flex transition-transform duration-500 ease-in-out"

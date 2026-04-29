@@ -38,6 +38,10 @@ import { getActiveBanners } from '@/lib/actions/banners';
 import { getActiveFeaturedCourseIds } from '@/lib/actions/featured-courses';
 import { getActiveFeaturedOnlineCourseIds } from '@/lib/actions/featured-online-courses';
 import { getActiveFeaturedReviewIds } from '@/lib/actions/featured-reviews';
+import {
+  getOrderedPrograms,
+  getOrderedSkills,
+} from '@/lib/actions/program-order';
 
 const CACHE_KEY = 'homepage_v1';
 const MAX_NEW_COURSES = 8;
@@ -222,8 +226,22 @@ export async function syncLandingData() {
 
   const allCourses = unwrapSettled(coursesResult, { items: [] }, 'listPublicCourses', errors).items ?? [];
   const allOnline = unwrapSettled(onlineResult, { items: [] }, 'getOnlineCourses', errors).items ?? [];
-  const programs = unwrapSettled(programsResult, { items: [] }, 'listPrograms', errors).items ?? [];
-  const skills = unwrapSettled(skillsResult, { items: [] }, 'listSkills', errors).items ?? [];
+  const rawPrograms = unwrapSettled(programsResult, { items: [] }, 'listPrograms', errors).items ?? [];
+  const rawSkills = unwrapSettled(skillsResult, { items: [] }, 'listSkills', errors).items ?? [];
+
+  // Apply admin-curated order + visibility before caching, so every
+  // consumer of the cached snapshot (home page, public header, etc.)
+  // gets the same sorted, hidden-filtered list.
+  const [programs, skills] = await Promise.all([
+    getOrderedPrograms(rawPrograms).catch((err) => {
+      errors.push(`getOrderedPrograms: ${err?.message ?? 'failed'}`);
+      return rawPrograms;
+    }),
+    getOrderedSkills(rawSkills).catch((err) => {
+      errors.push(`getOrderedSkills: ${err?.message ?? 'failed'}`);
+      return rawSkills;
+    }),
+  ]);
   const banners = unwrapSettled(bannersResult, [], 'getActiveBanners', errors);
   const featuredCourseIds = unwrapSettled(
     featuredCourseIdsResult, [], 'getActiveFeaturedCourseIds', errors

@@ -1,8 +1,8 @@
 import { notFound } from 'next/navigation';
 import { PagePlaceholder } from '@/components/layout/PagePlaceholder';
-import { getCourseByCode } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { resolveCourse } from '@/lib/resolveCourse';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
 import { ScheduleSection } from './_components/ScheduleSection';
@@ -17,16 +17,20 @@ import { SidebarNav } from './_components/SidebarNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
+import { CourseGallery } from './_components/CourseGallery';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
- *   /<slug>-training-course      → course detail (real data)
- *   /<slug>-career-path          → career path detail (Phase 3 placeholder)
- *   /<slug>-all-courses          → catalog by skill or program (Phase 3 placeholder)
+ *   /<slug>-training-course   → course detail (real data)
+ *   /<custom-alias>           → same course, but matched by
+ *                               CourseExtension.urlAlias
+ *   /<slug>-career-path       → career path detail (Phase 3 placeholder)
+ *   /<slug>-all-courses       → catalog by skill or program (Phase 3 placeholder)
  *
- * Next.js App Router does not support suffixes on a single dynamic segment
- * (e.g. `[slug]-training-course`), so we route all three patterns through
- * this catch-all and dispatch by suffix.
+ * Resolution flow:
+ *   resolveCourse() tries alias first, then the `-training-course`
+ *   suffix. If neither hits, fall through to the placeholder branches
+ *   so career-path / all-courses URLs keep working.
  */
 
 export const revalidate = 3600;
@@ -37,27 +41,34 @@ function segmentFromSlug(slug) {
   return segment;
 }
 
-function courseIdFromSegment(segment) {
-  if (!segment.endsWith('-training-course')) return null;
-  return segment.slice(0, -'-training-course'.length).toUpperCase();
-}
-
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
 
-  const courseId = courseIdFromSegment(segment);
-  if (courseId) {
-    const course = await getCourseByCode(courseId);
-    if (!course) return { title: 'ไม่พบหลักสูตร' };
-    return {
-      title: `${course.course_name} | 9Expert Training`,
-      description: course.course_teaser?.slice(0, 160),
-    };
-  }
+  const resolved = await resolveCourse(segment);
+  if (!resolved) return {};
 
-  return {};
+  const { course, extension } = resolved;
+  const title =
+    extension?.metaTitle?.trim() ||
+    `${course.course_name} | 9Expert Training`;
+  const description =
+    extension?.metaDescription?.trim() ||
+    course.course_teaser?.slice(0, 160) ||
+    '';
+  const ogImage =
+    extension?.ogImage?.trim() || course.course_cover_url || '';
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: ogImage ? [{ url: ogImage }] : [],
+    },
+  };
 }
 
 export default async function CatchAllPage({ params }) {
@@ -66,10 +77,10 @@ export default async function CatchAllPage({ params }) {
 
   if (!segment) notFound();
 
-  if (segment.endsWith('-training-course')) {
-    const courseId = courseIdFromSegment(segment);
-    const course = await getCourseByCode(courseId);
-    if (!course) notFound();
+  // Course resolver handles both alias and `-training-course` suffix.
+  const resolved = await resolveCourse(segment);
+  if (resolved) {
+    const { course, extension } = resolved;
 
     // Parallelise schedules + programs. `/programs` carries `programcolor`
     // which the hero gradient uses; the course detail response doesn't
@@ -87,6 +98,7 @@ export default async function CatchAllPage({ params }) {
     return (
       <CourseDetail
         course={course}
+        extension={extension}
         schedules={schedules}
         programs={programs}
       />
@@ -118,12 +130,13 @@ export default async function CatchAllPage({ params }) {
   notFound();
 }
 
-function CourseDetail({ course, schedules, programs }) {
+function CourseDetail({ course, extension, schedules, programs }) {
   const hasSchedules = Boolean(schedules?.length);
   const relatedCourses = Array.isArray(course.related_courses)
     ? course.related_courses
     : [];
   const hasRelated = relatedCourses.length > 0;
+  const gallery = Array.isArray(extension?.gallery) ? extension.gallery : [];
 
   // Hero gradient base — prefer the program's `programcolor` (carried on
   // `/programs`, not on the course detail). Fall back to the first
@@ -142,6 +155,11 @@ function CourseDetail({ course, schedules, programs }) {
       <div className="mx-auto max-w-[1280px] px-4 py-8 lg:px-6">
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]">
           <div className="min-w-0 space-y-10">
+            {gallery.length > 0 && (
+              <section aria-label="แกลเลอรี่หลักสูตร">
+                <CourseGallery gallery={gallery} />
+              </section>
+            )}
             <ScheduleSection course={course} schedules={schedules} />
             <CourseDescription course={course} />
             <CourseObjectives course={course} />

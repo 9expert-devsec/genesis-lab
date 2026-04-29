@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { cn } from '@/lib/utils';
+import { useSwipe } from '@/hooks/useSwipe';
 
 /**
  * Horizontal snap-scroll carousel of course cards with prev/next
@@ -37,6 +38,16 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
   const scrollBy = (delta) =>
     scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' });
 
+  // Swipe distance — roughly one card width (matches arrow-button step).
+  // Using JS-driven scroll on touch lets us hand `touch-action: pan-y`
+  // to iOS Safari so the gesture doesn't get pre-empted by native
+  // horizontal scroll behavior, which has been unreliable on iOS for
+  // some users.
+  useSwipe(scrollerRef, {
+    onSwipeLeft: () => scrollBy(300),
+    onSwipeRight: () => scrollBy(-300),
+  });
+
   if (!courses?.length) {
     return (
       <p className="py-10 text-center text-sm text-9e-slate">
@@ -50,6 +61,7 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
       <div
         ref={scrollerRef}
         className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 pt-2"
+        style={{ touchAction: 'pan-y', cursor: 'grab' }}
       >
         {courses.map((c) => (
           <div

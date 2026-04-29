@@ -20,15 +20,15 @@ export function CourseTableGroup({ program, courses }) {
             unoptimized
           />
         )}
-        <h2 className="text-lg font-bold text-9e-navy">
+        <h2 className="text-lg font-bold text-9e-navy dark:text-white">
           {program?.program_name ?? 'หลักสูตร'}
         </h2>
-        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary">
+        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
           {courses.length}
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
@@ -67,21 +67,21 @@ export function CourseTableGroup({ program, courses }) {
                       router.push(href);
                     }
                   }}
-                  className="cursor-pointer border-b border-gray-100 transition-colors duration-9e-micro ease-9e last:border-b-0 hover:bg-9e-ice"
+                  className="cursor-pointer border-b border-gray-100 transition-colors duration-9e-micro ease-9e last:border-b-0 hover:bg-9e-ice dark:border-[#1e3a5f] dark:hover:bg-[#0f1e30]"
                 >
-                  <td className="px-4 py-3 font-medium text-9e-navy">
+                  <td className="px-4 py-3 font-medium text-9e-navy dark:text-white">
                     {c.course_name}
                   </td>
-                  <td className="px-4 py-3 text-9e-slate">
+                  <td className="px-4 py-3 text-9e-slate dark:text-[#94a3b8]">
                     {c.program?.program_name ?? '-'}
                   </td>
-                  <td className="px-4 py-3 text-center text-9e-slate">
+                  <td className="px-4 py-3 text-center text-9e-slate dark:text-[#94a3b8]">
                     {days || '-'}
                   </td>
-                  <td className="px-4 py-3 text-center text-9e-slate">
+                  <td className="px-4 py-3 text-center text-9e-slate dark:text-[#94a3b8]">
                     {days ? days * 6 : '-'}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-9e-navy">
+                  <td className="px-4 py-3 text-right font-semibold text-9e-navy dark:text-white">
                     {c.course_price != null
                       ? Number(c.course_price).toLocaleString('th-TH')
                       : '-'}

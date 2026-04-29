@@ -2,6 +2,8 @@ import { Suspense } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { getCourseByCode, listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { listPrograms } from '@/lib/api/programs';
+import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { CourseListClient } from './_components/CourseListClient';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
@@ -18,11 +20,23 @@ const COVER_FETCH_CHUNK = 10;
 
 export default async function Page() {
   let items = [];
+  let programOrder = [];
   let fetchError = null;
 
   try {
-    const result = await listPublicCourses();
-    items = await enrichWithDetails(result.items);
+    const [coursesResult, rawPrograms] = await Promise.all([
+      listPublicCourses(),
+      listPrograms().catch(() => ({ items: [] })),
+    ]);
+    items = await enrichWithDetails(coursesResult.items);
+    // Apply admin-set program order. We pass the names down so the
+    // client groups + filter dropdown render in the same sequence.
+    const ordered = await getOrderedPrograms(rawPrograms.items ?? []).catch(
+      () => rawPrograms.items ?? []
+    );
+    programOrder = ordered
+      .map((p) => p.program_name)
+      .filter(Boolean);
   } catch (err) {
     console.error('[training-course]', err);
     fetchError = err.message;
@@ -36,7 +50,7 @@ export default async function Page() {
   // under Next 15 forces dynamic rendering without a boundary above it.
   return (
     <Suspense fallback={null}>
-      <CourseListClient items={items} />
+      <CourseListClient items={items} programOrder={programOrder} />
     </Suspense>
   );
 }
@@ -103,7 +117,7 @@ async function enrichWithDetails(items) {
 
 function ErrorState({ message }) {
   return (
-    <div className="mx-auto max-w-[1280px] px-4 py-16 lg:px-6">
+    <div className="mx-auto max-w-[1200px] px-4 py-16 lg:px-6">
       <div className="mx-auto flex max-w-md flex-col items-center text-center">
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-9e-sky/20">
           <AlertTriangle className="h-5 w-5 text-9e-primary" strokeWidth={1.75} />

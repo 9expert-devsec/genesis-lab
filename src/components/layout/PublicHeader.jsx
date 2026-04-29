@@ -1,4 +1,5 @@
 import { listPrograms } from '@/lib/api/programs';
+import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { PublicHeaderClient } from './PublicHeaderClient';
 
 /**
@@ -13,7 +14,7 @@ export async function PublicHeader() {
   let programs = [];
   try {
     const result = await listPrograms();
-    programs = result.items;
+    programs = await getOrderedPrograms(result.items);
   } catch (err) {
     console.error('[PublicHeader] failed to fetch programs:', err);
   }

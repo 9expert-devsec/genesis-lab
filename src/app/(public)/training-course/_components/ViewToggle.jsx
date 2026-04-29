@@ -37,7 +37,7 @@ function ToggleButton({ active, onClick, label, children }) {
         'rounded-lg p-2 transition-all duration-9e-micro ease-9e',
         active
           ? 'bg-9e-primary text-white shadow-9e-sm'
-          : 'border border-gray-200 bg-white text-9e-slate hover:border-9e-brand hover:text-9e-brand'
+          : 'border border-gray-200 bg-white text-9e-slate hover:border-9e-brand hover:text-9e-brand dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-[#94a3b8] dark:hover:border-9e-sky dark:hover:text-9e-sky'
       )}
     >
       {children}

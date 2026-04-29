@@ -94,7 +94,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
     <section className="bg-[#f8fafd] dark:bg-9e-border px-4 py-14 lg:px-6">
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
-          เลือกโปรแกรมที่คุณสนใจเรียน
+          ค้นหาสิ่งที่คุณสนใจ
         </h2>
 
         <div className="mb-8 flex w-full gap-3 sm:justify-center sm:gap-4">
@@ -103,14 +103,14 @@ export function ProgramSelector({ programs = [], skills = [] }) {
             onClick={() => handleTabChange("program")}
           >
             <Keyboard className="h-4 w-4" strokeWidth={2} />
-            Program
+            Programs
           </TabButton>
           <TabButton
             active={tab === "skill"}
             onClick={() => handleTabChange("skill")}
           >
             <Lightbulb className="h-4 w-4" strokeWidth={2} />
-            Skill
+            Skills
           </TabButton>
         </div>
 
@@ -407,7 +407,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
           />
         )}
       </div>
-      <span className="line-clamp-1 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary dark:text-white dark:group-hover:text-9e-lime">
+      <span className="line-clamp-2 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary dark:text-white dark:group-hover:text-9e-lime lg:line-clamp-1">
         {name}
       </span>
     </Link>

@@ -17,8 +17,8 @@ export function FilterBar({
   programOptions,
 }) {
   return (
-    <div className="sticky top-20 z-20 border-b border-gray-100 bg-white/90 shadow-sm backdrop-blur">
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center gap-3 px-4 py-3 lg:px-6">
+    <div className="sticky top-20 z-20 border-b border-gray-100 bg-white/90 shadow-sm backdrop-blur dark:border-[#1e3a5f] dark:bg-9e-navy/90">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-3 px-4 py-3 lg:px-6">
         <FilterSelect
           label="ทักษะ"
           value={skillSlug}
@@ -50,7 +50,7 @@ function FilterSelect({ label, value, onChange, options }) {
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         aria-label={label}
-        className="min-w-[160px] cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-primary/20"
+        className="min-w-[160px] cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-primary/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-sky"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

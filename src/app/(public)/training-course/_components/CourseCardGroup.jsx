@@ -15,14 +15,14 @@ export function CourseCardGroup({ program, courses }) {
             unoptimized
           />
         )}
-        <h2 className="text-lg font-bold text-9e-navy">
+        <h2 className="text-lg font-bold text-9e-navy dark:text-white">
           {program?.program_name ?? 'หลักสูตร'}
         </h2>
-        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary">
+        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
           {courses.length}
         </span>
       </div>
-      <hr className="mb-4 border-gray-100" />
+      <hr className="mb-4 border-gray-100 dark:border-[#1e3a5f]" />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {courses.map((c) => (
           <CourseCard key={c._id ?? c.course_id} course={c} />

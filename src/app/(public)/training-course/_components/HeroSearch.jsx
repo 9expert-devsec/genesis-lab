@@ -21,7 +21,7 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
   }, [value, onDebouncedChange]);
 
   return (
-    <section className="relative overflow-hidden bg-9e-gradient-hero py-12 md:py-16">
+    <section className="relative overflow-hidden bg-9e-gradient-hero py-12  dark:bg-gradient-to-b dark:from-[#0a1628] dark:to-[#0d1e36] md:py-16">
       {/* Decorative blurred circles */}
       <div
         aria-hidden
@@ -32,7 +32,7 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
         className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-white/10 blur-3xl"
       />
 
-      <div className="relative mx-auto max-w-[1280px] px-4 text-center lg:px-6">
+      <div className="relative mx-auto max-w-[1200px] px-4 text-center lg:px-6">
         <h1 className="text-3xl font-bold text-white md:text-4xl">
           หลักสูตรทั้งหมด
         </h1>
@@ -40,15 +40,18 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
           สอนแบบปูพื้นความรู้ เทคโนโลยีเพื่อ &ldquo;ขับเคลื่อนประเทศไทย&rdquo;
         </p>
 
-        <div className="mx-auto mt-6 flex max-w-xl items-center gap-3 rounded-full bg-white px-5 py-3 shadow-md">
-          <Search className="h-5 w-5 flex-none text-9e-slate" strokeWidth={1.75} />
+        <div className="mx-auto mt-6 flex max-w-xl items-center gap-3 rounded-full bg-white px-5 py-3 shadow-md dark:bg-[#111d2c] dark:shadow-none dark:ring-1 dark:ring-[#1e3a5f]">
+          <Search
+            className="h-5 w-5 flex-none text-9e-slate"
+            strokeWidth={1.75}
+          />
           <input
             type="search"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="ค้นหาหลักสูตร"
             aria-label="ค้นหาหลักสูตร"
-            className="min-w-0 flex-1 border-0 bg-transparent text-9e-navy placeholder:text-9e-slate focus:outline-none focus:ring-0"
+            className="min-w-0 flex-1 border-0 bg-transparent text-9e-navy placeholder:text-9e-slate focus:outline-none focus:ring-0 dark:text-white"
           />
         </div>
       </div>

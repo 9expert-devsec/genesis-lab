@@ -23,7 +23,7 @@ import { EmptyState } from './EmptyState';
  * server page — the list endpoint returns ~73 courses, well within the
  * size where client-side filter is simpler than refetching.
  */
-export function CourseListClient({ items }) {
+export function CourseListClient({ items, programOrder = [] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -56,14 +56,28 @@ export function CourseListClient({ items }) {
     }
   }, [skillSlug, programName, view, pathname, router, searchParams]);
 
-  // Distinct program list for the select, derived from the fetched data.
-  const programOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(items.map((c) => c?.program?.program_name).filter(Boolean))
-      ).sort((a, b) => a.localeCompare(b, 'th')),
-    [items]
-  );
+  // Program → admin-set rank lookup. Programs not in the order map
+  // fall to the bottom (sorted alphabetically among themselves).
+  const programRank = useMemo(() => {
+    const map = new Map();
+    programOrder.forEach((name, idx) => map.set(name, idx));
+    return map;
+  }, [programOrder]);
+
+  // Distinct program list for the select. Sort by admin-set order
+  // first; everything outside the order map falls to the bottom and
+  // sorts alphabetically among itself.
+  const programOptions = useMemo(() => {
+    const distinct = Array.from(
+      new Set(items.map((c) => c?.program?.program_name).filter(Boolean))
+    );
+    return distinct.sort((a, b) => {
+      const ra = programRank.has(a) ? programRank.get(a) : Infinity;
+      const rb = programRank.has(b) ? programRank.get(b) : Infinity;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b, 'th');
+    });
+  }, [items, programRank]);
 
   const skillIdForSlug = useMemo(() => {
     const s = skillSlug ? findSkillBySlug(skillSlug) : null;
@@ -89,7 +103,9 @@ export function CourseListClient({ items }) {
     });
   }, [items, search, skillIdForSlug, programName]);
 
-  // Group by program name, preserving first-seen order for stable rendering.
+  // Group by program name, then sort groups by the admin-set order so
+  // the page hierarchy mirrors the same sequence as the home page and
+  // the filter dropdown.
   const groups = useMemo(() => {
     const map = new Map();
     for (const c of filtered) {
@@ -99,13 +115,20 @@ export function CourseListClient({ items }) {
       }
       map.get(key).courses.push(c);
     }
-    return Array.from(map.values());
-  }, [filtered]);
+    return Array.from(map.values()).sort((a, b) => {
+      const an = a.program?.program_name ?? 'อื่นๆ';
+      const bn = b.program?.program_name ?? 'อื่นๆ';
+      const ra = programRank.has(an) ? programRank.get(an) : Infinity;
+      const rb = programRank.has(bn) ? programRank.get(bn) : Infinity;
+      if (ra !== rb) return ra - rb;
+      return an.localeCompare(bn, 'th');
+    });
+  }, [filtered, programRank]);
 
   const handleSearch = useCallback((v) => setSearch(v), []);
 
   return (
-    <div className="bg-9e-ice pb-16">
+    <div className="min-h-screen bg-9e-ice pb-16 dark:bg-9e-border">
       <HeroSearch onDebouncedChange={handleSearch} />
 
       <FilterBar
@@ -116,11 +139,13 @@ export function CourseListClient({ items }) {
         programOptions={programOptions}
       />
 
-      <div className="mx-auto max-w-[1280px] px-4 py-8 lg:px-6 lg:py-10">
+      <div className="mx-auto max-w-[1200px] px-4 py-8 lg:py-10">
         <div className="mb-6 flex items-center justify-between gap-4">
-          <p className="text-sm text-9e-slate">
+          <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
             ผลลัพธ์การค้นหา{' '}
-            <span className="font-bold text-9e-primary">{filtered.length}</span>{' '}
+            <span className="font-bold text-9e-primary dark:text-9e-sky">
+              {filtered.length}
+            </span>{' '}
             หลักสูตร
           </p>
           <ViewToggle view={view} onChange={setView} />

@@ -12,16 +12,30 @@ cloudinary.config({
  *
  * Streams the bytes directly — no temp file on disk. Resolves with the
  * raw Cloudinary response (we care about `secure_url` and `public_id`).
+ *
+ * @param {File|Blob} file
+ * @param {string}    subfolder
+ * @param {object}    [options]
+ * @param {('image'|'raw'|'video'|'auto')} [options.resourceType='image']
+ *   Cloudinary distinguishes raw (PDFs/docs) from image — pass 'raw'
+ *   for non-image uploads so the URL is served with the right MIME and
+ *   not run through image transforms.
+ * @param {string} [options.publicId] Override the auto-generated public_id.
  */
-export async function uploadToCloudinary(file, subfolder = '') {
+export async function uploadToCloudinary(file, subfolder = '', options = {}) {
   const buffer = Buffer.from(await file.arrayBuffer());
   const baseFolder = process.env.CLOUDINARY_UPLOAD_FOLDER || '';
   const folder = [baseFolder, subfolder].filter(Boolean).join('/');
 
+  const uploadOpts = {
+    folder,
+    resource_type: options.resourceType ?? 'image',
+  };
+  if (options.publicId) uploadOpts.public_id = options.publicId;
+
   return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: 'image' },
-      (err, result) => (err ? reject(err) : resolve(result))
+    const stream = cloudinary.uploader.upload_stream(uploadOpts, (err, result) =>
+      err ? reject(err) : resolve(result)
     );
     stream.end(buffer);
   });
