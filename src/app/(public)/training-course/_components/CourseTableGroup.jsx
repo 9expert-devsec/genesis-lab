@@ -82,9 +82,11 @@ export function CourseTableGroup({ program, courses }) {
                     {days ? days * 6 : '-'}
                   </td>
                   <td className="px-4 py-3 text-right font-semibold text-9e-navy dark:text-white">
-                    {c.course_price != null
-                      ? Number(c.course_price).toLocaleString('th-TH')
-                      : '-'}
+                    {!c.course_price || Number(c.course_price) === 0 ? (
+                      <span className="text-9e-slate dark:text-[#94a3b8]">Call</span>
+                    ) : (
+                      Number(c.course_price).toLocaleString('th-TH')
+                    )}
                   </td>
                 </tr>
               );

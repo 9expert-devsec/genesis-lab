@@ -7,7 +7,7 @@ import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
 
-const MOCK_BLOGS = [
+export const MOCK_BLOGS = [
   {
     id: 1,
     category: 'บทความวิดีโอ',
@@ -152,7 +152,7 @@ function BlogCarousel({ blogs }) {
   );
 }
 
-function BlogCard({ blog }) {
+export function BlogCard({ blog }) {
   return (
     <div className="overflow-hidden rounded-2xl bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]">
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice dark:bg-9e-navy">

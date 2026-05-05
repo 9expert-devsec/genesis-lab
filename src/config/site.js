@@ -142,7 +142,7 @@ export const mainNav = [
     })),
   },
   { label: 'ตารางฝึกอบรม', href: '/schedule' },
-  { label: 'โปรโมชัน',     href: '/promotion' },
+  { label: 'โปรโมชัน',     href: '/promotions' },
   { label: 'บทความ',       href: '/articles' },
   { label: 'ผลงานของเรา',  href: '/portfolio' },
   {
@@ -177,7 +177,7 @@ export const footerNav = {
   ],
   resources: [
     { label: 'บทความ', href: '/articles' },
-    { label: 'โปรโมชัน', href: '/promotion' },
+    { label: 'โปรโมชัน', href: '/promotions' },
     { label: 'คำถามที่พบบ่อย', href: '/faq' },
   ],
 };

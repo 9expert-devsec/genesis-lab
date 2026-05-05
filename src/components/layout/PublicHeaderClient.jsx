@@ -9,6 +9,7 @@ import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills } from '@/config/site';
 import { cn } from '@/lib/utils';
+import { toKebab } from '@/lib/slug';
 
 /**
  * Public site header — interactive shell.
@@ -191,13 +192,12 @@ function DesktopDropdown({ item }) {
 }
 
 /**
- * Build a stable URL slug for a program from its short upstream code.
- * Used only for the mega-menu link target — the program catalog page
- * (Phase 3) will own the canonical slug → upstream lookup.
+ * Build the public /program/[slug] URL for a mega-menu entry. Uses
+ * kebab-case of `program_name`; admins can override with a custom
+ * urlSlug via /admin/page-configs (the resolver tries that first).
  */
 function programHref(program) {
-  const code = String(program.program_id ?? '').toLowerCase();
-  return `/${code}-all-courses`;
+  return `/program/${toKebab(program.program_name)}`;
 }
 
 function DesktopMega({ item, programs }) {
@@ -281,7 +281,7 @@ function DesktopMega({ item, programs }) {
                   {skills.map((s) => (
                     <li key={s.slug}>
                       <Link
-                        href={`/${s.slug}-all-courses`}
+                        href={`/skill/${s.slug}`}
                         className="flex items-center gap-3 rounded-9e-md p-1.5 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
                       >
                         <Image

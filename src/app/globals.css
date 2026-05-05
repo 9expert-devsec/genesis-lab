@@ -174,3 +174,35 @@ html.dark   { color-scheme: dark; }
     min-width: 44px;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Promotion HTML content — rendered via dangerouslySetInnerHTML
+   from the upstream `detail_html` field. Trusted internal source.
+   ────────────────────────────────────────────────────────────── */
+
+.promotion-html-content {
+  color: inherit;
+  line-height: 1.75;
+}
+.promotion-html-content img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+.promotion-html-content h1,
+.promotion-html-content h2,
+.promotion-html-content h3 {
+  font-weight: 700; margin: 1.5rem 0 0.75rem;
+}
+.promotion-html-content p { margin-bottom: 1rem; }
+.promotion-html-content a { color: #005CFF; text-decoration: underline; }
+.promotion-html-content ul,
+.promotion-html-content ol { padding-left: 1.5rem; margin-bottom: 1rem; }
+.promotion-html-content li { margin-bottom: 0.25rem; }
+.promotion-html-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+.promotion-html-content td,
+.promotion-html-content th {
+  border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; text-align: left;
+}
+.promotion-html-content th { background: #f8fafd; font-weight: 600; }
+/* Dark mode */
+.dark .promotion-html-content a { color: #48B0FF; }
+.dark .promotion-html-content td,
+.dark .promotion-html-content th { border-color: #1e3a5f; }
+.dark .promotion-html-content th { background: #111d2c; }

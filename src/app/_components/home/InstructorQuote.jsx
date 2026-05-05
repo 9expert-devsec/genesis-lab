@@ -140,20 +140,20 @@ export function InstructorQuote() {
 
           <div className="hidden lg:inline text-center">
             <p className="text-base font-bold text-9e-navy ">
-              อ.ชไลเวท พิพัฒนพรรณวงศ์
+              อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
             <p className="text-sm text-9e-primary">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate">
-              บจก.นายน์เอ็กซ์เพิร์ท
+              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
             </p>
           </div>
         </div>
 
         <div className=" min-h-[400px] items-center justify-center flex flex-col lg:items-end lg:justify-end">
           <Image
-            src="/people/k-chalaivate.png"
+            src="/people/AJ.Chalaivate-1.png"
             alt="อ.ชไลเวท พิพัฒนพรรณวงศ์"
             width={400}
             height={500}
@@ -163,13 +163,13 @@ export function InstructorQuote() {
 
           <div className="text-center lg:hidden py-6">
             <p className="text-base font-bold text-9e-navy ">
-              อ.ชไลเวท พิพัฒนพรรณวงศ์
+              อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
             <p className="text-sm text-9e-primary">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate">
-              บจก.นายน์เอ็กซ์เพิร์ท
+              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
             </p>
           </div>
         </div>

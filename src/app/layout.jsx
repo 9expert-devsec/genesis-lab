@@ -62,16 +62,19 @@ export const metadata = {
     siteName:    siteConfig.name,
     title:       `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.description,
+    images: [{ url: '/logo/9exp-stand.png' }],
   },
   twitter: {
     card:        'summary_large_image',
     title:       siteConfig.name,
     description: siteConfig.description,
+    images: ['/logo/9exp-stand.png'],
   },
+  // Next.js App Router auto-discovers src/app/favicon.ico; the entries
+  // below add a PNG fallback (Apple/Android home-screen icons need it).
   icons: {
-    icon: '/brand/logo-g.ico',
-    shortcut: '/brand/logo-g.ico',
-    apple: '/brand/logo-g.ico',
+    icon: '/logo/9exp-stand.png',
+    apple: '/logo/9exp-stand.png',
   },
 };
 

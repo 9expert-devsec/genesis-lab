@@ -168,32 +168,36 @@ export function HeroBannerCarousel({ banners: allBanners }) {
             </div>
           ))}
         </div>
-
-        {total > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={prev}
-              aria-label="ก่อนหน้า"
-              className="hidden lg:flex absolute left-4 top-1/2 -translate-y-1/2 z-30
-                w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
-                items-center justify-center transition-colors"
-            >
-              <ChevronLeft size={20} className="text-9e-navy dark:text-white" />
-            </button>
-            <button
-              type="button"
-              onClick={next}
-              aria-label="ถัดไป"
-              className="hidden lg:flex absolute right-4 top-1/2 -translate-y-1/2 z-30
-                w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
-                items-center justify-center transition-colors"
-            >
-              <ChevronRight size={20} className="text-9e-navy dark:text-white" />
-            </button>
-          </>
-        )}
       </div>
+
+      {/* Arrows live OUTSIDE the overflow-hidden track so they (a) can't be
+          clipped at the right edge when a scrollbar appears and (b) don't
+          fight with the track's pointerdown drag handler. The section is
+          already `relative`, so absolute positioning anchors here. */}
+      {total > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={prev}
+            aria-label="ก่อนหน้า"
+            className="hidden lg:flex absolute left-4 top-1/2 -translate-y-1/2 z-40
+              w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
+              items-center justify-center transition-colors"
+          >
+            <ChevronLeft size={20} className="text-9e-navy dark:text-white" />
+          </button>
+          <button
+            type="button"
+            onClick={next}
+            aria-label="ถัดไป"
+            className="hidden lg:flex absolute right-4 top-1/2 -translate-y-1/2 z-40
+              w-10 h-10 bg-white/80 hover:bg-white dark:bg-9e-card/80 dark:hover:bg-9e-card rounded-full shadow-9e-md
+              items-center justify-center transition-colors"
+          >
+            <ChevronRight size={20} className="text-9e-navy dark:text-white" />
+          </button>
+        </>
+      )}
 
       {/* Dots + Play/Pause — centered on the full section */}
       {total > 1 && (

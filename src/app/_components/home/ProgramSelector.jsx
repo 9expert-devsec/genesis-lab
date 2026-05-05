@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Keyboard, Lightbulb } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toKebab } from "@/lib/slug";
 
 /**
  * Program / Skill selector.
@@ -237,9 +238,12 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                           <p className="text-xs font-semibold text-9e-primary dark:text-[#b6c2d4]">
                             {skillPrograms.length} โปรแกรม
                           </p>
-                          <button className="text-xs font-semibold text-white bg-9e-primary hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full">
+                          <Link
+                            href={`/skill/${toKebab(selectedSkill.skill_name)}`}
+                            className="text-xs font-semibold text-white bg-9e-primary hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full"
+                          >
                             ดูหลักสูตรใน Skill นี้
-                          </button>
+                          </Link>
                         </div>
                       </>
                     )}
@@ -443,6 +447,5 @@ function ProgramTileCard({ item, hrefBuilder }) {
 }
 
 function programHref(item) {
-  const name = item.program_name;
-  return `/training-course?program=${encodeURIComponent(name)}`;
+  return `/program/${toKebab(item.program_name)}`;
 }

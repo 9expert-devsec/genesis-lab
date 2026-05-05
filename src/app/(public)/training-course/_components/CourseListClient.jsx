@@ -93,8 +93,16 @@ export function CourseListClient({ items, programOrder = [] }) {
         if (!name.includes(q) && !code.includes(q)) return false;
       }
       if (skillIdForSlug) {
-        const ids = Array.isArray(c.skills) ? c.skills : [];
-        if (!ids.includes(skillIdForSlug)) return false;
+        // After detail enrichment c.skills is an array of objects
+        // ({_id, skill_name, ...}); pre-enrichment it's bare ObjectId
+        // strings. Match either shape.
+        const arr = Array.isArray(c.skills) ? c.skills : [];
+        const hit = arr.some((s) =>
+          typeof s === 'string'
+            ? s === skillIdForSlug
+            : s?._id === skillIdForSlug || s?.skill_id === skillIdForSlug
+        );
+        if (!hit) return false;
       }
       if (programName) {
         if (c.program?.program_name !== programName) return false;
