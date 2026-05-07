@@ -91,7 +91,7 @@ module.exports = {
         '9e-gradient-hero':      'linear-gradient(to right, #005CFF, #48B0FF)',
         '9e-gradient-dark':      'linear-gradient(to bottom, #0D1B2A, #005CFF)',
         '9e-gradient-subtle':    'linear-gradient(to bottom, #F8FAFD, #E8F0FE)',
-        '9e-gradient-accent':    'linear-gradient(to right, #B8D930, #E4FF6B)',
+        '9e-gradient-accent':    'linear-gradient(to right, #B8D930, #D8F852)',
         '9e-gradient-signature': 'linear-gradient(135deg, #0D1B2A 0%, #005CFF 100%)',
       },
     },
