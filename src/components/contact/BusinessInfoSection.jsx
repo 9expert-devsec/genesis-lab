@@ -46,7 +46,7 @@ const HOURS = [
 
 export default function BusinessInfoSection() {
   return (
-    <section className="relative bg-[#F8FAFD] py-20 dark:bg-[#0D1B2A]">
+    <section className="relative bg-white py-20 dark:bg-[#060e1a]">
       <div className="mx-auto max-w-[1200px] px-4 lg:px-6">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-2">
           {/* LEFT: Company info */}

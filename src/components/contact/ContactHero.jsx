@@ -1,8 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Phone, Mail, ArrowRight } from 'lucide-react';
+import { Phone } from 'lucide-react';
 import FloatingDots from '@/components/about/FloatingDots';
 
 export default function ContactHero() {
@@ -37,7 +36,7 @@ export default function ContactHero() {
 
       <FloatingDots />
 
-      <div className="relative mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-8 px-4 py-24 text-center lg:px-6 lg:py-28">
+      <div className="relative mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center gap-8 px-4 py-24 text-center lg:px-6 lg:py-28">
         {/* Eyebrow badge */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -90,36 +89,23 @@ export default function ContactHero() {
           className="h-1 w-full max-w-md bg-gradient-to-r from-transparent via-[#005CFF] to-transparent"
         />
 
-        {/* CTAs */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="flex flex-col gap-4 sm:flex-row"
-        >
-          <Link
-            href="tel:022194304"
-            className="group relative inline-flex items-center justify-center overflow-hidden rounded-full bg-gradient-to-r from-[#005CFF] to-[#2486FF] px-10 py-4 text-base font-semibold text-white shadow-[0_25px_50px_-12px_rgba(0,92,255,0.5)] transition-all duration-300 hover:shadow-[0_25px_50px_-12px_rgba(0,92,255,0.7)] sm:text-lg"
-          >
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[rgba(72,176,255,0.3)]"
-            />
-            <span className="relative z-10 flex items-center gap-2">
-              <Phone className="h-5 w-5" />
-              โทรหาเรา
-              <ArrowRight className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1" />
-            </span>
-          </Link>
-          <Link
-            href="mailto:training@9expert.co.th"
-            className="inline-flex items-center justify-center gap-2 rounded-full border border-[rgba(72,176,255,0.4)] px-10 py-4 text-base font-semibold text-[#48B0FF] transition-all duration-300 hover:border-[#48B0FF] hover:bg-[rgba(72,176,255,0.08)] sm:text-lg"
-          >
-            <Mail className="h-5 w-5" />
-            ส่งอีเมล
-          </Link>
-        </motion.div>
       </div>
+
+      {/* Wave divider — bridges dark hero into the white body section.
+          Stretches edge-to-edge via preserveAspectRatio="none". On dark
+          mode the fill matches the body bg, making the wave invisible
+          (intentional — no dark/dark seam). */}
+      <svg
+        aria-hidden
+        viewBox="0 0 1440 120"
+        preserveAspectRatio="none"
+        className="absolute bottom-0 left-0 h-[80px] w-full md:h-[120px]"
+      >
+        <path
+          d="M0,64 C240,112 480,16 720,48 C960,80 1200,32 1440,72 L1440,120 L0,120 Z"
+          className="fill-white dark:fill-[#060e1a]"
+        />
+      </svg>
     </section>
   );
 }

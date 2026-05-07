@@ -1,5 +1,5 @@
 import ContactHero from '@/components/contact/ContactHero';
-import ContactCardsSection from '@/components/contact/ContactCardsSection';
+import GetInTouchSection from '@/components/contact/GetInTouchSection';
 import VideoSection from '@/components/contact/VideoSection';
 import TransportMapSection from '@/components/contact/TransportMapSection';
 import BusinessInfoSection from '@/components/contact/BusinessInfoSection';
@@ -20,15 +20,11 @@ export default function ContactPage() {
   return (
     <main>
       <ContactHero />
-      <ContactCardsSection />
-      <div
-        aria-hidden
-        className="h-16 bg-gradient-to-b from-[#060e1a] to-[#F8FAFD] dark:to-[#0D1B2A]"
-      />
+      <GetInTouchSection />
       <BusinessInfoSection />
       <div
         aria-hidden
-        className="h-16 bg-gradient-to-b from-[#F8FAFD] to-[#060e1a] dark:from-[#0D1B2A]"
+        className="h-16 bg-gradient-to-b from-white to-[#060e1a] dark:from-[#060e1a]"
       />
       <VideoSection />
       <TransportMapSection />
