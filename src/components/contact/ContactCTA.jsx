@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Rocket, ArrowRight, GraduationCap } from 'lucide-react';
-import FloatingDots from '@/components/about2/FloatingDots';
+import FloatingDots from '@/components/about/FloatingDots';
 
 const TRUST_CHIPS = [
   'ออกแบบเฉพาะองค์กร',

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Phone, Mail, ArrowRight } from 'lucide-react';
-import FloatingDots from '@/components/about2/FloatingDots';
+import FloatingDots from '@/components/about/FloatingDots';
 
 export default function ContactHero() {
   return (
