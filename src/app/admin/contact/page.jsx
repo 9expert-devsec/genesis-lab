@@ -1,13 +1,13 @@
-import { getContactVideo, listTransportCards } from '@/lib/actions/contact';
+import { getContactVideo, getTransportMap } from '@/lib/actions/contact';
 import { ContactAdminClient } from './_components/ContactAdminClient';
 
 export const metadata = { title: 'จัดการหน้าติดต่อเรา' };
 export const dynamic = 'force-dynamic';
 
 export default async function ContactAdminPage() {
-  const [video, cards] = await Promise.all([
+  const [video, map] = await Promise.all([
     getContactVideo(),
-    listTransportCards(),
+    getTransportMap(),
   ]);
 
   return (
@@ -17,11 +17,11 @@ export default async function ContactAdminPage() {
           จัดการหน้าติดต่อเรา
         </h1>
         <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
-          จัดการวิดีโอแนะนำและการ์ดการเดินทางบนหน้า /contact-us
+          จัดการวิดีโอแนะนำและแผนที่การเดินทางบนหน้า /contact-us
         </p>
       </div>
 
-      <ContactAdminClient initialVideo={video} initialCards={cards} />
+      <ContactAdminClient initialVideo={video} initialMap={map} />
     </div>
   );
 }
