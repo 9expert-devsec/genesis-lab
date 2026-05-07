@@ -1,0 +1,27 @@
+import { getContactVideo, listTransportCards } from '@/lib/actions/contact';
+import { ContactAdminClient } from './_components/ContactAdminClient';
+
+export const metadata = { title: 'จัดการหน้าติดต่อเรา' };
+export const dynamic = 'force-dynamic';
+
+export default async function ContactAdminPage() {
+  const [video, cards] = await Promise.all([
+    getContactVideo(),
+    listTransportCards(),
+  ]);
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
+          จัดการหน้าติดต่อเรา
+        </h1>
+        <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+          จัดการวิดีโอแนะนำและการ์ดการเดินทางบนหน้า /contact-us
+        </p>
+      </div>
+
+      <ContactAdminClient initialVideo={video} initialCards={cards} />
+    </div>
+  );
+}

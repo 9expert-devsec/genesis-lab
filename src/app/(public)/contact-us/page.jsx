@@ -1,5 +1,7 @@
 import ContactHero from '@/components/contact/ContactHero';
 import ContactCardsSection from '@/components/contact/ContactCardsSection';
+import VideoSection from '@/components/contact/VideoSection';
+import TransportCardsSection from '@/components/contact/TransportCardsSection';
 import BusinessInfoSection from '@/components/contact/BusinessInfoSection';
 import MapSection from '@/components/contact/MapSection';
 import ContactCTA from '@/components/contact/ContactCTA';
@@ -28,6 +30,8 @@ export default function ContactPage() {
         aria-hidden
         className="h-16 bg-gradient-to-b from-[#F8FAFD] to-[#060e1a] dark:from-[#0D1B2A]"
       />
+      <VideoSection />
+      <TransportCardsSection />
       <MapSection />
       <ContactCTA />
     </main>

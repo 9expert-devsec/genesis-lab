@@ -25,6 +25,7 @@ import {
   CalendarDays,
   Tag,
   Info,
+  Phone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -57,6 +58,7 @@ const ICONS = {
   CalendarDays,
   Tag,
   Info,
+  Phone,
 };
 
 // `superadminOnly: true` items are filtered out for non-superadmin
@@ -85,6 +87,7 @@ const NAV_GROUPS = [
       { label: 'โปรโมชั่น',        href: '/admin/promotions',       icon: 'Tag', exact: true },
       { label: 'แบนเนอร์โปรโมชั่น', href: '/admin/promotions/banner', icon: 'Image' },
       { label: 'เกี่ยวกับเรา',     href: '/admin/about',            icon: 'Info' },
+      { label: 'ติดต่อเรา',        href: '/admin/contact',          icon: 'Phone' },
       { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare' },
       { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText' },
       { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays' },
