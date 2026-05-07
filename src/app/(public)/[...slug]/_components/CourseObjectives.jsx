@@ -9,7 +9,7 @@ export function CourseObjectives({ course }) {
       <ol className="space-y-2">
         {items.map((item, i) => (
           <li key={i} className="flex gap-2">
-            <span className="shrink-0 font-bold text-9e-primary">{i + 1}.</span>
+            <span className="shrink-0 font-bold text-9e-action">{i + 1}.</span>
             <span>{item}</span>
           </li>
         ))}

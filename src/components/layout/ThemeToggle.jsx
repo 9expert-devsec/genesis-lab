@@ -28,7 +28,7 @@ export function ThemeToggle({ className }) {
       <span
         aria-hidden="true"
         className={cn(
-          'inline-block h-7 w-12 rounded-full border border-9e-sky/50 bg-9e-sky/40',
+          'inline-block h-7 w-12 rounded-full border border-9e-air/50 bg-9e-air/40',
           className
         )}
       />
@@ -48,7 +48,7 @@ export function ThemeToggle({ className }) {
         'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-colors duration-9e-micro ease-9e',
         isDark
           ? 'bg-9e-navy border-9e-border'
-          : 'bg-9e-sky/40 border-9e-sky/50',
+          : 'bg-9e-air/40 border-9e-air/50',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-brand focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--page-bg)]',
         className
       )}
@@ -62,7 +62,7 @@ export function ThemeToggle({ className }) {
         {isDark ? (
           <Moon className="h-3 w-3 text-9e-navy" strokeWidth={2} />
         ) : (
-          <Sun className="h-3 w-3 text-9e-primary" strokeWidth={2} />
+          <Sun className="h-3 w-3 text-9e-action" strokeWidth={2} />
         )}
       </span>
     </button>

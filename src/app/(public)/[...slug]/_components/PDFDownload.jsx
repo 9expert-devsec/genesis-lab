@@ -30,7 +30,7 @@ export function PDFDownload({ course }) {
             </p>
             <p className="text-xs text-9e-slate">PDF</p>
           </div>
-          <Download className="h-3.5 w-3.5 shrink-0 text-9e-primary" strokeWidth={2} />
+          <Download className="h-3.5 w-3.5 shrink-0 text-9e-action" strokeWidth={2} />
         </a>
       ))}
     </div>

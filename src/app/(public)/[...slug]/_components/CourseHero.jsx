@@ -77,12 +77,12 @@ export function CourseHero({ course, heroColor }) {
               </div>
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
-                <span className="text-2xl font-extrabold text-9e-primary">
+                <span className="text-2xl font-extrabold text-9e-action">
                   {Number(
                     hasPromotion ? course.course_netprice : course.course_price
                   ).toLocaleString('th-TH')}
                 </span>
-                <span className="text-lg font-bold text-9e-primary">บาท</span>
+                <span className="text-lg font-bold text-9e-action">บาท</span>
                 {hasPromotion && (
                   <span className="text-sm text-9e-slate line-through">
                     ปกติ {Number(course.course_price).toLocaleString('th-TH')}{' '}
@@ -100,7 +100,7 @@ export function CourseHero({ course, heroColor }) {
                   {course.course_workshop_status && (
                     <span className="flex items-center gap-1">
                       <MonitorPlay
-                        className="h-3.5 w-3.5 text-9e-primary"
+                        className="h-3.5 w-3.5 text-9e-action"
                         strokeWidth={2}
                       />
                       Workshop
@@ -109,7 +109,7 @@ export function CourseHero({ course, heroColor }) {
                   {course.course_certificate_status && (
                     <span className="flex items-center gap-1">
                       <Award
-                        className="h-3.5 w-3.5 text-9e-primary"
+                        className="h-3.5 w-3.5 text-9e-action"
                         strokeWidth={2}
                       />
                       e-Certificate
@@ -121,13 +121,13 @@ export function CourseHero({ course, heroColor }) {
               <div className="flex flex-wrap gap-3">
                 <Link
                   href={registrationHref}
-                  className="rounded-xl bg-9e-primary px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+                  className="rounded-xl bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
                 >
                   ลงทะเบียน
                 </Link>
                 <Link
                   href="/contact-us"
-                  className="rounded-xl border-2 border-9e-primary px-5 py-2.5 text-sm font-bold text-9e-primary transition-colors duration-9e-micro ease-9e hover:bg-9e-primary hover:text-white"
+                  className="rounded-xl border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white"
                 >
                   ขอใบเสนอราคา
                 </Link>

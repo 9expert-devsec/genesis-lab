@@ -120,7 +120,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-primary hover:text-9e-primary disabled:opacity-50"
+            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
           >
             {syncing ? 'กำลัง Sync...' : 'Sync จาก API'}
           </button>
@@ -128,7 +128,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-9e-md bg-9e-primary px-4 py-2 text-sm text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
           >
             {saving ? 'กำลังบันทึก...' : 'บันทึกลำดับ'}
           </button>
@@ -155,9 +155,9 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
               className={
                 'rounded-9e-md border transition-all duration-150 ' +
                 (isDragging
-                  ? 'scale-[0.98] opacity-50 shadow-9e-md ring-2 ring-9e-primary '
+                  ? 'scale-[0.98] opacity-50 shadow-9e-md ring-2 ring-9e-action '
                   : '') +
-                (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+                (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
                 (skill.isHidden
                   ? 'border-dashed bg-gray-50 opacity-50 dark:bg-[#0a0f1a]'
                   : 'border-[var(--surface-border)] bg-white dark:bg-[#111d2c]')
@@ -190,14 +190,14 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     type="button"
                     onClick={() => setExpanded(isOpen ? null : skill.id)}
                     disabled={skill.orderedPrograms.length === 0}
-                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-primary disabled:opacity-30"
+                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     {isOpen ? 'ปิด' : 'เปิด'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleToggleHidden(skill.id, skill.isHidden)}
-                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-primary"
+                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action"
                   >
                     {skill.isHidden ? 'แสดง' : 'ซ่อน'}
                   </button>
@@ -206,7 +206,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     onClick={() => moveUp(i)}
                     disabled={i === 0}
                     aria-label="เลื่อนขึ้น"
-                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-primary disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -215,7 +215,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     onClick={() => moveDown(i)}
                     disabled={i === skills.length - 1}
                     aria-label="เลื่อนลง"
-                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-primary disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     ↓
                   </button>
@@ -273,7 +273,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
         <button
           type="button"
           onClick={onSave}
-          className="rounded-9e-sm bg-9e-primary/10 px-3 py-1 text-xs text-9e-primary hover:bg-9e-primary/20"
+          className="rounded-9e-sm bg-9e-action/10 px-3 py-1 text-xs text-9e-action hover:bg-9e-action/20"
         >
           บันทึกลำดับ Programs
         </button>
@@ -295,9 +295,9 @@ function NestedProgramList({ skill, onChange, onSave }) {
               className={
                 'flex items-center gap-2 rounded-9e-sm border bg-9e-ice px-2 py-1.5 transition-all duration-150 dark:bg-[#0a0f1a] ' +
                 (isDragging
-                  ? 'opacity-50 ring-2 ring-9e-primary '
+                  ? 'opacity-50 ring-2 ring-9e-action '
                   : 'border-[var(--surface-border)] ') +
-                (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '')
+                (isDropTarget ? 'border-t-2 border-t-9e-action ' : '')
               }
             >
               <DragHandle className="text-9e-slate/70" />
@@ -323,7 +323,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
                 onClick={() => moveProgramUp(pi)}
                 disabled={pi === 0}
                 aria-label="เลื่อนขึ้น"
-                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-primary disabled:opacity-30"
+                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-action disabled:opacity-30"
               >
                 ↑
               </button>
@@ -332,7 +332,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
                 onClick={() => moveProgramDown(pi)}
                 disabled={pi === programs.length - 1}
                 aria-label="เลื่อนลง"
-                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-primary disabled:opacity-30"
+                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-action disabled:opacity-30"
               >
                 ↓
               </button>

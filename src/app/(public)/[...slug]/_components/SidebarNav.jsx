@@ -54,10 +54,10 @@ export function SidebarNav({ course, hasSchedules, hasRelated }) {
           <li key={link.id}>
             <a
               href={`#${link.id}`}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-9e-slate transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-primary"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-9e-slate transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
             >
               <ChevronRight
-                className="h-3 w-3 text-9e-sky"
+                className="h-3 w-3 text-9e-air"
                 strokeWidth={2.5}
               />
               {link.label}

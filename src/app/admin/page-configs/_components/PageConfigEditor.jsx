@@ -92,7 +92,7 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
           <span
             className={
               isCustomSlug
-                ? 'font-medium text-9e-primary'
+                ? 'font-medium text-9e-action'
                 : 'italic text-9e-slate'
             }
           >
@@ -165,7 +165,7 @@ function EditForm({ kind, item, config, onSaved }) {
           value={form.urlSlug}
           onChange={update('urlSlug')}
           placeholder={item.id.toLowerCase()}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
         />
       </Field>
 
@@ -174,7 +174,7 @@ function EditForm({ kind, item, config, onSaved }) {
           type="text"
           value={form.metaTitle}
           onChange={update('metaTitle')}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
         />
       </Field>
 
@@ -183,7 +183,7 @@ function EditForm({ kind, item, config, onSaved }) {
           value={form.metaDescription}
           onChange={update('metaDescription')}
           rows={3}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
         />
       </Field>
 
@@ -193,7 +193,7 @@ function EditForm({ kind, item, config, onSaved }) {
           value={form.ogImage}
           onChange={update('ogImage')}
           placeholder="https://..."
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-9e-navy dark:text-white"
         />
       </Field>
 
@@ -212,7 +212,7 @@ function EditForm({ kind, item, config, onSaved }) {
           type="button"
           disabled={pending}
           onClick={onSave}
-          className="rounded-lg bg-9e-primary px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-lg bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึก'}
         </button>

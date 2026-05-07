@@ -134,7 +134,7 @@ export default async function AboutUsPage() {
               <div
                 key={s.label}
                 className={cn(
-                  "flex flex-col items-center gap-1 border-9e-sky dark:border-[#1e3a5f]",
+                  "flex flex-col items-center gap-1 border-9e-air dark:border-[#1e3a5f]",
                   i < STATS.length - 1 && "md:border-r-4",
                 )}
               >

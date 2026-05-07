@@ -55,7 +55,7 @@ export default async function AdminCourseExtensionPage({ params }) {
       <div className="mb-6">
         <Link
           href="/admin/courses"
-          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-9e-primary"
+          className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-9e-action"
         >
           <ChevronLeft className="h-4 w-4" />
           กลับไปยังรายการหลักสูตร

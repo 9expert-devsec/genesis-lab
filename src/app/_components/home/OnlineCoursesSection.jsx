@@ -30,7 +30,7 @@ export function OnlineCoursesSection({ courses = [] }) {
             href={siteConfig.academyUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm font-medium text-9e-primary hover:underline dark:text-white"
+            className="flex items-center gap-1 text-sm font-medium text-9e-action hover:underline dark:text-white"
           >
             ไปที่ 9Expert Academy
             <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />

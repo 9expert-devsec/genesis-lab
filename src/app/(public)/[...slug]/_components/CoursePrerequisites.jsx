@@ -11,7 +11,7 @@ export function CoursePrerequisites({ course }) {
         {items.map((item, i) => (
           <li key={i} className="flex items-start gap-2">
             <CheckCircle
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-9e-primary"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-9e-action"
               strokeWidth={2}
             />
             <span>{item}</span>

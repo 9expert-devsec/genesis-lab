@@ -26,7 +26,7 @@ export function InstructorGrid({ instructors }) {
 
   if (!instructors || instructors.length === 0) {
     return (
-      <p className="text-center text-sm text-[#808A95]">
+      <p className="text-center text-sm text-[#5E6A7E]">
         ยังไม่มีข้อมูลอาจารย์
       </p>
     );
@@ -109,7 +109,7 @@ export function InstructorGrid({ instructors }) {
               className={`h-2 rounded-full transition-all duration-300
                 ${i === current
                   ? 'w-6 bg-[#005CFF]'
-                  : 'w-2 bg-[#E2E8F0] dark:bg-[#1e3a5f] hover:bg-[#808A95]'
+                  : 'w-2 bg-[#E2E8F0] dark:bg-[#1e3a5f] hover:bg-[#5E6A7E]'
                 }`}
             />
           ))}
@@ -137,7 +137,7 @@ function InstructorCard({ instructor }) {
                        group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-[#808A95]">
+          <div className="flex h-full items-center justify-center text-sm text-[#5E6A7E]">
             ไม่มีรูป
           </div>
         )}
@@ -149,7 +149,7 @@ function InstructorCard({ instructor }) {
           {instructor.name}
         </p>
         {instructor.title && (
-          <p className="text-sm text-[#808A95] dark:text-[#94a3b8] mt-0.5">
+          <p className="text-sm text-[#5E6A7E] dark:text-[#94a3b8] mt-0.5">
             {instructor.title}
           </p>
         )}

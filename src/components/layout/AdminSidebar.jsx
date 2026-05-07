@@ -164,7 +164,7 @@ function SidebarItem({ item, currentPath, isSuper }) {
         className={cn(
           'flex items-center gap-3 rounded-9e-md px-3 py-2.5 text-sm transition-colors',
           isActive
-            ? 'bg-9e-primary/10 text-9e-primary font-medium border-l-2 border-9e-primary'
+            ? 'bg-9e-action/10 text-9e-action font-medium border-l-2 border-9e-action'
             : 'text-9e-slate hover:bg-9e-ice dark:hover:bg-[#111d2c] hover:text-9e-navy dark:hover:text-white'
         )}
       >

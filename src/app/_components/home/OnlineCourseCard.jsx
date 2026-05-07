@@ -103,7 +103,7 @@ export function OnlineCourseCard({ course, className }) {
 
         <div className="h-[52px]">
           <a href={ctaHref} target="_blank" rel="noopener noreferrer">
-            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-primary pl-2 text-base font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-primary dark:text-white">
+            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-action pl-2 text-base font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:text-white">
               {name}
             </h3>
           </a>
@@ -142,14 +142,14 @@ export function OnlineCourseCard({ course, className }) {
           <div className="flex flex-wrap gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
             {hasCertificate && (
               <span className="inline-flex items-center gap-1">
-                <Award className="h-3 w-3 text-9e-primary dark:text-white" strokeWidth={2} />
+                <Award className="h-3 w-3 text-9e-action dark:text-white" strokeWidth={2} />
                 e-Certificate
               </span>
             )}
             {levelLabel && (
               <span className="inline-flex items-center gap-1">
                 <BarChart2
-                  className="h-3 w-3 text-9e-primary dark:text-white"
+                  className="h-3 w-3 text-9e-action dark:text-white"
                   strokeWidth={2}
                 />
                 {levelLabel}
@@ -163,7 +163,7 @@ export function OnlineCourseCard({ course, className }) {
         href={ctaHref}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex w-full items-center justify-center gap-2 bg-9e-primary px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+        className="flex w-full items-center justify-center gap-2 bg-9e-action px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
       >
         ดูรายละเอียด
         <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
@@ -182,7 +182,7 @@ function PriceDisplay({ isFree, hasDiscount, price, netPrice }) {
         <span className="text-sm text-[#999] line-through dark:text-[#6b7280]">
           {netPrice.toLocaleString("th-TH")}.-
         </span>
-        <span className="text-base font-bold text-9e-primary dark:text-white">
+        <span className="text-base font-bold text-9e-action dark:text-white">
           {price.toLocaleString("th-TH")}.-
         </span>
       </span>

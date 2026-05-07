@@ -116,7 +116,7 @@ export function CourseCard({ course, className }) {
         {/* Course name with left accent */}
         <div className="h-[52px]">
           <Link href={href}>
-            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-primary pl-2 text-base font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-primary dark:text-white">
+            <h3 className="mb-2 line-clamp-2 border-l-4 border-9e-action pl-2 text-base font-bold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:text-white">
               {name}
             </h3>
           </Link>
@@ -152,7 +152,7 @@ export function CourseCard({ course, className }) {
             {hasWorkshop && (
               <span className="inline-flex items-center gap-1">
                 <MonitorPlay
-                  className="h-3 w-3 text-9e-primary dark:text-white"
+                  className="h-3 w-3 text-9e-action dark:text-white"
                   strokeWidth={2}
                 />
                 Workshop
@@ -160,14 +160,14 @@ export function CourseCard({ course, className }) {
             )}
             {hasCertificate && (
               <span className="inline-flex items-center gap-1">
-                <Award className="h-3 w-3 text-9e-primary dark:text-white" strokeWidth={2} />
+                <Award className="h-3 w-3 text-9e-action dark:text-white" strokeWidth={2} />
                 e-Certificate
               </span>
             )}
             {levelLabel && (
               <span className="inline-flex items-center gap-1">
                 <BarChart2
-                  className="h-3 w-3 text-9e-primary dark:text-white"
+                  className="h-3 w-3 text-9e-action dark:text-white"
                   strokeWidth={2}
                 />
                 {levelLabel}
@@ -186,11 +186,11 @@ export function CourseCard({ course, className }) {
             expanded ? "max-h-96" : "max-h-0",
           )}
         >
-          <div className="border-t border-9e-sky/30 bg-[#ffffff] px-4 pb-4 pt-3 dark:bg-9e-navy">
+          <div className="border-t border-9e-air/30 bg-[#ffffff] px-4 pb-4 pt-3 dark:bg-9e-navy">
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
               <span>รอบการอบรม</span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-primary shadow-9e-sm" />
+                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-action shadow-9e-sm" />
                 Classroom
               </span>
               <span className="inline-flex items-center gap-1.5">
@@ -244,7 +244,7 @@ export function CourseCard({ course, className }) {
               type="button"
               onClick={() => setExpanded(false)}
               aria-label="ย่อรอบอบรม"
-              className="text-base text-9e-primary transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
+              className="text-base text-9e-action transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
             >
               ▲
             </button>
@@ -253,7 +253,7 @@ export function CourseCard({ course, className }) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex w-full items-center justify-center gap-2 bg-9e-primary px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-in-out hover:bg-9e-brand"
+          className="flex w-full items-center justify-center gap-2 bg-9e-action px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-in-out hover:bg-9e-brand"
         >
           <span className="text-xs leading-none">▼</span>
           กดเพื่อดูรอบอบรม

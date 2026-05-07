@@ -93,7 +93,7 @@ export default function BusinessInfoSection() {
                   rel="noopener noreferrer"
                   aria-label={label}
                   title={label}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E2E8F0] text-[#808A95] transition-all duration-200 hover:border-[#005CFF] hover:bg-[#005CFF] hover:text-white hover:shadow-[0_0_16px_rgba(0,92,255,0.35)] dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-[#E2E8F0] text-[#5E6A7E] transition-all duration-200 hover:border-[#005CFF] hover:bg-[#005CFF] hover:text-white hover:shadow-[0_0_16px_rgba(0,92,255,0.35)] dark:border-[#1e3a5f] dark:text-[#94a3b8]"
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -146,7 +146,7 @@ export default function BusinessInfoSection() {
                     className={
                       open
                         ? 'text-base font-semibold text-[#005CFF] dark:text-[#48B0FF]'
-                        : 'text-base text-[#808A95] dark:text-[#6a7282]'
+                        : 'text-base text-[#5E6A7E] dark:text-[#6a7282]'
                     }
                   >
                     {time}

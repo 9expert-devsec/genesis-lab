@@ -40,12 +40,12 @@ export function ServicesSection() {
             <Link
               key={title}
               href={href}
-              className="group flex flex-col items-center gap-4 rounded-2xl border-2 border-transparent bg-white dark:bg-9e-card px-4 py-6 text-center shadow-sm transition-all duration-200 ease-9e hover:-translate-y-1 hover:border-9e-sky hover:shadow-9e-md active:scale-95 sm:p-6"
+              className="group flex flex-col items-center gap-4 rounded-2xl border-2 border-transparent bg-white dark:bg-9e-card px-4 py-6 text-center shadow-sm transition-all duration-200 ease-9e hover:-translate-y-1 hover:border-9e-air hover:shadow-9e-md active:scale-95 sm:p-6"
             >
-              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-9e-sky text-9e-primary transition-all duration-200 group-hover:border-9e-primary group-hover:bg-9e-primary group-hover:text-white dark:text-white dark:border-white">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-9e-air text-9e-action transition-all duration-200 group-hover:border-9e-action group-hover:bg-9e-action group-hover:text-white dark:text-white dark:border-white">
                 <Icon className="h-6 w-6" strokeWidth={1.75} />
               </div>
-              <h3 className="text-base font-bold text-9e-navy dark:text-white transition-colors duration-200 group-hover:text-9e-primary dark:group-hover:text-9e-sky">
+              <h3 className="text-base font-bold text-9e-navy dark:text-white transition-colors duration-200 group-hover:text-9e-action dark:group-hover:text-9e-air">
                 {title}
               </h3>
               <p className="text-sm leading-relaxed text-9e-slate dark:text-[#b6c2d4]">{desc}</p>

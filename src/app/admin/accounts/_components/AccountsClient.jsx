@@ -66,7 +66,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="inline-flex items-center gap-2 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-9e-brand"
+          className="inline-flex items-center gap-2 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-9e-brand"
         >
           <Plus className="h-4 w-4" />
           สร้างบัญชีใหม่
@@ -118,7 +118,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
                       <button
                         type="button"
                         onClick={() => setEditing(a)}
-                        className="rounded-9e-sm p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-9e-primary"
+                        className="rounded-9e-sm p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-9e-action"
                         aria-label="แก้ไข"
                       >
                         <Pencil className="h-4 w-4" />
@@ -126,7 +126,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
                       <button
                         type="button"
                         onClick={() => setResetting(a)}
-                        className="rounded-9e-sm p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-9e-primary"
+                        className="rounded-9e-sm p-1.5 text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-9e-action"
                         aria-label="รีเซ็ตรหัสผ่าน"
                       >
                         <KeyRound className="h-4 w-4" />
@@ -314,7 +314,7 @@ function CreateModal({ onClose, onSuccess, onError }) {
         <button
           type="submit"
           disabled={pending}
-          className="mt-2 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
+          className="mt-2 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังสร้าง...' : 'สร้างบัญชี'}
         </button>
@@ -386,7 +386,7 @@ function EditModal({ admin, onClose, onSuccess, onError }) {
         <button
           type="submit"
           disabled={pending}
-          className="mt-2 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
+          className="mt-2 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
@@ -439,7 +439,7 @@ function ResetPasswordModal({ admin, onClose, onSuccess, onError }) {
         <button
           type="submit"
           disabled={pending}
-          className="mt-2 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
+          className="mt-2 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก...' : 'รีเซ็ต'}
         </button>

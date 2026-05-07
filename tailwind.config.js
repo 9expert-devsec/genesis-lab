@@ -13,20 +13,40 @@ module.exports = {
         '9e': {
           // Primary Blues (60%)
           brand:      '#2486FF',  // Primary brand/logo color — headings, key buttons
-          primary:    '#005CFF',  // Secondary blue — links, interactive, gradients
-          sky:        '#48B0FF',  // Highlights, gradient light end
+          action:     '#005CFF',  // Secondary blue — links, interactive, gradients
+          air:        '#48B0FF',  // Highlights, gradient light end
           ice:        '#F8FAFD',  // Light backgrounds, text on dark
 
           // Accent Lime (10%) — CTAs, on dark backgrounds only
           lime:       '#D4F73F',
-          'lime-lt':  '#E4FF6B',  // Hover state
+          'lime-lt':  '#D8F852',  // Hover state
           'lime-dk':  '#B8D930',  // Active/pressed state
 
           // Supporting
-          slate:      '#808A95',  // Secondary text, captions
+          slate:      '#5E6A7E',  // Secondary text, captions
           navy:       '#0D1B2A',  // Dark backgrounds, primary text on light
           card:       '#132638',  // Card backgrounds on dark mode
           border:     '#1A2D42',  // Borders/dividers on dark
+        },
+        '9e-signature': {
+          50: '#2486FF', 100: '#3A92FF', 200: '#509EFF', 300: '#66AAFF',
+          400: '#7CB6FF', 500: '#92C2FF', 600: '#A7CFFF', 700: '#BDDBFF',
+          800: '#D3E7FF', 900: '#E9F3FF', 950: '#F4F9FF',
+        },
+        '9e-action-scale': {
+          50: '#005CFF', 100: '#1A6CFF', 200: '#337DFF', 300: '#4C8DFF',
+          400: '#669DFF', 500: '#80AEFF', 600: '#99BEFF', 700: '#B2CEFF',
+          800: '#CCDEFF', 900: '#E6EFFF', 950: '#F2F7FF',
+        },
+        '9e-air-scale': {
+          50: '#48B0FF', 100: '#5AB8FF', 200: '#6DC0FF', 300: '#7FC8FF',
+          400: '#91D0FF', 500: '#A4D8FF', 600: '#B6DFFF', 700: '#C8E7FF',
+          800: '#DAEFFF', 900: '#EDF7FF', 950: '#F6FBFF',
+        },
+        '9e-lime-scale': {
+          50: '#D4F73F', 100: '#D8F852', 200: '#DDF965', 300: '#E1F979',
+          400: '#E5FA8C', 500: '#EAFB9F', 600: '#EEFCB2', 700: '#F2FDC5',
+          800: '#F6FDD9', 900: '#FBFEEC', 950: '#FDFFF5',
         },
       },
 

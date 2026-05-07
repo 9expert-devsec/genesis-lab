@@ -125,7 +125,7 @@ export function InstructorQuote() {
       <div className="relative z-[2] mx-auto grid min-h-[400px] max-w-[1200px] grid-cols-1 lg:grid-cols-2  max-md:px-4">
         <div className="flex flex-col justify-center gap-6 py-12 lg:py-16">
           <span
-            className="select-none font-serif text-7xl leading-none text-9e-primary"
+            className="select-none font-serif text-7xl leading-none text-9e-action"
             aria-hidden
           >
             &ldquo;
@@ -135,14 +135,14 @@ export function InstructorQuote() {
             เราเป็นส่วนหนึ่งของการสนับสนุนบุคคลและองค์กร<br className="hidden lg:inline" />
             ในการปรับตัวตามความเปลี่ยนแปลงของเทคโนโลยี<br className="hidden lg:inline" />
             เพื่อนำมาใช้เพิ่มประสิทธิภาพการทำงาน สร้างความได้เปรียบ{' '}
-            <span className="text-9e-primary">ให้เหนือคู่แข่ง</span>
+            <span className="text-9e-action">ให้เหนือคู่แข่ง</span>
           </p>
 
           <div className="hidden lg:inline text-center">
             <p className="text-base font-bold text-9e-navy ">
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
-            <p className="text-sm text-9e-primary">
+            <p className="text-sm text-9e-action">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate">
@@ -165,7 +165,7 @@ export function InstructorQuote() {
             <p className="text-base font-bold text-9e-navy ">
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
-            <p className="text-sm text-9e-primary">
+            <p className="text-sm text-9e-action">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate">

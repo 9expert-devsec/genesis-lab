@@ -128,7 +128,7 @@ export default function HeroUniverse() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="max-w-3xl text-lg leading-relaxed text-9e-primary dark:text-[#d1d5dc] md:text-2xl"
+          className="max-w-3xl text-lg leading-relaxed text-9e-action dark:text-[#d1d5dc] md:text-2xl"
         >
           สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ
           <span className="text-9e-navy dark:text-[#48B0FF]"> "ขับเคลื่อนประเทศไทย" </span> <br />

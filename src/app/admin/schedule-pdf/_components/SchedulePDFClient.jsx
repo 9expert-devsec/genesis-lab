@@ -98,7 +98,7 @@ export default function SchedulePDFClient({ current }) {
       {/* Current file info */}
       <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-9e-md bg-9e-primary/10 text-9e-primary">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-9e-md bg-9e-action/10 text-9e-action">
             <FileText className="h-5 w-5" strokeWidth={1.75} />
           </div>
           <div className="min-w-0 flex-1">
@@ -116,7 +116,7 @@ export default function SchedulePDFClient({ current }) {
                     href={current.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 rounded-9e-sm border border-9e-primary px-3 py-1 text-xs text-9e-primary hover:bg-9e-primary hover:text-white"
+                    className="inline-flex items-center gap-1 rounded-9e-sm border border-9e-action px-3 py-1 text-xs text-9e-action hover:bg-9e-action hover:text-white"
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                     เปิดไฟล์
@@ -149,7 +149,7 @@ export default function SchedulePDFClient({ current }) {
           type="file"
           accept="application/pdf,.pdf"
           onChange={handleFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-3 file:rounded-9e-sm file:border-0 file:bg-9e-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-9e-primary hover:file:bg-9e-primary/20"
+          className="block w-full text-sm text-9e-slate file:mr-3 file:rounded-9e-sm file:border-0 file:bg-9e-action/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-9e-action hover:file:bg-9e-action/20"
         />
         {file ? (
           <p className="mt-2 text-xs text-9e-slate">
@@ -161,7 +161,7 @@ export default function SchedulePDFClient({ current }) {
           type="button"
           onClick={handleUpload}
           disabled={!file || submitting}
-          className="mt-4 inline-flex items-center gap-2 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
+          className="mt-4 inline-flex items-center gap-2 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />
           {submitting ? 'กำลังอัปโหลด...' : 'อัปโหลด PDF'}

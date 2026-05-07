@@ -59,7 +59,7 @@ export default async function PageConfigsAdmin({ searchParams }) {
             className={
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
               (tab === t.key
-                ? 'border-9e-primary text-9e-primary'
+                ? 'border-9e-action text-9e-action'
                 : 'border-transparent text-9e-slate hover:text-9e-navy')
             }
           >

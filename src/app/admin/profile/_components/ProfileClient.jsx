@@ -62,7 +62,7 @@ export function ProfileClient({ initialName }) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+          className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
         />
       </div>
 
@@ -81,7 +81,7 @@ export function ProfileClient({ initialName }) {
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               autoComplete="current-password"
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </div>
           <div>
@@ -94,7 +94,7 @@ export function ProfileClient({ initialName }) {
               onChange={(e) => setNewPassword(e.target.value)}
               minLength={8}
               autoComplete="new-password"
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </div>
           <div>
@@ -106,7 +106,7 @@ export function ProfileClient({ initialName }) {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               autoComplete="new-password"
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </div>
         </div>
@@ -126,7 +126,7 @@ export function ProfileClient({ initialName }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
+        className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
       >
         {pending ? 'กำลังบันทึก...' : 'บันทึก'}
       </button>

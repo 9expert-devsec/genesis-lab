@@ -86,8 +86,8 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
         <div
           className={`flex items-center gap-2 rounded-9e-md border-2 px-3 transition-colors ${
             open
-              ? 'border-9e-primary ring-2 ring-9e-primary/20'
-              : 'border-gray-200 hover:border-9e-sky'
+              ? 'border-9e-action ring-2 ring-9e-action/20'
+              : 'border-gray-200 hover:border-9e-air'
           }`}
         >
           <Search size={16} className="shrink-0 text-9e-slate" />
@@ -163,7 +163,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
       </div>
 
       {selected && (
-        <div className="flex items-center gap-3 rounded-9e-md border border-9e-sky/30 bg-9e-ice p-3">
+        <div className="flex items-center gap-3 rounded-9e-md border border-9e-air/30 bg-9e-ice p-3">
           <div className="flex h-9 w-16 shrink-0 items-center justify-center overflow-hidden rounded-9e-sm bg-white">
             {selected.program?.programiconurl && (
               <Image
@@ -186,7 +186,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
             type="button"
             onClick={handleAdd}
             disabled={isPending}
-            className="flex shrink-0 items-center gap-1.5 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
           >
             {isPending ? (
               <Loader2 size={14} className="animate-spin" />

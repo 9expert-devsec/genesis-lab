@@ -49,8 +49,8 @@ function ErrorState({ message }) {
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-16 lg:px-6">
       <div className="mx-auto flex max-w-md flex-col items-center text-center">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-9e-sky/20">
-          <AlertTriangle className="h-5 w-5 text-9e-primary" strokeWidth={1.75} />
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-9e-air/20">
+          <AlertTriangle className="h-5 w-5 text-9e-action" strokeWidth={1.75} />
         </div>
         <p className="text-base font-semibold text-9e-navy">โหลดข้อมูลไม่สำเร็จ</p>
         <p className="mt-1 text-sm text-9e-slate">

@@ -12,17 +12,17 @@
   /* ── Raw palette (brand hex — same across themes) ── */
   /* Primary Blues (60% usage) */
   --9e-brand:        #2486FF;
-  --9e-primary:      #005CFF;
-  --9e-sky:          #48B0FF;
+  --9e-action:       #005CFF;
+  --9e-air:          #48B0FF;
   --9e-ice:          #F8FAFD;
 
   /* Accent Lime (10% usage — CTAs, on dark only) */
   --9e-lime:         #D4F73F;
-  --9e-lime-lt:      #E4FF6B;
+  --9e-lime-lt:      #D8F852;
   --9e-lime-dk:      #B8D930;
 
   /* Supporting */
-  --9e-slate:        #808A95;
+  --9e-slate:        #5E6A7E;
   --9e-navy:         #0D1B2A;
   --9e-card:         #132638;
   --9e-border:       #1A2D42;
@@ -42,7 +42,61 @@
 
   --text-primary:   #0D1B2A;
   --text-secondary: #465469;
-  --text-muted:     #808A95;
+  --text-muted:     #5E6A7E;
+
+  /* === 11-step scales (light mode) === */
+
+  /* Signature Blue scale */
+  --9e-signature-50:  #2486FF;
+  --9e-signature-100: #3A92FF;
+  --9e-signature-200: #509EFF;
+  --9e-signature-300: #66AAFF;
+  --9e-signature-400: #7CB6FF;
+  --9e-signature-500: #92C2FF;
+  --9e-signature-600: #A7CFFF;
+  --9e-signature-700: #BDDBFF;
+  --9e-signature-800: #D3E7FF;
+  --9e-signature-900: #E9F3FF;
+  --9e-signature-950: #F4F9FF;
+
+  /* Action Blue scale */
+  --9e-action-50:  #005CFF;
+  --9e-action-100: #1A6CFF;
+  --9e-action-200: #337DFF;
+  --9e-action-300: #4C8DFF;
+  --9e-action-400: #669DFF;
+  --9e-action-500: #80AEFF;
+  --9e-action-600: #99BEFF;
+  --9e-action-700: #B2CEFF;
+  --9e-action-800: #CCDEFF;
+  --9e-action-900: #E6EFFF;
+  --9e-action-950: #F2F7FF;
+
+  /* Air Blue scale */
+  --9e-air-50:  #48B0FF;
+  --9e-air-100: #5AB8FF;
+  --9e-air-200: #6DC0FF;
+  --9e-air-300: #7FC8FF;
+  --9e-air-400: #91D0FF;
+  --9e-air-500: #A4D8FF;
+  --9e-air-600: #B6DFFF;
+  --9e-air-700: #C8E7FF;
+  --9e-air-800: #DAEFFF;
+  --9e-air-900: #EDF7FF;
+  --9e-air-950: #F6FBFF;
+
+  /* Lime scale */
+  --9e-lime-50:  #D4F73F;
+  --9e-lime-100: #D8F852;
+  --9e-lime-200: #DDF965;
+  --9e-lime-300: #E1F979;
+  --9e-lime-400: #E5FA8C;
+  --9e-lime-500: #EAFB9F;
+  --9e-lime-600: #EEFCB2;
+  --9e-lime-700: #F2FDC5;
+  --9e-lime-800: #F6FDD9;
+  --9e-lime-900: #FBFEEC;
+  --9e-lime-950: #FDFFF5;
 }
 
 /* ── Semantic tokens — DARK MODE overrides ── */
@@ -56,7 +110,61 @@
 
   --text-primary:   #F8FAFD;
   --text-secondary: #C5CEDA;
-  --text-muted:     #808A95;
+  --text-muted:     #5E6A7E;
+
+  /* === 11-step scales (dark mode) === */
+
+  /* Signature Blue scale */
+  --9e-signature-50:  #2486FF;
+  --9e-signature-100: #217AE8;
+  --9e-signature-200: #1E6ED0;
+  --9e-signature-300: #1C62B9;
+  --9e-signature-400: #1956A2;
+  --9e-signature-500: #164A8A;
+  --9e-signature-600: #133E73;
+  --9e-signature-700: #10325C;
+  --9e-signature-800: #0E2645;
+  --9e-signature-900: #0B1A2D;
+  --9e-signature-950: #091422;
+
+  /* Action Blue scale */
+  --9e-action-50:  #005CFF;
+  --9e-action-100: #0154E8;
+  --9e-action-200: #024CD0;
+  --9e-action-300: #0245B9;
+  --9e-action-400: #033DA2;
+  --9e-action-500: #04358A;
+  --9e-action-600: #052D73;
+  --9e-action-700: #06255C;
+  --9e-action-800: #061E45;
+  --9e-action-900: #07162D;
+  --9e-action-950: #081222;
+
+  /* Air Blue scale */
+  --9e-air-50:  #48B0FF;
+  --9e-air-100: #42A0E8;
+  --9e-air-200: #3B90D0;
+  --9e-air-300: #357FB9;
+  --9e-air-400: #2E6FA2;
+  --9e-air-500: #285F8A;
+  --9e-air-600: #224F73;
+  --9e-air-700: #1B3F5C;
+  --9e-air-800: #152E45;
+  --9e-air-900: #0E1E2D;
+  --9e-air-950: #0B1622;
+
+  /* Lime scale */
+  --9e-lime-50:  #D4F73F;
+  --9e-lime-100: #C0E03B;
+  --9e-lime-200: #ABC837;
+  --9e-lime-300: #97B133;
+  --9e-lime-400: #829A2F;
+  --9e-lime-500: #6E822A;
+  --9e-lime-600: #5A6B26;
+  --9e-lime-700: #455422;
+  --9e-lime-800: #313D1E;
+  --9e-lime-900: #1C251A;
+  --9e-lime-950: #121A18;
 }
 
 /* Native form controls and scrollbars follow the active theme */

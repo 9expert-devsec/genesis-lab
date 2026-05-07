@@ -125,7 +125,7 @@ export function SecurityClient({ initiallyEnabled, verifiedAt }) {
             placeholder="000000"
             value={disableToken}
             onChange={(e) => setDisableToken(e.target.value.replace(/\D/g, ''))}
-            className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-4 py-3 text-center text-xl font-bold tracking-widest text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+            className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-4 py-3 text-center text-xl font-bold tracking-widest text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
           />
           {disableError && (
             <p className="text-sm text-red-600">{disableError}</p>
@@ -168,7 +168,7 @@ export function SecurityClient({ initiallyEnabled, verifiedAt }) {
             onClick={startSetup}
             disabled={loading}
             className={cn(
-              'w-fit rounded-9e-md bg-9e-primary px-6 py-3 font-medium text-white',
+              'w-fit rounded-9e-md bg-9e-action px-6 py-3 font-medium text-white',
               'transition-colors hover:bg-9e-brand disabled:opacity-50'
             )}
           >
@@ -204,7 +204,7 @@ export function SecurityClient({ initiallyEnabled, verifiedAt }) {
             placeholder="กรอก OTP 6 หลักเพื่อยืนยัน"
             value={setupToken}
             onChange={(e) => setSetupToken(e.target.value.replace(/\D/g, ''))}
-            className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-4 py-3 text-center text-xl font-bold tracking-widest text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+            className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-4 py-3 text-center text-xl font-bold tracking-widest text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
           />
           {setupError && (
             <p className="text-sm text-red-600">{setupError}</p>
@@ -225,7 +225,7 @@ export function SecurityClient({ initiallyEnabled, verifiedAt }) {
             <button
               type="submit"
               disabled={loading || setupToken.length !== 6}
-              className="flex-1 rounded-9e-md bg-9e-primary px-6 py-3 font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
+              className="flex-1 rounded-9e-md bg-9e-action px-6 py-3 font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
             >
               {loading ? 'กำลังยืนยัน...' : 'ยืนยันและเปิดใช้'}
             </button>

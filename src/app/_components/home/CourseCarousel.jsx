@@ -78,7 +78,7 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
         aria-label="ก่อนหน้า"
         onClick={() => scrollBy(-300)}
         className={cn(
-          'absolute -left-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
+          'absolute -left-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-air text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
           canPrev ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >
@@ -89,7 +89,7 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
         aria-label="ถัดไป"
         onClick={() => scrollBy(300)}
         className={cn(
-          'absolute -right-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
+          'absolute -right-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-air text-9e-ice shadow-9e-md transition-opacity duration-9e-micro ease-9e hover:bg-9e-brand sm:flex',
           canNext ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       >

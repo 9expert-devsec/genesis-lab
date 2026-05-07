@@ -135,7 +135,7 @@ export function CourseGallery({ gallery = [] }) {
                 className={cn(
                   'h-2 w-2 rounded-full transition-colors',
                   i === current
-                    ? 'bg-9e-primary dark:bg-[#48B0FF]'
+                    ? 'bg-9e-action dark:bg-[#48B0FF]'
                     : 'bg-[#CBD5E1] dark:bg-[#1e3a5f]'
                 )}
               />

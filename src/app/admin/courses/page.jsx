@@ -86,7 +86,7 @@ export default async function AdminCoursesPage() {
                         href={`/admin/courses/${encodeURIComponent(
                           course.course_id
                         )}`}
-                        className="text-sm font-medium text-9e-primary hover:underline"
+                        className="text-sm font-medium text-9e-action hover:underline"
                       >
                         แก้ไข →
                       </Link>

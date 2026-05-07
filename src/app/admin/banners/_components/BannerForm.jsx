@@ -125,7 +125,7 @@ export function BannerForm({ banner }) {
             onChange={handleFileChange}
             className="block w-full text-sm text-9e-slate file:mr-4 file:py-2 file:px-4
               file:rounded-9e-md file:border-0 file:text-sm file:font-bold
-              file:bg-9e-primary file:text-white hover:file:bg-9e-brand file:cursor-pointer"
+              file:bg-9e-action file:text-white hover:file:bg-9e-brand file:cursor-pointer"
           />
           {imagePreview && (
             <div className="mt-3 relative w-full h-40 rounded-9e-md overflow-hidden bg-9e-ice border border-[var(--surface-border)]">
@@ -192,7 +192,7 @@ export function BannerForm({ banner }) {
           type="checkbox"
           id="active"
           defaultChecked={banner?.active ?? true}
-          className="w-4 h-4 rounded accent-9e-primary"
+          className="w-4 h-4 rounded accent-9e-action"
         />
         <label htmlFor="active" className="text-sm font-medium text-9e-navy">
           แสดง Banner นี้ (Active)
@@ -204,7 +204,7 @@ export function BannerForm({ banner }) {
         <button
           type="submit"
           disabled={isPending}
-          className="px-6 py-2.5 bg-9e-primary hover:bg-9e-brand text-white font-bold
+          className="px-6 py-2.5 bg-9e-action hover:bg-9e-brand text-white font-bold
             rounded-9e-md transition-colors disabled:opacity-50 text-sm"
         >
           {isPending ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'สร้าง Banner'}
@@ -242,6 +242,6 @@ function inputCls(hasError) {
     ${
       hasError
         ? 'border-red-400 focus:ring-red-200'
-        : 'border-gray-200 hover:border-9e-sky focus:ring-9e-primary/20'
+        : 'border-gray-200 hover:border-9e-air focus:ring-9e-action/20'
     }`;
 }

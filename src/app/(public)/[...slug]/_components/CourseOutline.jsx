@@ -42,7 +42,7 @@ export function CourseOutline({ course }) {
         <button
           type="button"
           onClick={toggleAll}
-          className="text-xs font-medium text-9e-primary hover:underline"
+          className="text-xs font-medium text-9e-action hover:underline"
         >
           {allOpen ? 'ซ่อนทั้งหมด' : 'แสดงทั้งหมด'}
         </button>
@@ -95,7 +95,7 @@ export function CourseOutline({ course }) {
                         key={j}
                         className="flex items-start gap-2 text-sm text-9e-slate"
                       >
-                        <span className="mt-1 shrink-0 text-9e-sky">•</span>
+                        <span className="mt-1 shrink-0 text-9e-air">•</span>
                         <span>{bullet}</span>
                       </li>
                     ))}

@@ -124,7 +124,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
             className={cn(
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors',
               tab === t.id
-                ? 'border-9e-primary text-9e-primary'
+                ? 'border-9e-action text-9e-action'
                 : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
             )}
           >
@@ -143,7 +143,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
                 value={urlAlias}
                 onChange={(e) => setUrlAlias(e.target.value)}
                 placeholder="excel-ai-business-training-course"
-                className="flex-1 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+                className="flex-1 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
               />
             </div>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
@@ -158,7 +158,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
               onChange={(e) => setMetaTitle(e.target.value)}
               maxLength={120}
               placeholder={courseName}
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </Field>
 
@@ -169,7 +169,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
               rows={3}
               maxLength={300}
               placeholder="คำอธิบายสั้นสำหรับ Search Engine และ Social Share..."
-              className="w-full resize-none rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full resize-none rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </Field>
 
@@ -179,7 +179,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
               value={ogImage}
               onChange={(e) => setOgImage(e.target.value)}
               placeholder="https://res.cloudinary.com/..."
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </Field>
 
@@ -189,7 +189,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               placeholder="Excel, AI, Business"
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
             />
           </Field>
 
@@ -210,7 +210,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
             <button
               type="button"
               onClick={addImage}
-              className="inline-flex items-center gap-2 rounded-9e-md border border-9e-primary px-4 py-2 text-sm text-9e-primary transition-colors hover:bg-9e-primary hover:text-white"
+              className="inline-flex items-center gap-2 rounded-9e-md border border-9e-action px-4 py-2 text-sm text-9e-action transition-colors hover:bg-9e-action hover:text-white"
             >
               <ImageIcon className="h-4 w-4" />
               เพิ่มรูปภาพ
@@ -249,7 +249,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-9e-md bg-9e-primary px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-9e-md bg-9e-action px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
         >
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
@@ -334,7 +334,7 @@ function GalleryRow({ item, index, lastIndex, onChange, onRemove, onMove }) {
           value={item.videoId}
           onChange={(e) => onChange(index, 'videoId', e.target.value)}
           placeholder="YouTube Video ID (เช่น dQw4w9WgXcQ)"
-          className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+          className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
         />
       ) : (
         <>
@@ -343,14 +343,14 @@ function GalleryRow({ item, index, lastIndex, onChange, onRemove, onMove }) {
             value={item.url}
             onChange={(e) => onChange(index, 'url', e.target.value)}
             placeholder="https://res.cloudinary.com/..."
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
           />
           <input
             type="text"
             value={item.alt}
             onChange={(e) => onChange(index, 'alt', e.target.value)}
             placeholder="Alt text (สำหรับ accessibility + SEO)"
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-primary focus:ring-2 focus:ring-9e-primary/20"
+            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
           />
         </>
       )}

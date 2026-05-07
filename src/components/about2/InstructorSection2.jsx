@@ -181,7 +181,7 @@ function InstructorCard({ ins }) {
         )}
         <div
           aria-hidden
-          className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-9e-primary via-9e-primary/50 to-transparent dark:from-[#052d73] dark:via-[#052d73]/50"
+          className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-9e-action via-9e-action/50 to-transparent dark:from-[#052d73] dark:via-[#052d73]/50"
         />
       </div>
 

@@ -142,7 +142,7 @@ function BlogCarousel({ blogs }) {
             className={cn(
               'h-2 w-2 rounded-full transition-colors',
               i === currentIndex
-                ? 'bg-9e-primary dark:bg-[#48B0FF]'
+                ? 'bg-9e-action dark:bg-[#48B0FF]'
                 : 'bg-[#CBD5E1] dark:bg-[#1e3a5f]'
             )}
           />
@@ -189,7 +189,7 @@ export function BlogCard({ blog }) {
           </div>
           <a
             href={blog.slug}
-            className="whitespace-nowrap text-sm font-medium text-9e-primary hover:underline dark:text-[#48B0FF]"
+            className="whitespace-nowrap text-sm font-medium text-9e-action hover:underline dark:text-[#48B0FF]"
           >
             อ่านเพิ่มเติม ...
           </a>

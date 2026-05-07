@@ -34,7 +34,7 @@ export function SkillBreadcrumb({ course }) {
           </span>
         ))}
         {program?.program_name && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-sky/40 bg-9e-sky/20 px-3 py-1 text-xs font-semibold text-9e-primary">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-air/40 bg-9e-air/20 px-3 py-1 text-xs font-semibold text-9e-action">
             {program.programiconurl && (
               <Image
                 src={program.programiconurl}
@@ -55,7 +55,7 @@ export function SkillBreadcrumb({ course }) {
           <span>หลักสูตรก่อนหน้า:</span>
           <Link
             href={previousHref}
-            className="font-medium text-9e-primary hover:underline"
+            className="font-medium text-9e-action hover:underline"
           >
             {previous.course_name}
           </Link>

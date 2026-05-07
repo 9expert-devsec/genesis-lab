@@ -92,7 +92,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-primary hover:text-9e-primary disabled:opacity-50"
+            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
           >
             {syncing ? 'กำลัง Sync...' : 'Sync จาก API'}
           </button>
@@ -100,7 +100,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="rounded-9e-md bg-9e-primary px-4 py-2 text-sm text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm text-white transition-colors hover:bg-[#0047CC] disabled:opacity-50"
           >
             {saving ? 'กำลังบันทึก...' : 'บันทึกลำดับ'}
           </button>
@@ -125,9 +125,9 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
               className={
                 'flex items-center gap-3 rounded-9e-md border p-3 transition-all duration-150 ' +
                 (isDragging
-                  ? 'scale-[0.98] opacity-50 shadow-9e-md ring-2 ring-9e-primary '
+                  ? 'scale-[0.98] opacity-50 shadow-9e-md ring-2 ring-9e-action '
                   : '') +
-                (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+                (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
                 (prog.isHidden
                   ? 'border-dashed bg-gray-50 opacity-50 dark:bg-[#0a0f1a]'
                   : 'border-[var(--surface-border)] bg-white dark:bg-[#111d2c]')
@@ -155,7 +155,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                 <button
                   type="button"
                   onClick={() => handleToggleHidden(prog.id, prog.isHidden)}
-                  className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-primary"
+                  className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action"
                 >
                   {prog.isHidden ? 'แสดง' : 'ซ่อน'}
                 </button>
@@ -164,7 +164,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                   onClick={() => moveUp(i)}
                   disabled={i === 0}
                   aria-label="เลื่อนขึ้น"
-                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-primary disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
                 >
                   ↑
                 </button>
@@ -173,7 +173,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                   onClick={() => moveDown(i)}
                   disabled={i === items.length - 1}
                   aria-label="เลื่อนลง"
-                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-primary disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
                 >
                   ↓
                 </button>

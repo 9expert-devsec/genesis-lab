@@ -175,7 +175,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                         className={cn(
                           "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3 text-sm font-semibold transition-all duration-9e-micro ease-9e",
                           isActive
-                            ? "border-9e-primary bg-[#e9e9e9] text-9e-primary dark:bg-9e-navy dark:text-9e-lime dark:border-9e-lime"
+                            ? "border-9e-action bg-[#e9e9e9] text-9e-action dark:bg-9e-navy dark:text-9e-lime dark:border-9e-lime"
                             : "border-transparent text-9e-slate hover:border-gray-300 hover:text-9e-navy dark:text-9e-slate dark:hover:border-gray-600 dark:hover:text-white",
                         )}
                       >
@@ -235,12 +235,12 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                         )}
 
                         <div className="mt-auto flex flex-row justify-between items-center">
-                          <p className="text-xs font-semibold text-9e-primary dark:text-[#b6c2d4]">
+                          <p className="text-xs font-semibold text-9e-action dark:text-[#b6c2d4]">
                             {skillPrograms.length} โปรแกรม
                           </p>
                           <Link
                             href={`/skill/${toKebab(selectedSkill.skill_name)}`}
-                            className="text-xs font-semibold text-white bg-9e-primary hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full"
+                            className="text-xs font-semibold text-white bg-9e-action hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full"
                           >
                             ดูหลักสูตรใน Skill นี้
                           </Link>
@@ -309,8 +309,8 @@ function TabButton({ active, onClick, children }) {
       className={cn(
         "flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-all duration-9e-micro ease-9e sm:flex-none sm:px-8",
         active
-          ? "bg-9e-primary text-white shadow-9e-md dark:bg-9e-lime dark:text-9e-navy"
-          : "border border-gray-200 bg-white text-9e-slate hover:border-9e-primary hover:text-9e-primary dark:border-gray-600 dark:bg-9e-navy dark:text-9e-slate dark:hover:border-9e-lime dark:hover:text-9e-lime",
+          ? "bg-9e-action text-white shadow-9e-md dark:bg-9e-lime dark:text-9e-navy"
+          : "border border-gray-200 bg-white text-9e-slate hover:border-9e-action hover:text-9e-action dark:border-gray-600 dark:bg-9e-navy dark:text-9e-slate dark:hover:border-9e-lime dark:hover:text-9e-lime",
       )}
     >
       {children}
@@ -329,7 +329,7 @@ function PrevButton({ show, onClick, compact = false }) {
       onClick={onClick}
       aria-label="ก่อนหน้า"
       className={cn(
-        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
+        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-air shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
         size,
         offset,
       )}
@@ -350,7 +350,7 @@ function NextButton({ show, onClick, compact = false }) {
       onClick={onClick}
       aria-label="ถัดไป"
       className={cn(
-        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
+        "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-9e-air shadow-9e-md transition-all duration-9e-micro ease-9e hover:bg-9e-brand dark:bg-9e-lime dark:hover:bg-9e-lime-dk",
         size,
         offset,
       )}
@@ -374,7 +374,7 @@ function PageDots({ total, current, onChange, className }) {
             "rounded-full transition-all duration-9e-micro ease-9e",
             i === current
               ? "h-2.5 w-6 bg-9e-brand dark:bg-9e-lime "
-              : "h-2.5 w-2.5 bg-gray-300 hover:bg-9e-sky dark:hover:bg-9e-lime-lt",
+              : "h-2.5 w-2.5 bg-gray-300 hover:bg-9e-air dark:hover:bg-9e-lime-lt",
           )}
         />
       ))}
@@ -397,7 +397,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
   return (
     <Link
       href={hrefBuilder(item)}
-      className="group flex items-center gap-3 rounded-xl border-2 border-transparent bg-white px-4 py-3 transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95 dark:bg-9e-navy dark:border-gray-600 dark:hover:border-9e-lime"
+      className="group flex items-center gap-3 rounded-xl border-2 border-transparent bg-white px-4 py-3 transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-action hover:shadow-9e-md active:scale-95 dark:bg-9e-navy dark:border-gray-600 dark:hover:border-9e-lime"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-9e-ice">
         {icon && (
@@ -411,7 +411,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
           />
         )}
       </div>
-      <span className="line-clamp-2 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary dark:text-white dark:group-hover:text-9e-lime lg:line-clamp-1">
+      <span className="line-clamp-2 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-lime lg:line-clamp-1">
         {name}
       </span>
     </Link>
@@ -425,7 +425,7 @@ function ProgramTileCard({ item, hrefBuilder }) {
   return (
     <Link
       href={hrefBuilder(item)}
-      className="group flex flex-col items-center gap-2 rounded-xl border-2 border-transparent bg-white p-2 text-center transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-primary hover:shadow-9e-md active:scale-95 sm:p-4 dark:bg-9e-border dark:hover:border-9e-lime"
+      className="group flex flex-col items-center gap-2 rounded-xl border-2 border-transparent bg-white p-2 text-center transition-all duration-9e-micro ease-9e hover:-translate-y-0.5 hover:border-9e-action hover:shadow-9e-md active:scale-95 sm:p-4 dark:bg-9e-border dark:hover:border-9e-lime"
     >
       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-9e-ice sm:h-12 sm:w-12">
         {icon && (
@@ -439,7 +439,7 @@ function ProgramTileCard({ item, hrefBuilder }) {
           />
         )}
       </div>
-      <span className="line-clamp-2 w-full text-[0.65rem] font-semibold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-primary sm:text-xs dark:text-9e-ice dark:group-hover:text-9e-lime">
+      <span className="line-clamp-2 w-full text-[0.65rem] font-semibold leading-snug text-9e-navy transition-colors duration-9e-micro ease-9e group-hover:text-9e-action sm:text-xs dark:text-9e-ice dark:group-hover:text-9e-lime">
         {name}
       </span>
     </Link>

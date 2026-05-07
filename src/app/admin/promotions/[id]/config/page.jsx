@@ -34,7 +34,7 @@ export default async function PromotionConfigPage({ params }) {
       <div>
         <Link
           href="/admin/promotions"
-          className="text-sm text-9e-primary hover:underline dark:text-9e-sky"
+          className="text-sm text-9e-action hover:underline dark:text-9e-air"
         >
           ← กลับไปยังรายการโปรโมชั่น
         </Link>

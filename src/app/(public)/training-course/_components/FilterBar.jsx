@@ -50,7 +50,7 @@ function FilterSelect({ label, value, onChange, options }) {
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         aria-label={label}
-        className="min-w-[160px] cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-primary/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-sky"
+        className="min-w-[160px] cursor-pointer rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-air"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>

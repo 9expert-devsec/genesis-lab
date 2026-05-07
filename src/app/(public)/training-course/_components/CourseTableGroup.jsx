@@ -23,7 +23,7 @@ export function CourseTableGroup({ program, courses }) {
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">
           {program?.program_name ?? 'หลักสูตร'}
         </h2>
-        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
+        <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
           {courses.length}
         </span>
       </div>
@@ -32,19 +32,19 @@ export function CourseTableGroup({ program, courses }) {
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
-              <th className="bg-9e-primary px-4 py-3 text-left font-bold text-white">
+              <th className="bg-9e-action px-4 py-3 text-left font-bold text-white">
                 ชื่อหลักสูตร
               </th>
-              <th className="bg-9e-primary px-4 py-3 text-left font-bold text-white">
+              <th className="bg-9e-action px-4 py-3 text-left font-bold text-white">
                 โปรแกรม
               </th>
-              <th className="bg-9e-primary px-4 py-3 text-center font-bold text-white">
+              <th className="bg-9e-action px-4 py-3 text-center font-bold text-white">
                 วัน
               </th>
-              <th className="bg-9e-primary px-4 py-3 text-center font-bold text-white">
+              <th className="bg-9e-action px-4 py-3 text-center font-bold text-white">
                 ชม.
               </th>
-              <th className="bg-9e-primary px-4 py-3 text-right font-bold text-white">
+              <th className="bg-9e-action px-4 py-3 text-right font-bold text-white">
                 ราคา (บาท)
               </th>
             </tr>

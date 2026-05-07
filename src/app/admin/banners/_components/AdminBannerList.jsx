@@ -67,7 +67,7 @@ export function AdminBannerList({ banners }) {
                 <div className="flex justify-end gap-2">
                   <a
                     href={`/admin/banners/${b._id}/edit`}
-                    className="text-xs px-3 py-1 border border-9e-primary text-9e-primary rounded-9e-sm hover:bg-9e-primary hover:text-white transition-colors"
+                    className="text-xs px-3 py-1 border border-9e-action text-9e-action rounded-9e-sm hover:bg-9e-action hover:text-white transition-colors"
                   >
                     แก้ไข
                   </a>

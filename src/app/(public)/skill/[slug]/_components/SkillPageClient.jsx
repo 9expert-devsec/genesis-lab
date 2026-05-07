@@ -25,7 +25,7 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses, blogs }
   return (
     <main className="min-h-screen bg-9e-ice dark:bg-9e-border pb-16">
       {/* ── Hero ──────────────────────────────────────────────────── */}
-      <section className="bg-gradient-to-b from-9e-primary to-[#0047CC] py-14 text-center dark:from-[#0a1628] dark:to-[#0d1e36]">
+      <section className="bg-gradient-to-b from-9e-action to-[#0047CC] py-14 text-center dark:from-[#0a1628] dark:to-[#0d1e36]">
         <div className="mx-auto max-w-[900px] px-4 lg:px-6">
           {skill?.skilliconurl && (
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 p-3 backdrop-blur">
@@ -98,13 +98,13 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses, blogs }
                   <h2 className="text-lg font-bold text-9e-navy dark:text-white">
                     {program?.program_name}
                   </h2>
-                  <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
+                  <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
                     {courses.length}
                   </span>
                   {programSlug && (
                     <Link
                       href={`/program/${programSlug}`}
-                      className="ml-auto text-sm font-medium text-9e-primary hover:underline dark:text-9e-sky"
+                      className="ml-auto text-sm font-medium text-9e-action hover:underline dark:text-9e-air"
                     >
                       ดูหลักสูตรใน Program นี้ →
                     </Link>

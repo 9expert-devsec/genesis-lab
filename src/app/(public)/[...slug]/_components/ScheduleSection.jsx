@@ -31,14 +31,14 @@ export function ScheduleSection({ course, schedules }) {
     <section id="schedule" className="scroll-mt-24">
       <TrainingTypeLegend />
 
-      <div className="flex items-center gap-2 rounded-t-xl bg-9e-primary px-5 py-3">
+      <div className="flex items-center gap-2 rounded-t-xl bg-9e-action px-5 py-3">
         <CalendarDays className="h-4 w-4 text-white" strokeWidth={1.75} />
         <h2 className="text-sm font-bold text-white">
           ตารางอบรม Public Training
         </h2>
       </div>
 
-      <div className="rounded-b-xl border border-9e-sky/30 bg-white p-4">
+      <div className="rounded-b-xl border border-9e-air/30 bg-white p-4">
         <ScheduleCarousel
           schedules={schedules ?? []}
           selectedId={selectedId}
@@ -49,7 +49,7 @@ export function ScheduleSection({ course, schedules }) {
           <div className="mt-4 flex justify-end">
             <Link
               href={hrefForSelected}
-              className="rounded-xl bg-9e-primary px-6 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+              className="rounded-xl bg-9e-action px-6 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
             >
               ลงทะเบียนรอบที่เลือก
             </Link>
@@ -72,7 +72,7 @@ function TrainingTypeLegend() {
     <div className="mb-3 flex items-center justify-end gap-3 text-xs text-9e-slate">
       <span>รูปแบบการอบรม:</span>
       <span className="flex items-center gap-1">
-        <span className="inline-block h-2 w-2 rounded-full bg-9e-primary" />
+        <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
         Classroom
       </span>
       <span className="flex items-center gap-1">
@@ -84,7 +84,7 @@ function TrainingTypeLegend() {
         <button
           type="button"
           aria-label="รูปแบบการอบรมคืออะไร"
-          className="flex h-5 w-5 items-center justify-center rounded-full border border-9e-slate text-xs text-9e-slate transition-colors duration-9e-micro ease-9e hover:border-9e-primary hover:text-9e-primary focus:outline-none focus:ring-2 focus:ring-9e-primary/20"
+          className="flex h-5 w-5 items-center justify-center rounded-full border border-9e-slate text-xs text-9e-slate transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action focus:outline-none focus:ring-2 focus:ring-9e-action/20"
         >
           ?
         </button>
@@ -95,7 +95,7 @@ function TrainingTypeLegend() {
             <div className="space-y-3">
               <div>
                 <p className="mb-0.5 flex items-center gap-1.5 text-xs font-bold text-9e-navy">
-                  <span className="inline-block h-2 w-2 rounded-full bg-9e-primary" />
+                  <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
                   Classroom
                 </p>
                 <p className="text-xs leading-relaxed text-9e-slate">

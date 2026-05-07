@@ -151,7 +151,7 @@ export function CourseListClient({ items, programOrder = [] }) {
         <div className="mb-6 flex items-center justify-between gap-4">
           <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
             ผลลัพธ์การค้นหา{' '}
-            <span className="font-bold text-9e-primary dark:text-9e-sky">
+            <span className="font-bold text-9e-action dark:text-9e-air">
               {filtered.length}
             </span>{' '}
             หลักสูตร

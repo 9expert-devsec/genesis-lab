@@ -28,7 +28,7 @@ export default function Page() {
         <p className="text-center mt-6">
           <Link
             href="/"
-            className="text-sm text-9e-slate hover:text-9e-primary transition-colors"
+            className="text-sm text-9e-slate hover:text-9e-action transition-colors"
           >
             ← กลับหน้าหลัก
           </Link>

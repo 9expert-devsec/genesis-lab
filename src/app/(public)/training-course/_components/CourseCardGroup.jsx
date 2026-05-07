@@ -18,7 +18,7 @@ export function CourseCardGroup({ program, courses }) {
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">
           {program?.program_name ?? 'หลักสูตร'}
         </h2>
-        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
+        <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
           {courses.length}
         </span>
       </div>

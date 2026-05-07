@@ -79,8 +79,8 @@ export function LoginForm() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-200 rounded-9e-md px-4 py-3 text-sm
-                text-9e-navy bg-white hover:border-9e-sky focus:outline-none
-                focus:ring-2 focus:ring-9e-primary/20 focus:border-9e-primary
+                text-9e-navy bg-white hover:border-9e-air focus:outline-none
+                focus:ring-2 focus:ring-9e-action/20 focus:border-9e-action
                 transition-colors"
             />
           </div>
@@ -103,8 +103,8 @@ export function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full border border-gray-200 rounded-9e-md px-4 py-3 pr-11 text-sm
-                  text-9e-navy bg-white hover:border-9e-sky focus:outline-none
-                  focus:ring-2 focus:ring-9e-primary/20 focus:border-9e-primary
+                  text-9e-navy bg-white hover:border-9e-air focus:outline-none
+                  focus:ring-2 focus:ring-9e-action/20 focus:border-9e-action
                   transition-colors"
               />
               <button
@@ -112,7 +112,7 @@ export function LoginForm() {
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-9e-slate
-                  hover:text-9e-primary transition-colors"
+                  hover:text-9e-action transition-colors"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
@@ -129,7 +129,7 @@ export function LoginForm() {
           <input type="hidden" name="password" value={password} />
 
           <p className="text-sm text-9e-slate flex items-center gap-2">
-            <ShieldCheck size={16} className="text-9e-primary" />
+            <ShieldCheck size={16} className="text-9e-action" />
             กรอกรหัส 6 หลักจาก Google Authenticator
           </p>
 
@@ -151,8 +151,8 @@ export function LoginForm() {
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
               className="w-full border border-gray-200 rounded-9e-md px-4 py-3 text-2xl
                 text-center tracking-[0.5em] font-bold
-                text-9e-navy bg-white hover:border-9e-sky focus:outline-none
-                focus:ring-2 focus:ring-9e-primary/20 focus:border-9e-primary
+                text-9e-navy bg-white hover:border-9e-air focus:outline-none
+                focus:ring-2 focus:ring-9e-action/20 focus:border-9e-action
                 transition-colors"
             />
           </div>
@@ -163,7 +163,7 @@ export function LoginForm() {
         type="submit"
         disabled={isPending || (isOtpStep && otp.length !== 6)}
         className="w-full flex items-center justify-center gap-2 py-3
-          bg-9e-primary hover:bg-9e-brand text-white font-bold rounded-9e-md
+          bg-9e-action hover:bg-9e-brand text-white font-bold rounded-9e-md
           transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-sm"
       >
         {isPending ? (
@@ -186,7 +186,7 @@ export function LoginForm() {
         <button
           type="button"
           onClick={handleBack}
-          className="w-full text-9e-slate text-sm hover:text-9e-primary transition-colors"
+          className="w-full text-9e-slate text-sm hover:text-9e-action transition-colors"
         >
           ← กลับไปหน้าล็อกอิน
         </button>

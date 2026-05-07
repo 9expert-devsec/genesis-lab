@@ -128,7 +128,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
           >
             {syncing ? 'กำลัง Sync…' : 'Sync จาก API'}
           </button>
@@ -169,8 +169,8 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                   {...getDragProps(i)}
                   className={
                     'border-b border-[var(--surface-border)] transition-all duration-150 last:border-0 ' +
-                    (isDragging ? 'opacity-50 ring-2 ring-9e-primary ' : '') +
-                    (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+                    (isDragging ? 'opacity-50 ring-2 ring-9e-action ' : '') +
+                    (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
                     (p.is_active
                       ? 'hover:bg-9e-ice/50 dark:hover:bg-[#0D1B2A]/40'
                       : 'opacity-60 hover:bg-gray-50 dark:hover:bg-[#0D1B2A]/30')
@@ -207,7 +207,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                   <td className="px-3 py-3">
                     <Link
                       href={editHref}
-                      className="text-xs text-9e-primary hover:underline dark:text-9e-sky"
+                      className="text-xs text-9e-action hover:underline dark:text-9e-air"
                     >
                       {slug || '—'}
                     </Link>
@@ -222,7 +222,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                       disabled={busyId === p.promotion_id}
                       aria-label={p.is_active ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}
                       className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
-                        p.is_active ? 'bg-9e-primary' : 'bg-gray-300 dark:bg-[#1e3a5f]'
+                        p.is_active ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
                       }`}
                     >
                       <span

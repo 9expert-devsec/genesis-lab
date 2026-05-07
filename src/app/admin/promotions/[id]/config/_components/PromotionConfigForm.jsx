@@ -65,7 +65,7 @@ export function PromotionConfigForm({ promotion, config }) {
             onChange={update('url_slug')}
             placeholder={promotion.promotion_id}
             className={
-              'w-full rounded-lg border px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:bg-[#0D1B2A] dark:text-white ' +
+              'w-full rounded-lg border px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:bg-[#0D1B2A] dark:text-white ' +
               (slugValid
                 ? 'border-gray-200 dark:border-[#1e3a5f] bg-white'
                 : 'border-red-400 bg-red-50 dark:bg-[#3a1818]')
@@ -77,7 +77,7 @@ export function PromotionConfigForm({ promotion, config }) {
               <Link
                 href={previewUrl}
                 target="_blank"
-                className="text-9e-primary hover:underline dark:text-9e-sky"
+                className="text-9e-action hover:underline dark:text-9e-air"
               >
                 {previewUrl}
               </Link>
@@ -91,7 +91,7 @@ export function PromotionConfigForm({ promotion, config }) {
             value={form.meta_title}
             onChange={update('meta_title')}
             placeholder={promotion.title}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
           />
         </Field>
 
@@ -100,7 +100,7 @@ export function PromotionConfigForm({ promotion, config }) {
             value={form.meta_description}
             onChange={update('meta_description')}
             rows={3}
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
           />
         </Field>
 
@@ -110,7 +110,7 @@ export function PromotionConfigForm({ promotion, config }) {
             value={form.og_image_url}
             onChange={update('og_image_url')}
             placeholder="https://..."
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
           />
         </Field>
 
@@ -119,7 +119,7 @@ export function PromotionConfigForm({ promotion, config }) {
             type="button"
             disabled={pending}
             onClick={onSave}
-            className="rounded-lg bg-9e-primary px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+            className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
           >
             {pending ? 'กำลังบันทึก…' : 'บันทึก'}
           </button>

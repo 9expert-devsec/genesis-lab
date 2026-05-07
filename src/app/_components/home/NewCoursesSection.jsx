@@ -17,7 +17,7 @@ export function NewCoursesSection({ courses = [] }) {
           </div>
           <Link
             href="/training-course"
-            className="flex items-center gap-1 text-sm font-medium text-9e-primary hover:underline dark:text-white"
+            className="flex items-center gap-1 text-sm font-medium text-9e-action hover:underline dark:text-white"
           >
             ดูคอร์สเรียนทั้งหมด
             <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />

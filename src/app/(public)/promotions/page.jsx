@@ -52,7 +52,7 @@ function PromotionCard({ promotion, slugMap }) {
             className="object-cover transition-transform duration-300 group-hover:scale-105 aspect-square"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-[#808A95]">
+          <div className="flex h-full items-center justify-center text-sm text-[#5E6A7E]">
             ไม่มีภาพปก
           </div>
         )}
@@ -123,7 +123,7 @@ export default async function PromotionsListPage() {
             <p className="text-base text-[#465469] dark:text-[#C5CEDA]">
               ยังไม่มีโปรโมชั่นในตอนนี้
             </p>
-            <p className="mt-1 text-sm text-[#808A95]">
+            <p className="mt-1 text-sm text-[#5E6A7E]">
               โปรดกลับมาตรวจสอบใหม่อีกครั้งภายหลัง
             </p>
           </div>

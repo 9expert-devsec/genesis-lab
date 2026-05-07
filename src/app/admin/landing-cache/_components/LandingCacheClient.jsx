@@ -98,7 +98,7 @@ export function LandingCacheClient({ initialCache }) {
         type="button"
         onClick={runSync}
         disabled={loading}
-        className="rounded-9e-md bg-9e-primary px-6 py-3 font-medium text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand disabled:opacity-50"
+        className="rounded-9e-md bg-9e-action px-6 py-3 font-medium text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand disabled:opacity-50"
       >
         {loading ? 'กำลัง sync...' : 'Sync ข้อมูลหน้า Home ตอนนี้'}
       </button>

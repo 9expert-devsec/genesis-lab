@@ -228,7 +228,7 @@ function ReviewCarousel({ reviews }) {
             type="button"
             onClick={prev}
             aria-label="ก่อนหน้า"
-            className="absolute -left-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-colors duration-9e-micro ease-9e hover:bg-9e-brand md:flex"
+            className="absolute -left-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-air text-9e-ice shadow-9e-md transition-colors duration-9e-micro ease-9e hover:bg-9e-brand md:flex"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -236,7 +236,7 @@ function ReviewCarousel({ reviews }) {
             type="button"
             onClick={next}
             aria-label="ถัดไป"
-            className="absolute -right-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-sky text-9e-ice shadow-9e-md transition-colors duration-9e-micro ease-9e hover:bg-9e-brand md:flex"
+            className="absolute -right-4 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-9e-air text-9e-ice shadow-9e-md transition-colors duration-9e-micro ease-9e hover:bg-9e-brand md:flex"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -302,7 +302,7 @@ function Avatar({ src, name }) {
   const initial = (name?.trim()?.[0] ?? '?').toUpperCase();
   if (!src) {
     return (
-      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-9e-primary text-xl font-bold text-white">
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-9e-action text-xl font-bold text-white">
         {initial}
       </div>
     );

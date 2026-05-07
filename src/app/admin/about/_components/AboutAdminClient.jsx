@@ -31,7 +31,7 @@ export function AboutAdminClient({ initialInstructors, initialConfig }) {
             className={
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
               (tab === t.key
-                ? 'border-9e-primary text-9e-primary'
+                ? 'border-9e-action text-9e-action'
                 : 'border-transparent text-9e-slate hover:text-9e-navy dark:hover:text-white')
             }
           >
@@ -114,7 +114,7 @@ function InstructorsSection({ initialInstructors }) {
         <button
           type="button"
           onClick={() => setShowAdd((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
+          className="inline-flex items-center gap-1.5 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
         >
           <Plus className="h-4 w-4" /> {showAdd ? 'ปิดฟอร์ม' : 'เพิ่มอาจารย์'}
         </button>
@@ -181,8 +181,8 @@ function RowFragment({
         {...dragProps}
         className={
           'border-b border-[var(--surface-border)] transition-all duration-150 ' +
-          (isDragging ? 'opacity-50 ring-2 ring-9e-primary ' : '') +
-          (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+          (isDragging ? 'opacity-50 ring-2 ring-9e-action ' : '') +
+          (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
           (row.is_active
             ? 'hover:bg-9e-ice/50 dark:hover:bg-[#0D1B2A]/40'
             : 'opacity-60 hover:bg-gray-50 dark:hover:bg-[#0D1B2A]/30')
@@ -223,7 +223,7 @@ function RowFragment({
             disabled={busy === row._id}
             aria-label={row.is_active ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}
             className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
-              row.is_active ? 'bg-9e-primary' : 'bg-gray-300 dark:bg-[#1e3a5f]'
+              row.is_active ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
             }`}
           >
             <span
@@ -308,7 +308,7 @@ function AddInstructorForm({ onAdded }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-9e-primary px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึก'}
         </button>
@@ -362,7 +362,7 @@ function EditInstructorForm({ row, onUpdated }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-9e-primary px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}
         </button>
@@ -385,7 +385,7 @@ function FormFields({ imagePreview, onFileChange, defaults = {} }) {
           name="image_file"
           accept="image/*"
           onChange={onFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-primary file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
+          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
         />
         {imagePreview && (
           <div className="relative mt-3 h-40 w-32 overflow-hidden rounded-xl border border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
@@ -406,7 +406,7 @@ function FormFields({ imagePreview, onFileChange, defaults = {} }) {
           required
           defaultValue={defaults.name ?? ''}
           placeholder="เช่น อาจารย์เอก"
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -415,7 +415,7 @@ function FormFields({ imagePreview, onFileChange, defaults = {} }) {
           name="title"
           defaultValue={defaults.title ?? ''}
           placeholder="เช่น Microsoft Excel Specialist"
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -424,7 +424,7 @@ function FormFields({ imagePreview, onFileChange, defaults = {} }) {
           type="checkbox"
           name="is_active"
           defaultChecked={defaults.is_active ?? true}
-          className="h-4 w-4 rounded accent-9e-primary"
+          className="h-4 w-4 rounded accent-9e-action"
         />
         แสดงบนหน้าเกี่ยวกับเรา
       </label>
@@ -465,7 +465,7 @@ function ConfigSection({ initialConfig }) {
           type="text"
           value={form.tagline}
           onChange={update('tagline')}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -474,7 +474,7 @@ function ConfigSection({ initialConfig }) {
           value={form.description}
           onChange={update('description')}
           rows={4}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -483,7 +483,7 @@ function ConfigSection({ initialConfig }) {
           value={form.mission}
           onChange={update('mission')}
           rows={3}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -492,7 +492,7 @@ function ConfigSection({ initialConfig }) {
           value={form.vision}
           onChange={update('vision')}
           rows={3}
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -501,7 +501,7 @@ function ConfigSection({ initialConfig }) {
           type="button"
           onClick={handleSave}
           disabled={pending}
-          className="rounded-lg bg-9e-primary px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึก'}
         </button>

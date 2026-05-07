@@ -138,8 +138,8 @@ export function FeaturedCourseList({ courses: initial }) {
                 {...getDragProps(i)}
                 className={
                   'border-b border-[var(--surface-border)] transition-all duration-150 last:border-0 ' +
-                  (isDragging ? 'opacity-50 ring-2 ring-9e-primary ' : '') +
-                  (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+                  (isDragging ? 'opacity-50 ring-2 ring-9e-action ' : '') +
+                  (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
                   (c.active
                     ? 'hover:bg-9e-ice/50'
                     : 'opacity-50 hover:bg-gray-50')
@@ -182,7 +182,7 @@ export function FeaturedCourseList({ courses: initial }) {
                     disabled={busyId === c._id}
                     aria-label={c.active ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}
                     className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
-                      c.active ? 'bg-9e-primary' : 'bg-gray-300'
+                      c.active ? 'bg-9e-action' : 'bg-gray-300'
                     }`}
                   >
                     <span

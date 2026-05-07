@@ -32,7 +32,7 @@ const buttonVariants = cva(
           'active:bg-9e-lime-dk active:translate-y-0',
         primary:
           'bg-9e-brand text-9e-ice ' +
-          'hover:bg-9e-primary hover:-translate-y-[2px] hover:shadow-9e-md',
+          'hover:bg-9e-action hover:-translate-y-[2px] hover:shadow-9e-md',
         outline:
           'border border-9e-brand text-9e-brand bg-transparent ' +
           'hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px]',

@@ -65,7 +65,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
                 </h1>
                 <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
                   กลุ่มหลักสูตร {program?.program_name} มีทั้งหมด{' '}
-                  <span className="font-bold text-9e-primary dark:text-9e-sky">
+                  <span className="font-bold text-9e-action dark:text-9e-air">
                     {courses.length}
                   </span>{' '}
                   หลักสูตร
@@ -111,7 +111,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
           <h2 className="text-lg font-bold text-9e-navy dark:text-white">
             หลักสูตรในโปรแกรม
           </h2>
-          <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
+          <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
             {courses.length}
           </span>
         </div>

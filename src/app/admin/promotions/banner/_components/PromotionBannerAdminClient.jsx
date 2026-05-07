@@ -72,7 +72,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
         <button
           type="button"
           onClick={() => setShowAdd((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-9e-md bg-9e-primary px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
+          className="inline-flex items-center gap-1.5 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
         >
           <Plus className="h-4 w-4" /> {showAdd ? 'ปิดฟอร์ม' : 'เพิ่มแบนเนอร์'}
         </button>
@@ -110,8 +110,8 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                   {...getDragProps(i)}
                   className={
                     'border-b border-[var(--surface-border)] transition-all duration-150 last:border-0 ' +
-                    (isDragging ? 'opacity-50 ring-2 ring-9e-primary ' : '') +
-                    (isDropTarget ? 'border-t-2 border-t-9e-primary ' : '') +
+                    (isDragging ? 'opacity-50 ring-2 ring-9e-action ' : '') +
+                    (isDropTarget ? 'border-t-2 border-t-9e-action ' : '') +
                     (b.is_active
                       ? 'hover:bg-9e-ice/50 dark:hover:bg-[#0D1B2A]/40'
                       : 'opacity-60 hover:bg-gray-50 dark:hover:bg-[#0D1B2A]/30')
@@ -148,7 +148,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                         href={b.link_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="line-clamp-1 text-xs text-9e-primary hover:underline dark:text-9e-sky"
+                        className="line-clamp-1 text-xs text-9e-action hover:underline dark:text-9e-air"
                       >
                         {b.link_url}
                       </a>
@@ -163,7 +163,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                       disabled={busy === b._id}
                       aria-label={b.is_active ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}
                       className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
-                        b.is_active ? 'bg-9e-primary' : 'bg-gray-300 dark:bg-[#1e3a5f]'
+                        b.is_active ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
                       }`}
                     >
                       <span
@@ -244,7 +244,7 @@ function AddBannerForm({ onAdded }) {
           name="image_file"
           accept="image/*"
           onChange={handleFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-primary file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
+          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
         />
         {imagePreview && (
           <div className="relative mt-3 aspect-[16/5] w-full overflow-hidden rounded-xl border border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
@@ -263,7 +263,7 @@ function AddBannerForm({ onAdded }) {
         <input
           name="alt_text"
           placeholder="เช่น โปรโมชั่นพิเศษส่งท้ายปี"
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -272,7 +272,7 @@ function AddBannerForm({ onAdded }) {
           name="link_url"
           type="url"
           placeholder="https://..."
-          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-primary/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-2 focus:ring-9e-action/30 dark:border-[#1e3a5f] dark:bg-[#0D1B2A] dark:text-white"
         />
       </Field>
 
@@ -281,7 +281,7 @@ function AddBannerForm({ onAdded }) {
           type="checkbox"
           name="is_active"
           defaultChecked
-          className="h-4 w-4 rounded accent-9e-primary"
+          className="h-4 w-4 rounded accent-9e-action"
         />
         เปิดใช้งานแบนเนอร์ทันที
       </label>
@@ -290,7 +290,7 @@ function AddBannerForm({ onAdded }) {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-9e-primary px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          className="rounded-lg bg-9e-action px-5 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
         >
           {pending ? 'กำลังบันทึก…' : 'บันทึก'}
         </button>

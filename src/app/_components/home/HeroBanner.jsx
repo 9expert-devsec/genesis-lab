@@ -11,11 +11,11 @@ export function HeroBanner() {
     <section className="relative overflow-hidden bg-gradient-to-br from-white to-[#E8F4FD] px-4 py-12 lg:px-6">
       <div
         aria-hidden
-        className="pointer-events-none absolute right-0 top-0 h-96 w-96 rounded-full bg-9e-sky/10 blur-3xl"
+        className="pointer-events-none absolute right-0 top-0 h-96 w-96 rounded-full bg-9e-air/10 blur-3xl"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-9e-primary/5 blur-2xl"
+        className="pointer-events-none absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-9e-action/5 blur-2xl"
       />
 
       <div className="relative mx-auto grid min-h-[460px] w-full max-w-[1280px] grid-cols-1 items-center gap-8 lg:grid-cols-2">
@@ -42,7 +42,7 @@ export function HeroBanner() {
           </Link>
 
           <div className="mt-8 flex gap-2">
-            <span className="h-3 w-3 rounded-full bg-9e-primary" />
+            <span className="h-3 w-3 rounded-full bg-9e-action" />
             <span className="h-3 w-3 rounded-full bg-gray-300" />
             <span className="h-3 w-3 rounded-full bg-gray-300" />
           </div>

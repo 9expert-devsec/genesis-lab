@@ -157,7 +157,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
               href={schedulePDF.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-9e-primary shadow-md transition-colors hover:bg-9e-ice"
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-9e-action shadow-md transition-colors hover:bg-9e-ice"
             >
               <FileText className="h-4 w-4" />
               ดาวน์โหลดตารางการฝึกอบรม
@@ -257,7 +257,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
                 onMouseEnter={() => setShowTooltip(true)}
                 onMouseLeave={() => setShowTooltip(false)}
                 onClick={() => setShowTooltip((v) => !v)}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-9e-slate text-9e-slate transition-colors hover:border-9e-primary hover:text-9e-primary"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-9e-slate text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action"
               >
                 <HelpCircle className="h-3.5 w-3.5" />
               </button>
@@ -303,7 +303,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
       <div className="mx-auto max-w-[1200px] max-md:px-4 pt-6">
         <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
           ผลลัพธ์การค้นหา{' '}
-          <span className="font-bold text-9e-primary dark:text-9e-sky">
+          <span className="font-bold text-9e-action dark:text-9e-air">
             {filteredCourses.length}
           </span>{' '}
           หลักสูตร
@@ -340,7 +340,7 @@ function FilterSelect({ value, onChange, ariaLabel, compact, children }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={
-        'cursor-pointer rounded-xl border border-gray-200 bg-white text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-primary/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-sky ' +
+        'cursor-pointer rounded-xl border border-gray-200 bg-white text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-air ' +
         (compact ? 'min-w-[80px] px-3 py-2' : 'min-w-[160px] px-4 py-2')
       }
     >
@@ -372,7 +372,7 @@ function ProgramTable({
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">
           {program?.program_name ?? 'อื่นๆ'}
         </h2>
-        <span className="rounded-full bg-9e-sky/20 px-2 py-0.5 text-xs font-bold text-9e-primary dark:bg-[#111d2c] dark:text-9e-sky">
+        <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
           {courses.length}
         </span>
       </div>
@@ -425,7 +425,7 @@ function ProgramTable({
                       href={courseHref(
                         c.course_id ? String(c.course_id).toLowerCase() : ''
                       )}
-                      className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-primary dark:text-white dark:hover:text-9e-sky"
+                      className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
                     >
                       {c.course_name}
                     </Link>
@@ -485,7 +485,7 @@ function ScheduleCell({ schedule }) {
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <span className="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-primary dark:text-white dark:group-hover:text-9e-sky">
+      <span className="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
         {dateLabel}
       </span>
       <span className={`text-[9px] font-bold leading-none ${statusStyle.text}`}>
