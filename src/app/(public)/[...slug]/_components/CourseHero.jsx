@@ -38,7 +38,7 @@ export function CourseHero({ course, heroColor }) {
 
   return (
     <section style={sectionStyle} className="w-full px-4 py-6 lg:px-6">
-      <div className="mx-auto max-w-[1280px]">
+      <div className="mx-auto max-w-[1200px]">
         <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2 lg:gap-6">
           {/* LEFT — standalone rounded white info card */}
           <div className="flex flex-col justify-center rounded-2xl bg-white p-6 shadow-9e-sm lg:p-8">

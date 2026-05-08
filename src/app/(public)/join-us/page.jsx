@@ -1,13 +1,23 @@
-import { PagePlaceholder } from '@/components/layout/PagePlaceholder';
+import { getActiveRecruits } from '@/lib/actions/recruits';
+import JoinUsHero from '@/components/join-us/JoinUsHero';
+import WhyJoinSection from '@/components/join-us/WhyJoinSection';
+import OpenPositionsSection from '@/components/join-us/OpenPositionsSection';
+import InstructorCTA from '@/components/join-us/InstructorCTA';
 
-export const metadata = { title: 'ร่วมงานกับเรา' };
+export const metadata = {
+  title: 'ร่วมงานกับเรา | 9Expert Training',
+  description:
+    'ร่วมงานกับ 9Expert Training สถาบันฝึกอบรมเทคโนโลยีชั้นนำ เปิดรับสมัครวิทยากรและทีมงานที่รักเทคโนโลยี',
+};
 
-export default function Page() {
+export default async function JoinUsPage() {
+  const recruits = await getActiveRecruits();
   return (
-    <PagePlaceholder
-      title="ร่วมงานกับเรา"
-      description="ตำแหน่งงานว่างที่ 9Expert Training"
-      phase="Phase 3"
-    />
+    <main>
+      <JoinUsHero />
+      <WhyJoinSection />
+      <OpenPositionsSection recruits={recruits} />
+      <InstructorCTA />
+    </main>
   );
 }
