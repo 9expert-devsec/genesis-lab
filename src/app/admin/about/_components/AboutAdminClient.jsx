@@ -32,7 +32,7 @@ export function AboutAdminClient({ initialInstructors, initialConfig }) {
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
               (tab === t.key
                 ? 'border-9e-action text-9e-action'
-                : 'border-transparent text-9e-slate hover:text-9e-navy dark:hover:text-white')
+                : 'border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white')
             }
           >
             {t.label}
@@ -108,7 +108,7 @@ function InstructorsSection({ initialInstructors }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ทั้งหมด {rows.length} ท่าน
         </p>
         <button
@@ -137,7 +137,7 @@ function InstructorsSection({ initialInstructors }) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-9e-slate dark:text-[#94a3b8]">
+                <td colSpan={6} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   ยังไม่มีอาจารย์ — กด <strong>เพิ่มอาจารย์</strong> เพื่อสร้างคนแรก
                 </td>
               </tr>
@@ -191,7 +191,7 @@ function RowFragment({
         <td className="px-2 py-3 align-middle">
           <DragHandle />
         </td>
-        <td className="px-3 py-3 text-9e-slate dark:text-[#94a3b8]">{index + 1}</td>
+        <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">{index + 1}</td>
         <td className="px-3 py-3">
           {row.image_url ? (
             <div className="relative h-12 w-12 overflow-hidden rounded-full bg-9e-ice dark:bg-[#0D1B2A]">
@@ -211,7 +211,7 @@ function RowFragment({
         <td className="px-3 py-3">
           <p className="font-medium text-9e-navy dark:text-white">{row.name}</p>
           {row.title && (
-            <p className="mt-0.5 text-xs text-9e-slate dark:text-[#94a3b8]">
+            <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
               {row.title}
             </p>
           )}
@@ -385,7 +385,7 @@ function FormFields({ imagePreview, onFileChange, defaults = {} }) {
           name="image_file"
           accept="image/*"
           onChange={onFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
+          className="block w-full text-sm text-9e-slate-dp-50 file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
         />
         {imagePreview && (
           <div className="relative mt-3 h-40 w-32 overflow-hidden rounded-xl border border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
@@ -518,7 +518,7 @@ function ConfigSection({ initialConfig }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">
+      <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {label}
         {hint && <span className="ml-2 font-normal italic">{hint}</span>}
       </p>

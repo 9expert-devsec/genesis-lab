@@ -16,7 +16,7 @@ export default async function ContactAdminPage() {
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการหน้าติดต่อเรา
         </h1>
-        <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           จัดการวิดีโอแนะนำและแผนที่การเดินทางบนหน้า /contact-us
         </p>
       </div>

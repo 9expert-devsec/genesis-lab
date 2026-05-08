@@ -84,7 +84,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-9e-slate">
+        <p className="text-sm text-9e-slate-dp-50">
           ลากที่จุด ⋮⋮ หรือกดลูกศรเพื่อเรียงลำดับ — มีผลกับทุกหน้าที่แสดง Programs
         </p>
         <div className="flex gap-2">
@@ -92,7 +92,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
+            className="rounded-9e-md border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 px-4 py-2 text-sm text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
           >
             {syncing ? 'กำลัง Sync...' : 'Sync จาก API'}
           </button>
@@ -109,7 +109,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
 
       <div className="flex flex-col gap-2">
         {items.length === 0 ? (
-          <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-6 text-center text-sm text-9e-slate">
+          <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-6 text-center text-sm text-9e-slate-dp-50">
             ไม่พบโปรแกรม — ลองกด &quot;Sync จาก API&quot;
           </p>
         ) : null}
@@ -134,7 +134,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
               }
             >
               <DragHandle />
-              <span className="w-6 text-center font-mono text-xs text-9e-slate">
+              <span className="w-6 text-center font-mono text-xs text-9e-slate-dp-50">
                 {i + 1}
               </span>
               {iconSrc ? (
@@ -155,7 +155,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                 <button
                   type="button"
                   onClick={() => handleToggleHidden(prog.id, prog.isHidden)}
-                  className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action"
+                  className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate-dp-50 transition-colors hover:text-9e-action"
                 >
                   {prog.isHidden ? 'แสดง' : 'ซ่อน'}
                 </button>
@@ -164,7 +164,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                   onClick={() => moveUp(i)}
                   disabled={i === 0}
                   aria-label="เลื่อนขึ้น"
-                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate-dp-50 transition-colors hover:text-9e-action disabled:opacity-30"
                 >
                   ↑
                 </button>
@@ -173,7 +173,7 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                   onClick={() => moveDown(i)}
                   disabled={i === items.length - 1}
                   aria-label="เลื่อนลง"
-                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
+                  className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate-dp-50 transition-colors hover:text-9e-action disabled:opacity-30"
                 >
                   ↓
                 </button>

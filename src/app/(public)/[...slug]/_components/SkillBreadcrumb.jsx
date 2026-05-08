@@ -51,7 +51,7 @@ export function SkillBreadcrumb({ course }) {
       </div>
 
       {previous && previousHref && (
-        <div className="flex flex-wrap items-center gap-2 pb-3 text-xs text-9e-slate">
+        <div className="flex flex-wrap items-center gap-2 pb-3 text-xs text-9e-slate-dp-50">
           <span>หลักสูตรก่อนหน้า:</span>
           <Link
             href={previousHref}

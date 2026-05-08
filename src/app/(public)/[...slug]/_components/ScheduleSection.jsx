@@ -69,7 +69,7 @@ export function ScheduleSection({ course, schedules }) {
  */
 function TrainingTypeLegend() {
   return (
-    <div className="mb-3 flex items-center justify-end gap-3 text-xs text-9e-slate">
+    <div className="mb-3 flex items-center justify-end gap-3 text-xs text-9e-slate-dp-50">
       <span>รูปแบบการอบรม:</span>
       <span className="flex items-center gap-1">
         <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
@@ -84,7 +84,7 @@ function TrainingTypeLegend() {
         <button
           type="button"
           aria-label="รูปแบบการอบรมคืออะไร"
-          className="flex h-5 w-5 items-center justify-center rounded-full border border-9e-slate text-xs text-9e-slate transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action focus:outline-none focus:ring-2 focus:ring-9e-action/20"
+          className="flex h-5 w-5 items-center justify-center rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action focus:outline-none focus:ring-2 focus:ring-9e-action/20"
         >
           ?
         </button>
@@ -98,7 +98,7 @@ function TrainingTypeLegend() {
                   <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
                   Classroom
                 </p>
-                <p className="text-xs leading-relaxed text-9e-slate">
+                <p className="text-xs leading-relaxed text-9e-slate-dp-50">
                   อบรมแบบ Class Room ณ ห้องอบรม 9EXPERT
                 </p>
               </div>
@@ -107,7 +107,7 @@ function TrainingTypeLegend() {
                   <span className="inline-block h-2 w-2 rounded-full bg-purple-500" />
                   Hybrid
                 </p>
-                <p className="text-xs leading-relaxed text-9e-slate">
+                <p className="text-xs leading-relaxed text-9e-slate-dp-50">
                   เลือกอบรมแบบ Class Room หรือ Ms Teams
                 </p>
               </div>

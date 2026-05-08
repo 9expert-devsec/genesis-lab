@@ -40,7 +40,7 @@ export function PublicFooter() {
           <p className="text-sm leading-relaxed text-9e-navy dark:text-white">
             {siteConfig.description}
           </p>
-          <p className="text-xs text-9e-slate dark:text-[#94a3b8]">
+          <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
             {siteConfig.concept}
           </p>
         </div>
@@ -56,7 +56,7 @@ export function PublicFooter() {
             <h4 className="mb-2 text-sm font-bold text-9e-navy dark:text-white">
               ที่อยู่ติดต่อ
             </h4>
-            <p className="text-xs leading-relaxed text-9e-slate dark:text-[#94a3b8]">
+            <p className="text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
               9EXPERT COMPANY LIMITED
               <br />
               เลขที่ 318 อาคารเอเวอร์กรีน เพลส ชั้น 2 ห้อง 2B
@@ -75,21 +75,21 @@ export function PublicFooter() {
               ติดต่อเรา
             </h4>
             <div className="flex flex-col gap-1">
-              <p className="text-xs text-9e-slate dark:text-[#94a3b8]">Telephone</p>
+              <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">Telephone</p>
               <a
                 href="tel:022194304"
                 className="text-sm font-bold text-9e-navy hover:text-9e-action dark:text-white dark:hover:text-[#48B0FF]"
               >
                 02-219-4304
               </a>
-              <p className="mt-1 text-xs text-9e-slate dark:text-[#94a3b8]">Email</p>
+              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">Email</p>
               <a
                 href="mailto:training@9expert.co.th"
                 className="text-sm font-bold text-9e-navy hover:text-9e-action dark:text-white dark:hover:text-[#48B0FF]"
               >
                 training@9expert.co.th
               </a>
-              <p className="mt-1 text-xs text-9e-slate dark:text-[#94a3b8]">LINE Official</p>
+              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">LINE Official</p>
               <a
                 href="https://line.me/R/ti/p/@9expert"
                 target="_blank"
@@ -109,7 +109,7 @@ export function PublicFooter() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={s.label}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E2E8F0] text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-[#48B0FF] dark:hover:text-[#48B0FF]"
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-[#E2E8F0] text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-[#48B0FF] dark:hover:text-[#48B0FF]"
               >
                 {s.Icon ? (
                   <s.Icon className="h-4 w-4" strokeWidth={1.75} />
@@ -121,7 +121,7 @@ export function PublicFooter() {
           </div>
 
           <div className="flex w-full flex-col items-center gap-2 sm:items-start">
-            <p className="text-xs text-9e-slate dark:text-[#94a3b8]">ได้รับการรับรองจาก</p>
+            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ได้รับการรับรองจาก</p>
             <a
               className="w-8/12 rounded-xl bg-white shadow-md ring-1 ring-slate-100 dark:ring-[#1e3a5f]"
               href="https://dbdregistered.dbd.go.th/api/public/trustmarkinfo/115374"
@@ -140,7 +140,7 @@ export function PublicFooter() {
 
       {/* Bottom bar */}
       <div className="border-t border-[#E2E8F0] dark:border-[#1e3a5f]">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 py-4 text-center text-xs text-9e-slate dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 py-4 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
           <p>
             © {year} {siteConfig.nameFull}. All rights reserved.
           </p>
@@ -167,7 +167,7 @@ function FooterGroup({ title, items }) {
             href={item.href}
             target={item.external ? "_blank" : undefined}
             rel={item.external ? "noopener noreferrer" : undefined}
-            className="text-sm text-9e-slate transition-colors hover:text-9e-action dark:text-[#94a3b8] dark:hover:text-[#48B0FF]"
+            className="text-sm text-9e-slate-dp-50 transition-colors hover:text-9e-action dark:text-[#94a3b8] dark:hover:text-[#48B0FF]"
           >
             {item.label}
           </Link>

@@ -121,7 +121,7 @@ export function FeaturedCourseList({ courses: initial }) {
         <tbody>
           {courses.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-8 text-center text-9e-slate">
+              <td colSpan={5} className="py-8 text-center text-9e-slate-dp-50">
                 ยังไม่มีคอร์ส featured — เพิ่มด้วย Course ID ด้านบน
               </td>
             </tr>
@@ -148,7 +148,7 @@ export function FeaturedCourseList({ courses: initial }) {
                 <td className="px-2 py-3 align-middle">
                   <DragHandle />
                 </td>
-                <td className="px-4 py-3 text-center text-9e-slate">{i + 1}</td>
+                <td className="px-4 py-3 text-center text-9e-slate-dp-50">{i + 1}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     {c.course_cover_url ? (
@@ -169,7 +169,7 @@ export function FeaturedCourseList({ courses: initial }) {
                       <p className="text-xs font-semibold text-9e-navy">
                         {c.course_id}
                       </p>
-                      <p className="line-clamp-1 text-xs text-9e-slate">
+                      <p className="line-clamp-1 text-xs text-9e-slate-dp-50">
                         {c.course_name}
                       </p>
                     </div>

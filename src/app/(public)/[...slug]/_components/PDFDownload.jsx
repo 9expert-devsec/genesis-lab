@@ -28,7 +28,7 @@ export function PDFDownload({ course }) {
             <p className="text-xs font-semibold text-9e-navy">
               ดาวน์โหลด Course Outline
             </p>
-            <p className="text-xs text-9e-slate">PDF</p>
+            <p className="text-xs text-9e-slate-dp-50">PDF</p>
           </div>
           <Download className="h-3.5 w-3.5 shrink-0 text-9e-action" strokeWidth={2} />
         </a>

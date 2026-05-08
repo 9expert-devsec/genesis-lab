@@ -94,7 +94,7 @@ export function ReviewSelector({ reviews = [] }) {
               : 'border-gray-200 hover:border-9e-air'
           }`}
         >
-          <Search size={16} className="shrink-0 text-9e-slate" />
+          <Search size={16} className="shrink-0 text-9e-slate-dp-50" />
 
           <input
             ref={inputRef}
@@ -106,7 +106,7 @@ export function ReviewSelector({ reviews = [] }) {
             }}
             onFocus={() => setOpen(true)}
             placeholder="พิมพ์ชื่อผู้รีวิว, คอร์ส, หรือข้อความรีวิว"
-            className="flex-1 bg-transparent py-2.5 text-sm text-9e-navy placeholder:text-9e-slate/60 focus:outline-none"
+            className="flex-1 bg-transparent py-2.5 text-sm text-9e-navy placeholder:text-9e-slate-lt-400/60 dark:placeholder:text-9e-slate-dp-400/60 focus:outline-none"
           />
 
           {query && (
@@ -114,7 +114,7 @@ export function ReviewSelector({ reviews = [] }) {
               type="button"
               onClick={handleClear}
               aria-label="ล้างการค้นหา"
-              className="text-9e-slate transition-colors hover:text-9e-navy"
+              className="text-9e-slate-dp-50 transition-colors hover:text-9e-navy"
             >
               <X size={16} />
             </button>
@@ -142,10 +142,10 @@ export function ReviewSelector({ reviews = [] }) {
                     </p>
                     <RatingBadge rating={review.rating} />
                   </div>
-                  <p className="truncate text-xs text-9e-slate">
+                  <p className="truncate text-xs text-9e-slate-dp-50">
                     {review.courseName}
                   </p>
-                  <p className="mt-1 line-clamp-2 text-xs text-9e-slate/80">
+                  <p className="mt-1 line-clamp-2 text-xs text-9e-slate-lt-400/80 dark:text-9e-slate-dp-400/80">
                     {review.headline ? `${review.headline} — ` : ''}
                     {review.comment}
                   </p>
@@ -156,13 +156,13 @@ export function ReviewSelector({ reviews = [] }) {
         )}
 
         {open && reviews.length === 0 && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate shadow-9e-md">
+          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate-dp-50 shadow-9e-md">
             ทุกรีวิวถูกเพิ่มไว้ในรายการแล้ว
           </div>
         )}
 
         {open && query.trim().length > 0 && filtered.length === 0 && reviews.length > 0 && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate shadow-9e-md">
+          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate-dp-50 shadow-9e-md">
             ไม่พบรีวิวที่ค้นหา
           </div>
         )}
@@ -182,10 +182,10 @@ export function ReviewSelector({ reviews = [] }) {
               </p>
               <RatingBadge rating={selected.rating} />
             </div>
-            <p className="truncate text-xs text-9e-slate">
+            <p className="truncate text-xs text-9e-slate-dp-50">
               {selected.courseName}
             </p>
-            <p className="mt-1 line-clamp-2 text-xs text-9e-slate/80">
+            <p className="mt-1 line-clamp-2 text-xs text-9e-slate-lt-400/80 dark:text-9e-slate-dp-400/80">
               {selected.comment}
             </p>
           </div>

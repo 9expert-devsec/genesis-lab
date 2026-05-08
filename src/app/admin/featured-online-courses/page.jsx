@@ -39,7 +39,7 @@ export default async function Page() {
         <h1 className="text-2xl font-bold text-9e-navy">
           คอร์สออนไลน์แนะนำ (Featured Online)
         </h1>
-        <p className="text-sm text-9e-slate">
+        <p className="text-sm text-9e-slate-dp-50">
           {activeCount} / {featured.length} active
         </p>
       </div>

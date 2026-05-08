@@ -66,7 +66,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ทั้งหมด {banners.length} แบนเนอร์
         </p>
         <button
@@ -95,7 +95,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
           <tbody>
             {banners.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-9e-slate dark:text-[#94a3b8]">
+                <td colSpan={6} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   ยังไม่มีแบนเนอร์ — กด <strong>เพิ่มแบนเนอร์</strong> เพื่อสร้างแบนเนอร์แรก
                 </td>
               </tr>
@@ -120,7 +120,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                   <td className="px-2 py-3 align-middle">
                     <DragHandle />
                   </td>
-                  <td className="px-3 py-3 text-9e-slate dark:text-[#94a3b8]">{i + 1}</td>
+                  <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">{i + 1}</td>
                   <td className="px-3 py-3">
                     {b.image_url ? (
                       <div className="relative h-[60px] w-[120px] overflow-hidden rounded bg-9e-ice dark:bg-[#0D1B2A]">
@@ -139,7 +139,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                   </td>
                   <td className="px-3 py-3">
                     {b.alt_text && (
-                      <p className="line-clamp-1 text-xs text-9e-slate dark:text-[#94a3b8]">
+                      <p className="line-clamp-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                         alt: {b.alt_text}
                       </p>
                     )}
@@ -153,7 +153,7 @@ export function PromotionBannerAdminClient({ initialBanners }) {
                         {b.link_url}
                       </a>
                     ) : (
-                      <span className="text-xs text-9e-slate dark:text-[#94a3b8]">— (ไม่มีลิงก์)</span>
+                      <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">— (ไม่มีลิงก์)</span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-center">
@@ -244,7 +244,7 @@ function AddBannerForm({ onAdded }) {
           name="image_file"
           accept="image/*"
           onChange={handleFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
+          className="block w-full text-sm text-9e-slate-dp-50 file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
         />
         {imagePreview && (
           <div className="relative mt-3 aspect-[16/5] w-full overflow-hidden rounded-xl border border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
@@ -307,7 +307,7 @@ function AddBannerForm({ onAdded }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">
+      <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {label}
         {hint && <span className="ml-2 font-normal italic">{hint}</span>}
       </p>

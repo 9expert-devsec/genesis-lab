@@ -145,7 +145,7 @@ export function InstructorQuote() {
             <p className="text-sm text-9e-action">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
-            <p className="text-sm text-9e-slate">
+            <p className="text-sm text-9e-slate-dp-50">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
             </p>
           </div>
@@ -168,7 +168,7 @@ export function InstructorQuote() {
             <p className="text-sm text-9e-action">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
-            <p className="text-sm text-9e-slate">
+            <p className="text-sm text-9e-slate-dp-50">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
             </p>
           </div>

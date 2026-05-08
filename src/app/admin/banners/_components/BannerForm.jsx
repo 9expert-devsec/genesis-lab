@@ -123,7 +123,7 @@ export function BannerForm({ banner }) {
             name="image_file"
             accept="image/*"
             onChange={handleFileChange}
-            className="block w-full text-sm text-9e-slate file:mr-4 file:py-2 file:px-4
+            className="block w-full text-sm text-9e-slate-dp-50 file:mr-4 file:py-2 file:px-4
               file:rounded-9e-md file:border-0 file:text-sm file:font-bold
               file:bg-9e-action file:text-white hover:file:bg-9e-brand file:cursor-pointer"
           />
@@ -211,7 +211,7 @@ export function BannerForm({ banner }) {
         </button>
         <a
           href="/admin/banners"
-          className="px-6 py-2.5 border border-gray-300 text-9e-slate font-bold
+          className="px-6 py-2.5 border border-gray-300 text-9e-slate-dp-50 font-bold
             rounded-9e-md hover:bg-9e-ice transition-colors text-sm"
         >
           ยกเลิก
@@ -226,7 +226,7 @@ function Field({ label, error, hint, children }) {
     <div>
       <label className="block text-sm font-bold text-9e-navy mb-1.5">{label}</label>
       {children}
-      {hint && <p className="mt-1 text-xs text-9e-slate">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-9e-slate-dp-50">{hint}</p>}
       {error && (
         <p className="mt-1 text-xs text-red-500">
           {Array.isArray(error) ? error[0] : error}

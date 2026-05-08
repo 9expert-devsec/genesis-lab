@@ -23,7 +23,6 @@ module.exports = {
           'lime-dk':  '#B8D930',  // Active/pressed state
 
           // Supporting
-          slate:      '#5E6A7E',  // Secondary text, captions
           navy:       '#0D1B2A',  // Dark backgrounds, primary text on light
           card:       '#132638',  // Card backgrounds on dark mode
           border:     '#1A2D42',  // Borders/dividers on dark
@@ -47,6 +46,17 @@ module.exports = {
           50: '#D4F73F', 100: '#D8F852', 200: '#DDF965', 300: '#E1F979',
           400: '#E5FA8C', 500: '#EAFB9F', 600: '#EEFCB2', 700: '#F2FDC5',
           800: '#F6FDD9', 900: '#FBFEEC', 950: '#FDFFF5',
+        },
+        // Slate split: lt for light mode, dp for dark mode (parity per step)
+        '9e-slate-lt': {
+          50:  '#b7c3d4', 100: '#BEC9D8', 200: '#C5CFDD', 300: '#CDD5E1',
+          400: '#D4DBE5', 500: '#DBE1EA', 600: '#E2E7EE', 700: '#E9EDF2',
+          800: '#F1F3F6', 900: '#F8F9FB', 950: '#FBFCFD',
+        },
+        '9e-slate-dp': {
+          50:  '#5E6A7E', 100: '#6E798B', 200: '#7E8898', 300: '#8E97A5',
+          400: '#9EA6B2', 500: '#AEB4BE', 600: '#BFC3CB', 700: '#CFD2D8',
+          800: '#DFE1E5', 900: '#EFF0F2', 950: '#F7F8F9',
         },
       },
 

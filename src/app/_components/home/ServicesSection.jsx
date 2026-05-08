@@ -48,7 +48,7 @@ export function ServicesSection() {
               <h3 className="text-base font-bold text-9e-navy dark:text-white transition-colors duration-200 group-hover:text-9e-action dark:group-hover:text-9e-air">
                 {title}
               </h3>
-              <p className="text-sm leading-relaxed text-9e-slate dark:text-[#b6c2d4]">{desc}</p>
+              <p className="text-sm leading-relaxed text-9e-slate-dp-50 dark:text-[#b6c2d4]">{desc}</p>
             </Link>
           ))}
         </div>

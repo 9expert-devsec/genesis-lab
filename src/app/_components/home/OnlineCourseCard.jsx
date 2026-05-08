@@ -93,7 +93,7 @@ export function OnlineCourseCard({ course, className }) {
             {skillTags.slice(0, 3).map((s) => (
               <span
                 key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
               >
                 {s.skill_name}
               </span>
@@ -110,12 +110,12 @@ export function OnlineCourseCard({ course, className }) {
         </div>
 
         {teaser && (
-          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate dark:text-[#b7c3d4]">
+          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#b7c3d4]">
             {teaser}
           </p>
         )}
 
-        <div className="mb-3 mt-auto flex flex-wrap items-end justify-between gap-2 text-xs text-9e-slate dark:text-[#b7c3d4]">
+        <div className="mb-3 mt-auto flex flex-wrap items-end justify-between gap-2 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {duration && (
               <span className="inline-flex items-center gap-1">
@@ -139,7 +139,7 @@ export function OnlineCourseCard({ course, className }) {
         </div>
 
         {(hasCertificate || levelLabel) && (
-          <div className="flex flex-wrap gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
+          <div className="flex flex-wrap gap-3 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
             {hasCertificate && (
               <span className="inline-flex items-center gap-1">
                 <Award className="h-3 w-3 text-9e-action dark:text-white" strokeWidth={2} />

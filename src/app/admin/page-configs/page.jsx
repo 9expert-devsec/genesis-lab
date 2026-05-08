@@ -42,7 +42,7 @@ export default async function PageConfigsAdmin({ searchParams }) {
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการ URL &amp; SEO
         </h1>
-        <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ตั้งค่า URL slug และ metadata ของหน้า /program และ /skill
           ไม่กรอก slug จะใช้ค่าเริ่มต้นจากชื่อโปรแกรม / skill โดยอัตโนมัติ
         </p>
@@ -60,7 +60,7 @@ export default async function PageConfigsAdmin({ searchParams }) {
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
               (tab === t.key
                 ? 'border-9e-action text-9e-action'
-                : 'border-transparent text-9e-slate hover:text-9e-navy')
+                : 'border-transparent text-9e-slate-dp-50 hover:text-9e-navy')
             }
           >
             {t.label}

@@ -25,13 +25,13 @@ export function HeroBanner() {
             <br />
             Training
           </h1>
-          <p className="mb-2 text-base text-9e-slate">
+          <p className="mb-2 text-base text-9e-slate-dp-50">
             สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ{' '}
             <span className="font-bold text-9e-navy">
               &ldquo;ขับเคลื่อนประเทศไทย&rdquo;
             </span>
           </p>
-          <p className="mb-8 text-sm text-9e-slate">
+          <p className="mb-8 text-sm text-9e-slate-dp-50">
             Power BI, Excel, RPA, Macro, Power Platform
           </p>
           <Link

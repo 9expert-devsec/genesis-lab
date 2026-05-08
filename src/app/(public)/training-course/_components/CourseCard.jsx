@@ -105,7 +105,7 @@ export function CourseCard({ course, className }) {
             {skillTags.slice(0, 3).map((s) => (
               <span
                 key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
               >
                 {s.skill_name}
               </span>
@@ -124,13 +124,13 @@ export function CourseCard({ course, className }) {
 
         {/* Teaser */}
         {teaser && (
-          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate dark:text-[#b7c3d4]">
+          <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#b7c3d4]">
             {teaser}
           </p>
         )}
 
         {/* Duration + Price */}
-        <div className="mb-3 mt-auto flex flex-wrap items-center justify-between gap-2 text-xs text-9e-slate dark:text-[#b7c3d4]">
+        <div className="mb-3 mt-auto flex flex-wrap items-center justify-between gap-2 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
           {days ? (
             <span className="inline-flex items-center gap-1">
               <Clock className="h-3 w-3" strokeWidth={1.75} />
@@ -148,7 +148,7 @@ export function CourseCard({ course, className }) {
 
         {/* Feature badges */}
         {(hasWorkshop || hasCertificate || levelLabel) && (
-          <div className="flex flex-wrap gap-2 text-[11px] text-9e-slate dark:text-[#b7c3d4]">
+          <div className="flex flex-wrap gap-2 text-[11px] text-9e-slate-dp-50 dark:text-[#b7c3d4]">
             {hasWorkshop && (
               <span className="inline-flex items-center gap-1">
                 <MonitorPlay
@@ -187,7 +187,7 @@ export function CourseCard({ course, className }) {
           )}
         >
           <div className="border-t border-9e-air/30 bg-[#ffffff] px-4 pb-4 pt-3 dark:bg-9e-navy">
-            <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate dark:text-[#b7c3d4]">
+            <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
               <span>รอบการอบรม</span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-action shadow-9e-sm" />

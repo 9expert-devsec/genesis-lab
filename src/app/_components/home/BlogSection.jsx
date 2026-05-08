@@ -172,7 +172,7 @@ export function BlogCard({ blog }) {
         <h3 className="line-clamp-3 text-base font-bold leading-snug text-9e-navy dark:text-white">
           {blog.title}
         </h3>
-        <p className="line-clamp-3 text-sm leading-relaxed text-9e-slate dark:text-[#94a3b8]">
+        <p className="line-clamp-3 text-sm leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {blog.excerpt}
         </p>
 
@@ -181,7 +181,7 @@ export function BlogCard({ blog }) {
             {blog.tags.map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs text-9e-slate dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
               >
                 {tag}
               </span>

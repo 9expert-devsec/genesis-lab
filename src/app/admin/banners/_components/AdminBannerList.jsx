@@ -41,7 +41,7 @@ export function AdminBannerList({ banners }) {
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={5} className="text-center py-8 text-9e-slate">
+              <td colSpan={5} className="text-center py-8 text-9e-slate-dp-50">
                 ยังไม่มี Banner
               </td>
             </tr>
@@ -51,9 +51,9 @@ export function AdminBannerList({ banners }) {
               key={b._id}
               className="border-b border-[var(--surface-border)] last:border-0 hover:bg-9e-ice/50 transition-colors"
             >
-              <td className="px-4 py-3 text-9e-slate text-center">{b.weight}</td>
+              <td className="px-4 py-3 text-9e-slate-dp-50 text-center">{b.weight}</td>
               <td className="px-4 py-3 font-medium text-9e-navy">{b.title}</td>
-              <td className="px-4 py-3 text-9e-slate">
+              <td className="px-4 py-3 text-9e-slate-dp-50">
                 {TYPE_LABELS[b.type] ?? b.type}
               </td>
               <td className="px-4 py-3 text-center">

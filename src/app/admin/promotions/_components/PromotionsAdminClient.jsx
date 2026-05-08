@@ -109,7 +109,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">โปรโมชั่น</h1>
-          <p className="mt-1 text-xs text-9e-slate dark:text-[#94a3b8]">
+          <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
             Sync ล่าสุด: {formatSyncedAt(lastSyncedAt)}
           </p>
         </div>
@@ -152,7 +152,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-9e-slate dark:text-[#94a3b8]">
+                <td colSpan={8} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   ยังไม่มีข้อมูล — กด <strong>Sync จาก API</strong> เพื่อดึงข้อมูลครั้งแรก
                 </td>
               </tr>
@@ -179,7 +179,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                   <td className="px-2 py-3 align-middle">
                     <DragHandle />
                   </td>
-                  <td className="px-3 py-3 text-9e-slate dark:text-[#94a3b8]">{i + 1}</td>
+                  <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">{i + 1}</td>
                   <td className="px-3 py-3">
                     {p.thumbnail_url ? (
                       <div className="relative h-[50px] w-[80px] overflow-hidden rounded bg-9e-ice dark:bg-[#0D1B2A]">
@@ -200,7 +200,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                     <p className="line-clamp-2 font-medium text-9e-navy dark:text-white">
                       {p.title || '(ไม่มีชื่อ)'}
                     </p>
-                    <p className="mt-0.5 text-xs text-9e-slate dark:text-[#94a3b8]">
+                    <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                       ID: {p.promotion_id}
                     </p>
                   </td>
@@ -212,7 +212,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                       {slug || '—'}
                     </Link>
                   </td>
-                  <td className="px-3 py-3 text-xs text-9e-slate dark:text-[#94a3b8]">
+                  <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {formatRange(p.start_date, p.end_date)}
                   </td>
                   <td className="px-3 py-3 text-center">

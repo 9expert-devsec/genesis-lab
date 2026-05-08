@@ -205,7 +205,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
           </FilterSelect>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-9e-slate dark:text-[#94a3b8]">เดือน:</span>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
             <FilterSelect
               value={String(monthFrom)}
               onChange={(v) => setMonthFrom(Number(v))}
@@ -218,7 +218,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
                 </option>
               ))}
             </FilterSelect>
-            <span className="text-xs text-9e-slate dark:text-[#94a3b8]">ถึง</span>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
             <FilterSelect
               value={String(safeMonthTo)}
               onChange={(v) => setMonthTo(Number(v))}
@@ -234,7 +234,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
           </div>
 
           {/* Legend + tooltip */}
-          <div className="ml-auto flex items-center gap-3 text-xs text-9e-slate dark:text-[#94a3b8]">
+          <div className="ml-auto flex items-center gap-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
             <span className="hidden md:inline">รูปแบบ:</span>
             <span className="inline-flex items-center gap-1">
               <span
@@ -257,7 +257,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
                 onMouseEnter={() => setShowTooltip(true)}
                 onMouseLeave={() => setShowTooltip(false)}
                 onClick={() => setShowTooltip((v) => !v)}
-                className="flex h-6 w-6 items-center justify-center rounded-full border border-9e-slate text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action"
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action"
               >
                 <HelpCircle className="h-3.5 w-3.5" />
               </button>
@@ -266,7 +266,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
                   <p className="mb-2 font-medium text-9e-navy dark:text-white">
                     รูปแบบการอบรม
                   </p>
-                  <div className="flex flex-col gap-2 text-9e-slate dark:text-[#94a3b8]">
+                  <div className="flex flex-col gap-2 text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     <div className="flex items-start gap-2">
                       <span
                         className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
@@ -301,7 +301,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
 
       {/* Result count */}
       <div className="mx-auto max-w-[1200px] max-md:px-4 pt-6">
-        <p className="text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ผลลัพธ์การค้นหา{' '}
           <span className="font-bold text-9e-action dark:text-9e-air">
             {filteredCourses.length}
@@ -313,7 +313,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
       {/* Schedule tables */}
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 py-6 max-md:px-4">
         {grouped.length === 0 ? (
-          <div className="rounded-9e-md border border-dashed border-[var(--surface-border)] py-20 text-center text-sm text-9e-slate dark:text-[#94a3b8]">
+          <div className="rounded-9e-md border border-dashed border-[var(--surface-border)] py-20 text-center text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
             ไม่พบหลักสูตรที่ตรงกับเงื่อนไข
           </div>
         ) : null}
@@ -430,7 +430,7 @@ function ProgramTable({
                       {c.course_name}
                     </Link>
                   </td>
-                  <td className="px-3 py-3 text-center text-xs text-9e-slate dark:text-[#94a3b8]">
+                  <td className="px-3 py-3 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {c.course_trainingdays ?? '-'}
                   </td>
                   <td className="px-3 py-3 text-center text-xs font-medium text-9e-navy dark:text-white">
@@ -448,7 +448,7 @@ function ProgramTable({
                         className="px-2 py-2 text-center align-top"
                       >
                         {cellSchedules.length === 0 ? (
-                          <span className="text-xs text-9e-slate/60">—</span>
+                          <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">—</span>
                         ) : (
                           <div className="flex flex-col items-center gap-2">
                             {cellSchedules.map((s, si) => (

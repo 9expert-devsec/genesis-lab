@@ -16,7 +16,7 @@ export default function Page() {
             <Logo variant="white" href={null} priority />
           </div>
           <h1 className="text-xl font-bold text-9e-navy">9Expert Admin</h1>
-          <p className="text-sm text-9e-slate mt-1">
+          <p className="text-sm text-9e-slate-dp-50 mt-1">
             สำหรับเจ้าหน้าที่ 9Expert Training เท่านั้น
           </p>
         </div>
@@ -28,7 +28,7 @@ export default function Page() {
         <p className="text-center mt-6">
           <Link
             href="/"
-            className="text-sm text-9e-slate hover:text-9e-action transition-colors"
+            className="text-sm text-9e-slate-dp-50 hover:text-9e-action transition-colors"
           >
             ← กลับหน้าหลัก
           </Link>

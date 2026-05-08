@@ -90,7 +90,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
               : 'border-gray-200 hover:border-9e-air'
           }`}
         >
-          <Search size={16} className="shrink-0 text-9e-slate" />
+          <Search size={16} className="shrink-0 text-9e-slate-dp-50" />
 
           <input
             ref={inputRef}
@@ -104,7 +104,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
               if (query) setOpen(true);
             }}
             placeholder="พิมพ์ชื่อคอร์สหรือ Course ID เช่น Power Query, ONL-MSE"
-            className="flex-1 bg-transparent py-2.5 text-sm text-9e-navy placeholder:text-9e-slate/60 focus:outline-none"
+            className="flex-1 bg-transparent py-2.5 text-sm text-9e-navy placeholder:text-9e-slate-lt-400/60 dark:placeholder:text-9e-slate-dp-400/60 focus:outline-none"
           />
 
           {query && (
@@ -112,7 +112,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
               type="button"
               onClick={handleClear}
               aria-label="ล้างการค้นหา"
-              className="text-9e-slate transition-colors hover:text-9e-navy"
+              className="text-9e-slate-dp-50 transition-colors hover:text-9e-navy"
             >
               <X size={16} />
             </button>
@@ -144,7 +144,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
                   <p className="truncate text-sm font-semibold text-9e-navy">
                     {course.course_name}
                   </p>
-                  <p className="text-xs text-9e-slate">
+                  <p className="text-xs text-9e-slate-dp-50">
                     {course.course_id}
                     {course.program?.program_name &&
                       ` · ${course.program.program_name}`}
@@ -156,7 +156,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
         )}
 
         {open && query.trim().length > 0 && filtered.length === 0 && (
-          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate shadow-9e-md">
+          <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-9e-md border border-gray-200 bg-white px-4 py-3 text-sm text-9e-slate-dp-50 shadow-9e-md">
             ไม่พบคอร์สที่ค้นหา
           </div>
         )}
@@ -180,7 +180,7 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
             <p className="truncate text-sm font-bold text-9e-navy">
               {selected.course_name}
             </p>
-            <p className="text-xs text-9e-slate">{selected.course_id}</p>
+            <p className="text-xs text-9e-slate-dp-50">{selected.course_id}</p>
           </div>
           <button
             type="button"

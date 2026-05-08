@@ -176,7 +176,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                           "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-5 py-3 text-sm font-semibold transition-all duration-9e-micro ease-9e",
                           isActive
                             ? "border-9e-action bg-[#e9e9e9] text-9e-action dark:bg-9e-navy dark:text-9e-lime dark:border-9e-lime"
-                            : "border-transparent text-9e-slate hover:border-gray-300 hover:text-9e-navy dark:text-9e-slate dark:hover:border-gray-600 dark:hover:text-white",
+                            : "border-transparent text-9e-slate-dp-50 hover:border-gray-300 hover:text-9e-navy dark:text-9e-slate-dp-400 dark:hover:border-gray-600 dark:hover:text-white",
                         )}
                       >
                         {skill.skilliconurl && (
@@ -229,7 +229,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                         </div>
 
                         {selectedSkill.skill_teaser && (
-                          <p className="line-clamp-[7] font-light text-sm leading-relaxed text-9e-slate dark:text-white">
+                          <p className="line-clamp-[7] font-light text-sm leading-relaxed text-9e-slate-dp-50 dark:text-white">
                             {selectedSkill.skill_teaser}
                           </p>
                         )}
@@ -252,7 +252,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                   {/* Right: programs in the selected skill */}
                   <div className="flex flex-col min-h-0 h-full p-6">
                     {skillPrograms.length === 0 ? (
-                      <div className="flex h-full items-center justify-center text-sm text-9e-slate dark:text-9e-slate">
+                      <div className="flex h-full items-center justify-center text-sm text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
                         ไม่มีโปรแกรมใน Skill นี้
                       </div>
                     ) : (
@@ -310,7 +310,7 @@ function TabButton({ active, onClick, children }) {
         "flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-bold transition-all duration-9e-micro ease-9e sm:flex-none sm:px-8",
         active
           ? "bg-9e-action text-white shadow-9e-md dark:bg-9e-lime dark:text-9e-navy"
-          : "border border-gray-200 bg-white text-9e-slate hover:border-9e-action hover:text-9e-action dark:border-gray-600 dark:bg-9e-navy dark:text-9e-slate dark:hover:border-9e-lime dark:hover:text-9e-lime",
+          : "border border-gray-200 bg-white text-9e-slate-dp-50 hover:border-9e-action hover:text-9e-action dark:border-gray-600 dark:bg-9e-navy dark:text-9e-slate-dp-400 dark:hover:border-9e-lime dark:hover:text-9e-lime",
       )}
     >
       {children}
@@ -384,7 +384,7 @@ function PageDots({ total, current, onChange, className }) {
 
 function EmptyState() {
   return (
-    <p className="py-8 text-center text-sm text-9e-slate">
+    <p className="py-8 text-center text-sm text-9e-slate-dp-50">
       ไม่สามารถโหลดรายการได้ในขณะนี้
     </p>
   );

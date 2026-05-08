@@ -378,7 +378,7 @@ function BannerSlide({ banner, isActive = true }) {
                 </h2>
                 {banner.slide_text && (
                   <div
-                    className="text-9e-slate dark:text-[#94a3b8] text-sm leading-relaxed"
+                    className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: banner.slide_text }}
                   />
                 )}

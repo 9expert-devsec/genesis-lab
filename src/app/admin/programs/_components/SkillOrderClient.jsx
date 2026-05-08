@@ -112,7 +112,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-9e-slate">
+        <p className="text-sm text-9e-slate-dp-50">
           ลากที่จุด ⋮⋮ หรือกดลูกศรเพื่อเรียงลำดับ Skills และ Programs ภายใน
         </p>
         <div className="flex gap-2">
@@ -120,7 +120,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
             type="button"
             onClick={handleSync}
             disabled={syncing}
-            className="rounded-9e-md border border-9e-slate px-4 py-2 text-sm text-9e-slate transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
+            className="rounded-9e-md border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 px-4 py-2 text-sm text-9e-slate-dp-50 transition-colors hover:border-9e-action hover:text-9e-action disabled:opacity-50"
           >
             {syncing ? 'กำลัง Sync...' : 'Sync จาก API'}
           </button>
@@ -137,7 +137,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
 
       <div className="flex flex-col gap-2">
         {skills.length === 0 ? (
-          <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-6 text-center text-sm text-9e-slate">
+          <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-6 text-center text-sm text-9e-slate-dp-50">
             ไม่พบ Skills — ลองกด &quot;Sync จาก API&quot;
           </p>
         ) : null}
@@ -165,7 +165,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
             >
               <div className="flex items-center gap-3 p-3">
                 <DragHandle />
-                <span className="w-6 text-center font-mono text-xs text-9e-slate">
+                <span className="w-6 text-center font-mono text-xs text-9e-slate-dp-50">
                   {i + 1}
                 </span>
                 {iconSrc ? (
@@ -181,7 +181,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                 )}
                 <span className="flex-1 truncate text-sm font-medium text-9e-navy dark:text-white">
                   {name}
-                  <span className="ml-2 text-xs text-9e-slate">
+                  <span className="ml-2 text-xs text-9e-slate-dp-50">
                     ({skill.orderedPrograms.length} programs)
                   </span>
                 </span>
@@ -190,14 +190,14 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     type="button"
                     onClick={() => setExpanded(isOpen ? null : skill.id)}
                     disabled={skill.orderedPrograms.length === 0}
-                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
+                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate-dp-50 transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     {isOpen ? 'ปิด' : 'เปิด'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleToggleHidden(skill.id, skill.isHidden)}
-                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate transition-colors hover:text-9e-action"
+                    className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate-dp-50 transition-colors hover:text-9e-action"
                   >
                     {skill.isHidden ? 'แสดง' : 'ซ่อน'}
                   </button>
@@ -206,7 +206,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     onClick={() => moveUp(i)}
                     disabled={i === 0}
                     aria-label="เลื่อนขึ้น"
-                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate-dp-50 transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -215,7 +215,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
                     onClick={() => moveDown(i)}
                     disabled={i === skills.length - 1}
                     aria-label="เลื่อนลง"
-                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate transition-colors hover:text-9e-action disabled:opacity-30"
+                    className="flex h-7 w-7 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-sm text-9e-slate-dp-50 transition-colors hover:text-9e-action disabled:opacity-30"
                   >
                     ↓
                   </button>
@@ -269,7 +269,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
   return (
     <div className="border-t border-[var(--surface-border)] p-3">
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-9e-slate">ลำดับ Programs ภายใน Skill นี้</p>
+        <p className="text-xs text-9e-slate-dp-50">ลำดับ Programs ภายใน Skill นี้</p>
         <button
           type="button"
           onClick={onSave}
@@ -300,8 +300,8 @@ function NestedProgramList({ skill, onChange, onSave }) {
                 (isDropTarget ? 'border-t-2 border-t-9e-action ' : '')
               }
             >
-              <DragHandle className="text-9e-slate/70" />
-              <span className="w-5 text-center font-mono text-[11px] text-9e-slate">
+              <DragHandle className="text-9e-slate-lt-400/70 dark:text-9e-slate-dp-400/70" />
+              <span className="w-5 text-center font-mono text-[11px] text-9e-slate-dp-50">
                 {pi + 1}
               </span>
               {picon ? (
@@ -323,7 +323,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
                 onClick={() => moveProgramUp(pi)}
                 disabled={pi === 0}
                 aria-label="เลื่อนขึ้น"
-                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-action disabled:opacity-30"
+                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate-dp-50 hover:text-9e-action disabled:opacity-30"
               >
                 ↑
               </button>
@@ -332,7 +332,7 @@ function NestedProgramList({ skill, onChange, onSave }) {
                 onClick={() => moveProgramDown(pi)}
                 disabled={pi === programs.length - 1}
                 aria-label="เลื่อนลง"
-                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate hover:text-9e-action disabled:opacity-30"
+                className="flex h-6 w-6 items-center justify-center rounded border border-[var(--surface-border)] text-xs text-9e-slate-dp-50 hover:text-9e-action disabled:opacity-30"
               >
                 ↓
               </button>

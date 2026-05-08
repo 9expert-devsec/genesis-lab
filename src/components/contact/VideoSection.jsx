@@ -9,17 +9,19 @@ export default async function VideoSection() {
   const { title_th, title_en } = video;
 
   return (
-    <section className="bg-[#060e1a] py-20">
+    <section className="bg-9e-ice py-20">
       <div className="mx-auto max-w-[1200px] px-4 lg:px-6">
         {(title_th || title_en) && (
           <div className="mb-8 text-center">
             {title_th && (
-              <h2 className="text-3xl font-extrabold text-white md:text-4xl">
+              <h2 className="text-3xl font-bold text-9e-navy md:text-4xl">
                 {title_th}
               </h2>
             )}
             {title_en && (
-              <p className="mt-2 text-base text-[#99a1af]">{title_en}</p>
+              <p className="mt-2 text-base text-9e-slate-dp-400 dark:text-9e-slate-dp-400">
+                {title_en}
+              </p>
             )}
           </div>
         )}

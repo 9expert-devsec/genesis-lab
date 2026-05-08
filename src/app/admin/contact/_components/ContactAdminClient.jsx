@@ -26,7 +26,7 @@ export function ContactAdminClient({ initialVideo, initialMap }) {
               'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
               (tab === t.key
                 ? 'border-9e-action text-9e-action'
-                : 'border-transparent text-9e-slate hover:text-9e-navy dark:hover:text-white')
+                : 'border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white')
             }
           >
             {t.label}
@@ -128,7 +128,7 @@ function VideoSection({ initialVideo }) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">พรีวิว</p>
+        <p className="text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">พรีวิว</p>
         {embedUrl ? (
           <div className="overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-black">
             <iframe
@@ -141,7 +141,7 @@ function VideoSection({ initialVideo }) {
             />
           </div>
         ) : (
-          <div className="flex aspect-video items-center justify-center rounded-2xl border border-dashed border-[var(--surface-border)] bg-9e-ice text-xs text-9e-slate dark:bg-[#0D1B2A] dark:text-[#94a3b8]">
+          <div className="flex aspect-video items-center justify-center rounded-2xl border border-dashed border-[var(--surface-border)] bg-9e-ice text-xs text-9e-slate-dp-50 dark:bg-[#0D1B2A] dark:text-[#94a3b8]">
             กรอก URL ที่ถูกต้องเพื่อดูพรีวิว
           </div>
         )}
@@ -222,7 +222,7 @@ function TransportSection({ initialMap }) {
           type="file"
           accept="image/png,image/jpeg,image/webp"
           onChange={handleFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
+          className="block w-full text-sm text-9e-slate-dp-50 file:mr-4 file:rounded-9e-md file:border-0 file:bg-9e-action file:px-4 file:py-2 file:text-sm file:font-bold file:text-white hover:file:cursor-pointer hover:file:bg-9e-brand"
         />
       </Field>
 
@@ -263,7 +263,7 @@ function TransportSection({ initialMap }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">
+      <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {label}
         {hint && <span className="ml-2 font-normal italic">{hint}</span>}
       </p>

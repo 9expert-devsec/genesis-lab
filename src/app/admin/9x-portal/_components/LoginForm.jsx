@@ -111,7 +111,7 @@ export function LoginForm() {
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-9e-slate
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-9e-slate-dp-50
                   hover:text-9e-action transition-colors"
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -128,7 +128,7 @@ export function LoginForm() {
           <input type="hidden" name="email" value={state?.email ?? email} />
           <input type="hidden" name="password" value={password} />
 
-          <p className="text-sm text-9e-slate flex items-center gap-2">
+          <p className="text-sm text-9e-slate-dp-50 flex items-center gap-2">
             <ShieldCheck size={16} className="text-9e-action" />
             กรอกรหัส 6 หลักจาก Google Authenticator
           </p>
@@ -186,7 +186,7 @@ export function LoginForm() {
         <button
           type="button"
           onClick={handleBack}
-          className="w-full text-9e-slate text-sm hover:text-9e-action transition-colors"
+          className="w-full text-9e-slate-dp-50 text-sm hover:text-9e-action transition-colors"
         >
           ← กลับไปหน้าล็อกอิน
         </button>

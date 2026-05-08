@@ -38,7 +38,7 @@ export default async function Page() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-9e-navy">รีวิวแนะนำ (Featured)</h1>
-        <p className="text-sm text-9e-slate">
+        <p className="text-sm text-9e-slate-dp-50">
           {activeCount} / {featured.length} active
         </p>
       </div>

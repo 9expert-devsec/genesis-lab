@@ -16,7 +16,7 @@ export default async function AboutAdminPage() {
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการหน้าเกี่ยวกับเรา
         </h1>
-        <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           จัดการรายชื่อวิทยากรและข้อความบนหน้า /about-us
         </p>
       </div>

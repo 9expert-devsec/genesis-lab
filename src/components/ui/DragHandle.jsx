@@ -2,7 +2,7 @@ export function DragHandle({ className = '' }) {
   return (
     <div
       className={
-        'cursor-grab select-none px-1 text-9e-slate ' +
+        'cursor-grab select-none px-1 text-9e-slate-dp-50 ' +
         'hover:text-9e-navy active:cursor-grabbing dark:hover:text-white ' +
         className
       }

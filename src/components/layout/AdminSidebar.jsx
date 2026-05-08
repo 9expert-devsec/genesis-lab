@@ -131,7 +131,7 @@ function AdminThemeToggle() {
       type="button"
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
-      className="flex w-full items-center gap-3 rounded-9e-md px-3 py-2.5 text-sm text-9e-slate transition-colors hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#111d2c] dark:hover:text-white"
+      className="flex w-full items-center gap-3 rounded-9e-md px-3 py-2.5 text-sm text-9e-slate-dp-50 transition-colors hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#111d2c] dark:hover:text-white"
     >
       <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
       {/* During SSR / pre-mount, render a stable placeholder so the
@@ -144,7 +144,7 @@ function AdminThemeToggle() {
 function GroupHeader({ label }) {
   return (
     <div className="px-3 pt-4 pb-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-9e-slate/60">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
         {label}
       </p>
     </div>
@@ -168,7 +168,7 @@ function SidebarItem({ item, currentPath, isSuper }) {
           'flex items-center gap-3 rounded-9e-md px-3 py-2.5 text-sm transition-colors',
           isActive
             ? 'bg-9e-action/10 text-9e-action font-medium border-l-2 border-9e-action'
-            : 'text-9e-slate hover:bg-9e-ice dark:hover:bg-[#111d2c] hover:text-9e-navy dark:hover:text-white'
+            : 'text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#111d2c] hover:text-9e-navy dark:hover:text-white'
         )}
       >
         {Icon ? <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} /> : null}

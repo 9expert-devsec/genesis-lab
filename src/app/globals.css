@@ -22,7 +22,6 @@
   --9e-lime-dk:      #B8D930;
 
   /* Supporting */
-  --9e-slate:        #5E6A7E;
   --9e-navy:         #0D1B2A;
   --9e-card:         #132638;
   --9e-border:       #1A2D42;
@@ -97,6 +96,33 @@
   --9e-lime-800: #F6FDD9;
   --9e-lime-900: #FBFEEC;
   --9e-lime-950: #FDFFF5;
+
+  /* Slate DP scale */
+  --9e-slate-dp-50:  #5E6A7E;
+  --9e-slate-dp-100: #6E798B;
+  --9e-slate-dp-200: #7E8898;
+  --9e-slate-dp-300: #8E97A5;
+  --9e-slate-dp-400: #9EA6B2;
+  --9e-slate-dp-500: #AEB4BE;
+  --9e-slate-dp-600: #BFC3CB;
+  --9e-slate-dp-700: #CFD2D8;
+  --9e-slate-dp-800: #DFE1E5;
+  --9e-slate-dp-900: #EFF0F2;
+  --9e-slate-dp-950: #F7F8F9;
+
+    /* Slate LT scale */
+  --9e-slate-lt-50:  #b7c3d4;
+  --9e-slate-lt-100: #BEC9D8;
+  --9e-slate-lt-200: #C5CFDD;
+  --9e-slate-lt-300: #CDD5E1;
+  --9e-slate-lt-400: #D4DBE5;
+  --9e-slate-lt-500: #DBE1EA;
+  --9e-slate-lt-600: #E2E7EE;
+  --9e-slate-lt-700: #E9EDF2;
+  --9e-slate-lt-800: #F1F3F6;
+  --9e-slate-lt-900: #F8F9FB;
+  --9e-slate-lt-950: #FBFCFD;
+
 }
 
 /* ── Semantic tokens — DARK MODE overrides ── */
@@ -165,6 +191,32 @@
   --9e-lime-800: #313D1E;
   --9e-lime-900: #1C251A;
   --9e-lime-950: #121A18;
+
+    /* Slate DP scale */
+  --9e-slate-dp-50:  #5E6A7E;
+  --9e-slate-dp-100: #6E798B;
+  --9e-slate-dp-200: #7E8898;
+  --9e-slate-dp-300: #8E97A5;
+  --9e-slate-dp-400: #9EA6B2;
+  --9e-slate-dp-500: #AEB4BE;
+  --9e-slate-dp-600: #BFC3CB;
+  --9e-slate-dp-700: #CFD2D8;
+  --9e-slate-dp-800: #DFE1E5;
+  --9e-slate-dp-900: #EFF0F2;
+  --9e-slate-dp-950: #F7F8F9;
+
+    /* Slate LT scale */
+  --9e-slate-lt-50:  #b7c3d4;
+  --9e-slate-lt-100: #BEC9D8;
+  --9e-slate-lt-200: #C5CFDD;
+  --9e-slate-lt-300: #CDD5E1;
+  --9e-slate-lt-400: #D4DBE5;
+  --9e-slate-lt-500: #DBE1EA;
+  --9e-slate-lt-600: #E2E7EE;
+  --9e-slate-lt-700: #E9EDF2;
+  --9e-slate-lt-800: #F1F3F6;
+  --9e-slate-lt-900: #F8F9FB;
+  --9e-slate-lt-950: #FBFCFD;
 }
 
 /* Native form controls and scrollbars follow the active theme */

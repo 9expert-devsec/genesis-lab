@@ -30,7 +30,7 @@ export function TestimonialStats({ reviews = [] }) {
         <h2 className="mb-2 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ส่วนหนึ่งของความภาคภูมิใจ
         </h2>
-        <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="mx-auto mb-10 max-w-2xl text-center text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           9Expert Training
           เป็นส่วนหนึ่งของการสนับสนุนบุคคลและองค์กรในการปรับตัวตามความเปลี่ยนแปลงของเทคโนโลยี
           เพื่อเพิ่มประสิทธิภาพการทำงานและสร้างความได้เปรียบเหนือคู่แข่ง
@@ -55,7 +55,7 @@ export function TestimonialStats({ reviews = [] }) {
                   {s.value}
                 </span>
               </div>
-              <span className="text-sm text-9e-slate dark:text-[#94a3b8]">
+              <span className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
                 {s.label}
               </span>
             </div>
@@ -276,7 +276,7 @@ function ReviewCard({ review, elevated = false }) {
             {reviewerName}
           </p>
           {subtitle && (
-            <p className="truncate text-xs text-9e-slate dark:text-[#94a3b8]">
+            <p className="truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
               {subtitle}
             </p>
           )}
@@ -289,7 +289,7 @@ function ReviewCard({ review, elevated = false }) {
         </p>
       )}
       {comment && (
-        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-9e-slate dark:text-[#94a3b8]">
+        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {comment}
         </p>
       )}

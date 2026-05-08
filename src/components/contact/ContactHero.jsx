@@ -6,7 +6,7 @@ import FloatingDots from '@/components/about/FloatingDots';
 
 export default function ContactHero() {
   return (
-    <section className="relative overflow-hidden bg-[#060e1a] text-white">
+    <section className="relative overflow-hidden bg-9e-navy text-white">
       {/* Radial glow */}
       <div
         aria-hidden
@@ -25,20 +25,20 @@ export default function ContactHero() {
       />
 
       {/* Corner brackets */}
-      <div
+      {/* <div
         aria-hidden
         className="pointer-events-none absolute left-6 top-24 h-32 w-32 border-l-2 border-t-2 border-[rgba(0,92,255,0.3)]"
       />
       <div
         aria-hidden
         className="pointer-events-none absolute bottom-10 right-6 h-32 w-32 border-b-2 border-r-2 border-[rgba(0,92,255,0.3)]"
-      />
+      /> */}
 
       <FloatingDots />
 
-      <div className="relative mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center gap-8 px-4 py-24 text-center lg:px-6 lg:py-28">
+      <div className="relative mx-auto flex min-h-[420px] max-w-3xl flex-col items-center justify-center gap-8 px-4 py-24 text-center lg:px-6 lg:py-28">
         {/* Eyebrow badge */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -48,26 +48,26 @@ export default function ContactHero() {
           <span className="text-sm font-medium uppercase tracking-[0.7px] text-[#48B0FF]">
             ติดต่อเรา
           </span>
-        </motion.div>
+        </motion.div> */}
 
         {/* H1 — two lines */}
-        <h1 className="text-4xl font-bold leading-normal md:text-5xl lg:text-6xl">
+        <h1 className="text-4xl font-bold leading-normal md:text-5xl lg:text-4xl">
           <motion.span
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             className="block text-white"
           >
-            พร้อมช่วยเหลือคุณ
+           Contact Us
           </motion.span>
-          <motion.span
+          {/* <motion.span
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.25 }}
             className="block bg-[linear-gradient(90deg,#48B0FF_0%,#005CFF_50%,#48B0FF_100%)] bg-clip-text text-transparent"
           >
             ทุกวันทำการ
-          </motion.span>
+          </motion.span> */}
         </h1>
 
         {/* Subtext */}
@@ -75,9 +75,9 @@ export default function ContactHero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.4 }}
-          className="max-w-2xl text-base leading-relaxed text-[#99a1af] md:text-lg"
+          className="max-w-2xl text-base leading-relaxed text-[#99a1af] md:text-base"
         >
-          ทีมงาน 9Expert Training พร้อมตอบทุกคำถาม จันทร์–ศุกร์ 08:00–17:00 น.
+          สอนแบ่งปันความรู้ เทคโนโลยีเพื่อ “ขับเคลื่อนประเทศไทย”
         </motion.p>
 
         {/* Gradient underline */}

@@ -43,7 +43,7 @@ export function CourseHero({ course, heroColor }) {
           {/* LEFT — standalone rounded white info card */}
           <div className="flex flex-col justify-center rounded-2xl bg-white p-6 shadow-9e-sm lg:p-8">
             <div className="w-full">
-              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-9e-slate">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
                 {course.course_id}
               </p>
 
@@ -51,7 +51,7 @@ export function CourseHero({ course, heroColor }) {
                 {course.course_name}
               </h1>
 
-              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-9e-slate">
+              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-9e-slate-dp-50">
                 <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span className="font-bold text-9e-navy">
                   {course.course_trainingdays} วัน
@@ -70,7 +70,7 @@ export function CourseHero({ course, heroColor }) {
                   Hybrid
                 </span>
                 {course.course_type_inhouse && (
-                  <span className="rounded-full border border-9e-slate bg-white px-3 py-1 text-xs font-bold text-9e-slate">
+                  <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
                     Inhouse
                   </span>
                 )}
@@ -84,19 +84,19 @@ export function CourseHero({ course, heroColor }) {
                 </span>
                 <span className="text-lg font-bold text-9e-action">บาท</span>
                 {hasPromotion && (
-                  <span className="text-sm text-9e-slate line-through">
+                  <span className="text-sm text-9e-slate-dp-50 line-through">
                     ปกติ {Number(course.course_price).toLocaleString('th-TH')}{' '}
                     บาท
                   </span>
                 )}
               </div>
-              <p className="mb-4 text-xs text-9e-slate">
+              <p className="mb-4 text-xs text-9e-slate-dp-50">
                 *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
               </p>
 
               {(course.course_workshop_status ||
                 course.course_certificate_status) && (
-                <div className="mb-5 flex flex-wrap gap-4 text-xs text-9e-slate">
+                <div className="mb-5 flex flex-wrap gap-4 text-xs text-9e-slate-dp-50">
                   {course.course_workshop_status && (
                     <span className="flex items-center gap-1">
                       <MonitorPlay

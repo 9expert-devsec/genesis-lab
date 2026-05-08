@@ -63,7 +63,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
                 <h1 className="text-3xl font-bold text-9e-navy dark:text-white md:text-4xl">
                   {program?.program_name}
                 </h1>
-                <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+                <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   กลุ่มหลักสูตร {program?.program_name} มีทั้งหมด{' '}
                   <span className="font-bold text-9e-action dark:text-9e-air">
                     {courses.length}
@@ -117,7 +117,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
         </div>
 
         {courses.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-9e-slate dark:border-[#1e3a5f]">
+          <p className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-9e-slate-dp-50 dark:border-[#1e3a5f]">
             ยังไม่มีหลักสูตรในโปรแกรมนี้
           </p>
         ) : (

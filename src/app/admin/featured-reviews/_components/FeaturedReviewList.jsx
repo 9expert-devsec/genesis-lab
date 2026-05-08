@@ -119,7 +119,7 @@ export function FeaturedReviewList({ items: initial }) {
         <tbody>
           {items.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-8 text-center text-9e-slate">
+              <td colSpan={5} className="py-8 text-center text-9e-slate-dp-50">
                 ยังไม่มีรีวิว featured — เพิ่มจากรายการด้านบน
               </td>
             </tr>
@@ -147,7 +147,7 @@ export function FeaturedReviewList({ items: initial }) {
                 <td className="px-2 py-3 align-middle">
                   <DragHandle />
                 </td>
-                <td className="px-4 py-3 text-center text-9e-slate">{i + 1}</td>
+                <td className="px-4 py-3 text-center text-9e-slate-dp-50">{i + 1}</td>
                 <td className="px-4 py-3">
                   {r ? (
                     <div className="flex items-start gap-3">
@@ -167,10 +167,10 @@ export function FeaturedReviewList({ items: initial }) {
                             </span>
                           ) : null}
                         </div>
-                        <p className="truncate text-xs text-9e-slate">
+                        <p className="truncate text-xs text-9e-slate-dp-50">
                           {r.courseName}
                         </p>
-                        <p className="line-clamp-1 text-xs text-9e-slate/80">
+                        <p className="line-clamp-1 text-xs text-9e-slate-lt-400/80 dark:text-9e-slate-dp-400/80">
                           {r.comment}
                         </p>
                       </div>

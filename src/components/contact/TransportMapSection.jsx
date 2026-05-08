@@ -7,20 +7,20 @@ export default async function TransportMapSection() {
   if (!map?.image_url) return null;
 
   return (
-    <section className="bg-[#060e1a] py-20">
+    <section className="bg-white py-20">
       <div className="mx-auto max-w-[1200px] px-4 lg:px-6">
         <div className="mx-auto mb-10 max-w-2xl text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[rgba(0,92,255,0.3)] bg-[rgba(0,92,255,0.05)] px-4 py-1.5">
+          {/* <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[rgba(0,92,255,0.3)] bg-[rgba(0,92,255,0.05)] px-4 py-1.5">
             <Navigation className="h-4 w-4 text-[#48B0FF]" />
             <span className="text-sm uppercase tracking-[0.7px] text-[#48B0FF]">
               การเดินทาง
             </span>
-          </div>
-          <h2 className="text-3xl font-extrabold leading-normal text-white md:text-5xl">
-            การเดินทางมายัง{' '}
-            <span className="bg-[linear-gradient(90deg,#48B0FF_0%,#005CFF_50%,#48B0FF_100%)] bg-clip-text text-transparent">
+          </div> */}
+          <h2 className="text-3xl font-bold leading-normal text-9e-navy md:text-4xl">
+            แผนที่การเดินทาง
+            {/* <span className="bg-[linear-gradient(90deg,#48B0FF_0%,#005CFF_50%,#48B0FF_100%)] bg-clip-text text-transparent">
               9Expert
-            </span>
+            </span> */}
           </h2>
         </div>
 
@@ -36,7 +36,7 @@ export default async function TransportMapSection() {
           </div>
 
           {map.caption_th && (
-            <p className="mt-6 whitespace-pre-line text-center text-sm text-[#99a1af]">
+            <p className="mt-6 whitespace-pre-line text-center text-sm text-9e-slate-dp-50">
               {map.caption_th}
             </p>
           )}

@@ -76,7 +76,7 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses, blogs }
       {/* ── Per-program sections ──────────────────────────────────── */}
       <div className="mx-auto flex max-w-[1200px] flex-col gap-12 px-4 pt-12 lg:px-6 lg:pt-16">
         {coursesByProgram.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-9e-slate dark:border-[#1e3a5f]">
+          <p className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm text-9e-slate-dp-50 dark:border-[#1e3a5f]">
             ยังไม่มีหลักสูตรใน Skill นี้
           </p>
         ) : (

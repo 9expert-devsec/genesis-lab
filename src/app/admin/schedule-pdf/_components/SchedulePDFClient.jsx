@@ -107,7 +107,7 @@ export default function SchedulePDFClient({ current }) {
                 <p className="truncate text-sm font-semibold text-9e-navy dark:text-white">
                   {current.filename || 'schedule.pdf'}
                 </p>
-                <p className="mt-0.5 text-xs text-9e-slate">
+                <p className="mt-0.5 text-xs text-9e-slate-dp-50">
                   อัปโหลดเมื่อ {formatDate(current.uploadedAt)}
                   {current.uploadedBy ? ` · ${current.uploadedBy}` : ''}
                 </p>
@@ -133,7 +133,7 @@ export default function SchedulePDFClient({ current }) {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-9e-slate">ยังไม่มีไฟล์อัปโหลด</p>
+              <p className="text-sm text-9e-slate-dp-50">ยังไม่มีไฟล์อัปโหลด</p>
             )}
           </div>
         </div>
@@ -149,10 +149,10 @@ export default function SchedulePDFClient({ current }) {
           type="file"
           accept="application/pdf,.pdf"
           onChange={handleFileChange}
-          className="block w-full text-sm text-9e-slate file:mr-3 file:rounded-9e-sm file:border-0 file:bg-9e-action/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-9e-action hover:file:bg-9e-action/20"
+          className="block w-full text-sm text-9e-slate-dp-50 file:mr-3 file:rounded-9e-sm file:border-0 file:bg-9e-action/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-9e-action hover:file:bg-9e-action/20"
         />
         {file ? (
-          <p className="mt-2 text-xs text-9e-slate">
+          <p className="mt-2 text-xs text-9e-slate-dp-50">
             {file.name} · {formatBytes(file.size)}
           </p>
         ) : null}

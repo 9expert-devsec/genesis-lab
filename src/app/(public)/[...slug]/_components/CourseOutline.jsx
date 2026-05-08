@@ -71,12 +71,12 @@ export function CourseOutline({ course }) {
                 </span>
                 {open ? (
                   <ChevronUp
-                    className="h-4 w-4 shrink-0 text-9e-slate"
+                    className="h-4 w-4 shrink-0 text-9e-slate-dp-50"
                     strokeWidth={2}
                   />
                 ) : (
                   <ChevronDown
-                    className="h-4 w-4 shrink-0 text-9e-slate"
+                    className="h-4 w-4 shrink-0 text-9e-slate-dp-50"
                     strokeWidth={2}
                   />
                 )}
@@ -93,7 +93,7 @@ export function CourseOutline({ course }) {
                     {bullets.map((bullet, j) => (
                       <li
                         key={j}
-                        className="flex items-start gap-2 text-sm text-9e-slate"
+                        className="flex items-start gap-2 text-sm text-9e-slate-dp-50"
                       >
                         <span className="mt-1 shrink-0 text-9e-air">•</span>
                         <span>{bullet}</span>

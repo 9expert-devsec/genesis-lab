@@ -42,7 +42,7 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
 
         <div className="mx-auto mt-6 flex max-w-xl items-center gap-3 rounded-full bg-white px-5 py-3 shadow-md dark:bg-[#111d2c] dark:shadow-none dark:ring-1 dark:ring-[#1e3a5f]">
           <Search
-            className="h-5 w-5 flex-none text-9e-slate"
+            className="h-5 w-5 flex-none text-9e-slate-dp-50"
             strokeWidth={1.75}
           />
           <input
@@ -51,7 +51,7 @@ export function HeroSearch({ defaultValue = '', onDebouncedChange }) {
             onChange={(e) => setValue(e.target.value)}
             placeholder="ค้นหาหลักสูตร"
             aria-label="ค้นหาหลักสูตร"
-            className="min-w-0 flex-1 border-0 bg-transparent text-9e-navy placeholder:text-9e-slate focus:outline-none focus:ring-0 dark:text-white"
+            className="min-w-0 flex-1 border-0 bg-transparent text-9e-navy placeholder:text-9e-slate-lt-400 dark:placeholder:text-9e-slate-dp-400 focus:outline-none focus:ring-0 dark:text-white"
           />
         </div>
       </div>

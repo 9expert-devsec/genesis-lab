@@ -72,7 +72,7 @@ export function PromotionConfigForm({ promotion, config }) {
             }
           />
           {previewUrl && (
-            <p className="mt-1 text-xs text-9e-slate dark:text-[#94a3b8]">
+            <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
               พรีวิว:{' '}
               <Link
                 href={previewUrl}
@@ -152,7 +152,7 @@ export function PromotionConfigForm({ promotion, config }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">
+      <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {label}
         {hint && <span className="ml-2 font-normal italic">{hint}</span>}
       </p>

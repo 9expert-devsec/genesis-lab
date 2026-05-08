@@ -70,7 +70,7 @@ export default function ScheduleCard({
             className={cx(
               "leading-none text-center whitespace-nowrap",
               i === lines.length - 1 && lines.length > 1
-                ? "text-[0.6rem] sm:text-[0.72rem] font-bold text-9e-slate dark:text-white"
+                ? "text-[0.6rem] sm:text-[0.72rem] font-bold text-9e-slate-dp-50 dark:text-white"
                 : "text-[0.68rem] sm:text-[0.82rem] font-bold text-9e-navy dark:text-white"
             )}
           >

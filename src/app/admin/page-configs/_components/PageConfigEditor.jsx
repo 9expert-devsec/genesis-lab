@@ -31,7 +31,7 @@ export function PageConfigEditor({ kind, items, configs, urlPrefix }) {
   return (
     <ul className="divide-y divide-[var(--surface-border)] rounded-2xl border border-[var(--surface-border)] bg-white dark:bg-9e-navy">
       {items.length === 0 ? (
-        <li className="px-4 py-6 text-center text-sm text-9e-slate">
+        <li className="px-4 py-6 text-center text-sm text-9e-slate-dp-50">
           ไม่พบรายการ
         </li>
       ) : (
@@ -83,17 +83,17 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-9e-navy dark:text-white">
           {item.name}{' '}
-          <span className="ml-2 font-normal text-xs text-9e-slate">
+          <span className="ml-2 font-normal text-xs text-9e-slate-dp-50">
             ({item.id})
           </span>
         </p>
-        <p className="truncate text-xs text-9e-slate dark:text-[#94a3b8]">
+        <p className="truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {urlPrefix}
           <span
             className={
               isCustomSlug
                 ? 'font-medium text-9e-action'
-                : 'italic text-9e-slate'
+                : 'italic text-9e-slate-dp-50'
             }
           >
             {slug}
@@ -101,7 +101,7 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
           {!isCustomSlug && ' (default)'}
         </p>
       </div>
-      <span className="shrink-0 rounded-md bg-9e-ice px-2 py-1 text-xs font-medium text-9e-slate dark:bg-[#111d2c] dark:text-[#94a3b8]">
+      <span className="shrink-0 rounded-md bg-9e-ice px-2 py-1 text-xs font-medium text-9e-slate-dp-50 dark:bg-[#111d2c] dark:text-[#94a3b8]">
         {isOpen ? 'ปิด' : 'แก้ไข'}
       </span>
     </button>
@@ -244,7 +244,7 @@ function EditForm({ kind, item, config, onSaved }) {
 function Field({ label, hint, children }) {
   return (
     <div>
-      <p className="mb-1 text-xs font-semibold text-9e-slate dark:text-[#94a3b8]">
+      <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
         {label}
         {hint && <span className="ml-2 font-normal italic">{hint}</span>}
       </p>

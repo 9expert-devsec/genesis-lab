@@ -41,7 +41,7 @@ export default async function PromotionConfigPage({ params }) {
         <h1 className="mt-2 text-2xl font-bold text-9e-navy dark:text-white">
           ตั้งค่า URL &amp; SEO
         </h1>
-        <p className="mt-1 text-sm text-9e-slate dark:text-[#94a3b8]">
+        <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {promotion.title}
         </p>
       </div>

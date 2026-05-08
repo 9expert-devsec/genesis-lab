@@ -53,11 +53,11 @@ function ErrorState({ message }) {
           <AlertTriangle className="h-5 w-5 text-9e-action" strokeWidth={1.75} />
         </div>
         <p className="text-base font-semibold text-9e-navy">โหลดข้อมูลไม่สำเร็จ</p>
-        <p className="mt-1 text-sm text-9e-slate">
+        <p className="mt-1 text-sm text-9e-slate-dp-50">
           กรุณาลองใหม่อีกครั้ง หรือติดต่อเราหากปัญหายังคงอยู่
         </p>
         {process.env.NODE_ENV !== 'production' && message && (
-          <pre className="mt-4 max-w-full overflow-x-auto rounded bg-9e-ice p-3 text-left text-xs text-9e-slate">
+          <pre className="mt-4 max-w-full overflow-x-auto rounded bg-9e-ice p-3 text-left text-xs text-9e-slate-dp-50">
             {message}
           </pre>
         )}

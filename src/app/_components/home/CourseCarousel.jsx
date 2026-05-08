@@ -50,7 +50,7 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
 
   if (!courses?.length) {
     return (
-      <p className="py-10 text-center text-sm text-9e-slate">
+      <p className="py-10 text-center text-sm text-9e-slate-dp-50">
         ยังไม่มีคอร์สในขณะนี้
       </p>
     );
