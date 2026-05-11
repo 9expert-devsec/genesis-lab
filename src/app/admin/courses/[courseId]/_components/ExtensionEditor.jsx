@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { ImageIcon, Youtube, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { saveCourseExtension } from '@/lib/actions/course-extensions';
 import { cn } from '@/lib/utils';
+import { CoursePromoLinksTab } from './CoursePromoLinksTab';
+import { EarlyBirdTab } from './EarlyBirdTab';
 
 /**
  * SEO + gallery editor for a single course.
@@ -15,7 +17,14 @@ import { cn } from '@/lib/utils';
  * change without a full reload.
  */
 
-export function ExtensionEditor({ courseId, courseName, initialData }) {
+export function ExtensionEditor({
+  courseId,
+  courseName,
+  initialData,
+  initialPromoLinks = [],
+  initialEarlyBird = null,
+  initialPromos = [],
+}) {
   const router = useRouter();
 
   const [tab, setTab] = useState('seo');
@@ -70,8 +79,7 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
     });
   }
 
-  async function handleSave(e) {
-    e.preventDefault();
+  async function handleSave() {
     setSaving(true);
     setMessage(null);
     try {
@@ -100,8 +108,10 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
     }
   }
 
+  const isExtensionTab = tab === 'seo' || tab === 'gallery';
+
   return (
-    <form onSubmit={handleSave} className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold text-[var(--text-primary)]">
           {courseName}
@@ -116,6 +126,8 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
         {[
           { id: 'seo', label: 'SEO & Meta' },
           { id: 'gallery', label: `Gallery (${gallery.length})` },
+          { id: 'promos', label: 'โปรโมชัน' },
+          { id: 'earlybird', label: 'Early Bird' },
         ].map((t) => (
           <button
             key={t.id}
@@ -245,26 +257,45 @@ export function ExtensionEditor({ courseId, courseName, initialData }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t border-[var(--surface-border)] pt-4">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-9e-md bg-9e-action px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
-        >
-          {saving ? 'กำลังบันทึก...' : 'บันทึก'}
-        </button>
-        {message && (
-          <span
-            className={cn(
-              'text-sm font-medium',
-              message.type === 'ok' ? 'text-green-600' : 'text-red-600'
-            )}
+      {tab === 'promos' && (
+        <CoursePromoLinksTab
+          courseId={courseId}
+          initialLinks={initialPromoLinks}
+          initialPromos={initialPromos}
+        />
+      )}
+
+      {tab === 'earlybird' && (
+        <EarlyBirdTab
+          courseId={courseId}
+          initialData={initialEarlyBird}
+          initialPromos={initialPromos}
+        />
+      )}
+
+      {isExtensionTab && (
+        <div className="flex items-center gap-3 border-t border-[var(--surface-border)] pt-4">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className="rounded-9e-md bg-9e-action px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-9e-brand disabled:opacity-50"
           >
-            {message.text}
-          </span>
-        )}
-      </div>
-    </form>
+            {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+          </button>
+          {message && (
+            <span
+              className={cn(
+                'text-sm font-medium',
+                message.type === 'ok' ? 'text-green-600' : 'text-red-600'
+              )}
+            >
+              {message.text}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

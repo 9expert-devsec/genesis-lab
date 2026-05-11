@@ -72,6 +72,19 @@ function shapeUpsert(item, syncedAt) {
         html_content:   toString(item?.detail_html),
         detail_plain:   toString(item?.detail_plain),
         tags:           shapeTags(item?.tags),
+        // Upstream sends `related_public_courses` as an array of objects
+        // ({ _id, course_id, course_name }). We store the human-readable
+        // `course_id` (e.g. "MSE-AI") so it joins against our CoursePromoLink
+        // and ExtensionEditor key. Mongo `_id` would not match.
+        // Empty = "applies to every course".
+        related_course_ids: Array.isArray(item?.related_public_courses)
+          ? item.related_public_courses
+              .map((c) => {
+                if (typeof c === 'string') return c.trim();
+                return String(c?.course_id ?? '').trim();
+              })
+              .filter(Boolean)
+          : [],
         is_published:   Boolean(item?.is_published),
         is_pinned:      Boolean(item?.is_pinned),
         publish_status: toString(item?.publish_status),

@@ -12,6 +12,11 @@ import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
+import {
+  getAllCoursePromoLinks,
+  getEarlyBirdAdminByCourse,
+} from '@/lib/actions/course-promos';
+import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
 import { ExtensionEditor } from './_components/ExtensionEditor';
 
 export const runtime = 'nodejs';
@@ -32,10 +37,16 @@ export default async function AdminCourseExtensionPage({ params }) {
   // Don't 404 if the upstream call fails — let the editor still work
   // so admins can fix data even when the API is down. We just won't
   // show the friendly course name.
-  const [courseResult, extension] = await Promise.allSettled([
-    getCourseByCode(courseId),
-    getCourseExtension(courseId),
-  ]).then((results) => results.map((r) => (r.status === 'fulfilled' ? r.value : null)));
+  const [courseResult, extension, promoLinks, earlyBirdAdmin, activePromos] =
+    await Promise.allSettled([
+      getCourseByCode(courseId),
+      getCourseExtension(courseId),
+      getAllCoursePromoLinks(courseId),
+      getEarlyBirdAdminByCourse(courseId),
+      getActivePromotionsForAdmin(),
+    ]).then((results) =>
+      results.map((r) => (r.status === 'fulfilled' ? r.value : null))
+    );
 
   // If the upstream returned a course that doesn't match by id (older
   // upstream IDs sometimes drift), fall back to the courseId param.
@@ -66,6 +77,9 @@ export default async function AdminCourseExtensionPage({ params }) {
         courseId={courseId}
         courseName={courseName}
         initialData={extension}
+        initialPromoLinks={promoLinks ?? []}
+        initialEarlyBird={earlyBirdAdmin ?? null}
+        initialPromos={activePromos ?? []}
       />
     </div>
   );

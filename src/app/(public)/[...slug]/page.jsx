@@ -18,6 +18,12 @@ import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
 import { CourseGallery } from './_components/CourseGallery';
+import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
+import { CoursePromoSection } from './_components/CoursePromoSection';
+import {
+  getEarlyBirdByCourse,
+  getActiveCoursePromos,
+} from '@/lib/actions/course-promos';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -86,14 +92,21 @@ export default async function CatchAllPage({ params }) {
     // which the hero gradient uses; the course detail response doesn't
     // include it. If the programs fetch fails we fall through to the
     // skillcolor fallback in CourseDetail.
-    const [scheduleRes, programsRes] = await Promise.allSettled([
-      listSchedulesByCourse(course._id, { limit: 10 }),
-      listPrograms(),
-    ]);
+    const [scheduleRes, programsRes, earlyBirdRes, coursePromosRes] =
+      await Promise.allSettled([
+        listSchedulesByCourse(course._id, { limit: 10 }),
+        listPrograms(),
+        getEarlyBirdByCourse(course.course_id),
+        getActiveCoursePromos(course.course_id),
+      ]);
     const schedules =
       scheduleRes.status === 'fulfilled' ? scheduleRes.value.items : [];
     const programs =
       programsRes.status === 'fulfilled' ? programsRes.value.items : [];
+    const earlyBird =
+      earlyBirdRes.status === 'fulfilled' ? earlyBirdRes.value : null;
+    const coursePromos =
+      coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
 
     return (
       <CourseDetail
@@ -101,6 +114,8 @@ export default async function CatchAllPage({ params }) {
         extension={extension}
         schedules={schedules}
         programs={programs}
+        earlyBird={earlyBird}
+        coursePromos={coursePromos}
       />
     );
   }
@@ -130,13 +145,23 @@ export default async function CatchAllPage({ params }) {
   notFound();
 }
 
-function CourseDetail({ course, extension, schedules, programs }) {
+function CourseDetail({
+  course,
+  extension,
+  schedules,
+  programs,
+  earlyBird,
+  coursePromos,
+}) {
   const hasSchedules = Boolean(schedules?.length);
   const relatedCourses = Array.isArray(course.related_courses)
     ? course.related_courses
     : [];
   const hasRelated = relatedCourses.length > 0;
   const gallery = Array.isArray(extension?.gallery) ? extension.gallery : [];
+  // `getEarlyBirdByCourse` joins the linked Promotion as `promotion` so
+  // the banner can render the thumbnail without a second DB hit.
+  const earlyBirdPromotion = earlyBird?.promotion ?? null;
 
   // Hero gradient base — prefer the program's `programcolor` (carried on
   // `/programs`, not on the course detail). Fall back to the first
@@ -152,9 +177,20 @@ function CourseDetail({ course, extension, schedules, programs }) {
       <CourseHero course={course} heroColor={heroColor} />
       <SkillBreadcrumb course={course} />
 
-      <div className="mx-auto max-w-[1280px] px-4 py-8 lg:px-6">
+      <div className="mx-auto max-w-[1200px] py-8 ">
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]">
           <div className="min-w-0 space-y-10">
+            {earlyBird && (
+              <EarlyBirdBanner
+                earlyBird={earlyBird}
+                earlyBirdPromotion={earlyBirdPromotion}
+                schedules={schedules}
+                course={course}
+              />
+            )}
+            {Array.isArray(coursePromos) && coursePromos.length > 0 && (
+              <CoursePromoSection coursePromos={coursePromos} />
+            )}
             {gallery.length > 0 && (
               <section aria-label="แกลเลอรี่หลักสูตร">
                 <CourseGallery gallery={gallery} />

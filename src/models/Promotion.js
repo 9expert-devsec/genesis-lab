@@ -42,6 +42,10 @@ const PromotionSchema = new mongoose.Schema(
       default: [],
     },
 
+    // Upstream-linked public course IDs (course_id strings, e.g. ["MSE-AI", "MANUS-EXC"])
+    // Synced from upstream API's related_courses array. Empty = applies to all courses.
+    related_course_ids: { type: [String], default: [] },
+
     // Upstream publish/status flags, mirrored for filtering convenience.
     is_published:   { type: Boolean, default: true },
     is_pinned:      { type: Boolean, default: false },

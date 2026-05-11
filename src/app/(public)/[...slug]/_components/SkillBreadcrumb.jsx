@@ -13,7 +13,7 @@ export function SkillBreadcrumb({ course }) {
     : null;
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 lg:px-6">
+    <div className="mx-auto max-w-[1200px]">
       <div className="flex flex-wrap gap-2 py-4">
         {skills.map((s) => (
           <span

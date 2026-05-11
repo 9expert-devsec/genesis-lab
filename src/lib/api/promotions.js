@@ -22,13 +22,18 @@ export async function listPromotions({
   includeExpired = false,
   includeUnpublished = false,
   includeScheduled = false,
+  withFullCourses = true,
 } = {}) {
+  // `withFullCourses=true` is required for `related_public_courses` to
+  // return the complete course list — without it upstream truncates the
+  // array, leaving our synced `related_course_ids` partial.
   const raw = await aiFetch(PATH, {
     tags: ['promotions'],
     params: {
-      includeExpired:     includeExpired ? 'true' : undefined,
+      includeExpired:     includeExpired     ? 'true' : undefined,
       includeUnpublished: includeUnpublished ? 'true' : undefined,
-      includeScheduled:   includeScheduled ? 'true' : undefined,
+      includeScheduled:   includeScheduled   ? 'true' : undefined,
+      withFullCourses:    withFullCourses    ? 'true' : undefined,
     },
   });
   return unwrap(raw);

@@ -131,3 +131,19 @@ export async function syncPromotionsAction() {
   revalidatePath('/promotions');
   return result;
 }
+
+/**
+ * Admin-only — minimal list of active promotions used to populate
+ * dropdowns in the course-level admin tabs (CoursePromoLinksTab,
+ * EarlyBirdTab).
+ */
+export async function getActivePromotionsForAdmin() {
+  await requireAdmin();
+  await dbConnect();
+  const docs = await Promotion
+    .find({ is_active: true })
+    .sort({ display_order: 1 })
+    .select('promotion_id title thumbnail_url related_course_ids')
+    .lean();
+  return serialize(docs);
+}
