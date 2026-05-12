@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
@@ -23,7 +23,7 @@ const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
  * `course.schedules` is optional; when present (pre-fetched server-side)
  * the expand panel shows up to 3 upcoming sessions as signup pills.
  */
-export function CourseCard({ course, className }) {
+function CourseCardComponent({ course, className }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!course) return null;
@@ -160,7 +160,10 @@ export function CourseCard({ course, className }) {
             )}
             {hasCertificate && (
               <span className="inline-flex items-center gap-1">
-                <Award className="h-3 w-3 text-9e-action dark:text-white" strokeWidth={2} />
+                <Award
+                  className="h-3 w-3 text-9e-action dark:text-white"
+                  strokeWidth={2}
+                />
                 e-Certificate
               </span>
             )}
@@ -183,10 +186,13 @@ export function CourseCard({ course, className }) {
         <div
           className={cn(
             "overflow-hidden transition-[max-height] duration-9e-reveal ease-in-out",
-            expanded ? "max-h-96" : "max-h-0",
+            {
+              "max-h-96": expanded,
+              "max-h-0": !expanded,
+            },
           )}
         >
-          <div className="border-t border-9e-air/30 bg-[#ffffff] px-4 pb-4 pt-3 dark:bg-9e-navy">
+          <div className="border-t border-9e-air/30 bg-[#ffffff] px-4 pt-3 dark:bg-9e-navy">
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
               <span>รอบการอบรม</span>
               <span className="inline-flex items-center gap-1.5">
@@ -198,35 +204,35 @@ export function CourseCard({ course, className }) {
                 Hybrid
               </span>
             </div>
-
-            <div className="scrollbar-hide flex flex-nowrap items-start justify-between gap-1.5 overflow-x-auto pb-1 pt-2 sm:gap-2">
-              {schedules.slice(0, 3).map((s, idx) => {
-                const card = (
-                  <ScheduleCard
-                    key={s._id ?? idx}
-                    dateLabel={formatScheduleDate(s)}
-                    type={s.type || "classroom"}
-                    status={formatStatusFromAPI(s.status)}
-                  />
-                );
-                return s.signup_url ? (
-                  <a
-                    key={s._id ?? idx}
-                    href={s.signup_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
-                  >
-                    {card}
-                  </a>
-                ) : (
-                  card
-                );
-              })}
+            <div className="@container">
+              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-4 overflow-x-auto  pt-2">
+                {schedules.slice(0, 3).map((s, idx) => {
+                  const card = (
+                    <ScheduleCard
+                      key={s._id ?? idx}
+                      dateLabel={formatScheduleDate(s)}
+                      type={s.type || "classroom"}
+                      status={formatStatusFromAPI(s.status)}
+                    />
+                  );
+                  return s.signup_url ? (
+                    <a
+                      key={s._id ?? idx}
+                      href={s.signup_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
+                    >
+                      {card}
+                    </a>
+                  ) : (
+                    card
+                  );
+                })}
+              </div>
             </div>
           </div>
           {/* Collapse-only control — small triangle centered at the panel bottom */}
-         
         </div>
       )}
 
@@ -241,13 +247,13 @@ export function CourseCard({ course, className }) {
       ) : !schedules?.length ? null : expanded ? (
         /* สถานะเมื่อขยายแล้ว: แสดงปุ่มเพื่อหุบเก็บ */
         <button
-              type="button"
-              onClick={() => setExpanded(false)}
-              aria-label="ย่อรอบอบรม"
-              className="text-base text-9e-action transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
-            >
-              ▲
-            </button>
+          type="button"
+          onClick={() => setExpanded(false)}
+          aria-label="ย่อรอบอบรม"
+          className="text-base text-9e-action transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
+        >
+          ▲
+        </button>
       ) : (
         /* สถานะเมื่อปิดอยู่: แสดงปุ่มเพื่อกดดู */
         <button
@@ -263,3 +269,4 @@ export function CourseCard({ course, className }) {
   );
 }
 
+export const CourseCard = memo(CourseCardComponent);

@@ -147,7 +147,7 @@ export function CourseListClient({ items, programOrder = [] }) {
         programOptions={programOptions}
       />
 
-      <div className="mx-auto max-w-[1200px] px-4 py-8 lg:py-10">
+      <div className="mx-auto max-w-[1200px] py-8 lg:py-10">
         <div className="mb-6 flex items-center justify-between gap-4">
           <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
             ผลลัพธ์การค้นหา{' '}

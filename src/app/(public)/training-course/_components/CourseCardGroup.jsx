@@ -23,9 +23,12 @@ export function CourseCardGroup({ program, courses }) {
         </span>
       </div>
       <hr className="mb-4 border-gray-100 dark:border-[#1e3a5f]" />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {courses.map((c) => (
-          <CourseCard key={c._id ?? c.course_id} course={c} />
+          <CourseCard
+            key={c._id ?? `${c.course_id}-${c.course_name}`}
+            course={c}
+          />
         ))}
       </div>
     </section>

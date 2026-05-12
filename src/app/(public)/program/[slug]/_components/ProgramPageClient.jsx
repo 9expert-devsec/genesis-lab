@@ -96,7 +96,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
       </section>
 
       {/* ── Course grid ───────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1200px] px-4 pt-10 lg:px-6 lg:pt-14">
+      <section className="mx-auto max-w-[1200px] pt-10 lg:pt-14">
         <div className="mb-6 flex items-center gap-3">
           {program?.programiconurl && (
             <Image
@@ -121,7 +121,7 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
             ยังไม่มีหลักสูตรในโปรแกรมนี้
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
             {courses.map((c) => (
               <CourseCard key={c._id ?? c.course_id} course={c} />
             ))}
