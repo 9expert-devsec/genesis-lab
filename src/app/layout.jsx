@@ -11,12 +11,9 @@ import './globals.css';
 const googleSans = localFont({
   src: [
     { path: '../fonts/GoogleSans-Regular.ttf',        weight: '400', style: 'normal' },
-    { path: '../fonts/GoogleSans-Italic.ttf',         weight: '400', style: 'italic' },
     { path: '../fonts/GoogleSans-Medium.ttf',         weight: '500', style: 'normal' },
-    { path: '../fonts/GoogleSans-MediumItalic.ttf',   weight: '500', style: 'italic' },
     { path: '../fonts/GoogleSans-SemiBold.ttf',       weight: '600', style: 'normal' },
     { path: '../fonts/GoogleSans-Bold.ttf',           weight: '700', style: 'normal' },
-    { path: '../fonts/GoogleSans-BoldItalic.ttf',     weight: '700', style: 'italic' },
   ],
   variable: '--font-en',
   display: 'swap',

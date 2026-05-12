@@ -159,6 +159,7 @@ export function InstructorQuote() {
             height={500}
             className="object-contain object-bottom"
             style={{ maxHeight: '425px' }}
+            priority
           />
 
           <div className="text-center lg:hidden py-6">

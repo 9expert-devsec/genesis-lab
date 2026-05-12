@@ -363,9 +363,10 @@ function BannerSlide({ banner, isActive = true }) {
                 <div className="relative aspect-video rounded-9e-lg overflow-hidden shadow-9e-lg order-1 lg:order-2">
                   <iframe
                     src={`https://www.youtube.com/embed/${banner.youtube_id}?rel=0`}
-                    title={banner.title}
+                    title={banner.title || 'YouTube video'}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
+                    loading="lazy"
                     className="absolute inset-0 w-full h-full"
                   />
                 </div>
