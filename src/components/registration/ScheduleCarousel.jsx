@@ -110,6 +110,18 @@ const STATUS_CLASS = {
   closed: 'bg-slate-100 text-slate-500',
 };
 
+const TYPE_LABEL = {
+  hybrid:    'Hybrid',
+  online:    'Online',
+  classroom: 'Classroom',
+};
+
+const TYPE_BADGE_CLASS = {
+  hybrid:    'bg-violet-100 text-violet-700',
+  online:    'bg-emerald-100 text-emerald-700',
+  classroom: 'bg-sky-100 text-sky-700',
+};
+
 function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
   const dates = [...(schedule.dates || [])].sort();
   const start = dates[0] ? new Date(dates[0]) : null;
@@ -157,6 +169,16 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
       >
         {statusLabel}
       </span>
+      {schedule.type && schedule.type !== 'classroom' && (
+        <span
+          className={cn(
+            'mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
+            TYPE_BADGE_CLASS[schedule.type] ?? 'bg-slate-100 text-slate-600'
+          )}
+        >
+          {TYPE_LABEL[schedule.type] ?? schedule.type}
+        </span>
+      )}
     </button>
   );
 }

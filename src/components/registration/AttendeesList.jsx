@@ -8,6 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
+// MAX_ATTENDEES controls the upper limit of the attendee count <select>.
+// The matching schema constraint is in src/lib/schemas/register-public.js
+// (publicRegistrationSchema → attendeesCount → .max(MAX_ATTENDEES)).
+// Change both values together if the limit needs adjusting.
 const MAX_ATTENDEES = 20;
 
 const EMPTY_ATTENDEE = { firstName: '', lastName: '', email: '', phone: '' };
@@ -76,6 +80,7 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
       <div className="grid gap-4 sm:grid-cols-[160px_1fr] sm:items-end">
         <div>
           <Label className="mb-1.5 block">จำนวนผู้สมัคร</Label>
+          {/* Attendee count selector — upper bound is MAX_ATTENDEES (line above). */}
           <select
             {...register('attendeesCount', { valueAsNumber: true })}
             className={cn(

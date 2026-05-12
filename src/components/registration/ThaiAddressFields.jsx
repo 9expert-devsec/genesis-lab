@@ -1,139 +1,211 @@
 'use client';
 
-import { useMemo } from 'react';
-import { CreateInput } from 'thai-address-autocomplete-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { getDataForZipCode } from 'thai-data';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 
 /**
- * Thai address input — 1 free-text line + 4 autocomplete dropdowns
- * (ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์). Selecting any suggestion
- * auto-fills the other three.
+ * Thai address input — zip-code-first autocomplete.
  *
- * The underlying package (`thai-address-autocomplete-react`) wraps
- * Antd's AutoComplete and exposes its own field names:
- *   district → ตำบล  (our schema: subDistrict)
- *   amphoe   → อำเภอ  (our schema: district)
- *   province → จังหวัด (our schema: province)
- *   zipcode  → รหัสไปรษณีย์ (our schema: postalCode)
+ * UX flow:
+ *   1. User enters รหัสไปรษณีย์ (5 digits)
+ *   2. Valid zip → auto-fills เขต/อำเภอ and จังหวัด, populates
+ *      แขวง/ตำบล dropdown
+ *   3. User picks แขวง/ตำบล from the dropdown
+ *   4. Each field remains manually editable after autofill
  *
- * We adapt at the component boundary; downstream code sees our
- * canonical names.
+ * Uses `thai-data` (zero runtime deps, 77 provinces, 978 zip codes)
+ * instead of the Antd-based thai-address-autocomplete-react which is
+ * incompatible with React 19.
  *
  * Props:
  * - value:    { addressLine, subDistrict, district, province, postalCode }
- * - onChange: (next) => void — fires on every edit
- * - errors:   RHF errors object scoped to the parent (e.g. errors.invoice)
- * - prefix:   key under `errors` where address errors live (default: 'address')
+ * - onChange: (next) => void
+ * - errors:   RHF errors object scoped to the parent
+ * - prefix:   key under errors where address errors live (default: 'address')
  */
 export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' }) {
-  // One InputThaiAddress instance per component mount
-  const Input = useMemo(() => CreateInput(), []);
-
-  const update = (key) => (next) => {
-    onChange({ ...value, [key]: next });
-  };
-
-  // When autocomplete selects a full address, fill the four fields
-  // together. Our schema naming differs from the package's — map here.
-  const handleSelect = (selected) => {
-    onChange({
-      ...value,
-      subDistrict: selected.district ?? '',
-      district:    selected.amphoe ?? '',
-      province:    selected.province ?? '',
-      postalCode:  selected.zipcode ?? '',
-    });
-  };
+  // subDistrict options derived from the current postalCode
+  const [subDistrictOptions, setSubDistrictOptions] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef(null);
 
   const err = (k) => errors?.[prefix]?.[k]?.message;
 
-  const autoCompleteClass =
-    'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)]';
+  const update = useCallback(
+    (key, val) => onChange({ ...value, [key]: val }),
+    [value, onChange]
+  );
+
+  // When postalCode reaches 5 digits, look up district + province and
+  // populate the subDistrict dropdown. Clear derived fields on invalid zip.
+  useEffect(() => {
+    const zip = (value.postalCode ?? '').trim();
+    if (zip.length !== 5) {
+      setSubDistrictOptions([]);
+      return;
+    }
+    const entry = getDataForZipCode(zip);
+    if (!entry) {
+      setSubDistrictOptions([]);
+      return;
+    }
+
+    const district = entry.districtList?.[0]?.districtName ?? '';
+    const province = entry.provinceList?.[0]?.provinceName ?? '';
+    const subs     = entry.subDistrictList?.map((s) => s.subDistrictName) ?? [];
+
+    setSubDistrictOptions(subs);
+
+    // Auto-fill เขต/อำเภอ and จังหวัด (preserve existing subDistrict if
+    // it still appears in the new zip's list, otherwise clear it)
+    const currentSub = value.subDistrict ?? '';
+    onChange({
+      ...value,
+      postalCode:  zip,
+      district,
+      province,
+      subDistrict: subs.includes(currentSub) ? currentSub : '',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.postalCode]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelectSubDistrict = (name) => {
+    update('subDistrict', name);
+    setShowDropdown(false);
+  };
+
+  const inputCls = cn(
+    'h-11 w-full rounded-9e-md border bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)]',
+    'border-[var(--surface-border)]',
+    'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand'
+  );
 
   return (
     <div className="grid gap-4">
-      <div>
-        <Label htmlFor="addressLine" className="mb-1.5 block">
-          ที่อยู่ <span className="text-9e-accent">*</span>
-        </Label>
+      {/* ── ที่อยู่ ──────────────────────────────────────── */}
+      <FieldGroup label="ที่อยู่" error={err('addressLine')} required>
         <input
-          id="addressLine"
           type="text"
-          value={value.addressLine}
-          onChange={(e) => update('addressLine')(e.target.value)}
-          className="h-11 w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] focus-visible:border-9e-brand focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-9e-brand"
-          placeholder="บ้านเลขที่ หมู่ ถนน"
+          value={value.addressLine ?? ''}
+          onChange={(e) => update('addressLine', e.target.value)}
+          className={inputCls}
+          placeholder="บ้านเลขที่ หมู่ ถนน อาคาร"
         />
-        {err('addressLine') && (
-          <p className="mt-1 text-xs text-9e-accent">{err('addressLine')}</p>
-        )}
+      </FieldGroup>
+
+      {/* ── Zip → auto-fills district + province ─────── */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FieldGroup label="รหัสไปรษณีย์" error={err('postalCode')} required>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={5}
+            value={value.postalCode ?? ''}
+            onChange={(e) => update('postalCode', e.target.value.replace(/\D/g, ''))}
+            className={inputCls}
+            placeholder="เช่น 10400"
+          />
+        </FieldGroup>
+
+        {/* ── แขวง / ตำบล with dropdown ────────────────── */}
+        <FieldGroup label="แขวง / ตำบล" error={err('subDistrict')} required>
+          <div className="relative" ref={dropdownRef}>
+            <input
+              type="text"
+              value={value.subDistrict ?? ''}
+              onChange={(e) => {
+                update('subDistrict', e.target.value);
+                setShowDropdown(true);
+              }}
+              onFocus={() => subDistrictOptions.length > 0 && setShowDropdown(true)}
+              className={inputCls}
+              placeholder={subDistrictOptions.length > 0 ? 'เลือกหรือพิมพ์' : 'กรอกรหัสไปรษณีย์ก่อน'}
+              readOnly={subDistrictOptions.length === 0}
+              aria-haspopup="listbox"
+              aria-expanded={showDropdown}
+            />
+
+            {showDropdown && subDistrictOptions.length > 0 && (
+              <ul
+                role="listbox"
+                className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] shadow-9e-md"
+              >
+                {subDistrictOptions
+                  .filter((s) =>
+                    !value.subDistrict ||
+                    s.includes(value.subDistrict)
+                  )
+                  .map((name) => (
+                    <li
+                      key={name}
+                      role="option"
+                      aria-selected={value.subDistrict === name}
+                      onMouseDown={() => handleSelectSubDistrict(name)}
+                      className={cn(
+                        'cursor-pointer px-3 py-2 text-sm',
+                        value.subDistrict === name
+                          ? 'bg-9e-brand/10 font-medium text-[var(--text-primary)]'
+                          : 'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]'
+                      )}
+                    >
+                      {name}
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        </FieldGroup>
+
+        {/* ── เขต / อำเภอ — autofilled ──────────────────── */}
+        <FieldGroup label="เขต / อำเภอ" error={err('district')} required>
+          <input
+            type="text"
+            value={value.district ?? ''}
+            onChange={(e) => update('district', e.target.value)}
+            className={inputCls}
+            placeholder="อัตโนมัติเมื่อกรอกรหัสไปรษณีย์"
+          />
+        </FieldGroup>
+
+        {/* ── จังหวัด — autofilled ─────────────────────── */}
+        <FieldGroup label="จังหวัด" error={err('province')} required>
+          <input
+            type="text"
+            value={value.province ?? ''}
+            onChange={(e) => update('province', e.target.value)}
+            className={inputCls}
+            placeholder="อัตโนมัติเมื่อกรอกรหัสไปรษณีย์"
+          />
+        </FieldGroup>
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <Label className="mb-1.5 block">
-            แขวง / ตำบล <span className="text-9e-accent">*</span>
-          </Label>
-          <Input.District
-            value={value.subDistrict}
-            onChange={update('subDistrict')}
-            onSelect={handleSelect}
-            className={autoCompleteClass}
-            autoCompleteProps={{ placeholder: 'แขวง / ตำบล' }}
-          />
-          {err('subDistrict') && (
-            <p className="mt-1 text-xs text-9e-accent">{err('subDistrict')}</p>
-          )}
-        </div>
+// ── Shared atom ─────────────────────────────────────────────────
 
-        <div>
-          <Label className="mb-1.5 block">
-            เขต / อำเภอ <span className="text-9e-accent">*</span>
-          </Label>
-          <Input.Amphoe
-            value={value.district}
-            onChange={update('district')}
-            onSelect={handleSelect}
-            className={autoCompleteClass}
-            autoCompleteProps={{ placeholder: 'เขต / อำเภอ' }}
-          />
-          {err('district') && (
-            <p className="mt-1 text-xs text-9e-accent">{err('district')}</p>
-          )}
-        </div>
-
-        <div>
-          <Label className="mb-1.5 block">
-            จังหวัด <span className="text-9e-accent">*</span>
-          </Label>
-          <Input.Province
-            value={value.province}
-            onChange={update('province')}
-            onSelect={handleSelect}
-            className={autoCompleteClass}
-            autoCompleteProps={{ placeholder: 'จังหวัด' }}
-          />
-          {err('province') && (
-            <p className="mt-1 text-xs text-9e-accent">{err('province')}</p>
-          )}
-        </div>
-
-        <div>
-          <Label className="mb-1.5 block">
-            รหัสไปรษณีย์ <span className="text-9e-accent">*</span>
-          </Label>
-          <Input.Zipcode
-            value={value.postalCode}
-            onChange={update('postalCode')}
-            onSelect={handleSelect}
-            className={autoCompleteClass}
-            autoCompleteProps={{ placeholder: 'รหัสไปรษณีย์' }}
-          />
-          {err('postalCode') && (
-            <p className="mt-1 text-xs text-9e-accent">{err('postalCode')}</p>
-          )}
-        </div>
-      </div>
+function FieldGroup({ label, error, required, children }) {
+  return (
+    <div>
+      <Label className="mb-1.5 block">
+        {label}
+        {required && <span className="ml-0.5 text-9e-accent">*</span>}
+      </Label>
+      {children}
+      {error && <p className="mt-1 text-xs text-9e-accent">{error}</p>}
     </div>
   );
 }

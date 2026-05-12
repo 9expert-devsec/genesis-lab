@@ -61,6 +61,8 @@ export async function POST(req) {
     courseName: data.courseName,
     classId: data.classId,
     classDate: data.classDate,
+    scheduleType: data.scheduleType ?? 'classroom',
+    attendanceMode: data.attendanceMode ?? 'classroom',
     coordinator: data.coordinator,
     attendeesCount: data.attendeesCount,
     attendeesListProvided: data.attendeesListProvided,
@@ -81,14 +83,43 @@ export async function POST(req) {
   const adminDashboardUrl = `${baseUrl}/admin/registrations/${doc._id}`;
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
 
-  // Email templates still use the Phase 2.5a shape (firstName at the
-  // top level). Remap from coordinator until the templates are
-  // rewritten in sub-phase 2.5a-4.
+  // Pre-compute flat invoice display strings for email templates.
+  // These are derived from the nested invoice sub-document so the
+  // templates stay logic-free.
+  const invoiceCountry = data.invoice?.country ?? 'TH';
+  const invoiceAddress =
+    invoiceCountry === 'OTHER'
+      ? [
+          data.invoice?.internationalAddress?.line1,
+          data.invoice?.internationalAddress?.line2,
+          data.invoice?.internationalAddress?.city,
+          data.invoice?.internationalAddress?.state,
+          data.invoice?.internationalAddress?.postalCode,
+          data.invoice?.internationalAddress?.country,
+        ]
+          .filter(Boolean)
+          .join(', ')
+      : [
+          data.invoice?.thaiAddress?.addressLine,
+          data.invoice?.thaiAddress?.subDistrict,
+          data.invoice?.thaiAddress?.district,
+          data.invoice?.thaiAddress?.province,
+          data.invoice?.thaiAddress?.postalCode,
+        ]
+          .filter(Boolean)
+          .join(' ');
+
   const userMsg = userConfirmationEmail({
     referenceNumber,
     firstName: data.coordinator.firstName,
     courseName: data.courseName || data.courseId,
     classDate: data.classDate,
+    attendanceMode: data.attendanceMode ?? 'classroom',
+    scheduleType: data.scheduleType,
+    requestInvoice: Boolean(data.requestInvoice),
+    invoice: data.invoice ?? null,
+    invoiceCountry,
+    invoiceAddress,
   });
 
   const adminMsg = adminNotificationEmail({
@@ -101,6 +132,9 @@ export async function POST(req) {
       phone: data.coordinator.phone,
       lineId: data.coordinator.lineId,
       requestInvoice: Boolean(data.requestInvoice),
+      attendanceMode: data.attendanceMode ?? 'classroom',
+      invoiceCountry,
+      invoiceAddress,
     },
     adminDashboardUrl,
   });
@@ -108,6 +142,7 @@ export async function POST(req) {
   const emailPromises = [
     sendEmail({
       to: data.coordinator.email,
+      bcc: process.env.POSTMARK_ADMIN_EMAIL,
       subject: `ยืนยันการสมัครอบรม ${data.courseName || ''} - ${referenceNumber}`,
       html: userMsg.html,
       text: userMsg.text,
@@ -117,6 +152,7 @@ export async function POST(req) {
     emailPromises.push(
       sendEmail({
         to: adminEmail,
+        bcc: process.env.POSTMARK_ADMIN_EMAIL,
         subject: `ใบสมัครใหม่ ${data.courseName || data.courseId} - ${referenceNumber}`,
         html: adminMsg.html,
         text: adminMsg.text,

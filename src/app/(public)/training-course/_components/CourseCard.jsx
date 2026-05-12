@@ -206,7 +206,7 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
               </span>
             </div>
             <div className="@container">
-              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-[15.5px] overflow-x-auto  pt-2">
+              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-[15px] overflow-x-auto  pt-2">
                 {schedules.slice(0, 3).map((s, idx) => {
                   const isEarlyBird = !!earlyBirdScheduleId && s._id === earlyBirdScheduleId;
                   const card = (

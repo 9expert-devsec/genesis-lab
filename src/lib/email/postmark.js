@@ -8,7 +8,7 @@
  * caller can proceed (e.g. still save the registration).
  */
 
-export async function sendEmail({ to, subject, html, text }) {
+export async function sendEmail({ to, bcc, subject, html, text }) {
   const token = process.env.POSTMARK_SERVER_TOKEN;
   const from = process.env.POSTMARK_FROM_EMAIL;
 
@@ -30,6 +30,7 @@ export async function sendEmail({ to, subject, html, text }) {
       body: JSON.stringify({
         From: from,
         To: to,
+        Bcc: bcc || process.env.POSTMARK_ADMIN_EMAIL || undefined,
         Subject: subject,
         HtmlBody: html,
         TextBody: text,

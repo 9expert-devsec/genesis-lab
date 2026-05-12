@@ -45,9 +45,24 @@ const ThaiAddressSchema = new mongoose.Schema(
 );
 
 /**
- * Invoice info with discriminated types.
- * - individual: firstName + lastName + taxId + address
- * - corporate:  companyName + (optional branch) + taxId + address
+ * Free-form address for non-Thai customers.
+ */
+const InternationalAddressSchema = new mongoose.Schema(
+  {
+    line1:      { type: String, trim: true, required: true },
+    line2:      { type: String, trim: true },
+    city:       { type: String, trim: true, required: true },
+    state:      { type: String, trim: true },
+    postalCode: { type: String, trim: true },
+    country:    { type: String, trim: true, required: true },
+  },
+  { _id: false }
+);
+
+/**
+ * Invoice info.
+ * - country 'TH'   : uses thaiAddress (structured) + taxId 13 digits required
+ * - country 'OTHER': uses internationalAddress (free-form) + taxId optional
  */
 const InvoiceSchema = new mongoose.Schema(
   {
@@ -56,12 +71,19 @@ const InvoiceSchema = new mongoose.Schema(
       enum: ['individual', 'corporate'],
       required: true,
     },
+    country: {
+      type: String,
+      enum: ['TH', 'OTHER'],
+      default: 'TH',
+    },
     firstName:   { type: String, trim: true },
     lastName:    { type: String, trim: true },
     companyName: { type: String, trim: true },
     branch:      { type: String, trim: true },
-    taxId:   { type: String, trim: true, required: true },
-    address: { type: ThaiAddressSchema, required: true },
+    taxId:       { type: String, trim: true },
+    // Only one address sub-document will be populated
+    thaiAddress:          { type: ThaiAddressSchema, default: null },
+    internationalAddress: { type: InternationalAddressSchema, default: null },
   },
   { _id: false }
 );
@@ -74,6 +96,19 @@ const RegisterPublicSchema = new mongoose.Schema(
     courseName: { type: String, trim: true },
     classId:    { type: String, required: true },
     classDate:  { type: String, trim: true },
+
+    // Schedule delivery type (from upstream API)
+    scheduleType: {
+      type: String,
+      enum: ['classroom', 'hybrid', 'online'],
+      default: 'classroom',
+    },
+    // Attendee's chosen mode — only meaningful when scheduleType === 'hybrid'
+    attendanceMode: {
+      type: String,
+      enum: ['classroom', 'teams'],
+      default: 'classroom',
+    },
 
     // Coordinator (the person filling the form)
     coordinator: { type: CoordinatorSchema, required: true },

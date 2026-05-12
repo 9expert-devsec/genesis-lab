@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Loader2, MapPin, Monitor } from 'lucide-react';
 import {
   publicRegistrationSchema,
   publicRegistrationDefaults,
@@ -234,6 +234,8 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
       courseName: course.course_name,
       classId: selectedScheduleId || '',
       classDate: activeDateLabel,
+      scheduleType: activeSchedule?.type || undefined,
+      attendanceMode: activeSchedule?.type !== 'hybrid' ? 'classroom' : undefined,
       ...(initialValues ?? {}),
     },
   });
@@ -246,6 +248,14 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     const sch = scheduleById.get(selectedScheduleId);
     setValue('classId', sch?._id || '');
     setValue('classDate', sch ? formatClassDates(sch.dates) : '');
+    // Track schedule type so the server + schema know if hybrid validation applies.
+    setValue('scheduleType', sch?.type || undefined);
+    // Non-hybrid schedules default silently to classroom; hybrid requires a choice.
+    if (sch?.type !== 'hybrid') {
+      setValue('attendanceMode', 'classroom');
+    } else {
+      setValue('attendanceMode', undefined);
+    }
   }, [selectedScheduleId, scheduleById, setValue]);
 
   // Lazy-init the invoice skeleton when the checkbox is first ticked,
@@ -255,17 +265,26 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     if (requestInvoice && !watch('invoice')) {
       setValue('invoice', {
         type: 'individual',
+        country: 'TH',
         firstName: '',
         lastName: '',
         companyName: '',
         branch: '',
         taxId: '',
-        address: {
+        thaiAddress: {
           addressLine: '',
           subDistrict: '',
           district: '',
           province: '',
           postalCode: '',
+        },
+        internationalAddress: {
+          line1: '',
+          line2: '',
+          city: '',
+          state: '',
+          postalCode: '',
+          country: '',
         },
       });
     }
@@ -339,6 +358,14 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
 
       {formRevealed && (
         <>
+          {activeSchedule?.type === 'hybrid' && (
+            <AttendanceModeSelector
+              value={watch('attendanceMode')}
+              onChange={(mode) => setValue('attendanceMode', mode, { shouldValidate: true })}
+              error={errors.attendanceMode?.message}
+            />
+          )}
+
           <CoordinatorFields register={register} errors={errors} />
 
           <AttendeesList
@@ -407,6 +434,80 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
   );
 }
 
+// ── Attendance Mode Selector (Hybrid only) ────────────────────────
+
+function AttendanceModeSelector({ value, onChange, error }) {
+  const modes = [
+    {
+      id: 'classroom',
+      title: 'Classroom',
+      description: 'เรียนสดที่สถาบัน 9Expert Training เหมาะกับผู้ที่ต้องการบรรยากาศห้องเรียน',
+      Icon: MapPin,
+    },
+    {
+      id: 'teams',
+      title: 'Online via Microsoft Teams',
+      description: 'เรียนสดออนไลน์ผ่าน Microsoft Teams เหมาะกับผู้เรียนต่างจังหวัดหรือต่างประเทศ',
+      Icon: Monitor,
+    },
+  ];
+
+  return (
+    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+      <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
+        เลือกรูปแบบการอบรม
+      </h2>
+      <p className="mb-4 text-xs text-[var(--text-secondary)]">
+        รอบนี้เป็น Hybrid — สามารถเลือกเรียนที่สถาบันหรือออนไลน์ได้
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        {modes.map(({ id, title, description, Icon: ModeIcon }) => {
+          const active = value === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onChange(id)}
+              aria-pressed={active}
+              className={cn(
+                'flex min-h-[92px] w-full gap-3 rounded-9e-lg border p-4 text-left transition-all',
+                active
+                  ? 'border-9e-brand bg-9e-brand/5 shadow-9e-sm ring-4 ring-9e-brand/10'
+                  : 'border-[var(--surface-border)] bg-[var(--surface)] hover:border-9e-brand/40 hover:bg-9e-brand/5'
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-10 w-10 shrink-0 items-center justify-center rounded-9e-md transition-colors',
+                  active
+                    ? 'bg-9e-brand text-9e-ice'
+                    : 'bg-[var(--surface-muted)] text-[var(--text-secondary)]'
+                )}
+              >
+                <ModeIcon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                  {title}
+                  {active && <CheckCircle2 className="h-4 w-4 text-9e-brand" />}
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">
+                  {description}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs text-9e-accent">{error}</p>
+      )}
+    </section>
+  );
+}
+
 // ── Step 2: Preview ──────────────────────────────────────────────
 
 function StepPreview({ data, onBack, onConfirm, submitting, error }) {
@@ -418,6 +519,12 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         <ReadOnlyRow label="หลักสูตร" value={data.courseName} />
         <ReadOnlyRow label="รหัสคอร์ส" value={data.courseCode || data.courseId} />
         <ReadOnlyRow label="รอบอบรม" value={data.classDate || '—'} />
+        {data.scheduleType === 'hybrid' && (
+          <ReadOnlyRow
+            label="รูปแบบการอบรม"
+            value={data.attendanceMode === 'teams' ? 'Online via Microsoft Teams' : 'Classroom'}
+          />
+        )}
       </Section>
 
       <Section title="ข้อมูลผู้ประสานงาน">
@@ -471,10 +578,14 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
       </Section>
 
       {data.requestInvoice && data.invoice && (
-        <Section title="ใบกำกับภาษี">
+        <Section title="ใบเสนอราคา / ใบกำกับภาษี">
           <ReadOnlyRow
-            label="ประเภท"
+            label="ประเภทลูกค้า"
             value={data.invoice.type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป'}
+          />
+          <ReadOnlyRow
+            label="ประเทศ"
+            value={data.invoice.country === 'TH' ? 'Thailand' : 'Other country'}
           />
           {data.invoice.type === 'individual' ? (
             <ReadOnlyRow
@@ -489,19 +600,38 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
               )}
             </>
           )}
-          <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={data.invoice.taxId} />
-          <ReadOnlyRow
-            label="ที่อยู่"
-            value={[
-              data.invoice.address?.addressLine,
-              data.invoice.address?.subDistrict,
-              data.invoice.address?.district,
-              data.invoice.address?.province,
-              data.invoice.address?.postalCode,
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          />
+          {data.invoice.taxId && (
+            <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={data.invoice.taxId} />
+          )}
+          {data.invoice.country === 'TH' && data.invoice.thaiAddress && (
+            <ReadOnlyRow
+              label="ที่อยู่"
+              value={[
+                data.invoice.thaiAddress.addressLine,
+                data.invoice.thaiAddress.subDistrict,
+                data.invoice.thaiAddress.district,
+                data.invoice.thaiAddress.province,
+                data.invoice.thaiAddress.postalCode,
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            />
+          )}
+          {data.invoice.country === 'OTHER' && data.invoice.internationalAddress && (
+            <ReadOnlyRow
+              label="ที่อยู่"
+              value={[
+                data.invoice.internationalAddress.line1,
+                data.invoice.internationalAddress.line2,
+                data.invoice.internationalAddress.city,
+                data.invoice.internationalAddress.state,
+                data.invoice.internationalAddress.postalCode,
+                data.invoice.internationalAddress.country,
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            />
+          )}
         </Section>
       )}
 
