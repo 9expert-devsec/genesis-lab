@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
+import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
 
 export const metadata = { title: 'สมัครอบรม - 9Expert Training' };
@@ -30,12 +31,16 @@ export default async function Page({ searchParams }) {
     redirect('/training-course');
   }
 
-  const { items: rawSchedules } = await listSchedulesByCourse(course._id, {
-    limit: 20,
-  });
+  const [{ items: rawSchedules }, earlyBirdMap] = await Promise.all([
+    listSchedulesByCourse(course._id, { limit: 20 }),
+    getAllActiveEarlyBirdMap().catch(() => ({})),
+  ]);
 
   // Apply admin status overrides (open → closed, scheduled changes).
   const schedules = await resolveScheduleStatusBatch(rawSchedules);
+
+  const earlyBirdScheduleId =
+    earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
 
   return (
     <article className="mx-auto max-w-[880px] px-4 py-10 lg:px-6">
@@ -57,6 +62,7 @@ export default async function Page({ searchParams }) {
           course={course}
           schedules={schedules}
           initialClassId={initialClassId}
+          earlyBirdScheduleId={earlyBirdScheduleId}
         />
       )}
     </article>

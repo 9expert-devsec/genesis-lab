@@ -109,11 +109,18 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   // slides don't fire when the user was swiping with the mouse. Touch
   // swipes are already suppressed by preventDefault() inside useSwipe.
   function handleClickCapture(e) {
+    // Never block clicks on interactive elements inside the carousel — the
+    // capture-phase preventDefault would otherwise swallow CTA <a> links
+    // inside image slides.
+    if (e.target.closest('button, a, [role="button"]')) {
+      dragRef.current.moved = false;
+      return;
+    }
     if (dragRef.current.moved) {
       e.stopPropagation();
       e.preventDefault();
-      dragRef.current.moved = false;
     }
+    dragRef.current.moved = false;
   }
 
   if (!total) return null;
@@ -366,7 +373,6 @@ function BannerSlide({ banner, isActive = true }) {
                     title={banner.title || 'YouTube video'}
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    loading="lazy"
                     className="absolute inset-0 w-full h-full"
                   />
                 </div>

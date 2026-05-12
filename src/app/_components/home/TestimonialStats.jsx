@@ -307,10 +307,15 @@ function Avatar({ src, name }) {
       </div>
     );
   }
+  // Cloudinary serves 800x800 by default — display is 56px, so request a
+  // 112px (2×) crop to save ~95% of the avatar bytes.
+  const optimizedSrc = src.includes('res.cloudinary.com')
+    ? src.replace('/upload/', '/upload/w_112,h_112,c_fill,f_auto,q_auto/')
+    : src;
   return (
     <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full bg-9e-ice">
       <Image
-        src={src}
+        src={optimizedSrc}
         alt={name ?? ''}
         fill
         sizes="56px"

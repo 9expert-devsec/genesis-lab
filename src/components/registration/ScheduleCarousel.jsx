@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EarlyBirdRibbon } from '@/components/ui/EarlyBirdRibbon';
 
 /**
  * Horizontal scrollable list of schedule cards.
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils';
  * - selectedId: string | null
  * - onSelect: (scheduleId: string) => void
  */
-export function ScheduleCarousel({ schedules, selectedId, onSelect }) {
+export function ScheduleCarousel({ schedules, selectedId, onSelect, earlyBirdScheduleId = null }) {
   const scrollerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -84,6 +85,7 @@ export function ScheduleCarousel({ schedules, selectedId, onSelect }) {
             schedule={s}
             selected={s._id === selectedId}
             onSelect={() => onSelect(s._id)}
+            isEarlyBird={!!earlyBirdScheduleId && s._id === earlyBirdScheduleId}
           />
         ))}
       </div>
@@ -108,7 +110,7 @@ const STATUS_CLASS = {
   closed: 'bg-slate-100 text-slate-500',
 };
 
-function ScheduleCard({ schedule, selected, onSelect }) {
+function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
   const dates = [...(schedule.dates || [])].sort();
   const start = dates[0] ? new Date(dates[0]) : null;
   const end = dates.at(-1) ? new Date(dates.at(-1)) : null;
@@ -135,7 +137,7 @@ function ScheduleCard({ schedule, selected, onSelect }) {
       disabled={isClosed}
       aria-pressed={selected}
       className={cn(
-        'flex-none snap-start rounded-9e-lg border px-6 py-4 text-center transition-all',
+        'relative flex-none snap-start overflow-hidden rounded-9e-lg border px-6 py-4 text-center transition-all',
         'min-w-[140px]',
         selected && !isClosed
           ? 'border-9e-brand bg-9e-brand/5 shadow-9e-md'
@@ -143,6 +145,7 @@ function ScheduleCard({ schedule, selected, onSelect }) {
         isClosed ? 'cursor-not-allowed opacity-60' : 'hover:border-9e-brand/50'
       )}
     >
+      {isEarlyBird && <EarlyBirdRibbon />}
       <div className="text-xl font-bold text-[var(--text-primary)]">
         {dateLabel}
       </div>

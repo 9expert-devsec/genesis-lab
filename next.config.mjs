@@ -30,6 +30,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '9experttraining.com', pathname: '/**' },
       // Upstream API host — in case any item URL points here directly
       { protocol: 'https', hostname: '9exp-sec.com', pathname: '/**' },
+      // YouTube thumbnails — used by the YouTubeFacade in HeroBannerCarousel
+      { protocol: 'https', hostname: 'i.ytimg.com', pathname: '/vi/**' },
     ],
   },
 

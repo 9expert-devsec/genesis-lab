@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { CalendarDays } from 'lucide-react';
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
+import { isEarlyBirdSchedule } from '@/lib/isEarlyBird';
 
 /**
  * Detail-page schedule block.
@@ -15,13 +16,21 @@ import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
  * If no schedules are open, shows an empty state — ScheduleCarousel
  * renders its own "ยังไม่มีรอบอบรม" message, so we just let it.
  */
-export function ScheduleSection({ course, schedules }) {
+export function ScheduleSection({ course, schedules, earlyBird }) {
   const [selectedId, setSelectedId] = useState(
     schedules?.[0]?._id ?? null
   );
 
   const selected = schedules?.find((s) => s._id === selectedId) ?? null;
   const hasSchedules = Boolean(schedules?.length);
+
+  // Resolve once — passing the bare schedule_id down avoids re-checking
+  // is_active / deadline for every card render.
+  const earlyBirdScheduleId =
+    earlyBird?.schedule_id &&
+    isEarlyBirdSchedule(earlyBird.schedule_id, earlyBird)
+      ? earlyBird.schedule_id
+      : null;
 
   const hrefForSelected = selected
     ? `/registration/public?course=${String(course.course_id).toLowerCase()}&class=${selected._id}`
@@ -43,6 +52,7 @@ export function ScheduleSection({ course, schedules }) {
           schedules={schedules ?? []}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          earlyBirdScheduleId={earlyBirdScheduleId}
         />
 
         {hasSchedules && hrefForSelected && (

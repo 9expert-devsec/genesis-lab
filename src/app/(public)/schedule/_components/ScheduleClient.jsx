@@ -45,7 +45,7 @@ function formatDateLabel(scheduleItem) {
   return `${first.getDate()} ${MONTH_TH[first.getMonth()]} - ${last.getDate()}`;
 }
 
-export function ScheduleClient({ courses, programs, schedulePDF }) {
+export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = {} }) {
   const currentMonth = new Date().getMonth();
 
   const [selectedProgram, setSelectedProgram] = useState('all');
@@ -326,6 +326,7 @@ export function ScheduleClient({ courses, programs, schedulePDF }) {
             visibleMonths={visibleMonths}
             scheduleMap={scheduleMap}
             sessionMatches={sessionMatches}
+            earlyBirdMap={earlyBirdMap}
           />
         ))}
       </div>
@@ -355,6 +356,7 @@ function ProgramTable({
   visibleMonths,
   scheduleMap,
   sessionMatches,
+  earlyBirdMap = {},
 }) {
   return (
     <div>
@@ -442,6 +444,8 @@ function ProgramTable({
                     const cellSchedules = (
                       scheduleMap[c._id]?.[m] ?? []
                     ).filter(sessionMatches);
+                    const ebScheduleId =
+                      earlyBirdMap?.[String(c.course_id).toUpperCase()] ?? null;
                     return (
                       <td
                         key={m}
@@ -455,6 +459,8 @@ function ProgramTable({
                               <ScheduleCell
                                 key={s._id ?? si}
                                 schedule={s}
+                                courseId={c.course_id}
+                                isEarlyBird={!!ebScheduleId && s._id === ebScheduleId}
                               />
                             ))}
                           </div>
@@ -472,14 +478,18 @@ function ProgramTable({
   );
 }
 
-function ScheduleCell({ schedule }) {
+function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
   const statusStyle = STATUS_STYLE[schedule.status] ?? STATUS_STYLE.open;
   const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
   const dateLabel = formatDateLabel(schedule);
-  const href = schedule.signup_url || null;
+  // Prefer the internal registration page with the schedule's _id pre-selected.
+  // Fall back to upstream signup_url only when _id or courseId is missing.
+  const href = schedule._id && courseId
+    ? `/registration/public?course=${String(courseId).toLowerCase()}&class=${schedule._id}`
+    : (schedule.signup_url || null);
 
   const inner = (
-    <span className="flex flex-col items-center gap-0.5">
+    <span className={`flex flex-col items-center gap-0.5${isEarlyBird ? ' pt-3' : ''}`}>
       <span
         className="h-2 w-2 rounded-full"
         style={{ backgroundColor: color }}
@@ -494,15 +504,29 @@ function ScheduleCell({ schedule }) {
     </span>
   );
 
-  if (!href) return <span className="block">{inner}</span>;
+  if (!href) {
+    return (
+      <span className="relative block overflow-hidden rounded-sm">
+        {isEarlyBird && <EarlyBirdPill />}
+        {inner}
+      </span>
+    );
+  }
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="group block cursor-pointer"
-    >
+    <a href={href} className="group relative block cursor-pointer overflow-hidden rounded-sm">
+      {isEarlyBird && <EarlyBirdPill />}
       {inner}
     </a>
   );
 }
+
+function EarlyBirdPill() {
+  return (
+    <span className="pointer-events-none absolute top-0 left-0 right-0 z-10 flex justify-center">
+      <span className="whitespace-nowrap rounded-b-sm bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">
+        Early Bird
+      </span>
+    </span>
+  );
+}
+

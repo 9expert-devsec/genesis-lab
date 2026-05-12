@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
+import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug } from '@/lib/resolvePageSlug';
 import { MOCK_BLOGS } from '@/app/_components/home/BlogSection';
 import { ProgramPageClient } from './_components/ProgramPageClient';
@@ -9,9 +10,10 @@ import { ProgramPageClient } from './_components/ProgramPageClient';
 export const revalidate = 3600;
 
 async function loadProgramAndCourses(slug) {
-  const [programsRes, coursesRes] = await Promise.all([
+  const [programsRes, coursesRes, earlyBirdMap] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
+    getAllActiveEarlyBirdMap().catch(() => ({})),
   ]);
   const programs = programsRes.items ?? [];
   const allCourses = coursesRes.items ?? [];
@@ -28,7 +30,7 @@ async function loadProgramAndCourses(slug) {
   );
 
   const enriched = await enrichCoursesWithDetails(programCourses);
-  return { program, config, courses: enriched };
+  return { program, config, courses: enriched, earlyBirdMap };
 }
 
 export default async function ProgramPage({ params }) {
@@ -43,6 +45,7 @@ export default async function ProgramPage({ params }) {
       config={data.config}
       courses={data.courses}
       blogs={MOCK_BLOGS}
+      earlyBirdMap={data.earlyBirdMap}
     />
   );
 }

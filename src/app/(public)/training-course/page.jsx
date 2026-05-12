@@ -4,6 +4,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
+import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { CourseListClient } from './_components/CourseListClient';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
@@ -11,14 +12,17 @@ export const metadata = { title: 'หลักสูตรทั้งหมด'
 export default async function Page() {
   let items = [];
   let programOrder = [];
+  let earlyBirdMap = {};
   let fetchError = null;
 
   try {
-    const [coursesResult, rawPrograms] = await Promise.all([
+    const [coursesResult, rawPrograms, earlyBirdMapResult] = await Promise.all([
       listPublicCourses(),
       listPrograms().catch(() => ({ items: [] })),
+      getAllActiveEarlyBirdMap().catch(() => ({})),
     ]);
     items = await enrichCoursesWithDetails(coursesResult.items);
+    earlyBirdMap = earlyBirdMapResult;
     // Apply admin-set program order. We pass the names down so the
     // client groups + filter dropdown render in the same sequence.
     const ordered = await getOrderedPrograms(rawPrograms.items ?? []).catch(
@@ -40,7 +44,11 @@ export default async function Page() {
   // under Next 15 forces dynamic rendering without a boundary above it.
   return (
     <Suspense fallback={null}>
-      <CourseListClient items={items} programOrder={programOrder} />
+      <CourseListClient
+        items={items}
+        programOrder={programOrder}
+        earlyBirdMap={earlyBirdMap}
+      />
     </Suspense>
   );
 }

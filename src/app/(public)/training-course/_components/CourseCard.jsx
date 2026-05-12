@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
 import { cn, courseHref } from "@/lib/utils";
 import ScheduleCard from "@/components/ScheduleCard";
+import { EarlyBirdRibbon } from "@/components/ui/EarlyBirdRibbon";
 import {
   formatScheduleDate,
   formatStatusFromAPI,
@@ -23,7 +24,7 @@ const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
  * `course.schedules` is optional; when present (pre-fetched server-side)
  * the expand panel shows up to 3 upcoming sessions as signup pills.
  */
-function CourseCardComponent({ course, className }) {
+function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!course) return null;
@@ -205,8 +206,9 @@ function CourseCardComponent({ course, className }) {
               </span>
             </div>
             <div className="@container">
-              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-4 overflow-x-auto  pt-2">
+              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-[15.5px] overflow-x-auto  pt-2">
                 {schedules.slice(0, 3).map((s, idx) => {
+                  const isEarlyBird = !!earlyBirdScheduleId && s._id === earlyBirdScheduleId;
                   const card = (
                     <ScheduleCard
                       key={s._id ?? idx}
@@ -215,14 +217,21 @@ function CourseCardComponent({ course, className }) {
                       status={formatStatusFromAPI(s.status)}
                     />
                   );
-                  return s.signup_url ? (
+
+                  // Prefer the internal registration page with the schedule's
+                  // _id pre-selected. Fall back to the upstream signup_url
+                  // (external) only when the schedule has no _id.
+                  const registrationHref = s._id
+                    ? `/registration/public?course=${String(id).toLowerCase()}&class=${s._id}`
+                    : s.signup_url ?? null;
+
+                  return registrationHref ? (
                     <a
                       key={s._id ?? idx}
-                      href={s.signup_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
+                      href={registrationHref}
+                      className="relative overflow-hidden transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
                     >
+                      {isEarlyBird && <EarlyBirdRibbon />}
                       {card}
                     </a>
                   ) : (

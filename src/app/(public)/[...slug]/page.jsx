@@ -196,7 +196,11 @@ function CourseDetail({
                 <CourseGallery gallery={gallery} />
               </section>
             )}
-            <ScheduleSection course={course} schedules={schedules} />
+            <ScheduleSection
+              course={course}
+              schedules={schedules}
+              earlyBird={earlyBird}
+            />
             <CourseDescription course={course} />
             <CourseObjectives course={course} />
             <CourseTarget course={course} />

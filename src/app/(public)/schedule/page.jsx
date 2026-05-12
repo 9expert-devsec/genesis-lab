@@ -3,6 +3,7 @@ import { listPrograms } from '@/lib/api/programs';
 import { getAllSchedules } from '@/lib/api/schedules';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
+import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { ScheduleClient } from './_components/ScheduleClient';
 
 export const metadata = {
@@ -14,13 +15,19 @@ export const metadata = {
 export const revalidate = 1800;
 
 export default async function SchedulePage() {
-  const [coursesResult, programsResult, schedulesResult, schedulePDF] =
-    await Promise.all([
-      listPublicCourses().catch(() => ({ items: [] })),
-      listPrograms().catch(() => ({ items: [] })),
-      getAllSchedules().catch(() => ({ items: [] })),
-      getSchedulePDF().catch(() => null),
-    ]);
+  const [
+    coursesResult,
+    programsResult,
+    schedulesResult,
+    schedulePDF,
+    earlyBirdMap,
+  ] = await Promise.all([
+    listPublicCourses().catch(() => ({ items: [] })),
+    listPrograms().catch(() => ({ items: [] })),
+    getAllSchedules().catch(() => ({ items: [] })),
+    getSchedulePDF().catch(() => null),
+    getAllActiveEarlyBirdMap().catch(() => ({})),
+  ]);
 
   const courses = coursesResult.items ?? [];
   const rawPrograms = programsResult.items ?? [];
@@ -82,6 +89,7 @@ export default async function SchedulePage() {
       courses={coursesWithSchedules}
       programs={programsLite}
       schedulePDF={schedulePDF}
+      earlyBirdMap={earlyBirdMap}
     />
   );
 }

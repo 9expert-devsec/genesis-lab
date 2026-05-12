@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
@@ -41,7 +42,7 @@ function formatClassDates(dates) {
   return `${start.getDate()} ${THAI_MONTHS[start.getMonth()]} - ${end.getDate()} ${THAI_MONTHS[end.getMonth()]} ${year}`;
 }
 
-export function RegisterWizard({ course, schedules, initialClassId }) {
+export function RegisterWizard({ course, schedules, initialClassId, earlyBirdScheduleId = null }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -118,6 +119,7 @@ export function RegisterWizard({ course, schedules, initialClassId }) {
           initialClassId={initialClassId}
           initialValues={formData ?? restoredFromStorage}
           onSubmit={handleFormSubmit}
+          earlyBirdScheduleId={earlyBirdScheduleId}
         />
       )}
 
@@ -184,11 +186,24 @@ function Stepper({ currentStep }) {
 
 // ── Step 1: Form ─────────────────────────────────────────────────
 
-function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }) {
+function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, earlyBirdScheduleId = null }) {
   const restoredClassId = initialValues?.classId;
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [selectedScheduleId, setSelectedScheduleId] = useState(
     restoredClassId || initialClassId || ''
   );
+
+  // Sync URL when the user picks a different round so the link is shareable
+  // and survives a refresh. `replace` (not `push`) keeps the back button
+  // clean; `scroll: false` prevents the page from jumping to the top.
+  const handleSelectSchedule = useCallback((id) => {
+    setSelectedScheduleId(id);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('class', id);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
   // If the user arrives with draft data, the form was already revealed
   // previously — auto-open it. Otherwise require an explicit confirm.
   const [formRevealed, setFormRevealed] = useState(Boolean(initialValues));
@@ -287,7 +302,8 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit }
         <ScheduleCarousel
           schedules={schedules}
           selectedId={selectedScheduleId}
-          onSelect={setSelectedScheduleId}
+          onSelect={handleSelectSchedule}
+          earlyBirdScheduleId={earlyBirdScheduleId}
         />
 
         {activeSchedule && (

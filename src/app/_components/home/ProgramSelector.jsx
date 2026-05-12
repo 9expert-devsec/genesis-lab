@@ -181,7 +181,9 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                       >
                         {skill.skilliconurl && (
                           <Image
-                            src={skill.skilliconurl}
+                            src={skill.skilliconurl?.includes('res.cloudinary.com')
+                              ? skill.skilliconurl.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
+                              : skill.skilliconurl}
                             alt=""
                             width={18}
                             height={18}
@@ -214,7 +216,9 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                               }
                             >
                               <Image
-                                src={selectedSkill.skilliconurl}
+                                src={selectedSkill.skilliconurl?.includes('res.cloudinary.com')
+                                  ? selectedSkill.skilliconurl.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
+                                  : selectedSkill.skilliconurl}
                                 alt={selectedSkill.skill_name}
                                 width={32}
                                 height={32}
@@ -402,7 +406,9 @@ function ProgramRowCard({ item, hrefBuilder }) {
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-9e-ice">
         {icon && (
           <Image
-            src={icon}
+            src={icon?.includes('res.cloudinary.com')
+              ? icon.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
+              : icon}
             alt=""
             width={32}
             height={32}
@@ -430,7 +436,9 @@ function ProgramTileCard({ item, hrefBuilder }) {
       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-9e-ice sm:h-12 sm:w-12">
         {icon && (
           <Image
-            src={icon}
+            src={icon?.includes('res.cloudinary.com')
+              ? icon.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
+              : icon}
             alt=""
             width={36}
             height={36}

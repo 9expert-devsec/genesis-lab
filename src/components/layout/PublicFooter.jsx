@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { FaInstagram, FaTiktok, FaLinkedin, FaYoutube } from "react-icons/fa";
 import { TbBrandShopee } from "react-icons/tb";
@@ -128,10 +129,12 @@ export function PublicFooter() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <img
+              <Image
                 src="/assets/DBD_logo.jpg"
                 alt="dbd logo"
-                className="mx-auto mt-1 h-auto w-1/2 object-contain"
+                width={90}
+                height={50}
+                className="mx-auto mt-1 object-contain"
               />
             </a>
           </div>

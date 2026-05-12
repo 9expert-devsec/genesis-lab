@@ -20,7 +20,7 @@ import { BlogCard } from '@/app/_components/home/BlogSection';
  * The roadmap image isn't part of the verified `/programs` shape, but
  * we look for likely field names so it shows up if upstream adds one.
  */
-export function ProgramPageClient({ program, config, courses, blogs }) {
+export function ProgramPageClient({ program, config, courses, blogs, earlyBirdMap = {} }) {
   const roadmapUrl =
     program?.program_roadmap_url ??
     program?.programroadmapurl ??
@@ -123,7 +123,13 @@ export function ProgramPageClient({ program, config, courses, blogs }) {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 items-start">
             {courses.map((c) => (
-              <CourseCard key={c._id ?? c.course_id} course={c} />
+              <CourseCard
+                key={c._id ?? c.course_id}
+                course={c}
+                earlyBirdScheduleId={
+                  earlyBirdMap[String(c.course_id).toUpperCase()] ?? null
+                }
+              />
             ))}
           </div>
         )}

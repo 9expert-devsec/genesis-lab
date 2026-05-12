@@ -175,6 +175,31 @@ export async function getEarlyBirdByCourse(courseId) {
   return serialize({ ...doc, promotion });
 }
 
+/**
+ * Fetch every active, non-expired EarlyBird config in one query.
+ * Returns a plain object keyed by uppercase course_id → schedule_id string.
+ * Used by list pages (training-course, schedule) that render many courses
+ * at once and would otherwise issue N round-trips for the per-course read.
+ */
+export async function getAllActiveEarlyBirdMap() {
+  await dbConnect();
+  const now = new Date();
+  const docs = await EarlyBirdConfig.find({
+    is_active: true,
+    $or: [{ deadline: null }, { deadline: { $gt: now } }],
+  })
+    .select('course_id schedule_id')
+    .lean();
+
+  const map = {};
+  for (const doc of docs) {
+    if (doc.course_id && doc.schedule_id) {
+      map[String(doc.course_id).toUpperCase()] = String(doc.schedule_id);
+    }
+  }
+  return map;
+}
+
 /** Admin read — always returns (even if inactive/expired). */
 export async function getEarlyBirdAdminByCourse(courseId) {
   await requireAdmin();
