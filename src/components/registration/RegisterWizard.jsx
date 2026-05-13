@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -207,6 +207,7 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
   // If the user arrives with draft data, the form was already revealed
   // previously — auto-open it. Otherwise require an explicit confirm.
   const [formRevealed, setFormRevealed] = useState(Boolean(initialValues));
+  const coordinatorRef = useRef(null);
 
   const scheduleById = useMemo(() => {
     const map = new Map();
@@ -226,7 +227,8 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     formState: { errors },
   } = useForm({
     resolver: zodResolver(publicRegistrationSchema),
-    mode: 'onBlur',
+    mode: 'onChange',
+    reValidateMode: 'onChange',
     defaultValues: {
       ...publicRegistrationDefaults,
       courseId: course.course_id,
@@ -257,6 +259,20 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
       setValue('attendanceMode', undefined);
     }
   }, [selectedScheduleId, scheduleById, setValue]);
+
+  // When the form is first revealed, scroll the user straight to the
+  // first field they need to interact with: the attendance-mode picker
+  // on hybrid schedules, or the coordinator section otherwise.
+  useEffect(() => {
+    if (!formRevealed) return;
+    const timer = setTimeout(() => {
+      const target = activeSchedule?.type === 'hybrid'
+        ? document.querySelector('[data-section="attendance-mode"]')
+        : coordinatorRef.current;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [formRevealed, activeSchedule?.type]);
 
   // Lazy-init the invoice skeleton when the checkbox is first ticked,
   // and clear it on untick so the schema's `.optional().nullable()`
@@ -366,7 +382,9 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
             />
           )}
 
-          <CoordinatorFields register={register} errors={errors} />
+          <div ref={coordinatorRef}>
+            <CoordinatorFields register={register} errors={errors} />
+          </div>
 
           <AttendeesList
             control={control}
@@ -453,7 +471,10 @@ function AttendanceModeSelector({ value, onChange, error }) {
   ];
 
   return (
-    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+    <section
+      data-section="attendance-mode"
+      className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6"
+    >
       <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
         เลือกรูปแบบการอบรม
       </h2>

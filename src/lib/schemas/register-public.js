@@ -3,33 +3,10 @@ import { z } from 'zod';
 /**
  * Validation schema for /registration/public form submissions.
  * Shared between the client wizard (react-hook-form resolver) and the
- * API route that writes to Mongo. Single source of truth per
- * Manifesto §4.6.
+ * API route that writes to Mongo. Single source of truth.
  */
 
 const thaiPhoneRegex = /^(0\d{9}|\+\d{10,15})$/;
-
-export const coordinatorSchema = z.object({
-  firstName: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
-  lastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
-  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:     z
-    .string()
-    .trim()
-    .regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
-  lineId:    z.string().trim().max(50).optional().or(z.literal('')),
-  isAttending: z.boolean().default(false),
-});
-
-export const attendeeSchema = z.object({
-  firstName: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
-  lastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
-  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:     z
-    .string()
-    .trim()
-    .regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
-});
 
 // ── Address schemas ────────────────────────────────────────────────
 
@@ -48,6 +25,23 @@ export const internationalAddressSchema = z.object({
   state:      z.string().trim().max(100).optional().or(z.literal('')),
   postalCode: z.string().trim().max(20).optional().or(z.literal('')),
   country:    z.string().trim().min(1, 'กรุณากรอกประเทศ').max(100),
+});
+
+// ── Party schemas ──────────────────────────────────────────────────
+
+export const coordinatorSchema = z.object({
+  firstName:   z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
+  lastName:    z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
+  email:       z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
+  phone:       z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+  isAttending: z.boolean().default(false),
+});
+
+export const attendeeSchema = z.object({
+  firstName: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
+  lastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
+  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
+  phone:     z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
 });
 
 // ── Invoice schema ─────────────────────────────────────────────────
@@ -93,15 +87,16 @@ export const invoiceSchema = z
     }
   });
 
+// ── Root form schema ───────────────────────────────────────────────
+
 export const publicRegistrationSchema = z
   .object({
     // Course refs
-    courseId:   z.string().min(1, 'ข้อมูลคอร์สไม่ครบ'),
-    courseCode: z.string().optional(),
-    courseName: z.string().optional(),
-    classId:    z.string().min(1, 'กรุณาเลือกรอบอบรม'),
-    classDate:  z.string().optional(),
-
+    courseId:       z.string().min(1, 'ข้อมูลคอร์สไม่ครบ'),
+    courseCode:     z.string().optional(),
+    courseName:     z.string().optional(),
+    classId:        z.string().min(1, 'กรุณาเลือกรอบอบรม'),
+    classDate:      z.string().optional(),
     // 'hybrid' schedule type requires an explicit choice; classroom-only
     // schedules default to 'classroom' and the field is not shown to the user.
     scheduleType:   z.enum(['classroom', 'hybrid', 'online']).optional(),
@@ -113,7 +108,7 @@ export const publicRegistrationSchema = z
     attendeesListProvided: z.boolean().default(true),
     attendees:             z.array(attendeeSchema).default([]),
 
-    // Invoice (structured form collected in sub-phase 2.5a-2)
+    // Invoice
     requestInvoice: z.boolean().default(false),
     invoice:        invoiceSchema.optional().nullable(),
 
@@ -134,7 +129,7 @@ export const publicRegistrationSchema = z
       ctx.addIssue({
         path: ['invoice'],
         code: 'custom',
-        message: 'กรุณากรอกข้อมูลใบกำกับภาษี',
+        message: 'กรุณากรอกข้อมูลใบเสนอราคา',
       });
     }
 
@@ -152,28 +147,28 @@ export const publicRegistrationSchema = z
     }
   });
 
+// ── Default values ─────────────────────────────────────────────────
+
 export const publicRegistrationDefaults = {
-  courseId: '',
+  courseId:   '',
   courseCode: '',
   courseName: '',
-  classId: '',
-  classDate: '',
-  scheduleType: undefined,
+  classId:    '',
+  classDate:  '',
+  scheduleType:   undefined,
   attendanceMode: undefined,
   coordinator: {
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    lineId: '',
+    firstName:   '',
+    lastName:    '',
+    email:       '',
+    phone:       '',
     isAttending: false,
+    // lineId removed — field no longer in the form
   },
-  attendeesCount: 1,
+  attendeesCount:        1,
   attendeesListProvided: true,
-  attendees: [],
+  attendees:      [],
   requestInvoice: false,
-  invoice: null,
-  // Default invoice skeleton (used when requestInvoice is first checked):
-  // country defaults to 'TH'; switch to 'OTHER' for international customers.
+  invoice:        null,
   notes: '',
 };

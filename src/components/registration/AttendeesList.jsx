@@ -119,9 +119,7 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
       )}
 
       {listProvided && coordinatorIsAttending && (
-        <p className="mt-4 rounded-9e-md bg-9e-brand/5 p-3 text-sm text-[var(--text-primary)]">
-          ผู้เข้าอบรมท่านที่ 1 คือผู้ประสานงาน (ใช้ข้อมูลเดียวกันด้านบน)
-        </p>
+        <CoordinatorMirrorCard watch={watch} />
       )}
 
       {listProvided && fields.length > 0 && (
@@ -142,6 +140,36 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
         <p className="mt-2 text-xs text-9e-accent">{errors.attendees.message}</p>
       )}
     </section>
+  );
+}
+
+/**
+ * Read-only card showing the coordinator's data as ท่านที่ 1.
+ * Values are read live from the form via `watch` so changes to the
+ * coordinator section are reflected here immediately.
+ * This card is purely display — it has no Input or register calls.
+ */
+function CoordinatorMirrorCard({ watch }) {
+  const firstName = watch('coordinator.firstName') || '';
+  const lastName  = watch('coordinator.lastName')  || '';
+  const email     = watch('coordinator.email')     || '';
+  const phone     = watch('coordinator.phone')     || '';
+
+  const fullName = `${firstName} ${lastName}`.trim() || '—';
+
+  return (
+    <div className="mt-4 rounded-9e-md border border-9e-brand/30 bg-9e-brand/5 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-9e-brand">
+        ผู้เข้าอบรมท่านที่ 1 (ผู้ประสานงาน)
+      </p>
+      <p className="text-sm font-semibold text-[var(--text-primary)]">{fullName}</p>
+      <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+        {email || '—'} · {phone || '—'}
+      </p>
+      <p className="mt-2 text-xs text-[var(--text-muted)]">
+        ข้อมูลนี้อ้างอิงจากผู้ประสานงานด้านบน ไม่สามารถแก้ไขได้ที่นี่
+      </p>
+    </div>
   );
 }
 

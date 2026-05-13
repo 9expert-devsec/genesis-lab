@@ -25,12 +25,14 @@ export function CoordinatorFields({ register, errors }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <FieldGroup label="ชื่อ" error={err.firstName?.message} required>
           <Input
+            placeholder="กรุณากรอกชื่อ"
             {...register('coordinator.firstName')}
             aria-invalid={!!err.firstName}
           />
         </FieldGroup>
         <FieldGroup label="นามสกุล" error={err.lastName?.message} required>
           <Input
+            placeholder="กรุณากรอกนามสกุล"
             {...register('coordinator.lastName')}
             aria-invalid={!!err.lastName}
           />
@@ -38,6 +40,7 @@ export function CoordinatorFields({ register, errors }) {
         <FieldGroup label="อีเมล" error={err.email?.message} required>
           <Input
             type="email"
+            placeholder="example@email.com"
             {...register('coordinator.email')}
             aria-invalid={!!err.email}
           />
@@ -45,17 +48,10 @@ export function CoordinatorFields({ register, errors }) {
         <FieldGroup label="เบอร์โทร" error={err.phone?.message} required>
           <Input
             inputMode="tel"
-            placeholder="0812345678"
+            placeholder="เช่น 0812345678 หรือ 021234567123"
             {...register('coordinator.phone')}
             aria-invalid={!!err.phone}
           />
-        </FieldGroup>
-        <FieldGroup
-          label="LINE ID (ถ้ามี)"
-          error={err.lineId?.message}
-          className="sm:col-span-2"
-        >
-          <Input {...register('coordinator.lineId')} />
         </FieldGroup>
       </div>
 
