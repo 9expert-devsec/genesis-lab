@@ -154,6 +154,7 @@ function CourseDetail({
   coursePromos,
 }) {
   const hasSchedules = Boolean(schedules?.length);
+  const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
   const relatedCourses = Array.isArray(course.related_courses)
     ? course.related_courses
     : [];
@@ -196,11 +197,13 @@ function CourseDetail({
                 <CourseGallery gallery={gallery} />
               </section>
             )}
-            <ScheduleSection
-              course={course}
-              schedules={schedules}
-              earlyBird={earlyBird}
-            />
+            {!isInhouseOnly && (
+              <ScheduleSection
+                course={course}
+                schedules={schedules}
+                earlyBird={earlyBird}
+              />
+            )}
             <CourseDescription course={course} />
             <CourseObjectives course={course} />
             <CourseTarget course={course} />
@@ -216,7 +219,7 @@ function CourseDetail({
               hasSchedules={hasSchedules}
               hasRelated={hasRelated}
             />
-            <InhouseCTA />
+            <InhouseCTA courseId={course.course_id} />
             <PDFDownload course={course} />
           </aside>
         </div>

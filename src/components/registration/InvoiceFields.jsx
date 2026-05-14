@@ -50,12 +50,18 @@ export function InvoiceFields({ register, watch, setValue, errors }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When country changes, reset both address sub-objects to empty so stale
-  // data from the previous country does not leak into the submission.
+  // When country changes, reset addresses so stale data does not leak into
+  // the submission. The INACTIVE branch is set to null so zod skips it
+  // (an empty object would still fail required-field validation).
   const handleCountryChange = (next) => {
-    setValue('invoice.country',              next,                { shouldValidate: false });
-    setValue('invoice.thaiAddress',          EMPTY_THAI_ADDRESS,  { shouldValidate: false });
-    setValue('invoice.internationalAddress', EMPTY_INTL_ADDRESS,  { shouldValidate: false });
+    setValue('invoice.country', next, { shouldValidate: false });
+    if (next === 'TH') {
+      setValue('invoice.thaiAddress',          EMPTY_THAI_ADDRESS, { shouldValidate: false });
+      setValue('invoice.internationalAddress', null,               { shouldValidate: false });
+    } else {
+      setValue('invoice.thaiAddress',          null,               { shouldValidate: false });
+      setValue('invoice.internationalAddress', EMPTY_INTL_ADDRESS, { shouldValidate: false });
+    }
   };
 
   const handleThaiAddressChange = (next) => {

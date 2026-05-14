@@ -16,11 +16,10 @@ import { AttendeesList } from '@/components/registration/AttendeesList';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const STORAGE_KEY = 'registration-public-v2';
+const STORAGE_KEY = 'registration-public-v3';
 
 const THAI_MONTHS = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -51,6 +50,10 @@ export function RegisterWizard({ course, schedules, initialClassId, earlyBirdSch
   const [restoredFromStorage, setRestoredFromStorage] = useState(null);
 
   useEffect(() => {
+    // Clear any stale drafts from previous schema versions
+    try { sessionStorage.removeItem('registration-public-v1'); } catch {}
+    try { sessionStorage.removeItem('registration-public-v2'); } catch {}
+
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -238,12 +241,13 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
       classDate: activeDateLabel,
       scheduleType: activeSchedule?.type || undefined,
       attendanceMode: activeSchedule?.type !== 'hybrid' ? 'classroom' : undefined,
+      attendeesListProvided: false,
+      requestInvoice: true,
       ...(initialValues ?? {}),
     },
   });
 
   const watched = watch();
-  const requestInvoice = watch('requestInvoice');
 
   // Sync hidden class fields when the user picks a different schedule
   useEffect(() => {
@@ -274,11 +278,9 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     return () => clearTimeout(timer);
   }, [formRevealed, activeSchedule?.type]);
 
-  // Lazy-init the invoice skeleton when the checkbox is first ticked,
-  // and clear it on untick so the schema's `.optional().nullable()`
-  // accepts the "no invoice" state cleanly.
+  // Always initialise the invoice skeleton on mount — invoice section is always visible.
   useEffect(() => {
-    if (requestInvoice && !watch('invoice')) {
+    if (!watch('invoice')) {
       setValue('invoice', {
         type: 'individual',
         country: 'TH',
@@ -294,21 +296,11 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
           province: '',
           postalCode: '',
         },
-        internationalAddress: {
-          line1: '',
-          line2: '',
-          city: '',
-          state: '',
-          postalCode: '',
-          country: '',
-        },
+        internationalAddress: null,
       });
     }
-    if (!requestInvoice) {
-      setValue('invoice', null);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestInvoice]);
+  }, []);
 
   // Persist draft to sessionStorage on every change
   useEffect(() => {
@@ -325,7 +317,24 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
   };
 
   return (
-    <form className="space-y-8" onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form
+      className="space-y-8"
+      onSubmit={handleSubmit(onSubmit, (errs) => {
+        // DEV DEBUG: log full error tree to console
+        console.error('[RegisterWizard] Validation errors:', JSON.stringify(errs, null, 2));
+        // Scroll to the first invalid field so the user can see what needs fixing
+        setTimeout(() => {
+          const firstError = document.querySelector(
+            '[aria-invalid="true"], [data-error="true"]'
+          );
+          if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus?.();
+          }
+        }, 50);
+      })}
+      noValidate
+    >
       <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
         <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
           เลือกรอบการอบรม
@@ -394,26 +403,12 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
             errors={errors}
           />
 
-          <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-            <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
-              ใบกำกับภาษี
-            </h2>
-            <label className="flex cursor-pointer items-center gap-2">
-              <Checkbox {...register('requestInvoice')} />
-              <span className="text-sm text-[var(--text-primary)]">
-                ต้องการใบกำกับภาษี
-              </span>
-            </label>
-          </section>
-
-          {requestInvoice && (
-            <InvoiceFields
-              register={register}
-              watch={watch}
-              setValue={setValue}
-              errors={errors}
-            />
-          )}
+          <InvoiceFields
+            register={register}
+            watch={watch}
+            setValue={setValue}
+            errors={errors}
+          />
 
           <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
             <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">
@@ -433,6 +428,13 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
               <p className="mt-1 text-xs text-9e-accent">{errors.notes.message}</p>
             )}
           </section>
+
+          {Object.keys(errors).length > 0 && (
+            <div className="rounded-9e-md border border-9e-accent/40 bg-9e-accent/10 p-4 text-sm text-9e-accent space-y-1">
+              <p className="font-semibold">กรุณาตรวจสอบข้อมูลต่อไปนี้:</p>
+              <DebugErrors errors={errors} />
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-4 pt-2">
             <Link
@@ -562,8 +564,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         />
       </Section>
 
-      <Section title="ข้อมูลผู้เข้าอบรม">
-        <ReadOnlyRow label="จำนวน" value={`${data.attendeesCount} ท่าน`} />
+      <Section title={`ข้อมูลผู้เข้าอบรม (${data.attendeesCount} ท่าน)`}>
         {!data.attendeesListProvided ? (
           <p className="text-sm text-[var(--text-secondary)]">
             ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
@@ -598,7 +599,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         )}
       </Section>
 
-      {data.requestInvoice && data.invoice && (
+      {data.invoice && (
         <Section title="ใบเสนอราคา / ใบกำกับภาษี">
           <ReadOnlyRow
             label="ประเภทลูกค้า"
@@ -749,5 +750,27 @@ function ReadOnlyRow({ label, value }) {
       </div>
       <div className="text-sm text-[var(--text-primary)]">{value || '—'}</div>
     </div>
+  );
+}
+
+/** DEV ONLY — flattens RHF errors tree into a visible list */
+function DebugErrors({ errors, path = '' }) {
+  return (
+    <>
+      {Object.entries(errors).map(([key, val]) => {
+        const fullPath = path ? `${path}.${key}` : key;
+        if (val?.message) {
+          return (
+            <p key={fullPath} className="text-xs">
+              <span className="font-mono font-bold">{fullPath}</span>: {val.message}
+            </p>
+          );
+        }
+        if (typeof val === 'object' && val !== null) {
+          return <DebugErrors key={fullPath} errors={val} path={fullPath} />;
+        }
+        return null;
+      })}
+    </>
   );
 }

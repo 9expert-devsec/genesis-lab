@@ -120,6 +120,10 @@ export async function POST(req) {
     invoice: data.invoice ?? null,
     invoiceCountry,
     invoiceAddress,
+    attendeesListProvided: data.attendeesListProvided,
+    attendees,
+    coordinatorIsAttending: data.coordinator.isAttending,
+    attendeesCount: data.attendeesCount,
   });
 
   const adminMsg = adminNotificationEmail({
@@ -135,6 +139,8 @@ export async function POST(req) {
       attendanceMode: data.attendanceMode ?? 'classroom',
       invoiceCountry,
       invoiceAddress,
+      attendees,
+      coordinatorIsAttending: data.coordinator.isAttending,
     },
     adminDashboardUrl,
   });

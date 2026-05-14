@@ -19,7 +19,7 @@ export function InhouseCTA() {
           หรือตามสถานที่อื่นๆ ที่ท่านต้องการ
         </p>
         <Link
-          href="/contact-us"
+          href="/registration/in-house"
           className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime px-8 py-4 text-base font-bold text-9e-navy shadow-lg transition-colors duration-9e-micro ease-9e hover:bg-9e-lime-dk sm:w-auto"
         >
           ขอใบเสนอราคา

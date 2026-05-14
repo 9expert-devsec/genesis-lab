@@ -27,6 +27,11 @@ export function CourseHero({ course, heroColor }) {
     course.course_id
   ).toLowerCase()}`;
 
+  // course_price === 0 means inhouse-only (no public schedule, no public price)
+  const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+
+  const inhouseHref = `/registration/in-house?course=${String(course.course_id).toLowerCase()}`;
+
   const hours =
     course.course_traininghours ??
     (course.course_trainingdays ? course.course_trainingdays * 6 : null);
@@ -91,7 +96,7 @@ export function CourseHero({ course, heroColor }) {
                 )}
               </div>
               <p className="mb-4 text-xs text-9e-slate-dp-50">
-                *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
+                {isInhouseOnly ? '*รับเฉพาะ InHouse Training เท่านั้น' : '*ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม'}
               </p>
 
               {(course.course_workshop_status ||
@@ -119,14 +124,16 @@ export function CourseHero({ course, heroColor }) {
               )}
 
               <div className="flex flex-wrap gap-3">
+                {!isInhouseOnly && (
+                  <Link
+                    href={registrationHref}
+                    className="rounded-xl bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+                  >
+                    ลงทะเบียน
+                  </Link>
+                )}
                 <Link
-                  href={registrationHref}
-                  className="rounded-xl bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
-                >
-                  ลงทะเบียน
-                </Link>
-                <Link
-                  href="/contact-us"
+                  href={inhouseHref}
                   className="rounded-xl border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white"
                 >
                   ขอใบเสนอราคา

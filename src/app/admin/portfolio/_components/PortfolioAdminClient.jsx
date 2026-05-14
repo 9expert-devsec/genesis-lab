@@ -110,6 +110,12 @@ function ClientLogosTab({ initialLogos }) {
 
   return (
     <div className="space-y-4">
+      <div className="rounded-9e-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300">
+        <strong>วิธีจัดแถว Marquee:</strong> โลโก้ที่มี display_order 1–21 จะแสดงใน <strong>แถวบน</strong> (แบรนด์ anchor หลัก)
+        และ 22–42 จะแสดงใน <strong>แถวล่าง</strong> (อุตสาหกรรม/สถาบัน/การผลิต)
+        ลากเพื่อเรียงลำดับ แล้วบันทึก order เพื่อให้มีผล
+      </div>
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ทั้งหมด {logos.length} โลโก้

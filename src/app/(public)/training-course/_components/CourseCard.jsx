@@ -50,6 +50,7 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
   const isInhouseOnly = isInhouse === true && !isPublic;
 
   const href = courseHref(id ? String(id).toLowerCase() : "");
+  const inhouseHref = `/registration/in-house?course=${String(id ?? '').toLowerCase()}`;
   const programIcon = program?.programiconurl;
   const programLabel = program?.program_name;
   const levelKey = levels != null ? Number(levels) : null;
@@ -248,10 +249,10 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
       {/* ── CTA ── */}
       {isInhouseOnly ? (
         <Link
-          href="/registration/in-house"
+          href={inhouseHref}
           className="flex w-full items-center justify-center bg-9e-navy px-4 py-3 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-navy/90 dark:bg-9e-ice dark:text-9e-navy"
         >
-          รับเฉพาะ Inhouse
+          ขอใบเสนอราคา
         </Link>
       ) : !schedules?.length ? null : expanded ? (
         /* สถานะเมื่อขยายแล้ว: แสดงปุ่มเพื่อหุบเก็บ */

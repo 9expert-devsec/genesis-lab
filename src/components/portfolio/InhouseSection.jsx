@@ -47,7 +47,7 @@ const SERVICES = [
 export default function InhouseSection() {
   return (
     <section className="bg-white py-20 dark:bg-[var(--page-bg)]">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1200px] ">
         <div className="flex flex-col items-center gap-12 lg:flex-row lg:gap-16">
           {/* Left — text block (5/12) */}
           <div className="w-full lg:w-5/12">
@@ -64,7 +64,7 @@ export default function InhouseSection() {
             </p>
 
             <Link
-              href="/contact-us"
+              href="/registration/in-house"
               className="btn-9e-cta mt-8 inline-flex items-center gap-2"
             >
               สนใจจัดอบรมภายในองค์กรของท่าน

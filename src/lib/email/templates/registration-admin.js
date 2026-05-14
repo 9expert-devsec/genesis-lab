@@ -61,6 +61,34 @@ export function adminNotificationEmail({
 
     <!-- Notes -->
     ${data.notes ? `<tr><td colspan="2" style="padding-top: 8px;"></td></tr><tr><td style="color: #6b7280;">หมายเหตุ</td><td>${data.notes}</td></tr>` : ''}
+
+    <!-- Attendees -->
+    ${data.attendeesListProvided && data.attendees?.length > 0 ? `
+    <tr><td colspan="2" style="padding-top: 20px;"><strong>รายชื่อผู้เข้าอบรม (${data.attendeesCount} ท่าน)</strong></td></tr>
+    <tr>
+      <td colspan="2" style="padding: 8px 0;">
+        <table width="100%" cellpadding="5" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="text-align:left; padding:6px 8px; border:1px solid #e2e8f0;">#</th>
+              <th style="text-align:left; padding:6px 8px; border:1px solid #e2e8f0;">ชื่อ-นามสกุล</th>
+              <th style="text-align:left; padding:6px 8px; border:1px solid #e2e8f0;">อีเมล</th>
+              <th style="text-align:left; padding:6px 8px; border:1px solid #e2e8f0;">เบอร์โทร</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.attendees.map((a, i) => `
+            <tr style="background:${i%2===0?'#fff':'#f8fafd'};">
+              <td style="padding:6px 8px;border:1px solid #e2e8f0;color:#6b7280;">${i+1}</td>
+              <td style="padding:6px 8px;border:1px solid #e2e8f0;">${a.firstName} ${a.lastName}${i===0 && data.coordinatorIsAttending ? ' <span style="color:#6b7280;font-size:11px;">(ผู้ประสานงาน)</span>':''}</td>
+              <td style="padding:6px 8px;border:1px solid #e2e8f0;">${a.email}</td>
+              <td style="padding:6px 8px;border:1px solid #e2e8f0;">${a.phone}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </td>
+    </tr>` : data.attendeesListProvided === false ? `
+    <tr><td colspan="2" style="padding-top:12px; color:#6b7280; font-size:13px; font-style:italic;">* รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง</td></tr>` : ''}
   </table>
 
   <div style="margin-top: 24px;">
@@ -88,6 +116,9 @@ export function adminNotificationEmail({
 ใบเสนอราคา / ใบกำกับภาษี: ${requestsInvoice}${data.requestInvoice ? `
   ประเภท: ${invoiceTypeThai} · ${invoiceCountryLabel}
   ${data.invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${data.invoice?.branch ? `\n  สาขา: ${data.invoice.branch}` : ''}${data.invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${data.invoice.taxId}` : ''}${data.invoiceAddress ? `\n  ที่อยู่: ${data.invoiceAddress}` : ''}` : ''}
+${data.attendeesListProvided && data.attendees?.length > 0 ? `
+รายชื่อผู้เข้าอบรม (${data.attendeesCount} ท่าน):
+${data.attendees.map((a, i) => `  ${i+1}. ${a.firstName} ${a.lastName} | ${a.email} | ${a.phone}${i===0 && data.coordinatorIsAttending ? ' (ผู้ประสานงาน)' : ''}`).join('\n')}` : data.attendeesListProvided === false ? '\n* รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง' : ''}
 
 ${data.notes ? `หมายเหตุ: ${data.notes}\n\n` : ''}ดูใน Admin: ${adminDashboardUrl}`;
 

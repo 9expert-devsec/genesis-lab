@@ -105,7 +105,7 @@ export const publicRegistrationSchema = z
     // Parties
     coordinator:           coordinatorSchema,
     attendeesCount:        z.number().int().min(1).max(20).default(1),
-    attendeesListProvided: z.boolean().default(true),
+    attendeesListProvided: z.boolean().default(false),
     attendees:             z.array(attendeeSchema).default([]),
 
     // Invoice
@@ -166,7 +166,7 @@ export const publicRegistrationDefaults = {
     // lineId removed — field no longer in the form
   },
   attendeesCount:        1,
-  attendeesListProvided: true,
+  attendeesListProvided: false,
   attendees:      [],
   requestInvoice: false,
   invoice:        null,

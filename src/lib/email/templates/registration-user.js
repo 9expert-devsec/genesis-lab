@@ -13,6 +13,10 @@ export function userConfirmationEmail({
   invoice = null,
   invoiceCountry = 'TH',
   invoiceAddress = '',
+  attendeesListProvided = false,
+  attendees = [],
+  coordinatorIsAttending = false,
+  attendeesCount = 1,
 }) {
   const modeLabel =
     attendanceMode === 'teams' ? 'Online via Microsoft Teams' : 'Classroom';
@@ -20,6 +24,45 @@ export function userConfirmationEmail({
 
   // ── Invoice display helpers ──────────────────────────────────────
   const showInvoice = requestInvoice && invoice;
+
+  // ── Attendees display helpers ────────────────────────────────────
+  const showAttendees = attendeesListProvided && attendees.length > 0;
+
+  const attendeesHtml = showAttendees ? `
+              <!-- Attendees block -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td>
+                    <p style="margin: 0 0 12px; font-size: 14px; font-weight: 700; color: #0d1b2a;">
+                      รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน)
+                    </p>
+                    <table width="100%" cellpadding="6" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+                      <thead>
+                        <tr style="background: #f1f5f9;">
+                          <th style="text-align: left; padding: 8px; border: 1px solid #e2e8f0; width: 40px;">#</th>
+                          <th style="text-align: left; padding: 8px; border: 1px solid #e2e8f0;">ชื่อ-นามสกุล</th>
+                          <th style="text-align: left; padding: 8px; border: 1px solid #e2e8f0;">อีเมล</th>
+                          <th style="text-align: left; padding: 8px; border: 1px solid #e2e8f0;">เบอร์โทร</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${attendees.map((a, i) => `
+                        <tr style="background: ${i % 2 === 0 ? '#ffffff' : '#f8fafd'};">
+                          <td style="padding: 8px; border: 1px solid #e2e8f0; color: #6b7280;">${i + 1}</td>
+                          <td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: ${i === 0 && coordinatorIsAttending ? '600' : '400'};">
+                            ${a.firstName} ${a.lastName}${i === 0 && coordinatorIsAttending ? ' <span style="color:#6b7280;font-size:11px;">(ผู้ประสานงาน)</span>' : ''}
+                          </td>
+                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${a.email}</td>
+                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${a.phone}</td>
+                        </tr>`).join('')}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              </table>` : attendeesListProvided === false ? `
+              <p style="margin: 0 0 24px; font-size: 13px; color: #6b7280; font-style: italic;">
+                * รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง ทีมขายจะติดต่อเพื่อเก็บข้อมูล
+              </p>` : '';
 
   const invoiceNameLine =
     invoice?.type === 'corporate'
@@ -93,6 +136,8 @@ export function userConfirmationEmail({
                 ทีมขายจะจัดส่งใบเสนอราคาให้ทางอีเมลหลังจากได้รับการยืนยัน
               </p>` : ''}
 
+              ${attendeesHtml}
+
               <h3 style="margin: 0 0 12px; font-size: 16px;">ขั้นตอนถัดไป</h3>
               <ol style="margin: 0 0 24px; padding-left: 20px; line-height: 1.8;">
                 <li>ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการเพื่อยืนยันและแจ้งรายละเอียดการชำระเงิน</li>
@@ -126,7 +171,10 @@ ${showInvoice ? `
 ข้อมูลออกใบเสนอราคา:
   ประเภท: ${invoiceTypeThai} · ${invoiceCountryLabel}
   ${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${invoice?.branch ? `\n  สาขา: ${invoice.branch}` : ''}${invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${invoice.taxId}` : ''}${invoiceAddress ? `\n  ที่อยู่: ${invoiceAddress}` : ''}
-` : ''}
+` : ''}${showAttendees ? `
+รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน):
+${attendees.map((a, i) => `  ${i + 1}. ${a.firstName} ${a.lastName} | ${a.email} | ${a.phone}${i === 0 && coordinatorIsAttending ? ' (ผู้ประสานงาน)' : ''}`).join('\n')}
+` : !attendeesListProvided ? '\n* รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง\n' : ''}
 ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการเพื่อยืนยันการสมัครและแจ้งรายละเอียดการชำระเงิน
 
 หากมีข้อสงสัย:
