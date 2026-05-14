@@ -15,7 +15,7 @@ const RING2 = [
   { angle: 120, label: "Python", color: "#005CFF" },
   { angle: 210, label: "Excel", color: "#48B0FF" },
   { angle: 300, label: "RPA", color: "#005CFF" },
-];
+]; 
 
 const DOTS = Array.from({ length: 24 }, (_, i) => i * 15);
 
