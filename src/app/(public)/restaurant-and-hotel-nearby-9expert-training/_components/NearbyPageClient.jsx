@@ -66,7 +66,7 @@ function PlaceCard({ place }) {
       </div>
 
       <div className="p-5">
-        <h3 className="text-lg font-black text-slate-950">{place.name}</h3>
+        <h3 className="text-lg font-bold text-slate-950">{place.name}</h3>
         <p className="mt-1 text-sm text-slate-500">{place.detail}</p>
 
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
@@ -128,7 +128,7 @@ function TopNearbyCard({ place, index }) {
       rel="noopener noreferrer"
       className="flex items-center gap-3 rounded-3xl border border-slate-100 bg-white p-3 shadow-sm transition hover:border-blue-200 hover:shadow-md"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#E6F1FF] font-black text-[#005CFF]">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#E6F1FF] font-bold text-[#005CFF]">
         {index + 1}
       </div>
       <img
@@ -189,7 +189,7 @@ function MapView({ filteredPlaces }) {
       <div className="relative min-h-[560px] overflow-hidden rounded-[32px] border border-slate-200 bg-[linear-gradient(135deg,#E0F2FE,#F8FAFC,#DBEAFE)] shadow-sm">
         <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-blue-300" />
         <div className="absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-dashed border-blue-300" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-[#005CFF] px-5 py-4 text-center font-black text-white shadow-xl">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-[#005CFF] px-5 py-4 text-center font-bold text-white shadow-xl">
           9Expert Training
         </div>
         {filteredPlaces.slice(0, mapPositions.length).map((place, index) => {
@@ -241,7 +241,7 @@ export default function NearbyPageClient({ places = [] }) {
         <div className="mx-auto grid max-w-[1200px] gap-8 lg:grid-cols-[1.05fr_.95fr] lg:items-center">
           <div>
 
-            <h1 className="font-bold max-w-3xl text-4xl tracking-normal leading-normal text-slate-950 sm:text-5xl sm:leading-normal lg:text-6xl lg:leading-tight">
+            <h1 className="font-bold max-w-3xl text-4xl tracking-normal leading-normal text-slate-950 sm:text-5xl sm:leading-normal lg:text-5xl lg:leading-tight">
               โรงแรม ร้านอาหาร<br />และคาเฟ่ใกล้สถาบัน
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-6 text-slate-600">
@@ -320,7 +320,7 @@ export default function NearbyPageClient({ places = [] }) {
         <div className="mx-auto max-w-[1200px]">
           <div className="mb-6 flex items-end justify-between">
             <div>
-              <h2 className="text-2xl font-black text-slate-950">สถานที่ทั้งหมด</h2>
+              <h2 className="text-2xl font-bold text-slate-950">สถานที่ทั้งหมด</h2>
               <p className="text-sm text-slate-500">เรียงจากใกล้ไปไกล · พบ {filteredPlaces.length} รายการ</p>
             </div>
           </div>
@@ -337,7 +337,7 @@ export default function NearbyPageClient({ places = [] }) {
             )
           ) : (
             <div className="rounded-[28px] border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
-              <div className="text-lg font-black text-slate-950">ไม่พบสถานที่ที่ตรงกับการค้นหา</div>
+              <div className="text-lg font-bold text-slate-950">ไม่พบสถานที่ที่ตรงกับการค้นหา</div>
               <p className="mt-2 text-sm text-slate-500">ลองเปลี่ยนคำค้นหาหรือเลือกหมวดหมู่อื่น</p>
             </div>
           )}

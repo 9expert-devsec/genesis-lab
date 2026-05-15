@@ -151,7 +151,7 @@ export const mainNav = [
     children: [
       { label: 'แผนที่และการเดินทาง',            href: '/contact-us' },
       { label: 'โรงแรมและร้านอาหารใกล้ 9Expert', href: '/restaurant-and-hotel-nearby-9expert-training' },
-      { label: 'Facebook',                        href: siteConfig.facebookUrl, external: true },
+      { label: 'Social Channels',                 href: '/social' },
       { label: 'คำถามที่พบบ่อย',                 href: '/faq' },
       { label: 'เกี่ยวกับเรา',                    href: '/about-us' },
       { label: 'ร่วมงานกับเรา',                  href: '/join-us' },
