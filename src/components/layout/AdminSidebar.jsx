@@ -27,6 +27,7 @@ import {
   Info,
   Phone,
   LayoutTemplate,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,7 @@ const ICONS = {
   Info,
   Phone,
   LayoutTemplate,
+  MapPin,
 };
 
 // `superadminOnly: true` items are filtered out for non-superadmin
@@ -91,6 +93,7 @@ const NAV_GROUPS = [
       { label: 'เกี่ยวกับเรา',     href: '/admin/about',            icon: 'Info' },
       { label: 'ติดต่อเรา',        href: '/admin/contact',          icon: 'Phone' },
       { label: 'ผลงานของเรา',      href: '/admin/portfolio',        icon: 'LayoutTemplate' },
+      { label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places',    icon: 'MapPin' },
       { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare' },
       { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText' },
       { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays' },
