@@ -116,7 +116,7 @@ export default function SocialPage() {
           </div>
 
           {/* Floating icons illustration */}
-          <div className="relative mx-auto h-[360px] w-full max-w-[440px]">
+          <div className="relative ml-auto h-[360px] w-full max-w-[440px]">
             {/* soft backdrop circle */}
             <div className="absolute left-1/2 top-1/2 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/60 blur-2xl" />
             {FLOATING_ICONS.map(([key, left, top, size, rot], i) => (
