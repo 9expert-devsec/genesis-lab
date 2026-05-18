@@ -34,7 +34,7 @@ export async function generateMetadata({ params }) {
   const { promotion, config } = resolved;
   const title =
     config?.meta_title?.trim() ||
-    `${promotion.title} | โปรโมชั่น 9Expert Training`;
+    `${promotion.title} | โปรโมชัน 9Expert Training`;
   const description =
     config?.meta_description?.trim() ||
     promotion.detail_plain?.slice(0, 160) ||
@@ -70,7 +70,7 @@ export default async function PromotionDetailPage({ params }) {
           href="/promotions"
           className="mb-6 inline-flex items-center gap-1 text-sm text-[#005CFF] hover:underline dark:text-[#48B0FF]"
         >
-          <span aria-hidden="true">←</span> กลับไปหน้าโปรโมชั่น
+          <span aria-hidden="true">←</span> กลับไปหน้าโปรโมชัน
         </Link>
 
         <header className="mb-6">

@@ -1,6 +1,9 @@
 // src/app/page.jsx
 import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
+import { TopNotificationBar } from "@/components/notifications/TopNotificationBar";
+import { SitePopup } from "@/components/notifications/SitePopup";
+import { getActiveTopBars } from "@/lib/actions/site-notifications";
 
 import { getLandingData } from "@/lib/landing/getLandingData";
 import { siteConfig } from "@/config/site";
@@ -43,17 +46,28 @@ export const metadata = {
  * never a 500.
  */
 export default async function HomePage() {
-  const {
-    banners,
-    programs,
-    skills,
-    newCoursesWithSchedules,
-    onlineCoursesForSection,
-    reviews,
-  } = await getLandingData();
+  // Home sits outside the `(public)` group so it doesn't inherit that
+  // group's layout — fetch + render the top bar inline here. Same call
+  // as `(public)/layout.jsx`; both are cached together via
+  // `revalidatePath('/', 'layout')` on admin writes.
+  const [
+    {
+      banners,
+      programs,
+      skills,
+      newCoursesWithSchedules,
+      onlineCoursesForSection,
+      reviews,
+    },
+    bars,
+  ] = await Promise.all([
+    getLandingData(),
+    getActiveTopBars().catch(() => []),
+  ]);
 
   return (
     <>
+      <TopNotificationBar bars={bars} />
       <PublicHeader />
 
       <main id="main">
@@ -81,6 +95,7 @@ export default async function HomePage() {
       </main>
 
       <PublicFooter />
+      <SitePopup />
     </>
   );
 }

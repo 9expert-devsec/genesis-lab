@@ -39,7 +39,7 @@ export default function ScheduleCard({
         )}
       >
         <svg
-          viewBox="0 0 88 80"
+          viewBox="0 0 90 80"
           preserveAspectRatio="xMidYMid meet"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"

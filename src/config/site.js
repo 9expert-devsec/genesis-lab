@@ -97,8 +97,12 @@ export function findSkillBySlug(slug) {
 
 /**
  * Career paths — hardcoded list for nav.
- * TODO(phase-3): fetch from /api/ai/career-path and cache via ISR.
- * curl-verify the endpoint first — see docs/api-domains.md.
+ *
+ * Intentionally static: the nav is rendered on every public page and we
+ * don't want a DB roundtrip in the header. Public detail/landing pages
+ * read from the synced CareerPath cache (see /lib/career-paths/) — keep
+ * this list in step with `careerpath.api_slug` (slug without the
+ * `-career-path` suffix).
  *
  * First entry is the "all" landing page (empty slug → /career-path-project).
  */

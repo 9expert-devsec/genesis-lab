@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/promotions-sync",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/faqs-sync",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/career-paths-sync",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

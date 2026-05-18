@@ -3,6 +3,8 @@ import { PagePlaceholder } from '@/components/layout/PagePlaceholder';
 import { listPrograms } from '@/lib/api/programs';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
+import { CareerPathDetail } from './_components/CareerPathDetail';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
 import { ScheduleSection } from './_components/ScheduleSection';
@@ -52,6 +54,30 @@ export async function generateMetadata({ params }) {
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
 
+  // Career-path detail pages live under this catch-all too; resolve them
+  // first so their metadata wins over any accidental course-name collision.
+  if (segment.endsWith('-career-path')) {
+    const careerPath = await getCareerPathBySlug(segment);
+    if (careerPath) {
+      const title =
+        `${careerPath.title} | เส้นทางอาชีพ · 9Expert Training`.trim();
+      const description =
+        careerPath.short_description?.slice(0, 160) ||
+        careerPath.tagline?.slice(0, 160) ||
+        '';
+      const ogImage = careerPath.hero_image_url || '';
+      return {
+        title,
+        description,
+        openGraph: {
+          title,
+          description,
+          images: ogImage ? [{ url: ogImage }] : [],
+        },
+      };
+    }
+  }
+
   const resolved = await resolveCourse(segment);
   if (!resolved) return {};
 
@@ -82,6 +108,17 @@ export default async function CatchAllPage({ params }) {
   const segment = segmentFromSlug(slug);
 
   if (!segment) notFound();
+
+  // Career-path detail — handled before course resolution so the
+  // `-career-path` suffix can't accidentally match a course alias.
+  if (segment.endsWith('-career-path')) {
+    const careerPath = await getCareerPathBySlug(segment);
+    if (careerPath) {
+      return <CareerPathDetail careerPath={careerPath} />;
+    }
+    // Fall through if no active career path is found — the placeholder
+    // branch below handles the legacy URL until sync repopulates.
+  }
 
   // Course resolver handles both alias and `-training-course` suffix.
   const resolved = await resolveCourse(segment);

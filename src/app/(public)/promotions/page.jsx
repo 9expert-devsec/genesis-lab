@@ -7,7 +7,7 @@ import { PromotionBannerCarousel } from '@/components/promotions/PromotionBanner
 export const revalidate = 3600;
 
 export const metadata = {
-  title: 'โปรโมชั่น | 9Expert Training',
+  title: 'โปรโมชัน | 9Expert Training',
   description:
     'รวมโปรโมชั่นและส่วนลดพิเศษสำหรับหลักสูตรอบรมจาก 9Expert Training',
 };
@@ -101,7 +101,7 @@ export default async function PromotionsListPage() {
         />
         <div className="relative mx-auto max-w-[1200px] px-4 text-center lg:px-6">
           <h1 className="text-3xl font-bold text-white md:text-4xl">
-            โปรโมชั่น
+            โปรโมชัน
           </h1>
           <p className="mx-auto mt-2 max-w-2xl text-base text-white/80">
             ส่วนลดและสิทธิพิเศษสำหรับหลักสูตรฝึกอบรม 9Expert Training
@@ -121,7 +121,7 @@ export default async function PromotionsListPage() {
         {promotions.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--surface-border)] bg-white p-10 text-center dark:bg-9e-border">
             <p className="text-base text-[#465469] dark:text-[#C5CEDA]">
-              ยังไม่มีโปรโมชั่นในตอนนี้
+              ยังไม่มีโปรโมชันในตอนนี้
             </p>
             <p className="mt-1 text-sm text-[#5E6A7E]">
               โปรดกลับมาตรวจสอบใหม่อีกครั้งภายหลัง

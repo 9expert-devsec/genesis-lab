@@ -89,27 +89,28 @@ export default function HeroUniverse() {
 
         {/* H1 — two lines */}
         <div className="max-w-5xl text-3xl font-medium leading-tight md:text-7xl lg:text-5xl">
-          <motion.h3
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="block bg-clip-text text-transparent lg:text-3xl bg-[linear-gradient(90deg,#081222_0%,#005cff_50%,#081222_100%)] dark:bg-[linear-gradient(90deg,#ffffff_0%,#93c5fd_50%,#ffffff_100%)]"
-          >
-            Never Stop Learning
-          </motion.h3>
+
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.25 }}
+            transition={{ duration: 0.6, delay: 0.01 }}
             className="mt-2 block bg-clip-text text-transparent leading-tight"
             style={{
               backgroundImage:
                 "linear-gradient(90deg,#48B0FF 0%,#005CFF 50%,#48B0FF 100%)",
             }}
           >
-            In a World where Technology <br />
-            Never Stops Changing.
+            "เราจะออกแบบทุกๆ หลักสูตรให้ทันสมัย<br />
+            ตอบโจทย์ในโลกธุรกิจและการทำงานจริง"
           </motion.h1>
+                    <motion.h3
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            className="block bg-clip-text text-transparent lg:text-3xl bg-[linear-gradient(90deg,#081222_0%,#005cff_50%,#081222_100%)] dark:bg-[linear-gradient(90deg,#ffffff_0%,#93c5fd_50%,#ffffff_100%)]"
+          >
+            9Expert Training | Never Stop Learning
+          </motion.h3>
         </div>
 
         {/* Eyebrow subtext */}
@@ -120,7 +121,7 @@ export default function HeroUniverse() {
           className="text-sm font-medium uppercase text-[#99a1af]"
           style={{ letterSpacing: "4px" }}
         >
-          Data · AI · Business · Technology
+          AI · DATA · AUTOMATION
         </motion.p>
 
         {/* Body paragraph */}

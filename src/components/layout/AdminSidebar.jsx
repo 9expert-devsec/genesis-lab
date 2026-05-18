@@ -28,6 +28,9 @@ import {
   Phone,
   LayoutTemplate,
   MapPin,
+  HelpCircle,
+  Map,
+  Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +66,9 @@ const ICONS = {
   Phone,
   LayoutTemplate,
   MapPin,
+  HelpCircle,
+  Map,
+  Bell,
 };
 
 // `superadminOnly: true` items are filtered out for non-superadmin
@@ -81,6 +87,7 @@ const NAV_GROUPS = [
       { label: 'คอร์สออนไลน์แนะนำ',    href: '/admin/featured-online-courses',  icon: 'Monitor' },
       { label: 'หลักสูตร SEO/Gallery', href: '/admin/courses',                  icon: 'GraduationCap' },
       { label: 'โปรแกรม & Skills',     href: '/admin/programs',                 icon: 'Layers' },
+      { label: 'Career Path',          href: '/admin/career-paths',             icon: 'Map' },
       { label: 'Program/Skill URL',    href: '/admin/page-configs',             icon: 'FileText' },
     ],
   },
@@ -90,12 +97,14 @@ const NAV_GROUPS = [
       { label: 'แบนเนอร์',         href: '/admin/banners',          icon: 'Image' },
       { label: 'โปรโมชั่น',        href: '/admin/promotions',       icon: 'Tag', exact: true },
       { label: 'แบนเนอร์โปรโมชั่น', href: '/admin/promotions/banner', icon: 'Image' },
+      { label: 'Notifications',    href: '/admin/notifications',    icon: 'Bell' },
       { label: 'เกี่ยวกับเรา',     href: '/admin/about',            icon: 'Info' },
       { label: 'ติดต่อเรา',        href: '/admin/contact',          icon: 'Phone' },
       { label: 'ผลงานของเรา',      href: '/admin/portfolio',        icon: 'LayoutTemplate' },
       { label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places',    icon: 'MapPin' },
       { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare' },
       { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText' },
+      { label: 'FAQ',              href: '/admin/faqs',             icon: 'HelpCircle' },
       { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays' },
     ],
   },
