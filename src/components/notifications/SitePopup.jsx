@@ -162,7 +162,7 @@ export function SitePopup() {
       onClick={close}
     >
       <div
-        className="relative w-[92vw] max-w-[360px] sm:max-w-[480px] min-[1537px]:max-w-[600px] rounded-2xl overflow-hidden"
+        className="relative w-[92vw] max-w-[360px] sm:max-w-[480px] min-[1537px]:max-w-[700px] rounded-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <button
