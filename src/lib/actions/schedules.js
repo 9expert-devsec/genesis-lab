@@ -15,7 +15,7 @@
  * here keeps the table fresh after each mutation.
  */
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { auth } from '@/lib/auth/options';
 import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
@@ -23,6 +23,27 @@ import { resolveCourseObjectId } from '@/lib/api/resolveIds';
 import ScheduleLocal from '@/models/ScheduleLocal';
 
 const ADMIN_PATH = '/admin/schedules';
+
+/**
+ * Bust the ISR caches that read schedules. Called after every write.
+ *   - tag `schedules`                — list views (admin table, /search)
+ *   - tag `schedules:course:<oid>`   — per-course detail page
+ *   - path `/admin/schedules`        — admin table re-render
+ * The per-course tag is a noop when courseObjectId is empty.
+ */
+function bustScheduleCaches(courseObjectId) {
+  try { revalidateTag('schedules'); } catch (err) {
+    console.warn('[schedules] revalidateTag(schedules) failed:', err?.message);
+  }
+  if (courseObjectId) {
+    try { revalidateTag(`schedules:course:${courseObjectId}`); } catch (err) {
+      console.warn('[schedules] revalidateTag(per-course) failed:', err?.message);
+    }
+  }
+  try { revalidatePath(ADMIN_PATH); } catch (err) {
+    console.warn('[schedules] revalidatePath failed:', err?.message);
+  }
+}
 
 async function requireAdmin() {
   const session = await auth();
@@ -120,7 +141,7 @@ export async function createSchedule(formData) {
       courseIdString,
       formData,
     });
-    revalidatePath(ADMIN_PATH);
+    bustScheduleCaches(courseObjectId);
     return { ok: true, item, id: item?._id };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'สร้างตารางไม่สำเร็จ' };
@@ -168,7 +189,7 @@ export async function updateSchedule(idOrFormData, maybeFormData) {
       courseIdString,
       formData,
     });
-    revalidatePath(ADMIN_PATH);
+    bustScheduleCaches(courseObjectId);
     return { ok: true, item };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'อัปเดตตารางไม่สำเร็จ' };
@@ -179,13 +200,28 @@ export async function deleteSchedule(id) {
   await requireAdmin();
   if (!id) return { ok: false, error: 'Missing schedule id' };
 
+  // Sidecar lookup — if present, we can also bust the per-course
+  // cache tag. Resolving via the local row avoids an extra MSDB call
+  // just to learn which course the deleted schedule pointed at.
+  let courseObjectId = '';
+  try {
+    await dbConnect();
+    const sidecar = await ScheduleLocal.findOne({
+      msdb_schedule_id: String(id),
+    }).lean();
+    if (sidecar?.course_id) {
+      courseObjectId = (await resolveCourseObjectId(sidecar.course_id)) ?? '';
+    }
+  } catch {
+    // Non-fatal — proceed with the delete, bust only the general tag.
+  }
+
   try {
     await msdbDelete('schedules', id);
     // Best-effort sidecar cleanup. If MSDB delete already succeeded,
     // a leftover sidecar is harmless but worth tidying up.
-    await dbConnect();
     await ScheduleLocal.deleteOne({ msdb_schedule_id: String(id) }).catch(() => {});
-    revalidatePath(ADMIN_PATH);
+    bustScheduleCaches(courseObjectId);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ลบตารางไม่สำเร็จ' };

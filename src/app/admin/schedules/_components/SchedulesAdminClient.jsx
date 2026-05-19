@@ -393,8 +393,22 @@ function ProgramGroup({
                     <td className="px-3 py-3 font-mono text-[11px] text-9e-slate-dp-50">
                       {course.course_id}
                     </td>
-                    <td className="max-w-[280px] truncate px-3 py-3 text-9e-navy dark:text-white">
-                      {course.course_name_th || course.course_name}
+                    <td className="px-3 py-3 text-9e-navy dark:text-white">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 max-w-[260px] truncate">
+                          {course.course_name_th || course.course_name}
+                        </span>
+                        {/* Inline shortcut: open the modal with this course
+                            pre-filled. No month hint — admin picks dates
+                            in the calendar grid themselves. */}
+                        <button
+                          type="button"
+                          onClick={() => onAdd(course.course_id, null)}
+                          className="shrink-0 whitespace-nowrap rounded-full border border-green-400 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
+                        >
+                          + รอบ
+                        </button>
+                      </div>
                     </td>
                     <td className="px-2 py-3 text-center text-xs text-9e-slate-dp-50">
                       {course.course_trainingdays || '—'}

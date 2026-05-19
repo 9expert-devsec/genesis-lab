@@ -17,12 +17,21 @@ const PATH = '/schedules';
  * @param {string} opts.from       — range start: 'YYYY-MM-DD'
  * @param {string} opts.to         — range end:   'YYYY-MM-DD'
  * @param {string|string[]} opts.courses — course ID(s); comma-joined upstream
+ * @param {number} opts.revalidate — override Next.js ISR seconds. Default 1800
+ *                                   (30 min). Admin pages pass `0` to read
+ *                                   uncached so just-written rows show up.
  */
-export async function listSchedules({ date, from, to, courses } = {}) {
+export async function listSchedules({
+  date,
+  from,
+  to,
+  courses,
+  revalidate = 1800,
+} = {}) {
   const coursesParam = Array.isArray(courses) ? courses.join(',') : courses;
   const raw = await aiFetch(PATH, {
     params: { date, from, to, courses: coursesParam },
-    revalidate: 1800, // 30 min — schedules change more often than static content
+    revalidate,
     tags: ['schedules'],
   });
   return unwrap(raw);

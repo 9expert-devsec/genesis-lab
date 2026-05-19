@@ -30,7 +30,14 @@ export default async function AdminSchedulesPage() {
 
   const [scheduleRes, courseRes, programRes, instructorRes] =
     await Promise.allSettled([
-      listSchedules({ from: toIsoDate(now), to: toIsoDate(toDate) }),
+      // revalidate: 0 — admin table must reflect a just-written row
+      // immediately after `router.refresh()`. The `schedules` tag is
+      // still attached so revalidateTag(...) busts public ISR caches.
+      listSchedules({
+        from: toIsoDate(now),
+        to:   toIsoDate(toDate),
+        revalidate: 0,
+      }),
       listPublicCourses(),
       listPrograms(),
       listInstructorsForAdmin(),
