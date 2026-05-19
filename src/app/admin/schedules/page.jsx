@@ -11,10 +11,26 @@ export const metadata = {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function toIsoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export default async function AdminSchedulesPage() {
+  // Show the next 3 months of schedules by default. The Month tabs in
+  // the client filter inside that window — narrower than the default
+  // upstream which returns everything from today onwards.
+  const now = new Date();
+  const toDate = new Date(now);
+  toDate.setMonth(toDate.getMonth() + 3);
+  const from = toIsoDate(now);
+  const to   = toIsoDate(toDate);
+
   // MSDB schedules first; we need their ids before fetching sidecars.
   const [scheduleRes, courseRes, instructorRes] = await Promise.allSettled([
-    listSchedules(),
+    listSchedules({ from, to }),
     listPublicCourses(),
     listInstructorsForAdmin(),
   ]);

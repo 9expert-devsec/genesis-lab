@@ -1,45 +1,83 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 /**
  * TrainingTopicsEditor — dynamic list of `{ topic, subtopics[] }`.
  *
- * Renders editable rows and serialises the whole list into a single
- * hidden input (`name={name}`, default "training_topics") as JSON. The
- * server-side `parseTrainingTopics()` helper in
- * `src/lib/actions/courses.js` decodes it back into structured form.
+ * Two ways to feed seed data:
+ *   - `initialTopics` (preferred): the MSDB-shaped array
+ *     `[{ topic: string, subtopics: string[] }]`. We map each subtopics
+ *     array to a newline-joined string for the textarea representation.
+ *   - `defaultValue` (legacy alias): same shape, kept so older callers
+ *     don't break. Treated as a fallback when `initialTopics` is omitted.
  *
- * Props
- *   name          FormData key for the hidden input (default "training_topics")
- *   defaultValue  initial array of { topic, subtopics: [] | string }
+ * The whole list is serialised to a single hidden input (`name`, default
+ * "training_topics") as JSON. `parseTrainingTopics()` on the server
+ * (src/lib/actions/courses.js) decodes it back to the upstream shape.
+ *
+ * Init pattern
+ *   We seed `useState` with a normalisation of the prop at mount, then
+ *   run an effect that re-syncs IF the prop reference changes from
+ *   empty → non-empty (e.g. the parent finished an async fetch after
+ *   first paint). Once the editor has rows, we don't clobber them on
+ *   subsequent prop changes — that would erase admin-typed input
+ *   whenever the parent re-renders.
  */
+function normalise(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((row) => ({
+      topic: String(row?.topic ?? ''),
+      subtopics: Array.isArray(row?.subtopics)
+        ? row.subtopics.map((s) => String(s ?? '')).join('\n')
+        : String(row?.subtopics ?? ''),
+    }))
+    .filter((r) => r.topic || r.subtopics.length > 0);
+}
+
 export function TrainingTopicsEditor({
   name = 'training_topics',
-  defaultValue = [],
+  initialTopics,
+  defaultValue,
 }) {
-  const [rows, setRows] = useState(() => {
-    const seed = Array.isArray(defaultValue) ? defaultValue : [];
-    if (seed.length === 0) return [{ topic: '', subtopics: '' }];
-    return seed.map((row) => ({
-      topic: String(row?.topic ?? ''),
-      // Render subtopics as newline-joined text for the textarea.
-      subtopics: Array.isArray(row?.subtopics)
-        ? row.subtopics.join('\n')
-        : String(row?.subtopics ?? ''),
-    }));
-  });
+  const seedSource = initialTopics ?? defaultValue ?? [];
+  const seedNormalised = useMemo(() => normalise(seedSource), [seedSource]);
+
+  const [rows, setRows] = useState(() =>
+    seedNormalised.length > 0
+      ? seedNormalised
+      : [{ topic: '', subtopics: '' }]
+  );
+
+  // If the parent passes a non-empty seed AFTER first paint (async data
+  // arrived late), populate the editor — but only when the user hasn't
+  // touched the placeholder row yet. The `hasUserEditedRef` flag
+  // protects against clobbering real input.
+  const hasUserEditedRef = useRef(false);
+  useEffect(() => {
+    if (hasUserEditedRef.current) return;
+    if (seedNormalised.length === 0) return;
+    setRows(seedNormalised);
+  }, [seedNormalised]);
+
+  function markEdited() {
+    hasUserEditedRef.current = true;
+  }
 
   function updateRow(idx, field, value) {
+    markEdited();
     setRows((cur) =>
       cur.map((r, i) => (i === idx ? { ...r, [field]: value } : r))
     );
   }
   function addRow() {
+    markEdited();
     setRows((cur) => [...cur, { topic: '', subtopics: '' }]);
   }
   function removeRow(idx) {
+    markEdited();
     setRows((cur) => cur.filter((_, i) => i !== idx));
   }
 

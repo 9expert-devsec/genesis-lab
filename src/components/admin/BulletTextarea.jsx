@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * BulletTextarea — newline-separated list editor.
@@ -19,7 +19,17 @@ import { useState } from 'react';
  *   placeholder placeholder text
  *   rows        textarea rows (default 5)
  *   urls        true → validate each line as a URL and surface a small warning
+ *
+ * Note on initial values: we seed `useState` lazily AND run an effect
+ * that copies a non-empty `defaultValue` into state ONCE — protects
+ * against the parent passing the prop async (e.g. after a refresh)
+ * while still letting the user clear the field afterwards. The
+ * `hasUserEditedRef` flag stops the effect from clobbering live input.
  */
+function normaliseDefault(v) {
+  return Array.isArray(v) ? v.join('\n') : String(v ?? '');
+}
+
 export function BulletTextarea({
   name,
   defaultValue = '',
@@ -29,11 +39,22 @@ export function BulletTextarea({
   rows = 5,
   urls = false,
 }) {
-  const initial = Array.isArray(defaultValue)
-    ? defaultValue.join('\n')
-    : String(defaultValue ?? '');
+  const seed = normaliseDefault(defaultValue);
+  const [value, setValueState] = useState(seed);
+  const hasUserEditedRef = useRef(false);
 
-  const [value, setValue] = useState(initial);
+  // Late-arriving seed (parent finished async data fetch after first
+  // paint). Only honored when the user hasn't touched the field yet.
+  useEffect(() => {
+    if (hasUserEditedRef.current) return;
+    if (!seed) return;
+    setValueState((cur) => (cur ? cur : seed));
+  }, [seed]);
+
+  function setValue(next) {
+    hasUserEditedRef.current = true;
+    setValueState(next);
+  }
 
   const lines = value
     .split('\n')

@@ -6,6 +6,7 @@
 
 import Link from 'next/link';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { listPrograms } from '@/lib/api/programs';
 import { listCourseExtensions } from '@/lib/actions/course-extensions';
 import { CoursesAdminClient } from './_components/CoursesAdminClient';
 
@@ -18,15 +19,18 @@ export const metadata = {
 };
 
 export default async function AdminCoursesPage() {
-  const [coursesRes, extensionsRes] = await Promise.allSettled([
+  const [coursesRes, extensionsRes, programsRes] = await Promise.allSettled([
     listPublicCourses(),
     listCourseExtensions(),
+    listPrograms(),
   ]);
 
   const courses =
     coursesRes.status === 'fulfilled' ? (coursesRes.value.items ?? []) : [];
   const extensions =
     extensionsRes.status === 'fulfilled' ? extensionsRes.value : [];
+  const programs =
+    programsRes.status === 'fulfilled' ? (programsRes.value.items ?? []) : [];
 
   const extByCourseId = Object.fromEntries(
     extensions.map((ext) => [ext.courseId, ext])
@@ -55,6 +59,7 @@ export default async function AdminCoursesPage() {
       <CoursesAdminClient
         courses={courses}
         extensions={extByCourseId}
+        programs={programs}
       />
     </div>
   );

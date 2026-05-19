@@ -1,15 +1,56 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Search } from 'lucide-react';
 import { deleteCourse } from '@/lib/actions/courses';
 
-export function CoursesAdminClient({ courses, extensions }) {
+const TYPE_OPTIONS = [
+  { value: '',         label: 'ทุกประเภท' },
+  { value: 'public',   label: 'Public' },
+  { value: 'inhouse',  label: 'In-house' },
+];
+
+export function CoursesAdminClient({
+  courses,
+  extensions,
+  programs = [],
+}) {
   const router = useRouter();
   const [busyId, setBusyId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
+
+  const [search, setSearch]               = useState('');
+  const [filterProgram, setFilterProgram] = useState('');
+  const [filterType, setFilterType]       = useState('');
+
+  // Match against program either as a populated object (`program._id`)
+  // or as a bare ObjectId string. Genesis sees both depending on the
+  // upstream populate level.
+  function programIdOf(course) {
+    const p = course?.program;
+    if (!p) return '';
+    return String(p?._id ?? p);
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return courses.filter((c) => {
+      const matchSearch =
+        !q ||
+        (c.course_name || '').toLowerCase().includes(q) ||
+        (c.course_name_th || '').toLowerCase().includes(q) ||
+        (c.course_id || '').toLowerCase().includes(q);
+      const matchProgram = !filterProgram || programIdOf(c) === filterProgram;
+      const matchType =
+        !filterType ||
+        (filterType === 'public'  && c.course_type_public) ||
+        (filterType === 'inhouse' && c.course_type_inhouse);
+      return matchSearch && matchProgram && matchType;
+    });
+  }, [courses, search, filterProgram, filterType]);
 
   async function handleDelete(course) {
     const ok = window.confirm(
@@ -36,6 +77,53 @@ export function CoursesAdminClient({ courses, extensions }) {
 
   return (
     <div>
+      {/* ── Filter bar ────────────────────────────────────────────── */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[240px] flex-1">
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+            aria-hidden="true"
+          />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ค้นหาชื่อหลักสูตรหรือ Course ID..."
+            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white pl-8 pr-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          />
+        </div>
+
+        <select
+          value={filterProgram}
+          onChange={(e) => setFilterProgram(e.target.value)}
+          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+        >
+          <option value="">ทุกโปรแกรม</option>
+          {programs.map((p) => {
+            const id = String(p._id ?? p.program_id ?? '');
+            const label =
+              p.program_name ?? p.name ?? p.label ?? id;
+            return (
+              <option key={id} value={id}>{label}</option>
+            );
+          })}
+        </select>
+
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+        >
+          {TYPE_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+
+        <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          {filtered.length} / {courses.length} หลักสูตร
+        </span>
+      </div>
+
       {msg && (
         <div
           className={
@@ -63,14 +151,16 @@ export function CoursesAdminClient({ courses, extensions }) {
               </tr>
             </thead>
             <tbody>
-              {courses.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-muted)]">
-                    ไม่สามารถโหลดรายการหลักสูตรได้ — ลองรีเฟรช หรือดู console log
+                    {courses.length === 0
+                      ? 'ไม่สามารถโหลดรายการหลักสูตรได้ — ลองรีเฟรช หรือดู console log'
+                      : 'ไม่พบหลักสูตรที่ตรงกับตัวกรอง'}
                   </td>
                 </tr>
               )}
-              {courses.map((course) => {
+              {filtered.map((course) => {
                 const ext = extensions[course.course_id];
                 const busy = busyId === course._id;
                 return (

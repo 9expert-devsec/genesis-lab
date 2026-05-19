@@ -518,7 +518,14 @@ export function CourseForm({
       >
         <TrainingTopicsEditor
           name="training_topics"
-          defaultValue={initial?.training_topics}
+          initialTopics={Array.isArray(initial?.training_topics)
+            ? initial.training_topics.map((t) => ({
+                topic: t?.topic ?? '',
+                subtopics: Array.isArray(t?.subtopics)
+                  ? t.subtopics
+                  : (t?.subtopics ?? ''),
+              }))
+            : []}
         />
       </Section>
 
