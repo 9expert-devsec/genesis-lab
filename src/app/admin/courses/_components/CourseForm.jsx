@@ -1,86 +1,126 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { BulletTextarea } from '@/components/admin/BulletTextarea';
+import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 
 /**
- * CourseForm — MSDB-aligned field names (curl-verified).
+ * Genesis course editor — MSDB field parity.
  *
- * The FormData keys this component emits ARE the MSDB field names, so
- * `shapePayload` in src/lib/actions/courses.js can forward them
- * verbatim:
- *   course_name           display name
- *   course_teaser         card / SEO snippet
- *   title                 LONG rich-text body (yes — MSDB calls it
- *                         "title" even though it's the description)
- *   course_trainingdays   number of training days
- *   course_price          price (THB)
- *   course_cover_url      cover image URL
- *   course_type_public    boolean — show on public site
- *   course_type_inhouse   boolean — available for in-house bookings
- *   program               ObjectId
- *   skills[]              ObjectId[]
+ * Layout follows the upstream MSDB admin form so admins moving between
+ * the two have a familiar mental model. The form collects FormData
+ * via `new FormData(form)` on submit, so every input below — including
+ * the hidden inputs rendered by ImageUploadField, BulletTextarea, and
+ * TrainingTopicsEditor — is picked up automatically. The server-side
+ * `shapePayload()` in `src/lib/actions/courses.js` is the source of
+ * truth for field names; keep the `name=` attributes here in sync.
  */
+const COURSE_LEVELS = [
+  { value: '1', label: '1 · Beginner' },
+  { value: '2', label: '2 · Intermediate' },
+  { value: '3', label: '3 · Advanced' },
+  { value: '4', label: '4 · Expert' },
+];
+
 export function CourseForm({
   initial = null,
   skills = [],
   programs = [],
+  allCourses = [],
   mode = 'create',
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
 
-  const [courseName, setCourseName]   = useState(initial?.course_name ?? '');
-  const [courseTeaser, setCourseTeaser] = useState(initial?.course_teaser ?? '');
-  // Note: `initial.title` here is the MSDB body field, not a heading.
-  const [bodyTitle, setBodyTitle]     = useState(initial?.title ?? '');
-  const [program, setProgram]         = useState(
-    initial?.program?._id ?? initial?.program ?? ''
-  );
+  // ── Section 1 ─────────────────────────────────────────────────────
+  const [courseId, setCourseId] = useState(initial?.course_id ?? '');
+
+  // ── Section 4: program + skills ───────────────────────────────────
   const initialSkillIds = (() => {
     if (!initial?.skills) return [];
-    return initial.skills.map((s) => s?._id ?? s).filter(Boolean);
+    return initial.skills.map((s) => s?._id ?? s).filter(Boolean).map(String);
   })();
-  const [skillIds, setSkillIds]       = useState(initialSkillIds);
-  const [trainingDays, setTrainingDays] = useState(
-    initial?.course_trainingdays != null ? String(initial.course_trainingdays) : ''
-  );
-  const [price, setPrice]             = useState(
-    initial?.course_price != null ? String(initial.course_price) : ''
-  );
-  const [coverUrl, setCoverUrl]       = useState(initial?.course_cover_url ?? '');
-  // Default to public-only for new courses; preserve existing flags on edit.
-  const [isPublic, setIsPublic]       = useState(
-    initial ? initial.course_type_public !== false : true
-  );
-  const [isInhouse, setIsInhouse]     = useState(
-    Boolean(initial?.course_type_inhouse)
-  );
+  const [selectedSkillIds, setSelectedSkillIds] = useState(initialSkillIds);
 
   function toggleSkill(id) {
-    setSkillIds((cur) =>
-      cur.includes(id) ? cur.filter((s) => s !== id) : [...cur, id]
+    setSelectedSkillIds((cur) =>
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
     );
   }
 
+  // ── Section 5: related courses ────────────────────────────────────
+  // The upstream payload returns populated course objects. Strip them
+  // back to course_id strings so the chips + the resolver share the
+  // same key (resolver lives in src/lib/api/resolveIds.js).
+  const initialRelatedCodes = (() => {
+    if (!Array.isArray(initial?.related_courses)) return [];
+    return initial.related_courses
+      .map((c) => (typeof c === 'string' ? c : c?.course_id))
+      .filter(Boolean)
+      .map(String);
+  })();
+  const [relatedCodes, setRelatedCodes] = useState(initialRelatedCodes);
+  const [relatedQuery, setRelatedQuery] = useState('');
+
+  const relatedOptions = useMemo(() => {
+    const q = relatedQuery.trim().toLowerCase();
+    return allCourses
+      .filter((c) => {
+        if (!c?.course_id) return false;
+        if (relatedCodes.includes(c.course_id)) return false; // hide picked
+        if (initial && c.course_id === initial.course_id) return false; // can't reference self
+        if (!q) return true;
+        return (
+          c.course_id.toLowerCase().includes(q) ||
+          (c.course_name || '').toLowerCase().includes(q) ||
+          (c.course_name_th || '').toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 8);
+  }, [allCourses, relatedQuery, relatedCodes, initial]);
+
+  function pickRelated(code) {
+    if (relatedCodes.length >= 5) return;
+    if (relatedCodes.includes(code)) return;
+    setRelatedCodes((cur) => [...cur, code]);
+    setRelatedQuery('');
+  }
+  function dropRelated(code) {
+    setRelatedCodes((cur) => cur.filter((c) => c !== code));
+  }
+
+  // Lookup helper for chip labels.
+  const codeToName = useMemo(() => {
+    const m = new Map();
+    for (const c of allCourses) {
+      if (c?.course_id) {
+        m.set(c.course_id, c.course_name_th || c.course_name || c.course_id);
+      }
+    }
+    return m;
+  }, [allCourses]);
+
+  // ── previous_course (single) ──────────────────────────────────────
+  const initialPreviousCode =
+    initial?.previous_course?.course_id ??
+    (typeof initial?.previous_course === 'string'
+      ? initial.previous_course
+      : '') ??
+    '';
+  const [previousCourse, setPreviousCourse] = useState(initialPreviousCode);
+
+  // ── submit ────────────────────────────────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
 
-    const fd = new FormData();
-    fd.set('course_name',         courseName);
-    fd.set('course_teaser',       courseTeaser);
-    fd.set('title',               bodyTitle);
-    fd.set('program',             program);
-    for (const id of skillIds) fd.append('skills', id);
-    fd.set('course_trainingdays', trainingDays);
-    fd.set('course_price',        price);
-    fd.set('course_cover_url',    coverUrl);
-    if (isPublic)  fd.set('course_type_public',  'on');
-    if (isInhouse) fd.set('course_type_inhouse', 'on');
+    const fd = new FormData(e.currentTarget);
 
     startTransition(async () => {
       const action =
@@ -96,6 +136,9 @@ export function CourseForm({
       }
     });
   }
+
+  // Pre-cooked defaults that map upstream populated objects.
+  const programId = initial?.program?._id ?? initial?.program ?? '';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -117,119 +160,234 @@ export function CourseForm({
         </div>
       )}
 
-      <div className="grid gap-4 rounded-9e-lg border border-[var(--surface-border)] bg-white p-5 dark:bg-[#111d2c]">
-        <Field label="ชื่อหลักสูตร *">
+      {/* ───────────────────────────────────────────────────────────
+          Section 1 — ข้อมูลหลัก
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="1. ข้อมูลหลัก">
+        <Field label="ชื่อหลักสูตร (course_name) *">
           <input
             required
             type="text"
             name="course_name"
-            value={courseName}
-            onChange={(e) => setCourseName(e.target.value)}
+            defaultValue={initial?.course_name ?? ''}
             className={inputCls}
           />
         </Field>
 
-        <Field label="คำอธิบายสั้น (course_teaser)" hint="สูงสุด 200 ตัวอักษร — ใช้สำหรับ card / SEO">
+        <Field
+          label={`รหัสหลักสูตร (course_id) ${mode === 'create' ? '*' : ''}`}
+          hint={
+            mode === 'edit'
+              ? 'แก้ไขไม่ได้หลังจากสร้างแล้ว — ใช้เป็น URL slug + key อ้างอิงอื่นๆ'
+              : 'ตัวพิมพ์ใหญ่ + ขีดกลาง เช่น "POWER-BI-PQ"'
+          }
+        >
+          <input
+            required={mode === 'create'}
+            readOnly={mode === 'edit'}
+            type="text"
+            name="course_id"
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value.toUpperCase())}
+            placeholder="POWER-BI-PQ"
+            className={
+              inputCls +
+              ' font-mono text-xs' +
+              (mode === 'edit' ? ' cursor-not-allowed opacity-70' : '')
+            }
+          />
+        </Field>
+
+        <Field
+          label="คำอธิบายสั้น (course_teaser)"
+          hint="สูงสุด 200 ตัวอักษร — ใช้สำหรับ card / SEO"
+        >
           <textarea
             rows={2}
             maxLength={200}
             name="course_teaser"
-            value={courseTeaser}
-            onChange={(e) => setCourseTeaser(e.target.value)}
+            defaultValue={initial?.course_teaser ?? ''}
             className={inputCls}
           />
         </Field>
 
         <Field
           label="เนื้อหา (title)"
-          hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ชื่อ field ใน MSDB คือ &quot;title&quot; แม้จะเก็บ body"
+          hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ใน MSDB ชื่อ field คือ &quot;title&quot; แม้จะเก็บ body"
         >
           <textarea
             rows={8}
             name="title"
-            value={bodyTitle}
-            onChange={(e) => setBodyTitle(e.target.value)}
+            defaultValue={initial?.title ?? ''}
             className={inputCls + ' font-mono text-xs'}
           />
         </Field>
+      </Section>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="โปรแกรม">
-            <select
-              name="program"
-              value={program}
-              onChange={(e) => setProgram(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">— ไม่ระบุ —</option>
-              {programs.map((p) => (
-                <option key={p._id ?? p.program_id} value={p._id ?? p.program_id}>
-                  {p.name ?? p.program_name ?? p.label ?? p._id}
-                </option>
-              ))}
-            </select>
-          </Field>
+      {/* ───────────────────────────────────────────────────────────
+          Section 2 — สื่อ เวลา ราคา & ลำดับ
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="2. สื่อ เวลา ราคา และลำดับ">
+        <ImageUploadField
+          name="course_cover_url"
+          currentUrl={initial?.course_cover_url ?? ''}
+          folder="courses/covers"
+          label="รูปปกหลักสูตร (course_cover_url)"
+          hint="แนะนำ 800×450px (16:9) · JPG/WebP · ไม่เกิน 5MB"
+        />
 
-          <Field label="ช่องทาง" hint="เลือกได้พร้อมกัน — Public แสดงในเว็บ, Inhouse เปิดให้จองแบบในองค์กร">
-            <div className="flex flex-col gap-2 pt-1">
-              <label className="flex items-center gap-2 text-sm text-9e-navy dark:text-white">
-                <input
-                  type="checkbox"
-                  name="course_type_public"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                Public (เผยแพร่บนเว็บ)
-              </label>
-              <label className="flex items-center gap-2 text-sm text-9e-navy dark:text-white">
-                <input
-                  type="checkbox"
-                  name="course_type_inhouse"
-                  checked={isInhouse}
-                  onChange={(e) => setIsInhouse(e.target.checked)}
-                  className="h-4 w-4"
-                />
-                In-house (รับจัดในองค์กร)
-              </label>
-            </div>
-          </Field>
-
-          <Field label="จำนวนวันอบรม">
+        <div className="grid gap-4 md:grid-cols-3">
+          <Field label="จำนวนวันอบรม (course_trainingdays)">
             <input
               type="number"
               min="0"
               step="0.5"
               name="course_trainingdays"
-              value={trainingDays}
-              onChange={(e) => setTrainingDays(e.target.value)}
+              defaultValue={initial?.course_trainingdays ?? ''}
               className={inputCls}
             />
           </Field>
+          <Field label="จำนวนชั่วโมง (course_traininghours)">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              name="course_traininghours"
+              defaultValue={initial?.course_traininghours ?? ''}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="ระดับ (course_levels)">
+            <select
+              name="course_levels"
+              defaultValue={String(initial?.course_levels ?? '1')}
+              className={inputCls}
+            >
+              {COURSE_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>{l.label}</option>
+              ))}
+            </select>
+          </Field>
 
-          <Field label="ราคา (บาท)">
+          <Field label="ราคา (course_price)">
             <input
               type="number"
               min="0"
               step="1"
               name="course_price"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              defaultValue={initial?.course_price ?? ''}
+              className={inputCls}
+            />
+          </Field>
+          <Field
+            label="ราคาสุทธิ (course_netprice)"
+            hint="ราคาหลังหักส่วนลด — เว้นว่างถ้าเท่ากับ course_price"
+          >
+            <input
+              type="number"
+              min="0"
+              step="1"
+              name="course_netprice"
+              defaultValue={initial?.course_netprice ?? ''}
+              className={inputCls}
+            />
+          </Field>
+          <Field label="ลำดับแสดงผล (sort_order)">
+            <input
+              type="number"
+              step="1"
+              name="sort_order"
+              defaultValue={initial?.sort_order ?? 0}
               className={inputCls}
             />
           </Field>
         </div>
 
+        <Field
+          label="หลักสูตรก่อนหน้า (previous_course)"
+          hint="เลือกหลักสูตรที่เป็นพื้นฐานก่อน — ใช้ใน roadmap"
+        >
+          <select
+            name="previous_course"
+            value={previousCourse}
+            onChange={(e) => setPreviousCourse(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">— ไม่มี —</option>
+            {allCourses
+              .filter((c) => c?.course_id && c.course_id !== initial?.course_id)
+              .map((c) => (
+                <option key={c.course_id} value={c.course_id}>
+                  {c.course_name_th || c.course_name} ({c.course_id})
+                </option>
+              ))}
+          </select>
+        </Field>
+      </Section>
+
+      {/* ───────────────────────────────────────────────────────────
+          Section 3 — รูปแบบคอร์ส (checkboxes)
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="3. รูปแบบคอร์ส">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <CheckboxField
+            name="course_type_public"
+            label="Public (เผยแพร่บนเว็บ)"
+            defaultChecked={initial ? initial.course_type_public !== false : true}
+          />
+          <CheckboxField
+            name="course_type_inhouse"
+            label="In-house (รับจัดในองค์กร)"
+            defaultChecked={Boolean(initial?.course_type_inhouse)}
+          />
+          <CheckboxField
+            name="course_workshop_status"
+            label="Workshop"
+            defaultChecked={Boolean(initial?.course_workshop_status)}
+          />
+          <CheckboxField
+            name="course_certificate_status"
+            label="มอบใบรับรอง (Certificate)"
+            defaultChecked={Boolean(initial?.course_certificate_status)}
+          />
+          <CheckboxField
+            name="course_promote_status"
+            label="โปรโมตเป็นพิเศษ"
+            defaultChecked={Boolean(initial?.course_promote_status)}
+          />
+        </div>
+      </Section>
+
+      {/* ───────────────────────────────────────────────────────────
+          Section 4 — โปรแกรม & สกิล
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="4. โปรแกรม และ Skills">
+        <Field label="โปรแกรม (program)">
+          <select
+            name="program"
+            defaultValue={programId}
+            className={inputCls}
+          >
+            <option value="">— ไม่ระบุ —</option>
+            {programs.map((p) => (
+              <option key={p._id ?? p.program_id} value={p._id ?? p.program_id}>
+                {p.name ?? p.program_name ?? p.label ?? p._id}
+              </option>
+            ))}
+          </select>
+        </Field>
+
         <Field label="Skills" hint="กดเลือกหลายค่าได้">
           <div className="flex flex-wrap gap-1.5">
             {skills.length === 0 && (
               <span className="text-xs text-9e-slate-dp-50">
-                โหลด skills ไม่ได้ — สร้างหลักสูตรได้แต่จะไม่มี skill mapping
+                โหลด skills ไม่ได้
               </span>
             )}
             {skills.map((s) => {
-              const id = s._id ?? s.skill_id;
-              const active = skillIds.includes(id);
+              const id = String(s._id ?? s.skill_id ?? '');
+              if (!id) return null;
+              const active = selectedSkillIds.includes(id);
               return (
                 <button
                   key={id}
@@ -247,20 +405,160 @@ export function CourseForm({
               );
             })}
           </div>
+          {selectedSkillIds.map((id) => (
+            <input key={id} type="hidden" name="skills" value={id} />
+          ))}
         </Field>
+      </Section>
 
-        <Field label="URL รูปหน้าปก (course_cover_url)">
-          <input
-            type="url"
-            name="course_cover_url"
-            value={coverUrl}
-            onChange={(e) => setCoverUrl(e.target.value)}
-            placeholder="https://res.cloudinary.com/…"
-            className={inputCls + ' font-mono text-xs'}
-          />
-        </Field>
-      </div>
+      {/* ───────────────────────────────────────────────────────────
+          Section 5 — Related courses (max 5)
+      ─────────────────────────────────────────────────────────── */}
+      <Section
+        title="5. หลักสูตรที่เกี่ยวข้อง"
+        hint="พิมพ์เพื่อค้นหา แล้วคลิกเพื่อเพิ่ม (สูงสุด 5 หลักสูตร)"
+      >
+        {relatedCodes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {relatedCodes.map((code) => (
+              <span
+                key={code}
+                className="inline-flex items-center gap-1 rounded-full bg-9e-action px-3 py-0.5 text-xs text-white"
+              >
+                <span className="font-mono">{code}</span>
+                <span className="opacity-80">·</span>
+                <span>{codeToName.get(code) || code}</span>
+                <button
+                  type="button"
+                  onClick={() => dropRelated(code)}
+                  aria-label="ลบ"
+                  className="ml-1 rounded-full hover:bg-white/20"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        {relatedCodes.length < 5 && (
+          <div className="relative">
+            <input
+              type="text"
+              value={relatedQuery}
+              onChange={(e) => setRelatedQuery(e.target.value)}
+              placeholder="พิมพ์เพื่อค้นหา course_id หรือชื่อ"
+              className={inputCls}
+            />
+            {relatedQuery && relatedOptions.length > 0 && (
+              <ul className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-auto rounded-9e-md border border-[var(--surface-border)] bg-white shadow-lg dark:bg-[#0D1B2A]">
+                {relatedOptions.map((c) => (
+                  <li key={c.course_id}>
+                    <button
+                      type="button"
+                      onClick={() => pickRelated(c.course_id)}
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-9e-ice dark:hover:bg-[#111d2c]"
+                    >
+                      <span className="font-mono text-9e-action">
+                        {c.course_id}
+                      </span>{' '}
+                      <span className="text-9e-navy dark:text-white">
+                        {c.course_name_th || c.course_name}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+        {relatedCodes.map((code) => (
+          <input key={code} type="hidden" name="related_courses" value={code} />
+        ))}
+      </Section>
 
+      {/* ───────────────────────────────────────────────────────────
+          Section 6 — รายละเอียดคอร์ส (bullets)
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="6. รายละเอียดคอร์ส">
+        <BulletTextarea
+          name="course_objectives"
+          label="วัตถุประสงค์ (course_objectives)"
+          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์"
+          defaultValue={initial?.course_objectives}
+        />
+        <BulletTextarea
+          name="course_target_audience"
+          label="กลุ่มเป้าหมาย (course_target_audience)"
+          defaultValue={initial?.course_target_audience}
+        />
+        <BulletTextarea
+          name="course_prerequisites"
+          label="ความรู้พื้นฐาน (course_prerequisites)"
+          defaultValue={initial?.course_prerequisites}
+        />
+        <BulletTextarea
+          name="course_system_requirements"
+          label="ความต้องการของระบบ (course_system_requirements)"
+          defaultValue={initial?.course_system_requirements}
+        />
+        <BulletTextarea
+          name="bullets"
+          label="ไฮไลต์ (bullets)"
+          hint="คำโปรย bullet ที่แสดงในหน้า course"
+          defaultValue={initial?.bullets}
+        />
+      </Section>
+
+      {/* ───────────────────────────────────────────────────────────
+          Section 7 — Training Topics
+      ─────────────────────────────────────────────────────────── */}
+      <Section
+        title="7. หัวข้ออบรม (training_topics)"
+        hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — 1 บรรทัด = 1 หัวข้อย่อย"
+      >
+        <TrainingTopicsEditor
+          name="training_topics"
+          defaultValue={initial?.training_topics}
+        />
+      </Section>
+
+      {/* ───────────────────────────────────────────────────────────
+          Section 8 — เอกสาร/ลิงก์ประกอบ (URL arrays)
+      ─────────────────────────────────────────────────────────── */}
+      <Section title="8. เอกสาร / ลิงก์ประกอบ">
+        <BulletTextarea
+          name="course_doc_paths"
+          label="เอกสารประกอบ (course_doc_paths)"
+          defaultValue={initial?.course_doc_paths}
+          urls
+        />
+        <BulletTextarea
+          name="course_lab_paths"
+          label="ไฟล์ Lab (course_lab_paths)"
+          defaultValue={initial?.course_lab_paths}
+          urls
+        />
+        <BulletTextarea
+          name="course_case_study_paths"
+          label="Case study (course_case_study_paths)"
+          defaultValue={initial?.course_case_study_paths}
+          urls
+        />
+        <BulletTextarea
+          name="website_urls"
+          label="เว็บไซต์อ้างอิง (website_urls)"
+          defaultValue={initial?.website_urls}
+          urls
+        />
+        <BulletTextarea
+          name="exam_links"
+          label="ลิงก์ข้อสอบ (exam_links)"
+          defaultValue={initial?.exam_links}
+          urls
+        />
+      </Section>
+
+      {/* ─── Submit row ──────────────────────────────────────────── */}
       <div className="flex gap-2">
         <button
           type="submit"
@@ -280,8 +578,26 @@ export function CourseForm({
   );
 }
 
+// ── shared bits ─────────────────────────────────────────────────────
+
 const inputCls =
   'w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:border-9e-action focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
+
+function Section({ title, hint, children }) {
+  return (
+    <section className="space-y-4 rounded-9e-lg border border-[var(--surface-border)] bg-white p-5 dark:bg-[#111d2c]">
+      <div>
+        <h2 className="text-base font-bold text-9e-navy dark:text-white">{title}</h2>
+        {hint && (
+          <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            {hint}
+          </p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 function Field({ label, hint, children }) {
   return (
@@ -295,6 +611,20 @@ function Field({ label, hint, children }) {
         </span>
       )}
       <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function CheckboxField({ name, label, defaultChecked }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-9e-navy dark:text-white">
+      <input
+        type="checkbox"
+        name={name}
+        defaultChecked={defaultChecked}
+        className="h-4 w-4"
+      />
+      {label}
     </label>
   );
 }

@@ -6,6 +6,7 @@ import {
   createPromotion,
   updatePromotion,
 } from '@/lib/actions/promotions';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 
 function isoDate(v) {
   if (!v) return '';
@@ -202,17 +203,14 @@ export function PromotionModal({ promotion, courses, onClose, onSaved }) {
             </label>
           </div>
 
-          <label className="block">
-            <span className="text-sm font-medium text-9e-navy dark:text-white">URL รูป Banner</span>
-            <input
-              type="url"
-              name="image_url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://res.cloudinary.com/…"
-              className={inputCls + ' font-mono text-xs'}
-            />
-          </label>
+          <ImageUploadField
+            name="image_url"
+            currentUrl={imageUrl}
+            folder="promotions"
+            label="รูป Banner โปรโมชัน"
+            hint="แนะนำ 1200×630px · JPG/WebP · ไม่เกิน 5MB"
+            onChange={setImageUrl}
+          />
 
           <div>
             <span className="text-sm font-medium text-9e-navy dark:text-white">หลักสูตรที่เกี่ยวข้อง</span>

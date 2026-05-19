@@ -4,13 +4,23 @@
  * Server actions for upstream Schedule CRUD.
  *
  * Genesis does not cache schedules in Mongo — public pages call MSDB
- * directly with a short ISR window. These actions just round-trip to
- * MSDB and revalidate the admin path; webhooks bust public caches.
+ * directly with a short ISR window. These actions:
+ *   1. Resolve the human `course_id` to its MSDB `_id` (Schedule.course
+ *      is an ObjectId ref).
+ *   2. Write through to MSDB.
+ *   3. Upsert a ScheduleLocal sidecar with metadata MSDB doesn't track
+ *      (`max_seats`, `instructor_ids`).
+ *
+ * Webhooks bust the public ISR caches; revalidating the admin path
+ * here keeps the table fresh after each mutation.
  */
 
 import { revalidatePath } from 'next/cache';
 import { auth } from '@/lib/auth/options';
+import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
+import { resolveCourseObjectId } from '@/lib/api/resolveIds';
+import ScheduleLocal from '@/models/ScheduleLocal';
 
 const ADMIN_PATH = '/admin/schedules';
 
@@ -33,40 +43,83 @@ function toStrArr(v) {
   }
   return [];
 }
+function toNullableNum(v) {
+  if (v === '' || v == null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
-function shapePayload(formData) {
-  const get = (k) =>
-    formData instanceof FormData ? formData.get(k) : formData?.[k];
-  const getAll = (k) =>
-    formData instanceof FormData ? formData.getAll(k) : formData?.[k];
+/**
+ * Pull dates from the form. Accepts either repeated `dates` keys
+ * (legacy) or a JSON-encoded `dates_json` field (new multi-date editor).
+ */
+function readDates(formData) {
+  const json = toStr(formData.get('dates_json'));
+  if (json) {
+    try {
+      const parsed = JSON.parse(json);
+      if (Array.isArray(parsed)) return toStrArr(parsed);
+    } catch {
+      // fall through
+    }
+  }
+  return toStrArr(formData.getAll('dates'));
+}
 
-  const out = {};
-  const courseId = toStr(get('course_id'));
-  if (courseId) out.course = courseId; // MSDB stores as `course` (ObjectId)
+/**
+ * Build the MSDB body. Only the fields MSDB knows about — local-only
+ * fields (max_seats, instructor_ids) stay in Genesis.
+ */
+function shapeMsdbPayload(courseObjectId, formData) {
+  return {
+    course:     courseObjectId,
+    dates:      readDates(formData),
+    status:     toStr(formData.get('status')) || 'open',
+    type:       toStr(formData.get('type'))   || 'classroom',
+    signup_url: toStr(formData.get('signup_url')),
+  };
+}
 
-  const dates = toStrArr(getAll('dates'));
-  if (dates.length) out.dates = dates;
-
-  const status = toStr(get('status'));
-  if (status) out.status = status;
-
-  const type = toStr(get('type'));
-  if (type) out.type = type;
-
-  const signupUrl = toStr(get('signup_url'));
-  if (signupUrl) out.signup_url = signupUrl;
-
-  return out;
+async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
+  if (!msdbScheduleId) return;
+  await dbConnect();
+  await ScheduleLocal.findOneAndUpdate(
+    { msdb_schedule_id: String(msdbScheduleId) },
+    {
+      $set: {
+        msdb_schedule_id: String(msdbScheduleId),
+        course_id:        courseIdString,
+        max_seats:        toNullableNum(formData.get('max_seats')),
+        instructor_ids:   toStrArr(formData.getAll('instructor_ids')),
+      },
+    },
+    { upsert: true, new: true }
+  );
 }
 
 export async function createSchedule(formData) {
   await requireAdmin();
-  const body = shapePayload(formData);
-  if (!body.course)            return { ok: false, error: 'กรุณาเลือกหลักสูตร' };
-  if (!body.dates?.length)     return { ok: false, error: 'กรุณาเลือกอย่างน้อย 1 วัน' };
+
+  const courseIdString = toStr(formData.get('course_id'));
+  if (!courseIdString) return { ok: false, error: 'กรุณาเลือกหลักสูตร' };
+
+  const courseObjectId = await resolveCourseObjectId(courseIdString);
+  if (!courseObjectId) {
+    return { ok: false, error: `ไม่พบหลักสูตร: ${courseIdString}` };
+  }
+
+  const body = shapeMsdbPayload(courseObjectId, formData);
+  if (!body.dates.length) {
+    return { ok: false, error: 'กรุณาเลือกอย่างน้อย 1 วัน' };
+  }
 
   try {
     const { item } = await msdbCreate('schedules', body);
+    await upsertLocal({
+      msdbScheduleId: item?._id,
+      courseIdString,
+      formData,
+    });
     revalidatePath(ADMIN_PATH);
     return { ok: true, item, id: item?._id };
   } catch (err) {
@@ -78,9 +131,26 @@ export async function updateSchedule(id, formData) {
   await requireAdmin();
   if (!id) return { ok: false, error: 'Missing schedule id' };
 
-  const body = shapePayload(formData);
+  const courseIdString = toStr(formData.get('course_id'));
+  const courseObjectId = courseIdString
+    ? await resolveCourseObjectId(courseIdString)
+    : null;
+  if (!courseObjectId) {
+    return { ok: false, error: `ไม่พบหลักสูตร: ${courseIdString || '(missing)'}` };
+  }
+
+  const body = shapeMsdbPayload(courseObjectId, formData);
+  if (!body.dates.length) {
+    return { ok: false, error: 'กรุณาเลือกอย่างน้อย 1 วัน' };
+  }
+
   try {
     const { item } = await msdbUpdate('schedules', id, body);
+    await upsertLocal({
+      msdbScheduleId: id,
+      courseIdString,
+      formData,
+    });
     revalidatePath(ADMIN_PATH);
     return { ok: true, item };
   } catch (err) {
@@ -94,9 +164,29 @@ export async function deleteSchedule(id) {
 
   try {
     await msdbDelete('schedules', id);
+    // Best-effort sidecar cleanup. If MSDB delete already succeeded,
+    // a leftover sidecar is harmless but worth tidying up.
+    await dbConnect();
+    await ScheduleLocal.deleteOne({ msdb_schedule_id: String(id) }).catch(() => {});
     revalidatePath(ADMIN_PATH);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ลบตารางไม่สำเร็จ' };
   }
+}
+
+/**
+ * Read-side helper used by the admin page to merge MSDB schedules
+ * with their Genesis sidecars. Keyed by `msdb_schedule_id`.
+ */
+export async function getScheduleLocals(scheduleIds) {
+  if (!Array.isArray(scheduleIds) || scheduleIds.length === 0) return {};
+  await dbConnect();
+  const ids = scheduleIds.map(String);
+  const rows = await ScheduleLocal.find({
+    msdb_schedule_id: { $in: ids },
+  }).lean();
+  const out = {};
+  for (const r of rows) out[r.msdb_schedule_id] = JSON.parse(JSON.stringify(r));
+  return out;
 }

@@ -16,7 +16,7 @@ import { auth } from '@/lib/auth/options';
 import { syncPromotions } from '@/lib/promotions/syncPromotions';
 import { triggerPromotionSync } from '@/lib/promotions/triggerPromotionSync';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
-import { aiFetch, unwrap } from '@/lib/api/client';
+import { resolveCourseObjectIdsVerbose } from '@/lib/api/resolveIds';
 
 const ADMIN_PATH = '/admin/promotions';
 
@@ -200,48 +200,6 @@ function htmlToPlain(html) {
 }
 
 /**
- * The Genesis multi-select sends `course_id` strings (e.g. `'POWER-BI-PQ'`)
- * because that's the user-meaningful key it shares with the rest of the
- * admin UI. MSDB's Promotion schema declares `related_public_courses` as
- * an array of ObjectId references to PublicCourse, so we have to look
- * up each `_id` before POST/PUT.
- *
- * Unresolved codes (typos, deleted courses) are silently dropped — the
- * caller logs the count via the returned shape so the admin can spot
- * mistakes in the toast.
- */
-async function resolvePublicCourseObjectIds(courseIds) {
-  if (!Array.isArray(courseIds) || courseIds.length === 0) {
-    return { ids: [], dropped: [] };
-  }
-  const wanted = new Set(courseIds.map((s) => String(s).trim()).filter(Boolean));
-  if (wanted.size === 0) return { ids: [], dropped: [] };
-
-  let items = [];
-  try {
-    const raw = await aiFetch('/public-course', { revalidate: 300 });
-    items = unwrap(raw).items ?? [];
-  } catch (err) {
-    console.warn('[promotions] resolvePublicCourseObjectIds aiFetch failed', err?.message);
-    return { ids: [], dropped: [...wanted] };
-  }
-
-  const byCode = new Map();
-  for (const c of items) {
-    if (c?.course_id && c?._id) byCode.set(String(c.course_id), String(c._id));
-  }
-
-  const ids = [];
-  const dropped = [];
-  for (const code of wanted) {
-    const id = byCode.get(code);
-    if (id) ids.push(id);
-    else    dropped.push(code);
-  }
-  return { ids, dropped };
-}
-
-/**
  * Shape the form payload for MSDB. Field mapping (curl-verified):
  *   name                   ← title             (required, display name)
  *   label                  ← label             (required, e.g. "ลด 20%")
@@ -317,7 +275,7 @@ export async function createPromotion(formData) {
   // but the LOCAL document keeps the course_id strings (matches what
   // syncPromotions writes from upstream).
   const courseIdStrings = body.related_public_courses;
-  const { ids: objectIds, dropped } = await resolvePublicCourseObjectIds(courseIdStrings);
+  const { ids: objectIds, dropped } = await resolveCourseObjectIdsVerbose(courseIdStrings);
 
   // 1. Local insert (placeholder promotion_id until MSDB ack'd)
   let localDoc;
@@ -392,7 +350,7 @@ export async function updatePromotion(localId, formData) {
   if (!body.label) return { ok: false, error: 'กรุณากรอกป้ายกำกับ' };
 
   const courseIdStrings = body.related_public_courses;
-  const { ids: objectIds, dropped } = await resolvePublicCourseObjectIds(courseIdStrings);
+  const { ids: objectIds, dropped } = await resolveCourseObjectIdsVerbose(courseIdStrings);
 
   // 1. Local update
   await Promotion.updateOne(

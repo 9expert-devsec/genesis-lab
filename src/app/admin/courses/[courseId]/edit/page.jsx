@@ -27,9 +27,13 @@ export default async function EditCoursePage({ params }) {
   // by _id locally — slow on a big catalog but adequate for an admin
   // form. Bail to 404 if the upstream list lookup misses.
   let course = null;
+  let allCourses = [];
   try {
+    // One round-trip serves both the lookup AND the related-course
+    // picker. saves us calling /public-course twice.
     const raw = await aiFetch('/public-course', { revalidate: 0 });
     const { items } = unwrap(raw);
+    allCourses = items;
     course = items.find((c) => String(c._id) === id) ?? null;
   } catch (err) {
     console.error('[admin/courses/edit] aiFetch failed', err?.message);
@@ -44,12 +48,13 @@ export default async function EditCoursePage({ params }) {
   const programs = programsRes.status === 'fulfilled' ? programsRes.value.items ?? [] : [];
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-4xl">
       <CourseForm
         mode="edit"
         initial={course}
         skills={skills}
         programs={programs}
+        allCourses={allCourses}
       />
     </div>
   );
