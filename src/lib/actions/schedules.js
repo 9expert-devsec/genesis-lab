@@ -127,9 +127,26 @@ export async function createSchedule(formData) {
   }
 }
 
-export async function updateSchedule(id, formData) {
+/**
+ * Update a schedule. The id can be passed positionally (legacy) OR
+ * embedded in the FormData under `schedule_id` (preferred — lets the
+ * client wire it up via a hidden input + plain `updateSchedule(fd)`
+ * call without juggling two args).
+ */
+export async function updateSchedule(idOrFormData, maybeFormData) {
   await requireAdmin();
-  if (!id) return { ok: false, error: 'Missing schedule id' };
+
+  // Resolve which arg is which.
+  let id, formData;
+  if (idOrFormData instanceof FormData) {
+    formData = idOrFormData;
+    id = toStr(formData.get('schedule_id'));
+  } else {
+    id = toStr(idOrFormData);
+    formData = maybeFormData;
+  }
+  if (!formData) return { ok: false, error: 'Missing form data' };
+  if (!id)       return { ok: false, error: 'Missing schedule id' };
 
   const courseIdString = toStr(formData.get('course_id'));
   const courseObjectId = courseIdString
@@ -176,17 +193,24 @@ export async function deleteSchedule(id) {
 }
 
 /**
- * Read-side helper used by the admin page to merge MSDB schedules
- * with their Genesis sidecars. Keyed by `msdb_schedule_id`.
+ * Read-side helper for the admin page. Returns ScheduleLocal sidecar
+ * rows so the UI can merge them with MSDB schedules.
+ *
+ *   - `getScheduleLocals()`           → every row (used by the
+ *                                       program-grouped admin view)
+ *   - `getScheduleLocals(idArray)`    → just rows whose
+ *                                       `msdb_schedule_id` is in the
+ *                                       array (legacy callers)
+ *
+ * Always returns a plain serialised array. Callers that want a lookup
+ * map can build one with Object.fromEntries(rows.map(r => [...])).
  */
 export async function getScheduleLocals(scheduleIds) {
-  if (!Array.isArray(scheduleIds) || scheduleIds.length === 0) return {};
   await dbConnect();
-  const ids = scheduleIds.map(String);
-  const rows = await ScheduleLocal.find({
-    msdb_schedule_id: { $in: ids },
-  }).lean();
-  const out = {};
-  for (const r of rows) out[r.msdb_schedule_id] = JSON.parse(JSON.stringify(r));
-  return out;
+  const filter =
+    Array.isArray(scheduleIds) && scheduleIds.length > 0
+      ? { msdb_schedule_id: { $in: scheduleIds.map(String) } }
+      : {};
+  const rows = await ScheduleLocal.find(filter).lean();
+  return JSON.parse(JSON.stringify(rows));
 }

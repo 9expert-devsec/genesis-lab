@@ -1,5 +1,6 @@
 import { listSchedules } from '@/lib/api/schedules';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { listPrograms } from '@/lib/api/programs';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
 import { SchedulesAdminClient } from './_components/SchedulesAdminClient';
@@ -19,41 +20,41 @@ function toIsoDate(d) {
 }
 
 export default async function AdminSchedulesPage() {
-  // Show the next 3 months of schedules by default. The Month tabs in
-  // the client filter inside that window — narrower than the default
-  // upstream which returns everything from today onwards.
+  // 4-month window — current month + next 3. The page renders one
+  // column per month, so this defines the visible horizon. We pass a
+  // wide `to` so MSDB returns everything that could fall into one of
+  // the displayed columns (filter on the client by `dates[0]`).
   const now = new Date();
   const toDate = new Date(now);
-  toDate.setMonth(toDate.getMonth() + 3);
-  const from = toIsoDate(now);
-  const to   = toIsoDate(toDate);
+  toDate.setMonth(toDate.getMonth() + 4);
 
-  // MSDB schedules first; we need their ids before fetching sidecars.
-  const [scheduleRes, courseRes, instructorRes] = await Promise.allSettled([
-    listSchedules({ from, to }),
-    listPublicCourses(),
-    listInstructorsForAdmin(),
-  ]);
+  const [scheduleRes, courseRes, programRes, instructorRes] =
+    await Promise.allSettled([
+      listSchedules({ from: toIsoDate(now), to: toIsoDate(toDate) }),
+      listPublicCourses(),
+      listPrograms(),
+      listInstructorsForAdmin(),
+    ]);
 
   const schedules =
     scheduleRes.status === 'fulfilled' ? scheduleRes.value.items ?? [] : [];
   const courses =
     courseRes.status === 'fulfilled' ? courseRes.value.items ?? [] : [];
+  const programs =
+    programRes.status === 'fulfilled' ? programRes.value.items ?? [] : [];
   const instructors =
     instructorRes.status === 'fulfilled' ? instructorRes.value : [];
 
-  // Pull sidecar metadata for the visible schedules in one round-trip.
-  const localsByMsdbId = await getScheduleLocals(
-    schedules.map((s) => String(s._id))
-  );
+  const scheduleLocals = await getScheduleLocals();
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="mx-auto max-w-[1600px]">
       <SchedulesAdminClient
         schedules={schedules}
         courses={courses}
+        programs={programs}
+        scheduleLocals={scheduleLocals}
         instructors={instructors}
-        localsByMsdbId={localsByMsdbId}
       />
     </div>
   );
