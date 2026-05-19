@@ -88,65 +88,95 @@ export async function handleScheduleEvent(/* event, data */) {
 export async function handlePromotionEvent(event, data) {
   await dbConnect();
 
-  // Anti-loop: if this payload originated from Genesis itself (we stamp
-  // source: 'genesis' on dual-write), MSDB is just echoing our write
-  // back. Skip the upsert — the local row already exists — and only
-  // revalidate the public surface.
-  if (toStr(data?.source) === 'genesis') {
-    safeRevalidate('/promotions');
-    safeRevalidate('/promotions/[slug]', 'page');
-    return;
-  }
-
   const promotion_id = toStr(data?._id);
   if (!promotion_id) {
     throw new Error('promotion payload missing _id');
   }
 
-  if (event === 'promotion.deleted') {
-    await Promotion.findOneAndDelete({ promotion_id });
-  } else {
-    const upstreamLive =
-      Boolean(data?.is_published) &&
-      toStr(data?.time_status).toLowerCase() === 'active';
-
-    await Promotion.updateOne(
+  // Genesis-created rows live under TWO different keys on the local
+  // doc until MSDB ack returns: `promotion_id` may still be the
+  // placeholder `genesis-pending-…` while `msdb_id` holds the real
+  // upstream `_id`. Match on either so an inbound `promotion.updated`
+  // for that row hits the right Mongo document.
+  const filter = {
+    $or: [
       { promotion_id },
-      {
-        $set: {
-          promotion_id,
-          title:          toStr(data?.name),
-          thumbnail_url:  toStr(data?.image_url),
-          image_alt:      toStr(data?.image_alt),
-          api_slug:       toStr(data?.slug),
-          external_url:   toStr(data?.external_url),
-          start_date:     toDate(data?.start_at),
-          end_date:       toDate(data?.end_at),
-          html_content:   toStr(data?.detail_html),
-          detail_plain:   toStr(data?.detail_plain),
-          tags:           shapeTags(data?.tags),
-          related_course_ids: Array.isArray(data?.related_public_courses)
-            ? data.related_public_courses
-                .map((c) =>
-                  typeof c === 'string' ? c.trim() : String(c?.course_id ?? '').trim()
-                )
-                .filter(Boolean)
-            : [],
-          is_published:   Boolean(data?.is_published),
-          is_pinned:      Boolean(data?.is_pinned),
-          publish_status: toStr(data?.publish_status),
-          time_status:    toStr(data?.time_status),
-          synced_at:      new Date(),
-        },
-        $setOnInsert: {
-          is_active:     upstreamLive,
-          display_order: 0,
-          source:        'msdb',
-        },
-      },
-      { upsert: true }
-    );
+      { msdb_id: promotion_id },
+    ],
+  };
+
+  if (event === 'promotion.deleted') {
+    await Promotion.findOneAndDelete(filter);
+    safeRevalidate('/promotions');
+    safeRevalidate('/promotions/[slug]', 'page');
+    safeRevalidate('/search');
+    return;
   }
+
+  // Anti-loop applies ONLY to `promotion.created` — MSDB echoes back
+  // our own POST, and the local row already exists from the dual-write
+  // server action. `promotion.updated` must still upsert, even when
+  // `source === 'genesis'`: it could be an MSDB admin editing a row
+  // that was originally created from Genesis.
+  if (toStr(data?.source) === 'genesis' && event === 'promotion.created') {
+    safeRevalidate('/promotions');
+    safeRevalidate('/promotions/[slug]', 'page');
+    return;
+  }
+
+  const upstreamLive =
+    Boolean(data?.is_published) &&
+    toStr(data?.time_status).toLowerCase() === 'active';
+  const name = toStr(data?.name);
+
+  await Promotion.findOneAndUpdate(
+    filter,
+    {
+      $set: {
+        promotion_id,
+        msdb_id:        promotion_id,
+        // Display name — write the MSDB field (`name`) AND the legacy
+        // Genesis field (`title`) so old readers keep working.
+        name,
+        title:          name,
+        label:          toStr(data?.label),
+        // MSDB → Genesis field-name aliases. Only the Genesis-style
+        // names are in the schema, so MSDB names (slug, image_url,
+        // start_at, end_at) are intentionally not written — they'd
+        // be silently dropped by Mongoose strict mode.
+        api_slug:       toStr(data?.slug),
+        thumbnail_url:  toStr(data?.image_url),
+        image_alt:      toStr(data?.image_alt),
+        external_url:   toStr(data?.external_url),
+        start_date:     toDate(data?.start_at),
+        end_date:       toDate(data?.end_at),
+        detail_html:    toStr(data?.detail_html),
+        html_content:   toStr(data?.detail_html), // legacy mirror
+        detail_plain:   toStr(data?.detail_plain),
+        tags:           shapeTags(data?.tags),
+        // course_id strings extracted from MSDB's populated objects (or
+        // pass-through if upstream already sent strings).
+        related_course_ids: Array.isArray(data?.related_public_courses)
+          ? data.related_public_courses
+              .map((c) =>
+                typeof c === 'string' ? c.trim() : String(c?.course_id ?? '').trim()
+              )
+              .filter(Boolean)
+          : [],
+        is_published:   Boolean(data?.is_published),
+        is_pinned:      Boolean(data?.is_pinned),
+        publish_status: toStr(data?.publish_status),
+        time_status:    toStr(data?.time_status),
+        source:         toStr(data?.source) || 'msdb',
+        synced_at:      new Date(),
+      },
+      $setOnInsert: {
+        is_active:     upstreamLive,
+        display_order: 0,
+      },
+    },
+    { upsert: true, new: true }
+  );
 
   safeRevalidate('/promotions');
   safeRevalidate('/promotions/[slug]', 'page');

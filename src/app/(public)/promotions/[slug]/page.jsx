@@ -1,13 +1,23 @@
-import Image from 'next/image';
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { resolvePromotion } from '@/lib/resolvePromotion';
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { resolvePromotion } from "@/lib/resolvePromotion";
 
 export const revalidate = 3600;
 
 const THAI_MONTHS = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+  "มกราคม",
+  "กุมภาพันธ์",
+  "มีนาคม",
+  "เมษายน",
+  "พฤษภาคม",
+  "มิถุนายน",
+  "กรกฎาคม",
+  "สิงหาคม",
+  "กันยายน",
+  "ตุลาคม",
+  "พฤศจิกายน",
+  "ธันวาคม",
 ];
 
 function formatThaiLong(value) {
@@ -39,8 +49,7 @@ export async function generateMetadata({ params }) {
     config?.meta_description?.trim() ||
     promotion.detail_plain?.slice(0, 160) ||
     promotion.title;
-  const ogImage =
-    config?.og_image_url?.trim() || promotion.thumbnail_url || '';
+  const ogImage = config?.og_image_url?.trim() || promotion.thumbnail_url || "";
 
   return {
     title,
@@ -65,7 +74,7 @@ export default async function PromotionDetailPage({ params }) {
     <div className="bg-[#F8FAFD] dark:bg-[#0D1B2A]">
       {/* Hero image */}
 
-      <article className="mx-auto max-w-[900px] px-4 py-10 lg:px-6 lg:py-14">
+      <article className="mx-auto max-w-[1200px] py-10 lg:py-14">
         <Link
           href="/promotions"
           className="mb-6 inline-flex items-center gap-1 text-sm text-[#005CFF] hover:underline dark:text-[#48B0FF]"
@@ -88,7 +97,7 @@ export default async function PromotionDetailPage({ params }) {
                 <span
                   key={`${t.label}-${i}`}
                   className="rounded-full px-2.5 py-0.5 text-xs font-medium text-white"
-                  style={{ backgroundColor: t.color || '#465469' }}
+                  style={{ backgroundColor: t.color || "#465469" }}
                 >
                   {t.label}
                 </span>
@@ -109,7 +118,6 @@ export default async function PromotionDetailPage({ params }) {
             ไม่มีรายละเอียดเพิ่มเติม
           </p>
         )}
-
       </article>
     </div>
   );

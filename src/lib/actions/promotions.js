@@ -441,6 +441,24 @@ export async function updatePromotion(localId, formData) {
   };
 }
 
+// MongoDB ObjectIds are 24 hex chars. Anything else is a stale
+// placeholder (e.g. `genesis-pending-<timestamp>` left by promotions
+// created before the dual-write fix landed) and would make MSDB throw
+// `Cast to ObjectId failed` if we forwarded it.
+function isObjectIdLike(v) {
+  return typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
+}
+
+/**
+ * Delete a promotion. Local-first:
+ *   1. Drop the Mongo row + its PromotionConfig.
+ *   2. Best-effort write-back to MSDB, but only if `msdb_id` looks
+ *      like a real ObjectId. Orphan rows from the pre-fix era simply
+ *      vanish locally; there's nothing valid to delete upstream.
+ *   3. Upstream failures are logged + surfaced as a `warning` — they
+ *      don't undo the local delete (which would leave the admin
+ *      unable to remove broken rows at all).
+ */
 export async function deletePromotion(localId) {
   await requireAdmin();
   await dbConnect();
@@ -449,24 +467,32 @@ export async function deletePromotion(localId) {
   const promo = await Promotion.findById(localId).lean();
   if (!promo) return { ok: false, error: 'ไม่พบโปรโมชั่น' };
 
-  const upstreamId = promo.msdb_id || promo.promotion_id;
-  if (upstreamId) {
-    try {
-      await msdbDelete('promotions', upstreamId);
-    } catch (err) {
-      // Do not delete locally if upstream delete failed — the admin
-      // sees the error and can retry once the upstream is healthy.
-      return {
-        ok: false,
-        error: `ลบจาก MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
-      };
-    }
-  }
-
+  // 1. Local delete first
   await Promotion.deleteOne({ _id: localId });
-  await PromotionConfig.deleteOne({ promotion_id: promo.promotion_id });
-
+  if (promo.promotion_id) {
+    await PromotionConfig.deleteOne({ promotion_id: promo.promotion_id });
+  }
   revalidatePath(ADMIN_PATH);
   revalidatePath('/promotions');
-  return { ok: true };
+
+  // 2. Pick the most likely real upstream id and write-back if valid.
+  const candidates = [promo.msdb_id, promo.promotion_id].filter(Boolean);
+  const upstreamId = candidates.find(isObjectIdLike);
+
+  if (!upstreamId) {
+    // No usable upstream id (e.g. placeholder `genesis-pending-…` from
+    // pre-fix era). Local delete already happened — done.
+    return { ok: true };
+  }
+
+  try {
+    await msdbDelete('promotions', upstreamId);
+    return { ok: true };
+  } catch (err) {
+    console.warn('[deletePromotion] MSDB delete failed:', err?.message);
+    return {
+      ok: true,
+      warning: `ลบ local สำเร็จ แต่ลบที่ MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
+    };
+  }
 }

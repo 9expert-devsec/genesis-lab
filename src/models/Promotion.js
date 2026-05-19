@@ -26,6 +26,11 @@ const PromotionSchema = new mongoose.Schema(
     },
 
     title:         { type: String, default: '' },
+    // MSDB-aligned aliases. `name` and `label` are the canonical
+    // upstream fields; `title` is kept in lock-step with `name` (handler
+    // + actions write both) so existing readers don't break.
+    name:          { type: String, default: '' },
+    label:         { type: String, default: '' },
     thumbnail_url: { type: String, default: '' },
     image_alt:     { type: String, default: '' },
     api_slug:      { type: String, default: '' },
