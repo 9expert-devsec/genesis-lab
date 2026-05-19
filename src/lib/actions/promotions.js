@@ -16,6 +16,7 @@ import { auth } from '@/lib/auth/options';
 import { syncPromotions } from '@/lib/promotions/syncPromotions';
 import { triggerPromotionSync } from '@/lib/promotions/triggerPromotionSync';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
+import { aiFetch, unwrap } from '@/lib/api/client';
 
 const ADMIN_PATH = '/admin/promotions';
 
@@ -178,21 +179,86 @@ function toStrArr(v) {
 }
 
 /**
+ * Strip HTML tags from `html` and collapse whitespace. Used to derive a
+ * `detail_plain` when the admin only filled in the rich-text editor —
+ * MSDB requires the plain field for card/SEO consumption.
+ */
+function htmlToPlain(html) {
+  return String(html ?? '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+}
+
+/**
+ * The Genesis multi-select sends `course_id` strings (e.g. `'POWER-BI-PQ'`)
+ * because that's the user-meaningful key it shares with the rest of the
+ * admin UI. MSDB's Promotion schema declares `related_public_courses` as
+ * an array of ObjectId references to PublicCourse, so we have to look
+ * up each `_id` before POST/PUT.
+ *
+ * Unresolved codes (typos, deleted courses) are silently dropped — the
+ * caller logs the count via the returned shape so the admin can spot
+ * mistakes in the toast.
+ */
+async function resolvePublicCourseObjectIds(courseIds) {
+  if (!Array.isArray(courseIds) || courseIds.length === 0) {
+    return { ids: [], dropped: [] };
+  }
+  const wanted = new Set(courseIds.map((s) => String(s).trim()).filter(Boolean));
+  if (wanted.size === 0) return { ids: [], dropped: [] };
+
+  let items = [];
+  try {
+    const raw = await aiFetch('/public-course', { revalidate: 300 });
+    items = unwrap(raw).items ?? [];
+  } catch (err) {
+    console.warn('[promotions] resolvePublicCourseObjectIds aiFetch failed', err?.message);
+    return { ids: [], dropped: [...wanted] };
+  }
+
+  const byCode = new Map();
+  for (const c of items) {
+    if (c?.course_id && c?._id) byCode.set(String(c.course_id), String(c._id));
+  }
+
+  const ids = [];
+  const dropped = [];
+  for (const code of wanted) {
+    const id = byCode.get(code);
+    if (id) ids.push(id);
+    else    dropped.push(code);
+  }
+  return { ids, dropped };
+}
+
+/**
  * Shape the form payload for MSDB. Field mapping (curl-verified):
  *   name                   ← title             (required, display name)
  *   label                  ← label             (required, e.g. "ลด 20%")
  *   slug                   ← slug              (optional)
  *   image_url              ← image_url
- *   detail_plain           ← description       (plain-text body)
- *   detail_html            ← description_html  (rich body)
+ *   detail_plain           ← detail_plain      (auto-derived from html if empty)
+ *   detail_html            ← detail_html       (rich body)
  *   start_at               ← start_date
  *   end_at                 ← end_date
  *   is_published           ← is_published
  *   is_pinned              ← is_pinned
- *   related_public_courses ← related_courses   (ObjectId[])
+ *   related_public_courses ← related_courses[] (ObjectId[] — resolved
+ *                              from course_id strings by the caller)
  *
- * MSDB has no discount_type / discount_value fields — drop them. The
- * old form fields are accepted as aliases for migration.
+ * `related_public_courses` is left as raw course_id strings here so the
+ * caller can both (a) resolve them for MSDB and (b) keep them as-is for
+ * the local Promotion document's `related_course_ids` field.
  */
 function shapeBody(formData) {
   const get = (k) =>
@@ -203,17 +269,22 @@ function shapeBody(formData) {
     return Array.isArray(v) ? v : [];
   };
 
+  const detailHtml  = toStr(get('detail_html')  || get('description_html'));
+  let   detailPlain = toStr(get('detail_plain') || get('description'));
+  if (!detailPlain && detailHtml) detailPlain = htmlToPlain(detailHtml);
+
   return {
     name:           toStr(get('name')        || get('title')),
     label:          toStr(get('label'))      || 'โปรโมชัน',
     slug:           toStr(get('slug')) || undefined,
     image_url:      toStr(get('image_url')),
-    detail_plain:   toStr(get('detail_plain') || get('description')),
-    detail_html:    toStr(get('detail_html')  || get('description_html')),
+    detail_plain:   detailPlain,
+    detail_html:    detailHtml,
     start_at:       toStr(get('start_at')    || get('start_date')) || null,
     end_at:         toStr(get('end_at')      || get('end_date'))   || null,
     is_published:   toBool(get('is_published')),
     is_pinned:      toBool(get('is_pinned')),
+    // Raw course_id strings — resolved to ObjectIds by caller.
     related_public_courses: toStrArr(
       getAll('related_public_courses').length
         ? getAll('related_public_courses')
@@ -242,6 +313,12 @@ export async function createPromotion(formData) {
   if (!body.name)  return { ok: false, error: 'กรุณากรอกชื่อโปรโมชั่น' };
   if (!body.label) return { ok: false, error: 'กรุณากรอกป้ายกำกับ' };
 
+  // course_id strings come straight off the form. MSDB needs ObjectIds,
+  // but the LOCAL document keeps the course_id strings (matches what
+  // syncPromotions writes from upstream).
+  const courseIdStrings = body.related_public_courses;
+  const { ids: objectIds, dropped } = await resolvePublicCourseObjectIds(courseIdStrings);
+
   // 1. Local insert (placeholder promotion_id until MSDB ack'd)
   let localDoc;
   try {
@@ -249,11 +326,12 @@ export async function createPromotion(formData) {
       promotion_id:    `genesis-pending-${Date.now()}`,
       title:           body.name,
       thumbnail_url:   body.image_url,
-      html_content:    body.detail_html,
+      detail_html:     body.detail_html,
+      html_content:    body.detail_html, // legacy mirror
       detail_plain:    body.detail_plain,
       start_date:      toDateOrNull(body.start_at),
       end_date:        toDateOrNull(body.end_at),
-      related_course_ids: body.related_public_courses,
+      related_course_ids: courseIdStrings,
       is_published:    body.is_published,
       is_pinned:       body.is_pinned,
       is_active:       body.is_published,
@@ -270,6 +348,7 @@ export async function createPromotion(formData) {
   try {
     const { item } = await msdbCreate('promotions', {
       ...body,
+      related_public_courses: objectIds, // ObjectId[] required upstream
       genesis_id: String(localDoc._id),
     });
     upstreamId = String(item?._id ?? '');
@@ -291,7 +370,13 @@ export async function createPromotion(formData) {
 
   revalidatePath(ADMIN_PATH);
   revalidatePath('/promotions');
-  return { ok: true, data: { ...serialize(localDoc), msdb_id: upstreamId } };
+  return {
+    ok: true,
+    data: { ...serialize(localDoc), msdb_id: upstreamId },
+    warning: dropped.length
+      ? `ไม่พบ course_id: ${dropped.join(', ')} (ไม่ได้บันทึกใน related_public_courses)`
+      : undefined,
+  };
 }
 
 export async function updatePromotion(localId, formData) {
@@ -306,6 +391,9 @@ export async function updatePromotion(localId, formData) {
   if (!body.name)  return { ok: false, error: 'กรุณากรอกชื่อโปรโมชั่น' };
   if (!body.label) return { ok: false, error: 'กรุณากรอกป้ายกำกับ' };
 
+  const courseIdStrings = body.related_public_courses;
+  const { ids: objectIds, dropped } = await resolvePublicCourseObjectIds(courseIdStrings);
+
   // 1. Local update
   await Promotion.updateOne(
     { _id: localId },
@@ -313,11 +401,12 @@ export async function updatePromotion(localId, formData) {
       $set: {
         title:              body.name,
         thumbnail_url:      body.image_url,
-        html_content:       body.detail_html,
+        detail_html:        body.detail_html,
+        html_content:       body.detail_html, // legacy mirror
         detail_plain:       body.detail_plain,
         start_date:         toDateOrNull(body.start_at),
         end_date:           toDateOrNull(body.end_at),
-        related_course_ids: body.related_public_courses,
+        related_course_ids: courseIdStrings,
         is_published:       body.is_published,
         is_pinned:          body.is_pinned,
       },
@@ -330,7 +419,10 @@ export async function updatePromotion(localId, formData) {
   const upstreamId = promo.msdb_id || promo.promotion_id;
   if (upstreamId) {
     try {
-      await msdbUpdate('promotions', upstreamId, body);
+      await msdbUpdate('promotions', upstreamId, {
+        ...body,
+        related_public_courses: objectIds,
+      });
     } catch (err) {
       return {
         ok: false,
@@ -341,7 +433,12 @@ export async function updatePromotion(localId, formData) {
 
   revalidatePath(ADMIN_PATH);
   revalidatePath('/promotions');
-  return { ok: true };
+  return {
+    ok: true,
+    warning: dropped.length
+      ? `ไม่พบ course_id: ${dropped.join(', ')} (ไม่ได้บันทึกใน related_public_courses)`
+      : undefined,
+  };
 }
 
 export async function deletePromotion(localId) {

@@ -28,7 +28,13 @@ export function PromotionModal({ promotion, courses, onClose, onSaved }) {
   // `label` is the short badge shown over the banner (e.g. "ลด 20%").
   // MSDB requires it on create.
   const [label, setLabel]                 = useState(promotion?.label ?? '');
-  const [description, setDescription]     = useState(promotion?.detail_plain ?? promotion?.html_content ?? '');
+  // Rich-text body + plain-text summary. `detail_html` is the canonical
+  // upstream field; `html_content` is the legacy mirror still emitted by
+  // older syncs. Either may be set on a given record — accept both.
+  const [detailHtml, setDetailHtml]   = useState(
+    promotion?.detail_html ?? promotion?.html_content ?? ''
+  );
+  const [detailPlain, setDetailPlain] = useState(promotion?.detail_plain ?? '');
   const [startDate, setStartDate] = useState(isoDate(promotion?.start_date ?? promotion?.start_at));
   const [endDate, setEndDate]     = useState(isoDate(promotion?.end_date   ?? promotion?.end_at));
   const [imageUrl, setImageUrl]   = useState(promotion?.thumbnail_url ?? promotion?.image_url ?? '');
@@ -51,7 +57,8 @@ export function PromotionModal({ promotion, courses, onClose, onSaved }) {
     const fd = new FormData();
     fd.set('name',         name);
     fd.set('label',        label);
-    fd.set('detail_plain', description);
+    fd.set('detail_html',  detailHtml);
+    fd.set('detail_plain', detailPlain);
     fd.set('start_at',     startDate);
     fd.set('end_at',       endDate);
     fd.set('image_url',    imageUrl);
@@ -70,7 +77,7 @@ export function PromotionModal({ promotion, courses, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-9e-lg bg-white p-6 shadow-xl dark:bg-[#111d2c]">
+      <div className="w-full max-w-4xl rounded-9e-lg bg-white p-6 shadow-xl dark:bg-[#111d2c]">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-9e-navy dark:text-white">
             {isEdit ? 'แก้ไขโปรโมชั่น' : 'สร้างโปรโมชั่น'}
@@ -116,13 +123,56 @@ export function PromotionModal({ promotion, courses, onClose, onSaved }) {
             />
           </label>
 
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="block text-sm font-medium text-9e-navy dark:text-white">
+                รายละเอียด (HTML)
+                <span className="ml-2 text-xs font-normal text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                  รองรับ HTML/CSS inline
+                </span>
+              </label>
+              <textarea
+                value={detailHtml}
+                onChange={(e) => setDetailHtml(e.target.value)}
+                rows={12}
+                spellCheck={false}
+                placeholder={'<h2>หัวข้อโปรโมชัน</h2>\n<p>รายละเอียด...</p>'}
+                className="mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2 font-mono text-xs text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-9e-navy dark:text-white">
+                Live Preview
+                <span className="ml-2 text-xs font-normal text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                  อัปเดตทันทีตามที่พิมพ์
+                </span>
+              </label>
+              {/* Trusted admin-authored HTML — same trust model as the
+                  MSDB admin form. If we ever expand the audience, swap
+                  to DOMPurify before rendering. */}
+              <div
+                className="prose prose-sm dark:prose-invert mt-1 min-h-[16rem] max-w-none overflow-auto rounded-9e-md border border-[var(--surface-border)] bg-white p-3 text-sm dark:bg-[#0D1B2A] dark:text-white"
+                dangerouslySetInnerHTML={{
+                  __html:
+                    detailHtml ||
+                    '<span class="text-gray-300">ยังไม่มีเนื้อหา</span>',
+                }}
+              />
+            </div>
+          </div>
+
           <label className="block">
-            <span className="text-sm font-medium text-9e-navy dark:text-white">รายละเอียด</span>
+            <span className="text-sm font-medium text-9e-navy dark:text-white">
+              สรุปย่อ (Plain text)
+              <span className="ml-2 text-xs font-normal text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                ใช้บน card / SEO — เว้นว่างแล้วระบบจะสร้างจาก HTML ให้
+              </span>
+            </span>
             <textarea
-              rows={4}
-              name="detail_plain"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              value={detailPlain}
+              onChange={(e) => setDetailPlain(e.target.value)}
+              placeholder="สรุปสั้นๆ ของโปรโมชัน"
               className={inputCls}
             />
           </label>

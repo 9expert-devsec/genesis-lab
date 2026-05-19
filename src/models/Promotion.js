@@ -34,6 +34,10 @@ const PromotionSchema = new mongoose.Schema(
     start_date: { type: Date, default: null },
     end_date:   { type: Date, default: null },
 
+    // MSDB-aligned naming. `detail_html` is the canonical field; the
+    // older `html_content` is kept in sync (via syncPromotions and the
+    // server actions) so existing readers don't break.
+    detail_html:   { type: String, default: '' },
     html_content:  { type: String, default: '' },
     detail_plain:  { type: String, default: '' },
 
