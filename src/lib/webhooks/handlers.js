@@ -62,26 +62,74 @@ function safeRevalidateTag(tag) {
 
 // ── handlers ────────────────────────────────────────────────────────
 
-export async function handleCourseEvent(event, data) {
-  // We don't mirror course detail rows into Mongo — public pages fetch
-  // via aiFetch with cache tags + ISR. Bust the tags so the next
-  // render hits upstream. The landing-sync cron handles the snapshot.
-  const courseId = toStr(data?._id);
-  safeRevalidateTag('public-courses');
-  if (courseId) safeRevalidateTag(`course:${courseId}`);
-
-  safeRevalidate('/[...slug]', 'page');
-  safeRevalidate('/search');
-  const slug = toStr(data?.url_slug || data?.slug);
-  if (slug) safeRevalidate(`/${slug.replace(/^\/+/, '')}`);
+/**
+ * Build the public detail-page path for a course code. The public
+ * route at `/[...slug]` matches `<slug>-training-course`; the slug is
+ * `course_id` lowercased with underscores → dashes.
+ *   "MSE-L1"     → "/mse-l1-training-course"
+ *   "POWER_BI"   → "/power-bi-training-course"
+ */
+function coursePathFromId(courseId) {
+  if (!courseId) return null;
+  const slug = String(courseId).toLowerCase().replace(/_/g, '-');
+  return `/${slug}-training-course`;
 }
 
-export async function handleScheduleEvent(/* event, data */) {
+export async function handleCourseEvent(event, data) {
+  // We don't mirror course detail rows into Mongo — public pages fetch
+  // via aiFetch with cache tags + ISR (revalidate=3600). Bust the
+  // tags + paths so the next request hits upstream.
+  const courseId = toStr(data?.course_id); // human code, e.g. "MSE-L1"
+
+  if (event === 'course.deleted') {
+    // Detail page will 404 on its own once MSDB no longer returns the
+    // course — we just need the list surfaces refreshed.
+    safeRevalidateTag('public-courses');
+    safeRevalidate('/search');
+    safeRevalidate('/');
+    return;
+  }
+
+  // created or updated → flush detail + list caches
+  if (courseId) {
+    safeRevalidateTag(`course:${courseId}`); // tag used by getCourseByCode
+  }
+  safeRevalidateTag('public-courses');
+  const path = coursePathFromId(courseId);
+  if (path) safeRevalidate(path);
+  safeRevalidate('/search');
+  safeRevalidate('/');
+
+  // Homepage reads from a Mongo LandingCache snapshot built by the
+  // landing-sync cron. Trigger a one-shot resync in the background so
+  // the snapshot reflects the change without waiting up to 3h for the
+  // next cron tick. Fire-and-forget: errors are non-critical.
+  try {
+    const { syncLandingData } = await import('@/lib/landing/syncLandingData');
+    syncLandingData().catch((err) =>
+      console.warn('[handleCourseEvent] landing sync failed:', err?.message ?? err)
+    );
+  } catch (err) {
+    console.warn('[handleCourseEvent] could not load syncLandingData:', err?.message ?? err);
+  }
+}
+
+export async function handleScheduleEvent(_event, data) {
   // Genesis does not cache schedules in Mongo — public pages call
-  // listSchedulesByCourse() at request time with a 30-min revalidate.
-  // Bust the tag + page caches so the next request fetches fresh data.
+  // listSchedulesByCourse() with ISR (30-min revalidate + 'schedules'
+  // tag). Same revalidation for create/update/delete, so `event` is
+  // intentionally unused here (renamed `_event` to signal intent).
+  //
+  // Upstream payload carries the linked course as either an ObjectId
+  // string (`data.course`) or a populated object (`{ course_id }`).
+  const courseId =
+    toStr(data?.course?.course_id) || // populated
+    toStr(data?.course_id) ||         // explicit
+    '';
+
   safeRevalidateTag('schedules');
-  safeRevalidate('/[...slug]', 'page');
+  const path = coursePathFromId(courseId);
+  if (path) safeRevalidate(path);
   safeRevalidate('/search');
 }
 

@@ -23,6 +23,11 @@ export const runtime = 'nodejs';
 // NO `export const revalidate` — webhook is dynamic, every POST runs.
 export const dynamic = 'force-dynamic';
 
+// 1MB body cap. MSDB payloads are small JSON; anything bigger is
+// almost certainly malformed (or hostile) and should be rejected at
+// the edge before we burn CPU on JSON.parse / HMAC.
+const MAX_BODY_BYTES = 1_000_000;
+
 function verifySignature(rawBody, headerValue, secret) {
   if (!secret || !headerValue) return false;
   // Accept either bare hex or the `sha256=<hex>` form MSDB sends.
@@ -58,11 +63,19 @@ async function logEvent({ event, payload, status, error }) {
 export async function POST(req) {
   const secret = process.env.MSDB_WEBHOOK_SECRET;
   if (!secret) {
-    // Surfaces fast in dev; in prod this is a deploy misconfiguration.
+    // Deploy misconfiguration — surface fast.
+    console.error('[webhook] MSDB_WEBHOOK_SECRET is not set');
     return NextResponse.json(
-      { error: 'MSDB_WEBHOOK_SECRET not configured' },
+      { error: 'Server misconfigured' },
       { status: 500 }
     );
+  }
+
+  // Cheap upfront reject for outsized payloads. `content-length` is
+  // advisory — MSDB always sets it, but we also re-check after read.
+  const declaredLen = Number(req.headers.get('content-length') || 0);
+  if (Number.isFinite(declaredLen) && declaredLen > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   }
 
   const sigHeader   = req.headers.get('x-webhook-signature');
@@ -73,6 +86,12 @@ export async function POST(req) {
     rawBody = await req.text();
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
+  }
+
+  // Authoritative size check after read — defends against missing/lying
+  // content-length headers.
+  if (rawBody.length > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
   }
 
   if (!verifySignature(rawBody, sigHeader, secret)) {

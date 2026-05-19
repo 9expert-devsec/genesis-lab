@@ -21,7 +21,10 @@ import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const BASE = process.env.AI_API_BASE ?? 'https://9exp-sec.com/api/ai';
 const KEY  = process.env.AI_API_KEY;
-const TIMEOUT_MS = 15_000; // a bit higher than reads — writes can take longer
+// 10s ceiling for any single write — long enough for a healthy MSDB to
+// finish, short enough that a hung upstream can't tie up a server
+// action waiting on a response that's never coming.
+const TIMEOUT_MS = 10_000;
 
 const ALLOWED = new Set([
   'public-course',
@@ -49,20 +52,35 @@ function assertKey() {
 }
 
 async function request(method, path, body) {
-  const res = await fetchWithTimeout(
-    BASE + path,
-    {
-      method,
-      headers: {
-        'x-api-key':    KEY,
-        'content-type': 'application/json',
-        'accept':       'application/json',
+  // `fetchWithTimeout` wraps AbortController internally and propagates
+  // the AbortError on timeout. We translate that here so the surfaced
+  // message names the offending endpoint instead of the opaque "The
+  // operation was aborted." default — saves debugging time when a
+  // server action toast bubbles up the error to the admin.
+  let res;
+  try {
+    res = await fetchWithTimeout(
+      BASE + path,
+      {
+        method,
+        headers: {
+          'x-api-key':    KEY,
+          'content-type': 'application/json',
+          'accept':       'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: 'no-store',
       },
-      body: body ? JSON.stringify(body) : undefined,
-      cache: 'no-store',
-    },
-    TIMEOUT_MS
-  );
+      TIMEOUT_MS
+    );
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error(
+        `[msdb-write] ${method} ${path} timed out after ${TIMEOUT_MS}ms`
+      );
+    }
+    throw err;
+  }
 
   // Parse body once — even on HTTP error, MSDB usually returns JSON.
   let parsed = null;

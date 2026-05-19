@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
-import { PagePlaceholder } from '@/components/layout/PagePlaceholder';
 import { listPrograms } from '@/lib/api/programs';
+import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { CareerPathDetail } from './_components/CareerPathDetail';
+import { CourseCard } from '@/components/course/CourseCard';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
 import { ScheduleSection } from './_components/ScheduleSection';
@@ -111,13 +112,40 @@ export default async function CatchAllPage({ params }) {
 
   // Career-path detail — handled before course resolution so the
   // `-career-path` suffix can't accidentally match a course alias.
+  // 404 when the record is missing or inactive; the duplicate
+  // PagePlaceholder fallthrough was removed.
   if (segment.endsWith('-career-path')) {
     const careerPath = await getCareerPathBySlug(segment);
-    if (careerPath) {
-      return <CareerPathDetail careerPath={careerPath} />;
-    }
-    // Fall through if no active career path is found — the placeholder
-    // branch below handles the legacy URL until sync repopulates.
+    if (!careerPath || careerPath.is_active === false) notFound();
+    return <CareerPathDetail careerPath={careerPath} />;
+  }
+
+  // All-courses catalog — public listing filtered by skill or program.
+  // We can't tell up-front which one `catalogSlug` refers to, so call
+  // listPublicCourses() unfiltered and let the user scan the grid.
+  if (segment.endsWith('-all-courses')) {
+    const catalogSlug = segment.slice(0, -'-all-courses'.length);
+    const { items: courses = [] } = await listPublicCourses().catch(() => ({
+      items: [],
+    }));
+    if (courses.length === 0) notFound();
+    return (
+      <section className="mx-auto max-w-[1200px] px-4 py-12">
+        <header className="mb-8">
+          <p className="text-sm font-medium uppercase tracking-wider text-9e-action">
+            หลักสูตรทั้งหมด
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-9e-navy md:text-3xl">
+            {catalogSlug.replace(/-/g, ' ')}
+          </h1>
+        </header>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {courses.map((course) => (
+            <CourseCard key={course.course_id} course={course} />
+          ))}
+        </div>
+      </section>
+    );
   }
 
   // Course resolver handles both alias and `-training-course` suffix.
@@ -153,28 +181,6 @@ export default async function CatchAllPage({ params }) {
         programs={programs}
         earlyBird={earlyBird}
         coursePromos={coursePromos}
-      />
-    );
-  }
-
-  if (segment.endsWith('-career-path')) {
-    const pathSlug = segment.slice(0, -'-career-path'.length);
-    return (
-      <PagePlaceholder
-        title={`เส้นทางอาชีพ: ${pathSlug}`}
-        description="รายละเอียดเส้นทางอาชีพ ทักษะที่จำเป็น และหลักสูตรแนะนำ — เชื่อมต่อ /api/ai/career-path ใน Phase 3"
-        phase="Phase 3"
-      />
-    );
-  }
-
-  if (segment.endsWith('-all-courses')) {
-    const catalogSlug = segment.slice(0, -'-all-courses'.length);
-    return (
-      <PagePlaceholder
-        title={`หลักสูตรทั้งหมด: ${catalogSlug}`}
-        description="รวมหลักสูตรตาม Skill หรือ Program — filter จาก /api/ai/public-courses ใน Phase 3"
-        phase="Phase 3"
       />
     );
   }
