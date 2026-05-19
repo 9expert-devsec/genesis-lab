@@ -118,6 +118,26 @@ async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
   );
 }
 
+/**
+ * Build the Genesis registration URL for a schedule. MSDB's
+ * `/schedules` list filters out rows with empty `signup_url`, so a
+ * just-created schedule with no URL never reaches the admin table or
+ * the public detail page. We auto-fill on create.
+ *
+ *   slug rule: course_id lowercased, "_" → "-" (matches the public
+ *              detail-page route at /<slug>-training-course).
+ *   base:      NEXT_PUBLIC_SITE_URL with any trailing slashes stripped.
+ *
+ * Returns '' when env or inputs are missing — caller falls back to
+ * whatever the admin typed.
+ */
+function buildAutoSignupUrl(courseIdString, scheduleId) {
+  const base = String(process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+  if (!base || !courseIdString || !scheduleId) return '';
+  const slug = String(courseIdString).toLowerCase().replace(/_/g, '-');
+  return `${base}/registration/public?course=${encodeURIComponent(slug)}&class=${encodeURIComponent(String(scheduleId))}`;
+}
+
 export async function createSchedule(formData) {
   await requireAdmin();
 
@@ -136,13 +156,38 @@ export async function createSchedule(formData) {
 
   try {
     const { item } = await msdbCreate('schedules', body);
+    const newId = item?._id;
+
+    // Auto-fill signup_url when the admin didn't supply one. We need
+    // the upstream-assigned `_id` to build the URL, so this is a
+    // second round-trip — failures are non-fatal because the row
+    // already exists; we just warn and let the admin set it manually.
+    let finalItem = item;
+    if (!body.signup_url && newId) {
+      const autoUrl = buildAutoSignupUrl(courseIdString, newId);
+      if (autoUrl) {
+        try {
+          const updated = await msdbUpdate('schedules', newId, {
+            ...body,
+            signup_url: autoUrl,
+          });
+          finalItem = updated?.item ?? { ...item, signup_url: autoUrl };
+        } catch (err) {
+          console.warn(
+            '[createSchedule] auto-fill signup_url failed:',
+            err?.message
+          );
+        }
+      }
+    }
+
     await upsertLocal({
-      msdbScheduleId: item?._id,
+      msdbScheduleId: newId,
       courseIdString,
       formData,
     });
     bustScheduleCaches(courseObjectId);
-    return { ok: true, item, id: item?._id };
+    return { ok: true, item: finalItem, id: newId };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'สร้างตารางไม่สำเร็จ' };
   }

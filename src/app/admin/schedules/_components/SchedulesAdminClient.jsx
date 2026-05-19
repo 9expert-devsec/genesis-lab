@@ -109,21 +109,51 @@ export function SchedulesAdminClient({
     return m;
   }, [instructors]);
 
-  /** course `_id` → { 'YYYY-MM': [schedule, …] } */
+  /**
+   * Bucket schedules by course AND by month. MSDB returns
+   * `schedule.course` as either a populated object (`{ _id, course_id,
+   * course_name, … }`) or a bare ObjectId string — and the bare form
+   * is more likely right after a write before the next round-trip
+   * populates it. We index under BOTH the ObjectId AND the human
+   * `course_id` code so the row lookup in `ProgramGroup` can fall back
+   * to whichever key matches the course in hand.
+   *
+   *   key shape:  `<ObjectId>` OR `<course_id>`
+   *   value:      { 'YYYY-MM': [schedule, …] }
+   *
+   * Duplicate schedules across both keys are deduped by `_id` so a
+   * lookup never returns the same row twice.
+   */
   const scheduleMap = useMemo(() => {
     const map = new Map();
+
+    function push(key, monthK, s) {
+      if (!key || !monthK) return;
+      if (!map.has(key)) map.set(key, {});
+      const bucket = map.get(key);
+      if (!bucket[monthK]) bucket[monthK] = [];
+      // Dedupe: same schedule may land under both the ObjectId and the
+      // course_id key. Keep it once per (key, monthK) bucket.
+      if (!bucket[monthK].some((x) => String(x._id) === String(s._id))) {
+        bucket[monthK].push(s);
+      }
+    }
+
     for (const s of schedules) {
-      const cid = String(
-        (typeof s.course === 'object' ? s.course?._id : s.course) ?? ''
-      );
-      if (!cid) continue;
-      const first = s.dates?.[0];
-      const key = monthKey(first);
-      if (!key) continue;
-      if (!map.has(cid)) map.set(cid, {});
-      const bucket = map.get(cid);
-      if (!bucket[key]) bucket[key] = [];
-      bucket[key].push(s);
+      const monthK = monthKey(s.dates?.[0]);
+      if (!monthK) continue;
+
+      let oid = '';
+      let codeKey = '';
+      if (typeof s.course === 'object' && s.course !== null) {
+        oid = String(s.course._id ?? '');
+        codeKey = String(s.course.course_id ?? '');
+      } else if (s.course != null) {
+        oid = String(s.course);
+      }
+
+      push(oid, monthK, s);
+      push(codeKey, monthK, s);
     }
     return map;
   }, [schedules]);
@@ -384,7 +414,15 @@ function ProgramGroup({
             <tbody className="divide-y divide-[var(--surface-border)]">
               {group.courses.map((course) => {
                 const cid = String(course._id ?? '');
-                const buckets = scheduleMap.get(cid) ?? {};
+                // Lookup fallback chain: prefer the ObjectId because
+                // it's globally unique, fall back to the human
+                // `course_id` code (the second key we indexed in
+                // scheduleMap) so a bare-ObjectId-only schedule still
+                // resolves when MSDB hasn't populated yet.
+                const buckets =
+                  scheduleMap.get(cid) ??
+                  scheduleMap.get(String(course.course_id ?? '')) ??
+                  {};
                 return (
                   <tr
                     key={course.course_id || cid}
@@ -871,19 +909,33 @@ function ScheduleModal({
             />
           </div>
 
-          {/* Signup URL */}
-          <label className="block">
-            <span className="text-sm font-medium text-9e-navy dark:text-white">
-              Signup URL (optional)
-            </span>
-            <input
-              type="url"
-              value={signupUrl}
-              onChange={(e) => setSignupUrl(e.target.value)}
-              placeholder="https://…"
-              className={inputCls + ' font-mono text-xs'}
-            />
-          </label>
+          {/* Signup URL — admin doesn't pick this on create; the server
+              action auto-fills based on NEXT_PUBLIC_SITE_URL + course
+              slug + the assigned schedule _id. On edit we show the
+              current value so it can be tweaked if needed. */}
+          <div>
+            <label className="text-sm font-medium text-9e-navy dark:text-white">
+              Signup URL
+            </label>
+            {isEdit ? (
+              <input
+                type="url"
+                value={signupUrl}
+                onChange={(e) => setSignupUrl(e.target.value)}
+                placeholder="https://…"
+                className={inputCls + ' font-mono text-xs'}
+              />
+            ) : (
+              <div className="mt-1 rounded-9e-md border border-green-200 bg-green-50 px-3 py-2">
+                <p className="text-xs text-green-700">
+                  ระบบจะสร้าง URL สมัครอัตโนมัติหลังบันทึก
+                </p>
+                <p className="mt-1 font-mono text-[11px] text-9e-slate-dp-50">
+                  /registration/public?course=&lt;course-id&gt;&amp;class=&lt;schedule-id&gt;
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Local sidecar */}
           <div className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-3">

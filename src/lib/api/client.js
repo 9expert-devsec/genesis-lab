@@ -51,6 +51,21 @@ export async function aiFetch(path, { params, revalidate = 3600, tags } = {}) {
     }
   }
 
+  // `revalidate: 0` is the admin-page "always fresh" signal. In Next 15
+  // the cleanest way to express that is `cache: 'no-store'` — passing
+  // `next: { revalidate: 0 }` is ambiguous (the framework reads it as
+  // "revalidate ASAP" rather than "never cache"). Anything > 0 keeps
+  // ISR + tag-based invalidation.
+  const cacheConfig =
+    revalidate === 0
+      ? { cache: 'no-store' }
+      : {
+          next: {
+            revalidate,
+            ...(tags ? { tags: Array.isArray(tags) ? tags : [tags] } : {}),
+          },
+        };
+
   const res = await fetchWithTimeout(
     url,
     {
@@ -58,10 +73,7 @@ export async function aiFetch(path, { params, revalidate = 3600, tags } = {}) {
         'x-api-key': KEY,
         'accept': 'application/json',
       },
-      next: {
-        revalidate,
-        ...(tags ? { tags: Array.isArray(tags) ? tags : [tags] } : {}),
-      },
+      ...cacheConfig,
     },
     UPSTREAM_TIMEOUT_MS
   );
