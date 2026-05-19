@@ -3,12 +3,15 @@
 import { useMemo, useState, useTransition } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 import {
   togglePromotionActive,
   updatePromotionOrder,
+  deletePromotion,
 } from '@/lib/actions/promotions';
+import { PromotionModal } from './PromotionModal';
 
 function formatRange(startISO, endISO) {
   const fmt = (v) => {
@@ -40,10 +43,12 @@ function formatSyncedAt(iso) {
   });
 }
 
-export function PromotionsAdminClient({ promotions: initial, configMap, lastSyncedAt }) {
+export function PromotionsAdminClient({ promotions: initial, configMap, courses = [], lastSyncedAt }) {
+  const router = useRouter();
   const [busyId, setBusyId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  const [editing, setEditing] = useState(null); // null | 'new' | <promotion>
   const [, startTransition] = useTransition();
 
   const {
@@ -79,6 +84,23 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
       );
       setBusyId(null);
     });
+  }
+
+  async function handleDelete(p) {
+    if (!window.confirm(`ลบโปรโมชั่น "${p.title || p.promotion_id}" ?`)) return;
+    setBusyId(p.promotion_id);
+    setSyncMsg(null);
+    try {
+      const res = await deletePromotion(p._id ?? p.promotion_id);
+      if (res?.ok) {
+        setSyncMsg({ type: 'ok', text: 'ลบสำเร็จ' });
+        router.refresh();
+      } else {
+        setSyncMsg({ type: 'err', text: res?.error ?? 'ลบไม่สำเร็จ' });
+      }
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function handleSync() {
@@ -124,6 +146,13 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
               {syncMsg.text}
             </span>
           )}
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="rounded-9e-md border border-9e-action px-4 py-2 text-sm font-bold text-9e-action hover:bg-9e-action hover:text-white"
+          >
+            + สร้างโปรโมชั่น
+          </button>
           <button
             type="button"
             onClick={handleSync}
@@ -233,12 +262,29 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
                     </button>
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <Link
-                      href={editHref}
-                      className="inline-flex items-center rounded border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                    >
-                      ตั้งค่า
-                    </Link>
+                    <div className="inline-flex flex-wrap justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditing(p)}
+                        className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                      >
+                        แก้ไข
+                      </button>
+                      <Link
+                        href={editHref}
+                        className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-action hover:bg-9e-ice"
+                      >
+                        ตั้งค่า
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(p)}
+                        disabled={busyId === p.promotion_id}
+                        className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        ลบ
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -246,6 +292,18 @@ export function PromotionsAdminClient({ promotions: initial, configMap, lastSync
           </tbody>
         </table>
       </div>
+
+      {editing && (
+        <PromotionModal
+          promotion={editing === 'new' ? null : editing}
+          courses={courses}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

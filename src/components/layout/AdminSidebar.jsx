@@ -31,6 +31,7 @@ import {
   HelpCircle,
   Map,
   Bell,
+  Webhook,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +70,7 @@ const ICONS = {
   HelpCircle,
   Map,
   Bell,
+  Webhook,
 };
 
 // `superadminOnly: true` items are filtered out for non-superadmin
@@ -85,7 +87,9 @@ const NAV_GROUPS = [
     items: [
       { label: 'หลักสูตรแนะนำ',        href: '/admin/featured-courses',         icon: 'Star' },
       { label: 'คอร์สออนไลน์แนะนำ',    href: '/admin/featured-online-courses',  icon: 'Monitor' },
-      { label: 'หลักสูตร SEO/Gallery', href: '/admin/courses',                  icon: 'GraduationCap' },
+      { label: 'หลักสูตร',             href: '/admin/courses',                  icon: 'GraduationCap' },
+      { label: 'ตารางอบรม',            href: '/admin/schedules',                icon: 'CalendarDays' },
+      { label: 'วิทยากร',              href: '/admin/instructors',              icon: 'User' },
       { label: 'โปรแกรม & Skills',     href: '/admin/programs',                 icon: 'Layers' },
       { label: 'Career Path',          href: '/admin/career-paths',             icon: 'Map' },
       { label: 'Program/Skill URL',    href: '/admin/page-configs',             icon: 'FileText' },
@@ -114,6 +118,7 @@ const NAV_GROUPS = [
       { label: 'การลงทะเบียน',  href: '/admin/registrations',  icon: 'ClipboardList' },
       { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase' },
       { label: 'Landing Cache', href: '/admin/landing-cache',  icon: 'Database' },
+      { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook' },
       { label: 'ความปลอดภัย',   href: '/admin/security',       icon: 'Shield' },
       { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User' },
       {

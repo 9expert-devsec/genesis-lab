@@ -7,12 +7,23 @@ import mongoose from 'mongoose';
  */
 const InstructorSchema = new mongoose.Schema(
   {
+    // Upstream MSDB `_id` once synced. Empty for locally-seeded rows
+    // (e.g. /public/Instructors entries that pre-date MSDB ownership).
+    instructor_id:   { type: String, default: '', index: true },
+
     name:            { type: String, required: true, trim: true },
+    name_en:         { type: String, default: '', trim: true },
     title:           { type: String, default: '', trim: true },
+    bio:             { type: String, default: '' },
     image_url:       { type: String, default: '' },
     image_public_id: { type: String, default: '' }, // present only for Cloudinary uploads
+    // Specialties are Genesis-local — MSDB has no equivalent field.
+    specialties:     { type: [String], default: [] },
+    // Programs the instructor teaches (MSDB ObjectId array).
+    programs:        { type: [String], default: [] },
     display_order:   { type: Number, default: 0 },
     is_active:       { type: Boolean, default: true },
+    synced_at:       { type: Date, default: null },
   },
   { timestamps: true, collection: 'instructors' }
 );

@@ -56,6 +56,15 @@ const PromotionSchema = new mongoose.Schema(
     is_active:     { type: Boolean, default: true },
     display_order: { type: Number,  default: 0 },
 
+    // Dual-write provenance:
+    //   'msdb'    → owned upstream; we only mirror.
+    //   'genesis' → admin created it from this app; we write through to MSDB
+    //               and ignore loop-back webhooks (see handlers.handlePromotion).
+    // `msdb_id` is the upstream Mongo `_id` once MSDB acknowledges the write,
+    // needed for PUT/DELETE write-back. Empty until acknowledged.
+    source:  { type: String, enum: ['msdb', 'genesis'], default: 'msdb' },
+    msdb_id: { type: String, default: '' },
+
     synced_at: { type: Date, default: null },
   },
   { timestamps: true, collection: 'promotions' }
