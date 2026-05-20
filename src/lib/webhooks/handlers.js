@@ -280,7 +280,27 @@ export async function handleCareerPathEvent(event, data) {
     );
   }
 
+  bustCareerPathCaches();
+}
+
+/**
+ * Revalidate every surface that renders career-path data.
+ *
+ * - `/career-path-project` and `/[...slug]` cover the landing + detail
+ *   pages.
+ * - The public `(public)` layout is what hosts the site-wide nav. The
+ *   header reads `getActiveCareerPaths()` on the server; revalidating
+ *   the layout busts that cached read so the dropdown reflects upstream
+ *   changes immediately.
+ * - `career-paths` is the ISR tag used by the read-side aiFetch
+ *   adapter — bust it so any upstream-list call goes through.
+ * - `/search` lists career paths in autocomplete results.
+ */
+function bustCareerPathCaches() {
+  safeRevalidateTag('career-paths');
   safeRevalidate('/career-path-project');
+  safeRevalidate('/(public)', 'layout');
+  safeRevalidate('/[...slug]', 'page');
   safeRevalidate('/search');
 }
 

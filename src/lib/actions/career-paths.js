@@ -4,13 +4,20 @@
  * Server actions for the CareerPath collection.
  *
  * Reads are public; writes require an authenticated admin session.
+ *
+ * Mutations are dual-write: we hit MSDB first (it owns career-path
+ * data — Genesis is a cache for fast public-page reads + admin UX)
+ * and on success we upsert the same shape into our local Mongo so the
+ * admin list reflects the change immediately, without waiting for the
+ * webhook round-trip.
  */
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
 import { auth } from '@/lib/auth/options';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
+import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 
 const ADMIN_PATH  = '/admin/career-paths';
 const PUBLIC_PATH = '/career-path-project';
@@ -24,6 +31,31 @@ async function requireAdmin() {
   }
 }
 
+// ── cache busting ─────────────────────────────────────────────────
+//
+// Career paths surface in three places:
+//   1. The admin list at /admin/career-paths
+//   2. The public landing /career-path-project and individual
+//      /[slug]-career-path detail pages (matched by /[...slug])
+//   3. The site-wide header dropdown — rendered in the public layout
+//      (PublicHeader fetches from Mongo on the server). When a path
+//      is created/renamed/deleted, the nav must reflect it immediately;
+//      revalidating just the page that triggered the action would not
+//      bust the layout, so we revalidate the layout explicitly.
+//
+// Tags: `career-paths` is set by the read-side aiFetch adapter; busting
+// it ensures any ISR-cached upstream list goes stale.
+function bustCaches() {
+  revalidateTag('career-paths');
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(PUBLIC_PATH);
+  revalidatePath('/(public)', 'layout');
+  revalidatePath('/[...slug]', 'page');
+  revalidatePath('/search');
+}
+
+// ── existing toggle / reorder / sync (preserved) ──────────────────
+
 export async function toggleCareerPathActive(careerPathId, isActive) {
   await requireAdmin();
   await dbConnect();
@@ -34,9 +66,7 @@ export async function toggleCareerPathActive(careerPathId, isActive) {
     { career_path_id: careerPathId },
     { $set: { is_active: Boolean(isActive) } }
   );
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(PUBLIC_PATH);
-  revalidatePath('/[...slug]', 'page');
+  bustCaches();
   return { ok: true };
 }
 
@@ -60,16 +90,283 @@ export async function updateCareerPathOrder(orderedIds) {
     },
   }));
   await CareerPath.bulkWrite(ops);
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(PUBLIC_PATH);
+  bustCaches();
   return { ok: true };
 }
 
 export async function syncCareerPathsAction() {
   await requireAdmin();
   const result = await syncCareerPaths();
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(PUBLIC_PATH);
-  revalidatePath('/[...slug]', 'page');
+  bustCaches();
   return result;
+}
+
+// ── CRUD (write-back to MSDB) ─────────────────────────────────────
+
+function parseLines(formData, key) {
+  return String(formData.get(key) ?? '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function toNum(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Build the MSDB payload from a FormData submitted by CareerPathForm.
+ *
+ * `courses` is the same list the form was rendered against — used to
+ * resolve `course_id` strings into the `publicCourse` ObjectId refs
+ * MSDB expects on curriculum items.
+ */
+function shapePayload(formData, courses) {
+  // Map { course_id → ObjectId } for resolving curriculum items.
+  const courseMap = Object.fromEntries(
+    (courses || []).map((c) => [c.course_id, c._id])
+  );
+
+  let blocks = [];
+  try {
+    blocks = JSON.parse(String(formData.get('curriculum_json') ?? '[]'));
+    if (!Array.isArray(blocks)) blocks = [];
+  } catch {
+    blocks = [];
+  }
+
+  const curriculum = blocks.map((block, idx) => {
+    const items = Array.isArray(block?.items) ? block.items : [];
+    return {
+      kind:        block?.kind === 'choice' ? 'choice' : 'fixed',
+      title:       String(block?.title ?? ''),
+      description: String(block?.description ?? ''),
+      chooseMin:   toNum(block?.chooseMin),
+      chooseMax:   toNum(block?.chooseMax),
+      sortOrder:   Number.isFinite(block?.sortOrder) ? block.sortOrder : idx,
+      items: items.map((it) => {
+        if (it?.kind === 'external') {
+          return {
+            kind:         'external',
+            externalName: String(it?.externalName ?? ''),
+            externalUrl:  String(it?.externalUrl ?? ''),
+            publicCourse: null,
+            note:         String(it?.note ?? ''),
+          };
+        }
+        // 'public' branch — drop items the admin half-filled (no course
+        // picked) rather than send `publicCourse: null` and have MSDB
+        // reject the doc. This is intentional: leaving stale empty
+        // rows in the curriculum is worse than silently skipping.
+        const ref = it?.course_id ? courseMap[it.course_id] : null;
+        return ref
+          ? {
+              kind:         'public',
+              publicCourse: ref,
+              note:         String(it?.note ?? ''),
+            }
+          : null;
+      }).filter(Boolean),
+    };
+  });
+
+  // ensure slug ends with -career-path (MSDB stores the suffixed form)
+  let slug = String(formData.get('slug') ?? '').trim().toLowerCase();
+  if (slug && !slug.endsWith('-career-path')) {
+    slug = `${slug}-career-path`;
+  }
+
+  return {
+    title:      String(formData.get('title') ?? '').trim(),
+    slug,
+    status:     String(formData.get('status') ?? 'offline'),
+    isPinned:   formData.get('isPinned') === 'on',
+    sortOrder:  toNum(formData.get('sortOrder')),
+    cardDetail: String(formData.get('cardDetail') ?? ''),
+    coverImage: {
+      url: String(formData.get('coverImage_url') ?? ''),
+      alt: String(formData.get('coverImage_alt') ?? ''),
+    },
+    roadmapImage: {
+      url: String(formData.get('roadmapImage_url') ?? ''),
+      alt: String(formData.get('roadmapImage_alt') ?? ''),
+    },
+    price: {
+      fullPrice:   toNum(formData.get('price_fullPrice')),
+      salePrice:   toNum(formData.get('price_salePrice')),
+      discountPct: toNum(formData.get('price_discountPct')),
+      currency:    String(formData.get('price_currency') ?? 'THB'),
+    },
+    links: {
+      detailUrl:  String(formData.get('links_detailUrl')  ?? ''),
+      signupUrl:  String(formData.get('links_signupUrl')  ?? ''),
+      outlineUrl: String(formData.get('links_outlineUrl') ?? ''),
+    },
+    detail: {
+      tagline:       String(formData.get('detail_tagline')     ?? ''),
+      intro:         String(formData.get('detail_intro')       ?? ''),
+      contentHtml:   String(formData.get('detail_contentHtml') ?? ''),
+      objectives:    parseLines(formData, 'detail_objectives'),
+      suitableFor:   parseLines(formData, 'detail_suitableFor'),
+      prerequisites: parseLines(formData, 'detail_prerequisites'),
+      benefits:      parseLines(formData, 'detail_benefits'),
+    },
+    curriculum,
+  };
+}
+
+/**
+ * Mirror the freshly-written MSDB item into Mongo so the admin list
+ * shows the change immediately. We don't wait on the webhook because
+ * the user is staring at the page expecting to see their save.
+ */
+function mongoSetFromMsdbItem(item) {
+  return {
+    api_slug:          String(item?.slug ?? ''),
+    title:             String(item?.title ?? ''),
+    short_description: String(item?.cardDetail ?? ''),
+    tagline:           String(item?.detail?.tagline ?? ''),
+    intro:             String(item?.detail?.intro ?? ''),
+    description_html:  String(item?.detail?.contentHtml ?? ''),
+    objectives:        Array.isArray(item?.detail?.objectives)    ? item.detail.objectives    : [],
+    suitable_for:      Array.isArray(item?.detail?.suitableFor)   ? item.detail.suitableFor   : [],
+    prerequisites:     Array.isArray(item?.detail?.prerequisites) ? item.detail.prerequisites : [],
+    benefits:          Array.isArray(item?.detail?.benefits)      ? item.detail.benefits      : [],
+    hero_image_url:    String(item?.coverImage?.url ?? ''),
+    hero_image_alt:    String(item?.coverImage?.alt ?? ''),
+    roadmap_image_url: String(item?.roadmapImage?.url ?? ''),
+    roadmap_image_alt: String(item?.roadmapImage?.alt ?? ''),
+    links:             item?.links ?? {},
+    price:             item?.price ?? {},
+    curriculum:        Array.isArray(item?.curriculum) ? item.curriculum : [],
+    upstream_status:   String(item?.status ?? ''),
+    upstream_order:    Number.isFinite(item?.sortOrder) ? item.sortOrder : 0,
+    synced_at:         new Date(),
+  };
+}
+
+export async function createCareerPath(formData, courses) {
+  await requireAdmin();
+
+  let payload;
+  try {
+    payload = shapePayload(formData, courses);
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'รูปแบบข้อมูลไม่ถูกต้อง' };
+  }
+
+  if (!payload.title) return { ok: false, error: 'กรุณากรอกชื่อ Career Path' };
+  if (!payload.slug)  return { ok: false, error: 'กรุณากรอก slug' };
+
+  let item;
+  try {
+    const result = await msdbCreate('career-path', payload);
+    item = result?.item;
+  } catch (err) {
+    return { ok: false, error: `บันทึกลง MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}` };
+  }
+
+  if (!item?._id) {
+    return { ok: false, error: 'MSDB ไม่ได้ส่ง _id กลับมา' };
+  }
+
+  await dbConnect();
+  await CareerPath.findOneAndUpdate(
+    { career_path_id: String(item._id) },
+    {
+      $set: {
+        career_path_id: String(item._id),
+        ...mongoSetFromMsdbItem(item),
+      },
+      $setOnInsert: {
+        is_active:     payload.status === 'active',
+        display_order: 999,
+      },
+    },
+    { upsert: true }
+  );
+
+  bustCaches();
+  return { ok: true, slug: item.slug, career_path_id: String(item._id) };
+}
+
+export async function updateCareerPath(careerPathId, formData, courses) {
+  await requireAdmin();
+  await dbConnect();
+
+  if (!careerPathId) return { ok: false, error: 'Missing career_path_id' };
+
+  const existing = await CareerPath.findOne({
+    career_path_id: String(careerPathId),
+  }).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบ Career Path' };
+
+  let payload;
+  try {
+    payload = shapePayload(formData, courses);
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'รูปแบบข้อมูลไม่ถูกต้อง' };
+  }
+  if (!payload.title) return { ok: false, error: 'กรุณากรอกชื่อ Career Path' };
+  if (!payload.slug)  return { ok: false, error: 'กรุณากรอก slug' };
+
+  // MSDB write API accepts the slug as the URL identifier for
+  // career-path (see docs/api-domains.md). We send the previous slug
+  // so a slug rename in the form still resolves to the right row.
+  const upstreamRef = existing.api_slug || existing.career_path_id;
+
+  let item;
+  try {
+    const result = await msdbUpdate('career-path', upstreamRef, payload);
+    item = result?.item;
+  } catch (err) {
+    return { ok: false, error: `อัปเดต MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}` };
+  }
+
+  await CareerPath.findOneAndUpdate(
+    { career_path_id: existing.career_path_id },
+    {
+      $set: mongoSetFromMsdbItem(item ?? {
+        ...payload,
+        // Fall back to the payload we just sent if MSDB didn't echo
+        // the item back — keeps the local row in step regardless.
+        _id: existing.career_path_id,
+      }),
+    }
+  );
+
+  bustCaches();
+  return { ok: true };
+}
+
+export async function deleteCareerPath(careerPathId) {
+  await requireAdmin();
+  await dbConnect();
+
+  if (!careerPathId) return { ok: false, error: 'Missing career_path_id' };
+
+  const existing = await CareerPath.findOne({
+    career_path_id: String(careerPathId),
+  }).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบ Career Path' };
+
+  const upstreamRef = existing.api_slug || existing.career_path_id;
+
+  try {
+    await msdbDelete('career-path', upstreamRef);
+  } catch (err) {
+    // Local delete is preferable to an orphaned row the admin can't
+    // remove — return a warning rather than aborting.
+    await CareerPath.findOneAndDelete({ career_path_id: existing.career_path_id });
+    bustCaches();
+    return {
+      ok: true,
+      warning: `ลบ local สำเร็จ แต่ลบที่ MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
+    };
+  }
+
+  await CareerPath.findOneAndDelete({ career_path_id: existing.career_path_id });
+  bustCaches();
+  return { ok: true };
 }

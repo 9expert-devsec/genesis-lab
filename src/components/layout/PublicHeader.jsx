@@ -1,23 +1,41 @@
 import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
+import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { PublicHeaderClient } from './PublicHeaderClient';
 
 /**
  * Public site header — Server Component shell.
  *
- * Fetches the programs list (server-cached via ISR in the adapter) and
- * passes it down to the interactive client shell. If the upstream fetch
- * fails we render the header with an empty programs array; the mega
- * trigger then degrades to a plain link to /training-course.
+ * Fetches:
+ *  - Programs list (server-cached via ISR in the adapter) for the
+ *    หลักสูตร mega menu.
+ *  - Active career paths from Mongo for the Career Path dropdown. We
+ *    pull the live list so an admin create/edit/delete reflects in the
+ *    nav immediately (the action revalidates the public layout to bust
+ *    this fetch). If the read fails we fall back to an empty list and
+ *    the client uses the static `careerPaths` config — no broken nav.
+ *
+ * Both reads are best-effort. The header renders even on failure;
+ * the mega trigger degrades to a plain link, the dropdown to config.
  */
 export async function PublicHeader() {
-  let programs = [];
-  try {
-    const result = await listPrograms();
-    programs = await getOrderedPrograms(result.items);
-  } catch (err) {
-    console.error('[PublicHeader] failed to fetch programs:', err);
-  }
+  const [programs, dynamicCareerPaths] = await Promise.all([
+    listPrograms()
+      .then((result) => getOrderedPrograms(result.items))
+      .catch((err) => {
+        console.error('[PublicHeader] failed to fetch programs:', err);
+        return [];
+      }),
+    getActiveCareerPaths().catch((err) => {
+      console.error('[PublicHeader] failed to fetch career paths:', err);
+      return [];
+    }),
+  ]);
 
-  return <PublicHeaderClient programs={programs} />;
+  return (
+    <PublicHeaderClient
+      programs={programs}
+      dynamicCareerPaths={dynamicCareerPaths}
+    />
+  );
 }

@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 import {
   toggleCareerPathActive,
   updateCareerPathOrder,
+  deleteCareerPath,
 } from '@/lib/actions/career-paths';
 
 function formatSyncedAt(iso) {
@@ -33,6 +34,9 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
   const [busyId, setBusyId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
+  // The "are you sure?" target — null when no dialog is showing.
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
   const [, startTransition] = useTransition();
 
   const {
@@ -64,6 +68,27 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
       );
       setBusyId(null);
     });
+  }
+
+  async function handleDelete(p) {
+    setBusyId(p.career_path_id);
+    setDeleteError(null);
+    try {
+      const res = await deleteCareerPath(p.career_path_id);
+      if (res?.ok === false) {
+        setDeleteError(res.error || 'ลบไม่สำเร็จ');
+        return;
+      }
+      setRows((cur) =>
+        cur.filter((r) => r.career_path_id !== p.career_path_id)
+      );
+      setConfirmDelete(null);
+      if (res?.warning) setSyncMsg({ type: 'err', text: res.warning });
+    } catch (err) {
+      setDeleteError(err?.message ?? 'ลบไม่สำเร็จ');
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function handleSync() {
@@ -110,6 +135,12 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
               {syncMsg.text}
             </span>
           )}
+          <Link
+            href="/admin/career-paths/new"
+            className="inline-flex items-center gap-1 rounded-9e-md border border-9e-action px-3 py-2 text-sm font-bold text-9e-action hover:bg-9e-action hover:text-white"
+          >
+            <Plus className="h-4 w-4" /> สร้าง Career Path
+          </Link>
           <button
             type="button"
             onClick={handleSync}
@@ -133,12 +164,13 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
               <th className="w-36 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Sync ล่าสุด</th>
               <th className="w-24 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">หน้าเว็บ</th>
+              <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                <td colSpan={9} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   ยังไม่มีข้อมูล — กด <strong>Sync จาก API</strong> เพื่อดึงข้อมูลครั้งแรก
                 </td>
               </tr>
@@ -244,12 +276,82 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
                       <span className="text-xs text-9e-slate-dp-50">—</span>
                     )}
                   </td>
+                  <td className="px-3 py-3 text-right">
+                    <div className="inline-flex items-center gap-1.5">
+                      <Link
+                        href={`/admin/career-paths/${p.career_path_id}/edit`}
+                        className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                        aria-label="แก้ไข"
+                      >
+                        <Pencil className="h-3 w-3" /> แก้ไข
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDeleteError(null);
+                          setConfirmDelete(p);
+                        }}
+                        disabled={busyId === p.career_path_id}
+                        className="inline-flex items-center gap-1 rounded-9e-sm border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        aria-label="ลบ"
+                      >
+                        <Trash2 className="h-3 w-3" /> ลบ
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-cp-title"
+        >
+          <div className="w-full max-w-md rounded-9e-lg bg-white p-6 shadow-9e-lg dark:bg-[#111d2c]">
+            <h2 id="delete-cp-title" className="text-base font-bold text-9e-navy dark:text-white">
+              ยืนยันการลบ Career Path
+            </h2>
+            <p className="mt-2 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              คุณแน่ใจหรือไม่ว่าจะลบ <strong className="text-9e-navy dark:text-white">{confirmDelete.title}</strong>?
+              การลบจะส่งคำสั่งลบไปยัง MSDB ด้วย และไม่สามารถย้อนกลับได้
+            </p>
+
+            {deleteError && (
+              <div className="mt-3 rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDelete(null);
+                  setDeleteError(null);
+                }}
+                disabled={busyId === confirmDelete.career_path_id}
+                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(confirmDelete)}
+                disabled={busyId === confirmDelete.career_path_id}
+                className="rounded-9e-md bg-red-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {busyId === confirmDelete.career_path_id ? 'กำลังลบ…' : 'ลบ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

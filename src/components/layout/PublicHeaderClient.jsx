@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -10,6 +10,39 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills } from '@/config/site';
 import { cn } from '@/lib/utils';
 import { toKebab } from '@/lib/slug';
+
+/**
+ * Merge DB-driven career paths into the static `mainNav` config.
+ *
+ * The Career Path dropdown's children are sourced from Mongo so admin
+ * CRUD reflects in the nav without a deploy. We keep the static config
+ * as the fallback (and as the source of the "All Career Path" entry,
+ * which is the landing page, not a row in the collection).
+ */
+function buildNav(dynamicCareerPaths) {
+  if (!Array.isArray(dynamicCareerPaths) || dynamicCareerPaths.length === 0) {
+    return mainNav;
+  }
+  return mainNav.map((item) => {
+    if (item.label !== 'Career Path') return item;
+    // api_slug already carries the `-career-path` suffix; render at
+    // /${api_slug}. Sort order is whatever the admin set via the drag
+    // reorder UI — the read helper already returns sorted docs.
+    const dynamicChildren = dynamicCareerPaths
+      .filter((cp) => cp.api_slug)
+      .map((cp) => ({
+        label: cp.title || cp.api_slug,
+        href: `/${cp.api_slug}`,
+      }));
+    const allPathChild = item.children?.[0];
+    return {
+      ...item,
+      children: allPathChild
+        ? [allPathChild, ...dynamicChildren]
+        : dynamicChildren,
+    };
+  });
+}
 
 /**
  * Public site header — interactive shell.
@@ -22,11 +55,16 @@ import { toKebab } from '@/lib/slug';
  * in that case the mega trigger still navigates to /training-course but
  * the panel is hidden (handled inside DesktopMega/MobileMegaAccordion).
  */
-export function PublicHeaderClient({ programs = [] }) {
+export function PublicHeaderClient({ programs = [], dynamicCareerPaths = [] }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Gate the portal until after first client render — `document.body`
   // doesn't exist on the server, and the SSR markup must match.
   const [mounted, setMounted] = useState(false);
+
+  // Recomputed only when the live career-paths list arrives (or changes
+  // across a revalidate). Stable identity prevents needless re-renders
+  // of the dropdown's children inside `DesktopDropdown`.
+  const nav = useMemo(() => buildNav(dynamicCareerPaths), [dynamicCareerPaths]);
 
   useEffect(() => {
     setMounted(true);
@@ -57,7 +95,7 @@ export function PublicHeaderClient({ programs = [] }) {
           className="hidden flex-1 items-center justify-center gap-1 lg:flex"
           aria-label="Primary"
         >
-          {mainNav.map((item) => {
+          {nav.map((item) => {
             if (item.type === 'mega') {
               return <DesktopMega key={item.label} item={item} programs={programs} />;
             }
@@ -111,6 +149,7 @@ export function PublicHeaderClient({ programs = [] }) {
         <MobileDrawer
           open={drawerOpen}
           programs={programs}
+          nav={nav}
           onClose={() => setDrawerOpen(false)}
         />,
         document.body
@@ -324,7 +363,7 @@ function ProgramIcon({ src, size }) {
 
 // ── Mobile drawer ───────────────────────────────────────────────
 
-function MobileDrawer({ open, programs, onClose }) {
+function MobileDrawer({ open, programs, nav = mainNav, onClose }) {
   // Always mounted so the translate-x slide animation has a stable
   // starting position. Pointer events on the backdrop are gated by
   // `open` so the closed state doesn't intercept clicks.
@@ -365,7 +404,7 @@ function MobileDrawer({ open, programs, onClose }) {
           className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4"
           aria-label="Mobile primary"
         >
-          {mainNav.map((item) => {
+          {nav.map((item) => {
             if (item.type === 'mega') {
               return (
                 <MobileMegaAccordion
