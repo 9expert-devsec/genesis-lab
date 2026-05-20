@@ -164,6 +164,10 @@ function shapePayload(formData, courses) {
           ? {
               kind:         'public',
               publicCourse: ref,
+              // Preserve the human-readable code alongside the ObjectId so
+              // mongoSetFromMsdbItem can restore it from the MSDB response
+              // without a reverse-lookup. MSDB ignores unknown fields on write.
+              course_id:    String(it.course_id),
               note:         String(it?.note ?? ''),
             }
           : null;
