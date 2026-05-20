@@ -13,7 +13,13 @@ export default async function NewCareerPathPage() {
   const courses = (result?.items ?? []).map((c) => ({
     _id:         c._id,
     course_id:   c.course_id,
-    course_name: c.course_name ?? c.name ?? '',
+    course_name: c.course_name ?? '',
+    course_teaser:        c.course_teaser        ?? '',
+    course_trainingdays:  c.course_trainingdays  ?? 0,
+    course_traininghours: c.course_traininghours ?? 0,
+    course_price:         c.course_netprice ?? c.course_price ?? 0,
+    course_cover_url:     c.course_cover_url     ?? '',
+    website_urls:         c.website_urls         ?? [],
   }));
 
   return (

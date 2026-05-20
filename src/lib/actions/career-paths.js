@@ -231,30 +231,58 @@ function shapePayload(formData, courses) {
  * without relying on MSDB populating `snap.code` (which it doesn't do
  * on the /api/ai write-back response).
  */
-function mongoSetFromMsdbItem(item, courses) {
-  // Build a reverse lookup  ObjectId-string → course_id  so we can
-  // annotate items that carry only a raw publicCourse ObjectId ref.
+function mongoSetFromMsdbItem(item, courses, payloadCurriculum) {
+  // MSDB strips unknown fields (strict Mongoose schema) and does NOT
+  // populate snap.code on write-back responses — so item.curriculum
+  // items never carry course_id after a POST/PUT round-trip.
+  //
+  // Strategy: prefer payloadCurriculum (the shapePayload output which
+  // still has course_id intact) over item.curriculum. Fall back to
+  // enriching item.curriculum via reverse ObjectId lookup only when
+  // payloadCurriculum is not available (e.g. cron/webhook sync path).
   const objIdToCourseId = Object.fromEntries(
     (courses || []).map((c) => [String(c._id), c.course_id])
   );
 
-  const curriculum = Array.isArray(item?.curriculum)
-    ? item.curriculum.map((block) => ({
-        ...block,
-        items: Array.isArray(block?.items)
-          ? block.items.map((it) => {
-              if (it?.kind !== 'public') return it;
-              // Prefer snap.code (populated by MSDB on full sync).
-              // Fall back to our local reverse-lookup so a just-written
-              // item (where snap.code is '') still resolves correctly.
-              const codeFromSnap  = it?.snap?.code ?? '';
-              const codeFromMap   = objIdToCourseId[String(it?.publicCourse ?? '')] ?? '';
-              const course_id     = codeFromSnap || codeFromMap || it?.course_id || '';
-              return { ...it, course_id };
-            })
-          : [],
-      }))
-    : [];
+  const sourceCurriculum = Array.isArray(payloadCurriculum)
+    ? payloadCurriculum
+    : (Array.isArray(item?.curriculum) ? item.curriculum : []);
+
+  const curriculum = sourceCurriculum.map((block) => ({
+    ...block,
+    items: Array.isArray(block?.items)
+      ? block.items.map((it) => {
+          if (it?.kind !== 'public') return it;
+          const course_id =
+            it?.course_id ||
+            it?.snap?.code ||
+            objIdToCourseId[String(it?.publicCourse ?? '')] ||
+            '';
+          // Also rebuild snap from courses list so the public page
+          // can render CourseSnapCard without needing a webhook sync.
+          const courseData = (courses || []).find(
+            (c) => c.course_id === course_id
+          );
+          const snap = it?.snap?.name
+            ? it.snap  // already populated (webhook path) — keep it
+            : courseData
+              ? {
+                  code:      courseData.course_id,
+                  name:      courseData.course_name,
+                  teaser:    courseData.course_teaser        ?? '',
+                  days:      courseData.course_trainingdays  ?? 0,
+                  hours:     courseData.course_traininghours ?? 0,
+                  price:     courseData.course_price         ?? 0,
+                  imageUrl:  courseData.course_cover_url     ?? '',
+                  publicUrl: Array.isArray(courseData.website_urls)
+                    ? courseData.website_urls[0] ?? ''
+                    : '',
+                }
+              : (it?.snap ?? {});
+          return { ...it, course_id, snap };
+        })
+      : [],
+  }));
 
   return {
     api_slug:          String(item?.slug ?? ''),
@@ -311,7 +339,7 @@ export async function createCareerPath(formData, courses) {
     {
       $set: {
         career_path_id: String(item._id),
-        ...mongoSetFromMsdbItem(item, courses),
+        ...mongoSetFromMsdbItem(item, courses, payload.curriculum),
       },
       $setOnInsert: {
         is_active:     payload.status === 'active',
@@ -366,7 +394,7 @@ export async function updateCareerPath(careerPathId, formData, courses) {
         // Fall back to the payload we just sent if MSDB didn't echo
         // the item back — keeps the local row in step regardless.
         _id: existing.career_path_id,
-      }, courses),
+      }, courses, payload.curriculum),
     }
   );
 
