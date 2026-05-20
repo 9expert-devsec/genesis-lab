@@ -220,8 +220,38 @@ function shapePayload(formData, courses) {
  * Mirror the freshly-written MSDB item into Mongo so the admin list
  * shows the change immediately. We don't wait on the webhook because
  * the user is staring at the page expecting to see their save.
+ *
+ * `courses` (optional) — the same list the form rendered against
+ * [{ _id, course_id }]. When provided we enrich curriculum items with
+ * a `course_id` field so the edit-form can repopulate the course picker
+ * without relying on MSDB populating `snap.code` (which it doesn't do
+ * on the /api/ai write-back response).
  */
-function mongoSetFromMsdbItem(item) {
+function mongoSetFromMsdbItem(item, courses) {
+  // Build a reverse lookup  ObjectId-string → course_id  so we can
+  // annotate items that carry only a raw publicCourse ObjectId ref.
+  const objIdToCourseId = Object.fromEntries(
+    (courses || []).map((c) => [String(c._id), c.course_id])
+  );
+
+  const curriculum = Array.isArray(item?.curriculum)
+    ? item.curriculum.map((block) => ({
+        ...block,
+        items: Array.isArray(block?.items)
+          ? block.items.map((it) => {
+              if (it?.kind !== 'public') return it;
+              // Prefer snap.code (populated by MSDB on full sync).
+              // Fall back to our local reverse-lookup so a just-written
+              // item (where snap.code is '') still resolves correctly.
+              const codeFromSnap  = it?.snap?.code ?? '';
+              const codeFromMap   = objIdToCourseId[String(it?.publicCourse ?? '')] ?? '';
+              const course_id     = codeFromSnap || codeFromMap || it?.course_id || '';
+              return { ...it, course_id };
+            })
+          : [],
+      }))
+    : [];
+
   return {
     api_slug:          String(item?.slug ?? ''),
     title:             String(item?.title ?? ''),
@@ -239,7 +269,7 @@ function mongoSetFromMsdbItem(item) {
     roadmap_image_alt: String(item?.roadmapImage?.alt ?? ''),
     links:             item?.links ?? {},
     price:             item?.price ?? {},
-    curriculum:        Array.isArray(item?.curriculum) ? item.curriculum : [],
+    curriculum,
     upstream_status:   String(item?.status ?? ''),
     upstream_order:    Number.isFinite(item?.sortOrder) ? item.sortOrder : 0,
     synced_at:         new Date(),
@@ -277,7 +307,7 @@ export async function createCareerPath(formData, courses) {
     {
       $set: {
         career_path_id: String(item._id),
-        ...mongoSetFromMsdbItem(item),
+        ...mongoSetFromMsdbItem(item, courses),
       },
       $setOnInsert: {
         is_active:     payload.status === 'active',
@@ -332,7 +362,7 @@ export async function updateCareerPath(careerPathId, formData, courses) {
         // Fall back to the payload we just sent if MSDB didn't echo
         // the item back — keeps the local row in step regardless.
         _id: existing.career_path_id,
-      }),
+      }, courses),
     }
   );
 
