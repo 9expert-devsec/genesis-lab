@@ -49,7 +49,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange }) {
   const statusTotal = data.statusDist.reduce((s, d) => s + d.count, 0);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="space-y-8 p-6">
 
       {/* ── Header + range toggle ── */}
       <div className="flex flex-wrap items-start justify-between gap-4">

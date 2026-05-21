@@ -21,4 +21,21 @@ export const articleSchema = z.object({
   author:          z.string().trim().max(100).default(''),
   publishedAt:     z.string().datetime().optional().or(z.literal('')),
   active:          z.boolean().default(true),
+
+  jsonLd: z.object({
+    enabled:    z.boolean().default(true),
+    schemaType: z
+      .enum(['Article', 'BlogPosting', 'NewsArticle', 'TechArticle'])
+      .default('Article'),
+    overrides: z.object({
+      headline:      z.string().default(''),
+      description:   z.string().default(''),
+      image:         z.string().default(''),
+      authorName:    z.string().default(''),
+      datePublished: z.string().default(''),
+      dateModified:  z.string().default(''),
+    }).default({}),
+    rawOverride:        z.string().default(''),
+    rawOverrideEnabled: z.boolean().default(false),
+  }).default({}),
 });

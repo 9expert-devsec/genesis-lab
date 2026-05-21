@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { AdminSidebar } from '@/components/layout/AdminSidebar';
+import { AdminContentWrapper } from '@/components/layout/AdminContentWrapper';
 import { auth } from '@/lib/auth/options';
 
 export const metadata = {
@@ -39,15 +40,20 @@ export default async function AdminLayout({ children }) {
   const session = await auth();
   const user = session?.user ?? null;
 
+  // h-screen + overflow-hidden on the outer row pins the chrome to the
+  // viewport; <main> owns its own overflow-y-auto so the content area
+  // scrolls independently and the document/body never grow a scrollbar.
+  // The sidebar is full-height with its own internal scroll (handled
+  // inside <AdminSidebar />).
   return (
-    <div className="flex min-h-dvh">
+    <div className="flex h-screen overflow-hidden">
       <AdminSidebar
         role={user?.role ?? null}
         userName={user?.name ?? null}
         userEmail={user?.email ?? null}
       />
-      <main className="flex-1 bg-[var(--page-bg)] ">
-        {children}
+      <main className="h-screen flex-1 overflow-y-auto bg-[var(--page-bg)]">
+        <AdminContentWrapper>{children}</AdminContentWrapper>
       </main>
     </div>
   );

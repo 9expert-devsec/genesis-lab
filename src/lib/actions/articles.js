@@ -52,6 +52,15 @@ function parseFormData(formData) {
     ? new Date(publishedAtRaw).toISOString()
     : '';
 
+  // jsonLd ships as a JSON blob — let Zod sanitize it on the way in.
+  let jsonLd = {};
+  try {
+    const parsed = JSON.parse(String(formData.get('jsonLd') ?? '{}'));
+    if (parsed && typeof parsed === 'object') jsonLd = parsed;
+  } catch {
+    jsonLd = {};
+  }
+
   return {
     slug:            String(formData.get('slug') ?? '').trim(),
     title:           String(formData.get('title') ?? '').trim(),
@@ -71,6 +80,7 @@ function parseFormData(formData) {
     author:          String(formData.get('author') ?? '').trim(),
     publishedAt,
     active:          formData.get('active') === 'true',
+    jsonLd,
   };
 }
 

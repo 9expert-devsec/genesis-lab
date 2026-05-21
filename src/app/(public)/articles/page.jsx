@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getArticles } from '@/lib/actions/articles';
 import { listPrograms } from '@/lib/api/programs';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
@@ -22,6 +23,15 @@ export default async function ArticlesIndexPage() {
     program_name: p.program_name,
   }));
 
+  // Distinct tag list sourced from the loaded articles — used by the
+  // client to render a "filtering by #tag" chip when arriving from a
+  // detail page's clickable tag link. The list page doesn't expose a
+  // dropdown for it; the chip is the only entry point and is set by
+  // the `?tag=` URL searchParam.
+  const allTags = [
+    ...new Set((items ?? []).flatMap((a) => a.tags ?? [])),
+  ].sort();
+
   return (
     <>
       <section className="relative overflow-hidden bg-gradient-to-br from-[#0D1B2A] via-[#0F2A4A] to-[#005CFF] text-white">
@@ -35,10 +45,16 @@ export default async function ArticlesIndexPage() {
       </section>
 
       <section className="mx-auto -mt-8 max-w-6xl px-4 pb-16 sm:px-6">
-        <ArticlesPageClient
-          articles={items}
-          programs={programs}
-        />
+        {/* useSearchParams inside ArticlesPageClient forces a CSR
+            bailout for the search-param-driven subtree — Suspense
+            gives the static pre-render something to flush. */}
+        <Suspense fallback={null}>
+          <ArticlesPageClient
+            articles={items}
+            programs={programs}
+            allTags={allTags}
+          />
+        </Suspense>
       </section>
     </>
   );

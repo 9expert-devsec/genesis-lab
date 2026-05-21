@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowRight, Search } from 'lucide-react';
 
 function formatDate(iso) {
@@ -15,21 +16,36 @@ function formatDate(iso) {
   });
 }
 
-export function ArticlesPageClient({ articles, programs }) {
+export function ArticlesPageClient({ articles, programs /* allTags */ }) {
+  const searchParams = useSearchParams();
+
   const [query,         setQuery]         = useState('');
   const [programFilter, setProgramFilter] = useState('');
   const [typeFilter,    setTypeFilter]    = useState('all');
+  // Seed from the `?tag=…` URL param so deep links from clickable
+  // tags on the detail page land here pre-filtered.
+  const [selectedTag,   setSelectedTag]   = useState(
+    searchParams.get('tag') ?? ''
+  );
+
+  // Keep the filter in sync if the user navigates between tag links
+  // without unmounting this component (App Router preserves state
+  // across same-route navigations).
+  useEffect(() => {
+    setSelectedTag(searchParams.get('tag') ?? '');
+  }, [searchParams]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return articles.filter((a) => {
+      if (selectedTag && !(a.tags ?? []).includes(selectedTag)) return false;
       if (programFilter && !(a.programs ?? []).includes(programFilter)) return false;
       if (typeFilter !== 'all' && a.articleType !== typeFilter) return false;
       if (!q) return true;
       const haystack = [a.title, a.excerpt].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(q);
     });
-  }, [articles, query, programFilter, typeFilter]);
+  }, [articles, query, programFilter, typeFilter, selectedTag]);
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
@@ -68,6 +84,23 @@ export function ArticlesPageClient({ articles, programs }) {
           <option value="video">บทความวิดีโอ</option>
         </select>
       </div>
+
+      {selectedTag && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="text-sm text-gray-500 dark:text-[#94a3b8]">กรองตาม tag:</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+            #{selectedTag}
+            <button
+              type="button"
+              onClick={() => setSelectedTag('')}
+              className="ml-1 hover:text-red-500"
+              aria-label="ล้าง tag filter"
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <p className="py-16 text-center text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">

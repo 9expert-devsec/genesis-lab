@@ -71,6 +71,18 @@ export default async function HomePage() {
       <PublicHeader />
 
       <main id="main">
+        {/* Visually hidden H1 — present in the DOM for crawlers and
+            screen readers, takes up zero visual space. Uses the
+            clip-rect pattern instead of font-size:0 because some
+            assistive tech skips zero-sized text. */}
+        <h1
+          aria-label="9Expert Training อบรมเทคโนโลยีชั้นนำ AI Data Automation ด้วยผู้เชี่ยวชาญตัวจริง"
+          className="absolute -m-px h-px w-px overflow-hidden whitespace-nowrap border-0 p-0"
+          style={{ clip: 'rect(0,0,0,0)' }}
+        >
+          9Expert Training อบรมเทคโนโลยีชั้นนำ AI Data Automation ด้วยผู้เชี่ยวชาญตัวจริง
+        </h1>
+
         {banners.length > 0 ? (
           <HeroBannerCarousel banners={banners} />
         ) : (

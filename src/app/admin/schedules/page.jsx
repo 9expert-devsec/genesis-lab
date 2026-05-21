@@ -55,7 +55,7 @@ export default async function AdminSchedulesPage() {
   const scheduleLocals = await getScheduleLocals();
 
   return (
-    <div className="mx-auto max-w-[1600px]">
+    <div className="p-6">
       <SchedulesAdminClient
         schedules={schedules}
         courses={courses}

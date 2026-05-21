@@ -71,6 +71,7 @@ import {
   searchArticles,
   getArticlesByIds,
 } from '@/lib/actions/articles';
+import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
 
 const MAX_TAGS = 20;
 
@@ -122,6 +123,35 @@ function autosize(el) {
 }
 
 /**
+ * Minimal HTML pretty-printer for the source-mode textarea.
+ *
+ * Tiptap emits everything on a single line — readable for the browser,
+ * unreadable for a human reviewing the markup. We split on tag
+ * boundaries and indent based on depth. Void elements (br, hr, img,
+ * input) don't push the indent level. Not a full HTML parser by design;
+ * just enough formatting that an admin can hand-edit comfortably.
+ */
+function formatHTML(html) {
+  let indent = 0;
+  const tab = '  ';
+  return html
+    .replace(/></g, '>\n<')
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return '';
+      if (trimmed.match(/^<\/\w/)) indent = Math.max(0, indent - 1);
+      const result = tab.repeat(indent) + trimmed;
+      if (trimmed.match(/^<\w[^/]*[^/]>$/) && !trimmed.match(/^<(br|hr|img|input)/i)) {
+        indent++;
+      }
+      return result;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
  * SEO score — same heuristic as the design artifact. Each criterion
  * contributes independently so the bar nudges up as the admin fills
  * each field.
@@ -143,6 +173,7 @@ export function ArticleForm({
   programs = [],
   skills = [],
   courses = [],
+  isSuperAdmin = false,
 }) {
   const router = useRouter();
   const isEdit = Boolean(article?._id);
@@ -193,14 +224,11 @@ export function ArticleForm({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/admin/articles-by-ids?ids=${relatedArticles.join(',')}`
-        );
-        if (!res.ok) return;
-        const json = await res.json().catch(() => ({}));
+        // Call the server action directly — no REST shim needed.
+        const items = await getArticlesByIds(relatedArticles);
         if (cancelled) return;
         const map = {};
-        for (const a of json.items ?? []) {
+        for (const a of items ?? []) {
           map[String(a._id)] = { _id: a._id, title: a.title };
         }
         setRelatedArticlesIndex((cur) => ({ ...map, ...cur }));
@@ -243,6 +271,23 @@ export function ArticleForm({
   // will look on the public detail page (live, against the current
   // unsaved form state).
   const [showPreview, setShowPreview] = useState(false);
+
+  // Transient "saved" confirmation, shown in the header after a
+  // successful update. We stay on the edit page (admins typically
+  // tweak-save-tweak), so a toast-style indicator stands in for the
+  // usual list-redirect feedback.
+  const [saved, setSaved] = useState(false);
+
+  // JSON-LD — seeded from the existing doc on edit. `jsonLdStatus` is
+  // the result of the last Preview pass (or 'unchecked' before the
+  // admin has clicked Preview at least once).
+  const [jsonLdEnabled,      setJsonLdEnabled]      = useState(article?.jsonLd?.enabled ?? true);
+  const [schemaType,         setSchemaType]         = useState(article?.jsonLd?.schemaType ?? 'Article');
+  const [jsonLdOverrides,    setJsonLdOverrides]    = useState(article?.jsonLd?.overrides ?? {});
+  const [rawOverride,        setRawOverride]        = useState(article?.jsonLd?.rawOverride ?? '');
+  const [rawOverrideEnabled, setRawOverrideEnabled] = useState(article?.jsonLd?.rawOverrideEnabled ?? false);
+  const [jsonLdPreviewOpen,  setJsonLdPreviewOpen]  = useState(false);
+  const [jsonLdStatus,       setJsonLdStatus]       = useState({ status: 'unchecked', message: '' });
 
   // ── Tiptap ────────────────────────────────────────────────────
   const editor = useEditor({
@@ -298,15 +343,21 @@ export function ArticleForm({
       editor.commands.setContent(sourceHtml || '');
       setSourceMode(false);
     } else {
-      setSourceHtml(editor.getHTML());
+      // Pretty-print the markup before showing it in the textarea —
+      // raw Tiptap output is single-line and hard to scan.
+      setSourceHtml(formatHTML(editor.getHTML()));
       setSourceMode(true);
     }
   }
 
-  // Used by both header buttons. `asDraft` ignores the active checkbox
-  // and submits with active=false; `asPublished` ensures publishedAt is
-  // set so the public page can show a date.
-  const submit = useCallback(({ asDraft, asPublished }) => {
+  // Two call paths:
+  //   { asDraft: true } — explicit Save-as-Draft on new articles
+  //                       (forces active=false regardless of the toggle).
+  //   default           — honor the current `active` toggle. When the
+  //                       admin flips publish on for the first time we
+  //                       stamp publishedAt=now so the public page has
+  //                       a date to render.
+  const submit = useCallback(({ asDraft } = {}) => {
     setError(null);
     if (!editor) {
       setError('Editor ยังไม่พร้อม');
@@ -325,11 +376,8 @@ export function ArticleForm({
     let finalPublishedAt = publishedAt;
     if (asDraft) {
       finalActive = false;
-    } else if (asPublished) {
-      finalActive = true;
-      if (!finalPublishedAt) {
-        finalPublishedAt = toLocalDateTimeInputValue(new Date().toISOString());
-      }
+    } else if (finalActive && !finalPublishedAt) {
+      finalPublishedAt = toLocalDateTimeInputValue(new Date().toISOString());
     }
 
     const fd = new FormData();
@@ -351,6 +399,15 @@ export function ArticleForm({
     fd.set('author',         author);
     fd.set('publishedAt',    finalPublishedAt);
     fd.set('active',         String(finalActive));
+    fd.set('jsonLd', JSON.stringify({
+      enabled:    jsonLdEnabled,
+      schemaType,
+      overrides:  jsonLdOverrides,
+      // Raw override is a superadmin-only feature — strip the
+      // payload even if the toggle is somehow on for a non-super.
+      rawOverride:        isSuperAdmin ? rawOverride : '',
+      rawOverrideEnabled: isSuperAdmin && rawOverrideEnabled,
+    }));
 
     startTransition(async () => {
       try {
@@ -361,8 +418,16 @@ export function ArticleForm({
           setError(res?.error ?? 'บันทึกไม่สำเร็จ');
           return;
         }
-        router.push('/admin/articles');
-        router.refresh();
+        if (isEdit) {
+          // Stay on the edit page — admins typically iterate. Show a
+          // transient ✓ in the header for feedback.
+          setSaved(true);
+          setTimeout(() => setSaved(false), 3000);
+          router.refresh();
+        } else {
+          router.push('/admin/articles');
+          router.refresh();
+        }
       } catch (err) {
         setError(err?.message ?? 'บันทึกไม่สำเร็จ');
       }
@@ -374,8 +439,38 @@ export function ArticleForm({
     relatedArticles, relatedCourses, articleType,
     seoTitle, seoDescription, focusKeyword,
     author, publishedAt, active,
+    jsonLdEnabled, schemaType, jsonLdOverrides,
+    rawOverride, rawOverrideEnabled, isSuperAdmin,
     isEdit, article, router,
   ]);
+
+  /**
+   * Build a JSON-LD object from the unsaved form state — used by the
+   * Preview / Copy buttons in the sidebar. We force `active: true` so
+   * the builder doesn't bail on drafts mid-edit; the production
+   * render still respects active/publishedAt because it calls
+   * buildJsonLd against the saved document.
+   */
+  function buildJsonLdPreview() {
+    return buildJsonLd({
+      ...(article ?? {}),
+      slug,
+      title,
+      excerpt,
+      coverUrl,
+      author,
+      publishedAt: publishedAt || new Date().toISOString(),
+      updatedAt:   new Date().toISOString(),
+      active: true,
+      jsonLd: {
+        enabled:    jsonLdEnabled,
+        schemaType,
+        overrides:  jsonLdOverrides,
+        rawOverride,
+        rawOverrideEnabled: isSuperAdmin && rawOverrideEnabled,
+      },
+    });
+  }
 
   // ── Derived UI bits ───────────────────────────────────────────
 
@@ -425,18 +520,26 @@ export function ArticleForm({
             </p>
           </div>
 
+          {saved && (
+            <span className="text-sm font-medium text-green-600">
+              ✓ บันทึกสำเร็จ
+            </span>
+          )}
+
           <span className={'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' + statusBadge.cls}>
             {statusBadge.label}
           </span>
 
-          <button
-            type="button"
-            onClick={() => submit({ asDraft: true })}
-            disabled={pending}
-            className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
-          >
-            บันทึก Draft
-          </button>
+          {!isEdit && (
+            <button
+              type="button"
+              onClick={() => submit({ asDraft: true })}
+              disabled={pending}
+              className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+            >
+              บันทึก Draft
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setShowPreview(true)}
@@ -444,13 +547,36 @@ export function ArticleForm({
           >
             <Eye className="h-4 w-4" /> Preview
           </button>
+          {/* Publish toggle — mutates `active` state directly so the
+              save button can read it. Stamping publishedAt happens at
+              submit time when active goes on for the first time. */}
+          <div className="flex items-center gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5">
+            <span className="text-xs text-gray-500 dark:text-[#94a3b8]">เผยแพร่</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={active}
+              onClick={() => setActive((v) => !v)}
+              className={
+                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ' +
+                (active ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600')
+              }
+            >
+              <span
+                className={
+                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ' +
+                  (active ? 'translate-x-4' : 'translate-x-1')
+                }
+              />
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => submit({ asPublished: true })}
+            onClick={() => submit({})}
             disabled={pending}
             className="rounded-9e-md bg-9e-action px-3 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
           >
-            {pending ? 'กำลังบันทึก…' : isEdit ? 'อัปเดต' : 'เผยแพร่'}
+            {pending ? 'กำลังบันทึก…' : 'บันทึกอัปเดต'}
           </button>
         </div>
       </header>
@@ -723,6 +849,31 @@ export function ArticleForm({
               </div>
             </div>
           </Section>
+
+          {/* ── JSON-LD / Schema ──────────────────────────── */}
+          <JsonLdSection
+            enabled={jsonLdEnabled}                setEnabled={setJsonLdEnabled}
+            schemaType={schemaType}                setSchemaType={setSchemaType}
+            overrides={jsonLdOverrides}            setOverrides={setJsonLdOverrides}
+            rawOverride={rawOverride}              setRawOverride={setRawOverride}
+            rawOverrideEnabled={rawOverrideEnabled} setRawOverrideEnabled={setRawOverrideEnabled}
+            status={jsonLdStatus}
+            isSuperAdmin={isSuperAdmin}
+            onPreview={() => {
+              const preview = buildJsonLdPreview();
+              setJsonLdStatus(validateJsonLd(preview));
+              setJsonLdPreviewOpen(true);
+            }}
+            onCopy={async () => {
+              try {
+                const preview = buildJsonLdPreview();
+                await navigator.clipboard.writeText(JSON.stringify(preview, null, 2));
+                setJsonLdStatus(validateJsonLd(preview));
+              } catch {
+                /* clipboard may be blocked — silent fallback */
+              }
+            }}
+          />
         </aside>
       </div>
 
@@ -842,6 +993,15 @@ export function ArticleForm({
           onClose={() => setShowPreview(false)}
         />
       )}
+
+      {/* ── JSON-LD preview modal ───────────────────────────── */}
+      {jsonLdPreviewOpen && (
+        <JsonLdPreviewOverlay
+          jsonLd={buildJsonLdPreview()}
+          status={jsonLdStatus}
+          onClose={() => setJsonLdPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -940,6 +1100,185 @@ function ArticlePreviewOverlay({ previewData, onClose }) {
           className="prose prose-lg max-w-none prose-h2:border-l-4 prose-h2:border-blue-500 prose-h2:pl-4 prose-a:text-blue-600 prose-a:underline prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:px-4 prose-blockquote:py-2 prose-code:rounded prose-code:bg-blue-50 prose-code:px-1 prose-code:text-blue-700 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-ol:list-decimal prose-ol:pl-6 prose-ul:list-disc prose-ul:pl-6 prose-li:my-1 prose-img:rounded-xl prose-img:shadow-md dark:prose-invert"
           dangerouslySetInnerHTML={{ __html: previewData.content }}
         />
+      </div>
+    </div>
+  );
+}
+
+// ── JSON-LD section ──────────────────────────────────────────────
+
+const JSONLD_STATUS_STYLE = {
+  valid:     { chip: 'bg-green-100 text-green-700',  text: 'text-green-600',  label: '✓ Valid' },
+  warning:   { chip: 'bg-yellow-100 text-yellow-700', text: 'text-yellow-600', label: '⚠ Warning' },
+  error:     { chip: 'bg-red-100 text-red-700',     text: 'text-red-600',    label: '✕ Error' },
+  disabled:  { chip: 'bg-gray-100 text-gray-500',   text: 'text-gray-500',   label: 'Disabled' },
+  unchecked: { chip: 'bg-gray-100 text-gray-500',   text: 'text-gray-500',   label: 'Unchecked' },
+};
+
+function StatusChip({ status }) {
+  const style = JSONLD_STATUS_STYLE[status] ?? JSONLD_STATUS_STYLE.unchecked;
+  return (
+    <span className={'rounded-full px-2 py-0.5 text-[10px] font-bold ' + style.chip}>
+      {style.label}
+    </span>
+  );
+}
+
+function JsonLdSection({
+  enabled, setEnabled,
+  schemaType, setSchemaType,
+  overrides, setOverrides,
+  rawOverride, setRawOverride,
+  rawOverrideEnabled, setRawOverrideEnabled,
+  status,
+  isSuperAdmin,
+  onPreview,
+  onCopy,
+}) {
+  const overrideFields = [
+    { key: 'headline',    label: 'Headline',    ph: 'ปล่อยว่าง = ใช้ชื่อบทความ' },
+    { key: 'description', label: 'Description', ph: 'ปล่อยว่าง = ใช้ excerpt' },
+    { key: 'image',       label: 'Image URL',   ph: 'ปล่อยว่าง = ใช้รูปปก' },
+    { key: 'authorName',  label: 'Author',      ph: 'ปล่อยว่าง = ใช้ผู้เขียน' },
+  ];
+  const statusStyle = JSONLD_STATUS_STYLE[status.status] ?? JSONLD_STATUS_STYLE.unchecked;
+
+  return (
+    <section className="space-y-3 rounded-9e-lg border border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-9e-navy dark:text-white">
+          JSON-LD / Schema
+        </h3>
+        <StatusChip status={status.status} />
+      </div>
+
+      <label className="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="h-4 w-4 rounded"
+        />
+        <span className="text-sm text-gray-600 dark:text-gray-300">เปิดใช้ JSON-LD</span>
+      </label>
+
+      {enabled && (
+        <>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-[#94a3b8]">
+              ประเภท Schema
+            </label>
+            <select
+              value={schemaType}
+              onChange={(e) => setSchemaType(e.target.value)}
+              className="w-full rounded-lg border border-[var(--surface-border)] px-3 py-1.5 text-sm dark:bg-[#0D1B2A] dark:text-white"
+            >
+              {['Article', 'BlogPosting', 'NewsArticle', 'TechArticle'].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {overrideFields.map(({ key, label, ph }) => (
+            <div key={key}>
+              <label className="mb-1 block text-xs font-medium text-gray-500 dark:text-[#94a3b8]">
+                {label}
+              </label>
+              <input
+                type="text"
+                value={overrides?.[key] ?? ''}
+                onChange={(e) =>
+                  setOverrides((prev) => ({ ...prev, [key]: e.target.value }))
+                }
+                placeholder={ph}
+                className="w-full rounded-lg border border-[var(--surface-border)] px-3 py-1.5 text-xs dark:bg-[#0D1B2A] dark:text-white"
+              />
+            </div>
+          ))}
+
+          {status.message && (
+            <p className={'text-xs ' + statusStyle.text}>{status.message}</p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onPreview}
+              className="flex-1 rounded-lg border border-[var(--surface-border)] px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#0D1B2A]"
+            >
+              Preview
+            </button>
+            <button
+              type="button"
+              onClick={onCopy}
+              className="flex-1 rounded-lg border border-[var(--surface-border)] px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-[#0D1B2A]"
+            >
+              Copy
+            </button>
+          </div>
+
+          {/* Raw-JSON escape hatch — superadmin only. We gate the UI
+              here and re-gate on submit, so toggling the flag client
+              side without the role can't sneak past. */}
+          {isSuperAdmin && (
+            <div className="border-t border-[var(--surface-border)] pt-2">
+              <label className="mb-2 flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rawOverrideEnabled}
+                  onChange={(e) => setRawOverrideEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                />
+                <span className="text-xs font-semibold text-orange-600">
+                  Advanced: Raw JSON Override
+                </span>
+              </label>
+              {rawOverrideEnabled && (
+                <textarea
+                  value={rawOverride}
+                  onChange={(e) => setRawOverride(e.target.value)}
+                  rows={6}
+                  placeholder='{"@context":"https://schema.org",...}'
+                  className="w-full rounded-lg border border-orange-300 px-3 py-2 font-mono text-xs dark:bg-[#0D1B2A] dark:text-white"
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+// ── JSON-LD preview modal ────────────────────────────────────────
+
+function JsonLdPreviewOverlay({ jsonLd, status, onClose }) {
+  const statusStyle = JSONLD_STATUS_STYLE[status.status] ?? JSONLD_STATUS_STYLE.unchecked;
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
+      <div className="flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl border border-[var(--surface-border)] bg-white shadow-2xl dark:bg-[#111d2c]">
+        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <h3 className="font-semibold text-9e-navy dark:text-white">JSON-LD Preview</h3>
+            <StatusChip status={status.status} />
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xl text-gray-400 hover:text-gray-600"
+            aria-label="ปิด"
+          >
+            ×
+          </button>
+        </div>
+        {status.message && (
+          <div className={'px-5 py-2 text-sm ' + statusStyle.chip}>
+            {status.message}
+          </div>
+        )}
+        <pre className="flex-1 overflow-auto rounded-b-xl bg-gray-50 p-5 font-mono text-xs text-gray-800 dark:bg-[#0D1B2A] dark:text-gray-200">
+{jsonLd ? JSON.stringify(jsonLd, null, 2) : '// JSON-LD ถูกปิดใช้งานหรือยังไม่ครบเงื่อนไข'}
+        </pre>
       </div>
     </div>
   );
@@ -1283,13 +1622,13 @@ function EditorToolbar({ editor, sourceMode, onToggleSource, onImageUploaded }) 
   if (sourceMode) {
     return (
       <div className="flex items-center justify-between rounded-9e-md border border-[var(--surface-border)] bg-amber-50 px-3 py-1.5 text-xs text-amber-800">
-        <span>กำลังแก้ไข HTML ดิบ — กดปุ่มเพื่อกลับโหมด WYSIWYG</span>
+        <span>กำลังแก้ไข HTML ดิบ — กดปุ่มเพื่อกลับสู่โหมดปกติ</span>
         <button
           type="button"
           onClick={onToggleSource}
           className="rounded-9e-sm border border-amber-300 bg-white px-2 py-1 font-medium hover:bg-amber-100"
         >
-          กลับ WYSIWYG
+          กลับสู่โหมดปกติ
         </button>
       </div>
     );

@@ -3,6 +3,7 @@ import { getArticleById } from '@/lib/actions/articles';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills }   from '@/lib/api/skills';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { auth } from '@/lib/auth/options';
 import { ArticleForm } from '../../_components/ArticleForm';
 
 export const metadata = { title: 'แก้ไขบทความ' };
@@ -11,13 +12,15 @@ export const dynamic  = 'force-dynamic';
 export default async function EditArticlePage({ params }) {
   const { id } = await params;
 
-  const [article, programsRes, skillsRes, coursesRes] = await Promise.all([
+  const [session, article, programsRes, skillsRes, coursesRes] = await Promise.all([
+    auth(),
     getArticleById(id),
     listPrograms().catch(() => ({ items: [] })),
     listSkills().catch(()   => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
   ]);
   if (!article) notFound();
+  const isSuperAdmin = session?.user?.role === 'superadmin';
 
   const programs = (programsRes.items ?? []).map((p) => ({
     program_id:   p.program_id,
@@ -39,6 +42,7 @@ export default async function EditArticlePage({ params }) {
       programs={programs}
       skills={skills}
       courses={courses}
+      isSuperAdmin={isSuperAdmin}
     />
   );
 }

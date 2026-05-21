@@ -42,6 +42,36 @@ const ArticleSchema = new mongoose.Schema(
     author:          { type: String, trim: true, default: '' },
     publishedAt:     { type: Date },
     active:          { type: Boolean, default: true },
+
+    // Schema.org JSON-LD configuration. `overrides` lets the admin
+    // pin specific JSON-LD fields without having to touch raw JSON;
+    // `rawOverride` (gated by `rawOverrideEnabled`) lets a superadmin
+    // ship a hand-crafted document straight through. `validation*`
+    // are scratch fields the admin form writes after a Preview pass.
+    jsonLd: {
+      enabled:    { type: Boolean, default: true },
+      schemaType: {
+        type: String,
+        enum: ['Article', 'BlogPosting', 'NewsArticle', 'TechArticle'],
+        default: 'Article',
+      },
+      overrides: {
+        headline:      { type: String, default: '' },
+        description:   { type: String, default: '' },
+        image:         { type: String, default: '' },
+        authorName:    { type: String, default: '' },
+        datePublished: { type: String, default: '' },
+        dateModified:  { type: String, default: '' },
+      },
+      rawOverride:        { type: String, default: '' },
+      rawOverrideEnabled: { type: Boolean, default: false },
+      validationStatus: {
+        type: String,
+        enum: ['valid', 'warning', 'error', 'disabled', 'unchecked'],
+        default: 'unchecked',
+      },
+      validationMessage: { type: String, default: '' },
+    },
   },
   { timestamps: true, collection: 'articles' }
 );

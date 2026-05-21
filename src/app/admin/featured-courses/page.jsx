@@ -31,7 +31,7 @@ export default async function Page() {
   const activeCount = featured.filter((c) => c.active).length;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-9e-navy">
           คอร์สใหม่แนะนำ (Featured)
