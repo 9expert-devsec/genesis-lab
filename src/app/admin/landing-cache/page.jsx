@@ -34,7 +34,7 @@ export default async function LandingCachePage() {
   const cache = raw ? JSON.parse(JSON.stringify(raw)) : null;
 
   return (
-    <div className="mx-auto max-w-2xl p-6">
+    <div>
       <h1 className="mb-2 text-xl font-bold text-[var(--text-primary)]">
         Landing Cache
       </h1>

@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export default async function NearbyPlacesAdminPage() {
   const places = await getAllNearbyPlaces();
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div>
       <div>
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           โรงแรมและร้านอาหารใกล้เคียง

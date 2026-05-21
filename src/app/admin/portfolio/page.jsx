@@ -14,7 +14,7 @@ export default async function PortfolioAdminPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div>
       <div>
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการหน้าผลงาน

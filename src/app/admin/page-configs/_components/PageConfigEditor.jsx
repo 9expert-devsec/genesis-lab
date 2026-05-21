@@ -29,7 +29,7 @@ export function PageConfigEditor({ kind, items, configs, urlPrefix }) {
   const [openId, setOpenId] = useState(null);
 
   return (
-    <ul className="divide-y divide-[var(--surface-border)] rounded-2xl border border-[var(--surface-border)] bg-white dark:bg-9e-navy">
+    <ul className="divide-y divide-[var(--surface-border)] rounded-2xl border border-[var(--surface-border)] bg-white dark:bg-9e-navy mt-2">
       {items.length === 0 ? (
         <li className="px-4 py-6 text-center text-sm text-9e-slate-dp-50">
           ไม่พบรายการ

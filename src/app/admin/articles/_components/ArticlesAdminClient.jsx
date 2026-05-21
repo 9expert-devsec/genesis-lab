@@ -71,7 +71,7 @@ export function ArticlesAdminClient({ articles: initial }) {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
@@ -101,7 +101,7 @@ export function ArticlesAdminClient({ articles: initial }) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
+      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">

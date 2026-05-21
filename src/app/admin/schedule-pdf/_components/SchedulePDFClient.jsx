@@ -96,7 +96,7 @@ export default function SchedulePDFClient({ current }) {
   return (
     <div className="flex flex-col gap-6">
       {/* Current file info */}
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
+      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c] mt-2">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-9e-md bg-9e-action/10 text-9e-action">
             <FileText className="h-5 w-5" strokeWidth={1.75} />

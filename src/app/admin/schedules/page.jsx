@@ -55,7 +55,7 @@ export default async function AdminSchedulesPage() {
   const scheduleLocals = await getScheduleLocals();
 
   return (
-    <div className="p-6">
+    <div>
       <SchedulesAdminClient
         schedules={schedules}
         courses={courses}

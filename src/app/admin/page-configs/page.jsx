@@ -37,7 +37,7 @@ export default async function PageConfigsAdmin({ searchParams }) {
   const skillConfigs = JSON.parse(JSON.stringify(skillConfigsRaw));
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
+    <div>
       <div>
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการ URL &amp; SEO

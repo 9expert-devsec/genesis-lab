@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminInstructorsPage() {
   const instructors = await listInstructorsForAdmin();
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <InstructorsAdminClient instructors={instructors} />
     </div>
   );

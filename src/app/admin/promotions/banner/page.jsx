@@ -9,7 +9,7 @@ export default async function PromotionBannerPage() {
   const banners = await listPromotionBanners();
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div>
       <div>
         <Link
           href="/admin/promotions"

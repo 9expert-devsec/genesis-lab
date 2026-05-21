@@ -38,7 +38,7 @@ export default async function SecurityPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-6 p-6">
+    <div className="mx-auto flex max-w-lg flex-col gap-6 ">
       <div>
         <h1 className="text-xl font-bold text-[var(--text-primary)]">
           ความปลอดภัย — 2FA

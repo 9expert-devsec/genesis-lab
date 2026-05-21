@@ -11,7 +11,7 @@ export default async function ContactAdminPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div>
       <div>
         <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
           จัดการหน้าติดต่อเรา

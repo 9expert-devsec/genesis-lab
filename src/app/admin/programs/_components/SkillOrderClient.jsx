@@ -111,7 +111,7 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 mt-2">
         <p className="text-sm text-9e-slate-dp-50">
           ลากที่จุด ⋮⋮ หรือกดลูกศรเพื่อเรียงลำดับ Skills และ Programs ภายใน
         </p>

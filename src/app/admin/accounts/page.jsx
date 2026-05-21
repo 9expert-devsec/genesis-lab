@@ -31,8 +31,8 @@ export default async function AdminAccountsPage() {
   const admins = await listAdmins();
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-6 flex items-center justify-between">
+    <div>
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">
             บัญชีผู้ดูแล

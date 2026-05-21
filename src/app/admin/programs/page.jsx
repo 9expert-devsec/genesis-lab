@@ -32,7 +32,7 @@ export default async function ProgramsAdminPage({ searchParams }) {
   const skillOrders = JSON.parse(JSON.stringify(skillOrdersRaw));
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 p-6">
+    <div>
       <h1 className="text-2xl font-bold text-9e-navy">
         จัดการลำดับโปรแกรม &amp; Skills
       </h1>

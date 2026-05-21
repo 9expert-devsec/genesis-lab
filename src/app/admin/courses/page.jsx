@@ -37,7 +37,7 @@ export default async function AdminCoursesPage() {
   );
 
   return (
-    <div className="p-6">
+    <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">
