@@ -1,13 +1,10 @@
-import { PagePlaceholder } from '@/components/layout/PagePlaceholder';
+import { getArticles } from '@/lib/actions/articles';
+import { ArticlesAdminClient } from './_components/ArticlesAdminClient';
 
-export const metadata = { title: 'บทความ' };
+export const metadata = { title: 'จัดการบทความ' };
+export const dynamic = 'force-dynamic';
 
-export default function Page() {
-  return (
-    <PagePlaceholder
-      title="บทความ"
-      description="จัดการบทความบนเว็บไซต์"
-      phase="Phase 3"
-    />
-  );
+export default async function ArticlesAdminPage() {
+  const { items } = await getArticles({ limit: 100 });
+  return <ArticlesAdminClient articles={items} />;
 }

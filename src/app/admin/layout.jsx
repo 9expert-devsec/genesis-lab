@@ -46,7 +46,7 @@ export default async function AdminLayout({ children }) {
         userName={user?.name ?? null}
         userEmail={user?.email ?? null}
       />
-      <main className="flex-1 bg-[var(--page-bg)] px-4 py-6 lg:px-8 lg:py-8">
+      <main className="flex-1 bg-[var(--page-bg)] ">
         {children}
       </main>
     </div>

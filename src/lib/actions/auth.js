@@ -2,7 +2,23 @@
 
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
-import { signIn } from '@/lib/auth/options';
+import { signIn, auth } from '@/lib/auth/options';
+
+/**
+ * Throw if the current request is not from an authenticated admin.
+ *
+ * Use at the top of any server action that mutates data. The thrown
+ * error carries `.status = 401` so a route handler can map it to a
+ * proper HTTP status if it surfaces there.
+ */
+export async function requireAdmin() {
+  const session = await auth();
+  if (!session?.user) {
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    throw err;
+  }
+}
 
 /**
  * Admin login — server action wired to `useActionState`.

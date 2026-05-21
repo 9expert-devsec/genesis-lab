@@ -203,7 +203,7 @@ export function AdminSidebar({ role = null, userName = null, userEmail = null })
   const isSuper = SUPERADMIN_ROLES.has(role);
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-[var(--surface-border)] md:bg-[var(--surface)]">
+    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-[var(--surface-border)] md:bg-[var(--surface)] h-screen">
       <div className="p-6">
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           Admin Panel
@@ -211,7 +211,7 @@ export function AdminSidebar({ role = null, userName = null, userEmail = null })
         <p className="mt-1 text-base font-bold text-[var(--text-primary)]">9Expert</p>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4" aria-label="Admin">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 " aria-label="Admin">
         {NAV_GROUPS.map((group) => {
           const visibleItems = group.items.filter(
             (item) => !item.superadminOnly || isSuper

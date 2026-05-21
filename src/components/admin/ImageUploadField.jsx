@@ -121,10 +121,10 @@ export function ImageUploadField({
         </div>
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-col items-center gap-2">
         <label
           className={
-            'inline-flex cursor-pointer items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium ' +
+            'flex w-full justify-center cursor-pointer items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium' +
             (uploading
               ? 'opacity-50'
               : 'text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]')
@@ -147,7 +147,7 @@ export function ImageUploadField({
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="หรือวาง URL ตรงนี้"
-          className="flex-1 rounded-9e-md border border-[var(--surface-border)] bg-white px-2 py-1.5 font-mono text-xs text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          className="flex-1 rounded-9e-md border border-[var(--surface-border)] bg-white px-2 py-1.5 font-mono text-xs text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white w-full"
         />
       </div>
 
