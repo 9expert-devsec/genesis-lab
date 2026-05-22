@@ -202,6 +202,33 @@ export function NotificationFormModal({ initial, onClose }) {
     setSubmitting(true);
     setError(null);
 
+    // Upload image first if a new file was selected. Passing raw File
+    // objects through Server Actions trips Vercel's FUNCTION_PAYLOAD_TOO_LARGE.
+    let uploadedImageUrl      = form.image_url;
+    let uploadedImagePublicId = form.image_public_id;
+    let uploadedBgUrl         = form.bg_image_url;
+    let uploadedBgPublicId    = form.bg_image_public_id;
+
+    if (imageFile) {
+      const fd = new FormData();
+      fd.append('file', imageFile);
+      fd.append('folder', 'notifications');
+      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error || 'อัปโหลดรูปไม่สำเร็จ');
+        setSubmitting(false);
+        return;
+      }
+      if (form.display_type === 'popup') {
+        uploadedImageUrl      = json.url;
+        uploadedImagePublicId = json.publicId;
+      } else {
+        uploadedBgUrl      = json.url;
+        uploadedBgPublicId = json.publicId;
+      }
+    }
+
     const payload = {
       ...form,
       starts_at:        fromLocalInputValue(form.starts_at),
@@ -215,7 +242,10 @@ export function NotificationFormModal({ initial, onClose }) {
         .split('\n')
         .map((s) => s.trim())
         .filter(Boolean),
-      _imageFile: imageFile,
+      image_url:          uploadedImageUrl,
+      image_public_id:    uploadedImagePublicId,
+      bg_image_url:       uploadedBgUrl,
+      bg_image_public_id: uploadedBgPublicId,
     };
     delete payload.page_scope_text;
 
