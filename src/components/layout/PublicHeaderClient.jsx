@@ -281,9 +281,9 @@ function DesktopMega({ item, programs }) {
               {/* Programs column */}
               <div>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                     Programs
-                  </h3>
+                  </p>
                   <Link
                     href="/training-course"
                     className="inline-flex items-center gap-1 text-xs font-medium text-9e-brand hover:underline"
@@ -299,7 +299,7 @@ function DesktopMega({ item, programs }) {
                         href={programHref(p)}
                         className="flex items-center gap-3 rounded-9e-md p-1.5 transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]"
                       >
-                        <ProgramIcon src={p.programiconurl} size={24} />
+                        <ProgramIcon src={p.programiconurl} size={24} alt={p.program_name} />
                         <span className="text-sm leading-tight text-[var(--text-primary)]">
                           {p.program_name}
                         </span>
@@ -312,9 +312,9 @@ function DesktopMega({ item, programs }) {
               {/* Skills column */}
               <div>
                 <div className="mb-4">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
                     Skills
-                  </h3>
+                  </p>
                 </div>
                 <ul className="flex flex-col gap-1">
                   {skills.map((s) => (
@@ -325,8 +325,7 @@ function DesktopMega({ item, programs }) {
                       >
                         <Image
                           src={s.iconUrl}
-                          alt=""
-                          aria-hidden="true"
+                          alt={`ไอคอน ${s.label}`}
                           width={24}
                           height={24}
                           className="h-6 w-6 flex-none object-contain"
@@ -347,13 +346,12 @@ function DesktopMega({ item, programs }) {
   );
 }
 
-function ProgramIcon({ src, size }) {
+function ProgramIcon({ src, size, alt }) {
   if (!src) return null;
   return (
     <Image
       src={src}
-      alt=""
-      aria-hidden="true"
+      alt={alt ? `ไอคอน ${alt}` : ''}
       width={size}
       height={size}
       className="shrink-0 object-contain"
@@ -545,7 +543,7 @@ function MobileMegaProgramList({ programs, onNavigate }) {
               onClick={onNavigate}
               className="flex items-center gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
             >
-              <ProgramIcon src={p.programiconurl} size={24} />
+              <ProgramIcon src={p.programiconurl} size={24} alt={p.program_name} />
               <span>{p.program_name}</span>
             </Link>
           </li>

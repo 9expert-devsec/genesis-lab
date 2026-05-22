@@ -2,9 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ExternalLink, FileText } from 'lucide-react';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
-import { BlogCard } from '@/app/_components/home/BlogSection';
 import { toKebab } from '@/lib/slug';
 
 /**
@@ -15,9 +13,8 @@ import { toKebab } from '@/lib/slug';
  *   2. Per-program sections — each has its own course grid so users
  *      can scan how a skill is broken down across programs.
  *   3. Optional roadmap image when `skill_roadmap_url` is present.
- *   4. Related mock blogs.
  */
-export function SkillPageClient({ skill, coursesByProgram, totalCourses, blogs }) {
+export function SkillPageClient({ skill, coursesByProgram, totalCourses }) {
   const description =
     skill?.skill_description || skill?.skill_teaser || '';
   const roadmapUrl = skill?.skill_roadmap_url ?? null;
@@ -122,32 +119,6 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses, blogs }
         )}
       </div>
 
-      {/* ── Related blogs ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1200px] px-4 pt-12 lg:px-6 lg:pt-16">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-9e-brand">
-              <FileText className="h-4 w-4 text-white" strokeWidth={2} />
-            </div>
-            <h2 className="text-xl font-bold text-9e-navy dark:text-white">
-              บทความที่เกี่ยวข้อง
-            </h2>
-          </div>
-          <Link
-            href="/articles"
-            className="flex items-center gap-1 text-sm font-medium text-9e-brand hover:underline dark:text-white"
-          >
-            ดูบทความทั้งหมด
-            <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {blogs.slice(0, 3).map((blog) => (
-            <BlogCard key={blog.id} blog={blog} />
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

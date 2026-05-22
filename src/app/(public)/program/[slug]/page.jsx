@@ -4,7 +4,6 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug } from '@/lib/resolvePageSlug';
-import { MOCK_BLOGS } from '@/app/_components/home/BlogSection';
 import { ProgramPageClient } from './_components/ProgramPageClient';
 
 export const revalidate = 3600;
@@ -44,7 +43,6 @@ export default async function ProgramPage({ params }) {
       program={data.program}
       config={data.config}
       courses={data.courses}
-      blogs={MOCK_BLOGS}
       earlyBirdMap={data.earlyBirdMap}
     />
   );

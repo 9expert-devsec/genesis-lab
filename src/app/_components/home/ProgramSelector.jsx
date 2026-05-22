@@ -184,7 +184,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                             src={skill.skilliconurl?.includes('res.cloudinary.com')
                               ? skill.skilliconurl.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
                               : skill.skilliconurl}
-                            alt=""
+                            alt={`ไอคอน ${skill.skill_name ?? ''}`}
                             width={18}
                             height={18}
                             className="object-contain"
@@ -409,7 +409,7 @@ function ProgramRowCard({ item, hrefBuilder }) {
             src={icon?.includes('res.cloudinary.com')
               ? icon.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
               : icon}
-            alt=""
+            alt={`ไอคอน ${name ?? ''}`}
             width={32}
             height={32}
             className="object-contain"
@@ -439,7 +439,7 @@ function ProgramTileCard({ item, hrefBuilder }) {
             src={icon?.includes('res.cloudinary.com')
               ? icon.replace('/upload/', '/upload/w_64,h_64,c_fill,f_auto,q_auto/')
               : icon}
-            alt=""
+            alt={`ไอคอน ${name ?? ''}`}
             width={36}
             height={36}
             className="h-7 w-7 object-contain sm:h-9 sm:w-9"

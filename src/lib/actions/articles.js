@@ -117,7 +117,7 @@ export async function getArticles({
   const skip = (Math.max(1, page) - 1) * limit;
   const [docs, total] = await Promise.all([
     Article.find(filter)
-      .sort({ publishedAt: -1, createdAt: -1 })
+      .sort({ isPinnedOnArticlePage: -1, pinOrder: 1, publishedAt: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
@@ -285,4 +285,49 @@ export async function toggleArticleActive(id, active) {
   if (!doc) return { ok: false, error: 'ไม่พบบทความ' };
   bustCaches(doc.slug);
   return { ok: true };
+}
+
+export async function toggleArticlePinnedOnArticlePage(id, value) {
+  await requireAdmin();
+  await dbConnect();
+  if (!id) return { ok: false, error: 'Missing id' };
+  await Article.findByIdAndUpdate(id, { $set: { isPinnedOnArticlePage: Boolean(value) } });
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(PUBLIC_PATH);
+  return { ok: true };
+}
+
+export async function toggleArticleFeaturedOnLanding(id, value) {
+  await requireAdmin();
+  await dbConnect();
+  if (!id) return { ok: false, error: 'Missing id' };
+  await Article.findByIdAndUpdate(id, { $set: { featuredOnLanding: Boolean(value) } });
+  revalidatePath(ADMIN_PATH);
+  revalidatePath('/');
+  return { ok: true };
+}
+
+export async function updateArticlePinOrder(id, pinOrder) {
+  await requireAdmin();
+  await dbConnect();
+  if (!id) return { ok: false, error: 'Missing id' };
+  const numeric = Number.isFinite(Number(pinOrder)) ? Number(pinOrder) : 0;
+  await Article.findByIdAndUpdate(id, { $set: { pinOrder: numeric } });
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(PUBLIC_PATH);
+  return { ok: true };
+}
+
+/**
+ * Featured articles for the Landing page BlogSection.
+ * Admin sets `featuredOnLanding=true` per article.
+ */
+export async function getFeaturedArticlesForLanding(limit = 6) {
+  await dbConnect();
+  const docs = await Article.find({ active: true, featuredOnLanding: true })
+    .sort({ publishedAt: -1, createdAt: -1 })
+    .limit(limit)
+    .select('slug title excerpt coverUrl tags articleType publishedAt')
+    .lean();
+  return serialize(docs);
 }

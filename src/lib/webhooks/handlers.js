@@ -231,6 +231,52 @@ export async function handlePromotionEvent(event, data) {
   safeRevalidate('/search');
 }
 
+/**
+ * Merge an upstream curriculum (from MSDB) with the existing Genesis
+ * curriculum, preserving per-item Genesis-only fields. Mirrors the
+ * helper in syncCareerPaths.js — kept local to avoid a cross-module
+ * import on the hot webhook path.
+ *
+ * MSDB owns the course list (kinds, ordering, course refs). Genesis
+ * owns `prerequisites`, `note`, `course_id`, and the populated `snap`.
+ * Per-item matching is by `publicCourse` ObjectId or `snap.code`, so
+ * an upstream reorder still carries the right prereqs to the right
+ * item.
+ */
+function mergeCurriculumPreserveGenesis(upstreamBlocks, existingBlocks) {
+  const safeExisting = Array.isArray(existingBlocks) ? existingBlocks : [];
+  return upstreamBlocks.map((upBlock, blockIdx) => {
+    const exBlock = safeExisting[blockIdx];
+    const items = Array.isArray(upBlock?.items)
+      ? upBlock.items.map((upItem) => {
+          const upRef  = String(upItem?.publicCourse ?? '');
+          const upCode = upItem?.snap?.code ?? '';
+          const exItem = Array.isArray(exBlock?.items)
+            ? exBlock.items.find((ei) => {
+                const eiRef  = String(ei?.publicCourse ?? '');
+                const eiCode = ei?.snap?.code ?? ei?.course_id ?? '';
+                return (upRef  && eiRef  === upRef) ||
+                       (upCode && eiCode === upCode);
+              })
+            : null;
+          if (!exItem) {
+            return { ...upItem, prerequisites: [] };
+          }
+          return {
+            ...upItem,
+            prerequisites: Array.isArray(exItem.prerequisites)
+              ? exItem.prerequisites
+              : [],
+            note:      exItem.note      ?? upItem?.note      ?? '',
+            course_id: exItem.course_id ?? upItem?.course_id ?? '',
+            snap:      exItem.snap      ?? upItem?.snap      ?? {},
+          };
+        })
+      : [];
+    return { ...upBlock, items };
+  });
+}
+
 export async function handleCareerPathEvent(event, data) {
   await dbConnect();
   const career_path_id = toStr(data?._id);
@@ -244,6 +290,19 @@ export async function handleCareerPathEvent(event, data) {
     const road   = data?.roadmapImage ?? {};
     const sortOrder = Number.isFinite(data?.sortOrder) ? data.sortOrder : 0;
     const upstreamActive = toStr(data?.status).toLowerCase() === 'active';
+
+    // Read the existing Genesis curriculum + admin-only scalars so the
+    // webhook write preserves them. Without this merge, MSDB's echo of
+    // an admin save would wipe `prerequisites` on every curriculum item
+    // (MSDB strips unknown fields). Same fix pattern as syncCareerPaths.
+    const existing = await CareerPath.findOne({ career_path_id })
+      .select('curriculum')
+      .lean();
+
+    const mergedCurriculum = mergeCurriculumPreserveGenesis(
+      Array.isArray(data?.curriculum) ? data.curriculum : [],
+      existing?.curriculum
+    );
 
     await CareerPath.updateOne(
       { career_path_id },
@@ -266,14 +325,21 @@ export async function handleCareerPathEvent(event, data) {
           roadmap_image_alt: toStr(road?.alt),
           links:             data?.links ?? {},
           price:             data?.price ?? {},
-          curriculum:        Array.isArray(data?.curriculum) ? data.curriculum : [],
+          curriculum:        mergedCurriculum,
           upstream_status:   toStr(data?.status),
           upstream_order:    sortOrder,
           synced_at:         new Date(),
         },
         $setOnInsert: {
-          is_active:     upstreamActive,
-          display_order: sortOrder,
+          is_active:              upstreamActive,
+          display_order:          sortOrder,
+          // Genesis-only — initialised on first insert only, never
+          // touched again by webhook upserts.
+          registrationOpen:       false,
+          registerBannerUrl:      '',
+          registerBannerPublicId: '',
+          localCourses:           [],
+          requiredSelections:     0,
         },
       },
       { upsert: true }

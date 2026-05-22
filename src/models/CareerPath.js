@@ -72,6 +72,40 @@ const CareerPathSchema = new mongoose.Schema(
     // Admin-controlled — preserved across syncs.
     is_active:     { type: Boolean, default: true },
     display_order: { type: Number, default: 0 },
+
+    // Career Path Registration — locally-managed course schedule data.
+    // Replaces the legacy PHP/Google-Sheets pipeline. Lives here (not in
+    // a sibling collection) because it's admin-edited per career path
+    // and never sourced from upstream MSDB — so syncCareerPaths must
+    // leave it alone (it already does — only the listed fields above
+    // are overwritten on sync).
+    //
+    // Shape — Array of CourseGroup:
+    //   {
+    //     _id: string (UUID),
+    //     courseName: string,
+    //     isExclusive: boolean,      // true → user picks exactly 1 from a group
+    //     isOptional: boolean,       // true → not counted toward required total
+    //     prerequisites: string[],   // courseName[] that must be selected first
+    //     schedules: [
+    //       { _id, label, startDate, endDate, type: 'Classroom'|'Hybrid'|'Online' }
+    //     ]
+    //   }
+    localCourses: { type: mongoose.Schema.Types.Mixed, default: [] },
+
+    // How many courses must be selected to proceed (0 = all required courses)
+    requiredSelections: { type: Number, default: 0 },
+
+    // Registration open/closed — gates both the public form page and
+    // the "สมัคร" CTA on the public detail page.
+    registrationOpen:   { type: Boolean, default: false },
+
+    // Optional banner shown above the public registration form.
+    // Stored separately from `hero_image_url` because the registration
+    // banner has a different aspect ratio (3:1) and is admin-managed
+    // locally rather than synced from MSDB.
+    registerBannerUrl:      { type: String, default: '' },
+    registerBannerPublicId: { type: String, default: '' },
   },
   { timestamps: true, collection: 'career_paths' }
 );

@@ -40,6 +40,7 @@ const ALLOWED_FOLDERS = new Set([
   'articles',
   'notifications',
   'about',
+  'career-paths',
   'uploads',
 ]);
 

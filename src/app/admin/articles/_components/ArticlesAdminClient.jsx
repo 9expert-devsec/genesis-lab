@@ -2,10 +2,13 @@
 
 import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Pin, Plus, Search, Star, Trash2 } from 'lucide-react';
 import {
   deleteArticle,
   toggleArticleActive,
+  toggleArticleFeaturedOnLanding,
+  toggleArticlePinnedOnArticlePage,
+  updateArticlePinOrder,
 } from '@/lib/actions/articles';
 
 function formatDate(iso) {
@@ -49,6 +52,45 @@ export function ArticlesAdminClient({ articles: initial }) {
         );
       }
       setBusyId(null);
+    });
+  }
+
+  function handleTogglePin(a) {
+    const next = !a.isPinnedOnArticlePage;
+    setBusyId(a._id);
+    startTransition(async () => {
+      const res = await toggleArticlePinnedOnArticlePage(a._id, next);
+      if (res?.ok) {
+        setRows((cur) =>
+          cur.map((r) => (r._id === a._id ? { ...r, isPinnedOnArticlePage: next } : r))
+        );
+      }
+      setBusyId(null);
+    });
+  }
+
+  function handleToggleFeatured(a) {
+    const next = !a.featuredOnLanding;
+    setBusyId(a._id);
+    startTransition(async () => {
+      const res = await toggleArticleFeaturedOnLanding(a._id, next);
+      if (res?.ok) {
+        setRows((cur) =>
+          cur.map((r) => (r._id === a._id ? { ...r, featuredOnLanding: next } : r))
+        );
+      }
+      setBusyId(null);
+    });
+  }
+
+  function handlePinOrderChange(a, value) {
+    const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
+    // Optimistic — the field is editable mid-typing, no busy state.
+    setRows((cur) =>
+      cur.map((r) => (r._id === a._id ? { ...r, pinOrder: numeric } : r))
+    );
+    startTransition(async () => {
+      await updateArticlePinOrder(a._id, numeric);
     });
   }
 
@@ -113,13 +155,15 @@ export function ArticlesAdminClient({ articles: initial }) {
               <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ผู้เขียน</th>
               <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">เผยแพร่</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
+              <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Pin /articles</th>
+              <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Landing</th>
               <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                <td colSpan={11} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   {rows.length === 0 ? (
                     <>ยังไม่มีบทความ — กด <strong>สร้างบทความ</strong> เพื่อเริ่มต้น</>
                   ) : (
@@ -212,6 +256,55 @@ export function ArticlesAdminClient({ articles: initial }) {
                     <span
                       className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
                         a.active ? 'left-4' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePin(a)}
+                      disabled={busyId === a._id}
+                      aria-label={a.isPinnedOnArticlePage ? 'ยกเลิกการปักหมุด' : 'ปักหมุดที่หน้า /articles'}
+                      title={a.isPinnedOnArticlePage ? 'ยกเลิก Pin' : 'Pin บทความนี้'}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-9e-ice disabled:opacity-50 dark:hover:bg-[#0D1B2A]"
+                    >
+                      <Pin
+                        className={`h-4 w-4 transition-colors ${
+                          a.isPinnedOnArticlePage
+                            ? 'fill-9e-action text-9e-action'
+                            : 'text-gray-300 dark:text-[#1e3a5f]'
+                        }`}
+                        strokeWidth={2}
+                      />
+                    </button>
+                    {a.isPinnedOnArticlePage && (
+                      <input
+                        type="number"
+                        min="0"
+                        value={a.pinOrder ?? 0}
+                        onChange={(e) => handlePinOrderChange(a, e.target.value)}
+                        title="ลำดับ Pin (น้อย = ขึ้นก่อน)"
+                        className="w-12 rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-center text-xs text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
+                      />
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-center">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleFeatured(a)}
+                    disabled={busyId === a._id}
+                    aria-label={a.featuredOnLanding ? 'ยกเลิกการแสดงบน Landing' : 'แสดงบน Landing'}
+                    title={a.featuredOnLanding ? 'แสดงบน Landing แล้ว' : 'แสดงบน Landing'}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-9e-ice disabled:opacity-50 dark:hover:bg-[#0D1B2A]"
+                  >
+                    <Star
+                      className={`h-4 w-4 ${
+                        a.featuredOnLanding
+                          ? 'fill-yellow-500 text-yellow-500'
+                          : 'text-gray-300 dark:text-[#1e3a5f]'
                       }`}
                     />
                   </button>

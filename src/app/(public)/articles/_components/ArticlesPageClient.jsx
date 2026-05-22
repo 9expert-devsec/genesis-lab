@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowRight, Search } from 'lucide-react';
+import { ArrowRight, Pin, Search } from 'lucide-react';
 
 function formatDate(iso) {
   if (!iso) return '';
@@ -37,13 +37,23 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return articles.filter((a) => {
+    const list = articles.filter((a) => {
       if (selectedTag && !(a.tags ?? []).includes(selectedTag)) return false;
       if (programFilter && !(a.programs ?? []).includes(programFilter)) return false;
       if (typeFilter !== 'all' && a.articleType !== typeFilter) return false;
       if (!q) return true;
       const haystack = [a.title, a.excerpt].filter(Boolean).join(' ').toLowerCase();
       return haystack.includes(q);
+    });
+
+    // Pinned articles float to the top, ordered by pinOrder (asc); the
+    // non-pinned tail keeps the server's existing order.
+    return [...list].sort((a, b) => {
+      const aPin = a.isPinnedOnArticlePage ? 1 : 0;
+      const bPin = b.isPinnedOnArticlePage ? 1 : 0;
+      if (bPin !== aPin) return bPin - aPin;
+      if (aPin && bPin) return (a.pinOrder ?? 0) - (b.pinOrder ?? 0);
+      return 0;
     });
   }, [articles, query, programFilter, typeFilter, selectedTag]);
 
@@ -144,6 +154,11 @@ function ArticleCard({ article }) {
         >
           {isVideo ? 'บทความวิดีโอ' : 'บทความ'}
         </span>
+        {article.isPinnedOnArticlePage && (
+          <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm dark:bg-[#0D1B2A]/90">
+            <Pin className="h-3.5 w-3.5 text-9e-action" strokeWidth={2.5} />
+          </span>
+        )}
       </Link>
 
       <div className="flex flex-1 flex-col p-4">

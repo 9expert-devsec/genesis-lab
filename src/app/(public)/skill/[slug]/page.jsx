@@ -5,7 +5,6 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { resolveSkillBySlug } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
-import { MOCK_BLOGS } from '@/app/_components/home/BlogSection';
 import { SkillPageClient } from './_components/SkillPageClient';
 
 export const revalidate = 3600;
@@ -66,7 +65,6 @@ export default async function SkillPage({ params }) {
       skill={data.skill}
       coursesByProgram={data.coursesByProgram}
       totalCourses={data.totalCourses}
-      blogs={MOCK_BLOGS}
     />
   );
 }

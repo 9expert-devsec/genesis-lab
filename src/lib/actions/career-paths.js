@@ -12,12 +12,19 @@
  * webhook round-trip.
  */
 
+import mongoose from 'mongoose';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
 import { auth } from '@/lib/auth/options';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
+import { getCourseByCode } from '@/lib/api/public-courses';
+import { listSchedulesByCourse } from '@/lib/api/schedules';
+
+function serialize(v) {
+  return v == null ? v : JSON.parse(JSON.stringify(v));
+}
 
 const ADMIN_PATH  = '/admin/career-paths';
 const PUBLIC_PATH = '/career-path-project';
@@ -146,6 +153,15 @@ function shapePayload(formData, courses) {
       chooseMax:   toNum(block?.chooseMax),
       sortOrder:   Number.isFinite(block?.sortOrder) ? block.sortOrder : idx,
       items: items.map((it) => {
+        // Per-item prerequisites — admin-configured list of other
+        // courses (by course_id code) that must be selected before this
+        // item is pickable in the public registration form. MSDB ignores
+        // unknown fields on write so we can ride this through alongside
+        // the supported shape.
+        const prereqs = Array.isArray(it?.prerequisites)
+          ? it.prerequisites.map((c) => String(c)).filter(Boolean)
+          : [];
+
         if (it?.kind === 'external') {
           return {
             kind:         'external',
@@ -153,6 +169,7 @@ function shapePayload(formData, courses) {
             externalUrl:  String(it?.externalUrl ?? ''),
             publicCourse: null,
             note:         String(it?.note ?? ''),
+            prerequisites: prereqs,
           };
         }
         // 'public' branch — drop items the admin half-filled (no course
@@ -169,6 +186,7 @@ function shapePayload(formData, courses) {
               // without a reverse-lookup. MSDB ignores unknown fields on write.
               course_id:    String(it.course_id),
               note:         String(it?.note ?? ''),
+              prerequisites: prereqs,
             }
           : null;
       }).filter(Boolean),
@@ -431,4 +449,190 @@ export async function deleteCareerPath(careerPathId) {
   await CareerPath.findOneAndDelete({ career_path_id: existing.career_path_id });
   bustCaches();
   return { ok: true };
+}
+
+// ── Career Path Registration support ──────────────────────────────
+//
+// These three actions back the new "Career Path Registration" feature
+// (admin course management + public sign-up form). The `id` argument
+// follows the same convention as the rest of the admin: it's whatever
+// shows up in /admin/career-paths/[id]/… — historically a string that
+// could be either the Mongo `_id` or the upstream `career_path_id`.
+// We accept both for parity with the existing edit page.
+
+function buildIdFilter(id) {
+  const str = String(id ?? '');
+  const or = [{ career_path_id: str }];
+  if (mongoose.isValidObjectId(str)) or.push({ _id: str });
+  return { $or: or };
+}
+
+/**
+ * Lookup helper used by the admin course-management page. Returns null
+ * if nothing matches — the page surfaces 404.
+ */
+export async function getCareerPathById(id) {
+  if (!id) return null;
+  await dbConnect();
+  const doc = await CareerPath.findOne(buildIdFilter(id)).lean();
+  return doc ? serialize(doc) : null;
+}
+
+/**
+ * Persist the admin's edits to `localCourses`, `requiredSelections`,
+ * and `registrationOpen`. These three live outside the MSDB sync
+ * surface (admin-only data) so we don't dual-write — just Mongo.
+ */
+export async function updateCareerPathCourses(id, payload = {}) {
+  await requireAdmin();
+  await dbConnect();
+  if (!id) return { ok: false, error: 'Missing id' };
+
+  // Sparse update: only set fields the caller actually supplied. The
+  // simplified admin form (post-redesign) no longer touches
+  // `localCourses` — leaving it out preserves whatever Phase-1 data
+  // already lives on the doc rather than wiping it to [].
+  const update = {};
+  if ('localCourses' in payload) {
+    update.localCourses = Array.isArray(payload.localCourses) ? payload.localCourses : [];
+  }
+  if ('requiredSelections' in payload) {
+    update.requiredSelections = Number(payload.requiredSelections) || 0;
+  }
+  if ('registrationOpen' in payload) {
+    update.registrationOpen = Boolean(payload.registrationOpen);
+  }
+  if ('registerBannerUrl' in payload) {
+    update.registerBannerUrl = String(payload.registerBannerUrl ?? '');
+  }
+  if ('registerBannerPublicId' in payload) {
+    update.registerBannerPublicId = String(payload.registerBannerPublicId ?? '');
+  }
+
+  if (Object.keys(update).length === 0) {
+    return { ok: false, error: 'No fields to update' };
+  }
+
+  const res = await CareerPath.findOneAndUpdate(
+    buildIdFilter(id),
+    { $set: update },
+    { new: true }
+  ).lean();
+
+  if (!res) return { ok: false, error: 'ไม่พบ Career Path' };
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(`${ADMIN_PATH}/${id}/courses`);
+  // Public detail pages may need to flip the "สมัคร" CTA, so bust the
+  // [...slug] page tree too.
+  revalidatePath('/[...slug]', 'page');
+  return { ok: true };
+}
+
+/**
+ * Curriculum-driven schedule lookup for the public registration form.
+ *
+ * Pulls upcoming schedules for every course listed in the path's
+ * `curriculum`, keyed back by `course_id` code so the client can look
+ * them up without ObjectId round-trips. Pattern matches
+ * `enrichCoursesWithDetails`: chunked fan-out, allSettled so one bad
+ * course doesn't drop the whole batch.
+ *
+ *   Phase 1 — resolve each curriculum item's code → MSDB ObjectId via
+ *             `getCourseByCode`. We need the ObjectId because
+ *             `/schedules` accepts only `course=<oid>`, not codes.
+ *   Phase 2 — fan out `listSchedulesByCourse(oid)` for each resolved
+ *             course.
+ *
+ * Upstream already filters to status ∈ {open, nearly_full} + non-empty
+ * signup_url + dates >= today, but we filter again defensively in case
+ * the upstream ever loosens.
+ */
+export async function getCareerPathWithSchedules(slug) {
+  const cp = await getCareerPathForRegistration(slug);
+  if (!cp) return null;
+
+  // Flatten unique course codes out of the curriculum tree.
+  const codes = new Set();
+  for (const group of Array.isArray(cp.curriculum) ? cp.curriculum : []) {
+    for (const item of Array.isArray(group?.items) ? group.items : []) {
+      const code = item?.snap?.code ?? item?.course_id ?? '';
+      if (code) codes.add(String(code));
+    }
+  }
+
+  if (codes.size === 0) return { ...cp, schedulesByCourse: {} };
+
+  const CHUNK = 10;
+  const codesArr = [...codes];
+
+  // Phase 1: code → ObjectId. Skip codes that no longer resolve (e.g.
+  // course was decommissioned upstream) — the client just renders
+  // "ไม่มีรอบเปิดรับสมัคร" for those.
+  const codeToOid = new Map();
+  for (let i = 0; i < codesArr.length; i += CHUNK) {
+    const chunk = codesArr.slice(i, i + CHUNK);
+    const results = await Promise.allSettled(chunk.map((c) => getCourseByCode(c)));
+    results.forEach((r, idx) => {
+      if (r.status === 'fulfilled' && r.value?._id) {
+        codeToOid.set(chunk[idx], String(r.value._id));
+      }
+    });
+  }
+
+  // Phase 2: ObjectId → schedules[]. `listSchedulesByCourse` already
+  // applies the upstream open/nearly_full + future-dates filter; we
+  // re-filter status defensively.
+  const schedulesByCourse = {};
+  const entries = [...codeToOid.entries()];
+  for (let i = 0; i < entries.length; i += CHUNK) {
+    const chunk = entries.slice(i, i + CHUNK);
+    const results = await Promise.allSettled(
+      chunk.map(([, oid]) => listSchedulesByCourse(oid, { limit: 20 }))
+    );
+    results.forEach((r, idx) => {
+      const [code] = chunk[idx];
+      if (r.status === 'fulfilled') {
+        const items = r.value?.items ?? [];
+        schedulesByCourse[code] = items.filter(
+          (s) => s?.status === 'open' || s?.status === 'nearly_full'
+        );
+      } else {
+        schedulesByCourse[code] = [];
+      }
+    });
+  }
+
+  // Ensure every code present in the curriculum has an entry — even
+  // empty — so the client can distinguish "course exists but no rounds"
+  // from "course missing".
+  for (const c of codesArr) {
+    if (!(c in schedulesByCourse)) schedulesByCourse[c] = [];
+  }
+
+  return { ...cp, schedulesByCourse };
+}
+
+/**
+ * Resolve a public-facing register slug → CareerPath doc.
+ *
+ * The public route is /career-path-register/data-analyst — but stored
+ * `api_slug` is `data-analyst-career-path` (suffix included). Accept
+ * either form so deep links from the detail page work without the
+ * caller having to remember to append the suffix.
+ *
+ * Filters by `is_active` so admin-disabled paths can't be signed up to
+ * even via a stale URL — but does NOT filter by `registrationOpen`;
+ * the page itself renders the "ยังไม่เปิดรับสมัคร" message so a closed
+ * path is still discoverable as "exists but closed" vs. a true 404.
+ */
+export async function getCareerPathForRegistration(slug) {
+  if (!slug) return null;
+  await dbConnect();
+  const s = String(slug).trim();
+  const doc = await CareerPath.findOne({
+    $or: [{ api_slug: s }, { api_slug: `${s}-career-path` }],
+    is_active: true,
+  }).lean();
+  return doc ? serialize(doc) : null;
 }

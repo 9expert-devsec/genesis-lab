@@ -115,7 +115,8 @@ const NAV_GROUPS = [
   {
     label: 'ระบบ',
     items: [
-      { label: 'การลงทะเบียน',  href: '/admin/registrations',  icon: 'ClipboardList' },
+      { label: 'การลงทะเบียน',           href: '/admin/registrations',              icon: 'ClipboardList' },
+      { label: 'Career Path Registrations', href: '/admin/career-path-registrations', icon: 'ClipboardList' },
       { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase' },
       { label: 'Landing Cache', href: '/admin/landing-cache',  icon: 'Database' },
       { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook' },

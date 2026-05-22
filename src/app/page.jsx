@@ -3,7 +3,9 @@ import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { TopNotificationBar } from "@/components/notifications/TopNotificationBar";
 import { SitePopup } from "@/components/notifications/SitePopup";
+import { ScrollToTopButton } from "@/components/ui/ScrollToTopButton";
 import { getActiveTopBars } from "@/lib/actions/site-notifications";
+import { getFeaturedArticlesForLanding } from "@/lib/actions/articles";
 
 import { getLandingData } from "@/lib/landing/getLandingData";
 import { siteConfig } from "@/config/site";
@@ -31,7 +33,11 @@ export const runtime = "nodejs";
 
 export const metadata = {
   title: `${siteConfig.name} — ${siteConfig.tagline}`,
-  description: siteConfig.description,
+  description:
+    'อบรมคอร์สเทคโนโลยีชั้นนำ AI, Data, Power BI, Excel, Power Automate, Automation ด้วยผู้เชี่ยวชาญตัวจริง สอนสไตล์ใช้งานจริง Never Stop Learning',
+  alternates: {
+    canonical: siteConfig.url,
+  },
 };
 
 /**
@@ -60,9 +66,11 @@ export default async function HomePage() {
       reviews,
     },
     bars,
+    featuredArticles,
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
+    getFeaturedArticlesForLanding().catch(() => []),
   ]);
 
   return (
@@ -70,17 +78,55 @@ export default async function HomePage() {
       <TopNotificationBar bars={bars} />
       <PublicHeader />
 
+      {/* Organization structured data — surfaces the brand panel and
+          course catalogue in Google's SERP. Inlined here (vs. layout)
+          so it only appears on the home page, where the Organization
+          claim is canonical. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'EducationalOrganization',
+            name: '9Expert Training',
+            alternateName: 'นายน์เอ็กซ์เพิร์ท',
+            url: siteConfig.url,
+            logo: `${siteConfig.url}/logo/9exp-stand.png`,
+            description:
+              'อบรมคอร์สเทคโนโลยีชั้นนำ AI, Data, Power BI, Excel, Power Automate, Automation ด้วยผู้เชี่ยวชาญตัวจริง',
+            address: {
+              '@type': 'PostalAddress',
+              addressCountry: 'TH',
+              addressLocality: 'กรุงเทพมหานคร',
+            },
+            sameAs: [siteConfig.facebookUrl],
+            hasOfferCatalog: {
+              '@type': 'OfferCatalog',
+              name: 'หลักสูตรอบรม IT',
+              itemListElement: [
+                { '@type': 'Course', name: 'AI & Machine Learning',          provider: { '@type': 'Organization', name: '9Expert Training' } },
+                { '@type': 'Course', name: 'Data Analytics & Power BI',      provider: { '@type': 'Organization', name: '9Expert Training' } },
+                { '@type': 'Course', name: 'Microsoft 365 & Power Platform', provider: { '@type': 'Organization', name: '9Expert Training' } },
+                { '@type': 'Course', name: 'RPA & Automation',               provider: { '@type': 'Organization', name: '9Expert Training' } },
+              ],
+            },
+          }),
+        }}
+      />
+
       <main id="main">
         {/* Visually hidden H1 — present in the DOM for crawlers and
             screen readers, takes up zero visual space. Uses the
             clip-rect pattern instead of font-size:0 because some
-            assistive tech skips zero-sized text. */}
+            assistive tech skips zero-sized text. Must be the first
+            heading in DOM order so Ahrefs / Google see H1 before any
+            section H2/H3. */}
         <h1
-          aria-label="9Expert Training อบรมเทคโนโลยีชั้นนำ AI Data Automation ด้วยผู้เชี่ยวชาญตัวจริง"
+          aria-label="9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง"
           className="absolute -m-px h-px w-px overflow-hidden whitespace-nowrap border-0 p-0"
           style={{ clip: 'rect(0,0,0,0)' }}
         >
-          9Expert Training อบรมเทคโนโลยีชั้นนำ AI Data Automation ด้วยผู้เชี่ยวชาญตัวจริง
+          9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง
         </h1>
 
         {banners.length > 0 ? (
@@ -101,13 +147,14 @@ export default async function HomePage() {
 
         <TestimonialStats reviews={reviews} />
 
-        <BlogSection />
+        <BlogSection articles={featuredArticles} />
 
         <InstructorQuote />
       </main>
 
       <PublicFooter />
       <SitePopup />
+      <ScrollToTopButton />
     </>
   );
 }

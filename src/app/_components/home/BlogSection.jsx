@@ -7,48 +7,30 @@ import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
 
-export const MOCK_BLOGS = [
-  {
-    id: 1,
-    category: 'บทความวิดีโอ',
-    title: 'Claude Cowork vs Copilot Cowork เปรียบเทียบ AI Agent สองค่ายใหญ่ ใครเหมาะกับคุณ?',
-    excerpt:
-      'Claude Cowork vs Copilot Cowork จะเลือกใช้ AI Agent ตัวไหน มาดูกันในบทความนี้เลยว่า คุณเหมาะกับเครื่องมือไหน',
-    thumbnail: '/mock-article/cover-article-claude-cowork-vs-copilot-cowork.png.webp',
-    tags: ['Artificial Intelligence'],
-    slug: '#',
-  },
-  {
-    id: 2,
-    category: 'บทความวิดีโอ',
-    title: 'อ่าน เขียน ข้อมูลจบได้ใน Power BI ด้วย Translytical',
-    excerpt:
-      'หากพูดถึงการแก้ไขข้อมูลและอัปเดตข้อมูล Power BI หากเป็นเมื่อก่อนทางผู้ใช้คงจะตอบว่าไม่สามารถทำได้...',
-    thumbnail: '/mock-article/cover-what-is-translytical.png.webp',
-    tags: ['Power Platform', 'Business', 'Data'],
-    slug: '#',
-  },
-  {
-    id: 3,
-    category: 'บทความวิดีโอ',
-    title: 'เจาะลึก 3 เครื่องมือ AI Automation ยกระดับธุรกิจด้วย Agentic AI',
-    excerpt:
-      'เปลี่ยนงานซ้ำซ้อนให้เป็นระบบอัจฉริยะด้วยกลยุทธ์ Agentic AI ผ่าน 3 เครื่องมือระดับโลก...',
-    thumbnail: '/mock-article/cover-articles-3-ai-agent-automation-tools_0.jpg.webp',
-    tags: ['Business', 'Artificial Intelligence'],
-    slug: '#',
-  },
-];
-
 /**
- * Static mockup matching the design reference. No props, no API —
- * swap to real data via a server-fetch adapter once the article CMS
- * pipeline is in place.
+ * Real articles only — server fetches via `getFeaturedArticlesForLanding`
+ * and passes them in. If nothing is featured, the section disappears
+ * entirely rather than showing a placeholder.
  *
- * Mobile renders a swipeable, auto-advancing carousel; desktop keeps
- * the 3-column grid since all three cards already fit.
+ * Desktop renders a 1–4 column grid for short lists or a 4-up arrow
+ * slider when there are more than 4 cards; mobile is a swipeable,
+ * auto-advancing carousel with dot indicators.
  */
-export function BlogSection() {
+export function BlogSection({ articles = [] }) {
+  if (articles.length === 0) return null;
+
+  const blogs = articles.map((a) => ({
+    id:        a._id ?? a.slug,
+    category:  a.articleType === 'video' ? 'บทความวิดีโอ' : 'บทความ',
+    title:     a.title ?? '',
+    excerpt:   a.excerpt ?? '',
+    thumbnail: a.coverUrl && a.coverUrl.trim() !== ''
+                 ? a.coverUrl
+                 : '/mock-article/cover-article-claude-cowork-vs-copilot-cowork.png.webp',
+    tags:      Array.isArray(a.tags) ? a.tags : [],
+    slug:      `/articles/${a.slug}`,
+  }));
+
   return (
     <section className="bg-9e-ice px-4 py-12 dark:bg-9e-navy lg:px-6">
       <div className="mx-auto max-w-[1200px]">
@@ -70,17 +52,81 @@ export function BlogSection() {
           </Link>
         </div>
 
-        {/* Desktop: static 3-col grid */}
-        <div className="mt-6 hidden grid-cols-3 gap-6 md:grid">
-          {MOCK_BLOGS.map((blog) => (
-            <BlogCard key={blog.id} blog={blog} />
-          ))}
+        {/* Desktop: static grid for ≤4, slider with arrows for >4 */}
+        <div className="mt-6 hidden md:block">
+          {blogs.length <= 4 ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {blogs.map((blog) => (
+                <BlogCard key={blog.id} blog={blog} />
+              ))}
+            </div>
+          ) : (
+            <BlogSlider blogs={blogs} />
+          )}
         </div>
 
         {/* Mobile: swipe + auto-slide carousel */}
-        <BlogCarousel blogs={MOCK_BLOGS} />
+        <div className="mt-6 md:hidden">
+          <BlogCarousel blogs={blogs} />
+        </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Desktop slider: 4 cards visible, advances one card at a time. Arrows
+ * disappear at the bounds so the track can't be pushed past the edges.
+ */
+function BlogSlider({ blogs }) {
+  const [index, setIndex] = useState(0);
+  const perPage  = 4;
+  const maxIndex = Math.max(0, blogs.length - perPage);
+
+  const prev = () => setIndex((i) => Math.max(0, i - 1));
+  const next = () => setIndex((i) => Math.min(maxIndex, i + 1));
+
+  return (
+    <div className="relative">
+      {index > 0 && (
+        <button
+          type="button"
+          onClick={prev}
+          aria-label="ก่อนหน้า"
+          className="absolute -left-4 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+      )}
+
+      <div className="overflow-hidden">
+        <div
+          className="flex gap-4 transition-transform duration-300 ease-in-out"
+          style={{ transform: `translateX(calc(-${index} * (100% / ${perPage} + 16px / ${perPage})))` }}
+        >
+          {blogs.map((blog) => (
+            <div
+              key={blog.id}
+              className="flex-shrink-0"
+              style={{ width: `calc((100% - ${(perPage - 1) * 16}px) / ${perPage})` }}
+            >
+              <BlogCard blog={blog} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {index < maxIndex && (
+        <button
+          type="button"
+          onClick={next}
+          aria-label="ถัดไป"
+          className="absolute -right-4 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -111,7 +157,6 @@ function BlogCarousel({ blogs }) {
 
   return (
     <div
-      className="mt-6 md:hidden"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
@@ -154,14 +199,17 @@ function BlogCarousel({ blogs }) {
 
 export function BlogCard({ blog }) {
   return (
-    <div className="overflow-hidden rounded-2xl bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]">
+    <Link
+      href={blog.slug}
+      className="group block overflow-hidden rounded-2xl bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
+    >
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice dark:bg-9e-navy">
         <Image
           src={blog.thumbnail}
           alt={blog.title}
           fill
-          sizes="(max-width: 768px) 100vw, 33vw"
-          className="object-cover"
+          sizes="(max-width: 768px) 100vw, 25vw"
+          className="object-cover transition-opacity group-hover:opacity-90"
         />
         <span className="absolute left-3 top-3 rounded-full bg-9e-brand px-3 py-1 text-xs font-bold text-white">
           {blog.category}
@@ -176,9 +224,9 @@ export function BlogCard({ blog }) {
           {blog.excerpt}
         </p>
 
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-            {blog.tags.map((tag) => (
+        {blog.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {blog.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}
                 className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
@@ -186,15 +234,14 @@ export function BlogCard({ blog }) {
                 {tag}
               </span>
             ))}
+            {blog.tags.length > 2 && (
+              <span className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs font-medium text-9e-action dark:border-[#1e3a5f] dark:text-[#48B0FF]">
+                +{blog.tags.length - 2}
+              </span>
+            )}
           </div>
-          <a
-            href={blog.slug}
-            className="whitespace-nowrap text-sm font-medium text-9e-action hover:underline dark:text-[#48B0FF]"
-          >
-            อ่านเพิ่มเติม ...
-          </a>
-        </div>
+        )}
       </div>
-    </div>
+    </Link>
   );
 }

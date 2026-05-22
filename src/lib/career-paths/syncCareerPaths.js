@@ -2,10 +2,20 @@
  * Pull /career-path from the upstream API and upsert each item into the
  * CareerPath collection.
  *
- * Admin-controlled fields (`is_active`, `display_order`) are written
- * with `$setOnInsert`, so they are only initialised on first insert
- * and never clobbered by subsequent syncs. Everything else is
- * overwritten on every sync.
+ * Admin-controlled fields are NEVER clobbered by sync. Two protection
+ * mechanisms:
+ *
+ *   1. Scalar Genesis-only fields (`is_active`, `display_order`,
+ *      `registrationOpen`, `registerBannerUrl`, `registerBannerPublicId`,
+ *      `localCourses`, `requiredSelections`) ride in `$setOnInsert` so
+ *      they're initialised once and never touched again.
+ *
+ *   2. The `curriculum` array is MERGED, not overwritten. Upstream
+ *      owns the course list (kinds, course refs, snap data, ordering);
+ *      Genesis owns per-item admin extensions (`prerequisites`, `note`,
+ *      and the resolved `course_id` code). The merge runs item-by-item,
+ *      matching by `publicCourse` ObjectId or `snap.code` so reorders
+ *      are handled correctly.
  *
  * Called by:
  *   - Manual sync   → POST /api/admin/career-paths/sync
@@ -38,8 +48,14 @@ function shapeUpsert(item, syncedAt) {
   const sortOrder = Number.isFinite(item?.sortOrder) ? item.sortOrder : 0;
   const upstreamActive = toString(item?.status).toLowerCase() === 'active';
 
+  // Upstream curriculum is returned separately so the caller can merge
+  // it against the existing Genesis doc (preserving per-item admin
+  // additions like `prerequisites`). Deliberately NOT placed in $set.
+  const upstreamCurriculum = Array.isArray(item?.curriculum) ? item.curriculum : [];
+
   return {
     filter: { career_path_id },
+    upstreamCurriculum,
     update: {
       $set: {
         career_path_id,
@@ -59,17 +75,81 @@ function shapeUpsert(item, syncedAt) {
         roadmap_image_alt: toString(road?.alt),
         links:             item?.links ?? {},
         price:             item?.price ?? {},
-        curriculum:        Array.isArray(item?.curriculum) ? item.curriculum : [],
+        // `curriculum` is intentionally absent — merged into $set by
+        // the sync loop after fetching the existing Genesis doc.
         upstream_status:   toString(item?.status),
         upstream_order:    sortOrder,
         synced_at:         syncedAt,
       },
       $setOnInsert: {
-        is_active:     upstreamActive,
-        display_order: sortOrder,
+        is_active:              upstreamActive,
+        display_order:          sortOrder,
+        // Genesis-only — initialised on first insert, never touched
+        // again by sync. Admin can flip these via the course-settings
+        // page without worrying about the next cron run reverting them.
+        registrationOpen:       false,
+        registerBannerUrl:      '',
+        registerBannerPublicId: '',
+        localCourses:           [],
+        requiredSelections:     0,
       },
     },
   };
+}
+
+/**
+ * Merge upstream curriculum with the existing Genesis curriculum,
+ * preserving Genesis-only per-item fields (`prerequisites`, `note`,
+ * `course_id`, `snap`).
+ *
+ * Upstream is the authoritative course list — additions/removals/order
+ * changes are honored. Matching against existing items is done by
+ * `publicCourse` ObjectId or `snap.code` so a re-ordered group still
+ * carries forward each item's prerequisites.
+ *
+ * For new items (no Genesis match), `prerequisites` defaults to `[]`.
+ */
+function mergeCurriculum(upstreamCurriculum, existingCurriculum) {
+  const safeExisting = Array.isArray(existingCurriculum) ? existingCurriculum : [];
+
+  return upstreamCurriculum.map((upstreamBlock, blockIdx) => {
+    const existingBlock = safeExisting[blockIdx];
+    const upstreamItems = Array.isArray(upstreamBlock?.items)
+      ? upstreamBlock.items
+      : [];
+
+    const mergedItems = upstreamItems.map((upstreamItem) => {
+      const upstreamRef  = String(upstreamItem?.publicCourse ?? '');
+      const upstreamCode = upstreamItem?.snap?.code ?? '';
+
+      const existingItem = Array.isArray(existingBlock?.items)
+        ? existingBlock.items.find((ei) => {
+            const eiRef  = String(ei?.publicCourse ?? '');
+            const eiCode = ei?.snap?.code ?? ei?.course_id ?? '';
+            return (
+              (upstreamRef  && eiRef  === upstreamRef) ||
+              (upstreamCode && eiCode === upstreamCode)
+            );
+          })
+        : null;
+
+      if (!existingItem) {
+        return { ...upstreamItem, prerequisites: [] };
+      }
+
+      return {
+        ...upstreamItem,
+        prerequisites: Array.isArray(existingItem.prerequisites)
+          ? existingItem.prerequisites
+          : [],
+        note:      existingItem.note      ?? upstreamItem?.note      ?? '',
+        course_id: existingItem.course_id ?? upstreamItem?.course_id ?? '',
+        snap:      existingItem.snap      ?? upstreamItem?.snap      ?? {},
+      };
+    });
+
+    return { ...upstreamBlock, items: mergedItems };
+  });
 }
 
 export async function syncCareerPaths() {
@@ -96,6 +176,18 @@ export async function syncCareerPaths() {
       continue;
     }
     try {
+      // Fetch the existing Genesis doc (if any) so we can merge in
+      // per-item admin extensions before writing. On first insert
+      // there's nothing to merge — `mergeCurriculum` handles that.
+      const existing = await CareerPath.findOne(shaped.filter)
+        .select('curriculum')
+        .lean();
+
+      shaped.update.$set.curriculum = mergeCurriculum(
+        shaped.upstreamCurriculum,
+        existing?.curriculum
+      );
+
       await CareerPath.updateOne(shaped.filter, shaped.update, { upsert: true });
       synced += 1;
     } catch (err) {

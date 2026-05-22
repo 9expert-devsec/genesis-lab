@@ -325,14 +325,10 @@ export function ArticleDetailClient({
             {/* Related courses */}
             {relatedCoursesData.length > 0 && (
               <section className="mt-10 rounded-2xl border border-[var(--surface-border)] bg-white p-6 dark:bg-[#111d2c]">
-                <h3 className="mb-4 text-lg font-bold text-9e-navy dark:text-white">
+                <h3 className="mb-5 text-lg font-bold text-9e-navy dark:text-white">
                   หลักสูตรที่เกี่ยวข้อง
                 </h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {relatedCoursesData.map((course) => (
-                    <RelatedCourseCard key={course.course_id} course={course} />
-                  ))}
-                </div>
+                <RelatedCoursesSlider courses={relatedCoursesData} />
               </section>
             )}
 
@@ -578,43 +574,127 @@ function RelatedCourseCard({ course }) {
     ? course.website_urls[0]
     : '#';
   const price = Number(course.course_price ?? 0);
+  const days  = Number(course.course_trainingdays ?? 0);
+  const hours = Number(course.course_traininghours ?? 0) || (days ? days * 6 : 0);
+
+  const LEVEL_LABEL = { 1: 'Beginner', 2: 'Intermediate', 3: 'Advanced' };
+  const levelKey   = course.course_levels != null ? Number(course.course_levels) : null;
+  const levelLabel = levelKey ? LEVEL_LABEL[levelKey] : null;
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex flex-col overflow-hidden rounded-xl border border-[var(--surface-border)] transition-shadow hover:shadow-md"
+      className="group flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-md dark:border-none dark:bg-9e-navy"
     >
-      {course.course_cover_url && (
-        <div className="aspect-video overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/* Thumbnail */}
+      <div className="relative aspect-video w-full overflow-hidden bg-9e-ice">
+        {course.course_cover_url ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={course.course_cover_url}
-            alt={course.course_name}
+            alt={course.course_name ?? ''}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
           />
-        </div>
-      )}
-      <div className="p-4">
-        <span className="font-mono text-xs font-bold text-9e-action">
+        ) : null}
+      </div>
+
+      {/* Body */}
+      <div className="flex flex-1 flex-col p-4">
+        {/* Course ID */}
+        <span className="mb-1 font-mono text-xs font-bold text-9e-action">
           {course.course_id}
         </span>
-        <h4 className="mt-1 line-clamp-2 text-sm font-semibold text-9e-navy dark:text-white">
+
+        {/* Course name with left accent — same as CourseCard */}
+        <h4 className="mb-3 line-clamp-2 border-l-4 border-9e-action pl-2 text-sm font-bold leading-snug text-9e-navy dark:text-white">
           {course.course_name}
         </h4>
-        <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
-          {course.course_trainingdays > 0 && (
-            <span>📅 {course.course_trainingdays} วัน</span>
-          )}
-          {price > 0 && (
-            <span className="font-semibold text-9e-navy dark:text-white">
-              {price.toLocaleString()} .-
+
+        {/* Duration + price row */}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
+          {days > 0 ? (
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3 w-3" strokeWidth={1.75} />
+              {days} วัน{hours ? ` (${hours} ชม.)` : ''}
             </span>
+          ) : (
+            <span />
           )}
+          <span className="text-sm font-bold text-9e-navy dark:text-white">
+            {!price ? 'Call .-' : `${price.toLocaleString('th-TH')} .-`}
+          </span>
         </div>
+
+        {/* Level badge if available */}
+        {levelLabel && (
+          <div className="mt-2 text-[11px] text-9e-slate-dp-50 dark:text-[#b7c3d4]">
+            {levelLabel}
+          </div>
+        )}
       </div>
     </a>
+  );
+}
+
+/**
+ * Horizontal arrow slider — 3 cards visible, advances one card at a time.
+ * Arrows hide at the bounds so the user can't scroll past the edges.
+ */
+function RelatedCoursesSlider({ courses }) {
+  const [index, setIndex] = useState(0);
+  const perPage  = 3;
+  const total    = courses.length;
+  const maxIndex = Math.max(0, total - perPage);
+
+  const prev = () => setIndex((i) => Math.max(0, i - 1));
+  const next = () => setIndex((i) => Math.min(maxIndex, i + 1));
+
+  return (
+    <div className="relative">
+      {/* Arrow: prev */}
+      {index > 0 && (
+        <button
+          type="button"
+          onClick={prev}
+          aria-label="ก่อนหน้า"
+          className="absolute -left-4 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+      )}
+
+      {/* Visible window — 3 cards */}
+      <div className="overflow-hidden">
+        <div
+          className="flex gap-4 transition-transform duration-300 ease-in-out"
+          style={{ transform: `translateX(calc(-${index} * (100% / ${perPage} + 16px / ${perPage})))` }}
+        >
+          {courses.map((course) => (
+            <div
+              key={course.course_id}
+              className="w-[calc((100%-32px)/3)] flex-shrink-0"
+            >
+              <RelatedCourseCard course={course} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Arrow: next */}
+      {index < maxIndex && (
+        <button
+          type="button"
+          onClick={next}
+          aria-label="ถัดไป"
+          className="absolute -right-4 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
+        >
+          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -1,26 +1,21 @@
 'use client';
 
 import Image from 'next/image';
-import Link from 'next/link';
-import { ExternalLink, FileText } from 'lucide-react';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
-import { BlogCard } from '@/app/_components/home/BlogSection';
 
 /**
  * Public program detail page.
  *
- * Three sections:
+ * Two sections:
  *   1. Hero — program icon + name + course count, gradient tinted by
  *      `programcolor` when present.
  *   2. Course grid — all enriched courses for this program. CourseCard
  *      handles the card-level details (cover, schedules, badges).
- *   3. Related blogs — currently the static MOCK_BLOGS until an article
- *      CMS pipeline is wired up.
  *
  * The roadmap image isn't part of the verified `/programs` shape, but
  * we look for likely field names so it shows up if upstream adds one.
  */
-export function ProgramPageClient({ program, config, courses, blogs, earlyBirdMap = {} }) {
+export function ProgramPageClient({ program, config, courses, earlyBirdMap = {} }) {
   const roadmapUrl =
     program?.program_roadmap_url ??
     program?.programroadmapurl ??
@@ -135,32 +130,6 @@ export function ProgramPageClient({ program, config, courses, blogs, earlyBirdMa
         )}
       </section>
 
-      {/* ── Related blogs ─────────────────────────────────────────── */}
-      <section className="mx-auto max-w-[1200px] px-4 pt-12 lg:px-6 lg:pt-16">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-9e-brand">
-              <FileText className="h-4 w-4 text-white" strokeWidth={2} />
-            </div>
-            <h2 className="text-xl font-bold text-9e-navy dark:text-white">
-              บทความที่เกี่ยวข้อง
-            </h2>
-          </div>
-          <Link
-            href="/articles"
-            className="flex items-center gap-1 text-sm font-medium text-9e-brand hover:underline dark:text-white"
-          >
-            ดูบทความทั้งหมด
-            <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {blogs.slice(0, 3).map((blog) => (
-            <BlogCard key={blog.id} blog={blog} />
-          ))}
-        </div>
-      </section>
     </main>
   );
 }

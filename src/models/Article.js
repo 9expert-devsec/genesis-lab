@@ -43,6 +43,14 @@ const ArticleSchema = new mongoose.Schema(
     publishedAt:     { type: Date },
     active:          { type: Boolean, default: true },
 
+    // Pin this article to the top of /articles page (always shows first)
+    isPinnedOnArticlePage: { type: Boolean, default: false },
+    // Display order when multiple articles are pinned (lower = first)
+    pinOrder:              { type: Number,  default: 0 },
+
+    // Show this article in the Landing page BlogSection
+    featuredOnLanding:     { type: Boolean, default: false },
+
     // Schema.org JSON-LD configuration. `overrides` lets the admin
     // pin specific JSON-LD fields without having to touch raw JSON;
     // `rawOverride` (gated by `rawOverrideEnabled`) lets a superadmin
@@ -79,5 +87,7 @@ const ArticleSchema = new mongoose.Schema(
 ArticleSchema.index({ publishedAt: -1, active: 1 });
 ArticleSchema.index({ tags: 1 });
 ArticleSchema.index({ programs: 1 });
+ArticleSchema.index({ isPinnedOnArticlePage: 1, pinOrder: 1 });
+ArticleSchema.index({ featuredOnLanding: 1, publishedAt: -1 });
 
 export default mongoose.models.Article || mongoose.model('Article', ArticleSchema);

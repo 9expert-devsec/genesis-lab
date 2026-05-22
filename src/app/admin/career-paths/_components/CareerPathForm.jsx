@@ -57,6 +57,12 @@ function blocksFromCareerPath(cp) {
           externalName: it?.externalName ?? '',
           externalUrl:  it?.externalUrl ?? '',
           note:         it?.note ?? '',
+          // Manual per-item prerequisites — array of course_id codes
+          // that must be selected before this item in the registration
+          // form. Edited via checkbox grid on the row.
+          prerequisites: Array.isArray(it?.prerequisites)
+            ? it.prerequisites.map(String)
+            : [],
         }))
       : [],
   }));
@@ -583,6 +589,7 @@ function CurriculumBlocks({ blocks, setBlocks, courses }) {
                   externalName: '',
                   externalUrl: '',
                   note: '',
+                  prerequisites: [],
                 },
               ],
             }
@@ -752,6 +759,7 @@ function CurriculumBlocks({ blocks, setBlocks, courses }) {
                 key={ii}
                 item={item}
                 courses={courses}
+                allBlocks={blocks}
                 onChange={(patch) => updateItem(bi, ii, patch)}
                 onRemove={() => removeItem(bi, ii)}
               />
@@ -763,7 +771,32 @@ function CurriculumBlocks({ blocks, setBlocks, courses }) {
   );
 }
 
-function CurriculumItemRow({ item, courses, onChange, onRemove }) {
+function CurriculumItemRow({ item, courses, allBlocks, onChange, onRemove }) {
+  // Build the list of OTHER public courses across every group — these
+  // become the available prerequisite options. External items are
+  // excluded because they don't have a stable `course_id` code to
+  // reference from the public form.
+  const selfCode = String(item?.course_id ?? '');
+  const otherCourses = [];
+  for (const b of Array.isArray(allBlocks) ? allBlocks : []) {
+    for (const it of Array.isArray(b?.items) ? b.items : []) {
+      if (it?.kind !== 'public') continue;
+      const code = String(it?.course_id ?? '');
+      if (!code || code === selfCode) continue;
+      const matched = courses.find((c) => c.course_id === code);
+      otherCourses.push({ code, name: matched?.course_name ?? code });
+    }
+  }
+
+  const prereqs = Array.isArray(item?.prerequisites) ? item.prerequisites : [];
+
+  function togglePrereq(code, checked) {
+    const next = checked
+      ? Array.from(new Set([...prereqs, code]))
+      : prereqs.filter((c) => c !== code);
+    onChange({ prerequisites: next });
+  }
+
   return (
     <div className="rounded-9e-sm border border-[var(--surface-border)] bg-white p-3 dark:bg-[#111d2c]">
       <div className="mb-2 flex items-center gap-2">
@@ -833,6 +866,44 @@ function CurriculumItemRow({ item, courses, onChange, onRemove }) {
           className={inputCls}
         />
       </label>
+
+      {/* ── Prerequisites — checkbox grid of other public courses ── */}
+      <div className="mt-3">
+        <p className="mb-1 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          ต้องเรียนก่อน (Prerequisites)
+          <span className="ml-1 font-normal text-[11px]">
+            — เลือกคอร์สที่ต้องผ่านก่อนคอร์สนี้
+          </span>
+        </p>
+        {otherCourses.length === 0 ? (
+          <span className="text-xs text-gray-400">ไม่มีคอร์สอื่นในหลักสูตร</span>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {otherCourses.map((other) => {
+              const checked = prereqs.includes(other.code);
+              return (
+                <label
+                  key={other.code}
+                  className={
+                    'flex items-center gap-1 rounded border px-2 py-0.5 text-xs cursor-pointer ' +
+                    (checked
+                      ? 'border-9e-action bg-9e-action/5 text-9e-navy dark:text-white'
+                      : 'border-[var(--surface-border)] text-9e-navy hover:border-9e-action/40 dark:text-white')
+                  }
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => togglePrereq(other.code, e.target.checked)}
+                  />
+                  {other.name}{' '}
+                  <span className="font-mono text-9e-action">{other.code}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -269,38 +269,70 @@ function CurriculumSection({ careerPath }) {
 
 function PriceSummary({ careerPath }) {
   const price = careerPath.price;
-  if (!price || (!price.fullPrice && !price.salePrice)) return null;
   const outline = careerPath.links?.outlineUrl;
   const signup  = careerPath.links?.signupUrl;
+
+  // api_slug is like "prompt-engineer-career-path" → strip the suffix
+  // to land on the local register route /career-path-register/<slug>.
+  const registerSlug = careerPath.api_slug
+    ? careerPath.api_slug.replace(/-career-path$/, '')
+    : '';
+  const localRegisterUrl = careerPath.registrationOpen && registerSlug
+    ? `/career-path-register/${registerSlug}`
+    : null;
+
+  // Prefer local registration when open; otherwise fall back to the
+  // legacy MSDB external signup URL.
+  const signupHref = localRegisterUrl ?? signup;
+
+  // Panel previously hid itself when there was no price/link. Now it
+  // also stays visible whenever registration is open, so the CTA
+  // surfaces on price-less paths too.
+  const hasPrice = price && (price.fullPrice || price.salePrice);
+  if (!hasPrice && !careerPath.registrationOpen) return null;
+
   return (
     <aside className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
-      <p className="text-sm text-gray-500">ราคาทั้งหมด (ก่อน VAT)</p>
-      <div className="mt-1 flex items-baseline gap-2">
-        <span className="text-3xl font-extrabold text-[#0D1B2A]">
-          {Number(price.salePrice ?? price.fullPrice).toLocaleString('th-TH')}
-        </span>
-        <span className="text-sm text-gray-500">บาท</span>
-      </div>
-      {price.salePrice != null && price.fullPrice != null && price.salePrice < price.fullPrice && (
-        <p className="mt-1 text-sm text-gray-400">
-          <span className="line-through">
-            {Number(price.fullPrice).toLocaleString('th-TH')}
-          </span>{' '}
-          <span className="font-semibold text-red-500">
-            ลด {price.discountPct ?? 0}%
-          </span>
-        </p>
+      {hasPrice && (
+        <>
+          <p className="text-sm text-gray-500">ราคาทั้งหมด (ก่อน VAT)</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold text-[#0D1B2A]">
+              {Number(price.salePrice ?? price.fullPrice).toLocaleString('th-TH')}
+            </span>
+            <span className="text-sm text-gray-500">บาท</span>
+          </div>
+          {price.salePrice != null && price.fullPrice != null && price.salePrice < price.fullPrice && (
+            <p className="mt-1 text-sm text-gray-400">
+              <span className="line-through">
+                {Number(price.fullPrice).toLocaleString('th-TH')}
+              </span>{' '}
+              <span className="font-semibold text-red-500">
+                ลด {price.discountPct ?? 0}%
+              </span>
+            </p>
+          )}
+        </>
       )}
       <div className="mt-5 flex flex-col gap-2">
-        {signup && (
-          <a
-            href={signup}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
-          >
-            ลงทะเบียน <ArrowRight className="h-4 w-4" />
-          </a>
+        {signupHref && (
+          localRegisterUrl ? (
+            <Link
+              href={localRegisterUrl}
+              className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
+            >
+              ลงทะเบียน <ArrowRight className="h-4 w-4" />
+            </Link>
+          ) : (
+            <a
+              href={signupHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 rounded-9e-md bg-[#005CFF] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#0046cc]"
+            >
+              ลงทะเบียน <ArrowRight className="h-4 w-4" />
+            </a>
+          )
         )}
         {outline && (
           <a
@@ -339,7 +371,8 @@ export function CareerPathDetail({ careerPath }) {
   const hasPriceOrLinks =
     careerPath.price?.fullPrice ||
     careerPath.links?.signupUrl ||
-    careerPath.links?.outlineUrl;
+    careerPath.links?.outlineUrl ||
+    careerPath.registrationOpen;
 
   return (
     <article className="bg-white">
