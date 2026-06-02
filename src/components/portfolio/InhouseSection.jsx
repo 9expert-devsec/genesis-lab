@@ -12,33 +12,33 @@ import {
 const SERVICES = [
   {
     icon: MonitorPlay,
-    title: 'สอนสด',
+    title: 'Classroom Training',
     description:
-      'อบรมสดกับวิทยากรมืออาชีพที่ Classroom ณ สถาบัน 9Expert Training Center',
+      'เรียนสดกับวิทยากรผู้เชี่ยวชาญ ณ 9Expert Training พร้อม Workshop และ Case Study ที่นำไปใช้ได้จริง',
     accent: 'border-t-2 border-9e-brand',
     image: '/port/public_0.jpg',
   },
   {
     icon: Video,
-    title: 'สอนออนไลน์',
+    title: 'Live Online Training',
     description:
-      'หลักสูตรการอบรมสอนสไตล์ใช้งานจริงในรูปแบบ Video Conference ผ่าน MS Teams ตามรอบอบรม',
+      'เรียนสดผ่าน Microsoft Teams ตามรอบอบรมของ Classroom Training พร้อมวิทยากรผู้เชี่ยวชาญและตัวอย่างการใช้งานจริง',
     accent: 'border-t-2 border-9e-air',
     image: '/port/online_0.png',
   },
   {
     icon: Building2,
-    title: 'สอนนอกสถานที่',
+    title: 'In-house Training',
     description:
-      'จัดอบรม On-site ณ สถานที่ของท่าน หรือจัดอบรมในรูปแบบ In-house ตามความต้องการขององค์กร',
+      'จัดอบรมเฉพาะองค์กร ณ สถานที่ของท่าน หรือในรูปแบบที่เหมาะกับเป้าหมายการพัฒนาบุคลากรขององค์กร',
     accent: 'border-t-2 border-9e-lime',
     image: '/port/inhouse_0.jpg',
   },
   {
     icon: BookOpen,
-    title: 'บทความ',
+    title: 'บทความและคลังความรู้',
     description:
-      'ค้นพบคลังความรู้ที่หลากหลายและมีคุณภาพกับ 9Expert แหล่งรวมบทความที่สร้างสรรค์',
+      'อัปเดตความรู้ด้าน AI, Data, Automation และ Digital Transformation รวมถึงเทคโนโลยีสำหรับการทำงานจากผู้เชี่ยวชาญ 9Expert Training',
     accent: 'border-t-2 border-9e-lime',
     image: '/port/article_0.jpg',
   },
@@ -67,7 +67,7 @@ export default function InhouseSection() {
               href="/registration/in-house"
               className="btn-9e-cta mt-8 inline-flex items-center gap-2"
             >
-              สนใจจัดอบรมภายในองค์กรของท่าน
+              ติดต่อทีมที่ปรึกษาหลักสูตร
               <ArrowRight className="h-4 w-4" strokeWidth={2} />
             </Link>
           </div>

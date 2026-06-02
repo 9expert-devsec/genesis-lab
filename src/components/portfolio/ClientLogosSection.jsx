@@ -44,7 +44,7 @@ export default function ClientLogosSection({ logos }) {
           องค์กรที่ให้ความไว้วางใจ
         </h2>
         <p className="mt-3 font-thai text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
-          บริษัทและองค์กรชั้นนำกว่า 5000+ แห่งจากทุกอุตสาหกรรม
+          ได้รับความไว้วางใจจากบริษัทและองค์กรชั้นนำมากกว่า 5,000 แห่ง ครอบคลุมหลากหลายอุตสาหกรรม
         </p>
       </div>
 

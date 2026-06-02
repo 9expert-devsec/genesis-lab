@@ -24,12 +24,12 @@ export default function PortfolioCTA() {
         <h2 className="font-heading text-3xl font-extrabold leading-normal text-white md:text-5xl">
           <span className="block">ให้ 9Expert Training</span>
           <span className="block bg-9e-gradient-hero bg-clip-text text-transparent">
-            ดูแลการพัฒนาบุคลากรของคุณ
+            ดูแลการพัฒนาศักยภาพบุคลากรในองค์กร
           </span>
         </h2>
 
         <p className="mx-auto mt-6 max-w-xl font-thai text-base leading-relaxed text-9e-slate-dp-600 md:text-lg">
-          ติดต่อเราเพื่อรับข้อเสนอการอบรมแบบ In-House สำหรับองค์กรของคุณ
+          ติดต่อทีมที่ปรึกษาหลักสูตร เพื่อออกแบบ In-house Training สำหรับองค์กรของคุณโดยเฉพาะ
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">

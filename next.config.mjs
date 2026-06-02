@@ -30,6 +30,10 @@ const nextConfig = {
       { protocol: 'https', hostname: '9experttraining.com', pathname: '/**' },
       // Upstream API host — in case any item URL points here directly
       { protocol: 'https', hostname: '9exp-sec.com', pathname: '/**' },
+      // MSDB public host — serves outline `download_url` streaming routes.
+      // Used in <a href> (not next/image), so this is defensive in case a
+      // course asset URL ever points here directly.
+      { protocol: 'https', hostname: 'msdb.9expert.app', pathname: '/**' },
       // YouTube thumbnails — used by the YouTubeFacade in HeroBannerCarousel
       { protocol: 'https', hostname: 'i.ytimg.com', pathname: '/vi/**' },
     ],

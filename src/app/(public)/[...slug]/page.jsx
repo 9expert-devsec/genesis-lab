@@ -262,7 +262,7 @@ function CourseDetail({
               hasSchedules={hasSchedules}
               hasRelated={hasRelated}
             />
-            <InhouseCTA courseId={course.course_id} />
+            {/* <InhouseCTA courseId={course.course_id} /> */}
             <PDFDownload course={course} />
           </aside>
         </div>

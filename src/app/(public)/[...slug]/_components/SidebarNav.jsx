@@ -40,7 +40,9 @@ export function SidebarNav({ course, hasSchedules, hasRelated }) {
     {
       id: 'roadmap',
       label: 'Road Map',
-      show: !!course?.course_roadmap_url,
+      show: !!(
+        course?.course_roadmap_desktop_url || course?.course_roadmap_mobile_url
+      ),
     },
     { id: 'related', label: 'หลักสูตรที่เกี่ยวข้อง', show: hasRelated },
   ].filter((l) => l.show);
