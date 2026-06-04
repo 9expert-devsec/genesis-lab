@@ -58,7 +58,7 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
   }, [articles, query, programFilter, typeFilter, selectedTag]);
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
+    <div className="rounded-2xl bg-white pt-10 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-9e-slate-dp-50" />

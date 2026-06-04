@@ -44,7 +44,7 @@ export default async function ArticlesIndexPage() {
         </div>
       </section>
 
-      <section className="mx-auto -mt-8 max-w-6xl px-4 pb-16 sm:px-6">
+      <section className="mx-auto mt-8 max-w-[1200px] pb-16">
         {/* useSearchParams inside ArticlesPageClient forces a CSR
             bailout for the search-param-driven subtree — Suspense
             gives the static pre-render something to flush. */}

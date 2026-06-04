@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -15,6 +17,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ThaiAddressFields } from '@/components/registration/ThaiAddressFields';
 import { cn } from '@/lib/utils';
+
+// ── Storage keys (mirror the Public wizard pattern) ────────────────
+const STORAGE_KEY  = 'registration-inhouse-v1';
+const FORMDATA_KEY = 'registration-inhouse-formdata-v1';
+const RESULT_KEY   = 'registration-inhouse-result-v1';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -54,14 +61,250 @@ const THAI_MONTHS = Array.from({ length: 12 }, (_, i) => {
   };
 });
 
-// ── Main Component ─────────────────────────────────────────────────
+const labelOf = (list, value) => list.find((o) => o.value === value)?.label ?? value;
 
-export function InhouseForm({ courses = [], preselectedCourse = null }) {
-  const [submitting,   setSubmitting]   = useState(false);
-  const [submitError,  setSubmitError]  = useState(null);
-  const [submitted,    setSubmitted]    = useState(false);
-  const [refNo,        setRefNo]        = useState('');
+// ── Wizard (top-level orchestration) ───────────────────────────────
 
+export function InhouseWizard({
+  courses = [],
+  preselectedCourse = null,
+  step = 1,
+  basePath = '/registration/in-house',
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [currentStep, setCurrentStep] = useState(step);
+  const [formData, setFormData] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [restoredFromStorage, setRestoredFromStorage] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Build a step URL that preserves the ?course= query param so the path
+  // stays shareable and survives a refresh.
+  const stepHref = (n) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const q = params.toString();
+    return `${basePath}/step-${n}${q ? `?${q}` : ''}`;
+  };
+
+  // Keep the rendered step in sync with the URL-derived prop.
+  useEffect(() => {
+    setCurrentStep(step);
+  }, [step]);
+
+  // On mount, rehydrate from sessionStorage. Because each step is its own
+  // route, navigating between steps remounts this component and clears
+  // in-memory state — the draft, the confirmed payload, and the success
+  // result all live in storage.
+  useEffect(() => {
+    // Restore live draft (field-by-field typing)
+    let draft = null;
+    try {
+      const raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.formType === 'inhouse') {
+          draft = parsed;
+        } else {
+          sessionStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+    setRestoredFromStorage(draft);
+
+    // Restore confirmed formData (written when user clicks ถัดไป). This makes
+    // "แก้ไข" (back from step 2) restore ALL fields exactly as entered.
+    try {
+      const raw2 = sessionStorage.getItem(FORMDATA_KEY);
+      if (raw2) {
+        const parsed2 = JSON.parse(raw2);
+        if (parsed2?.formType === 'inhouse') {
+          setFormData(parsed2);
+        } else {
+          sessionStorage.removeItem(FORMDATA_KEY);
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+
+    if (step === 3) {
+      // Thank-you screen needs the API result + the email it was sent to.
+      try {
+        const rawRes = sessionStorage.getItem(RESULT_KEY);
+        if (rawRes) {
+          const saved = JSON.parse(rawRes);
+          if (saved?.result) {
+            setResult(saved.result);
+            if (saved.formData) setFormData(saved.formData);
+          }
+        }
+      } catch {
+        // ignore corrupted storage
+      }
+    } else if (step === 1) {
+      // Fresh start on step 1 — drop any stale success result.
+      try { sessionStorage.removeItem(RESULT_KEY); } catch {}
+    }
+
+    setHydrated(true);
+  }, [step]);
+
+  // If the user refreshes or deep-links a later step without the data that
+  // step needs, silently send them back to step 1 — keeping query params.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (currentStep === 2 && !formData) {
+      router.replace(stepHref(1));
+    } else if (currentStep === 3 && !result) {
+      router.replace(stepHref(1));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, currentStep, formData, result]);
+
+  const handleFormSubmit = (data) => {
+    // Tag the payload so storage restores only apply to the In-house flow.
+    const withType = { ...data, formType: 'inhouse' };
+    setFormData(withType);
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(withType)); } catch {}
+    try { sessionStorage.setItem(FORMDATA_KEY, JSON.stringify(withType)); } catch {}
+    setCurrentStep(2);
+    router.push(stepHref(2));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBack = () => {
+    setSubmitError(null);
+    setCurrentStep(1);
+    router.push(stepHref(1));
+  };
+
+  const handleConfirm = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const res = await fetch('/api/registration/inhouse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSubmitError(body?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่');
+        setSubmitting(false);
+        return;
+      }
+      // Draft + confirmed payload are consumed; persist the result so the
+      // step-3 route can render it.
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+      try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+      try {
+        sessionStorage.setItem(RESULT_KEY, JSON.stringify({ result: body, formData }));
+      } catch {}
+      setResult(body);
+      setCurrentStep(3);
+      router.push(stepHref(3));
+      // Keep the loading overlay up through the navigation — the fresh
+      // step-3 mount resets `submitting`, so we don't clear it here.
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setSubmitError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div>
+      <InhouseStepper currentStep={currentStep} />
+
+      {currentStep === 1 && hydrated && (
+        <InhouseStepForm
+          courses={courses}
+          preselectedCourse={preselectedCourse}
+          initialValues={formData ?? restoredFromStorage}
+          onSubmit={handleFormSubmit}
+        />
+      )}
+
+      {currentStep === 2 && formData && (
+        <InhouseStepPreview
+          data={formData}
+          courses={courses}
+          onBack={handleBack}
+          onConfirm={() => setShowConfirm(true)}
+          submitting={submitting}
+          error={submitError}
+          showConfirm={showConfirm}
+          onConfirmCancel={() => setShowConfirm(false)}
+          onConfirmProceed={() => {
+            setShowConfirm(false);
+            handleConfirm();
+          }}
+        />
+      )}
+
+      {currentStep === 3 && result && (
+        <InhouseStepComplete
+          referenceNumber={result.referenceNumber}
+          email={formData?.contactEmail}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Stepper ────────────────────────────────────────────────────────
+
+function InhouseStepper({ currentStep }) {
+  const steps = [
+    { n: 1, label: 'กรอกข้อมูล' },
+    { n: 2, label: 'ตรวจสอบ' },
+    { n: 3, label: 'สำเร็จ' },
+  ];
+  return (
+    <ol className="mb-8 flex items-center justify-center gap-2 text-sm">
+      {steps.map((s, i) => (
+        <li key={s.n} className="flex items-center gap-2">
+          <span
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold',
+              currentStep === s.n
+                ? 'border-9e-brand bg-9e-brand text-9e-ice'
+                : currentStep > s.n
+                  ? 'border-9e-brand bg-9e-brand/10 text-9e-brand'
+                  : 'border-[var(--surface-border)] text-[var(--text-muted)]'
+            )}
+          >
+            {currentStep > s.n ? <CheckCircle2 className="h-4 w-4" /> : s.n}
+          </span>
+          <span
+            className={cn(
+              'font-medium',
+              currentStep >= s.n
+                ? 'text-[var(--text-primary)]'
+                : 'text-[var(--text-muted)]'
+            )}
+          >
+            {s.label}
+          </span>
+          {i < steps.length - 1 && (
+            <span className="mx-2 h-px w-8 bg-[var(--surface-border)]" />
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+// ── Step 1: Form ───────────────────────────────────────────────────
+
+function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues, onSubmit }) {
   // Group courses by program for optgroup
   const coursesByProgram = courses.reduce((acc, c) => {
     const prog = c.program || 'อื่นๆ';
@@ -70,10 +313,13 @@ export function InhouseForm({ courses = [], preselectedCourse = null }) {
     return acc;
   }, {});
 
-  // Find preselected course id (case-insensitive)
+  // Resolve the initial course id: a restored selection wins, otherwise the
+  // ?course= preselect (case-insensitive).
+  const restoredCourseId = initialValues?.coursesInterested?.[0];
   const preselectedId = preselectedCourse
     ? (courses.find((c) => c.id.toUpperCase() === preselectedCourse.toUpperCase())?.id ?? '')
     : '';
+  const initialCourseId = restoredCourseId || preselectedId || '';
 
   const {
     register, handleSubmit, watch, setValue,
@@ -84,22 +330,38 @@ export function InhouseForm({ courses = [], preselectedCourse = null }) {
     reValidateMode: 'onChange',
     defaultValues: {
       ...inhouseRegistrationDefaults,
-      // courseInterested is a single-select UI field (not in schema directly)
-      coursesInterested: preselectedId ? [preselectedId] : [],
+      coursesInterested: initialCourseId ? [initialCourseId] : [],
+      ...(initialValues ?? {}),
     },
   });
 
-  // Local single-select state for course dropdown
-  const [courseInterested, setCourseInterested] = useState(preselectedId);
+  const watched = watch();
 
-  const contentMode       = watch('contentMode');
-  const scheduleMode      = watch('scheduleMode');
-  const trainingFormat    = watch('trainingFormat');
-  const quotationCountry  = watch('quotationCountry');
-  const participantsCount = watch('participantsCount') ?? 15;
-  const isTH              = quotationCountry === 'TH';
-  const isOnsite          = trainingFormat === 'onsite';
-  const isOnline          = trainingFormat === 'online';
+  // Persist draft to sessionStorage on every change.
+  // Guard: skip the very first render (when watched still equals defaultValues)
+  // so we don't overwrite a restored draft with an empty skeleton.
+  const isFirstDraftWrite = useRef(true);
+  useEffect(() => {
+    if (isFirstDraftWrite.current) {
+      isFirstDraftWrite.current = false;
+      return;
+    }
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ ...watched, formType: 'inhouse' }));
+    } catch {
+      // storage full / disabled — ignore
+    }
+  }, [watched]);
+
+  const selectedCourseId   = watch('coursesInterested')?.[0] ?? '';
+  const contentMode        = watch('contentMode');
+  const scheduleMode       = watch('scheduleMode');
+  const trainingFormat     = watch('trainingFormat');
+  const quotationCountry   = watch('quotationCountry');
+  const participantsCount  = watch('participantsCount') ?? 15;
+  const isTH               = quotationCountry === 'TH';
+  const isOnsite           = trainingFormat === 'onsite';
+  const isOnline           = trainingFormat === 'online';
 
   const toggleEquipment = (item) => {
     const cur = watch('onsiteEquipment') ?? [];
@@ -112,77 +374,28 @@ export function InhouseForm({ courses = [], preselectedCourse = null }) {
     setValue('internationalAddress', val === 'OTHER' ? { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' } : null);
   };
 
-  const onSubmit = async (data) => {
-    // Map single courseInterested → coursesInterested array for API
-    const payload = { ...data, coursesInterested: courseInterested ? [courseInterested] : [] };
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const res  = await fetch('/api/registration/inhouse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) { setSubmitError(body?.message || 'ส่งคำขอไม่สำเร็จ กรุณาลองใหม่'); return; }
-      setRefNo(body.referenceNumber);
-      setSubmitted(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch {
-      setSubmitError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // ── Thank you ──────────────────────────────────────────────────
-  if (submitted) {
-    return (
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
-        <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
-        <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">ส่งคำขอเรียบร้อยแล้ว</h2>
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">
-          เลขอ้างอิง:{' '}
-          <span className="font-mono text-base font-bold text-9e-action">{refNo}</span>
-        </p>
-        <p className="mt-4 max-w-md mx-auto text-sm text-[var(--text-secondary)]">
-          ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการพร้อมใบเสนอราคาและรายละเอียดการจัดอบรม
-        </p>
-      </div>
-    );
-  }
-
-  // ── Form ──────────────────────────────────────────────────────
   return (
     <form
-      className="mx-auto max-w-[760px] space-y-6"
+      className="space-y-6"
       onSubmit={handleSubmit(onSubmit, () => {
+        // Scroll to the first invalid field so the user can see what to fix.
         setTimeout(() => {
-          const first = document.querySelector('[aria-invalid="true"]');
+          const first = document.querySelector('[aria-invalid="true"], [data-error="true"]');
           if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus?.(); }
         }, 50);
       })}
       noValidate
     >
-      {/* Page header */}
-      <div className="pb-2">
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-          ขอใบเสนอราคาอบรมแบบ In-house
-        </h1>
-        <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          ส่งข้อมูล Requirement เบื้องต้น ทีมขายจะติดต่อกลับพร้อมใบเสนอราคาภายใน 1-2 วันทำการ
-        </p>
-      </div>
-
       {/* ── Section 1: Course & Requirement ── */}
       <FormSection icon={<FileText className="h-5 w-5" />} title="หลักสูตร & Training Requirement">
 
         {/* Course dropdown */}
-        <FieldGroup label="หลักสูตรที่สนใจ" required error={!courseInterested && errors.coursesInterested ? 'กรุณาเลือกหลักสูตร' : undefined}>
+        <FieldGroup label="หลักสูตรที่สนใจ" required error={errors.coursesInterested?.message}>
           <select
-            value={courseInterested}
-            onChange={(e) => setCourseInterested(e.target.value)}
-            className={cn(selectCls(), !courseInterested && errors.coursesInterested ? 'border-9e-accent' : '')}
+            value={selectedCourseId}
+            onChange={(e) => setValue('coursesInterested', e.target.value ? [e.target.value] : [], { shouldValidate: true })}
+            className={cn(selectCls(), errors.coursesInterested ? 'border-red-500' : '')}
+            aria-invalid={!!errors.coursesInterested}
           >
             <option value="">— เลือกหลักสูตร —</option>
             {Object.entries(coursesByProgram)
@@ -206,7 +419,7 @@ export function InhouseForm({ courses = [], preselectedCourse = null }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label className="mb-2 block">
-              จำนวนผู้เข้าอบรม (โดยประมาณ) <span className="text-9e-accent">*</span>
+              จำนวนผู้เข้าอบรม (โดยประมาณ) <span className="text-red-500">*</span>
             </Label>
             <div className="flex items-center overflow-hidden rounded-9e-md border border-[var(--surface-border)] w-fit">
               <button type="button"
@@ -510,28 +723,233 @@ export function InhouseForm({ courses = [], preselectedCourse = null }) {
         />
       </FormSection>
 
-      {/* Error + Submit */}
-      {Object.keys(errors).length > 0 && (
-        <div className="rounded-9e-md border border-9e-accent/40 bg-9e-accent/5 p-4 text-sm text-9e-accent">
-          กรุณาตรวจสอบและแก้ไขข้อมูลที่ไม่ถูกต้องก่อนส่งคำขอ
-        </div>
-      )}
-      {submitError && (
-        <div className="rounded-9e-md border border-9e-accent/40 bg-9e-accent/5 p-4 text-sm text-9e-accent">
-          {submitError}
-        </div>
-      )}
+      {/* Friendly error summary (Thai messages, no field paths) */}
+      {Object.keys(errors).length > 0 && (() => {
+        const msgs = [...collectMessages(errors)];
+        return msgs.length > 0 ? (
+          <div className="rounded-9e-md border border-red-300 bg-red-50 p-4 text-sm text-red-600 space-y-1">
+            <p className="font-semibold">กรุณาตรวจสอบข้อมูลต่อไปนี้:</p>
+            <ul className="list-disc list-inside space-y-0.5">
+              {msgs.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null;
+      })()}
 
       <div className="flex items-center justify-between gap-4 pt-2">
-        <p className="text-xs text-[var(--text-muted)]">
-          ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการ
-        </p>
-        <Button type="submit" variant="cta" disabled={submitting}>
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-          {submitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอใบเสนอราคา'}
+        <Link
+          href="/training-course"
+          className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-brand"
+        >
+          ← กลับไปดูหลักสูตร
+        </Link>
+        <Button type="submit" variant="cta">
+          ถัดไป
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </div>
     </form>
+  );
+}
+
+// ── Step 2: Preview ────────────────────────────────────────────────
+
+function InhouseStepPreview({
+  data,
+  courses = [],
+  onBack,
+  onConfirm,
+  submitting,
+  error,
+  showConfirm,
+  onConfirmCancel,
+  onConfirmProceed,
+}) {
+  const courseName = (() => {
+    const id = data.coursesInterested?.[0];
+    if (!id) return '';
+    return courses.find((c) => c.id === id)?.name ?? id;
+  })();
+
+  const contactName = `${data.contactFirstName ?? ''} ${data.contactLastName ?? ''}`.trim();
+
+  const thaiAddr = data.thaiAddress
+    ? [
+        data.thaiAddress.addressLine,
+        data.thaiAddress.subDistrict,
+        data.thaiAddress.district,
+        data.thaiAddress.province,
+        data.thaiAddress.postalCode,
+      ].filter(Boolean).join(' ')
+    : '';
+
+  const intlAddr = data.internationalAddress
+    ? [
+        data.internationalAddress.line1,
+        data.internationalAddress.line2,
+        data.internationalAddress.city,
+        data.internationalAddress.state,
+        data.internationalAddress.postalCode,
+        data.internationalAddress.country,
+      ].filter(Boolean).join(', ')
+    : '';
+
+  const dateRange = [data.preferredDateFrom, data.preferredDateTo].filter(Boolean).join(' - ');
+
+  return (
+    <>
+      <div className="space-y-6">
+        <Section title="หลักสูตร & Requirement">
+          <ReadOnlyRow label="หลักสูตรที่สนใจ" value={courseName} />
+          <ReadOnlyRow label="จำนวนผู้เข้าอบรม" value={data.participantsCount ? `${data.participantsCount} ท่าน` : ''} />
+          <ReadOnlyRow label="ระดับพื้นฐาน" value={labelOf(SKILL_LEVELS, data.skillLevel)} />
+          <ReadOnlyRow label="วัตถุประสงค์" value={data.objective} />
+          <ReadOnlyRow label="รูปแบบเนื้อหา" value={labelOf(CONTENT_MODES, data.contentMode)} />
+          {data.contentMode !== 'standard' && (
+            <ReadOnlyRow label="รายละเอียดเนื้อหา" value={data.contentDetails} />
+          )}
+        </Section>
+
+        <Section title="ตารางเวลา & รูปแบบการอบรม">
+          <ReadOnlyRow label="ช่วงเวลาที่สะดวก" value={labelOf(SCHEDULE_MODES, data.scheduleMode)} />
+          {data.scheduleMode === 'month' && (
+            <ReadOnlyRow label="เดือนที่สนใจ" value={labelOf(THAI_MONTHS, data.preferredMonth)} />
+          )}
+          {data.scheduleMode === 'dateRange' && (
+            <ReadOnlyRow label="ช่วงวันที่" value={dateRange} />
+          )}
+          <ReadOnlyRow label="หมายเหตุเรื่องวัน" value={data.scheduleNote} />
+          <ReadOnlyRow label="รูปแบบการอบรม" value={labelOf(TRAINING_FORMATS, data.trainingFormat)} />
+          {data.trainingFormat === 'onsite' && (
+            <>
+              <ReadOnlyRow label="ที่อยู่สถานที่" value={data.onsiteAddress} />
+              <ReadOnlyRow label="จังหวัด" value={data.onsiteProvince} />
+              <ReadOnlyRow label="เขต / อำเภอ" value={data.onsiteDistrict} />
+              <ReadOnlyRow label="อุปกรณ์ที่มีให้" value={(data.onsiteEquipment ?? []).join(', ')} />
+            </>
+          )}
+          {data.trainingFormat === 'online' && (
+            <>
+              <ReadOnlyRow label="พื้นที่ผู้เข้าอบรม" value={data.onlineRegion} />
+              <ReadOnlyRow label="ข้อจำกัดด้านเวลา" value={data.onlineTimezone} />
+            </>
+          )}
+        </Section>
+
+        <Section title="ผู้ประสานงาน">
+          <ReadOnlyRow label="ชื่อ-นามสกุล" value={contactName} />
+          <ReadOnlyRow label="ตำแหน่ง" value={data.contactRole} />
+          <ReadOnlyRow label="แผนก" value={data.contactDepartment} />
+          <ReadOnlyRow label="บริษัท / องค์กร" value={data.companyName} />
+          <ReadOnlyRow label="อีเมล" value={data.contactEmail} />
+          <ReadOnlyRow label="เบอร์โทรศัพท์" value={data.contactPhone} />
+        </Section>
+
+        <Section title="ข้อมูลใบเสนอราคา">
+          <ReadOnlyRow label="ประเทศ" value={data.quotationCountry === 'TH' ? 'Thailand' : 'Other country'} />
+          <ReadOnlyRow label="ชื่อบริษัท (ใบเสนอราคา)" value={data.quotationCompany} />
+          <ReadOnlyRow label="เลขผู้เสียภาษี" value={data.taxId} />
+          <ReadOnlyRow label="สาขา" value={data.branch} />
+          <ReadOnlyRow label="ที่อยู่" value={data.quotationCountry === 'TH' ? thaiAddr : intlAddr} />
+        </Section>
+
+        {data.message && (
+          <Section title="หมายเหตุเพิ่มเติม">
+            <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{data.message}</p>
+          </Section>
+        )}
+
+        {error && (
+          <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-500">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-4 pt-2">
+          <Button type="button" variant="outline" onClick={onBack} disabled={submitting}>
+            แก้ไข
+          </Button>
+          <Button type="button" variant="cta" onClick={onConfirm} disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                กำลังส่ง...
+              </>
+            ) : (
+              'ยืนยันการส่งคำขอ'
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* Phase A — confirm dialog before submitting */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-9e-lg">
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">
+              ยืนยันการส่งข้อมูล
+            </h3>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              คุณต้องการส่งข้อมูลนี้ใช่หรือไม่?
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button type="button" variant="outline" onClick={onConfirmCancel}>
+                ยกเลิก
+              </Button>
+              <Button type="button" variant="cta" onClick={onConfirmProceed}>
+                ยืนยัน
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase B — fullscreen loading overlay while submitting */}
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-md dark:bg-[var(--surface)]/80">
+          <Loader2 className="h-12 w-12 animate-spin text-9e-brand" />
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            กำลังส่งข้อมูล...
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── Step 3: Thank-you ──────────────────────────────────────────────
+
+function InhouseStepComplete({ referenceNumber, email }) {
+  return (
+    <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
+      <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
+      <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
+        ส่งคำขอเรียบร้อยแล้ว
+      </h2>
+      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+        เลขอ้างอิง:{' '}
+        <span className="font-mono text-base font-bold text-9e-brand">
+          {referenceNumber}
+        </span>
+      </p>
+      {email && (
+        <p className="mt-4 text-sm text-[var(--text-secondary)]">
+          เราได้ส่งอีเมลยืนยันไปที่{' '}
+          <span className="font-semibold text-[var(--text-primary)]">{email}</span>{' '}
+          แล้ว
+        </p>
+      )}
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+        ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการ
+      </p>
+      <div className="mt-8">
+        <Button asChild variant="outline">
+          <Link href="/training-course">ดูคอร์สอื่นเพิ่มเติม</Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -556,10 +974,10 @@ function FieldGroup({ label, error, required, children, className }) {
     <div className={className}>
       <Label className="mb-1.5 block">
         {label}
-        {required && <span className="ml-0.5 text-9e-accent">*</span>}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
       </Label>
       {children}
-      {error && <p className="mt-1 text-xs text-9e-accent">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }
@@ -568,6 +986,48 @@ function selectCls() {
   return cn(
     'h-10 w-full rounded-9e-md border bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)]',
     'border-[var(--surface-border)]',
-    'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand'
+    'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand',
+    'aria-[invalid=true]:border-red-500 aria-[invalid=true]:focus-visible:ring-red-500'
   );
+}
+
+// ── Preview atoms (read-only summary) ──────────────────────────────
+
+function Section({ title, children }) {
+  return (
+    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
+      <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">{title}</h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function ReadOnlyRow({ label, value }) {
+  // Skip empty values so the preview only shows what the user actually filled.
+  if (value === undefined || value === null || value === '') return null;
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+      <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)] sm:w-48 sm:flex-none">
+        {label}
+      </div>
+      <div className="text-sm text-[var(--text-primary)]">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Walks the react-hook-form errors tree and collects only the user-facing
+ * `.message` strings, deduplicated — so the summary box shows friendly Thai
+ * messages instead of developer-facing field paths.
+ */
+function collectMessages(errors, messages = new Set()) {
+  for (const val of Object.values(errors)) {
+    if (!val) continue;
+    if (typeof val.message === 'string' && val.message) {
+      messages.add(val.message);
+    } else if (typeof val === 'object') {
+      collectMessages(val, messages);
+    }
+  }
+  return messages;
 }

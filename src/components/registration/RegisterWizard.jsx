@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'registration-public-v3';
+const RESULT_KEY = 'registration-public-result-v3';
+const FORMDATA_KEY = 'registration-public-formdata-v1';
 
 const THAI_MONTHS = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
@@ -41,25 +43,57 @@ function formatClassDates(dates) {
   return `${start.getDate()} ${THAI_MONTHS[start.getMonth()]} - ${end.getDate()} ${THAI_MONTHS[end.getMonth()]} ${year}`;
 }
 
-export function RegisterWizard({ course, schedules, initialClassId, earlyBirdScheduleId = null }) {
-  const [currentStep, setCurrentStep] = useState(1);
+export function RegisterWizard({
+  course,
+  schedules,
+  initialClassId,
+  earlyBirdScheduleId = null,
+  step = 1,
+  basePath = '/registration/public',
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [currentStep, setCurrentStep] = useState(step);
   const [formData, setFormData] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [result, setResult] = useState(null);
   const [restoredFromStorage, setRestoredFromStorage] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
 
+  // Build a step URL that preserves the course/class query params so the
+  // path stays shareable and survives a refresh.
+  const stepHref = useCallback(
+    (n) => {
+      const params = new URLSearchParams(searchParams.toString());
+      const q = params.toString();
+      return `${basePath}/step-${n}${q ? `?${q}` : ''}`;
+    },
+    [basePath, searchParams]
+  );
+
+  // Keep the rendered step in sync with the URL-derived prop. Each step is
+  // its own route, so this normally just confirms the value on mount.
+  useEffect(() => {
+    setCurrentStep(step);
+  }, [step]);
+
+  // On mount, rehydrate from sessionStorage. Because each step is its own
+  // route, navigating between steps remounts this component and clears
+  // in-memory state — the draft (and the success result) live in storage.
   useEffect(() => {
     // Clear any stale drafts from previous schema versions
     try { sessionStorage.removeItem('registration-public-v1'); } catch {}
     try { sessionStorage.removeItem('registration-public-v2'); } catch {}
 
+    let draft = null;
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.courseId === course.course_id) {
-          setRestoredFromStorage(parsed);
+          draft = parsed;
         } else {
           sessionStorage.removeItem(STORAGE_KEY);
         }
@@ -67,17 +101,75 @@ export function RegisterWizard({ course, schedules, initialClassId, earlyBirdSch
     } catch {
       // ignore corrupted storage
     }
-  }, [course.course_id]);
+    setRestoredFromStorage(draft);
+
+    // Rehydrate the confirmed Step-1 payload. "แก้ไข" (back) and a refresh
+    // both remount this component, wiping React state — restoring formData
+    // from its own key is what keeps every field the user entered intact on
+    // step 2 and on the way back to step 1.
+    try {
+      const rawForm = sessionStorage.getItem(FORMDATA_KEY);
+      if (rawForm) {
+        const parsed = JSON.parse(rawForm);
+        if (parsed?.courseId === course.course_id) {
+          setFormData(parsed);
+        } else {
+          sessionStorage.removeItem(FORMDATA_KEY);
+        }
+      }
+    } catch {
+      // ignore corrupted storage
+    }
+
+    if (step === 3) {
+      // Thank-you screen needs the API result + the email it was sent to.
+      try {
+        const rawRes = sessionStorage.getItem(RESULT_KEY);
+        if (rawRes) {
+          const saved = JSON.parse(rawRes);
+          if (saved?.result) {
+            setResult(saved.result);
+            if (saved.formData) setFormData(saved.formData);
+          }
+        }
+      } catch {
+        // ignore corrupted storage
+      }
+    } else if (step === 1) {
+      // Fresh start on step 1 — drop any stale success result.
+      try { sessionStorage.removeItem(RESULT_KEY); } catch {}
+    }
+
+    setHydrated(true);
+  }, [course.course_id, step]);
+
+  // If the user refreshes or deep-links a later step without the data that
+  // step needs (formData lost on remount, no draft in storage), silently
+  // send them back to step 1 — keeping the query params.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (currentStep === 2 && !formData) {
+      router.replace(stepHref(1));
+    } else if (currentStep === 3 && !result) {
+      router.replace(stepHref(1));
+    }
+  }, [hydrated, currentStep, formData, result, router, stepHref]);
 
   const handleFormSubmit = (data) => {
     setFormData(data);
+    // Persist the validated payload so the remounted step-2 route — and a
+    // later "แก้ไข" back to step 1 — can restore every field the user entered.
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+    try { sessionStorage.setItem(FORMDATA_KEY, JSON.stringify(data)); } catch {}
     setCurrentStep(2);
+    router.push(stepHref(2));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleBack = () => {
     setSubmitError(null);
     setCurrentStep(1);
+    router.push(stepHref(1));
   };
 
   const handleConfirm = async () => {
@@ -100,13 +192,24 @@ export function RegisterWizard({ course, schedules, initialClassId, earlyBirdSch
         setSubmitting(false);
         return;
       }
-      sessionStorage.removeItem(STORAGE_KEY);
+      // Draft + confirmed payload are consumed; persist the result so the
+      // step-3 route can render it.
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+      try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+      try {
+        sessionStorage.setItem(
+          RESULT_KEY,
+          JSON.stringify({ result: body, formData })
+        );
+      } catch {}
       setResult(body);
       setCurrentStep(3);
+      router.push(stepHref(3));
+      // Keep the loading overlay up through the navigation — the fresh
+      // step-3 mount resets `submitting`, so we don't clear it here.
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setSubmitError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -115,7 +218,7 @@ export function RegisterWizard({ course, schedules, initialClassId, earlyBirdSch
     <div>
       <Stepper currentStep={currentStep} />
 
-      {currentStep === 1 && (
+      {currentStep === 1 && hydrated && (
         <StepForm
           course={course}
           schedules={schedules}
@@ -153,7 +256,7 @@ function Stepper({ currentStep }) {
     { n: 3, label: 'สำเร็จ' },
   ];
   return (
-    <ol className="mb-8 flex items-center gap-2 text-sm">
+    <ol className="mb-8 flex items-center justify-center gap-2 text-sm">
       {steps.map((s, i) => (
         <li key={s.n} className="flex items-center gap-2">
           <span
@@ -211,6 +314,10 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
   // previously — auto-open it. Otherwise require an explicit confirm.
   const [formRevealed, setFormRevealed] = useState(Boolean(initialValues));
   const coordinatorRef = useRef(null);
+  // Tracks the very first run of the schedule-sync effect so we don't
+  // overwrite a restored attendanceMode (e.g. after clicking "แก้ไข" back
+  // from step 2 on a hybrid schedule) before the user ever sees it.
+  const isFirstScheduleSync = useRef(true);
 
   const scheduleById = useMemo(() => {
     const map = new Map();
@@ -256,6 +363,12 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     setValue('classDate', sch ? formatClassDates(sch.dates) : '');
     // Track schedule type so the server + schema know if hybrid validation applies.
     setValue('scheduleType', sch?.type || undefined);
+    // On the very first run (initial mount), keep any restored attendanceMode
+    // intact — only reset it when the schedule actually changes afterwards.
+    if (isFirstScheduleSync.current) {
+      isFirstScheduleSync.current = false;
+      return;
+    }
     // Non-hybrid schedules default silently to classroom; hybrid requires a choice.
     if (sch?.type !== 'hybrid') {
       setValue('attendanceMode', 'classroom');
@@ -302,8 +415,15 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist draft to sessionStorage on every change
+  // Persist draft to sessionStorage on every change.
+  // Guard: skip the very first render (when watched still equals defaultValues)
+  // so we don't overwrite a restored draft with an empty skeleton.
+  const isFirstDraftWrite = useRef(true);
   useEffect(() => {
+    if (isFirstDraftWrite.current) {
+      isFirstDraftWrite.current = false;
+      return;
+    }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(watched));
     } catch {
@@ -319,9 +439,7 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
   return (
     <form
       className="space-y-8"
-      onSubmit={handleSubmit(onSubmit, (errs) => {
-        // DEV DEBUG: log full error tree to console
-        console.error('[RegisterWizard] Validation errors:', JSON.stringify(errs, null, 2));
+      onSubmit={handleSubmit(onSubmit, () => {
         // Scroll to the first invalid field so the user can see what needs fixing
         setTimeout(() => {
           const firstError = document.querySelector(
@@ -377,7 +495,7 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
         )}
 
         {errors.classId && (
-          <p className="mt-2 text-xs text-9e-accent">{errors.classId.message}</p>
+          <p className="mt-2 text-xs text-red-500">{errors.classId.message}</p>
         )}
       </section>
 
@@ -425,16 +543,23 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
               {...register('notes')}
             />
             {errors.notes?.message && (
-              <p className="mt-1 text-xs text-9e-accent">{errors.notes.message}</p>
+              <p className="mt-1 text-xs text-red-500">{errors.notes.message}</p>
             )}
           </section>
 
-          {Object.keys(errors).length > 0 && (
-            <div className="rounded-9e-md border border-9e-accent/40 bg-9e-accent/10 p-4 text-sm text-9e-accent space-y-1">
-              <p className="font-semibold">กรุณาตรวจสอบข้อมูลต่อไปนี้:</p>
-              <DebugErrors errors={errors} />
-            </div>
-          )}
+          {Object.keys(errors).length > 0 && (() => {
+            const msgs = [...collectMessages(errors)];
+            return msgs.length > 0 ? (
+              <div className="rounded-9e-md border border-red-300 bg-red-50 p-4 text-sm text-red-600 space-y-1">
+                <p className="font-semibold">กรุณาตรวจสอบข้อมูลต่อไปนี้:</p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  {msgs.map((m, i) => (
+                    <li key={i}>{m}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null;
+          })()}
 
           <div className="flex items-center justify-between gap-4 pt-2">
             <Link
@@ -475,6 +600,7 @@ function AttendanceModeSelector({ value, onChange, error }) {
   return (
     <section
       data-section="attendance-mode"
+      data-error={!!error || undefined}
       className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6"
     >
       <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
@@ -525,7 +651,7 @@ function AttendanceModeSelector({ value, onChange, error }) {
       </div>
 
       {error && (
-        <p className="mt-2 text-xs text-9e-accent">{error}</p>
+        <p className="mt-2 text-xs text-red-500">{error}</p>
       )}
     </section>
   );
@@ -536,7 +662,9 @@ function AttendanceModeSelector({ value, onChange, error }) {
 function StepPreview({ data, onBack, onConfirm, submitting, error }) {
   const coord = data.coordinator ?? {};
   const attendees = data.attendees ?? [];
+  const [showConfirm, setShowConfirm] = useState(false);
   return (
+    <>
     <div className="space-y-8">
       <Section title="ข้อมูลคอร์ส">
         <ReadOnlyRow label="หลักสูตร" value={data.courseName} />
@@ -666,7 +794,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
       )}
 
       {error && (
-        <div className="rounded-9e-md border border-9e-accent/40 bg-9e-accent/10 p-4 text-sm text-9e-accent">
+        <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-500">
           {error}
         </div>
       )}
@@ -678,7 +806,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         <Button
           type="button"
           variant="cta"
-          onClick={onConfirm}
+          onClick={() => setShowConfirm(true)}
           disabled={submitting}
         >
           {submitting ? (
@@ -692,6 +820,50 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         </Button>
       </div>
     </div>
+
+      {/* Phase A — confirm dialog before submitting */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-9e-lg">
+            <h3 className="text-lg font-bold text-[var(--text-primary)]">
+              ยืนยันการส่งข้อมูล
+            </h3>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+              คุณต้องการส่งข้อมูลนี้ใช่หรือไม่?
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowConfirm(false)}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                type="button"
+                variant="cta"
+                onClick={() => {
+                  setShowConfirm(false);
+                  onConfirm();
+                }}
+              >
+                ยืนยัน
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase B — fullscreen loading overlay while submitting */}
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-md dark:bg-[var(--surface)]/80">
+          <Loader2 className="h-12 w-12 animate-spin text-9e-brand" />
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            กำลังส่งข้อมูล...
+          </p>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -753,24 +925,20 @@ function ReadOnlyRow({ label, value }) {
   );
 }
 
-/** DEV ONLY — flattens RHF errors tree into a visible list */
-function DebugErrors({ errors, path = '' }) {
-  return (
-    <>
-      {Object.entries(errors).map(([key, val]) => {
-        const fullPath = path ? `${path}.${key}` : key;
-        if (val?.message) {
-          return (
-            <p key={fullPath} className="text-xs">
-              <span className="font-mono font-bold">{fullPath}</span>: {val.message}
-            </p>
-          );
-        }
-        if (typeof val === 'object' && val !== null) {
-          return <DebugErrors key={fullPath} errors={val} path={fullPath} />;
-        }
-        return null;
-      })}
-    </>
-  );
+/**
+ * Walks the react-hook-form errors tree and collects only the user-facing
+ * `.message` strings, deduplicated. Field paths (e.g.
+ * `invoice.thaiAddress.addressLine`) are intentionally dropped so the summary
+ * box shows friendly Thai messages instead of developer-facing paths.
+ */
+function collectMessages(errors, messages = new Set()) {
+  for (const val of Object.values(errors)) {
+    if (!val) continue;
+    if (typeof val.message === 'string' && val.message) {
+      messages.add(val.message);
+    } else if (typeof val === 'object') {
+      collectMessages(val, messages);
+    }
+  }
+  return messages;
 }

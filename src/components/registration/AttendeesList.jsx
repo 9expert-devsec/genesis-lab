@@ -137,7 +137,7 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
       )}
 
       {errors?.attendees?.message && (
-        <p className="mt-2 text-xs text-9e-accent">{errors.attendees.message}</p>
+        <p className="mt-2 text-xs text-red-500">{errors.attendees.message}</p>
       )}
     </section>
   );
@@ -235,10 +235,10 @@ function FieldGroup({ label, error, required, children, className }) {
     <div className={className}>
       <Label className="mb-1.5 block">
         {label}
-        {required && <span className="ml-0.5 text-9e-accent">*</span>}
+        {required && <span className="ml-0.5 text-red-500">*</span>}
       </Label>
       {children}
-      {error && <p className="mt-1 text-xs text-9e-accent">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
     </div>
   );
 }

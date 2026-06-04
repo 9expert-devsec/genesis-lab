@@ -15,7 +15,7 @@ export const Input = forwardRef(function Input(
         'transition-colors duration-9e-micro ease-9e',
         'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'aria-[invalid=true]:border-9e-accent aria-[invalid=true]:focus-visible:ring-9e-accent',
+        'aria-[invalid=true]:border-red-500 aria-[invalid=true]:focus-visible:ring-red-500',
         className
       )}
       {...props}
