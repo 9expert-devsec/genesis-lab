@@ -134,6 +134,126 @@ export function ArticleDetailClient({
     };
   }, [article._id]);
 
+  // Inject "Copy" buttons into every <pre> block inside the rendered article.
+  // Uses the same retry strategy as the heading-ID injection above.
+  useEffect(() => {
+    let cancelled = false;
+    let timer;
+
+    function injectCopyButtons() {
+      const root = contentRef.current;
+      if (!root || cancelled) return false;
+
+      const preEls = root.querySelectorAll('pre');
+      if (preEls.length === 0) return false;
+
+      preEls.forEach((pre) => {
+        // Skip if already injected (Strict Mode double-invoke guard)
+        if (pre.querySelector('[data-copy-btn]')) return;
+
+        // Ensure the <pre> is positioned so the button can be absolute
+        if (getComputedStyle(pre).position === 'static') {
+          pre.style.position = 'relative';
+        }
+
+        const btn = document.createElement('button');
+        btn.setAttribute('data-copy-btn', '');
+        btn.setAttribute('aria-label', 'Copy code');
+        btn.textContent = 'Copy';
+
+        // Inline styles — no Tailwind class needed, avoids purge issues
+        Object.assign(btn.style, {
+          position: 'absolute',
+          top: '10px',
+          right: '10px',
+          padding: '3px 10px',
+          fontSize: '11px',
+          fontFamily: 'inherit',
+          fontWeight: '500',
+          lineHeight: '1.5',
+          color: '#e2e8f0',
+          background: 'rgba(255,255,255,0.08)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '5px',
+          cursor: 'pointer',
+          transition: 'background 0.15s, color 0.15s',
+          zIndex: '10',
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+        });
+
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = 'rgba(255,255,255,0.16)';
+        });
+        btn.addEventListener('mouseleave', () => {
+          if (btn.textContent !== '✓ Copied!') {
+            btn.style.background = 'rgba(255,255,255,0.08)';
+          }
+        });
+
+        btn.addEventListener('click', async () => {
+          const code = pre.querySelector('code');
+          const text = code ? code.innerText : pre.innerText;
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch {
+            // Fallback for older browsers / blocked clipboard
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          }
+
+          // Feedback state
+          btn.textContent = '✓ Copied!';
+          btn.style.color = '#86efac';       // green-300
+          btn.style.borderColor = '#86efac';
+          btn.style.background = 'rgba(134,239,172,0.10)';
+
+          clearTimeout(btn._resetTimer);
+          btn._resetTimer = setTimeout(() => {
+            btn.textContent = 'Copy';
+            btn.style.color = '#e2e8f0';
+            btn.style.borderColor = 'rgba(255,255,255,0.15)';
+            btn.style.background = 'rgba(255,255,255,0.08)';
+          }, 2000);
+        });
+
+        pre.appendChild(btn);
+      });
+
+      return true;
+    }
+
+    // Try immediately (covers client-nav case where DOM already exists)
+    if (injectCopyButtons()) return () => { cancelled = true; };
+
+    // Retry with backoff for dangerouslySetInnerHTML hydration gap
+    const delays = [50, 100, 200, 400, 500];
+    let i = 0;
+    function retry() {
+      if (cancelled || i >= delays.length) return;
+      timer = setTimeout(() => {
+        if (!injectCopyButtons()) {
+          i++;
+          retry();
+        }
+      }, delays[i++]);
+    }
+    retry();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+  // Empty deps: run once on mount. Article HTML does not change after mount.
+  // The retry strategy handles the dangerouslySetInnerHTML timing gap.
+
   // Single scroll handler drives the bar, the badge visibility, and
   // the active-TOC highlight — all read off the same contentRef so
   // they can't disagree.

@@ -153,7 +153,7 @@ export function InstructorQuote() {
 
         <div className=" min-h-[400px] items-center justify-center flex flex-col lg:items-end lg:justify-end">
           <Image
-            src="/people/AJ.Chalaivate-1.webp"
+            src="/people/AJ.Chalaivate.png"
             alt="อ.ชไลเวท พิพัฒนพรรณวงศ์"
             width={400}
             height={500}

@@ -32,6 +32,7 @@ import {
   Map,
   Bell,
   Webhook,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -71,6 +72,7 @@ const ICONS = {
   Map,
   Bell,
   Webhook,
+  ExternalLink,
 };
 
 // `superadminOnly: true` items are filtered out for non-superadmin
@@ -87,11 +89,13 @@ const NAV_GROUPS = [
     items: [
       { label: 'หลักสูตรแนะนำ',        href: '/admin/featured-courses',         icon: 'Star' },
       { label: 'คอร์สออนไลน์แนะนำ',    href: '/admin/featured-online-courses',  icon: 'Monitor' },
+      { label: 'คอร์สออนไลน์ (Navbar)', href: '/admin/nav-featured-online-courses', icon: 'Monitor' },
       { label: 'หลักสูตร',             href: '/admin/courses',                  icon: 'GraduationCap' },
       { label: 'ตารางอบรม',            href: '/admin/schedules',                icon: 'CalendarDays' },
       { label: 'วิทยากร',              href: '/admin/instructors',              icon: 'User' },
       { label: 'โปรแกรม & Skills',     href: '/admin/programs',                 icon: 'Layers' },
       { label: 'Career Path',          href: '/admin/career-paths',             icon: 'Map' },
+      { label: 'TNHS Courses',         href: '/admin/tnhs-courses',             icon: 'ExternalLink' },
       { label: 'Program/Skill URL',    href: '/admin/page-configs',             icon: 'FileText' },
     ],
   },

@@ -137,14 +137,8 @@ export const mainNav = [
     href: '/training-course',
     type: 'mega',
   },
-  {
-    label: 'Career Path',
-    href: '/career-path-project',
-    children: careerPaths.map((c) => ({
-      label: c.label,
-      href: c.slug ? `/${c.slug}-career-path` : '/career-path-project',
-    })),
-  },
+  // Career Path, TNHS, and หลักสูตรออนไลน์ are NOT top-level items —
+  // they live only inside the หลักสูตร mega menu panel.
   { label: 'ตารางฝึกอบรม', href: '/schedule' },
   { label: 'โปรโมชัน',     href: '/promotions' },
   { label: 'บทความ',       href: '/articles' },
