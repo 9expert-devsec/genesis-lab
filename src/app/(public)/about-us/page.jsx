@@ -4,8 +4,10 @@ import KPISection from "@/components/about/KPISection";
 import HowWeTeachSection from "@/components/about/HowWeTeachSection";
 import InstructorSection2 from "@/components/about/InstructorSection2";
 import JoinUsSection from "@/components/about/JoinUsSection";
+import AtmosphereSection from "@/components/portfolio/AtmosphereSection";
 
 import { getInstructors } from "@/lib/actions/about";
+import { getActiveAtmospherePhotos } from "@/lib/actions/portfolio";
 
 export const revalidate = 3600;
 
@@ -18,7 +20,10 @@ export function generateMetadata() {
 }
 
 export default async function AboutUsPage() {
-  const instructors = await getInstructors();
+  const [instructors, atmospherePhotos] = await Promise.all([
+    getInstructors(),
+    getActiveAtmospherePhotos().catch(() => []),
+  ]);
 
   const stats = [
     { value: 90, suffix: "K+", label: "ผู้เรียน" },
@@ -35,6 +40,7 @@ export default async function AboutUsPage() {
       <KPISection stats={stats} />
       <HowWeTeachSection />
       <InstructorSection2 instructors={instructors} />
+      <AtmosphereSection photos={atmospherePhotos} />
       <JoinUsSection />
     </main>
   );

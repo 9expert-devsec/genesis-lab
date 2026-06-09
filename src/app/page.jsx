@@ -6,6 +6,8 @@ import { SitePopup } from "@/components/notifications/SitePopup";
 import { ScrollToTopButton } from "@/components/ui/ScrollToTopButton";
 import { getActiveTopBars } from "@/lib/actions/site-notifications";
 import { getFeaturedArticlesForLanding } from "@/lib/actions/articles";
+import { getActiveClientLogos } from "@/lib/actions/portfolio";
+import ClientLogosSection from "@/components/portfolio/ClientLogosSection";
 
 import { getLandingData } from "@/lib/landing/getLandingData";
 import { siteConfig } from "@/config/site";
@@ -67,10 +69,12 @@ export default async function HomePage() {
     },
     bars,
     featuredArticles,
+    clientLogos,
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
     getFeaturedArticlesForLanding().catch(() => []),
+    getActiveClientLogos().catch(() => []),
   ]);
 
   return (
@@ -145,7 +149,11 @@ export default async function HomePage() {
 
         <InhouseCTA />
 
+        <ClientLogosSection logos={clientLogos} />
+
         <TestimonialStats reviews={reviews} />
+
+        
 
         <BlogSection articles={featuredArticles} />
 

@@ -40,7 +40,7 @@ export default function ClientLogosSection({ logos }) {
   return (
     <section className="overflow-hidden bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]">
       <div className="mx-auto max-w-[1200px] text-center">
-        <h2 className="font-heading text-3xl font-bold text-9e-navy dark:text-white lg:text-4xl">
+        <h2 className="font-heading text-[28px] font-bold text-9e-navy dark:text-white">
           องค์กรที่ให้ความไว้วางใจ
         </h2>
         <p className="mt-3 font-thai text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
@@ -106,7 +106,7 @@ function MarqueeRow({ logos, direction, speed = 40 }) {
 
   return (
     <div
-      className="relative overflow-hidden"
+      className="relative overflow-hidden max-w-[1200px] mx-auto"
       onMouseEnter={pause}
       onMouseLeave={resume}
       style={{

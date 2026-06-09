@@ -26,8 +26,6 @@ export default async function PortfolioPage() {
       <PortfolioHero />
       {/* <StatsSection /> */}
       <InhouseSection />
-      <ClientLogosSection logos={logos} />
-      <AtmosphereSection photos={photos} />
       <PortfolioCTA />
     </main>
   );
