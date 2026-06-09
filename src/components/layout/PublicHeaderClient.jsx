@@ -355,6 +355,15 @@ function DesktopMega({
     setIsOpen(false);
   }, [pathname]);
 
+  // When the panel closes, reset to the default section so it re-opens on
+  // 'programs' rather than whatever was last hovered (e.g. 'career-path').
+  useEffect(() => {
+    if (!isOpen) {
+      setCol1Active('programs');
+      setCol2HoveredKey(null);
+    }
+  }, [isOpen]);
+
   // Defaults for the Career Path / TNHS cover previews — the first row.
   // These come straight from props (no fetch), so a hover is instant.
   const defaultCareerPathPreview = cpRows[0]
@@ -371,6 +380,11 @@ function DesktopMega({
   // Default to 'programs' so the panel is never empty on first open.
   // "all" is click-only and never becomes the active section.
   const [col1Active, setCol1Active] = useState('programs'); // COL1_ITEMS key
+
+  // Tracks which Col 2 row is currently "active" (its courses are in Col 3).
+  // Needed because CSS `:hover` ends when the mouse moves to Col 3, but the
+  // row should stay highlighted while its courses are still shown.
+  const [col2HoveredKey, setCol2HoveredKey] = useState(null); // program_id or skill.upstreamId
 
   // Col 3: course list for the currently hovered program or skill
   const [col3Courses, setCol3Courses] = useState([]); // [{ course_id, course_name }]
@@ -403,6 +417,7 @@ function DesktopMega({
   // auto-load, leaving the Skills panel blank.
   useEffect(() => {
     if (!isOpen) return;
+    setCol2HoveredKey(null);
     if (col1Active === 'programs') {
       if (programs.length > 0) handleProgramHover(programs[0]);
       return;
@@ -426,6 +441,7 @@ function DesktopMega({
   // hover later overrides it via handleCourseHover.
   async function handleProgramHover(program) {
     const pid = String(program.program_id ?? program._id ?? '');
+    setCol2HoveredKey(pid); // keep this row highlighted while its courses show in Col 3
     const key = `program:${pid}`;
 
     if (coursesCache.current.has(key)) {
@@ -456,6 +472,7 @@ function DesktopMega({
   }
 
   async function handleSkillHover(skill) {
+    setCol2HoveredKey(skill.upstreamId); // keep this row highlighted while its courses show in Col 3
     const key = `skill:${skill.upstreamId}`;
 
     if (coursesCache.current.has(key)) {
@@ -601,7 +618,7 @@ function DesktopMega({
               )}
             >
               {/* ── COL 1 — Sidebar (flat 6 items) ───────────── */}
-              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pl-4 py-3 pr-2 bg-9e-signature-950">
+              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pl-4 py-3 pr-2 bg-9e-air-scale-950">
                 <ul className="flex flex-col gap-0.5">
                   {COL1_ITEMS.map((c) => {
                     const active = !c.clickOnly && col1Active === c.key;
@@ -609,8 +626,8 @@ function DesktopMega({
                     const itemClass = cn(
                       'flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors duration-9e-micro ease-9e',
                       active
-                        ? 'border-l-2 border-9e-brand bg-[var(--surface-muted)] font-medium text-9e-brand'
-                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-[var(--surface-muted)]'
+                        ? 'border-l-2 border-9e-brand bg-[var(--surface-muted)] font-medium text-9e-brand hover:bg-white'
+                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-white hover:text-9e-brand'
                     );
                     const inner = (
                       <>
@@ -654,10 +671,10 @@ function DesktopMega({
               </div>
 
               {/* ── COL 2 — Dynamic list / cards ─────────────── */}
-              <div className={'max-h-[330px] min-h-0 overflow-y-auto ' + (col1Active === 'online' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
+              <div className={'max-h-[340px] min-h-0 overflow-y-auto ' + (col1Active === 'online' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
                 {col1Active === 'programs' && (
                   <>
-                    <div className="flex items-center justify-between px-3 pb-1 pt-1">
+                    <div className="flex items-center justify-between px-3 pb-1 pt-3">
                       <span className={MEGA_COL_HEADER}>PROGRAMS</span>
                       <Link href="/training-course" onClick={closeMegaMenu} className={MEGA_SEE_ALL}>
                         ดูหลักสูตรทั้งหมด →
@@ -671,16 +688,25 @@ function DesktopMega({
                         const count =
                           coursesCache.current.get(`program:${pid}`)?.items?.length ??
                           navMenuData.programs?.[pid]?.items?.length;
+                        const isActiveRow = col2HoveredKey === pid;
                         return (
                           <li key={p._id ?? p.program_id}>
                             <Link
                               href={programHref(p)}
                               onMouseEnter={() => handleProgramHover(p)}
                               onClick={closeMegaMenu}
-                              className={MEGA_ROW}
+                              className={cn(
+                                MEGA_ROW,
+                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-brand'
+                              )}
                             >
                               <ProgramIcon src={p.programiconurl} size={20} alt={p.program_name} />
-                              <span className="flex-1 text-[var(--text-primary)]">
+                              <span
+                                className={cn(
+                                  'flex-1',
+                                  isActiveRow ? 'text-9e-brand' : 'text-[var(--text-primary)]'
+                                )}
+                              >
                                 {p.program_name}
                               </span>
                               {count > 0 && (
@@ -705,13 +731,17 @@ function DesktopMega({
                         const count =
                           coursesCache.current.get(`skill:${s.upstreamId}`)?.items?.length ??
                           navMenuData.skills?.[s.upstreamId]?.items?.length;
+                        const isActiveRow = col2HoveredKey === s.upstreamId;
                         return (
                           <li key={s.slug}>
                             <Link
                               href={`/skill/${s.slug}`}
                               onMouseEnter={() => handleSkillHover(s)}
                               onClick={closeMegaMenu}
-                              className={MEGA_ROW}
+                              className={cn(
+                                MEGA_ROW,
+                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-brand'
+                              )}
                             >
                               <Image
                                 src={s.iconUrl}
@@ -721,7 +751,14 @@ function DesktopMega({
                                 className="h-5 w-5 flex-none object-contain"
                                 unoptimized
                               />
-                              <span className="flex-1 text-[var(--text-primary)]">{s.label}</span>
+                              <span
+                                className={cn(
+                                  'flex-1',
+                                  isActiveRow ? 'text-9e-brand' : 'text-[var(--text-primary)]'
+                                )}
+                              >
+                                {s.label}
+                              </span>
                               {count > 0 && (
                                 <span className="flex-none text-[10px] text-[var(--text-muted)]">({count})</span>
                               )}
