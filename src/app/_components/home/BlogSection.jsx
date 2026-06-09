@@ -99,7 +99,7 @@ function BlogSlider({ blogs }) {
         </button>
       )}
 
-      <div className="overflow-hidden">
+      <div className="overflow-hidden pb-4">
         <div
           className="flex gap-4 transition-transform duration-300 ease-in-out"
           style={{ transform: `translateX(calc(-${index} * (100% / ${perPage} + 16px / ${perPage})))` }}

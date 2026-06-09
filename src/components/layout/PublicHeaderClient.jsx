@@ -585,14 +585,14 @@ function DesktopMega({
       >
         <div
           className={cn(
-            'max-h-[440px] max-w-[1200px] mx-auto overflow-hidden border-t shadow-9e-lg rounded-b-2xl',
+            'max-h-[350px] max-w-[1200px] mx-auto overflow-hidden border-t shadow-9e-lg rounded-b-2xl',
             'bg-[var(--surface)] border-[var(--surface-border)]'
           )}
         >
-          <div className="max-w-[1200px] px-4 py-3">
+          <div className="max-w-[1200px]">
             <div
               className={cn(
-                'grid h-[440px]',
+                'grid h-[350px]',
                 isProgSkill
                   ? 'grid-cols-[200px_240px_minmax(0,1fr)_280px]' // sidebar · list · course list · cover
                   : isCareerTnhs
@@ -601,7 +601,7 @@ function DesktopMega({
               )}
             >
               {/* ── COL 1 — Sidebar (flat 6 items) ───────────── */}
-              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pr-2">
+              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pl-4 py-3 pr-2 bg-9e-signature-950">
                 <ul className="flex flex-col gap-0.5">
                   {COL1_ITEMS.map((c) => {
                     const active = !c.clickOnly && col1Active === c.key;
@@ -654,7 +654,7 @@ function DesktopMega({
               </div>
 
               {/* ── COL 2 — Dynamic list / cards ─────────────── */}
-              <div className={'max-h-[420px] min-h-0 overflow-y-auto ' + (col1Active === 'online' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
+              <div className={'max-h-[330px] min-h-0 overflow-y-auto ' + (col1Active === 'online' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
                 {col1Active === 'programs' && (
                   <>
                     <div className="flex items-center justify-between px-3 pb-1 pt-1">
@@ -944,7 +944,7 @@ function DesktopMega({
  */
 function Col4Card({ preview, onClose }) {
   const cardClass = [
-    'group flex flex-col rounded-xl overflow-hidden',
+    'group flex flex-col rounded-xl overflow-hidden max-w-[360px] w-full mx-auto',
     'border border-[var(--surface-border)]',
     'bg-[var(--surface)]',
     'shadow-sm hover:shadow-md',
