@@ -54,6 +54,11 @@ export async function addNavFeaturedOnlineCourse(formData) {
       ? formData.get('course_cover_url').trim()
       : '';
 
+  const course_url =
+    typeof formData.get('course_url') === 'string'
+      ? formData.get('course_url').trim()
+      : '';
+
   const exists = await NavFeaturedOnlineCourse.findOne({ course_id });
   if (exists) return { ok: false, error: `${course_id} มีอยู่แล้ว` };
 
@@ -72,6 +77,7 @@ export async function addNavFeaturedOnlineCourse(formData) {
     course_id,
     course_name,
     course_cover_url,
+    course_url,
     sort_order: count,
     active: true,
   });

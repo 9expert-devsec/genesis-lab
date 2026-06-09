@@ -1,5 +1,6 @@
 import { getNavFeaturedOnlineCourses } from '@/lib/actions/nav-featured-online-courses';
 import { getOnlineCourses } from '@/lib/api/online-courses';
+import { siteConfig } from '@/config/site';
 import { AddNavFeaturedOnlineCourseForm } from './_components/AddNavFeaturedOnlineCourseForm';
 import { NavFeaturedOnlineCourseList } from './_components/NavFeaturedOnlineCourseList';
 
@@ -22,6 +23,11 @@ export default async function Page() {
         typeof c.o_course_id === 'string' ? c.o_course_id.trim() : '',
       course_name: c.o_course_name,
       course_cover_url: c.o_course_cover_url,
+      // Real Academy URL — website_urls[0], fallback to the academy home.
+      course_url:
+        Array.isArray(c.website_urls) && c.website_urls[0]
+          ? c.website_urls[0]
+          : (siteConfig.academyUrl ?? 'https://academy.9experttraining.com'),
       program: c.program
         ? {
             program_name: c.program.program_name,

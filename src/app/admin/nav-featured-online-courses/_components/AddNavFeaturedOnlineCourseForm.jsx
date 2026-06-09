@@ -58,6 +58,7 @@ export function AddNavFeaturedOnlineCourseForm({ courses = [] }) {
     fd.set('course_id', selected.course_id);
     fd.set('course_name', selected.course_name ?? '');
     fd.set('course_cover_url', selected.course_cover_url ?? '');
+    fd.set('course_url', selected.course_url ?? '');
 
     startTransition(async () => {
       const result = await addNavFeaturedOnlineCourse(fd);

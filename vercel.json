@@ -5,6 +5,10 @@
       "schedule": "0 */3 * * *"
     },
     {
+      "path": "/api/cron/navmenu-sync",
+      "schedule": "0 */3 * * *"
+    },
+    {
       "path": "/api/cron/promotions-sync",
       "schedule": "0 */6 * * *"
     },

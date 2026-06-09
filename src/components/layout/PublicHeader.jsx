@@ -3,6 +3,7 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { getActiveTnhsCourses } from '@/lib/actions/tnhs-courses';
 import { getActiveNavFeaturedOnlineCourses } from '@/lib/actions/nav-featured-online-courses';
+import { getNavMenuData } from '@/lib/navmenu/getNavMenuData';
 import { PublicHeaderClient } from './PublicHeaderClient';
 
 /**
@@ -21,7 +22,7 @@ import { PublicHeaderClient } from './PublicHeaderClient';
  * the mega trigger degrades to a plain link, the dropdown to config.
  */
 export async function PublicHeader() {
-  const [programs, dynamicCareerPaths, tnhsCourses, navOnlineCourses] =
+  const [programs, dynamicCareerPaths, tnhsCourses, navOnlineCourses, navMenuData] =
     await Promise.all([
       listPrograms()
         .then((result) => getOrderedPrograms(result.items))
@@ -41,6 +42,10 @@ export async function PublicHeader() {
         console.error('[PublicHeader] failed to fetch nav online courses:', err);
         return [];
       }),
+      getNavMenuData().catch((err) => {
+        console.error('[PublicHeader] failed to fetch nav menu cache:', err);
+        return { programs: {}, skills: {} };
+      }),
     ]);
 
   return (
@@ -49,6 +54,7 @@ export async function PublicHeader() {
       dynamicCareerPaths={dynamicCareerPaths}
       tnhsCourses={tnhsCourses}
       navOnlineCourses={navOnlineCourses}
+      navMenuData={navMenuData}
     />
   );
 }

@@ -14,6 +14,7 @@ const NavFeaturedOnlineCourseSchema = new mongoose.Schema(
     course_id:        { type: String, required: true, trim: true, unique: true },
     course_name:      { type: String, required: true },
     course_cover_url: { type: String, default: '' },
+    course_url:       { type: String, default: '' }, // Academy link — website_urls[0] from API
     sort_order:       { type: Number, default: 0 },
     active:           { type: Boolean, default: true },
   },
