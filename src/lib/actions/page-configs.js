@@ -90,6 +90,9 @@ export async function saveProgramConfig(programId, data) {
     revalidatePath(ADMIN_PATH);
     if (update.urlSlug) revalidatePath(`/program/${update.urlSlug}`);
     revalidatePath(`/program/${programId}`);
+    // Bust the public layout so the nav (PublicHeader) picks up the new
+    // custom slug immediately instead of waiting for the next cron sync.
+    revalidatePath('/', 'layout');
     return { ok: true, data: serialize(doc) };
   } catch (err) {
     if (err?.code === 11000) {
@@ -104,6 +107,8 @@ export async function deleteProgramConfig(programId) {
   await dbConnect();
   await ProgramPageConfig.deleteOne({ programId });
   revalidatePath(ADMIN_PATH);
+  revalidatePath(`/program/${programId}`);
+  revalidatePath('/', 'layout'); // bust the nav so the slug reverts to default
   return { ok: true };
 }
 
@@ -149,6 +154,9 @@ export async function saveSkillConfig(skillId, data) {
     revalidatePath(ADMIN_PATH);
     if (update.urlSlug) revalidatePath(`/skill/${update.urlSlug}`);
     revalidatePath(`/skill/${skillId}`);
+    // Bust the public layout so the nav (PublicHeader) picks up the new
+    // custom slug immediately instead of waiting for the next cron sync.
+    revalidatePath('/', 'layout');
     return { ok: true, data: serialize(doc) };
   } catch (err) {
     if (err?.code === 11000) {
@@ -163,5 +171,7 @@ export async function deleteSkillConfig(skillId) {
   await dbConnect();
   await SkillPageConfig.deleteOne({ skillId });
   revalidatePath(ADMIN_PATH);
+  revalidatePath(`/skill/${skillId}`);
+  revalidatePath('/', 'layout'); // bust the nav so the slug reverts to default
   return { ok: true };
 }

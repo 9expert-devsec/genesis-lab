@@ -1,31 +1,27 @@
-import {
-  getActiveClientLogos,
-  getActiveAtmospherePhotos,
-} from '@/lib/actions/portfolio';
 import PortfolioHero from '@/components/portfolio/PortfolioHero';
-import StatsSection from '@/components/portfolio/StatsSection';
-import InhouseSection from '@/components/portfolio/InhouseSection';
-import ClientLogosSection from '@/components/portfolio/ClientLogosSection';
-import AtmosphereSection from '@/components/portfolio/AtmosphereSection';
+import PortfolioStats from '@/components/portfolio/PortfolioStats';
+import TrainingSection from '@/components/portfolio/TrainingSection';
+import ConsultingSection from '@/components/portfolio/ConsultingSection';
+import AwardsSection from '@/components/portfolio/AwardsSection';
+import CommunitySection from '@/components/portfolio/CommunitySection';
 import PortfolioCTA from '@/components/portfolio/PortfolioCTA';
 
 export const metadata = {
   title: 'ผลงานของเรา | 9Expert Training',
   description:
-    'ผลงานของ 9Expert Training ให้บริการอบรมองค์กรชั้นนำกว่า 5,000 แห่ง ผู้เรียนกว่า 90,000 คน',
+    'ผลงานด้านการฝึกอบรม ที่ปรึกษา รางวัล และ Community ของ 9Expert Training ' +
+    'สถาบันฝึกอบรมเทคโนโลยีชั้นนำที่ให้บริการองค์กรกว่า 5,000 แห่งทั่วประเทศ',
 };
 
-export default async function PortfolioPage() {
-  const [logos, photos] = await Promise.all([
-    getActiveClientLogos(),
-    getActiveAtmospherePhotos(),
-  ]);
-
+export default function PortfolioPage() {
   return (
     <main>
       <PortfolioHero />
-      {/* <StatsSection /> */}
-      <InhouseSection />
+      <PortfolioStats />
+      <TrainingSection />
+      <ConsultingSection />
+      <AwardsSection />
+      <CommunitySection />
       <PortfolioCTA />
     </main>
   );

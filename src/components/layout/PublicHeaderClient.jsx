@@ -69,7 +69,7 @@ export function PublicHeaderClient({
   dynamicCareerPaths = [],
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Gate the portal until after first client render — `document.body`
@@ -172,6 +172,7 @@ export function PublicHeaderClient({
           dynamicCareerPaths={dynamicCareerPaths}
           tnhsCourses={tnhsCourses}
           navOnlineCourses={navOnlineCourses}
+          navMenuData={navMenuData}
           onClose={() => setDrawerOpen(false)}
         />,
         document.body
@@ -276,12 +277,29 @@ function DesktopDropdown({ item }) {
 }
 
 /**
- * Build the public /program/[slug] URL for a mega-menu entry. Uses
- * kebab-case of `program_name`; admins can override with a custom
- * urlSlug via /admin/page-configs (the resolver tries that first).
+ * Build the public /program/[slug] URL for a mega-menu entry. Prefers the
+ * admin-managed custom `urlSlug` (from ProgramPageConfig, passed in as
+ * `slugMap` keyed by lower-cased program_id/_id); falls back to the
+ * kebab-case of `program_name` when no custom slug exists. `slugMap`
+ * defaults to {} so the function stays backward-compatible.
  */
-function programHref(program) {
+function programHref(program, slugMap = {}) {
+  for (const id of [program.program_id, program._id]) {
+    if (!id) continue;
+    const custom = slugMap[String(id).toLowerCase()];
+    if (custom) return `/program/${custom}`;
+  }
   return `/program/${toKebab(program.program_name)}`;
+}
+
+/**
+ * Build the public /skill/[slug] URL for a mega-menu entry. Prefers the
+ * admin-managed custom `urlSlug` (keyed by the skill's lower-cased
+ * upstreamId); falls back to the static config `slug`.
+ */
+function skillHref(skill, slugMap = {}) {
+  const custom = slugMap[skill.upstreamId?.toLowerCase?.()];
+  return `/skill/${custom ?? skill.slug}`;
 }
 
 function ProgramIcon({ src, size, alt }) {
@@ -338,7 +356,7 @@ function DesktopMega({
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
 }) {
   const cpRows = careerPathRows(dynamicCareerPaths);
   const hasPrograms = programs.length > 0;
@@ -692,7 +710,7 @@ function DesktopMega({
                         return (
                           <li key={p._id ?? p.program_id}>
                             <Link
-                              href={programHref(p)}
+                              href={programHref(p, navMenuData?.programSlugs ?? {})}
                               onMouseEnter={() => handleProgramHover(p)}
                               onClick={closeMegaMenu}
                               className={cn(
@@ -735,7 +753,7 @@ function DesktopMega({
                         return (
                           <li key={s.slug}>
                             <Link
-                              href={`/skill/${s.slug}`}
+                              href={skillHref(s, navMenuData?.skillSlugs ?? {})}
                               onMouseEnter={() => handleSkillHover(s)}
                               onClick={closeMegaMenu}
                               className={cn(
@@ -1064,6 +1082,7 @@ function MobileDrawer({
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
   onClose,
 }) {
   // Always mounted so the translate-x slide animation has a stable
@@ -1116,6 +1135,7 @@ function MobileDrawer({
                   dynamicCareerPaths={dynamicCareerPaths}
                   tnhsCourses={tnhsCourses}
                   navOnlineCourses={navOnlineCourses}
+                  navMenuData={navMenuData}
                   onNavigate={onClose}
                 />
               );
@@ -1239,6 +1259,7 @@ function MobileMegaAccordion({
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
   onNavigate,
 }) {
   const [open, setOpen] = useState(false);
@@ -1281,7 +1302,7 @@ function MobileMegaAccordion({
             {programs.map((p) => (
               <Link
                 key={p._id ?? p.program_id}
-                href={programHref(p)}
+                href={programHref(p, navMenuData?.programSlugs ?? {})}
                 onClick={onNavigate}
                 className={rowClass}
               >
@@ -1296,7 +1317,7 @@ function MobileMegaAccordion({
             {skills.map((s) => (
               <Link
                 key={s.slug}
-                href={`/skill/${s.slug}`}
+                href={skillHref(s, navMenuData?.skillSlugs ?? {})}
                 onClick={onNavigate}
                 className={rowClass}
               >

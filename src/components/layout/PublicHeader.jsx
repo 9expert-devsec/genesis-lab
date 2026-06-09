@@ -44,7 +44,7 @@ export async function PublicHeader() {
       }),
       getNavMenuData().catch((err) => {
         console.error('[PublicHeader] failed to fetch nav menu cache:', err);
-        return { programs: {}, skills: {} };
+        return { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} };
       }),
     ]);
 
