@@ -1,38 +1,38 @@
-'use client';
+"use client";
 
-import { useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Award, Star, Youtube, ExternalLink } from 'lucide-react';
+import { useRef } from "react";
+import { motion } from "framer-motion";
+import { Award, Star, Youtube, ExternalLink } from "lucide-react";
 
 const AWARDS = [
   {
-    num: '01',
+    num: "01",
     Icon: Award,
-    title: 'Microsoft MVP — Power BI',
-    subtitle: 'Microsoft Most Valuable Professional ด้าน Power BI',
-    badge: 'Microsoft',
-    link: 'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333',
+    title: "Microsoft MVP — Power BI",
+    subtitle: "Microsoft Most Valuable Professional ด้าน Power BI",
+    badge: "Microsoft",
+    link: "https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333",
   },
   {
-    num: '02',
+    num: "02",
     Icon: Star,
-    title: 'Microsoft MVP — M365 Copilot',
-    subtitle: 'Microsoft Most Valuable Professional AI & Productivity Expert',
-    badge: 'AI Expert',
-    link: 'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333',
+    title: "Microsoft MVP — M365 Copilot",
+    subtitle: "Microsoft Most Valuable Professional AI & Productivity Expert",
+    badge: "AI Expert",
+    link: "https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333",
   },
   {
-    num: '03',
+    num: "03",
     Icon: Youtube,
-    title: 'YouTube Silver Creator Award',
-    subtitle: 'Silver Play Button จาก Channel 9Expert',
-    badge: '250K+ Subscribers',
-    link: 'https://www.youtube.com/@9expert',
+    title: "YouTube Silver Creator Award",
+    subtitle: "Silver Play Button จาก Channel 9Expert",
+    badge: "250K+ Subscribers",
+    link: "https://www.youtube.com/@9expert",
   },
 ];
 
 const MVP_PROFILE =
-  'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333';
+  "https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333";
 
 const GLOW_STYLES = `
   .award-card-glow {
@@ -86,8 +86,8 @@ function AwardCard({ award, index }) {
     if (!rect) return;
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    cardRef.current.style.setProperty('--mx', `${x}%`);
-    cardRef.current.style.setProperty('--my', `${y}%`);
+    cardRef.current.style.setProperty("--mx", `${x}%`);
+    cardRef.current.style.setProperty("--my", `${y}%`);
   };
 
   const Icon = award.Icon;
@@ -98,13 +98,13 @@ function AwardCard({ award, index }) {
       onPointerMove={handlePointerMove}
       initial={{ opacity: 0, y: 28 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-60px' }}
+      viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.5, delay: index * 0.12 }}
-      className="award-card-glow relative isolate min-h-[230px] overflow-hidden rounded-9e-lg p-[34px]"
-      style={{ background: 'rgba(255,255,255,0.035)' }}
+      className="award-card-glow relative isolate min-h-[230px] overflow-hidden rounded-9e-lg p-[34px] text-white/[0.05] hover:text-9e-lime"
+      style={{ background: "rgba(255,255,255,0.035)" }}
     >
       {/* Large background number */}
-      <div className="absolute right-6 top-3 select-none font-en text-[82px] font-black leading-none tracking-tighter text-white/[0.05] transition-colors duration-300">
+      <div className="absolute right-6 top-3 select-none font-en text-[82px] font-bold leading-none tracking-tighter transition-colors duration-300">
         {award.num}
       </div>
 
@@ -113,7 +113,7 @@ function AwardCard({ award, index }) {
         <Icon className="h-8 w-8 text-9e-lime" strokeWidth={1.5} />
       </div>
 
-      <h3 className="font-heading text-[22px] font-black leading-tight tracking-tight text-white transition-colors duration-300">
+      <h3 className="font-heading text-[22px] font-bold leading-tight tracking-tight text-white transition-colors duration-300">
         {award.title}
       </h3>
       <p className="mb-[18px] mt-2.5 font-thai text-sm leading-relaxed text-[#bdd1e6] transition-colors duration-300">
@@ -124,7 +124,7 @@ function AwardCard({ award, index }) {
         href={award.link}
         target="_blank"
         rel="noopener noreferrer"
-        className="award-badge-el inline-flex rounded-full border border-9e-lime/45 px-3 py-1.5 font-en text-[12px] font-black text-9e-lime transition-all duration-300"
+        className="award-badge-el inline-flex rounded-full border border-9e-lime/45 px-3 py-1.5 font-en text-[12px] font-bold text-9e-lime transition-all duration-300"
       >
         {award.badge}
       </a>
@@ -143,18 +143,18 @@ export default function AwardsSection() {
         className="pointer-events-none absolute inset-0"
         style={{
           backgroundImage:
-            'radial-gradient(rgba(72,176,255,0.08) 1px, transparent 1px)',
-          backgroundSize: '32px 32px',
+            "radial-gradient(rgba(72,176,255,0.08) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
         }}
       />
 
-      <div className="relative z-10 mx-auto max-w-[1200px] px-4">
+      <div className="relative z-10 mx-auto max-w-[1200px]">
         {/* Header */}
         <div className="mb-14 text-center">
-          <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-brand">
+          <p className="font-en text-xs font-bold uppercase tracking-[2px] text-9e-brand">
             AWARDS &amp; RECOGNITION
           </p>
-          <h2 className="mt-3 font-heading text-4xl font-black text-white">
+          <h2 className="mt-3 font-heading text-4xl font-bold text-white">
             รางวัลและการรับรอง
           </h2>
           <p className="mt-3 font-thai text-sm text-9e-slate-dp-600">
@@ -175,7 +175,7 @@ export default function AwardsSection() {
             href={MVP_PROFILE}
             target="_blank"
             rel="noopener noreferrer"
-            className="mx-auto inline-flex w-fit items-center gap-2 rounded-full border border-9e-lime/45 px-[22px] py-[13px] font-en text-sm font-black text-9e-lime transition-all duration-200 hover:bg-9e-lime/10"
+            className="mx-auto inline-flex w-fit items-center gap-2 rounded-full border border-9e-lime/45 px-[22px] py-[13px] font-en text-sm font-bold text-9e-lime transition-all duration-200 hover:bg-9e-lime/10"
           >
             ดู Microsoft MVP Profile บน Microsoft.com
             <ExternalLink className="h-3.5 w-3.5" />

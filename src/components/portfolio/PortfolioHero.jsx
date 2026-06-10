@@ -49,7 +49,7 @@ export default function PortfolioHero() {
       />
 
       {/* Content */}
-      <div className="relative z-10 mx-auto flex min-h-[460px] max-w-4xl flex-col items-center gap-7 px-4 py-24 text-center">
+      <div className="relative z-10 mx-auto flex max-w-4xl flex-col items-center gap-7 px-4 py-24 text-center">
         {/* A. Label badge */}
         {/* <motion.div
           initial={{ opacity: 0, y: -14 }}
@@ -64,7 +64,7 @@ export default function PortfolioHero() {
         </motion.div> */}
 
         {/* B. Headline */}
-        <h1 className="font-heading text-5xl font-bold">
+        <h1 className="font-heading text-5xl font-bold leading-tight">
           <motion.span
             initial={{ opacity: 0, y: 28 }}
             animate={{ opacity: 1, y: 0 }}
@@ -94,16 +94,16 @@ export default function PortfolioHero() {
         </motion.p>
 
         {/* D. Divider */}
-        <motion.div
+        {/* <motion.div
           aria-hidden
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
           transition={{ duration: dur(0.7), delay: delay(0.5), ease: [0.4, 0, 0.2, 1] }}
           className="h-px w-56 bg-gradient-to-r from-transparent via-9e-action to-transparent"
-        />
+        /> */}
 
         {/* E. Floating stat cards */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0, y: 36 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: dur(0.6), delay: delay(0.65) }}
@@ -134,7 +134,7 @@ export default function PortfolioHero() {
               </motion.div>
             ))}
           </motion.div>
-        </motion.div>
+        </motion.div> */}
       </div>
     </section>
   );
