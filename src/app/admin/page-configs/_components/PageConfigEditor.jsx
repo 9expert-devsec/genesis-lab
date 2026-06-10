@@ -64,8 +64,12 @@ export function PageConfigEditor({ kind, items, configs, urlPrefix }) {
 }
 
 function Row({ item, config, urlPrefix, isOpen, onToggle }) {
-  const slug = config?.urlSlug || item.id.toLowerCase();
   const isCustomSlug = Boolean(config?.urlSlug);
+  // Custom slugs now render at the bare URL (no /program or /skill
+  // prefix); only the default fallback keeps the prefix.
+  const previewUrl = isCustomSlug
+    ? `/${config.urlSlug}`
+    : `${urlPrefix}${item.id.toLowerCase()}`;
   return (
     <button
       type="button"
@@ -88,7 +92,6 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
           </span>
         </p>
         <p className="truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          {urlPrefix}
           <span
             className={
               isCustomSlug
@@ -96,7 +99,7 @@ function Row({ item, config, urlPrefix, isOpen, onToggle }) {
                 : 'italic text-9e-slate-dp-50'
             }
           >
-            {slug}
+            {previewUrl}
           </span>
           {!isCustomSlug && ' (default)'}
         </p>

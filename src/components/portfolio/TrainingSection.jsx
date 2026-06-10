@@ -14,7 +14,8 @@ const TRAINING_ITEMS = [
     tag: 'Public Training',
     tagBg: 'bg-9e-brand text-white',
     accentHex: '#2486FF',
-    image: '/port/public_0.jpg',
+    image:
+      'https://res.cloudinary.com/ddva7xvdt/image/upload/v1778228610/9exp-genesis/atmosphere-photos/e4bvkvg6jxgvv33rxb6z.jpg',
     href: '/training-course',
   },
   {
@@ -72,7 +73,7 @@ function ActiveContent({ item }) {
       >
         {item.tag}
       </span>
-      <h3 className="font-heading text-xl font-bold leading-tight text-white">
+      <h3 className="font-heading text-3xl font-bold leading-tight text-white">
         {item.title}
       </h3>
       <p className="mt-2 line-clamp-3 font-thai text-sm leading-relaxed text-white/70">
@@ -112,7 +113,7 @@ export default function TrainingSection() {
         initial={{ opacity: 0, y: 32 }}
         animate={inView ? { opacity: 1, y: 0 } : {}}
         transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        className="mx-auto hidden h-[480px] max-w-[1200px] gap-1.5 px-4 md:flex"
+        className="mx-auto hidden h-[480px] max-w-[1200px] px-4 md:flex"
       >
         {TRAINING_ITEMS.map((item, i) => {
           const isActive = i === active;
@@ -121,7 +122,7 @@ export default function TrainingSection() {
               key={item.title}
               onClick={() => setActive(i)}
               style={{ borderTopColor: item.accentHex }}
-              className={`group relative cursor-pointer overflow-hidden rounded-9e-lg border-t-2 bg-9e-navy transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+              className={`group relative cursor-pointer overflow-hidden border-t-2 bg-9e-navy hover:bg-9e-action transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${
                 isActive ? 'flex-[5]' : 'flex-1'
               }`}
             >
@@ -129,25 +130,25 @@ export default function TrainingSection() {
                 src={item.image}
                 alt={item.title}
                 className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105 ${
-                  isActive ? 'opacity-35' : 'opacity-25'
+                  isActive ? 'opacity-100' : 'opacity-25'
                 }`}
               />
 
               {isActive ? (
                 <>
-                  <div className="absolute inset-0 bg-gradient-to-t from-9e-navy via-9e-navy/80 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-9e-action via-9e-navy/20 to-transparent" />
                   <ActiveContent item={item} />
                 </>
               ) : (
                 <>
                   <div className="absolute inset-0 bg-gradient-to-t from-9e-navy/95 to-9e-navy/50" />
-                  <span className="absolute left-4 top-4 font-en text-xs text-white/30">
+                  <span className="absolute left-4 top-4 font-en text-sm text-white/80">
                     {item.num}
                   </span>
-                  <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+                  <div className="absolute bottom-6 left-6 right-0 flex">
                     <span
                       style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
-                      className="font-heading text-sm font-semibold tracking-wide text-white/70"
+                      className="font-heading text-2xl font-semibold tracking-wide text-white/70"
                     >
                       {item.title}
                     </span>

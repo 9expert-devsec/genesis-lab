@@ -5,6 +5,7 @@ import ConsultingSection from '@/components/portfolio/ConsultingSection';
 import AwardsSection from '@/components/portfolio/AwardsSection';
 import CommunitySection from '@/components/portfolio/CommunitySection';
 import PortfolioCTA from '@/components/portfolio/PortfolioCTA';
+import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 
 export const metadata = {
   title: 'ผลงานของเรา | 9Expert Training',
@@ -18,10 +19,11 @@ export default function PortfolioPage() {
     <main>
       <PortfolioHero />
       <PortfolioStats />
-      <TrainingSection />
-      <ConsultingSection />
-      <AwardsSection />
-      <CommunitySection />
+      <PortfolioSectionNav />
+      <section id="learning"><TrainingSection /></section>
+      <section id="consulting"><ConsultingSection /></section>
+      <section id="awards"><AwardsSection /></section>
+      <section id="community"><CommunitySection /></section>
       <PortfolioCTA />
     </main>
   );

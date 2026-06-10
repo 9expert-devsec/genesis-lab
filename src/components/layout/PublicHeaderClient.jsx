@@ -277,29 +277,30 @@ function DesktopDropdown({ item }) {
 }
 
 /**
- * Build the public /program/[slug] URL for a mega-menu entry. Prefers the
- * admin-managed custom `urlSlug` (from ProgramPageConfig, passed in as
- * `slugMap` keyed by lower-cased program_id/_id); falls back to the
- * kebab-case of `program_name` when no custom slug exists. `slugMap`
- * defaults to {} so the function stays backward-compatible.
+ * Build the public URL for a program mega-menu entry. An admin-set custom
+ * `urlSlug` (from ProgramPageConfig, passed in as `slugMap` keyed by
+ * lower-cased program_id/_id) now renders at the bare slug — no /program
+ * prefix. Programs without a custom slug fall back to the legacy
+ * /program/<kebab> path. `slugMap` defaults to {} for backward-compat.
  */
 function programHref(program, slugMap = {}) {
   for (const id of [program.program_id, program._id]) {
     if (!id) continue;
     const custom = slugMap[String(id).toLowerCase()];
-    if (custom) return `/program/${custom}`;
+    if (custom) return `/${custom}`;
   }
   return `/program/${toKebab(program.program_name)}`;
 }
 
 /**
- * Build the public /skill/[slug] URL for a mega-menu entry. Prefers the
- * admin-managed custom `urlSlug` (keyed by the skill's lower-cased
- * upstreamId); falls back to the static config `slug`.
+ * Build the public URL for a skill mega-menu entry. An admin-set custom
+ * `urlSlug` (keyed by the skill's lower-cased upstreamId) renders at the
+ * bare slug — no /skill prefix. Skills without one fall back to the
+ * legacy /skill/<slug> path from the static config.
  */
 function skillHref(skill, slugMap = {}) {
   const custom = slugMap[skill.upstreamId?.toLowerCase?.()];
-  return `/skill/${custom ?? skill.slug}`;
+  return custom ? `/${custom}` : `/skill/${skill.slug}`;
 }
 
 function ProgramIcon({ src, size, alt }) {

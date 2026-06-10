@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
@@ -17,54 +17,52 @@ function courseInSkill(course, skillId) {
   });
 }
 
-async function loadSkillAndCourses(slug) {
-  const [skillsRes, programsRes, coursesRes] = await Promise.all([
-    listSkills().catch(() => ({ items: [] })),
+/**
+ * /skill/[slug] is now a transitional route. When the skill has an
+ * admin-set custom `urlSlug`, the canonical page lives at /<urlSlug> via
+ * the catch-all route, so we redirect there. Skills without a custom
+ * slug keep rendering inline here (canonical stays /skill/<slug>).
+ */
+export default async function SkillPage({ params }) {
+  const { slug } = await params;
+  const skillsRes = await listSkills().catch(() => ({ items: [] }));
+  const skills = skillsRes.items ?? [];
+
+  const resolved = await resolveSkillBySlug(slug, skills);
+  if (!resolved) notFound();
+  if (resolved.config?.isPublished === false) notFound();
+
+  const custom = resolved.config?.urlSlug?.trim();
+  if (custom) redirect(`/${custom}`);
+
+  // No custom slug — render inline under /skill/<slug>.
+  const { skill } = resolved;
+  const skillId = String(skill._id);
+  const [programsRes, coursesRes] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
   ]);
-  const skills = skillsRes.items ?? [];
-  const programs = programsRes.items ?? [];
-  const allCourses = coursesRes.items ?? [];
 
-  const resolved = await resolveSkillBySlug(slug, skills);
-  if (!resolved) return null;
-  const { skill, config } = resolved;
-  const skillId = String(skill._id);
-
-  // Enrich first so we have full skill objects on each course; the
-  // list response only has ObjectId strings.
-  const enriched = await enrichCoursesWithDetails(allCourses);
+  const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
   const skillCourses = enriched.filter((c) => courseInSkill(c, skillId));
 
-  // Group by program, then sort groups by admin-set program order.
-  const ordered = await getOrderedPrograms(programs).catch(() => programs);
+  const ordered = await getOrderedPrograms(programsRes.items ?? []).catch(
+    () => programsRes.items ?? []
+  );
   const coursesByProgram = ordered
-    .map((prog) => {
-      const progKey = String(prog._id);
-      return {
-        program: prog,
-        courses: skillCourses.filter(
-          (c) => String(c?.program?._id ?? '') === progKey
-        ),
-      };
-    })
+    .map((prog) => ({
+      program: prog,
+      courses: skillCourses.filter(
+        (c) => String(c?.program?._id ?? '') === String(prog._id)
+      ),
+    }))
     .filter((g) => g.courses.length > 0);
-
-  return { skill, config, coursesByProgram, totalCourses: skillCourses.length };
-}
-
-export default async function SkillPage({ params }) {
-  const { slug } = await params;
-  const data = await loadSkillAndCourses(slug);
-  if (!data) notFound();
-  if (data.config && data.config.isPublished === false) notFound();
 
   return (
     <SkillPageClient
-      skill={data.skill}
-      coursesByProgram={data.coursesByProgram}
-      totalCourses={data.totalCourses}
+      skill={skill}
+      coursesByProgram={coursesByProgram}
+      totalCourses={skillCourses.length}
     />
   );
 }
@@ -96,4 +94,3 @@ export async function generateMetadata({ params }) {
     },
   };
 }
-

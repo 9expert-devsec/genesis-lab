@@ -26,7 +26,17 @@ import { CoursePromoSection } from './_components/CoursePromoSection';
 import {
   getEarlyBirdByCourse,
   getActiveCoursePromos,
+  getAllActiveEarlyBirdMap,
 } from '@/lib/actions/course-promos';
+import { dbConnect } from '@/lib/db/connect';
+import ProgramPageConfig from '@/models/ProgramPageConfig';
+import SkillPageConfig from '@/models/SkillPageConfig';
+import { resolveProgramBySlug, resolveSkillBySlug } from '@/lib/resolvePageSlug';
+import { listSkills } from '@/lib/api/skills';
+import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
+import { getOrderedPrograms } from '@/lib/actions/program-order';
+import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
+import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -50,10 +60,148 @@ function segmentFromSlug(slug) {
   return segment;
 }
 
+// ── Program / skill pretty-URL pages ────────────────────────────────
+// These used to live under /program/[slug] and /skill/[slug]; they now
+// render at the bare slug (e.g. /canva, /power-bi-all-courses) matched
+// by the admin custom `urlSlug` only. A cheap indexed probe on the
+// *PageConfig collection short-circuits the common case (course aliases
+// hitting this catch-all) before any heavier list/enrich work runs, so
+// existing course pages pay almost nothing for this addition.
+
+async function loadProgram(slug) {
+  await dbConnect();
+  const cfg = await ProgramPageConfig.findOne({ urlSlug: slug }).lean();
+  if (!cfg || cfg.isPublished === false) return null;
+
+  const [programsRes, coursesRes, earlyBirdMap] = await Promise.all([
+    listPrograms().catch(() => ({ items: [] })),
+    listPublicCourses().catch(() => ({ items: [] })),
+    getAllActiveEarlyBirdMap().catch(() => ({})),
+  ]);
+
+  const resolved = await resolveProgramBySlug(slug, programsRes.items ?? []);
+  if (!resolved) return null;
+
+  const { program, config } = resolved;
+  const programKey = String(program._id);
+  const programCourses = (coursesRes.items ?? []).filter(
+    (c) => String(c?.program?._id ?? '') === programKey
+  );
+  const courses = await enrichCoursesWithDetails(programCourses);
+  return { program, config, courses, earlyBirdMap };
+}
+
+function courseInSkill(course, skillId) {
+  const arr = Array.isArray(course?.skills) ? course.skills : [];
+  return arr.some((s) => {
+    if (typeof s === 'string') return s === skillId;
+    return s?._id === skillId || s?.skill_id === skillId;
+  });
+}
+
+async function loadSkill(slug) {
+  await dbConnect();
+  const cfg = await SkillPageConfig.findOne({ urlSlug: slug }).lean();
+  if (!cfg || cfg.isPublished === false) return null;
+
+  const [skillsRes, programsRes, coursesRes] = await Promise.all([
+    listSkills().catch(() => ({ items: [] })),
+    listPrograms().catch(() => ({ items: [] })),
+    listPublicCourses().catch(() => ({ items: [] })),
+  ]);
+
+  const resolved = await resolveSkillBySlug(slug, skillsRes.items ?? []);
+  if (!resolved) return null;
+
+  const { skill, config } = resolved;
+  const skillId = String(skill._id);
+  const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
+  const skillCourses = enriched.filter((c) => courseInSkill(c, skillId));
+
+  const ordered = await getOrderedPrograms(programsRes.items ?? []).catch(
+    () => programsRes.items ?? []
+  );
+  const coursesByProgram = ordered
+    .map((prog) => ({
+      program: prog,
+      courses: skillCourses.filter(
+        (c) => String(c?.program?._id ?? '') === String(prog._id)
+      ),
+    }))
+    .filter((g) => g.courses.length > 0);
+
+  return { skill, config, coursesByProgram, totalCourses: skillCourses.length };
+}
+
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
+
+  // Program / skill custom-slug metadata. Cheap indexed probe first so
+  // course-alias hits don't pay for the program/skill list fetches.
+  if (
+    !segment.endsWith('-training-course') &&
+    !segment.endsWith('-career-path')
+  ) {
+    await dbConnect();
+    const [progCfg, skillCfg] = await Promise.all([
+      ProgramPageConfig.findOne({ urlSlug: segment }).lean(),
+      SkillPageConfig.findOne({ urlSlug: segment }).lean(),
+    ]);
+
+    if (progCfg && progCfg.isPublished !== false) {
+      const programsRes = await listPrograms().catch(() => ({ items: [] }));
+      const resolved = await resolveProgramBySlug(segment, programsRes.items ?? []);
+      if (resolved) {
+        const { program, config } = resolved;
+        const title =
+          config?.metaTitle?.trim() ||
+          `${program.program_name} | 9Expert Training`;
+        const description =
+          config?.metaDescription?.trim() ||
+          program.program_description ||
+          program.program_teaser ||
+          '';
+        const ogImage = config?.ogImage?.trim() || program.programiconurl || '';
+        return {
+          title,
+          description,
+          openGraph: {
+            title,
+            description,
+            images: ogImage ? [{ url: ogImage }] : [],
+          },
+        };
+      }
+    }
+
+    if (skillCfg && skillCfg.isPublished !== false) {
+      const skillsRes = await listSkills().catch(() => ({ items: [] }));
+      const resolved = await resolveSkillBySlug(segment, skillsRes.items ?? []);
+      if (resolved) {
+        const { skill, config } = resolved;
+        const title =
+          config?.metaTitle?.trim() ||
+          `${skill.skill_name} | 9Expert Training`;
+        const description =
+          config?.metaDescription?.trim() ||
+          skill.skill_description ||
+          skill.skill_teaser ||
+          '';
+        const ogImage = config?.ogImage?.trim() || skill.skilliconurl || '';
+        return {
+          title,
+          description,
+          openGraph: {
+            title,
+            description,
+            images: ogImage ? [{ url: ogImage }] : [],
+          },
+        };
+      }
+    }
+  }
 
   // Career-path detail pages live under this catch-all too; resolve them
   // first so their metadata wins over any accidental course-name collision.
@@ -109,6 +257,38 @@ export default async function CatchAllPage({ params }) {
   const segment = segmentFromSlug(slug);
 
   if (!segment) notFound();
+
+  // Program / skill pretty-URL pages (custom admin slug, no prefix).
+  // Skip obvious course / career-path suffixes so we don't probe the DB
+  // on every course-alias hit. The probe inside loadProgram/loadSkill
+  // makes a non-custom slug fall straight through to the logic below.
+  if (
+    !segment.endsWith('-training-course') &&
+    !segment.endsWith('-career-path')
+  ) {
+    const programData = await loadProgram(segment);
+    if (programData) {
+      return (
+        <ProgramPageClient
+          program={programData.program}
+          config={programData.config}
+          courses={programData.courses}
+          earlyBirdMap={programData.earlyBirdMap}
+        />
+      );
+    }
+
+    const skillData = await loadSkill(segment);
+    if (skillData) {
+      return (
+        <SkillPageClient
+          skill={skillData.skill}
+          coursesByProgram={skillData.coursesByProgram}
+          totalCourses={skillData.totalCourses}
+        />
+      );
+    }
+  }
 
   // Career-path detail — handled before course resolution so the
   // `-career-path` suffix can't accidentally match a course alias.

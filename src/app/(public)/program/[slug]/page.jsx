@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
@@ -8,42 +8,47 @@ import { ProgramPageClient } from './_components/ProgramPageClient';
 
 export const revalidate = 3600;
 
-async function loadProgramAndCourses(slug) {
-  const [programsRes, coursesRes, earlyBirdMap] = await Promise.all([
-    listPrograms().catch(() => ({ items: [] })),
+/**
+ * /program/[slug] is now a transitional route. When the program has an
+ * admin-set custom `urlSlug`, the canonical page lives at /<urlSlug> via
+ * the catch-all route, so we redirect there. Programs without a custom
+ * slug keep rendering inline here (canonical stays /program/<slug>), so
+ * existing links never break.
+ *
+ * We resolve the config first and redirect before doing the heavier
+ * course/early-bird fetches, so a redirect doesn't pay for work it
+ * throws away.
+ */
+export default async function ProgramPage({ params }) {
+  const { slug } = await params;
+  const programsRes = await listPrograms().catch(() => ({ items: [] }));
+  const programs = programsRes.items ?? [];
+
+  const resolved = await resolveProgramBySlug(slug, programs);
+  if (!resolved) notFound();
+  if (resolved.config?.isPublished === false) notFound();
+
+  const custom = resolved.config?.urlSlug?.trim();
+  if (custom) redirect(`/${custom}`);
+
+  // No custom slug — render inline under /program/<slug>.
+  const { program, config } = resolved;
+  const [coursesRes, earlyBirdMap] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
   ]);
-  const programs = programsRes.items ?? [];
-  const allCourses = coursesRes.items ?? [];
-
-  const resolved = await resolveProgramBySlug(slug, programs);
-  if (!resolved) return null;
-
-  const { program, config } = resolved;
   const programKey = String(program._id);
-
-  // Course→program is `course.program._id` per the verified shape.
-  const programCourses = allCourses.filter(
+  const programCourses = (coursesRes.items ?? []).filter(
     (c) => String(c?.program?._id ?? '') === programKey
   );
-
-  const enriched = await enrichCoursesWithDetails(programCourses);
-  return { program, config, courses: enriched, earlyBirdMap };
-}
-
-export default async function ProgramPage({ params }) {
-  const { slug } = await params;
-  const data = await loadProgramAndCourses(slug);
-  if (!data) notFound();
-  if (data.config && data.config.isPublished === false) notFound();
+  const courses = await enrichCoursesWithDetails(programCourses);
 
   return (
     <ProgramPageClient
-      program={data.program}
-      config={data.config}
-      courses={data.courses}
-      earlyBirdMap={data.earlyBirdMap}
+      program={program}
+      config={config}
+      courses={courses}
+      earlyBirdMap={earlyBirdMap}
     />
   );
 }

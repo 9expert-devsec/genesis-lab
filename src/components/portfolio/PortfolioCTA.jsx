@@ -21,7 +21,7 @@ export default function PortfolioCTA() {
       <FloatingDots />
 
       <div className="relative z-10 mx-auto max-w-[900px] px-4 text-center lg:px-6">
-        <h2 className="font-heading text-3xl font-extrabold leading-normal text-white md:text-5xl">
+        <h2 className="font-heading text-4xl font-extrabold leading-normal text-white">
           <span className="block">ให้ 9Expert Training</span>
           <span className="block bg-9e-gradient-hero bg-clip-text text-transparent">
             ดูแลการพัฒนาศักยภาพบุคลากรในองค์กร

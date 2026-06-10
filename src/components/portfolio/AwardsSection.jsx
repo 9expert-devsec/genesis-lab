@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Award, Star, Youtube, ExternalLink } from 'lucide-react';
 
@@ -7,27 +8,24 @@ const AWARDS = [
   {
     num: '01',
     Icon: Award,
-    iconColor: 'text-9e-lime',
     title: 'Microsoft MVP — Power BI',
-    subtitle: 'Microsoft Most Valuable Professional · คนแรกของประเทศไทย สาขา Power BI',
-    badge: 'คนแรกของไทย',
+    subtitle: 'Microsoft Most Valuable Professional ด้าน Power BI',
+    badge: 'Microsoft',
     link: 'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333',
   },
   {
     num: '02',
     Icon: Star,
-    iconColor: 'text-9e-lime',
     title: 'Microsoft MVP — M365 Copilot',
-    subtitle: 'Microsoft Most Valuable Professional · AI & Productivity Expert',
+    subtitle: 'Microsoft Most Valuable Professional AI & Productivity Expert',
     badge: 'AI Expert',
     link: 'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333',
   },
   {
     num: '03',
     Icon: Youtube,
-    iconColor: 'text-red-400',
     title: 'YouTube Silver Creator Award',
-    subtitle: 'Silver Play Button · 250,000+ Subscribers · Channel @9expert',
+    subtitle: 'Silver Play Button จาก Channel 9Expert',
     badge: '250K+ Subscribers',
     link: 'https://www.youtube.com/@9expert',
   },
@@ -36,28 +34,109 @@ const AWARDS = [
 const MVP_PROFILE =
   'https://mvp.microsoft.com/en-US/mvp/profile/f547abba-8786-ed11-aad1-000d3a197333';
 
-function Badge({ award }) {
-  const badge = (
-    <span className="rounded-full border border-9e-lime/40 bg-9e-lime/10 px-4 py-1.5 font-en text-xs font-bold text-9e-lime">
-      {award.badge}
-    </span>
-  );
+const GLOW_STYLES = `
+  .award-card-glow {
+    isolation: isolate;
+    transition: background .34s ease, box-shadow .34s ease;
+  }
+  .award-card-glow::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    background:
+      radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(216,255,47,0.20), transparent 22%),
+      linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.10), transparent 70%);
+    opacity: 0;
+    transform: translateX(-18%) rotate(8deg);
+    transition: opacity .34s ease, transform .55s ease;
+    z-index: -1;
+  }
+  .award-card-glow:hover {
+    background:
+      radial-gradient(circle at var(--mx, 50%) var(--my, 50%), rgba(216,255,47,0.11), transparent 28%),
+      rgba(255,255,255,0.075);
+    box-shadow:
+      inset 0 0 0 1px rgba(216,255,47,0.16),
+      inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  .award-card-glow:hover::before {
+    opacity: 1;
+    transform: translateX(18%) rotate(8deg);
+  }
+  .award-card-glow:hover .award-icon-el {
+    text-shadow: 0 0 28px rgba(216,255,47,0.48);
+  }
+  .award-card-glow:hover h3 { color: #ffffff; }
+  .award-card-glow:hover p  { color: #d8eaff; }
+  .award-card-glow:hover .award-badge-el {
+    color: #06172f;
+    background: #D4F73F;
+    border-color: #D4F73F;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .award-card-glow, .award-card-glow::before { transition: none; }
+  }
+`;
+
+function AwardCard({ award, index }) {
+  const cardRef = useRef(null);
+
+  const handlePointerMove = (e) => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    cardRef.current.style.setProperty('--mx', `${x}%`);
+    cardRef.current.style.setProperty('--my', `${y}%`);
+  };
+
+  const Icon = award.Icon;
+
   return (
-    <div className="relative z-10 ml-auto hidden flex-shrink-0 items-center md:flex">
-      {award.link ? (
-        <a href={award.link} target="_blank" rel="noopener noreferrer">
-          {badge}
-        </a>
-      ) : (
-        badge
-      )}
-    </div>
+    <motion.article
+      ref={cardRef}
+      onPointerMove={handlePointerMove}
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-60px' }}
+      transition={{ duration: 0.5, delay: index * 0.12 }}
+      className="award-card-glow relative isolate min-h-[230px] overflow-hidden rounded-9e-lg p-[34px]"
+      style={{ background: 'rgba(255,255,255,0.035)' }}
+    >
+      {/* Large background number */}
+      <div className="absolute right-6 top-3 select-none font-en text-[82px] font-black leading-none tracking-tighter text-white/[0.05] transition-colors duration-300">
+        {award.num}
+      </div>
+
+      {/* Icon */}
+      <div className="award-icon-el mb-[26px] transition-all duration-300">
+        <Icon className="h-8 w-8 text-9e-lime" strokeWidth={1.5} />
+      </div>
+
+      <h3 className="font-heading text-[22px] font-black leading-tight tracking-tight text-white transition-colors duration-300">
+        {award.title}
+      </h3>
+      <p className="mb-[18px] mt-2.5 font-thai text-sm leading-relaxed text-[#bdd1e6] transition-colors duration-300">
+        {award.subtitle}
+      </p>
+
+      <a
+        href={award.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="award-badge-el inline-flex rounded-full border border-9e-lime/45 px-3 py-1.5 font-en text-[12px] font-black text-9e-lime transition-all duration-300"
+      >
+        {award.badge}
+      </a>
+    </motion.article>
   );
 }
 
 export default function AwardsSection() {
   return (
     <section className="relative overflow-hidden bg-9e-navy py-20">
+      <style>{GLOW_STYLES}</style>
+
       {/* Dot grid */}
       <div
         aria-hidden
@@ -69,79 +148,34 @@ export default function AwardsSection() {
         }}
       />
 
-      <div className="relative z-10">
+      <div className="relative z-10 mx-auto max-w-[1200px] px-4">
         {/* Header */}
-        <div className="mx-auto mb-14 max-w-[1200px] px-4">
-
-          <h2 className="mt-4 font-heading text-3xl font-bold text-white md:text-4xl">
+        <div className="mb-14 text-center">
+          <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-brand">
+            AWARDS &amp; RECOGNITION
+          </p>
+          <h2 className="mt-3 font-heading text-4xl font-black text-white">
             รางวัลและการรับรอง
           </h2>
+          <p className="mt-3 font-thai text-sm text-9e-slate-dp-600">
+            ความภาคภูมิใจที่สะท้อนถึงคุณภาพและมาตรฐานระดับสากล
+          </p>
         </div>
 
-        {/* Award list */}
-        <div className="mx-auto max-w-[1200px] px-4">
+        {/* Award grid */}
+        <div className="mx-auto grid max-w-[1080px] grid-cols-1 gap-5 md:grid-cols-3">
           {AWARDS.map((award, index) => (
-            <motion.div
-              key={award.num}
-              initial={{ opacity: 0, y: 28 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.5, delay: index * 0.12 }}
-              className="group relative flex cursor-default items-center gap-6 overflow-hidden py-8 md:gap-10"
-            >
-              {/* Hover background fill */}
-              <motion.div
-                className="absolute inset-0 bg-9e-card"
-                initial={{ scaleX: 0 }}
-                whileHover={{ scaleX: 1 }}
-                transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                style={{ originX: 0, zIndex: 0 }}
-              />
-
-              {/* Number */}
-              <span className="relative z-10 min-w-[100px] select-none text-right font-en text-[72px] font-black leading-none text-white/[0.06] transition-colors duration-300 group-hover:text-9e-brand/15 md:min-w-[130px] md:text-[96px]">
-                {award.num}
-              </span>
-
-              {/* Icon */}
-              <award.Icon
-                className={`relative z-10 h-8 w-8 flex-shrink-0 md:h-10 md:w-10 ${award.iconColor}`}
-                strokeWidth={1.5}
-              />
-
-              {/* Content */}
-              <div className="relative z-10 min-w-0 flex-1">
-                <h3 className="font-heading text-xl font-bold text-white transition-colors duration-300 group-hover:text-9e-lime md:text-2xl">
-                  {award.title}
-                </h3>
-                <p className="mt-1 font-en text-sm text-9e-slate-dp-400">
-                  {award.subtitle}
-                </p>
-              </div>
-
-              {/* Badge */}
-              <Badge award={award} />
-
-              {/* Animated separator */}
-              <motion.div
-                className="absolute bottom-0 left-0 h-px bg-9e-border"
-                initial={{ scaleX: 0 }}
-                whileInView={{ scaleX: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
-                style={{ originX: 0, width: '100%' }}
-              />
-            </motion.div>
+            <AwardCard key={award.num} award={award} index={index} />
           ))}
         </div>
 
         {/* Bottom CTA */}
-        <div className="mt-12 text-center">
+        <div className="mt-[34px] text-center">
           <a
             href={MVP_PROFILE}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-full border border-9e-lime/40 px-6 py-2.5 font-en text-sm font-semibold text-9e-lime transition-all duration-200 hover:bg-9e-lime/10"
+            className="mx-auto inline-flex w-fit items-center gap-2 rounded-full border border-9e-lime/45 px-[22px] py-[13px] font-en text-sm font-black text-9e-lime transition-all duration-200 hover:bg-9e-lime/10"
           >
             ดู Microsoft MVP Profile บน Microsoft.com
             <ExternalLink className="h-3.5 w-3.5" />
