@@ -227,7 +227,7 @@ export default function MapSection() {
             </button>
 
             <Image
-              src="/assets/9ExpertMap-Present1.png"
+              src="/assets/9ExpertMap-2026.png"
               alt="แผนที่การเดินทางมายัง 9Expert Training"
               width={1920}
               height={1080}
