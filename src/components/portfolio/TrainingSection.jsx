@@ -27,7 +27,7 @@ const TRAINING_ITEMS = [
     tag: 'Online',
     tagBg: 'bg-9e-air text-9e-navy',
     accentHex: '#48B0FF',
-    image: '/port/online_0.png',
+    image: '/port/online_3.png',
     href: '/training-course',
   },
   {
@@ -39,7 +39,7 @@ const TRAINING_ITEMS = [
     tag: 'Corporate',
     tagBg: 'bg-9e-lime text-9e-navy',
     accentHex: '#D4F73F',
-    image: '/port/inhouse_0.jpg',
+    image: '/port/inhouse_2.jpg',
     href: '/registration/in-house',
   },
   {
@@ -51,7 +51,7 @@ const TRAINING_ITEMS = [
     tag: 'Knowledge',
     tagBg: 'bg-9e-lime text-9e-navy',
     accentHex: '#D4F73F',
-    image: '/port/article_0.jpg',
+    image: '/port/article_1.png',
     href: '/articles',
   },
 ];

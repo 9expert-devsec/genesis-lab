@@ -18,8 +18,8 @@ export default function PortfolioPage() {
   return (
     <main>
       <PortfolioHero />
-      <PortfolioStats />
       <PortfolioSectionNav />
+      <section id="impact"><PortfolioStats /></section>
       <section id="learning"><TrainingSection /></section>
       <section id="consulting"><ConsultingSection /></section>
       <section id="awards"><AwardsSection /></section>

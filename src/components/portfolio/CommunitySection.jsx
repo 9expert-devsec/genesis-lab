@@ -17,7 +17,7 @@ const FEATURED = [
       'radial-gradient(circle at 76% 18%, rgba(72,176,255,0.56), transparent 32%), radial-gradient(circle at 18% 84%, rgba(216,255,47,0.16), transparent 32%), linear-gradient(135deg, #005cff 0%, #082b5f 54%, #06172f 100%)',
   },
   {
-    name: 'AI / Copilot Community',
+    name: 'AI Community',
     iconUrl:
       'https://res.cloudinary.com/ddva7xvdt/image/upload/v1781066417/AI_lkvzpl.png',
     description:
@@ -61,13 +61,13 @@ export default function CommunitySection() {
         <h2 className="mt-3 font-heading text-4xl font-bold text-[var(--text-primary)]">
           ชุมชนเทคโนโลยีที่เราก่อตั้ง
         </h2>
-        <p className="mt-3 font-thai text-sm text-[var(--text-secondary)]">
+        <p className="mt-3 font-thai text-normal text-[var(--text-secondary)]">
           เชื่อมต่อ แลกเปลี่ยน เรียนรู้ไปด้วยกัน ผ่านชุมชนด้าน Data, AI และ Microsoft Technology
         </p>
-        <p className="mt-4 font-thai text-sm font-semibold text-[var(--text-secondary)]">
+        {/* <p className="mt-4 font-thai text-[20px] font-semibold text-[var(--text-secondary)]">
           รวมสมาชิกทั้งหมด{' '}
           <span className="font-en font-black text-9e-brand">201.9K+ Members</span>
-        </p>
+        </p> */}
       </div>
 
       {/* Featured communities */}

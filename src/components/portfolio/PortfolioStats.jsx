@@ -13,7 +13,7 @@ const STATS = [
     target: 20,
     suffix: "+",
     label: "ปีประสบการณ์",
-    sub: "ตั้งแต่ปี 1999",
+    sub: "ตั้งแต่ปี 2005",
     Icon: GraduationCap,
   },
   {
@@ -24,11 +24,18 @@ const STATS = [
     Icon: Building2,
   },
   {
-    target: 68,
+    target: 75,
     suffix: "+",
     label: "หลักสูตรที่เปิดสอน",
     sub: "Public & Corporate Training",
     Icon: BookOpen,
+  },
+  {
+    target: 201.9,
+    suffix: "K+",
+    label: "สมาชิกในชุมชน",
+    sub: "ด้าน Data, AI และ MS Technology",
+    Icon: Users,
   },
 ];
 
@@ -119,7 +126,7 @@ function FeaturedCard({ active, reduced }) {
 
       {/* Number block */}
       <div className="relative z-10 mt-auto">
-        <p className="font-en text-[56px] font-black leading-none tracking-[-0.05em] text-9e-brand md:text-[64px]">
+        <p className="font-en text-[64px] font-black leading-none tracking-[-0.05em] text-9e-brand">
           {fmt(count)}+
         </p>
         <p className="mt-2 font-heading text-xl font-bold text-[var(--text-primary)]">
@@ -160,31 +167,31 @@ function SecondaryCard({ stat, active, reduced, delay = 0, wide = false }) {
         }}
       />
 
-     
-        {/* Icon */}
-        <div
-          className={`relative z-10 inline-flex flex-shrink-0 items-center justify-center rounded-[14px]
+      {/* Icon */}
+      <div
+        className={`relative z-10 inline-flex flex-shrink-0 items-center justify-center rounded-[14px]
                     bg-[#eaf4ff] dark:bg-9e-border
                     ${wide ? "h-[52px] w-[52px]" : "mb-4 h-[48px] w-[48px]"}`}
-        >
-          <Icon className="h-6 w-6 text-9e-brand" strokeWidth={1.5} />
-        </div>
+      >
+        <Icon className="h-6 w-6 text-9e-brand" strokeWidth={1.5} />
+      </div>
 
-        {/* Content */}
-        <div className={`relative z-10  ${wide ? "text-center mx-auto" : "text-end"}`}>
-          <p className="font-en text-[46px] font-black leading-none tracking-[-0.04em] text-9e-brand">
-            {fmt(count)}
-            {stat.suffix}
-          </p>
-          <p className="mt-1 font-heading text-base font-bold text-[var(--text-primary)]">
-            {stat.label}
-          </p>
-          <p className="mt-0.5 font-en text-xs text-[var(--text-secondary)]">
-            {stat.sub}
-          </p>
-          {/* <div className="mt-4 h-px w-10 bg-9e-brand/35" /> */}
-        </div>
-      
+      {/* Content */}
+      <div
+        className={`relative z-10  ${wide ? "text-center mx-auto" : "text-end"}`}
+      >
+        <p className="font-en text-[40px] font-black leading-none tracking-[-0.04em] text-9e-brand">
+          {fmt(count)}
+          {stat.suffix}
+        </p>
+        <p className="mt-1 font-heading text-base font-bold text-[var(--text-primary)]">
+          {stat.label}
+        </p>
+        <p className="mt-0.5 font-en text-xs text-[var(--text-secondary)]">
+          {stat.sub}
+        </p>
+        {/* <div className="mt-4 h-px w-10 bg-9e-brand/35" /> */}
+      </div>
     </motion.div>
   );
 }
@@ -220,9 +227,9 @@ export default function PortfolioStats() {
         <FeaturedCard active={inView} reduced={reduced} />
 
         {/* Right column — 3 secondary cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-1 md:grid-rows-2 md:h-full">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2  md:grid-rows-2 md:h-full">
           {/* Top: two cards side by side */}
-          <div className="grid grid-cols-2 gap-4">
+         
             <SecondaryCard
               stat={STATS[0]}
               active={inView}
@@ -235,16 +242,22 @@ export default function PortfolioStats() {
               reduced={reduced}
               delay={0.2}
             />
-          </div>
-          {/* Bottom: wide card */}
+            {/* Bottom: wide card */}
           <SecondaryCard
             stat={STATS[2]}
             active={inView}
             reduced={reduced}
             delay={0.3}
-            wide
           />
-        </div>
+          <SecondaryCard
+            stat={STATS[3]}
+            active={inView}
+            reduced={reduced}
+            delay={0.4}
+          />
+          </div>
+          
+        
       </div>
     </section>
   );
