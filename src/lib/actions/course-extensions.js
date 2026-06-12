@@ -110,6 +110,8 @@ export async function saveCourseExtension(courseId, data) {
     gallery,
     isPublished:
       typeof data?.isPublished === 'boolean' ? data.isPublished : true,
+    omisePaymentEnabled:
+      typeof data?.omisePaymentEnabled === 'boolean' ? data.omisePaymentEnabled : false,
   };
 
   try {

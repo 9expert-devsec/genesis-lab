@@ -44,6 +44,9 @@ export function ExtensionEditor({
   const [isPublished, setIsPublished] = useState(
     initialData?.isPublished !== false
   );
+  const [omisePaymentEnabled, setOmisePaymentEnabled] = useState(
+    initialData?.omisePaymentEnabled === true
+  );
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -91,6 +94,7 @@ export function ExtensionEditor({
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         gallery: gallery.map((item, i) => ({ ...item, order: i })),
         isPublished,
+        omisePaymentEnabled,
       });
       if (result.ok) {
         setMessage({ type: 'ok', text: 'บันทึกเรียบร้อย ✓' });
@@ -108,7 +112,7 @@ export function ExtensionEditor({
     }
   }
 
-  const isExtensionTab = tab === 'seo' || tab === 'gallery';
+  const isExtensionTab = tab === 'seo' || tab === 'gallery' || tab === 'payment';
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,6 +132,7 @@ export function ExtensionEditor({
           { id: 'gallery', label: `Gallery (${gallery.length})` },
           { id: 'promos', label: 'โปรโมชัน' },
           { id: 'earlybird', label: 'Early Bird' },
+          { id: 'payment', label: 'การชำระเงิน' },
         ].map((t) => (
           <button
             key={t.id}
@@ -271,6 +276,30 @@ export function ExtensionEditor({
           initialData={initialEarlyBird}
           initialPromos={initialPromos}
         />
+      )}
+
+      {tab === 'payment' && (
+        <div className="space-y-4">
+          <label className="flex items-start gap-3 text-sm text-[var(--text-primary)]">
+            <input
+              type="checkbox"
+              checked={omisePaymentEnabled}
+              onChange={(e) => setOmisePaymentEnabled(e.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>
+              <span className="font-semibold">เปิดการชำระเงินออนไลน์ (Omise)</span>
+              <span className="mt-1 block text-xs text-[var(--text-secondary)]">
+                เมื่อเปิด หน้าลงทะเบียนของคอร์สนี้จะให้ผู้เรียนเลือกชำระผ่าน
+                บัตรเครดิต/เดบิต หรือ QR PromptPay ได้ทันที (นอกเหนือจากการขอใบเสนอราคา).
+                เมื่อปิด คอร์สนี้จะใช้ขั้นตอนลงทะเบียนแบบเดิม (ขอใบเสนอราคาอย่างเดียว).
+              </span>
+            </span>
+          </label>
+          <p className="text-xs text-[var(--text-muted)]">
+            ราคาต่อรอบตั้งได้ที่หน้า “ตารางอบรม” (Schedules) — ช่อง “ราคาต่อท่าน”.
+          </p>
+        </div>
       )}
 
       {isExtensionTab && (

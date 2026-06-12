@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Pencil, Trash2, Check, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatTHB } from '@/lib/pricing';
 import {
   updateRegistrationStatus,
   updateRegistration,
@@ -18,6 +19,9 @@ const STATUS_LABEL   = { pending: 'รอดำเนินการ', confirmed
 const STATUS_ACTIONS = { pending: ['confirmed','cancelled'], confirmed: ['paid','cancelled'], paid: ['cancelled'], cancelled: ['pending'] };
 const ACTION_LABEL   = { confirmed: 'ยืนยันการสมัคร', paid: 'บันทึกชำระแล้ว', cancelled: 'ยกเลิกการสมัคร', pending: 'คืนสถานะ รอดำเนินการ' };
 const ACTION_VARIANT = { confirmed: 'primary', paid: 'cta', cancelled: 'outline', pending: 'outline' };
+
+const PAYMENT_METHOD_LABEL = { credit_card: 'บัตรเครดิต/เดบิต', promptpay: 'QR PromptPay', quote: 'ขอใบเสนอราคา' };
+const OMISE_STATUS_LABEL   = { pending: 'รอชำระ', successful: 'สำเร็จ', failed: 'ล้มเหลว', expired: 'หมดอายุ' };
 
 const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 function fmtDate(iso) {
@@ -328,6 +332,11 @@ export function RegistrationDetailClient({ doc }) {
         )}
       </CardEditable>
 
+      {/* ── Payment (read-only, Omise only) ── */}
+      {doc.payment && (
+        <PaymentInfoCard payment={doc.payment} pricing={doc.pricing} consent={doc.consent} />
+      )}
+
       {/* ── Notes (editable) ── */}
       <CardEditable title="หมายเหตุ"
         isEditing={editSection === 'notes'} isSaving={busy === 'save-notes'}
@@ -583,5 +592,63 @@ function InvoiceReadView({ requestInvoice, invoice }) {
         />
       )}
     </>
+  );
+}
+
+// ── Payment info (read-only) ──────────────────────────────────────
+
+function PaymentInfoCard({ payment, pricing, consent }) {
+  const chargeUrl = payment.omiseChargeId
+    ? `https://dashboard.omise.co/charges/${payment.omiseChargeId}`
+    : null;
+  return (
+    <Card title="การชำระเงิน (Omise)">
+      <Row label="วิธีชำระเงิน" value={PAYMENT_METHOD_LABEL[payment.method] ?? payment.method} />
+      <Row label="สถานะการชำระ" value={OMISE_STATUS_LABEL[payment.omiseStatus] ?? (payment.omiseStatus || '—')} />
+      {pricing && (
+        <>
+          <Row label="ราคาต่อท่าน" value={`${formatTHB(pricing.pricePerSeat)} บาท`} />
+          <Row label={`ราคา × ${pricing.seats} ท่าน`} value={`${formatTHB(pricing.subtotal)} บาท`} />
+          <Row label="VAT 7%" value={`${formatTHB(pricing.vatAmount)} บาท`} />
+          <Row label="ยอดสุทธิ" value={<span className="font-bold text-9e-action">{formatTHB(pricing.total)} บาท</span>} />
+        </>
+      )}
+      {payment.paidAt && <Row label="วันที่ชำระ" value={fmtDate(payment.paidAt)} />}
+      {payment.omiseChargeId && (
+        <Row
+          label="Omise Charge ID"
+          value={
+            <a href={chargeUrl} target="_blank" rel="noopener noreferrer"
+              className="font-mono text-xs text-9e-action hover:underline">
+              {payment.omiseChargeId}
+            </a>
+          }
+        />
+      )}
+      {(payment.failureCode || payment.failureMessage) && (
+        <Row label="สาเหตุที่ล้มเหลว" value={[payment.failureCode, payment.failureMessage].filter(Boolean).join(' · ')} />
+      )}
+      {consent && (
+        <div className="mt-2 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] p-3">
+          <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">การยอมรับเงื่อนไข (Audit)</p>
+          <ConsentLine ok={consent.dataChecked}   label="ตรวจสอบข้อมูลแล้ว" />
+          <ConsentLine ok={consent.noRefund}      label="รับทราบไม่คืนเงิน" />
+          <ConsentLine ok={consent.changePolicy}  label="เงื่อนไขเปลี่ยน/เลื่อน/ยกเลิก" />
+          <ConsentLine ok={consent.termsAccepted} label="ยินยอมเงื่อนไขอบรม" />
+          <div className="mt-2 text-xs text-[var(--text-muted)]">
+            เวลา: {consent.acceptedAt ? fmtDate(consent.acceptedAt) : '—'} · IP: {consent.ipAddress || '—'}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ConsentLine({ ok, label }) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-[var(--text-primary)]">
+      <span className={ok ? 'text-emerald-600' : 'text-[var(--text-muted)]'}>{ok ? '✓' : '—'}</span>
+      <span>{label}</span>
+    </div>
   );
 }

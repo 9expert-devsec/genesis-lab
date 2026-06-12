@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ArrowRight, Pin, Search } from 'lucide-react';
 
 function formatDate(iso) {
@@ -16,46 +16,57 @@ function formatDate(iso) {
   });
 }
 
-export function ArticlesPageClient({ articles, programs /* allTags */ }) {
-  const searchParams = useSearchParams();
+export function ArticlesPageClient({
+  articles,
+  programs,
+  page,
+  totalPages,
+  total,
+  initialFilters,
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const sp = useSearchParams();
 
-  const [query,         setQuery]         = useState('');
-  const [programFilter, setProgramFilter] = useState('');
-  const [typeFilter,    setTypeFilter]    = useState('all');
-  // Seed from the `?tag=…` URL param so deep links from clickable
-  // tags on the detail page land here pre-filtered.
-  const [selectedTag,   setSelectedTag]   = useState(
-    searchParams.get('tag') ?? ''
+  // Filters other than the search box are read straight from the URL
+  // (the server re-renders with the correct page on every change), so
+  // `initialFilters` is always the live source of truth for them.
+  const program = initialFilters.program ?? '';
+  const type = initialFilters.type ?? 'all';
+  const tag = initialFilters.tag ?? '';
+
+  // Search is debounced, so it gets its own local input state.
+  const [query, setQuery] = useState(initialFilters.q ?? '');
+
+  // Build a URL with merged params; resets to page 1 on any filter change.
+  const pushWith = useCallback(
+    (updates, resetPage = true) => {
+      const next = new URLSearchParams(sp?.toString());
+      Object.entries(updates).forEach(([k, v]) => {
+        if (v === '' || v == null || v === 'all') next.delete(k);
+        else next.set(k, String(v));
+      });
+      if (resetPage) next.delete('page');
+      const qs = next.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [router, pathname, sp]
   );
 
-  // Keep the filter in sync if the user navigates between tag links
-  // without unmounting this component (App Router preserves state
-  // across same-route navigations).
+  // Debounce the search box → URL ?q=. Skip the no-op first render.
+  const tRef = useRef(null);
   useEffect(() => {
-    setSelectedTag(searchParams.get('tag') ?? '');
-  }, [searchParams]);
+    if (query === (initialFilters.q ?? '')) return;
+    clearTimeout(tRef.current);
+    tRef.current = setTimeout(() => pushWith({ q: query }), 400);
+    return () => clearTimeout(tRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = articles.filter((a) => {
-      if (selectedTag && !(a.tags ?? []).includes(selectedTag)) return false;
-      if (programFilter && !(a.programs ?? []).includes(programFilter)) return false;
-      if (typeFilter !== 'all' && a.articleType !== typeFilter) return false;
-      if (!q) return true;
-      const haystack = [a.title, a.excerpt].filter(Boolean).join(' ').toLowerCase();
-      return haystack.includes(q);
-    });
-
-    // Pinned articles float to the top, ordered by pinOrder (asc); the
-    // non-pinned tail keeps the server's existing order.
-    return [...list].sort((a, b) => {
-      const aPin = a.isPinnedOnArticlePage ? 1 : 0;
-      const bPin = b.isPinnedOnArticlePage ? 1 : 0;
-      if (bPin !== aPin) return bPin - aPin;
-      if (aPin && bPin) return (a.pinOrder ?? 0) - (b.pinOrder ?? 0);
-      return 0;
-    });
-  }, [articles, query, programFilter, typeFilter, selectedTag]);
+  const goToPage = (p) => {
+    pushWith({ page: p }, false);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 });
+  };
 
   return (
     <div className="rounded-2xl bg-white pt-10 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
@@ -72,8 +83,8 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
         </div>
 
         <select
-          value={programFilter}
-          onChange={(e) => setProgramFilter(e.target.value)}
+          value={program}
+          onChange={(e) => pushWith({ program: e.target.value })}
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           <option value="">ทุก Program</option>
@@ -85,8 +96,8 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
         </select>
 
         <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
+          value={type}
+          onChange={(e) => pushWith({ type: e.target.value })}
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           <option value="all">ประเภททั้งหมด</option>
@@ -95,14 +106,14 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
         </select>
       </div>
 
-      {selectedTag && (
+      {tag && (
         <div className="mb-4 flex items-center gap-2">
           <span className="text-sm text-gray-500 dark:text-[#94a3b8]">กรองตาม tag:</span>
           <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-            #{selectedTag}
+            #{tag}
             <button
               type="button"
-              onClick={() => setSelectedTag('')}
+              onClick={() => pushWith({ tag: '' })}
               className="ml-1 hover:text-red-500"
               aria-label="ล้าง tag filter"
             >
@@ -112,18 +123,78 @@ export function ArticlesPageClient({ articles, programs /* allTags */ }) {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {total === 0 ? (
         <p className="py-16 text-center text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
           ไม่พบบทความที่ตรงกับเงื่อนไข
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((a) => (
-            <ArticleCard key={a._id} article={a} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {articles.map((a) => (
+              <ArticleCard key={a._id} article={a} />
+            ))}
+          </div>
+          <Pager page={page} totalPages={totalPages} onGo={goToPage} />
+        </>
       )}
     </div>
+  );
+}
+
+function Pager({ page, totalPages, onGo }) {
+  if (totalPages <= 1) return null;
+
+  // Compact window: 1 … (p-1) p (p+1) … last
+  const pages = [];
+  const push = (n) => pages.push(n);
+  const windowSize = 1;
+  const lo = Math.max(2, page - windowSize);
+  const hi = Math.min(totalPages - 1, page + windowSize);
+  push(1);
+  if (lo > 2) pages.push('…');
+  for (let n = lo; n <= hi; n++) push(n);
+  if (hi < totalPages - 1) pages.push('…');
+  if (totalPages > 1) push(totalPages);
+
+  const btn = 'min-w-9 h-9 px-3 rounded-9e-md border text-sm transition';
+  return (
+    <nav className="mt-8 flex items-center justify-center gap-2" aria-label="แบ่งหน้า">
+      <button
+        type="button"
+        disabled={page <= 1}
+        onClick={() => onGo(page - 1)}
+        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}
+      >
+        ก่อนหน้า
+      </button>
+      {pages.map((p, i) =>
+        p === '…' ? (
+          <span key={`e${i}`} className="px-1 text-9e-slate-dp-50">…</span>
+        ) : (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onGo(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={
+              p === page
+                ? `${btn} border-9e-action bg-9e-action text-white`
+                : `${btn} border-[var(--surface-border)] text-9e-navy hover:border-9e-action dark:text-white`
+            }
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        type="button"
+        disabled={page >= totalPages}
+        onClick={() => onGo(page + 1)}
+        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}
+      >
+        ถัดไป
+      </button>
+    </nav>
   );
 }
 

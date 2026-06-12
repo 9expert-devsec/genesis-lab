@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Pencil, Pin, Plus, Search, Star, Trash2 } from 'lucide-react';
 import {
@@ -41,6 +41,25 @@ export function ArticlesAdminClient({ articles: initial }) {
         .some((s) => String(s).toLowerCase().includes(q))
     );
   }, [rows, query]);
+
+  // ── Client-side pagination over the filtered rows ──────────────
+  const PAGE_SIZE = 12;
+  const [page, setPage] = useState(1);
+
+  // Reset to page 1 whenever the search query changes.
+  useEffect(() => { setPage(1); }, [query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  // Clamp page if the filtered set shrank (e.g. after delete or search).
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
 
   function handleToggle(a) {
     setBusyId(a._id);
@@ -120,7 +139,7 @@ export function ArticlesAdminClient({ articles: initial }) {
             จัดการบทความ
           </h1>
           <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            ทั้งหมด {rows.length} บทความ
+            ทั้งหมด {rows.length} บทความ · แสดง {pageRows.length} จาก {filtered.length} รายการ
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -172,7 +191,7 @@ export function ArticlesAdminClient({ articles: initial }) {
                 </td>
               </tr>
             )}
-            {filtered.map((a, i) => (
+            {pageRows.map((a, i) => (
               <tr
                 key={a._id}
                 className={
@@ -183,7 +202,7 @@ export function ArticlesAdminClient({ articles: initial }) {
                 }
               >
                 <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {i + 1}
+                  {(page - 1) * PAGE_SIZE + i + 1}
                 </td>
                 <td className="px-3 py-3">
                   {a.coverUrl ? (
@@ -338,6 +357,8 @@ export function ArticlesAdminClient({ articles: initial }) {
         </table>
       </div>
 
+      <Pager page={page} totalPages={totalPages} onGo={setPage} />
+
       {confirmDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -385,5 +406,40 @@ export function ArticlesAdminClient({ articles: initial }) {
         </div>
       )}
     </div>
+  );
+}
+
+function Pager({ page, totalPages, onGo }) {
+  if (totalPages <= 1) return null;
+  const pages = [];
+  const lo = Math.max(2, page - 1);
+  const hi = Math.min(totalPages - 1, page + 1);
+  pages.push(1);
+  if (lo > 2) pages.push('…');
+  for (let n = lo; n <= hi; n++) pages.push(n);
+  if (hi < totalPages - 1) pages.push('…');
+  if (totalPages > 1) pages.push(totalPages);
+
+  const btn = 'min-w-9 h-9 px-3 rounded-9e-md border text-sm transition';
+  return (
+    <nav className="flex items-center justify-center gap-2 py-4" aria-label="แบ่งหน้า">
+      <button type="button" disabled={page <= 1} onClick={() => onGo(page - 1)}
+        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}>ก่อนหน้า</button>
+      {pages.map((p, i) =>
+        p === '…' ? (
+          <span key={`e${i}`} className="px-1 text-9e-slate-dp-50">…</span>
+        ) : (
+          <button key={p} type="button" onClick={() => onGo(p)}
+            aria-current={p === page ? 'page' : undefined}
+            className={p === page
+              ? `${btn} border-9e-action bg-9e-action text-white`
+              : `${btn} border-[var(--surface-border)] text-9e-navy hover:border-9e-action dark:text-white`}>
+            {p}
+          </button>
+        )
+      )}
+      <button type="button" disabled={page >= totalPages} onClick={() => onGo(page + 1)}
+        className={`${btn} border-[var(--surface-border)] disabled:opacity-40`}>ถัดไป</button>
+    </nav>
   );
 }

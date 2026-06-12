@@ -87,6 +87,14 @@ export const invoiceSchema = z
     }
   });
 
+// ── Consent schema (Omise pre-payment summary) ─────────────────────
+export const consentSchema = z.object({
+  dataChecked:   z.boolean(),
+  noRefund:      z.boolean(),
+  changePolicy:  z.boolean(),
+  termsAccepted: z.boolean(),
+});
+
 // ── Root form schema ───────────────────────────────────────────────
 
 export const publicRegistrationSchema = z
@@ -114,6 +122,13 @@ export const publicRegistrationSchema = z
 
     // Meta
     notes: z.string().trim().max(500).optional().or(z.literal('')),
+
+    // ── Online payment (Omise) — optional; absent = legacy quote flow
+    paymentMethod: z.enum(['quote', 'credit_card', 'promptpay']).optional(),
+    // Omise token (card) — only present for credit_card method, created
+    // client-side by Omise.js. Never the raw card number.
+    omiseToken: z.string().optional(),
+    consent: consentSchema.optional().nullable(),
   })
   .superRefine((data, ctx) => {
     // Hybrid schedules require an explicit attendance mode selection.
@@ -145,6 +160,28 @@ export const publicRegistrationSchema = z
         });
       }
     }
+
+    // Card / QR payments require all 4 consent boxes ticked.
+    if (data.paymentMethod === 'credit_card' || data.paymentMethod === 'promptpay') {
+      const c = data.consent;
+      const allChecked =
+        c && c.dataChecked && c.noRefund && c.changePolicy && c.termsAccepted;
+      if (!allChecked) {
+        ctx.addIssue({
+          path: ['consent'],
+          code: 'custom',
+          message: 'กรุณายอมรับเงื่อนไขให้ครบทุกข้อก่อนชำระเงิน',
+        });
+      }
+    }
+    // Credit card must carry an Omise token.
+    if (data.paymentMethod === 'credit_card' && !data.omiseToken) {
+      ctx.addIssue({
+        path: ['omiseToken'],
+        code: 'custom',
+        message: 'ไม่พบข้อมูลบัตร กรุณาลองใหม่',
+      });
+    }
   });
 
 // ── Default values ─────────────────────────────────────────────────
@@ -171,4 +208,7 @@ export const publicRegistrationDefaults = {
   requestInvoice: false,
   invoice:        null,
   notes: '',
+  paymentMethod: undefined,
+  omiseToken: undefined,
+  consent: null,
 };

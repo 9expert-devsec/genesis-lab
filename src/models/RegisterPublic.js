@@ -88,6 +88,62 @@ const InvoiceSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * Pricing snapshot — frozen at the moment of checkout so future price
+ * changes (per-round overrides, upstream edits) never alter what the
+ * customer actually paid. All amounts in THB.
+ */
+const PricingSnapshotSchema = new mongoose.Schema(
+  {
+    pricePerSeat: { type: Number, required: true, min: 0 },
+    seats:        { type: Number, required: true, min: 1 },
+    subtotal:     { type: Number, required: true, min: 0 }, // pricePerSeat * seats
+    vatRate:      { type: Number, default: 0.07 },          // 7%
+    vatAmount:    { type: Number, required: true, min: 0 },
+    total:        { type: Number, required: true, min: 0 }, // subtotal + vatAmount
+    currency:     { type: String, default: 'THB' },
+  },
+  { _id: false }
+);
+
+/**
+ * Payment record — Omise charge metadata. Only populated for the
+ * card / promptpay methods. 'quote' registrations leave this null.
+ */
+const PaymentSchema = new mongoose.Schema(
+  {
+    method: {
+      type: String,
+      enum: ['quote', 'credit_card', 'promptpay'],
+      required: true,
+    },
+    omiseChargeId: { type: String, default: null },
+    omiseStatus:   { type: String, default: null }, // pending | successful | failed | expired
+    paidAt:        { type: Date,   default: null },
+    failureCode:    { type: String, default: null },
+    failureMessage: { type: String, default: null },
+    receiptSentAt: { type: Date, default: null },
+  },
+  { _id: false }
+);
+
+/**
+ * Consent record — captured on the pre-payment summary screen so the
+ * customer's acceptance of the 4 conditions is auditable.
+ */
+const ConsentSchema = new mongoose.Schema(
+  {
+    accepted:      { type: Boolean, default: false },
+    acceptedAt:    { type: Date,    default: null },
+    ipAddress:     { type: String,  default: null },
+    dataChecked:   { type: Boolean, default: false }, // ตรวจสอบข้อมูลแล้ว
+    noRefund:      { type: Boolean, default: false }, // รับทราบไม่คืนเงิน
+    changePolicy:  { type: Boolean, default: false }, // เงื่อนไขเปลี่ยน/เลื่อน/ยกเลิก
+    termsAccepted: { type: Boolean, default: false }, // ยินยอมเงื่อนไขอบรม
+  },
+  { _id: false }
+);
+
 const RegisterPublicSchema = new mongoose.Schema(
   {
     // Course / class references (upstream IDs as strings)
@@ -122,6 +178,11 @@ const RegisterPublicSchema = new mongoose.Schema(
     requestInvoice: { type: Boolean, default: false },
     invoice:        { type: InvoiceSchema, default: null },
 
+    // ── Online payment (Omise) — null for legacy quote-only flow ──
+    pricing: { type: PricingSnapshotSchema, default: null },
+    payment: { type: PaymentSchema,         default: null },
+    consent: { type: ConsentSchema,         default: null },
+
     // Meta
     notes:  { type: String, trim: true, maxlength: 500 },
     status: {
@@ -139,6 +200,7 @@ const RegisterPublicSchema = new mongoose.Schema(
 
 RegisterPublicSchema.index({ createdAt: -1, status: 1 });
 RegisterPublicSchema.index({ 'coordinator.email': 1 });
+RegisterPublicSchema.index({ 'payment.method': 1, status: 1 });
 
 // Drop cached model from prior schema shape (Phase 2.5a) so dev HMR
 // picks up the new structure. No-op in production.

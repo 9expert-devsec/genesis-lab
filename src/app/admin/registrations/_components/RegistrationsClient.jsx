@@ -254,6 +254,7 @@ export function RegistrationsClient({
                 <Th>ผู้ประสานงาน</Th>
                 <Th center>ผู้เข้าอบรม</Th>
                 <Th center>ใบเสนอราคา</Th>
+                <Th center>ชำระเงิน</Th>
                 <Th>สถานะ</Th>
                 <Th>วันที่สมัคร</Th>
                 <Th></Th>
@@ -262,7 +263,7 @@ export function RegistrationsClient({
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-[var(--text-muted)]">
+                  <td colSpan={11} className="px-4 py-10 text-center text-[var(--text-muted)]">
                     ไม่พบรายการที่ตรงกับเงื่อนไข
                   </td>
                 </tr>
@@ -298,6 +299,9 @@ export function RegistrationsClient({
                     {row.requestInvoice
                       ? <span className="text-xs font-semibold text-emerald-600">✓</span>
                       : <span className="text-xs text-[var(--text-muted)]">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <PaymentChip payment={row.payment} pricing={row.pricing} />
                   </td>
                   <td className="px-4 py-3">
                     <span className={cn(
@@ -343,6 +347,31 @@ function Th({ children, center }) {
     )}>
       {children}
     </th>
+  );
+}
+
+const PAY_METHOD_CHIP = {
+  credit_card: { label: 'บัตร', cls: 'bg-indigo-100 text-indigo-700' },
+  promptpay:   { label: 'QR',   cls: 'bg-teal-100 text-teal-700' },
+};
+
+function PaymentChip({ payment, pricing }) {
+  const chip = PAY_METHOD_CHIP[payment?.method];
+  // Rows without an online-payment record (or quote method) = ใบเสนอราคา / legacy.
+  if (!chip) {
+    return <span className="text-[10px] text-[var(--text-muted)]">ใบเสนอราคา</span>;
+  }
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', chip.cls)}>
+        {chip.label}
+      </span>
+      {pricing?.total != null && (
+        <span className="text-[10px] tabular-nums text-[var(--text-muted)]">
+          ฿{Number(pricing.total).toLocaleString('th-TH')}
+        </span>
+      )}
+    </div>
   );
 }
 

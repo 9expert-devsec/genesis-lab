@@ -27,6 +27,12 @@ const ScheduleLocalSchema = new mongoose.Schema(
     // null = no cap declared. Numeric only when an admin opted in.
     max_seats: { type: Number, default: null },
 
+    // Per-round fixed price (THB, per attendee, VAT-exclusive).
+    // null = fall back to the upstream course.course_price.
+    // Used by Omise checkout so each round can be priced independently
+    // without affecting MSDB or past paid registrations.
+    price_override: { type: Number, default: null, min: 0 },
+
     // Instructor `_id` strings (from the Genesis Instructor model).
     instructor_ids: { type: [String], default: [] },
   },

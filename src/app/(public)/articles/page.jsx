@@ -8,29 +8,39 @@ export const metadata = {
   description: 'แบ่งปันความรู้เทคโนโลยี เพื่อ "ขับเคลื่อนประเทศไทย"',
 };
 
-// Articles change with new posts, not by the minute — 1h ISR is fine.
-// Server Actions hit revalidatePath('/articles') on every write.
-export const revalidate = 3600;
+// The list is now page- and filter-driven via searchParams, so render
+// fresh per request rather than serving a single ISR snapshot. Server
+// Actions still call revalidatePath('/articles') on every write.
+export const dynamic = 'force-dynamic';
 
-export default async function ArticlesIndexPage() {
-  const [{ items }, programsRes] = await Promise.all([
-    getArticles({ active: true, limit: 50 }),
+const PAGE_SIZE = 12;
+
+export default async function ArticlesIndexPage({ searchParams }) {
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp?.page) || 1);
+  const search = (sp?.q ?? '').toString();
+  const tag = (sp?.tag ?? '').toString();
+  const program = (sp?.program ?? '').toString();
+  const articleType = (sp?.type ?? '').toString(); // '', 'article', 'video'
+
+  const [{ items, total }, programsRes] = await Promise.all([
+    getArticles({
+      active: true,
+      limit: PAGE_SIZE,
+      page,
+      search,
+      tag,
+      program,
+      articleType: articleType === 'all' ? '' : articleType,
+    }),
     listPrograms().catch(() => ({ items: [] })),
   ]);
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const programs = (programsRes.items ?? []).map((p) => ({
     program_id:   p.program_id,
     program_name: p.program_name,
   }));
-
-  // Distinct tag list sourced from the loaded articles — used by the
-  // client to render a "filtering by #tag" chip when arriving from a
-  // detail page's clickable tag link. The list page doesn't expose a
-  // dropdown for it; the chip is the only entry point and is set by
-  // the `?tag=` URL searchParam.
-  const allTags = [
-    ...new Set((items ?? []).flatMap((a) => a.tags ?? [])),
-  ].sort();
 
   return (
     <>
@@ -52,7 +62,10 @@ export default async function ArticlesIndexPage() {
           <ArticlesPageClient
             articles={items}
             programs={programs}
-            allTags={allTags}
+            page={page}
+            totalPages={totalPages}
+            total={total}
+            initialFilters={{ q: search, tag, program, type: articleType || 'all' }}
           />
         </Suspense>
       </section>

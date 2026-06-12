@@ -4,6 +4,8 @@ import { getCourseByCode } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
+import { getCourseExtension } from '@/lib/actions/course-extensions';
+import { getScheduleLocals } from '@/lib/actions/schedules';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
 
 /**
@@ -39,9 +41,10 @@ export async function RegisterPageContent({ searchParams, step }) {
     redirect('/training-course');
   }
 
-  const [{ items: rawSchedules }, earlyBirdMap] = await Promise.all([
+  const [{ items: rawSchedules }, earlyBirdMap, ext] = await Promise.all([
     listSchedulesByCourse(course._id, { limit: 20 }),
     getAllActiveEarlyBirdMap().catch(() => ({})),
+    getCourseExtension(course.course_id).catch(() => null),
   ]);
 
   // Apply admin status overrides (open → closed, scheduled changes).
@@ -49,6 +52,21 @@ export async function RegisterPageContent({ searchParams, step }) {
 
   const earlyBirdScheduleId =
     earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
+
+  // ── Omise online-payment inputs ────────────────────────────────
+  // The toggle lives on the CourseExtension sidecar; per-round price
+  // overrides live on ScheduleLocal. Resolve both here so the wizard
+  // can branch + show prices without an extra client round-trip.
+  const omisePaymentEnabled = ext?.omisePaymentEnabled === true;
+
+  const scheduleIds = schedules.map((s) => s._id).filter(Boolean);
+  const locals = await getScheduleLocals(scheduleIds).catch(() => []);
+  const priceByScheduleId = {};
+  for (const row of locals) {
+    if (row?.msdb_schedule_id != null && row.price_override != null) {
+      priceByScheduleId[row.msdb_schedule_id] = row.price_override;
+    }
+  }
 
   return (
     <article className="mx-auto max-w-[880px] px-4 py-10 lg:px-6">
@@ -73,6 +91,9 @@ export async function RegisterPageContent({ searchParams, step }) {
           earlyBirdScheduleId={earlyBirdScheduleId}
           step={step}
           basePath={REGISTRATION_BASE_PATH}
+          omisePaymentEnabled={omisePaymentEnabled}
+          coursePrice={course.course_price ?? null}
+          priceByScheduleId={priceByScheduleId}
         />
       )}
     </article>

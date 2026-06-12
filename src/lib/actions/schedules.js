@@ -111,6 +111,7 @@ async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
         msdb_schedule_id: String(msdbScheduleId),
         course_id:        courseIdString,
         max_seats:        toNullableNum(formData.get('max_seats')),
+        price_override:   toNullableNum(formData.get('price_override')),
         instructor_ids:   toStrArr(formData.getAll('instructor_ids')),
       },
     },

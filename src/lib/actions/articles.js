@@ -99,14 +99,16 @@ export async function getArticles({
   search = '',
   tag = '',
   program = '',
+  articleType = '', // 'article' | 'video' | '' (all)
   active,
 } = {}) {
   await dbConnect();
 
   const filter = {};
   if (typeof active === 'boolean') filter.active = active;
-  if (tag)     filter.tags     = String(tag);
-  if (program) filter.programs = String(program);
+  if (tag)         filter.tags        = String(tag);
+  if (program)     filter.programs    = String(program);
+  if (articleType) filter.articleType = String(articleType);
   if (search) {
     filter.$or = [
       { title:   { $regex: search, $options: 'i' } },

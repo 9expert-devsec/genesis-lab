@@ -82,17 +82,22 @@ export function CourseHero({ course, heroColor }) {
               </div>
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
-                <span className="text-2xl font-extrabold text-9e-action">
-                  {Number(
-                    hasPromotion ? course.course_netprice : course.course_price
-                  ).toLocaleString('th-TH')}
-                </span>
-                <span className="text-lg font-bold text-9e-action">บาท</span>
-                {hasPromotion && (
-                  <span className="text-sm text-9e-slate-dp-50 line-through">
-                    ปกติ {Number(course.course_price).toLocaleString('th-TH')}{' '}
-                    บาท
-                  </span>
+                {isInhouseOnly ? (
+                  <span className="text-2xl font-extrabold text-9e-action">Call</span>
+                ) : (
+                  <>
+                    <span className="text-2xl font-extrabold text-9e-action">
+                      {Number(
+                        hasPromotion ? course.course_netprice : course.course_price
+                      ).toLocaleString('th-TH')}
+                    </span>
+                    <span className="text-lg font-bold text-9e-action">บาท</span>
+                    {hasPromotion && (
+                      <span className="text-sm text-9e-slate-dp-50 line-through">
+                        ปกติ {Number(course.course_price).toLocaleString('th-TH')} บาท
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
               <p className="mb-4 text-xs text-9e-slate-dp-50">

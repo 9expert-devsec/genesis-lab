@@ -5,17 +5,28 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowRight, CheckCircle2, Loader2, MapPin, Monitor } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  MapPin,
+  Monitor,
+  CreditCard,
+  QrCode,
+  Lock,
+} from 'lucide-react';
 import {
   publicRegistrationSchema,
   publicRegistrationDefaults,
 } from '@/lib/schemas/register-public';
+import { computePricing, formatTHB } from '@/lib/pricing';
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { CoordinatorFields } from '@/components/registration/CoordinatorFields';
 import { AttendeesList } from '@/components/registration/AttendeesList';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +61,9 @@ export function RegisterWizard({
   earlyBirdScheduleId = null,
   step = 1,
   basePath = '/registration/public',
+  omisePaymentEnabled = false,
+  coursePrice = null,
+  priceByScheduleId = {},
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,6 +86,20 @@ export function RegisterWizard({
     },
     [basePath, searchParams]
   );
+
+  // Display-only pricing for the selected round. The server recomputes
+  // authoritatively on charge — this is purely for the summary screen.
+  const pricing = useMemo(() => {
+    if (!formData) return null;
+    const raw = priceByScheduleId[formData.classId] ?? coursePrice ?? null;
+    const perSeat = raw == null ? null : Number(raw);
+    if (perSeat == null || !Number.isFinite(perSeat) || perSeat <= 0) return null;
+    try {
+      return computePricing(perSeat, formData.attendeesCount ?? 1);
+    } catch {
+      return null;
+    }
+  }, [formData, priceByScheduleId, coursePrice]);
 
   // Keep the rendered step in sync with the URL-derived prop. Each step is
   // its own route, so this normally just confirms the value on mount.
@@ -136,7 +164,9 @@ export function RegisterWizard({
         // ignore corrupted storage
       }
     } else if (step === 1) {
-      // Fresh start on step 1 — drop any stale success result.
+      // Fresh start on step 1 — drop any stale success result. The unified
+      // step-2 page is stateless across remounts on purpose (a refresh
+      // returns a fresh page and never auto-creates a charge).
       try { sessionStorage.removeItem(RESULT_KEY); } catch {}
     }
 
@@ -196,13 +226,14 @@ export function RegisterWizard({
       // step-3 route can render it.
       try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
       try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+      const quoteResult = { ...body, kind: 'quote' };
       try {
         sessionStorage.setItem(
           RESULT_KEY,
-          JSON.stringify({ result: body, formData })
+          JSON.stringify({ result: quoteResult, formData })
         );
       } catch {}
-      setResult(body);
+      setResult(quoteResult);
       setCurrentStep(3);
       router.push(stepHref(3));
       // Keep the loading overlay up through the navigation — the fresh
@@ -214,9 +245,27 @@ export function RegisterWizard({
     }
   };
 
+  // Shared success path for card + PromptPay — persist a 'paid' result
+  // and advance to the step-3 receipt screen.
+  const handlePaid = useCallback((paid) => {
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
+    try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+    const paidResult = { kind: 'paid', ...paid };
+    try {
+      sessionStorage.setItem(
+        RESULT_KEY,
+        JSON.stringify({ result: paidResult, formData })
+      );
+    } catch {}
+    setResult(paidResult);
+    setCurrentStep(3);
+    router.push(stepHref(3));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [formData, router, stepHref]);
+
   return (
     <div>
-      <Stepper currentStep={currentStep} />
+      <Stepper currentStep={currentStep} omisePaymentEnabled={omisePaymentEnabled} />
 
       {currentStep === 1 && hydrated && (
         <StepForm
@@ -229,7 +278,8 @@ export function RegisterWizard({
         />
       )}
 
-      {currentStep === 2 && formData && (
+      {/* Toggle OFF — unchanged quote preview. */}
+      {currentStep === 2 && formData && !omisePaymentEnabled && (
         <StepPreview
           data={formData}
           onBack={handleBack}
@@ -239,9 +289,22 @@ export function RegisterWizard({
         />
       )}
 
+      {/* Toggle ON — single unified preview + payment page. */}
+      {currentStep === 2 && formData && omisePaymentEnabled && (
+        <UnifiedPaymentStep
+          data={formData}
+          pricing={pricing}
+          onBack={handleBack}
+          onQuoteConfirm={handleConfirm}
+          onPaid={handlePaid}
+          submitting={submitting}
+          error={submitError}
+        />
+      )}
+
       {currentStep === 3 && result && (
         <StepComplete
-          referenceNumber={result.referenceNumber}
+          result={result}
           email={formData?.coordinator?.email}
         />
       )}
@@ -249,10 +312,10 @@ export function RegisterWizard({
   );
 }
 
-function Stepper({ currentStep }) {
+function Stepper({ currentStep, omisePaymentEnabled = false }) {
   const steps = [
     { n: 1, label: 'กรอกข้อมูล' },
-    { n: 2, label: 'ตรวจสอบ' },
+    { n: 2, label: omisePaymentEnabled ? 'ชำระเงิน' : 'ตรวจสอบ' },
     { n: 3, label: 'สำเร็จ' },
   ];
   return (
@@ -661,7 +724,6 @@ function AttendanceModeSelector({ value, onChange, error }) {
 
 function StepPreview({ data, onBack, onConfirm, submitting, error }) {
   const coord = data.coordinator ?? {};
-  const attendees = data.attendees ?? [];
   const [showConfirm, setShowConfirm] = useState(false);
   return (
     <>
@@ -693,95 +755,12 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
       </Section>
 
       <Section title={`ข้อมูลผู้เข้าอบรม (${data.attendeesCount} ท่าน)`}>
-        {!data.attendeesListProvided ? (
-          <p className="text-sm text-[var(--text-secondary)]">
-            ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
-          </p>
-        ) : (
-          <ol className="space-y-2">
-            {coord.isAttending && (
-              <li className="rounded-9e-md bg-9e-brand/5 p-3 text-sm">
-                <div className="font-semibold">
-                  ท่านที่ 1 · {coord.firstName} {coord.lastName}
-                </div>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  {coord.email} · {coord.phone}
-                </div>
-              </li>
-            )}
-            {attendees.map((a, i) => (
-              <li
-                key={i}
-                className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm"
-              >
-                <div className="font-semibold">
-                  ท่านที่ {coord.isAttending ? i + 2 : i + 1} · {a.firstName}{' '}
-                  {a.lastName}
-                </div>
-                <div className="text-xs text-[var(--text-secondary)]">
-                  {a.email} · {a.phone}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
+        <AttendeeListView data={data} />
       </Section>
 
       {data.invoice && (
         <Section title="ใบเสนอราคา / ใบกำกับภาษี">
-          <ReadOnlyRow
-            label="ประเภทลูกค้า"
-            value={data.invoice.type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป'}
-          />
-          <ReadOnlyRow
-            label="ประเทศ"
-            value={data.invoice.country === 'TH' ? 'Thailand' : 'Other country'}
-          />
-          {data.invoice.type === 'individual' ? (
-            <ReadOnlyRow
-              label="ชื่อ-นามสกุล"
-              value={`${data.invoice.firstName ?? ''} ${data.invoice.lastName ?? ''}`.trim()}
-            />
-          ) : (
-            <>
-              <ReadOnlyRow label="ชื่อบริษัท" value={data.invoice.companyName} />
-              {data.invoice.branch && (
-                <ReadOnlyRow label="สาขา" value={data.invoice.branch} />
-              )}
-            </>
-          )}
-          {data.invoice.taxId && (
-            <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={data.invoice.taxId} />
-          )}
-          {data.invoice.country === 'TH' && data.invoice.thaiAddress && (
-            <ReadOnlyRow
-              label="ที่อยู่"
-              value={[
-                data.invoice.thaiAddress.addressLine,
-                data.invoice.thaiAddress.subDistrict,
-                data.invoice.thaiAddress.district,
-                data.invoice.thaiAddress.province,
-                data.invoice.thaiAddress.postalCode,
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            />
-          )}
-          {data.invoice.country === 'OTHER' && data.invoice.internationalAddress && (
-            <ReadOnlyRow
-              label="ที่อยู่"
-              value={[
-                data.invoice.internationalAddress.line1,
-                data.invoice.internationalAddress.line2,
-                data.invoice.internationalAddress.city,
-                data.invoice.internationalAddress.state,
-                data.invoice.internationalAddress.postalCode,
-                data.invoice.internationalAddress.country,
-              ]
-                .filter(Boolean)
-                .join(', ')}
-            />
-          )}
+          <InvoiceView invoice={data.invoice} />
         </Section>
       )}
 
@@ -869,7 +848,54 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 
 // ── Step 3: Thank-you ────────────────────────────────────────────
 
-function StepComplete({ referenceNumber, email }) {
+function StepComplete({ result, email }) {
+  const referenceNumber = result?.referenceNumber;
+
+  // ── Paid variant (card / PromptPay) ──────────────────────────────
+  if (result?.kind === 'paid') {
+    const methodLabel =
+      result.method === 'promptpay' ? 'QR PromptPay' : 'บัตรเครดิต/เดบิต';
+    return (
+      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
+        <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
+        <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
+          ชำระเงินสำเร็จ
+        </h2>
+        <p className="mt-3 text-sm text-[var(--text-secondary)]">
+          เลขอ้างอิง:{' '}
+          <span className="font-mono text-base font-bold text-9e-brand">
+            {referenceNumber}
+          </span>
+        </p>
+        {result.amount != null && (
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            ยอดชำระ:{' '}
+            <span className="text-base font-bold text-[var(--text-primary)]">
+              {formatTHB(result.amount)} บาท
+            </span>
+          </p>
+        )}
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">
+          ช่องทางชำระเงิน:{' '}
+          <span className="font-semibold text-[var(--text-primary)]">{methodLabel}</span>
+        </p>
+        {email && (
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            เราได้ส่งใบเสร็จและอีเมลยืนยันไปที่{' '}
+            <span className="font-semibold text-[var(--text-primary)]">{email}</span>{' '}
+            แล้ว
+          </p>
+        )}
+        <div className="mt-8">
+          <Button asChild variant="outline">
+            <Link href="/training-course">ดูคอร์สอื่นเพิ่มเติม</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Quote variant (unchanged) ────────────────────────────────────
   return (
     <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
       <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
@@ -941,4 +967,684 @@ function collectMessages(errors, messages = new Set()) {
     }
   }
   return messages;
+}
+
+// ── Read-only attendee + invoice views (shared by preview/summary) ──
+
+function AttendeeListView({ data }) {
+  const coord = data.coordinator ?? {};
+  const attendees = data.attendees ?? [];
+  if (!data.attendeesListProvided) {
+    return (
+      <p className="text-sm text-[var(--text-secondary)]">
+        ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
+      </p>
+    );
+  }
+  return (
+    <ol className="space-y-2">
+      {coord.isAttending && (
+        <li className="rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+          <div className="font-semibold">
+            ท่านที่ 1 · {coord.firstName} {coord.lastName}
+          </div>
+          <div className="text-xs text-[var(--text-secondary)]">
+            {coord.email} · {coord.phone}
+          </div>
+        </li>
+      )}
+      {attendees.map((a, i) => (
+        <li
+          key={i}
+          className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm"
+        >
+          <div className="font-semibold">
+            ท่านที่ {coord.isAttending ? i + 2 : i + 1} · {a.firstName}{' '}
+            {a.lastName}
+          </div>
+          <div className="text-xs text-[var(--text-secondary)]">
+            {a.email} · {a.phone}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function InvoiceView({ invoice }) {
+  if (!invoice) return null;
+  return (
+    <>
+      <ReadOnlyRow
+        label="ประเภทลูกค้า"
+        value={invoice.type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป'}
+      />
+      <ReadOnlyRow
+        label="ประเทศ"
+        value={invoice.country === 'TH' ? 'Thailand' : 'Other country'}
+      />
+      {invoice.type === 'individual' ? (
+        <ReadOnlyRow
+          label="ชื่อ-นามสกุล"
+          value={`${invoice.firstName ?? ''} ${invoice.lastName ?? ''}`.trim()}
+        />
+      ) : (
+        <>
+          <ReadOnlyRow label="ชื่อบริษัท" value={invoice.companyName} />
+          {invoice.branch && <ReadOnlyRow label="สาขา" value={invoice.branch} />}
+        </>
+      )}
+      {invoice.taxId && (
+        <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId} />
+      )}
+      {invoice.country === 'TH' && invoice.thaiAddress && (
+        <ReadOnlyRow
+          label="ที่อยู่"
+          value={[
+            invoice.thaiAddress.addressLine,
+            invoice.thaiAddress.subDistrict,
+            invoice.thaiAddress.district,
+            invoice.thaiAddress.province,
+            invoice.thaiAddress.postalCode,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        />
+      )}
+      {invoice.country === 'OTHER' && invoice.internationalAddress && (
+        <ReadOnlyRow
+          label="ที่อยู่"
+          value={[
+            invoice.internationalAddress.line1,
+            invoice.internationalAddress.line2,
+            invoice.internationalAddress.city,
+            invoice.internationalAddress.state,
+            invoice.internationalAddress.postalCode,
+            invoice.internationalAddress.country,
+          ]
+            .filter(Boolean)
+            .join(', ')}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Omise: consent checkbox ─────────────────────────────────────
+
+function ConsentCheckbox({ checked, onChange, label }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 text-sm text-[var(--text-primary)]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5 h-4 w-4 shrink-0 accent-9e-brand"
+      />
+      <span className="leading-5">{label}</span>
+    </label>
+  );
+}
+
+// ── Step 2 (Omise): unified preview + payment page ──────────────
+
+const CONSENT_ITEMS = [
+  { key: 'dataChecked', label: 'ข้าพเจ้าตรวจสอบข้อมูลการลงทะเบียนทั้งหมดเรียบร้อยแล้ว' },
+  { key: 'noRefund', label: 'ข้าพเจ้ารับทราบว่าหลังชำระเงินแล้ว จะไม่สามารถขอคืนเงินได้' },
+  {
+    key: 'changePolicy',
+    label:
+      'ข้าพเจ้ารับทราบว่าการเปลี่ยนแปลงผู้เข้าอบรม การเลื่อนรอบ หรือยกเลิก เป็นไปตามเงื่อนไขที่บริษัทกำหนด',
+  },
+  { key: 'termsAccepted', label: 'ข้าพเจ้ายินยอมและรับทราบเงื่อนไขการอบรมทั้งหมด' },
+];
+
+/** Left column — read-only preview of everything the customer entered. */
+function PreviewSections({ data }) {
+  const coord = data.coordinator ?? {};
+  return (
+    <div className="space-y-6">
+      <Section title="ข้อมูลคอร์ส">
+        <ReadOnlyRow label="หลักสูตร" value={data.courseName} />
+        <ReadOnlyRow label="รหัสคอร์ส" value={data.courseCode || data.courseId} />
+        <ReadOnlyRow label="รอบอบรม" value={data.classDate || '—'} />
+        {data.scheduleType === 'hybrid' && (
+          <ReadOnlyRow
+            label="รูปแบบการอบรม"
+            value={data.attendanceMode === 'teams' ? 'Online via Microsoft Teams' : 'Classroom'}
+          />
+        )}
+      </Section>
+
+      <Section title="ข้อมูลผู้ประสานงาน">
+        <ReadOnlyRow
+          label="ชื่อ-นามสกุล"
+          value={`${coord.firstName ?? ''} ${coord.lastName ?? ''}`.trim()}
+        />
+        <ReadOnlyRow label="อีเมล" value={coord.email} />
+        <ReadOnlyRow label="เบอร์โทร" value={coord.phone} />
+        {coord.lineId && <ReadOnlyRow label="LINE ID" value={coord.lineId} />}
+        <ReadOnlyRow
+          label="ผู้ประสานงานเข้าอบรม"
+          value={coord.isAttending ? 'ใช่' : 'ไม่'}
+        />
+      </Section>
+
+      <Section title={`ข้อมูลผู้เข้าอบรม (${data.attendeesCount} ท่าน)`}>
+        <AttendeeListView data={data} />
+      </Section>
+
+      {data.invoice && (
+        <Section title="ใบเสนอราคา / ใบกำกับภาษี">
+          <InvoiceView invoice={data.invoice} />
+        </Section>
+      )}
+
+      {data.notes && (
+        <Section title="หมายเหตุ">
+          <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">
+            {data.notes}
+          </p>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function SummaryLine({ label, value }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-[var(--text-secondary)]">{label}</span>
+      <span className="text-[var(--text-primary)]">{value}</span>
+    </div>
+  );
+}
+
+function MethodRadio({ selected, disabled, onClick, title, subtitle }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        'flex w-full items-start gap-3 rounded-9e-lg border p-3 text-left transition-all',
+        disabled
+          ? 'cursor-not-allowed border-[var(--surface-border)] opacity-50'
+          : selected
+            ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15'
+            : 'border-[var(--surface-border)] hover:border-9e-brand/40'
+      )}
+    >
+      <span
+        className={cn(
+          'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
+          selected ? 'border-9e-brand' : 'border-[var(--surface-border)]'
+        )}
+      >
+        {selected && <span className="h-2 w-2 rounded-full bg-9e-brand" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-[var(--text-primary)]">{title}</span>
+        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-secondary)]">
+          {subtitle}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ChannelCard({ selected, onClick, Icon, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={cn(
+        'flex flex-col items-center gap-2 rounded-9e-lg border p-3 text-center transition-all',
+        selected
+          ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15'
+          : 'border-[var(--surface-border)] hover:border-9e-brand/40'
+      )}
+    >
+      <Icon className={cn('h-6 w-6', selected ? 'text-9e-brand' : 'text-[var(--text-secondary)]')} />
+      <span className="text-xs font-semibold text-[var(--text-primary)]">{label}</span>
+    </button>
+  );
+}
+
+function CardFields({ card, setCard }) {
+  const update = (k) => (e) => setCard((c) => ({ ...c, [k]: e.target.value }));
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="card-number">หมายเลขบัตร</Label>
+        <Input id="card-number" inputMode="numeric" autoComplete="cc-number"
+          placeholder="4242 4242 4242 4242" value={card.number} onChange={update('number')} />
+      </div>
+      <div>
+        <Label htmlFor="card-name">ชื่อบนบัตร</Label>
+        <Input id="card-name" autoComplete="cc-name" placeholder="NAME SURNAME"
+          value={card.name} onChange={update('name')} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="card-expiry">วันหมดอายุ (MM/YY)</Label>
+          <Input id="card-expiry" inputMode="numeric" autoComplete="cc-exp"
+            placeholder="12/28" value={card.expiry} onChange={update('expiry')} />
+        </div>
+        <div>
+          <Label htmlFor="card-cvc">CVC</Label>
+          <Input id="card-cvc" inputMode="numeric" autoComplete="cc-csc"
+            placeholder="123" value={card.cvc} onChange={update('cvc')} />
+        </div>
+      </div>
+      <p className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
+        <Lock className="h-3.5 w-3.5" />
+        ข้อมูลบัตรถูกเข้ารหัสและส่งตรงไปยัง Omise — เราไม่เก็บเลขบัตรของคุณ
+      </p>
+    </div>
+  );
+}
+
+function QrDisplay({ charge, pricing, expired }) {
+  return (
+    <div className="flex flex-col items-center rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-center">
+      <h3 className="mb-1 text-sm font-bold text-[var(--text-primary)]">
+        สแกนเพื่อชำระเงิน (QR PromptPay)
+      </h3>
+      <p className="mb-3 text-xs text-[var(--text-secondary)]">
+        เปิดแอปธนาคารของคุณแล้วสแกน QR ด้านล่าง
+      </p>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={charge.qrUrl}
+        alt="PromptPay QR"
+        className="h-56 w-56 rounded-9e-md border border-[var(--surface-border)] bg-white p-2"
+      />
+      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+        ยอดชำระ:{' '}
+        <span className="text-lg font-bold text-9e-brand">
+          {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
+        </span>
+      </p>
+      {expired && <p className="mt-2 text-sm text-red-500">หมดเวลา กรุณาลองใหม่</p>}
+    </div>
+  );
+}
+
+/**
+ * UnifiedPaymentStep — one page: left preview, right sticky payment card
+ * (summary → method → channel → channel UI → consent → confirm). No
+ * separate navigation screens. The PromptPay charge is created only on an
+ * explicit button press (never on mount) to avoid duplicate charges.
+ */
+function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, submitting, error }) {
+  const [method, setMethod] = useState(null); // 'instant' | 'quote'
+  const [channel, setChannel] = useState(null); // 'promptpay' | 'credit_card'
+  const [consent, setConsent] = useState({
+    dataChecked: false,
+    noRefund: false,
+    changePolicy: false,
+    termsAccepted: false,
+  });
+
+  const [card, setCard] = useState({ number: '', name: '', expiry: '', cvc: '' });
+  const [omiseReady, setOmiseReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [payError, setPayError] = useState(null);
+  const [charge, setCharge] = useState(null); // QR result, once created
+  const [pendingTarget, setPendingTarget] = useState(null);
+  const [expired, setExpired] = useState(false);
+
+  const consentOk =
+    consent.dataChecked && consent.noRefund && consent.changePolicy && consent.termsAccepted;
+  const toggleConsent = (k) => setConsent((c) => ({ ...c, [k]: !c[k] }));
+  const qrLive = Boolean(charge?.qrUrl);
+
+  // Load Omise.js when the card channel is selected.
+  useEffect(() => {
+    if (channel !== 'credit_card') return;
+    const pk = process.env.NEXT_PUBLIC_OMISE_PUBLIC_KEY;
+    function configure() {
+      try {
+        if (window.Omise && pk) {
+          window.Omise.setPublicKey(pk);
+          setOmiseReady(true);
+        }
+      } catch {
+        // leave omiseReady false — pay button stays disabled
+      }
+    }
+    if (typeof window !== 'undefined' && window.Omise) {
+      configure();
+      return;
+    }
+    const existing = document.querySelector('script[data-omise]');
+    if (existing) {
+      existing.addEventListener('load', configure);
+      return () => existing.removeEventListener('load', configure);
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.omise.co/omise.js';
+    script.async = true;
+    script.setAttribute('data-omise', 'true');
+    script.addEventListener('load', configure);
+    document.body.appendChild(script);
+    return () => script.removeEventListener('load', configure);
+  }, [channel]);
+
+  // Poll for settlement (card async + PromptPay) every 3s; stop after ~10 min.
+  useEffect(() => {
+    if (!pendingTarget?.id) return;
+    const start = Date.now();
+    const timer = setInterval(async () => {
+      if (Date.now() - start > 600000) {
+        clearInterval(timer);
+        setExpired(true);
+        setBusy(false);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/registration/public/status?id=${encodeURIComponent(pendingTarget.id)}`
+        );
+        const body = await res.json().catch(() => ({}));
+        if (body?.status === 'paid') {
+          clearInterval(timer);
+          onPaid({
+            referenceNumber: pendingTarget.referenceNumber,
+            amount: pendingTarget.amount,
+            method: pendingTarget.method,
+          });
+        }
+      } catch {
+        // transient — keep polling
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [pendingTarget, onPaid]);
+
+  const payCard = () => {
+    setPayError(null);
+    if (!window.Omise || !omiseReady) {
+      setPayError('ระบบชำระเงินยังไม่พร้อม กรุณารอสักครู่แล้วลองใหม่');
+      return;
+    }
+    const [mm, yy] = card.expiry.split('/').map((s) => s.trim());
+    const year = yy ? (yy.length === 2 ? 2000 + Number(yy) : Number(yy)) : NaN;
+    setBusy(true);
+    window.Omise.createToken(
+      'card',
+      {
+        name: card.name,
+        number: card.number.replace(/\s+/g, ''),
+        expiration_month: Number(mm),
+        expiration_year: year,
+        security_code: card.cvc,
+      },
+      async (statusCode, response) => {
+        if (statusCode !== 200) {
+          setBusy(false);
+          setPayError(response?.message || 'ข้อมูลบัตรไม่ถูกต้อง กรุณาตรวจสอบ');
+          return;
+        }
+        try {
+          const res = await fetch('/api/registration/public/charge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ...data,
+              paymentMethod: 'credit_card',
+              omiseToken: response.id,
+              consent,
+            }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok || !body.ok) {
+            setBusy(false);
+            setPayError(body?.message || 'การชำระเงินไม่สำเร็จ กรุณาลองใหม่');
+            return;
+          }
+          if (body.paid) {
+            onPaid({ referenceNumber: body.referenceNumber, amount: body.amount, method: 'credit_card' });
+            return;
+          }
+          // Rare for card — fall back to status polling.
+          setPendingTarget({
+            id: body.registrationId,
+            referenceNumber: body.referenceNumber,
+            amount: body.amount,
+            method: 'credit_card',
+          });
+        } catch {
+          setBusy(false);
+          setPayError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
+        }
+      }
+    );
+  };
+
+  const createQr = async () => {
+    setPayError(null);
+    setBusy(true);
+    try {
+      const res = await fetch('/api/registration/public/charge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, paymentMethod: 'promptpay', consent }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) {
+        setBusy(false);
+        setPayError(body?.message || 'สร้าง QR ไม่สำเร็จ กรุณาลองใหม่');
+        return;
+      }
+      setCharge(body);
+      setPendingTarget({
+        id: body.registrationId,
+        referenceNumber: body.referenceNumber,
+        amount: body.amount,
+        method: 'promptpay',
+      });
+      setBusy(false);
+    } catch {
+      setBusy(false);
+      setPayError('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่');
+    }
+  };
+
+  const onConfirm = () => {
+    if (method === 'quote') return onQuoteConfirm();
+    if (method === 'instant' && channel === 'credit_card') return payCard();
+    if (method === 'instant' && channel === 'promptpay') return createQr();
+  };
+
+  const canConfirm =
+    method === 'quote'
+      ? true
+      : Boolean(method === 'instant' && channel && consentOk && pricing);
+  const cardNotReady = method === 'instant' && channel === 'credit_card' && !omiseReady;
+  const confirmLabel =
+    method === 'quote'
+      ? 'ยืนยันการขอใบเสนอราคา'
+      : channel === 'credit_card'
+        ? 'ยืนยันการสมัครและชำระด้วยบัตร'
+        : channel === 'promptpay'
+          ? 'ยืนยันการสมัครและชำระด้วย PromptPay'
+          : 'เลือกวิธีดำเนินการ';
+
+  return (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_minmax(360px,420px)]">
+      {/* LEFT — preview */}
+      <div>
+        <PreviewSections data={data} />
+      </div>
+
+      {/* RIGHT — sticky payment card */}
+      <div className="lg:sticky lg:top-24 lg:self-start">
+        <div className="space-y-6 rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-9e-sm">
+          {/* 1. สรุปยอด */}
+          <div>
+            <h2 className="mb-3 text-base font-bold text-[var(--text-primary)]">สรุปยอด</h2>
+            {pricing ? (
+              <div className="space-y-2 text-sm">
+                <SummaryLine
+                  label={`ราคาต่อท่าน × ${pricing.seats}`}
+                  value={`${formatTHB(pricing.subtotal)} บาท`}
+                />
+                <SummaryLine label="ส่วนลด" value={`${formatTHB(0)} บาท`} />
+                <SummaryLine label="VAT 7%" value={`${formatTHB(pricing.vatAmount)} บาท`} />
+                <div className="mt-2 flex items-baseline justify-between border-t border-[var(--surface-border)] pt-2">
+                  <span className="font-semibold text-[var(--text-primary)]">ยอดรวมสุทธิ</span>
+                  <span className="text-xl font-bold text-9e-brand">
+                    {formatTHB(pricing.total)} บาท
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-red-500">
+                ไม่สามารถคำนวณราคาได้ กรุณาเลือกขอใบเสนอราคา หรือ ติดต่อทีมงาน
+              </p>
+            )}
+          </div>
+
+          {/* 2. เลือกวิธีดำเนินการ */}
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+              เลือกวิธีดำเนินการ
+            </h3>
+            <div className="space-y-2">
+              <MethodRadio
+                selected={method === 'instant'}
+                disabled={!pricing}
+                onClick={() => setMethod('instant')}
+                title="ชำระทันที"
+                subtitle="ชำระผ่าน PromptPay QR หรือบัตรเครดิต/เดบิต"
+              />
+              <MethodRadio
+                selected={method === 'quote'}
+                onClick={() => { setMethod('quote'); setChannel(null); }}
+                title="ขอใบเสนอราคา"
+                subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+              />
+            </div>
+            {!pricing && (
+              <p className="mt-2 text-xs text-amber-700">
+                * ราคายังไม่พร้อม สามารถเลือกขอใบเสนอราคาได้
+              </p>
+            )}
+          </div>
+
+          {/* 3 + 4 + 5 — instant path, before the QR is created */}
+          {method === 'instant' && !qrLive && (
+            <>
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+                  เลือกช่องทางชำระเงิน
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <ChannelCard
+                    selected={channel === 'promptpay'}
+                    onClick={() => setChannel('promptpay')}
+                    Icon={QrCode}
+                    label="PromptPay QR"
+                  />
+                  <ChannelCard
+                    selected={channel === 'credit_card'}
+                    onClick={() => setChannel('credit_card')}
+                    Icon={CreditCard}
+                    label="บัตรเครดิต/เดบิต"
+                  />
+                </div>
+              </div>
+
+              {/* 4. only the selected channel's UI */}
+              {channel === 'credit_card' && <CardFields card={card} setCard={setCard} />}
+              {channel === 'promptpay' && (
+                <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-[var(--text-secondary)]">
+                  กด “ยืนยันการสมัครและชำระด้วย PromptPay” เพื่อสร้าง QR สำหรับสแกนชำระเงิน
+                </p>
+              )}
+
+              {/* 5. consent at the bottom */}
+              {channel && (
+                <div>
+                  <h3 className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+                    เงื่อนไขการชำระเงิน
+                  </h3>
+                  <div className="space-y-3">
+                    {CONSENT_ITEMS.map(({ key, label }) => (
+                      <ConsentCheckbox
+                        key={key}
+                        checked={consent[key]}
+                        onChange={() => toggleConsent(key)}
+                        label={label}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* QR display once created */}
+          {qrLive && <QrDisplay charge={charge} pricing={pricing} expired={expired} />}
+
+          {/* Errors */}
+          {payError && (
+            <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
+              {payError}
+            </div>
+          )}
+          {error && method === 'quote' && (
+            <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
+              {error}
+            </div>
+          )}
+
+          {/* 6. confirm button (hidden once the QR is live) */}
+          {!qrLive && (
+            <Button
+              type="button"
+              variant="cta"
+              className="w-full"
+              disabled={busy || submitting || !canConfirm || cardNotReady}
+              onClick={onConfirm}
+            >
+              {busy || submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  กำลังดำเนินการ...
+                </>
+              ) : (
+                <>
+                  {method === 'instant' && <Lock className="h-4 w-4" />}
+                  {confirmLabel}
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* 7. QR pending status line */}
+          {qrLive && !expired && (
+            <p className="flex items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              สถานะ: รอตรวจสอบผลการชำระเงิน
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={onBack}
+            disabled={busy || submitting}
+          >
+            ย้อนกลับไปแก้ไขข้อมูล
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }

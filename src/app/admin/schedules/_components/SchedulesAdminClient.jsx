@@ -548,6 +548,11 @@ function ScheduleCell({
           {local.max_seats} ที่
         </div>
       )}
+      {local?.price_override != null && (
+        <div className="mt-0.5 text-[10px] font-medium text-9e-action">
+          ฿{Number(local.price_override).toLocaleString('th-TH')}
+        </div>
+      )}
       {teacherNames.length > 0 && (
         <div
           className="mt-0.5 truncate text-[10px] text-9e-slate-dp-50"
@@ -676,6 +681,9 @@ function ScheduleModal({
   const [maxSeats, setMaxSeats] = useState(
     initialLocal?.max_seats != null ? String(initialLocal.max_seats) : ''
   );
+  const [priceOverride, setPriceOverride] = useState(
+    initialLocal?.price_override != null ? String(initialLocal.price_override) : ''
+  );
   const [instructorIds, setInstructorIds] = useState(
     Array.isArray(initialLocal?.instructor_ids)
       ? initialLocal.instructor_ids.map(String)
@@ -716,6 +724,7 @@ function ScheduleModal({
     fd.set('type',        type);
     fd.set('signup_url',  signupUrl);
     if (maxSeats) fd.set('max_seats', maxSeats);
+    if (priceOverride !== '') fd.set('price_override', priceOverride);
     for (const id of instructorIds) fd.append('instructor_ids', id);
     if (isEdit) fd.set('schedule_id', schedule._id);
 
@@ -989,6 +998,24 @@ function ScheduleModal({
                   })}
                 </div>
               </div>
+
+              <label className="block">
+                <span className="text-sm font-medium text-9e-navy dark:text-white">
+                  ราคาต่อท่าน (บาท, ต่อรอบ)
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={priceOverride}
+                  onChange={(e) => setPriceOverride(e.target.value)}
+                  placeholder="เว้นว่าง = ใช้ราคาปกติของหลักสูตร"
+                  className={inputCls}
+                />
+                <span className="mt-1 block text-xs text-9e-slate-dp-50">
+                  เว้นว่าง = ใช้ราคาปกติของหลักสูตร
+                </span>
+              </label>
             </div>
           </div>
         </form>

@@ -422,3 +422,11 @@ html.dark   { color-scheme: dark; }
   pointer-events: none;
   height: 0;
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Hide a container's native horizontal scrollbar (used by the
+   public schedule table, which renders its own custom scrollbar
+   positioned under the month columns only).
+   ────────────────────────────────────────────────────────────── */
+.no-native-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-native-scrollbar::-webkit-scrollbar { display: none; }

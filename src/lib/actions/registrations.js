@@ -76,7 +76,7 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(PAGE_SIZE)
-      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount requestInvoice status createdAt')
+      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount requestInvoice status createdAt payment pricing')
       .lean();
   }
 

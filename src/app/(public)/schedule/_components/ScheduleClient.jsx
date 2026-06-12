@@ -1,26 +1,40 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { Download, FileText, HelpCircle } from 'lucide-react';
-import { courseHref } from '@/lib/utils';
+import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Download, FileText, HelpCircle } from "lucide-react";
+import { courseHref } from "@/lib/utils";
 
 const MONTH_TH = [
-  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+  "ม.ค.",
+  "ก.พ.",
+  "มี.ค.",
+  "เม.ย.",
+  "พ.ค.",
+  "มิ.ย.",
+  "ก.ค.",
+  "ส.ค.",
+  "ก.ย.",
+  "ต.ค.",
+  "พ.ย.",
+  "ธ.ค.",
 ];
 
 const STATUS_STYLE = {
-  open:        { dot: 'bg-[#39b980]', text: 'text-[#39b980]', label: 'รับสมัคร' },
-  nearly_full: { dot: 'bg-[#ffc94a]', text: 'text-[#d4a017]', label: 'ใกล้เต็ม' },
-  full:        { dot: 'bg-[#ff4b55]', text: 'text-[#ff4b55]', label: 'เต็ม' },
+  open: { dot: "bg-[#39b980]", text: "text-[#39b980]", label: "รับสมัคร" },
+  nearly_full: {
+    dot: "bg-[#ffc94a]",
+    text: "text-[#d4a017]",
+    label: "ใกล้เต็ม",
+  },
+  full: { dot: "bg-[#ff4b55]", text: "text-[#ff4b55]", label: "เต็ม" },
 };
 
 const TYPE_COLOR = {
-  classroom: '#00CCFF',
-  hybrid:    '#8B5CF6',
-  online:    '#22C55E',
+  classroom: "#00CCFF",
+  hybrid: "#8B5CF6",
+  online: "#22C55E",
 };
 
 function getMonthIndex(scheduleItem) {
@@ -35,7 +49,7 @@ function formatDateLabel(scheduleItem) {
     .map((d) => new Date(d))
     .filter((d) => !Number.isNaN(d.getTime()))
     .sort((a, b) => a - b);
-  if (dates.length === 0) return '-';
+  if (dates.length === 0) return "-";
   const first = dates[0];
   const last = dates[dates.length - 1];
   if (dates.length === 1) return String(first.getDate());
@@ -45,12 +59,17 @@ function formatDateLabel(scheduleItem) {
   return `${first.getDate()} ${MONTH_TH[first.getMonth()]} - ${last.getDate()}`;
 }
 
-export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = {} }) {
+export function ScheduleClient({
+  courses,
+  programs,
+  schedulePDF,
+  earlyBirdMap = {},
+}) {
   const currentMonth = new Date().getMonth();
 
-  const [selectedProgram, setSelectedProgram] = useState('all');
-  const [selectedType, setSelectedType] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedProgram, setSelectedProgram] = useState("all");
+  const [selectedType, setSelectedType] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
   const [monthFrom, setMonthFrom] = useState(currentMonth);
   const [monthTo, setMonthTo] = useState(11);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -83,13 +102,13 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
   // Filter helpers — applied to a schedule cell so the table reacts
   // to type / status filters at the cell level (not just whole row).
   const sessionMatches = (s) =>
-    (selectedType === 'all' || s.type === selectedType) &&
-    (selectedStatus === 'all' || s.status === selectedStatus);
+    (selectedType === "all" || s.type === selectedType) &&
+    (selectedStatus === "all" || s.status === selectedStatus);
 
   const filteredCourses = useMemo(() => {
     return courses.filter((c) => {
       if (
-        selectedProgram !== 'all' &&
+        selectedProgram !== "all" &&
         c.program?.program_name !== selectedProgram
       ) {
         return false;
@@ -97,9 +116,7 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
       // Course is visible if it has at least one matching schedule in
       // the visible-month range.
       const buckets = scheduleMap[c._id] ?? {};
-      return visibleMonths.some((m) =>
-        (buckets[m] ?? []).some(sessionMatches)
-      );
+      return visibleMonths.some((m) => (buckets[m] ?? []).some(sessionMatches));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -118,7 +135,7 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
     const orderRank = new Map(order.map((n, i) => [n, i]));
     const groups = new Map();
     for (const c of filteredCourses) {
-      const key = c.program?.program_name ?? 'อื่นๆ';
+      const key = c.program?.program_name ?? "อื่นๆ";
       if (!groups.has(key)) {
         groups.set(key, { program: c.program, courses: [] });
       }
@@ -132,9 +149,9 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
         ? orderRank.get(b.program?.program_name)
         : Infinity;
       if (ra !== rb) return ra - rb;
-      const an = a.program?.program_name ?? '';
-      const bn = b.program?.program_name ?? '';
-      return an.localeCompare(bn, 'th');
+      const an = a.program?.program_name ?? "";
+      const bn = b.program?.program_name ?? "";
+      return an.localeCompare(bn, "th");
     });
   }, [filteredCourses, programs]);
 
@@ -205,7 +222,9 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
           </FilterSelect>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              เดือน:
+            </span>
             <FilterSelect
               value={String(monthFrom)}
               onChange={(v) => setMonthFrom(Number(v))}
@@ -218,7 +237,9 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
                 </option>
               ))}
             </FilterSelect>
-            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ถึง
+            </span>
             <FilterSelect
               value={String(safeMonthTo)}
               onChange={(v) => setMonthTo(Number(v))}
@@ -275,7 +296,7 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
                       <span>
                         <strong className="text-9e-navy dark:text-white">
                           Classroom
-                        </strong>{' '}
+                        </strong>{" "}
                         : อบรมที่ห้องอบรม 9Expert
                       </span>
                     </div>
@@ -287,7 +308,7 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
                       <span>
                         <strong className="text-9e-navy dark:text-white">
                           Hybrid
-                        </strong>{' '}
+                        </strong>{" "}
                         : เลือกเรียนที่ห้องอบรม หรือ Microsoft Teams
                       </span>
                     </div>
@@ -302,10 +323,10 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
       {/* Result count */}
       <div className="mx-auto max-w-[1200px] max-md:px-4 pt-6">
         <p className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          ผลลัพธ์การค้นหา{' '}
+          ผลลัพธ์การค้นหา{" "}
           <span className="font-bold text-9e-action dark:text-9e-air">
             {filteredCourses.length}
-          </span>{' '}
+          </span>{" "}
           หลักสูตร
         </p>
       </div>
@@ -320,7 +341,7 @@ export function ScheduleClient({ courses, programs, schedulePDF, earlyBirdMap = 
 
         {grouped.map(({ program, courses: groupCourses }) => (
           <ProgramTable
-            key={program?._id ?? program?.program_name ?? 'other'}
+            key={program?._id ?? program?.program_name ?? "other"}
             program={program}
             courses={groupCourses}
             visibleMonths={visibleMonths}
@@ -341,8 +362,8 @@ function FilterSelect({ value, onChange, ariaLabel, compact, children }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={
-        'cursor-pointer rounded-xl border border-gray-200 bg-white text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-air ' +
-        (compact ? 'min-w-[80px] px-3 py-2' : 'min-w-[160px] px-4 py-2')
+        "cursor-pointer rounded-xl border border-gray-200 bg-white text-sm text-9e-navy transition-all duration-9e-micro ease-9e hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white dark:hover:border-9e-air " +
+        (compact ? "min-w-[80px] px-3 py-2" : "min-w-[160px] px-4 py-2")
       }
     >
       {children}
@@ -358,6 +379,81 @@ function ProgramTable({
   sessionMatches,
   earlyBirdMap = {},
 }) {
+  const scrollRef = useRef(null); // the table's overflow-x container
+  const barRef = useRef(null); // custom scrollbar track
+  const [thumb, setThumb] = useState({ width: 0, left: 0 });
+  const [needsScroll, setNeedsScroll] = useState(false);
+
+  // Measure the scroll container and size/position the custom thumb.
+  // Because the frozen columns are sticky inside the same scroll
+  // container, the entire horizontal overflow IS the month area.
+  const measure = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const { scrollWidth, clientWidth, scrollLeft } = el;
+    const overflow = scrollWidth - clientWidth;
+    const need = overflow > 1;
+    setNeedsScroll(need);
+    const bar = barRef.current;
+    if (!need || !bar) return;
+    const trackW = bar.clientWidth;
+    const thumbW = Math.max(40, (clientWidth / scrollWidth) * trackW);
+    const maxThumbLeft = trackW - thumbW;
+    const left = overflow > 0 ? (scrollLeft / overflow) * maxThumbLeft : 0;
+    setThumb({ width: thumbW, left });
+  }, []);
+
+  // Keep the custom thumb in sync with native scroll / resize / reflow.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [measure, visibleMonths.length, courses.length]);
+
+  // Re-measure once the bar actually mounts (it only renders when
+  // needsScroll flips true), so the thumb gets sized on first overflow.
+  useEffect(() => {
+    if (needsScroll) measure();
+  }, [needsScroll, measure]);
+
+  // Drag / click the custom track → map pointer x back to scrollLeft.
+  const onTrackPointer = (e) => {
+    const el = scrollRef.current;
+    const bar = barRef.current;
+    if (!el || !bar) return;
+    const rect = bar.getBoundingClientRect();
+    const overflow = el.scrollWidth - el.clientWidth;
+    const trackW = bar.clientWidth;
+    const thumbW = Math.max(40, (el.clientWidth / el.scrollWidth) * trackW);
+    const maxThumbLeft = trackW - thumbW;
+
+    const move = (clientX) => {
+      const x = Math.min(
+        Math.max(clientX - rect.left - thumbW / 2, 0),
+        maxThumbLeft,
+      );
+      el.scrollLeft = maxThumbLeft > 0 ? (x / maxThumbLeft) * overflow : 0;
+    };
+    move(e.clientX);
+
+    const onMove = (ev) => move(ev.clientX);
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   return (
     <div>
       <div className="mb-4 flex items-center gap-3">
@@ -372,107 +468,160 @@ function ProgramTable({
           />
         ) : null}
         <h2 className="text-lg font-bold text-9e-navy dark:text-white">
-          {program?.program_name ?? 'อื่นๆ'}
+          {program?.program_name ?? "อื่นๆ"}
         </h2>
         <span className="rounded-full bg-9e-air/20 px-2 py-0.5 text-xs font-bold text-9e-action dark:bg-[#111d2c] dark:text-9e-air">
           {courses.length}
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
-        <table className="w-full min-w-[900px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-gray-100 bg-9e-ice dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
-              <th className="sticky left-0 z-10 w-[400px] min-w-[400px] max-w-[400px] border-r border-gray-100 bg-9e-ice px-4 py-3 text-left font-bold text-9e-navy dark:border-[#1e3a5f] dark:bg-[#0f1e30] dark:text-white">
-                ชื่อหลักสูตร
-              </th>
-              <th className="w-[60px] px-3 py-3 text-center font-bold text-9e-navy dark:text-white">
-                วัน
-              </th>
-              <th className="w-[100px] px-3 py-3 text-center font-bold text-9e-navy dark:text-white">
-                ราคา
-              </th>
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+        <div ref={scrollRef} className="no-native-scrollbar overflow-x-auto">
+          <table className="min-w-[900px] table-fixed border-collapse text-sm">
+            <colgroup>
+              <col style={{ width: 120 }} />{/* รหัสหลักสูตร */}
+              <col style={{ width: 360 }} />{/* ชื่อหลักสูตร */}
+              <col style={{ width: 60 }} />{/* วัน */}
+              <col style={{ width: 100 }} />{/* ราคา */}
               {visibleMonths.map((m) => (
-                <th
-                  key={m}
-                  className="min-w-[90px] px-2 py-3 text-center font-bold text-9e-navy dark:text-white"
-                >
-                  {MONTH_TH[m]}
-                </th>
+                <col key={m} style={{ width: 90 }} />
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {courses.map((c, i) => {
-              const stripe = i % 2 === 0;
-              return (
-                <tr
-                  key={c._id ?? c.course_id}
-                  className={
-                    'border-b border-gray-100 transition-colors last:border-0 hover:bg-9e-ice/50 dark:border-[#1e3a5f] dark:hover:bg-[#0f1e30]/60 ' +
-                    (stripe
-                      ? ''
-                      : 'bg-[#FAFBFC] dark:bg-[#0a1424]/40')
-                  }
-                >
-                  <td
+            </colgroup>
+            <thead>
+              <tr className="border-b border-gray-100 bg-9e-ice dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
+                <th className="sticky left-0 z-10 w-[120px] min-w-[120px] max-w-[120px] bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
+                  รหัสหลักสูตร
+                </th>
+                <th className="sticky left-[120px] z-10 w-[360px] min-w-[360px] max-w-[360px] bg-9e-ice px-4 py-3 text-left font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
+                  ชื่อหลักสูตร
+                </th>
+                <th className="sticky left-[480px] z-10 w-[60px] min-w-[60px] max-w-[60px] bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
+                  วัน
+                </th>
+                <th className="sticky left-[540px] z-10 w-[100px] min-w-[100px] max-w-[100px] border-r border-gray-100 bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:border-[#1e3a5f] dark:bg-[#0f1e30] dark:text-white">
+                  ราคา
+                </th>
+                {visibleMonths.map((m) => (
+                  <th
+                    key={m}
+                    className="min-w-[90px] px-2 py-3 text-center font-bold text-9e-navy dark:text-white"
+                  >
+                    {MONTH_TH[m]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {courses.map((c, i) => {
+                const stripe = i % 2 === 0;
+                const stickyBg = stripe
+                  ? "bg-white dark:bg-[#111d2c]"
+                  : "bg-[#FAFBFC] dark:bg-[#0a1424]/40";
+                return (
+                  <tr
+                    key={c._id ?? c.course_id}
                     className={
-                      'sticky left-0 z-10 border-r border-gray-100 px-4 py-3 dark:border-[#1e3a5f] ' +
-                      (stripe
-                        ? 'bg-white dark:bg-[#111d2c]'
-                        : 'bg-[#FAFBFC] dark:bg-[#0a1424]/40')
+                      "border-b border-gray-100 last:border-0 dark:border-[#1e3a5f] " +
+                      stickyBg
                     }
                   >
-                    <Link
-                      href={courseHref(
-                        c.course_id ? String(c.course_id).toLowerCase() : ''
-                      )}
-                      className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+                    <td
+                      className={
+                        "sticky left-0 z-10 w-[120px] min-w-[120px] max-w-[120px] px-3 py-2 text-center align-middle text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8] " +
+                        stickyBg
+                      }
                     >
-                      {c.course_name}
-                    </Link>
-                  </td>
-                  <td className="px-3 py-3 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                    {c.course_trainingdays ?? '-'}
-                  </td>
-                  <td className="px-3 py-3 text-center text-xs font-medium text-9e-navy dark:text-white">
-                    {c.course_price
-                      ? Number(c.course_price).toLocaleString('th-TH')
-                      : 'Call'}
-                  </td>
-                  {visibleMonths.map((m) => {
-                    const cellSchedules = (
-                      scheduleMap[c._id]?.[m] ?? []
-                    ).filter(sessionMatches);
-                    const ebScheduleId =
-                      earlyBirdMap?.[String(c.course_id).toUpperCase()] ?? null;
-                    return (
-                      <td
-                        key={m}
-                        className="px-2 py-2 text-center align-top"
-                      >
-                        {cellSchedules.length === 0 ? (
-                          <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">—</span>
-                        ) : (
-                          <div className="flex flex-col items-center gap-2">
-                            {cellSchedules.map((s, si) => (
-                              <ScheduleCell
-                                key={s._id ?? si}
-                                schedule={s}
-                                courseId={c.course_id}
-                                isEarlyBird={!!ebScheduleId && s._id === ebScheduleId}
-                              />
-                            ))}
-                          </div>
+                      {c.course_id ?? "-"}
+                    </td>
+                    <td
+                      className={
+                        "sticky left-[120px] z-10 w-[360px] min-w-[360px] max-w-[360px] px-4 py-2 align-middle " +
+                        stickyBg
+                      }
+                    >
+                      <Link
+                        href={courseHref(
+                          c.course_id ? String(c.course_id).toLowerCase() : "",
                         )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+                      >
+                        {c.course_name}
+                      </Link>
+                    </td>
+                    <td
+                      className={
+                        "sticky left-[480px] z-10 w-[60px] min-w-[60px] max-w-[60px] px-3 py-2 text-center align-middle text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] " +
+                        stickyBg
+                      }
+                    >
+                      {c.course_trainingdays ?? "-"}
+                    </td>
+                    <td
+                      className={
+                        "sticky left-[540px] z-10 w-[100px] min-w-[100px] max-w-[100px] border-r border-gray-100 px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:border-[#1e3a5f] dark:text-white " +
+                        stickyBg
+                      }
+                    >
+                      {c.course_price
+                        ? Number(c.course_price).toLocaleString("th-TH")
+                        : "Call"}
+                    </td>
+                    {visibleMonths.map((m) => {
+                      const cellSchedules = (
+                        scheduleMap[c._id]?.[m] ?? []
+                      ).filter(sessionMatches);
+                      const ebScheduleId =
+                        earlyBirdMap?.[String(c.course_id).toUpperCase()] ??
+                        null;
+                      return (
+                        <td
+                          key={m}
+                          className="min-w-[90px] px-2 py-2 text-center align-middle"
+                        >
+                          {cellSchedules.length === 0 ? (
+                            <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
+                              —
+                            </span>
+                          ) : (
+                            <div className="flex flex-col items-center gap-2">
+                              {cellSchedules.map((s, si) => (
+                                <ScheduleCell
+                                  key={s._id ?? si}
+                                  schedule={s}
+                                  courseId={c.course_id}
+                                  isEarlyBird={
+                                    !!ebScheduleId && s._id === ebScheduleId
+                                  }
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Custom horizontal scrollbar — full-width track, calibrated 1:1
+            to the scroll container so it reaches the last month. */}
+        {needsScroll && (
+          <div className="pb-2">
+            <div
+              ref={barRef}
+              onMouseDown={onTrackPointer}
+              className="relative h-2.5 cursor-pointer rounded-full bg-gray-200 dark:bg-[#1e3a5f]"
+            >
+              <div
+                className="absolute top-0 h-2.5 rounded-full bg-gray-400 hover:bg-gray-500 dark:bg-[#3b5a7f]"
+                style={{ width: thumb.width, left: thumb.left }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -484,12 +633,15 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
   const dateLabel = formatDateLabel(schedule);
   // Prefer the internal registration page with the schedule's _id pre-selected.
   // Fall back to upstream signup_url only when _id or courseId is missing.
-  const href = schedule._id && courseId
-    ? `/registration/public?course=${String(courseId).toLowerCase()}&class=${schedule._id}`
-    : (schedule.signup_url || null);
+  const href =
+    schedule._id && courseId
+      ? `/registration/public?course=${String(courseId).toLowerCase()}&class=${schedule._id}`
+      : schedule.signup_url || null;
 
   const inner = (
-    <span className={`flex flex-col items-center gap-0.5${isEarlyBird ? ' pt-3' : ''}`}>
+    <span
+      className={`flex flex-col items-center gap-0.5${isEarlyBird ? " pt-3" : ""}`}
+    >
       <span
         className="h-2 w-2 rounded-full"
         style={{ backgroundColor: color }}
@@ -513,7 +665,10 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
     );
   }
   return (
-    <a href={href} className="group relative block cursor-pointer overflow-hidden rounded-sm">
+    <a
+      href={href}
+      className="group relative block cursor-pointer overflow-hidden rounded-sm"
+    >
       {isEarlyBird && <EarlyBirdPill />}
       {inner}
     </a>
@@ -529,4 +684,3 @@ function EarlyBirdPill() {
     </span>
   );
 }
-

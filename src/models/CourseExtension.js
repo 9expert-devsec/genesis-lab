@@ -52,6 +52,12 @@ const CourseExtensionSchema = new mongoose.Schema(
 
     // ── Control
     isPublished: { type: Boolean, default: true },
+
+    // ── Payment (Omise) ─────────────────────────────────────────
+    // When true, the public registration wizard for this course shows
+    // the 3-way payment choice (quote / credit card / QR PromptPay).
+    // When false (default), the course uses the original quote-only flow.
+    omisePaymentEnabled: { type: Boolean, default: false },
   },
   { timestamps: true, collection: 'course_extensions' }
 );
