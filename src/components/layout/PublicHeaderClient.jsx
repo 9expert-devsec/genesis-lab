@@ -941,7 +941,7 @@ function DesktopMega({
                       col3Courses.map((course) => (
                         <a
                           key={course.course_id}
-                          href={courseHref(course.course_id)}
+                          href={courseHref(course.urlAlias || course.course_id)}
                           onMouseEnter={() => handleCourseHover(course.course_id)}
                           onClick={closeMegaMenu}
                           className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)] no-underline transition-colors hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
@@ -972,7 +972,7 @@ function DesktopMega({
                       preview={{
                         name: col4Preview.course_name,
                         imageUrl: col4Preview.course_cover_url ?? null,
-                        href: courseHref(col4Preview.course_id),
+                        href: courseHref(col4Preview.urlAlias || col4Preview.course_id),
                         external: false,
                       }}
                       onClose={closeMegaMenu}

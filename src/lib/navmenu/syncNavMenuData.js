@@ -13,6 +13,7 @@
 
 import { dbConnect } from '@/lib/db/connect';
 import NavMenuCache from '@/models/NavMenuCache';
+import CourseExtension from '@/models/CourseExtension';
 import { listPublicCourses, getCourseByCode } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
@@ -31,6 +32,27 @@ async function buildEntry(filter) {
     course_name: c.course_name ?? '',
   }));
 
+  // Enrich with urlAlias from CourseExtension — the upstream list API
+  // doesn't carry it. Stored aliases keep a leading slash (e.g.
+  // "/power-bi-...-training-course"); strip it so courseHref() yields a
+  // single-slash URL on the client.
+  const courseIds = courseList.map((c) => c.course_id).filter(Boolean);
+  const extensions = await CourseExtension.find(
+    { courseId: { $in: courseIds } },
+    { courseId: 1, urlAlias: 1 }
+  ).lean();
+  const aliasMap = Object.fromEntries(
+    extensions.map((e) => [
+      String(e.courseId).toUpperCase(),
+      e.urlAlias ? String(e.urlAlias).replace(/^\/+/, '') : null,
+    ])
+  );
+
+  const courseListWithAlias = courseList.map((c) => ({
+    ...c,
+    urlAlias: aliasMap[String(c.course_id).toUpperCase()] ?? null,
+  }));
+
   let firstCover = null;
   if (items?.[0]?.course_id) {
     const detail = await getCourseByCode(items[0].course_id);
@@ -39,10 +61,11 @@ async function buildEntry(filter) {
         course_id: items[0].course_id,
         course_name: items[0].course_name ?? '',
         course_cover_url: detail.course_cover_url ?? null,
+        urlAlias: aliasMap[String(items[0].course_id).toUpperCase()] ?? null,
       };
     }
   }
-  return { items: courseList, firstCover };
+  return { items: courseListWithAlias, firstCover };
 }
 
 export async function syncNavMenuData() {

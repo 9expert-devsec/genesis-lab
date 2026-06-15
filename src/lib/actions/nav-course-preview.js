@@ -1,6 +1,41 @@
 'use server';
 
 import { listPublicCourses, getCourseByCode } from '@/lib/api/public-courses';
+import { dbConnect } from '@/lib/db/connect';
+import CourseExtension from '@/models/CourseExtension';
+
+/**
+ * Attach `urlAlias` (from CourseExtension) to a list-course array and its
+ * firstCover. The upstream list API doesn't carry urlAlias. Stored aliases
+ * keep a leading slash (e.g. "/power-bi-...-training-course"); strip it so
+ * courseHref() produces a single-slash URL on the client.
+ */
+async function attachAliases(items, firstCover) {
+  await dbConnect();
+  const ids = items.map((c) => c.course_id).filter(Boolean);
+  const exts = await CourseExtension.find(
+    { courseId: { $in: ids } },
+    { courseId: 1, urlAlias: 1 }
+  ).lean();
+  const aliasMap = Object.fromEntries(
+    exts.map((e) => [
+      String(e.courseId).toUpperCase(),
+      e.urlAlias ? String(e.urlAlias).replace(/^\/+/, '') : null,
+    ])
+  );
+  return {
+    items: items.map((c) => ({
+      ...c,
+      urlAlias: aliasMap[String(c.course_id).toUpperCase()] ?? null,
+    })),
+    firstCover: firstCover
+      ? {
+          ...firstCover,
+          urlAlias: aliasMap[String(firstCover.course_id).toUpperCase()] ?? null,
+        }
+      : null,
+  };
+}
 
 /**
  * Lazy lookups for the หลักสูตร mega menu's Programs/Skills cascade.
@@ -26,13 +61,12 @@ export async function getCoursesByProgram(programId) {
   try {
     const { items } = await listPublicCourses({ program: String(programId) });
     if (!items?.length) return { items: [], firstCover: null };
-    return {
-      items: items.map((c) => ({
-        course_id: c.course_id,
-        course_name: c.course_name ?? '',
-      })),
-      firstCover: await firstCourseCover(items[0]),
-    };
+    const mapped = items.map((c) => ({
+      course_id: c.course_id,
+      course_name: c.course_name ?? '',
+    }));
+    const firstCover = await firstCourseCover(items[0]);
+    return attachAliases(mapped, firstCover);
   } catch {
     return { items: [], firstCover: null };
   }
@@ -50,13 +84,12 @@ export async function getCoursesBySkill(skillUpstreamId) {
   try {
     const { items } = await listPublicCourses({ skill: String(skillUpstreamId) });
     if (!items?.length) return { items: [], firstCover: null };
-    return {
-      items: items.map((c) => ({
-        course_id: c.course_id,
-        course_name: c.course_name ?? '',
-      })),
-      firstCover: await firstCourseCover(items[0]),
-    };
+    const mapped = items.map((c) => ({
+      course_id: c.course_id,
+      course_name: c.course_name ?? '',
+    }));
+    const firstCover = await firstCourseCover(items[0]);
+    return attachAliases(mapped, firstCover);
   } catch {
     return { items: [], firstCover: null };
   }
@@ -90,10 +123,18 @@ export async function getCoursePreview(courseId) {
   try {
     const detail = await getCourseByCode(courseId);
     if (!detail) return null;
+    // getCourseByCode hits the upstream API only — urlAlias lives in
+    // CourseExtension, so fetch it here too. Strip the stored leading slash.
+    await dbConnect();
+    const ext = await CourseExtension.findOne(
+      { courseId: detail.course_id ?? courseId },
+      { urlAlias: 1 }
+    ).lean();
     return {
       course_id: detail.course_id ?? courseId,
       course_name: detail.course_name ?? '',
       course_cover_url: detail.course_cover_url ?? null,
+      urlAlias: ext?.urlAlias ? String(ext.urlAlias).replace(/^\/+/, '') : null,
     };
   } catch {
     return null;
