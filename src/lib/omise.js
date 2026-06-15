@@ -9,6 +9,15 @@
 
 const OMISE_API = 'https://api.omise.co';
 
+// Warn if test key is active on production
+if (
+  typeof process !== 'undefined' &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.OMISE_SECRET_KEY?.startsWith('skey_test_')
+) {
+  console.warn('[omise] ⚠️  Using TEST secret key on production environment.');
+}
+
 function authHeader() {
   const secret = process.env.OMISE_SECRET_KEY;
   if (!secret) return null;

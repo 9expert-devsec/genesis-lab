@@ -3,7 +3,10 @@ import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic from '@/models/RegisterPublic';
 
 export async function POST(req) {
-  if (process.env.NODE_ENV === 'production') {
+  // Allow this endpoint ONLY when PAYMENT_TEST_MODE=true is explicitly set,
+  // regardless of NODE_ENV. This lets us test on production with test keys
+  // without exposing it permanently.
+  if (process.env.PAYMENT_TEST_MODE !== 'true') {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   const { id } = await req.json().catch(() => ({}));
