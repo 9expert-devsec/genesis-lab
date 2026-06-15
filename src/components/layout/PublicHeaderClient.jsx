@@ -189,7 +189,7 @@ function DesktopLink({ item }) {
       href={item.href}
       target={item.external ? '_blank' : undefined}
       rel={item.external ? 'noopener noreferrer' : undefined}
-      className="rounded-9e-sm px-3 py-2 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:text-9e-brand"
+      className="rounded-9e-sm px-3 py-2 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:hover:text-9e-air"
     >
       {item.label}
     </Link>
@@ -218,7 +218,7 @@ function DesktopDropdown({ item }) {
         className={cn(
           'inline-flex items-center gap-1 rounded-9e-sm px-3 py-2 text-[15px] font-medium',
           'transition-colors duration-9e-micro ease-9e',
-          isOpen ? 'text-9e-brand' : 'text-[var(--text-secondary)]'
+          isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]'
         )}
       >
         {item.label}
@@ -257,7 +257,7 @@ function DesktopDropdown({ item }) {
                   'flex items-center justify-between gap-3 rounded-9e-sm px-3 py-2',
                   'text-sm text-[var(--text-primary)]',
                   'transition-colors duration-9e-micro ease-9e',
-                  'hover:bg-[var(--surface-muted)] hover:text-9e-brand'
+                  'hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air'
                 )}
               >
                 <span>{child.label}</span>
@@ -333,7 +333,7 @@ const COL1_ITEMS = [
 const MEGA_COL_HEADER =
   'text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]';
 const MEGA_SEE_ALL =
-  'text-[10px] font-medium text-9e-brand hover:underline';
+  'text-[10px] font-medium text-9e-action dark:text-9e-air hover:underline';
 const MEGA_ROW =
   'flex items-center gap-2 rounded-md px-3 py-1.5 text-sm cursor-pointer transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)]';
 
@@ -595,7 +595,7 @@ function DesktopMega({
         className={cn(
           'inline-flex h-full items-center gap-1 rounded-9e-sm px-3 text-[15px] font-medium',
           'transition-colors duration-9e-micro ease-9e',
-          isOpen ? 'text-9e-brand' : 'text-[var(--text-secondary)]'
+          isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]'
         )}
       >
         {item.label}
@@ -645,8 +645,8 @@ function DesktopMega({
                     const itemClass = cn(
                       'flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors duration-9e-micro ease-9e',
                       active
-                        ? 'border-l-2 border-9e-brand bg-[var(--surface-muted)] font-medium text-9e-brand hover:bg-white'
-                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-white hover:text-9e-brand'
+                        ? 'border-l-2 border-9e-brand bg-[var(--surface-muted)] font-medium text-9e-action dark:text-9e-brand hover:bg-white'
+                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-white hover:text-9e-action dark:hover:text-9e-air'
                     );
                     const inner = (
                       <>
@@ -716,14 +716,14 @@ function DesktopMega({
                               onClick={closeMegaMenu}
                               className={cn(
                                 MEGA_ROW,
-                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-brand'
+                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-action dark:text-9e-brand'
                               )}
                             >
                               <ProgramIcon src={p.programiconurl} size={20} alt={p.program_name} />
                               <span
                                 className={cn(
                                   'flex-1',
-                                  isActiveRow ? 'text-9e-brand' : 'text-[var(--text-primary)]'
+                                  isActiveRow ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-primary)]'
                                 )}
                               >
                                 {p.program_name}
@@ -759,7 +759,7 @@ function DesktopMega({
                               onClick={closeMegaMenu}
                               className={cn(
                                 MEGA_ROW,
-                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-brand'
+                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-action dark:text-9e-brand'
                               )}
                             >
                               <Image
@@ -773,7 +773,7 @@ function DesktopMega({
                               <span
                                 className={cn(
                                   'flex-1',
-                                  isActiveRow ? 'text-9e-brand' : 'text-[var(--text-primary)]'
+                                  isActiveRow ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-primary)]'
                                 )}
                               >
                                 {s.label}
@@ -805,7 +805,7 @@ function DesktopMega({
                             href={cp.href}
                             onMouseEnter={() => handleCareerPathHover(cp)}
                             onClick={closeMegaMenu}
-                            className="flex items-center rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+                            className="flex items-center rounded-md px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
                           >
                             {cp.label}
                           </Link>
@@ -861,7 +861,7 @@ function DesktopMega({
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={closeMegaMenu}
-                        className="text-[10px] text-9e-brand hover:underline"
+                        className="text-[10px] text-9e-action dark:text-9e-air hover:underline"
                       >
                         ดูทั้งหมด →
                       </a>
@@ -895,7 +895,7 @@ function DesktopMega({
                             <p className="line-clamp-2 text-xs font-medium leading-snug text-[var(--text-primary)]">
                               {c.course_name}
                             </p>
-                            <span className="text-[10px] text-9e-brand group-hover:underline">
+                            <span className="text-[10px] text-9e-action dark:text-9e-air group-hover:underline">
                               ดูรายละเอียด →
                             </span>
                           </a>
@@ -944,7 +944,7 @@ function DesktopMega({
                           href={courseHref(course.course_id)}
                           onMouseEnter={() => handleCourseHover(course.course_id)}
                           onClick={closeMegaMenu}
-                          className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)] no-underline transition-colors hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+                          className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)] no-underline transition-colors hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
                         >
                           <span className="line-clamp-1 flex-1">{course.course_name}</span>
                           <ChevronRight className="h-3 w-3 flex-none opacity-25" strokeWidth={2} />
@@ -1034,7 +1034,7 @@ function Col4Card({ preview, onClose }) {
         <p className="line-clamp-2 text-sm font-semibold leading-snug text-[var(--text-primary)]">
           {preview.name}
         </p>
-        <span className="text-xs text-9e-brand group-hover:underline">
+        <span className="text-xs text-9e-action dark:text-9e-air group-hover:underline">
           {preview.external ? 'เปิดเว็บไซต์ →' : 'ดูรายละเอียด →'}
         </span>
       </div>
@@ -1198,7 +1198,7 @@ function MobileAccordion({ item, onNavigate }) {
                 target={child.external ? '_blank' : undefined}
                 rel={child.external ? 'noopener noreferrer' : undefined}
                 onClick={onNavigate}
-                className="flex items-center justify-between gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+                className="flex items-center justify-between gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
               >
                 <span>{child.label}</span>
                 {child.external && (
@@ -1267,7 +1267,7 @@ function MobileMegaAccordion({
   const cpRows = careerPathRows(dynamicCareerPaths);
 
   const rowClass =
-    'flex items-center gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand';
+    'flex items-center gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air';
 
   return (
     <div>
@@ -1360,7 +1360,7 @@ function MobileMegaAccordion({
                   target={c.external_url ? '_blank' : undefined}
                   rel={c.external_url ? 'noopener noreferrer' : undefined}
                   onClick={onNavigate}
-                  className="flex items-center justify-between gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+                  className="flex items-center justify-between gap-3 rounded-9e-sm px-3 py-2 text-sm text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
                 >
                   <span>{c.course_name}</span>
                   <ExternalLink className="h-3.5 w-3.5 flex-none text-[var(--text-muted)]" strokeWidth={1.75} />
@@ -1394,7 +1394,7 @@ function MobileMegaAccordion({
               target="_blank"
               rel="noopener noreferrer"
               onClick={onNavigate}
-              className="flex items-center px-3 py-2 text-xs font-medium text-9e-brand hover:underline"
+              className="flex items-center px-3 py-2 text-xs font-medium text-9e-action dark:text-9e-air hover:underline"
             >
               ดูทั้งหมด →
             </a>

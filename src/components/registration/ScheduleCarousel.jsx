@@ -105,7 +105,7 @@ const STATUS_LABEL = {
 };
 
 const STATUS_CLASS = {
-  open: 'bg-9e-brand/10 text-9e-brand',
+  open: 'bg-9e-brand/10 text-9e-action',
   nearly_full: 'bg-amber-100 text-amber-700',
   closed: 'bg-slate-100 text-slate-500',
 };

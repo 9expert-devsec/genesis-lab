@@ -93,7 +93,7 @@ function PositionCard({ recruit, onDetail }) {
       <div className="p-6 flex h-full flex-col">
 
       {recruit.department && (
-        <span className="inline-flex w-max rounded-full bg-9e-signature-800 px-3 py-1 font-en text-xs text-9e-brand dark:bg-9e-signature-900">
+        <span className="inline-flex w-max rounded-full bg-9e-signature-800 px-3 py-1 font-en text-xs text-9e-action dark:bg-9e-signature-900">
           {recruit.department}
         </span>
       )}
@@ -145,7 +145,7 @@ function PositionCard({ recruit, onDetail }) {
           onClick={() => onDetail(recruit)}
           className="inline-flex items-center justify-center gap-2
            rounded-9e-xl border border-9e-brand bg-transparent px-6 py-3
-           font-en font-semibold text-9e-brand
+           font-en font-semibold text-9e-action
            transition-all duration-9e-micro ease-9e
            hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px] text-sm"
         >
@@ -209,7 +209,7 @@ function JobDetailModal({ job, onClose }) {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               {job.department && (
-                <span className="mb-2 inline-block rounded-full bg-9e-signature-900 px-3 py-1 font-en text-xs text-9e-brand dark:bg-9e-signature-900">
+                <span className="mb-2 inline-block rounded-full bg-9e-signature-900 px-3 py-1 font-en text-xs text-9e-action dark:bg-9e-signature-900">
                   {job.department}
                 </span>
               )}

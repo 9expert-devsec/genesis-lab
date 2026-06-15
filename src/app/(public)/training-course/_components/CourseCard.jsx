@@ -260,7 +260,7 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
           type="button"
           onClick={() => setExpanded(false)}
           aria-label="ย่อรอบอบรม"
-          className="text-base text-9e-action transition-colors  duration-9e-reveal ease-in-out hover:text-9e-brand px-4 py-3 bg-[#fff] dark:bg-9e-navy"
+          className="text-base text-9e-action transition-colors  duration-9e-reveal ease-in-out hover:text-9e-action px-4 py-3 bg-[#fff] dark:bg-9e-navy"
         >
           ▲
         </button>

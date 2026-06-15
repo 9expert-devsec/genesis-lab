@@ -58,7 +58,7 @@ const TRAINING_ITEMS = [
 
 function LabelPill({ children }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-brand/25 bg-9e-signature-950 px-3 py-1 font-en text-xs font-semibold uppercase tracking-[1px] text-9e-brand dark:bg-9e-border dark:text-9e-air">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-brand/25 bg-9e-signature-950 px-3 py-1 font-en text-xs font-semibold uppercase tracking-[1px] text-9e-action dark:bg-9e-border dark:text-9e-air">
       {children}
     </span>
   );

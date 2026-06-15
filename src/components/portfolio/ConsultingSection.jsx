@@ -60,7 +60,7 @@ export default function ConsultingSection() {
         <div className="flex flex-col lg:flex-row lg:items-start lg:gap-12">
           {/* Left — sticky aside (static, no dynamic description / hint box) */}
           <aside className="flex-shrink-0 lg:sticky lg:top-28 lg:w-[300px]">
-            <p className="font-en text-xs font-bold uppercase tracking-[2px] text-9e-brand">
+            <p className="font-en text-xs font-bold uppercase tracking-[2px] text-9e-action">
               CONSULTING PROJECTS
             </p>
             <h2 className="mt-3 font-heading text-4xl font-bold leading-tight text-[var(--text-primary)]">
@@ -157,7 +157,7 @@ export default function ConsultingSection() {
                               {item.tags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className="rounded-full border border-9e-brand/25 bg-9e-signature-950 px-3 py-1 font-en text-xs font-semibold text-9e-brand dark:bg-9e-border dark:text-9e-air"
+                                  className="rounded-full border border-9e-brand/25 bg-9e-signature-950 px-3 py-1 font-en text-xs font-semibold text-9e-action dark:bg-9e-border dark:text-9e-air"
                                 >
                                   {tag}
                                 </span>

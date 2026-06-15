@@ -159,7 +159,7 @@ function CoordinatorMirrorCard({ watch }) {
 
   return (
     <div className="mt-4 rounded-9e-md border border-9e-brand/30 bg-9e-brand/5 p-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-9e-brand">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-9e-action">
         ผู้เข้าอบรมท่านที่ 1 (ผู้ประสานงาน)
       </p>
       <p className="text-sm font-semibold text-[var(--text-primary)]">{fullName}</p>

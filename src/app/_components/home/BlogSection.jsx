@@ -45,7 +45,7 @@ export function BlogSection({ articles = [] }) {
           </div>
           <Link
             href="/articles"
-            className="flex items-center gap-1 text-sm font-medium text-9e-brand hover:underline dark:text-white"
+            className="flex items-center gap-1 text-sm font-medium text-9e-action hover:underline dark:text-white"
           >
             ดูบทความทั้งหมด
             <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />

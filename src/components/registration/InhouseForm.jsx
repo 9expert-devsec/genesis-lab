@@ -277,7 +277,7 @@ function InhouseStepper({ currentStep }) {
               currentStep === s.n
                 ? 'border-9e-brand bg-9e-brand text-9e-ice'
                 : currentStep > s.n
-                  ? 'border-9e-brand bg-9e-brand/10 text-9e-brand'
+                  ? 'border-9e-brand bg-9e-brand/10 text-9e-action'
                   : 'border-[var(--surface-border)] text-[var(--text-muted)]'
             )}
           >
@@ -741,7 +741,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
       <div className="flex items-center justify-between gap-4 pt-2">
         <Link
           href="/training-course"
-          className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-brand"
+          className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-action"
         >
           ← กลับไปดูหลักสูตร
         </Link>
@@ -930,7 +930,7 @@ function InhouseStepComplete({ referenceNumber, email }) {
       </h2>
       <p className="mt-3 text-sm text-[var(--text-secondary)]">
         เลขอ้างอิง:{' '}
-        <span className="font-mono text-base font-bold text-9e-brand">
+        <span className="font-mono text-base font-bold text-9e-action">
           {referenceNumber}
         </span>
       </p>

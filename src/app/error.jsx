@@ -12,7 +12,7 @@ export default function GlobalError({ error, reset }) {
 
   return (
     <div className="mx-auto max-w-[680px] px-4 py-24 text-center">
-      <p className="text-xs font-semibold uppercase tracking-wider text-9e-brand">
+      <p className="text-xs font-semibold uppercase tracking-wider text-9e-action">
         Something went wrong
       </p>
       <h1 className="mt-2 text-3xl font-bold text-[var(--text-primary)] md:text-4xl">

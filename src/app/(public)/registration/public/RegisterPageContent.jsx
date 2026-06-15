@@ -111,7 +111,7 @@ function EmptyState() {
       </p>
       <Link
         href="/contact-us"
-        className="mt-4 inline-block text-sm font-semibold text-9e-brand underline"
+        className="mt-4 inline-block text-sm font-semibold text-9e-action underline"
       >
         ติดต่อเรา
       </Link>

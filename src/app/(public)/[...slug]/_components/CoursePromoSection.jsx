@@ -25,7 +25,7 @@ export function CoursePromoSection({ coursePromos }) {
       className="rounded-9e-lg border border-dashed border-9e-brand/30 p-4 dark:border-9e-brand/20"
     >
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-en text-xs font-bold uppercase tracking-wider text-9e-brand">
+        <p className="font-en text-xs font-bold uppercase tracking-wider text-9e-action">
           โปรโมชัน
         </p>
         <Link

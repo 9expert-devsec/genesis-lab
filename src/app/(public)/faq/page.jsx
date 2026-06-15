@@ -1,7 +1,11 @@
 import { getActiveFaqsGrouped } from '@/lib/faqs/getFaqs';
 import { FaqClient } from './_components/FaqClient';
 
-export const metadata = { title: 'คำถามที่พบบ่อย | 9Expert Training' };
+export const metadata = {
+  title: 'คำถามที่พบบ่อย',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
+  openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
+};
 export const dynamic = 'force-dynamic';
 
 function FaqHero() {

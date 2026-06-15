@@ -37,6 +37,7 @@ import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
+import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -138,6 +139,8 @@ export async function generateMetadata({ params }) {
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
 
+  const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${segment}`;
+
   // Program / skill custom-slug metadata. Cheap indexed probe first so
   // course-alias hits don't pay for the program/skill list fetches.
   if (
@@ -157,7 +160,7 @@ export async function generateMetadata({ params }) {
         const { program, config } = resolved;
         const title =
           config?.metaTitle?.trim() ||
-          `${program.program_name} | 9Expert Training`;
+          `${program.program_name}`;
         const description =
           config?.metaDescription?.trim() ||
           program.program_description ||
@@ -167,9 +170,11 @@ export async function generateMetadata({ params }) {
         return {
           title,
           description,
+          alternates: { canonical: pageUrl },
           openGraph: {
             title,
             description,
+            url: pageUrl,
             images: ogImage ? [{ url: ogImage }] : [],
           },
         };
@@ -183,7 +188,7 @@ export async function generateMetadata({ params }) {
         const { skill, config } = resolved;
         const title =
           config?.metaTitle?.trim() ||
-          `${skill.skill_name} | 9Expert Training`;
+          `${skill.skill_name}`;
         const description =
           config?.metaDescription?.trim() ||
           skill.skill_description ||
@@ -193,9 +198,11 @@ export async function generateMetadata({ params }) {
         return {
           title,
           description,
+          alternates: { canonical: pageUrl },
           openGraph: {
             title,
             description,
+            url: pageUrl,
             images: ogImage ? [{ url: ogImage }] : [],
           },
         };
@@ -209,7 +216,7 @@ export async function generateMetadata({ params }) {
     const careerPath = await getCareerPathBySlug(segment);
     if (careerPath) {
       const title =
-        `${careerPath.title} | เส้นทางอาชีพ · 9Expert Training`.trim();
+        `${careerPath.title} | เส้นทางอาชีพ`.trim();
       const description =
         careerPath.short_description?.slice(0, 160) ||
         careerPath.tagline?.slice(0, 160) ||
@@ -218,9 +225,11 @@ export async function generateMetadata({ params }) {
       return {
         title,
         description,
+        alternates: { canonical: pageUrl },
         openGraph: {
           title,
           description,
+          url: pageUrl,
           images: ogImage ? [{ url: ogImage }] : [],
         },
       };
@@ -233,7 +242,7 @@ export async function generateMetadata({ params }) {
   const { course, extension } = resolved;
   const title =
     extension?.metaTitle?.trim() ||
-    `${course.course_name} | 9Expert Training`;
+    `${course.course_name}`;
   const description =
     extension?.metaDescription?.trim() ||
     course.course_teaser?.slice(0, 160) ||
@@ -244,9 +253,11 @@ export async function generateMetadata({ params }) {
   return {
     title,
     description,
+    alternates: { canonical: pageUrl },
     openGraph: {
       title,
       description,
+      url: pageUrl,
       images: ogImage ? [{ url: ogImage }] : [],
     },
   };
@@ -353,15 +364,63 @@ export default async function CatchAllPage({ params }) {
     const coursePromos =
       coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
 
+    // Course + BreadcrumbList JSON-LD (separate <script> tags, as Google
+    // recommends). courseUrl mirrors the slug logic in buildCourseJsonLd.
+    const courseJsonLd = buildCourseJsonLd({
+      course,
+      extension,
+      schedules,
+      siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+    });
+    const courseSlug =
+      extension?.urlAlias || `${course.course_id?.toLowerCase?.()}-training-course`;
+    const courseUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${courseSlug}`;
+    const breadcrumbJsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'หน้าแรก',
+          item: process.env.NEXT_PUBLIC_SITE_URL,
+        },
+        {
+          '@type': 'ListItem',
+          position: 2,
+          name: course.program?.program_name ?? 'หลักสูตร',
+          item: `${process.env.NEXT_PUBLIC_SITE_URL}/training-course`,
+        },
+        {
+          '@type': 'ListItem',
+          position: 3,
+          name: course.course_name,
+          item: courseUrl,
+        },
+      ],
+    };
+
     return (
-      <CourseDetail
-        course={course}
-        extension={extension}
-        schedules={schedules}
-        programs={programs}
-        earlyBird={earlyBird}
-        coursePromos={coursePromos}
-      />
+      <>
+        {courseJsonLd && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }}
+          />
+        )}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        />
+        <CourseDetail
+          course={course}
+          extension={extension}
+          schedules={schedules}
+          programs={programs}
+          earlyBird={earlyBird}
+          coursePromos={coursePromos}
+        />
+      </>
     );
   }
 

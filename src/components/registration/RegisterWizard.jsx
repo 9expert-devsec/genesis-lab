@@ -328,7 +328,7 @@ function Stepper({ currentStep, omisePaymentEnabled = false }) {
               currentStep === s.n
                 ? 'border-9e-brand bg-9e-brand text-9e-ice'
                 : currentStep > s.n
-                  ? 'border-9e-brand bg-9e-brand/10 text-9e-brand'
+                  ? 'border-9e-brand bg-9e-brand/10 text-9e-action'
                   : 'border-[var(--surface-border)] text-[var(--text-muted)]'
             )}
           >
@@ -627,7 +627,7 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
           <div className="flex items-center justify-between gap-4 pt-2">
             <Link
               href="/training-course"
-              className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-brand"
+              className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-action"
             >
               ← กลับไปดูหลักสูตร
             </Link>
@@ -863,7 +863,7 @@ function StepComplete({ result, email }) {
         </h2>
         <p className="mt-3 text-sm text-[var(--text-secondary)]">
           เลขอ้างอิง:{' '}
-          <span className="font-mono text-base font-bold text-9e-brand">
+          <span className="font-mono text-base font-bold text-9e-action">
             {referenceNumber}
           </span>
         </p>
@@ -904,7 +904,7 @@ function StepComplete({ result, email }) {
       </h2>
       <p className="mt-3 text-sm text-[var(--text-secondary)]">
         เลขอ้างอิง:{' '}
-        <span className="font-mono text-base font-bold text-9e-brand">
+        <span className="font-mono text-base font-bold text-9e-action">
           {referenceNumber}
         </span>
       </p>
@@ -1271,7 +1271,7 @@ function CardFields({ card, setCard }) {
         <div className="mb-1 flex items-center justify-between">
           <Label htmlFor="card-number">หมายเลขบัตร</Label>
           {numDigits.length > 0 && (
-            <span className="text-xs font-semibold text-9e-brand">
+            <span className="text-xs font-semibold text-9e-action">
               {CARD_BRAND_LABEL[brand]}
             </span>
           )}
@@ -1357,7 +1357,7 @@ function QrDisplay({ charge, pricing, expired, secondsLeft }) {
       />
       <p className="mt-3 text-sm text-[var(--text-secondary)]">
         ยอดชำระ:{' '}
-        <span className="text-lg font-bold text-9e-brand">
+        <span className="text-lg font-bold text-9e-action">
           {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
         </span>
       </p>

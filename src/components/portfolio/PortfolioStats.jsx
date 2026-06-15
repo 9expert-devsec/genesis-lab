@@ -205,7 +205,7 @@ export default function PortfolioStats() {
     <section className="bg-white py-16 dark:bg-[var(--page-bg)]">
       {/* Section header */}
       <div className="mx-auto mb-10 max-w-[1200px] px-4 text-center">
-        <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-brand my-4">
+        <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-action my-4">
           IMPACT METRICS
         </p>
         {/* <div className="mx-auto my-2 h-px w-10 bg-9e-brand/40" /> */}

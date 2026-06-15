@@ -34,12 +34,12 @@ const buttonVariants = cva(
           'bg-9e-brand text-9e-ice ' +
           'hover:bg-9e-action hover:-translate-y-[2px] hover:shadow-9e-md',
         outline:
-          'border border-9e-brand text-9e-brand bg-transparent ' +
+          'border border-9e-brand text-9e-action bg-transparent ' +
           'hover:bg-9e-brand hover:text-9e-ice hover:-translate-y-[2px]',
         ghost:
           'text-[var(--text-primary)] hover:bg-[var(--surface-muted)]',
         link:
-          'text-9e-brand underline-offset-4 hover:underline p-0 h-auto',
+          'text-9e-action underline-offset-4 hover:underline p-0 h-auto',
       },
       size: {
         sm: 'h-9  px-4 text-sm',

@@ -12,9 +12,9 @@ module.exports = {
       colors: {
         '9e': {
           // Primary Blues (60%)
-          brand:      '#2486FF',  // Primary brand/logo color — headings, key buttons
-          action:     '#005CFF',  // Secondary blue — links, interactive, gradients
-          air:        '#48B0FF',  // Highlights, gradient light end
+          brand:      '#2486FF',  // Primary brand/logo color — large text/icons/dark bg; NOT small text on white (3.4:1 contrast)
+          action:     '#005CFF',  // Links, small text on light bg, interactive (5.3:1 contrast ✅ WCAG AA)
+          air:        '#48B0FF',  // Decorative, gradient, icons — dark backgrounds only; NOT text on light bg (2.3:1 contrast)
           ice:        '#F8FAFD',  // Light backgrounds, text on dark
 
           // Accent Lime (10%) — CTAs, on dark backgrounds only

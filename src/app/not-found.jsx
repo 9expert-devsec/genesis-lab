@@ -8,7 +8,7 @@ export default function NotFound() {
     <>
       <PublicHeader />
       <main className="mx-auto max-w-[680px] px-4 py-24 text-center lg:py-32">
-        <p className="text-xs font-semibold uppercase tracking-wider text-9e-brand">
+        <p className="text-xs font-semibold uppercase tracking-wider text-9e-action">
           404 — Page not found
         </p>
         <h1 className="mt-2 text-4xl font-bold text-[var(--text-primary)] md:text-5xl">

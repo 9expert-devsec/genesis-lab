@@ -55,7 +55,7 @@ export default function CommunitySection() {
     <section className="bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]">
       {/* Header */}
       <div className="mx-auto mb-10 max-w-[1080px] px-4 text-center">
-        <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-brand">
+        <p className="font-en text-xs font-black uppercase tracking-[2px] text-9e-action">
           TECHNOLOGY COMMUNITY
         </p>
         <h2 className="mt-3 font-heading text-4xl font-bold text-[var(--text-primary)]">
@@ -180,7 +180,7 @@ export default function CommunitySection() {
             <p className="mt-2 font-thai text-xs leading-[1.55] text-[var(--text-secondary)]">
               {item.description}
             </p>
-            <p className="mt-3 font-en text-xs font-black text-9e-brand">
+            <p className="mt-3 font-en text-xs font-black text-9e-action">
               {item.members} Members
             </p>
             <span

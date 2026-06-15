@@ -8,10 +8,12 @@ import PortfolioCTA from '@/components/portfolio/PortfolioCTA';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 
 export const metadata = {
-  title: 'ผลงานของเรา | 9Expert Training',
+  title: 'ผลงานของเรา',
   description:
     'ผลงานด้านการฝึกอบรม ที่ปรึกษา รางวัล และ Community ของ 9Expert Training ' +
     'สถาบันฝึกอบรมเทคโนโลยีชั้นนำที่ให้บริการองค์กรกว่า 5,000 แห่งทั่วประเทศ',
+  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/portfolio` },
+  openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/portfolio` },
 };
 
 export default function PortfolioPage() {

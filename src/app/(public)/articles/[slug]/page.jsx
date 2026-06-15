@@ -20,12 +20,15 @@ export async function generateMetadata({ params }) {
   const article = await getArticleBySlug(slug);
   if (!article) return { title: 'ไม่พบบทความ' };
   const description = article.seoDescription || article.excerpt || article.title;
+  const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
   return {
     title:       article.seoTitle || article.title,
     description,
+    alternates: { canonical: pageUrl },
     openGraph: {
       title:       article.seoTitle || article.title,
       description,
+      url: pageUrl,
       images: article.coverUrl ? [{ url: article.coverUrl }] : [],
       type: 'article',
     },

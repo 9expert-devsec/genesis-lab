@@ -109,7 +109,7 @@ export default function MapSection() {
               href={MAP_LINK}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#48B0FF] transition-all hover:text-white hover:underline"
+              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-9e-action transition-all hover:text-white hover:underline"
             >
               <MapPin className="h-4 w-4" />
               ดูแผนที่ขนาดใหญ่บน Google Maps
@@ -165,7 +165,7 @@ export default function MapSection() {
               <ul className="space-y-3">
                 {current.lines.map((line, i) => (
                   <li key={line} className="flex items-center gap-3">
-                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(0,92,255,0.15)] text-xs font-semibold text-9e-brand">
+                    <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-[rgba(0,92,255,0.15)] text-xs font-semibold text-9e-action">
                       {i + 1}
                     </span>
                     <span className="text-sm leading-relaxed text-9e-slate-dp-50">

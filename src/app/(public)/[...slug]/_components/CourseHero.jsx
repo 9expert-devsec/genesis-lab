@@ -67,7 +67,7 @@ export function CourseHero({ course, heroColor }) {
 
               <div className="mb-5 flex flex-wrap gap-2">
                 {course.course_type_public && (
-                  <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-brand">
+                  <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
                     Classroom
                   </span>
                 )}

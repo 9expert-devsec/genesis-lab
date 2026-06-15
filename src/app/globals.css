@@ -16,6 +16,14 @@
   --9e-air:          #48B0FF;
   --9e-ice:          #F8FAFD;
 
+  /*
+   * Contrast rule (WCAG AA):
+   * - Small text/links on white/light bg → use --9e-action (#005CFF, ~5.3:1) ✅
+   * - Large text (≥24px or ≥18.66px bold) on white → --9e-brand (#2486FF, ~3.4:1) ✅
+   * - Decorative/icons/borders → any brand color OK
+   * - --9e-air (#48B0FF) → dark backgrounds only, never small text on light
+   */
+
   /* Accent Lime (10% usage — CTAs, on dark only) */
   --9e-lime:         #D4F73F;
   --9e-lime-lt:      #D8F852;

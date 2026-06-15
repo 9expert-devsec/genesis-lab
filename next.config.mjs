@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
 
   // Default Server Action body limit is 1 MB. Banner / promotion-banner
   // / instructor-portrait uploads frequently exceed that and surface as
@@ -58,6 +59,45 @@ const nextConfig = {
         source: '/promotion',
         destination: '/promotions',
         permanent: true,
+      },
+    ];
+  },
+
+  async headers() {
+    const securityHeaders = [
+      // Start CSP in Report-Only mode first — switch to enforcing after
+      // verifying no violations in Vercel logs (change key to
+      // 'Content-Security-Policy' when ready to enforce).
+      {
+        key: 'Content-Security-Policy-Report-Only',
+        value: [
+          "default-src 'self'",
+          "img-src 'self' https://res.cloudinary.com https://ddva7xvdt.res.cloudinary.com https://9expert-cdn.s3.ap-southeast-1.amazonaws.com https://www.9experttraining.com https://9experttraining.com https://9exp-sec.com https://msdb.9expert.app https://i.ytimg.com data: blob:",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.omise.co https://www.youtube.com https://www.googletagmanager.com",
+          "style-src 'self' 'unsafe-inline'",
+          "font-src 'self' data:",
+          "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
+          "connect-src 'self' https://api.omise.co https://9exp-sec.com https://msdb.9expert.app https://res.cloudinary.com",
+          "media-src 'self' blob:",
+          "frame-ancestors 'self'",
+          "base-uri 'self'",
+          "form-action 'self'",
+        ].join('; '),
+      },
+      { key: 'X-Frame-Options',          value: 'SAMEORIGIN' },
+      { key: 'X-Content-Type-Options',   value: 'nosniff' },
+      { key: 'Referrer-Policy',          value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy',       value: 'camera=(), microphone=(), geolocation=()' },
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=63072000; includeSubDomains; preload',
+      },
+    ];
+
+    return [
+      {
+        source: '/:path*',
+        headers: securityHeaders,
       },
     ];
   },
