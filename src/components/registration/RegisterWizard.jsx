@@ -1455,7 +1455,8 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
       }
       try {
         const res = await fetch(
-          `/api/registration/public/status?id=${encodeURIComponent(pendingTarget.id)}`
+          `/api/registration/public/status?id=${encodeURIComponent(pendingTarget.id)}`,
+          { cache: 'no-store' }
         );
         const body = await res.json().catch(() => ({}));
         if (body?.status === 'paid') {
@@ -1780,7 +1781,7 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
                 <Loader2 className="h-4 w-4 animate-spin" />
                 สถานะ: รอตรวจสอบผลการชำระเงิน
               </p>
-              {process.env.NODE_ENV !== 'production' && pendingTarget?.id && (
+              {process.env.NEXT_PUBLIC_PAYMENT_TEST_MODE === 'true' && pendingTarget?.id && (
                 <button
                   type="button"
                   onClick={async () => {
