@@ -1213,30 +1213,120 @@ function ChannelCard({ selected, onClick, Icon, label }) {
   );
 }
 
+// ── Card input helpers (brand detection / formatting / validation) ──
+
+function detectCardBrand(num) {
+  const n = (num || '').replace(/\D/g, '');
+  if (/^3[47]/.test(n)) return 'amex';
+  if (/^35/.test(n)) return 'jcb';
+  if (/^4/.test(n)) return 'visa';
+  if (/^(5[1-5]|222[1-9]|22[3-9]\d|2[3-6]\d\d|27[01]\d|2720)/.test(n)) return 'mastercard';
+  return 'unknown';
+}
+function formatCardNumber(value, brand) {
+  const max = brand === 'amex' ? 15 : 16;
+  const digits = (value || '').replace(/\D/g, '').slice(0, max);
+  if (brand === 'amex') {
+    return digits.replace(/^(\d{0,4})(\d{0,6})(\d{0,5}).*/, (_, a, b, c) =>
+      [a, b, c].filter(Boolean).join(' ')
+    );
+  }
+  return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+}
+function formatExpiry(value) {
+  const d = (value || '').replace(/\D/g, '').slice(0, 4);
+  return d.length <= 2 ? d : d.slice(0, 2) + '/' + d.slice(2);
+}
+function expiryValid(mmYY) {
+  const m = (mmYY || '').match(/^(\d{2})\/(\d{2})$/);
+  if (!m) return false;
+  const mm = Number(m[1]);
+  const yy = 2000 + Number(m[2]);
+  if (mm < 1 || mm > 12) return false;
+  return new Date(yy, mm, 0, 23, 59, 59) >= new Date();
+}
+function cvcMax(brand) { return brand === 'amex' ? 4 : 3; }
+function cardNumberValid(num, brand) {
+  const n = (num || '').replace(/\D/g, '');
+  return brand === 'amex' ? n.length === 15 : n.length >= 16;
+}
+
+const CARD_BRAND_LABEL = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'Amex',
+  jcb: 'JCB',
+  unknown: 'บัตร',
+};
+
 function CardFields({ card, setCard }) {
-  const update = (k) => (e) => setCard((c) => ({ ...c, [k]: e.target.value }));
+  const brand = detectCardBrand(card.number);
+  const numDigits = card.number.replace(/\D/g, '');
+  const numError = numDigits.length > 0 && !cardNumberValid(card.number, brand);
+  const expError = card.expiry.length > 0 && !expiryValid(card.expiry);
+  const cvcError = card.cvc.length > 0 && card.cvc.length !== cvcMax(brand);
   return (
     <div className="space-y-3">
       <div>
-        <Label htmlFor="card-number">หมายเลขบัตร</Label>
-        <Input id="card-number" inputMode="numeric" autoComplete="cc-number"
-          placeholder="4242 4242 4242 4242" value={card.number} onChange={update('number')} />
+        <div className="mb-1 flex items-center justify-between">
+          <Label htmlFor="card-number">หมายเลขบัตร</Label>
+          {numDigits.length > 0 && (
+            <span className="text-xs font-semibold text-9e-brand">
+              {CARD_BRAND_LABEL[brand]}
+            </span>
+          )}
+        </div>
+        <Input
+          id="card-number"
+          inputMode="numeric"
+          autoComplete="cc-number"
+          placeholder="4242 4242 4242 4242"
+          value={card.number}
+          onChange={(e) =>
+            setCard((c) => ({
+              ...c,
+              number: formatCardNumber(e.target.value, detectCardBrand(e.target.value)),
+            }))
+          }
+        />
+        {numError && <p className="mt-1 text-xs text-red-500">หมายเลขบัตรไม่ถูกต้อง</p>}
       </div>
       <div>
         <Label htmlFor="card-name">ชื่อบนบัตร</Label>
         <Input id="card-name" autoComplete="cc-name" placeholder="NAME SURNAME"
-          value={card.name} onChange={update('name')} />
+          value={card.name}
+          onChange={(e) => setCard((c) => ({ ...c, name: e.target.value }))} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label htmlFor="card-expiry">วันหมดอายุ (MM/YY)</Label>
-          <Input id="card-expiry" inputMode="numeric" autoComplete="cc-exp"
-            placeholder="12/28" value={card.expiry} onChange={update('expiry')} />
+          <Input
+            id="card-expiry"
+            inputMode="numeric"
+            autoComplete="cc-exp"
+            maxLength={5}
+            placeholder="MM/YY"
+            value={card.expiry}
+            onChange={(e) => setCard((c) => ({ ...c, expiry: formatExpiry(e.target.value) }))}
+          />
+          {expError && <p className="mt-1 text-xs text-red-500">วันหมดอายุไม่ถูกต้อง</p>}
         </div>
         <div>
           <Label htmlFor="card-cvc">CVC</Label>
-          <Input id="card-cvc" inputMode="numeric" autoComplete="cc-csc"
-            placeholder="123" value={card.cvc} onChange={update('cvc')} />
+          <Input
+            id="card-cvc"
+            inputMode="numeric"
+            autoComplete="cc-csc"
+            placeholder={brand === 'amex' ? '1234' : '123'}
+            value={card.cvc}
+            onChange={(e) =>
+              setCard((c) => ({
+                ...c,
+                cvc: e.target.value.replace(/\D/g, '').slice(0, cvcMax(detectCardBrand(card.number))),
+              }))
+            }
+          />
+          {cvcError && <p className="mt-1 text-xs text-red-500">CVC ไม่ถูกต้อง</p>}
         </div>
       </div>
       <p className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
@@ -1247,7 +1337,10 @@ function CardFields({ card, setCard }) {
   );
 }
 
-function QrDisplay({ charge, pricing, expired }) {
+function QrDisplay({ charge, pricing, expired, secondsLeft }) {
+  const mmss = `${String(Math.floor((secondsLeft ?? 0) / 60)).padStart(2, '0')}:${String(
+    (secondsLeft ?? 0) % 60
+  ).padStart(2, '0')}`;
   return (
     <div className="flex flex-col items-center rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-center">
       <h3 className="mb-1 text-sm font-bold text-[var(--text-primary)]">
@@ -1268,7 +1361,13 @@ function QrDisplay({ charge, pricing, expired }) {
           {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
         </span>
       </p>
-      {expired && <p className="mt-2 text-sm text-red-500">หมดเวลา กรุณาลองใหม่</p>}
+      {!expired ? (
+        <p className="mt-2 text-xs text-[var(--text-secondary)]">
+          QR หมดอายุใน <span className="font-semibold">{mmss}</span>
+        </p>
+      ) : (
+        <p className="mt-2 text-sm text-red-500">QR หมดอายุแล้ว กรุณาสร้าง QR ใหม่</p>
+      )}
     </div>
   );
 }
@@ -1296,11 +1395,20 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
   const [charge, setCharge] = useState(null); // QR result, once created
   const [pendingTarget, setPendingTarget] = useState(null);
   const [expired, setExpired] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(600);
 
   const consentOk =
     consent.dataChecked && consent.noRefund && consent.changePolicy && consent.termsAccepted;
   const toggleConsent = (k) => setConsent((c) => ({ ...c, [k]: !c[k] }));
   const qrLive = Boolean(charge?.qrUrl);
+
+  // Card validity (gates the card pay button alongside omiseReady + consent).
+  const cardBrand = detectCardBrand(card.number);
+  const cardValid =
+    cardNumberValid(card.number, cardBrand) &&
+    expiryValid(card.expiry) &&
+    card.cvc.length === cvcMax(cardBrand) &&
+    card.name.trim().length > 0;
 
   // Load Omise.js when the card channel is selected.
   useEffect(() => {
@@ -1365,22 +1473,46 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
     return () => clearInterval(timer);
   }, [pendingTarget, onPaid]);
 
+  // QR countdown — counts down from 600s while the QR is live; flips to
+  // expired at 0. Reset to 600 whenever a fresh charge is created.
+  useEffect(() => {
+    if (!charge?.qrUrl || expired) return;
+    const t = setInterval(() => {
+      setSecondsLeft((s) => {
+        if (s <= 1) {
+          clearInterval(t);
+          setExpired(true);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [charge, expired]);
+
+  const regenerateQr = () => {
+    setCharge(null);
+    setPendingTarget(null);
+    setExpired(false);
+    setSecondsLeft(600);
+    setPayError(null);
+  };
+
   const payCard = () => {
     setPayError(null);
     if (!window.Omise || !omiseReady) {
       setPayError('ระบบชำระเงินยังไม่พร้อม กรุณารอสักครู่แล้วลองใหม่');
       return;
     }
-    const [mm, yy] = card.expiry.split('/').map((s) => s.trim());
-    const year = yy ? (yy.length === 2 ? 2000 + Number(yy) : Number(yy)) : NaN;
+    const [em, ey] = card.expiry.split('/');
     setBusy(true);
     window.Omise.createToken(
       'card',
       {
         name: card.name,
         number: card.number.replace(/\s+/g, ''),
-        expiration_month: Number(mm),
-        expiration_year: year,
+        expiration_month: Number(em),
+        expiration_year: 2000 + Number(ey),
         security_code: card.cvc,
       },
       async (statusCode, response) => {
@@ -1441,6 +1573,8 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
         return;
       }
       setCharge(body);
+      setSecondsLeft(600);
+      setExpired(false);
       setPendingTarget({
         id: body.registrationId,
         referenceNumber: body.referenceNumber,
@@ -1463,7 +1597,13 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
   const canConfirm =
     method === 'quote'
       ? true
-      : Boolean(method === 'instant' && channel && consentOk && pricing);
+      : Boolean(
+          method === 'instant' &&
+          channel &&
+          consentOk &&
+          pricing &&
+          (channel !== 'credit_card' || cardValid)
+        );
   const cardNotReady = method === 'instant' && channel === 'credit_card' && !omiseReady;
   const confirmLabel =
     method === 'quote'
@@ -1589,7 +1729,14 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
           )}
 
           {/* QR display once created */}
-          {qrLive && <QrDisplay charge={charge} pricing={pricing} expired={expired} />}
+          {qrLive && (
+            <QrDisplay
+              charge={charge}
+              pricing={pricing}
+              expired={expired}
+              secondsLeft={secondsLeft}
+            />
+          )}
 
           {/* Errors */}
           {payError && (
@@ -1626,12 +1773,37 @@ function UnifiedPaymentStep({ data, pricing, onBack, onQuoteConfirm, onPaid, sub
             </Button>
           )}
 
-          {/* 7. QR pending status line */}
+          {/* 7. QR pending status line + dev shortcut */}
           {qrLive && !expired && (
-            <p className="flex items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              สถานะ: รอตรวจสอบผลการชำระเงิน
-            </p>
+            <>
+              <p className="flex items-center justify-center gap-2 text-sm text-[var(--text-secondary)]">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                สถานะ: รอตรวจสอบผลการชำระเงิน
+              </p>
+              {process.env.NODE_ENV !== 'production' && pendingTarget?.id && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await fetch('/api/registration/public/dev-mark-paid', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ id: pendingTarget.id }),
+                    });
+                    // the existing 3s poll will see status:'paid' → onPaid → step 3
+                  }}
+                  className="mx-auto mt-2 block rounded-9e-md border border-dashed border-amber-500/60 px-3 py-1.5 text-xs text-amber-600"
+                >
+                  [DEV] จำลองว่าชำระเงินแล้ว
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Expired QR → let the user generate a fresh one (no auto-recreate). */}
+          {qrLive && expired && (
+            <Button type="button" variant="outline" className="w-full" onClick={regenerateQr}>
+              สร้าง QR ใหม่
+            </Button>
           )}
 
           <Button
