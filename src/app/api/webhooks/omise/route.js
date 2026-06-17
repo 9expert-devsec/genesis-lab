@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic from '@/models/RegisterPublic';
+import MasterclassRegistration from '@/models/MasterclassRegistration';
 import { retrieveCharge } from '@/lib/omise';
 
 export async function POST(req) {
@@ -28,7 +29,13 @@ export async function POST(req) {
   const charge = verified.data;
 
   await dbConnect();
-  const doc = await RegisterPublic.findOne({ 'payment.omiseChargeId': chargeId });
+  // Check MasterclassRegistration if not found in RegisterPublic
+  let doc = await RegisterPublic.findOne({ 'payment.omiseChargeId': chargeId });
+  let isMasterclass = false;
+  if (!doc) {
+    doc = await MasterclassRegistration.findOne({ 'payment.omiseChargeId': chargeId });
+    isMasterclass = Boolean(doc);
+  }
   if (!doc) {
     // Unknown charge — ack so Omise stops retrying.
     return NextResponse.json({ ok: true, unknown: true });
@@ -44,8 +51,13 @@ export async function POST(req) {
     doc.payment.omiseStatus = 'successful';
     doc.payment.paidAt = new Date();
     await doc.save();
-    const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
-    await sendPaidReceipt(doc);
+    if (isMasterclass) {
+      const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
+      await sendMasterclassReceipt(doc);
+    } else {
+      const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
+      await sendPaidReceipt(doc);
+    }
     return NextResponse.json({ ok: true, paid: true });
   }
 

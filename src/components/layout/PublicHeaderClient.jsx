@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  GraduationCap,
   ImageIcon,
   Layers,
   Menu,
@@ -326,6 +327,7 @@ const COL1_ITEMS = [
   { key: 'programs',    label: 'Programs',         href: '/training-course',                     icon: Layers },
   { key: 'skills',      label: 'Skills',           href: '/training-course',                     icon: Sparkles },
   { key: 'career-path', label: 'Career Path',      href: '/career-path-project',                 icon: TrendingUp },
+  { key: 'masterclass', label: 'Masterclass',      href: '/masterclass',                         icon: GraduationCap, clickOnly: true },
   { key: 'tnhs',        label: 'TNHS',             href: 'https://www.thenexthumansskills.com/', icon: Puzzle,       external: true },
   { key: 'online',      label: 'หลักสูตรออนไลน์',  href: siteConfig.academyUrl,                  icon: Monitor,      external: true },
 ];

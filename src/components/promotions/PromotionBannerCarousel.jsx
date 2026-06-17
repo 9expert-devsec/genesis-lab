@@ -113,7 +113,7 @@ export function PromotionBannerCarousel({ banners }) {
               type="button"
               aria-label={`ไปยังสไลด์ ${i + 1}`}
               onClick={() => setCurrent(i)}
-              className="relative flex h-6 w-6 items-center justify-center"
+              className="relative flex h-11 w-11 items-center justify-center"
             >
               <span
                 aria-hidden

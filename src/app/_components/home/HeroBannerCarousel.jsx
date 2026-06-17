@@ -21,7 +21,11 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   const total = banners.length;
 
   const [current, setCurrent] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(true);
+  // Respect prefers-reduced-motion — initialize isPlaying to false if user prefers reduced motion
+  const [isPlaying, setIsPlaying] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  });
   const [isHovered, setIsHovered] = useState(false);
   const [isPointerDown, setIsPointerDown] = useState(false);
   const intervalRef = useRef(null);
@@ -171,7 +175,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
               className="h-full shrink-0"
               style={{ width: `${100 / total}%` }}
             >
-              <BannerSlide banner={b} isActive={i === current} />
+              <BannerSlide banner={b} isActive={i === current} isFirst={i === 0} />
             </div>
           ))}
         </div>
@@ -216,7 +220,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
                 type="button"
                 aria-label={`ไปยังสไลด์ ${i + 1}`}
                 onClick={() => setCurrent(i)}
-                className="relative flex h-9 w-9 items-center justify-center"
+                className="relative flex h-11 w-11 items-center justify-center"
               >
                 <span
                   aria-hidden
@@ -235,7 +239,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
               type="button"
               onClick={() => setIsPlaying((v) => !v)}
               aria-label={isPlaying ? 'หยุดสไลด์' : 'เล่นสไลด์'}
-              className="flex h-9 w-9 items-center justify-center
+              className="flex h-11 w-11 items-center justify-center
                 text-white hover:text-white/80 transition-colors"
             >
               {showPause ? (
@@ -286,7 +290,7 @@ function useFilteredBanners(allBanners) {
   return { banners, isMobile };
 }
 
-function BannerSlide({ banner, isActive = true }) {
+function BannerSlide({ banner, isActive = true, isFirst = false }) {
   switch (banner.type) {
     case 'image_desktop':
     case 'image_mobile': {
@@ -300,6 +304,7 @@ function BannerSlide({ banner, isActive = true }) {
             draggable={false}
             className="object-cover object-center"
             priority={isActive}
+            fetchPriority={isFirst ? "high" : "auto"}
             sizes="1440px"
           />
         </div>
@@ -343,6 +348,7 @@ function BannerSlide({ banner, isActive = true }) {
             draggable={false}
             className="object-cover object-center"
             priority={isActive}
+            fetchPriority={isFirst ? "high" : "auto"}
             sizes="1440px"
           />
           {banner.link_text && banner.link_url && (

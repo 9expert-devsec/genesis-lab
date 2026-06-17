@@ -38,7 +38,10 @@ export default function ClientLogosSection({ logos }) {
   const { rowA, rowB } = assignRows(logos);
 
   return (
-    <section className="overflow-hidden bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]">
+    <section
+      aria-label="องค์กรที่ให้ความไว้วางใจ"
+      className="overflow-hidden bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]"
+    >
       <div className="mx-auto max-w-[1200px] text-center">
         <h2 className="font-heading text-[28px] font-bold text-9e-navy dark:text-white">
           องค์กรที่ให้ความไว้วางใจ
@@ -47,6 +50,10 @@ export default function ClientLogosSection({ logos }) {
           ได้รับความไว้วางใจจากบริษัทและองค์กรชั้นนำมากกว่า 5,000 แห่ง ครอบคลุมหลากหลายอุตสาหกรรม
         </p>
       </div>
+
+      <p className="sr-only">
+        บริษัทและองค์กรชั้นนำที่ใช้บริการ ได้แก่ {rowA.concat(rowB).map(l => l.company_name).join(', ')}
+      </p>
 
       <div className="mt-14 space-y-6">
         <MarqueeRow logos={rowA} direction="left" speed={40} />
@@ -67,6 +74,9 @@ function MarqueeRow({ logos, direction, speed = 40 }) {
   useEffect(() => {
     const track = trackRef.current;
     if (!track) return;
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReduced) return; // stop animation entirely
 
     const getSetWidth = () => track.scrollWidth / 3;
 
@@ -106,6 +116,8 @@ function MarqueeRow({ logos, direction, speed = 40 }) {
 
   return (
     <div
+      aria-hidden="true"
+      role="presentation"
       className="relative overflow-hidden max-w-[1200px] mx-auto"
       onMouseEnter={pause}
       onMouseLeave={resume}
