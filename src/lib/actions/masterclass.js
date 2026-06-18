@@ -68,6 +68,11 @@ export async function createMasterclassBatch(courseId, data) {
   if (!data.batch_label) {
     data.batch_label = `รุ่นที่ ${data.batch_no}`;
   }
+  // Populate course_slug from the course doc if not provided
+  if (!data.course_slug) {
+    const courseDoc = await MasterclassCourse.findById(courseId).select('slug').lean();
+    if (courseDoc?.slug) data.course_slug = courseDoc.slug;
+  }
   const doc = await MasterclassBatch.create({ ...data, course_id: courseId });
   revalidatePath(ADMIN_COURSE_PATH);
   return { ok: true, id: String(doc._id) };

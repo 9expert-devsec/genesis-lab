@@ -19,6 +19,7 @@ const CurriculumModuleSchema = new mongoose.Schema(
     topics:    { type: [String], default: [] },
     workshop:  { type: String, default: '' },
     output:    { type: String, default: '' },
+    content_html: { type: String, default: '' },  // rich text for additional notes
   },
   { _id: false }
 );
@@ -50,6 +51,10 @@ const MasterclassCourseSchema = new mongoose.Schema(
     description_html: { type: String, default: '' },
     cover_image_url:  { type: String, default: '' },
     cover_image_public_id: { type: String, default: '' },
+    // Hero banner gradient — two Tailwind color stops, used when no cover image
+    hero_gradient_from: { type: String, default: '#2486FF' },  // CSS hex
+    hero_gradient_to:   { type: String, default: '#005CFF' },
+    course_outline_url:    { type: String, default: '' },
 
     duration_days:  { type: Number, default: 1 },
     duration_hours: { type: Number, default: 7 },
@@ -59,7 +64,14 @@ const MasterclassCourseSchema = new mongoose.Schema(
     level:          { type: String, enum: ['beginner', 'intermediate', 'advanced'], default: 'intermediate' },
     tags:           { type: [String], default: [] },
 
-    suitable_for:        { type: [String], default: [] },
+    suitable_for: {
+      type: [{
+        label:     { type: String, default: '' },
+        image_url: { type: String, default: '' },
+      }],
+      default: [],
+      _id: false,
+    },
     prerequisites:       { type: [String], default: [] },
     objectives:          { type: [String], default: [] },
     benefits:            { type: [String], default: [] },

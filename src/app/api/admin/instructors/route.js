@@ -20,7 +20,9 @@ export async function GET(req) {
     if (!ids.length) return NextResponse.json([]);
 
     await dbConnect();
-    const docs = await Instructor.find({ _id: { $in: ids }, is_active: true }).lean();
+    const docs = await Instructor.find({ _id: { $in: ids }, is_active: true })
+      .select('name title image_url specialties bio')
+      .lean();
     return NextResponse.json(JSON.parse(JSON.stringify(docs)));
   } catch (err) {
     console.error('[GET /api/admin/instructors]', err);

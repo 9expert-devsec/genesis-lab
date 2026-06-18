@@ -41,6 +41,7 @@ const ALLOWED_FOLDERS = new Set([
   'notifications',
   'about',
   'career-paths',
+  'masterclass',
   'uploads',
 ]);
 
@@ -64,9 +65,11 @@ export async function POST(req) {
     return NextResponse.json({ error: 'No file' }, { status: 400 });
   }
 
-  if (!file.type || !file.type.startsWith('image/')) {
+  const isImage = file.type?.startsWith('image/');
+  const isPdf = file.type === 'application/pdf';
+  if (!isImage && !isPdf) {
     return NextResponse.json(
-      { error: 'Only image files allowed' },
+      { error: 'Only image or PDF files allowed' },
       { status: 400 }
     );
   }

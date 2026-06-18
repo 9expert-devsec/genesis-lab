@@ -38,6 +38,7 @@ export function BulletTextarea({
   placeholder,
   rows = 5,
   urls = false,
+  onChange = null,
 }) {
   const seed = normaliseDefault(defaultValue);
   const [value, setValueState] = useState(seed);
@@ -54,6 +55,7 @@ export function BulletTextarea({
   function setValue(next) {
     hasUserEditedRef.current = true;
     setValueState(next);
+    if (typeof onChange === 'function') onChange(next);
   }
 
   const lines = value

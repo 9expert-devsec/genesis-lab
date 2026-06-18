@@ -61,7 +61,10 @@ function MasterclassCard({ course }) {
   const firstBatch = course.batches?.[0];
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-9e-md dark:bg-9e-card">
+    <Link
+      href={`/masterclass/${course.slug}`}
+      className="group flex flex-col overflow-hidden rounded-2xl bg-white shadow-9e-md dark:bg-9e-card transition-shadow hover:shadow-lg"
+    >
       {/* Cover */}
       <div className="relative aspect-video">
         {course.cover_image_url ? (
@@ -166,29 +169,22 @@ function MasterclassCard({ course }) {
             </div>
 
             {/* CTA */}
-            <div className="mt-auto flex items-center gap-3 pt-4">
-              {firstBatch.status === 'full' ? (
+            {firstBatch.status === 'full' && (
+              <div className="mt-auto flex items-center gap-3 pt-4">
                 <button
                   disabled
                   className="flex-1 cursor-not-allowed rounded-full bg-gray-200 py-2.5 text-sm font-medium text-gray-400 dark:bg-gray-700"
                 >
                   เต็มแล้ว
                 </button>
-              ) : (
-                <Link
-                  href={`/masterclass/${course.slug}`}
-                  className="flex-1 rounded-full bg-9e-action py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-9e-brand"
-                >
-                  ดูรายละเอียด
-                </Link>
-              )}
-            </div>
+              </div>
+            )}
           </>
         ) : (
           <p className="mt-auto pt-4 text-sm text-gray-400">ยังไม่เปิดรับสมัคร</p>
         )}
       </div>
-    </div>
+    </Link>
   );
 }
 

@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, Plus, X } from 'lucide-react';
+import { ChevronDown, Plus, X, Upload, Download } from 'lucide-react';
 import {
   createMasterclassCourse,
   updateMasterclassCourse,
 } from '@/lib/actions/masterclass';
 import { SimpleRichTextEditor } from '@/components/admin/SimpleRichTextEditor';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { BulletTextarea } from '@/components/admin/BulletTextarea';
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
@@ -71,46 +73,6 @@ function Toggle({ checked, onChange, label }) {
   );
 }
 
-// ── Dynamic string[] editor ───────────────────────────────────────────────────
-function StringListEditor({ label, items, onChange, placeholder = '' }) {
-  const add = () => onChange([...(items ?? []), '']);
-  const update = (i, v) => onChange(items.map((it, idx) => (idx === i ? v : it)));
-  const remove = (i) => onChange(items.filter((_, idx) => idx !== i));
-  return (
-    <div>
-      {label && <span className={labelCls}>{label}</span>}
-      <div className="mt-1 space-y-2">
-        {(items ?? []).map((it, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              type="text"
-              value={it}
-              placeholder={placeholder}
-              onChange={(e) => update(i, e.target.value)}
-              className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
-            />
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-red-500 hover:bg-red-50"
-              aria-label="ลบ"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={add}
-          className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-        >
-          <Plus size={14} /> เพิ่มรายการ
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export function MasterclassCourseFormClient({ course }) {
   const router = useRouter();
   const isEdit = Boolean(course?._id);
@@ -130,6 +92,9 @@ export function MasterclassCourseFormClient({ course }) {
 
   // Section 2 — cover
   const [coverImageUrl, setCoverImageUrl] = useState(course?.cover_image_url ?? '');
+  const [gradientFrom, setGradientFrom] = useState(course?.hero_gradient_from ?? '#2486FF');
+  const [gradientTo,   setGradientTo]   = useState(course?.hero_gradient_to   ?? '#005CFF');
+  const [courseOutlineUrl, setCourseOutlineUrl] = useState(course?.course_outline_url ?? '');
 
   // Section 3 — schedule
   const [durationDays, setDurationDays] = useState(course?.duration_days ?? 1);
@@ -164,7 +129,14 @@ export function MasterclassCourseFormClient({ course }) {
   const [licenseChoices, setLicenseChoices] = useState(course?.license_options?.choices ?? []);
 
   // Section 9 — instructors
-  const [instructorIdsText, setInstructorIdsText] = useState((course?.instructor_ids ?? []).join(', '));
+  const [instructorIds, setInstructorIds] = useState(course?.instructor_ids ?? []);
+  const [instructorList, setInstructorList] = useState([]);
+  useEffect(() => {
+    fetch('/api/admin/instructors/all')
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setInstructorList(data); })
+      .catch(() => {});
+  }, []);
 
   // Section 10 — curriculum
   const [curriculum, setCurriculum] = useState(course?.curriculum ?? []);
@@ -242,6 +214,9 @@ export function MasterclassCourseFormClient({ course }) {
       subtitle_th: subtitleTh.trim(),
       description_html: descriptionHtml,
       cover_image_url: coverImageUrl.trim(),
+      hero_gradient_from: gradientFrom,
+      hero_gradient_to:   gradientTo,
+      course_outline_url: courseOutlineUrl.trim(),
       duration_days: Number(durationDays) || 0,
       duration_hours: Number(durationHours) || 0,
       schedule_days: scheduleDays,
@@ -249,7 +224,9 @@ export function MasterclassCourseFormClient({ course }) {
       time_end: timeEnd,
       level,
       tags,
-      suitable_for: suitableFor.filter(Boolean),
+      suitable_for: (suitableFor ?? [])
+        .map((it) => (typeof it === 'string' ? { label: it, image_url: '' } : it))
+        .filter((it) => it.label?.trim()),
       prerequisites: prerequisites.filter(Boolean),
       objectives: objectives.filter(Boolean),
       benefits: benefits.filter(Boolean),
@@ -267,7 +244,7 @@ export function MasterclassCourseFormClient({ course }) {
           detail_options: Array.isArray(c.detail_options) ? c.detail_options : parseCsv(c.detail_options),
         })),
       },
-      instructor_ids: parseCsv(instructorIdsText),
+      instructor_ids: instructorIds,
       curriculum: curriculum.map((s) => ({
         session_label: s.session_label,
         modules: (s.modules ?? []).map((m) => ({
@@ -373,18 +350,98 @@ export function MasterclassCourseFormClient({ course }) {
 
       {/* Section 2 — Cover image */}
       <Section title="2. รูปปก">
-        <label className={labelCls}>Cover Image URL (Cloudinary)</label>
-        <input
-          type="text"
-          value={coverImageUrl}
-          onChange={(e) => setCoverImageUrl(e.target.value)}
-          placeholder="https://res.cloudinary.com/…"
-          className={inputCls}
+        <ImageUploadField
+          name="cover_image_url"
+          label="Cover Image"
+          folder="masterclass"
+          currentUrl={coverImageUrl ?? ''}
+          aspect="16/9"
+          hint="แนะนำขนาด 1280×720px (16:9) — อัพโหลดหรือวาง Cloudinary URL"
+          onChange={(url) => setCoverImageUrl(url)}
         />
-        {coverImageUrl && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={coverImageUrl} alt="ตัวอย่างรูปปก" className="mt-2 h-32 rounded-lg object-cover" />
-        )}
+
+        {/* Gradient (used when no cover image) */}
+        <div className="mt-4">
+          <p className="text-sm font-medium text-9e-navy dark:text-white mb-2">
+            Hero Gradient (fallback เมื่อไม่มีรูป)
+          </p>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span>จากสี (From)</span>
+              <input
+                type="color"
+                value={gradientFrom}
+                onChange={(e) => setGradientFrom(e.target.value)}
+                className="h-8 w-14 cursor-pointer rounded border border-[var(--surface-border)] p-0.5"
+              />
+              <span className="font-mono text-xs">{gradientFrom}</span>
+            </label>
+            <span className="text-gray-300">→</span>
+            <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span>ถึงสี (To)</span>
+              <input
+                type="color"
+                value={gradientTo}
+                onChange={(e) => setGradientTo(e.target.value)}
+                className="h-8 w-14 cursor-pointer rounded border border-[var(--surface-border)] p-0.5"
+              />
+              <span className="font-mono text-xs">{gradientTo}</span>
+            </label>
+            {/* Live preview */}
+            <div
+              className="h-8 w-24 rounded-lg border border-gray-200"
+              style={{ background: `linear-gradient(135deg, ${gradientFrom}, ${gradientTo})` }}
+            />
+          </div>
+        </div>
+
+        {/* Course Outline PDF */}
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-9e-navy dark:text-white">
+            Course Outline (PDF)
+          </label>
+          <p className="mt-0.5 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            อัพโหลด PDF หรือวาง URL ตรงๆ
+          </p>
+          <div className="mt-1 flex gap-2">
+            <input
+              type="text"
+              placeholder="https://..."
+              value={courseOutlineUrl ?? ''}
+              onChange={(e) => setCourseOutlineUrl(e.target.value)}
+              className={inputCls + ' flex-1'}
+            />
+            <label className="flex cursor-pointer items-center gap-1.5 rounded-9e-md border border-9e-action px-3 py-2 text-sm text-9e-action hover:bg-9e-action/5 transition-colors whitespace-nowrap">
+              <Upload size={14} />
+              อัพโหลด PDF
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append('file', file);
+                  fd.append('folder', 'masterclass');
+                  const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+                  const result = await res.json().catch(() => ({}));
+                  if (result?.url) setCourseOutlineUrl(result.url);
+                }}
+              />
+            </label>
+          </div>
+          {courseOutlineUrl && (
+            <a
+              href={courseOutlineUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-9e-action hover:underline"
+            >
+              <Download size={11} /> ดูไฟล์ที่อัพโหลด
+            </a>
+          )}
+        </div>
       </Section>
 
       {/* Section 3 — Schedule */}
@@ -476,19 +533,148 @@ export function MasterclassCourseFormClient({ course }) {
 
       {/* Section 6 — Dynamic lists */}
       <Section title="6. รายการต่าง ๆ">
-        <StringListEditor label="เหมาะสำหรับ (suitable_for)" items={suitableFor} onChange={setSuitableFor} />
-        <StringListEditor label="พื้นฐานที่ต้องมี (prerequisites)" items={prerequisites} onChange={setPrerequisites} />
-        <StringListEditor label="วัตถุประสงค์ (objectives)" items={objectives} onChange={setObjectives} />
-        <StringListEditor label="ประโยชน์ที่ได้รับ (benefits)" items={benefits} onChange={setBenefits} />
-        <StringListEditor label="อุปกรณ์ที่ต้องเตรียม (equipment_required)" items={equipmentRequired} onChange={setEquipmentRequired} />
+        {/* suitable_for — label + background image per card */}
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-semibold text-9e-navy dark:text-white">
+              หลักสูตรนี้เหมาะสำหรับ (suitable_for)
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setSuitableFor((cur) => [...(cur ?? []), { label: '', image_url: '' }])
+              }
+              className="flex items-center gap-1 text-xs text-9e-action hover:underline"
+            >
+              <Plus size={12} /> เพิ่ม
+            </button>
+          </div>
+          <div className="space-y-3">
+            {(suitableFor ?? []).map((item, i) => {
+              // Support legacy string[] during migration
+              const label     = typeof item === 'string' ? item : item.label;
+              const image_url = typeof item === 'string' ? '' : item.image_url;
+              return (
+                <div
+                  key={i}
+                  className="flex gap-2 items-start rounded-lg border border-[var(--surface-border)] p-3"
+                >
+                  <div className="flex-1 space-y-2">
+                    <input
+                      type="text"
+                      placeholder="เช่น Data / Business Analyst"
+                      value={label}
+                      onChange={(e) => {
+                        const next = [...(suitableFor ?? [])];
+                        next[i] = { label: e.target.value, image_url };
+                        setSuitableFor(next);
+                      }}
+                      className={inputCls}
+                    />
+                    <ImageUploadField
+                      name={`suitable_for_image_${i}`}
+                      label="Background Image (hover)"
+                      folder="masterclass"
+                      currentUrl={image_url}
+                      aspect="16/9"
+                      hint="ภาพ background เมื่อ hover — แนะนำ 400×300px"
+                      onChange={(url) => {
+                        const next = [...(suitableFor ?? [])];
+                        next[i] = { label, image_url: url };
+                        setSuitableFor(next);
+                      }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSuitableFor((cur) => (cur ?? []).filter((_, j) => j !== i))
+                    }
+                    className="mt-1 text-gray-400 hover:text-red-500"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <BulletTextarea
+          label="พื้นฐานของผู้เข้าอบรม (prerequisites)"
+          hint="1 บรรทัด = 1 รายการ"
+          rows={6}
+          defaultValue={prerequisites ?? []}
+          onChange={(raw) =>
+            setPrerequisites(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+
+        <BulletTextarea
+          label="วัตถุประสงค์ (objectives)"
+          hint="1 บรรทัด = 1 รายการ"
+          rows={6}
+          defaultValue={objectives ?? []}
+          onChange={(raw) =>
+            setObjectives(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+
+        <BulletTextarea
+          label="ประโยชน์ที่จะได้รับ (benefits)"
+          hint="1 บรรทัด = 1 รายการ"
+          rows={6}
+          defaultValue={benefits ?? []}
+          onChange={(raw) =>
+            setBenefits(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+
+        <BulletTextarea
+          label="อุปกรณ์ที่ต้องการ (equipment_required)"
+          hint="1 บรรทัด = 1 รายการ"
+          rows={3}
+          defaultValue={equipmentRequired ?? []}
+          onChange={(raw) =>
+            setEquipmentRequired(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
       </Section>
 
       {/* Section 7 — System requirements */}
       <Section title="7. ความต้องการของระบบ">
-        <StringListEditor label="ระบบปฏิบัติการ (os)" items={srOs} onChange={setSrOs} />
-        <StringListEditor label="เว็บเบราว์เซอร์ (browsers)" items={srBrowsers} onChange={setSrBrowsers} />
-        <StringListEditor label="บัญชีที่ต้องใช้ (accounts)" items={srAccounts} onChange={setSrAccounts} />
-        <StringListEditor label="โปรแกรมที่ต้องติดตั้ง (software)" items={srSoftware} onChange={setSrSoftware} />
+        <BulletTextarea
+          label="ระบบปฏิบัติการ (OS)"
+          rows={3}
+          defaultValue={srOs ?? []}
+          onChange={(raw) =>
+            setSrOs(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+        <BulletTextarea
+          label="เว็บเบราว์เซอร์ (browsers)"
+          rows={3}
+          defaultValue={srBrowsers ?? []}
+          onChange={(raw) =>
+            setSrBrowsers(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+        <BulletTextarea
+          label="บัญชีที่ต้องใช้ (accounts)"
+          rows={3}
+          defaultValue={srAccounts ?? []}
+          onChange={(raw) =>
+            setSrAccounts(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
+        <BulletTextarea
+          label="โปรแกรมที่ต้องติดตั้ง (software)"
+          rows={3}
+          defaultValue={srSoftware ?? []}
+          onChange={(raw) =>
+            setSrSoftware(raw.split('\n').map((s) => s.trim()).filter(Boolean))
+          }
+        />
       </Section>
 
       {/* Section 8 — License options */}
@@ -556,17 +742,51 @@ export function MasterclassCourseFormClient({ course }) {
 
       {/* Section 9 — Instructors */}
       <Section title="9. วิทยากร" defaultOpen={false}>
-        <label className={labelCls}>Instructor IDs (MongoDB _id, comma-separated)</label>
-        <input
-          type="text"
-          value={instructorIdsText}
-          onChange={(e) => setInstructorIdsText(e.target.value)}
-          placeholder="65f…, 65a…"
-          className={inputCls}
-        />
-        <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          ดู ID ได้จากหน้า /admin/instructors
-        </p>
+        <div>
+          <label className={labelCls + ' mb-2 block'}>วิทยากร (Instructors)</label>
+          {instructorList.length === 0 ? (
+            <p className="text-xs text-gray-400">กำลังโหลดรายชื่อวิทยากร...</p>
+          ) : (
+            <div className="space-y-2">
+              {instructorList.map((inst) => {
+                const id       = String(inst._id);
+                const selected = (instructorIds ?? []).includes(id);
+                return (
+                  <label
+                    key={id}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--surface-border)] px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() =>
+                        setInstructorIds((cur) =>
+                          selected
+                            ? (cur ?? []).filter((x) => x !== id)
+                            : [...(cur ?? []), id]
+                        )
+                      }
+                    />
+                    {inst.image_url && (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={inst.image_url}
+                        alt={inst.name}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-9e-navy dark:text-white">{inst.name}</p>
+                      {inst.title && (
+                        <p className="text-xs text-gray-400">{inst.title}</p>
+                      )}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </Section>
 
       {/* Section 10 — Curriculum */}
@@ -611,7 +831,16 @@ export function MasterclassCourseFormClient({ course }) {
                       </button>
                     </div>
                     <div className="mt-3">
-                      <StringListEditor label="หัวข้อย่อย (topics)" items={mod.topics} onChange={(v) => updateModule(si, mi, { topics: v })} />
+                      <BulletTextarea
+                        label="Topics"
+                        hint="1 บรรทัด = 1 topic  |  เริ่มด้วย '- ' (ขีด+เว้นวรรค) = sub-bullet"
+                        rows={4}
+                        defaultValue={mod.topics ?? []}
+                        onChange={(raw) => {
+                          const topics = raw.split('\n').map((t) => t.trim()).filter(Boolean);
+                          updateModule(si, mi, { topics });
+                        }}
+                      />
                     </div>
                     <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
                       <div>
@@ -622,6 +851,17 @@ export function MasterclassCourseFormClient({ course }) {
                         <label className={labelCls}>ผลลัพธ์ (output)</label>
                         <input type="text" value={mod.output} onChange={(e) => updateModule(si, mi, { output: e.target.value })} className={inputCls} />
                       </div>
+                    </div>
+                    {/* Additional content (rich text) */}
+                    <div className="mt-2">
+                      <label className="text-xs font-medium text-[var(--text-secondary)]">
+                        เนื้อหาเพิ่มเติม (HTML) — optional
+                      </label>
+                      <SimpleRichTextEditor
+                        value={mod.content_html ?? ''}
+                        onChange={(html) => updateModule(si, mi, { content_html: html })}
+                        placeholder="เนื้อหาเพิ่มเติม รายละเอียด หรือ note..."
+                      />
                     </div>
                   </div>
                 ))}

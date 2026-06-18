@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic from '@/models/RegisterPublic';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
+import MasterclassBatch from '@/models/MasterclassBatch';
 import { retrieveCharge } from '@/lib/omise';
 
 export async function POST(req) {
@@ -54,6 +55,23 @@ export async function POST(req) {
     if (isMasterclass) {
       const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
       await sendMasterclassReceipt(doc);
+
+      // Increment registered_count and auto-flip status to 'full' if capacity reached.
+      const updatedBatch = await MasterclassBatch.findByIdAndUpdate(
+        doc.batch_id,
+        { $inc: { registered_count: 1 } },
+        { new: true }
+      );
+      if (
+        updatedBatch &&
+        !updatedBatch.status_override &&
+        updatedBatch.status === 'open' &&
+        updatedBatch.registered_count >= updatedBatch.capacity
+      ) {
+        await MasterclassBatch.findByIdAndUpdate(updatedBatch._id, {
+          $set: { status: 'full' },
+        });
+      }
     } else {
       const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
       await sendPaidReceipt(doc);

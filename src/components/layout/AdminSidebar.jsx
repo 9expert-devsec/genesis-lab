@@ -96,6 +96,7 @@ const NAV_GROUPS = [
       { label: 'โปรแกรม & Skills',     href: '/admin/programs',                 icon: 'Layers' },
       { label: 'Career Path',          href: '/admin/career-paths',             icon: 'Map' },
       { label: 'Masterclass',          href: '/admin/masterclass',              icon: 'GraduationCap' },
+      { label: 'MC — ผู้ลงทะเบียน',   href: '/admin/masterclass/registrations', icon: 'ClipboardList' },
       { label: 'TNHS Courses',         href: '/admin/tnhs-courses',             icon: 'ExternalLink' },
       { label: 'Program/Skill URL',    href: '/admin/page-configs',             icon: 'FileText' },
     ],

@@ -40,16 +40,18 @@ export function CountdownTimer({ deadline, className = '' }) {
   ];
 
   return (
-    <div className={`flex gap-2 ${className}`}>
+    <div className={`flex gap-4 ${className}`}>
       {units.map(({ value, label }) => (
         <div
           key={label}
-          className="flex min-w-[48px] flex-col items-center rounded-lg bg-9e-navy px-3 py-1.5 dark:bg-white/10"
+          className="flex min-w-[60px] flex-col items-center rounded-xl bg-9e-lime px-3 py-1.5 dark:bg-white/10"
         >
-          <span className="tabular-nums text-xl font-bold text-white">
+          <span className="tabular-nums text-2xl font-bold text-9e-navy">
             {String(value).padStart(2, '0')}
           </span>
-          <span className="text-[10px] text-9e-air">{label}</span>
+          <span className="text-[14px] text-9e-navy">
+            {label}
+          </span>
         </div>
       ))}
     </div>

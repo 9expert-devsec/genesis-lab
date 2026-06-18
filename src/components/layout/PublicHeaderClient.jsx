@@ -103,7 +103,7 @@ export function PublicHeaderClient({
 
         {/* ── Desktop nav (center) ─────────────────────────────── */}
         <nav
-          className="hidden flex-1 items-center justify-center gap-1 lg:flex"
+          className="font-thai hidden flex-1 items-center justify-center gap-1 lg:flex"
           aria-label="Primary"
         >
           {mainNav.map((item) => {

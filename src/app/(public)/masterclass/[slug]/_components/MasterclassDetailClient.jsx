@@ -1,45 +1,55 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import {
   Award,
   BarChart2,
-  Briefcase,
-  Building2,
   CheckCircle,
   CheckCircle2,
   ChevronDown,
-  Database,
   Download,
   FlaskConical,
   Plus,
-  TrendingUp,
-  UserCheck,
   Wrench,
-} from 'lucide-react';
-import { CountdownTimer } from '../../_components/CountdownTimer';
+} from "lucide-react";
+import { CountdownTimer } from "../../_components/CountdownTimer";
 
-const LEVEL_MAP = { beginner: 'เริ่มต้น', intermediate: 'กลาง', advanced: 'สูง' };
-const SUITABLE_ICONS = [BarChart2, Briefcase, Database, Building2, UserCheck, TrendingUp];
+const LEVEL_MAP = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+};
 
 // ── Shared FAQ accordion (same as listing page) ───────────────────────────────
 function FaqAccordionItem({ faq }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700">
+    <div
+      className={`border rounded-2xl dark:border-gray-700 ${open ? "border-9e-action-scale-600 shadow-lg shadow-9e-action-scale-600/20" : "border-gray-200"}`}
+    >
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-4 text-left text-sm font-medium text-9e-navy dark:text-white"
+        className="flex w-full items-center justify-between p-4 text-left text-[17px] font-bold text-9e-navy dark:text-white"
       >
         <span>{faq.question_th}</span>
-        <Plus size={16} className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-45' : ''}`} />
-      </button>
-      <div className={`overflow-hidden transition-all duration-300 ${open ? 'max-h-96' : 'max-h-0'}`}>
         <div
-          className="prose prose-sm dark:prose-invert pb-4 text-gray-600 dark:text-gray-300"
+          className="p-2
+         rounded-full bg-9e-signature-900"
+        >
+          <Plus
+            size={16}
+            className={`shrink-0 transition-transform duration-200 text-9e-action ${open ? "rotate-45" : ""}`}
+          />
+        </div>
+      </button>
+      <div
+        className={`overflow-hidden transition-all duration-300 ${open ? "max-h-96" : "max-h-0"}`}
+      >
+        <div
+          className="prose prose-base dark:prose-invert px-4 pb-4 text-gray-600 dark:text-gray-300"
           dangerouslySetInnerHTML={{ __html: faq.answer_html }}
         />
       </div>
@@ -53,7 +63,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
   const [instructors, setInstructors] = useState([]);
   useEffect(() => {
     if (!course.instructor_ids?.length) return;
-    fetch(`/api/admin/instructors?ids=${course.instructor_ids.join(',')}`)
+    fetch(`/api/admin/instructors?ids=${course.instructor_ids.join(",")}`)
       .then((r) => r.json())
       .then((data) => setInstructors(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -70,56 +80,94 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
     return map;
   };
   const [openModules, setOpenModules] = useState({});
-  useEffect(() => { setOpenModules(buildDefaultOpen()); }, []);
+  useEffect(() => {
+    setOpenModules(buildDefaultOpen());
+  }, []);
 
-  const allOpen = Object.values(openModules).every(Boolean) && Object.keys(openModules).length > 0;
+  const allOpen =
+    Object.values(openModules).every(Boolean) &&
+    Object.keys(openModules).length > 0;
   const toggleAll = () => {
     const next = {};
-    Object.keys(openModules).forEach((k) => { next[k] = !allOpen; });
+    Object.keys(openModules).forEach((k) => {
+      next[k] = !allOpen;
+    });
     setOpenModules(next);
   };
   const toggleModule = (key) =>
     setOpenModules((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const visibleBatches = course.batches?.filter((b) => b.status !== 'cancelled') ?? [];
+  const visibleBatches =
+    course.batches?.filter((b) => b.status !== "cancelled") ?? [];
 
   return (
     <main>
       {/* [A] Hero */}
-      <section className="bg-9e-navy px-4 py-16">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-widest text-9e-lime">
-              Masterclass
-            </span>
-            <h1 className="mt-3 text-3xl font-bold leading-tight text-white lg:text-4xl">
-              {course.title_th}
-            </h1>
-            {course.subtitle_th && (
-              <p className="mt-3 text-base text-9e-air">{course.subtitle_th}</p>
-            )}
-            <div className="mt-5 flex flex-wrap gap-2">
-              {[
-                { icon: <Wrench size={12} />, label: 'Workshop' },
-                { icon: <Award size={12} />, label: 'e-Certificate' },
-                { icon: null, label: LEVEL_MAP[course.level] ?? course.level },
-              ].filter((t) => t.label).map(({ icon, label }) => (
-                <span
-                  key={label}
-                  className="flex items-center gap-1.5 rounded-full border border-white/20 px-3 py-1 text-xs text-white/80"
-                >
-                  {icon}
-                  {label}
+      <section className="bg-[#0e2c4a] px-4 py-10">
+        <div className="max-w-[1200px] mx-auto relative grid grid-cols-1 lg:grid-cols-2 items-stretch gap-6">
+          <div className="relative flex aspect-video overflow-hidden bg-9e-navy rounded-2xl p-8">
+            {/* Subtle corner gradient blobs */}
+            <div
+              className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
+              style={{ background: course.hero_gradient_from ?? "#2486FF" }}
+            />
+            <div
+              className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
+              style={{ background: course.hero_gradient_to ?? "#005CFF" }}
+            />
+
+            <div className="relative flex w-full flex-col">
+              <div>
+                <span className="text-base font-semibold tracking-widest text-9e-lime">
+                  Masterclass
                 </span>
-              ))}
+
+                <h1 className="mt-3 text-3xl font-bold leading-tight text-white lg:text-4xl">
+                  {course.title_th}
+                </h1>
+
+                {course.subtitle_th && (
+                  <p className="mt-3 line-clamp-3 text-base text-white leading-relaxed">
+                    {course.subtitle_th}
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-auto">
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { icon: <Wrench size={12} />, label: "Workshop" },
+                    { icon: <Award size={12} />, label: "e-Certificate" },
+                    {
+                      icon: <BarChart2 size={12} />,
+                      label: LEVEL_MAP[course.level] ?? course.level,
+                    },
+                  ]
+                    .filter((t) => t.label)
+                    .map(({ icon, label }) => (
+                      <span
+                        key={label}
+                        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs text-white/80"
+                      >
+                        {icon}
+                        {label}
+                      </span>
+                    ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    document
+                      .getElementById("batch-section")
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
+                  className="mt-2 rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
+                >
+                  ลงทะเบียน
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => document.getElementById('batch-section')?.scrollIntoView({ behavior: 'smooth' })}
-              className="mt-8 rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
-            >
-              ลงทะเบียน
-            </button>
           </div>
           <div>
             {course.cover_image_url ? (
@@ -140,47 +188,59 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       </section>
 
       {/* [B] Stats bar */}
-      <section className="border-b border-gray-100 bg-white dark:border-gray-800 dark:bg-9e-card">
-        <div className="max-w-6xl mx-auto flex divide-x divide-gray-200 dark:divide-gray-700">
-          {[
-            {
-              main: `${course.duration_days} Day${course.duration_days > 1 ? 's' : ''}`,
-              sub: 'INTENSIVE',
-              action: null,
-            },
-            {
-              main: `${visibleBatches[0]?.capacity ?? 50} Participants`,
-              sub: 'MAX CAPACITY',
-              action: null,
-            },
-            {
-              main: null,
-              sub: 'COURSE OUTLINE',
-              action: (
-                <a
-                  href="#"
-                  className="flex items-center gap-2 rounded-full bg-9e-action px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
-                >
-                  <Download size={15} /> Download
-                </a>
-              ),
-            },
-          ].map(({ main, sub, action }, i) => (
-            <div key={i} className="flex flex-1 flex-col items-center gap-1 py-6">
-              {action ?? (
-                <span className="text-2xl font-bold text-9e-navy dark:text-white">{main}</span>
-              )}
-              <span className="text-[10px] uppercase tracking-wider text-gray-400">{sub}</span>
-            </div>
-          ))}
+      <section className="mt-10 mb-2">
+        <div className="max-w-[1000px] mx-auto grid grid-cols-3 items-center justify-center gap-4">
+          {/* 1 Day / INTENSIVE */}
+          <div className="flex flex-col px-8 py-5 bg-9e-ice rounded-[20px] items-center h-full">
+            <span className="text-2xl font-bold text-9e-navy dark:text-white">
+              {course.duration_days} Day{course.duration_days > 1 ? "s" : ""}
+            </span>
+            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
+              INTENSIVE
+            </span>
+          </div>
+          {/* N Participants / MAX CAPACITY */}
+          <div className="flex flex-col px-8 py-5 bg-9e-ice rounded-[20px] items-center h-full">
+            <span className="text-2xl font-bold text-9e-navy dark:text-white">
+              {visibleBatches[0]?.capacity ?? 50} Participants
+            </span>
+            <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
+              MAX CAPACITY
+            </span>
+          </div>
+          {course.course_outline_url ? (
+            <a
+              href={course.course_outline_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col px-8 py-5  items-center rounded-[20px] bg-9e-brand text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
+            >
+              <div className="flex flex-row items-center gap-2 text-2xl">
+                <Download size={24} /> Download
+              </div>
+
+              <span className="text-[12px] font-semibold uppercase tracking-widest text-white mt-0.5">
+                COURSE OUTLINE
+              </span>
+            </a>
+          ) : (
+            <span className="flex flex-col px-8 py-5  items-center rounded-[20px] border border-gray-200 text-sm font-medium text-gray-400 cursor-default">
+              <div className="flex flex-row items-center gap-2 text-2xl">
+                <Download size={24} /> Download
+              </div>
+              <span className="text-[12px] font-semibold uppercase tracking-widest text-gray-400 mt-0.5">
+                COURSE OUTLINE
+              </span>
+            </span>
+          )}
         </div>
       </section>
 
       {/* [C] Description */}
       {course.description_html && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
+        <section className="max-w-[1200px] mx-auto px-4 py-6">
           <div
-            className="prose prose-lg dark:prose-invert max-w-none"
+            className="prose prose-base dark:prose-invert max-w-none"
             dangerouslySetInnerHTML={{ __html: course.description_html }}
           />
         </section>
@@ -188,60 +248,139 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [D] Batch section */}
       {visibleBatches.length > 0 && (
-        <section id="batch-section" className="max-w-4xl mx-auto px-4 py-10">
+        <section
+          id="batch-section"
+          className="max-w-[760px] mx-auto px-4 py-10 flex flex-col items-center"
+        >
           <h2 className="mb-6 text-xl font-bold text-9e-navy dark:text-white">
             รุ่นที่เปิดรับสมัครและราคา
           </h2>
           {visibleBatches.map((batch) => (
             <div
               key={batch._id}
-              className={`relative mb-4 rounded-2xl border-2 border-gray-200 p-6 dark:border-gray-700 ${batch.is_early_bird ? 'pt-10' : ''}`}
+              className={`relative w-full isolate mb-4 overflow-hidden rounded-2xl transition-shadow hover:shadow-md ${
+                batch.is_early_bird
+                  ? " ring-2 ring-inset ring-9e-lime bg-9e-navy dark:bg-9e-card"
+                  : "border border-gray-200 bg-white dark:border-gray-700 dark:bg-9e-card"
+              }`}
             >
+              {batch.status === "closed" && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-9e-slate-lt-800/50" />
+              )}
+              {/* Gradient background blobs */}
               {batch.is_early_bird && (
-                <span className="absolute left-4 top-4 rounded-full bg-9e-lime px-3 py-1 text-xs font-bold text-9e-navy">
+                <>
+                  <div className="pointer-events-none absolute -left-20 -top-20 z-0 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-20 -right-20 z-0 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
+                </>
+              )}
+              {/* Early Bird badge */}
+              {batch.is_early_bird && (
+                <span className="relative z-10 flex h-10 w-[160px] items-center justify-center rounded-br-2xl bg-9e-lime text-base font-bold text-9e-navy">
                   Early Bird
                 </span>
               )}
-              <p className="text-lg font-bold text-9e-navy dark:text-white">
-                {batch.batch_label || `รุ่นที่ ${batch.batch_no}`}
-              </p>
-              {batch.dates?.[0]?.day_label && (
-                <p className="text-2xl font-bold text-9e-navy dark:text-white">
-                  {batch.dates[0].day_label}
-                </p>
-              )}
-              <p className="mt-1 text-sm text-gray-500">
-                {course.time_start} – {course.time_end} น.{batch.venue_name ? ` · ${batch.venue_name}` : ''}
-              </p>
-              {batch.is_early_bird && batch.early_bird_deadline && (
-                <CountdownTimer deadline={batch.early_bird_deadline} className="mt-4" />
-              )}
-              <div className="mt-4 flex items-end justify-between gap-4">
-                <div>
-                  <span className="text-3xl font-bold text-9e-action">
-                    {batch.effective_price?.toLocaleString('th-TH')} บาท
-                  </span>
-                  {batch.is_early_bird && (
-                    <p className="text-sm text-gray-400 line-through">
-                      {batch.original_price?.toLocaleString('th-TH')} บาท
+
+              <div className="relative z-10 p-6">
+                <div className="flex flex-row items-center justify-between">
+                  <div>
+                    {/* Top row: batch label + date */}
+                    <p
+                      className={`text-base font-semibold ${
+                        batch.is_early_bird
+                          ? "text-white"
+                          : "text-9e-navy dark:text-white"
+                      }`}
+                    >
+                      {batch.batch_label || `รุ่นที่ ${batch.batch_no}`}
                     </p>
+                    {batch.dates?.[0]?.day_label && (
+                      <p
+                        className={`mt-0.5 text-[28px] font-bold ${
+                          batch.is_early_bird
+                            ? "text-white"
+                            : "text-9e-navy dark:text-white"
+                        }`}
+                      >
+                        {batch.dates[0].day_label}
+                      </p>
+                    )}
+                    <p
+                      className={`text-[18px] ${
+                        batch.is_early_bird
+                          ? "text-9e-slate-lt-50"
+                          : "text-9e-slate-dp-50 dark:text-white"
+                      }`}
+                    >
+                      {course.time_start} – {course.time_end} น.
+                    </p>
+                    <p
+                      className={`text-[18px] ${
+                        batch.is_early_bird
+                          ? "text-9e-slate-lt-50"
+                          : "text-9e-slate-dp-50 dark:text-white"
+                      }`}
+                    >
+                      {batch.venue_name ? `${batch.venue_name}` : ""}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col items-end">
+                    <span
+                      className={`text-[40px] font-bold  ${
+                        batch.is_early_bird
+                          ? "bg-gradient-to-r from-9e-air to-9e-brand bg-clip-text text-transparent"
+                          : "text-9e-navy dark:text-white"
+                      }`}
+                    >
+                      {batch.effective_price?.toLocaleString("th-TH")} บาท
+                    </span>
+                    {batch.is_early_bird && batch.original_price && (
+                      <span className="text-[20px] text-9e-slate-lt-50">
+                        จากปกติ{" "}
+                        <span className="line-through">
+                          {batch.original_price?.toLocaleString("th-TH")} บาท
+                        </span>
+                      </span>
+                    )}
+                    {batch.is_early_bird ? (
+                      ""
+                    ) : (
+                      <span className="text-[14px] text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
+                        *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className={`mt-5 flex items-center  gap-4 ${
+                    batch.is_early_bird ? "justify-between" : "justify-end "
+                  }`}
+                >
+                  {/* Countdown */}
+                  {batch.is_early_bird && batch.early_bird_deadline && (
+                    <CountdownTimer
+                      deadline={batch.early_bird_deadline}
+                      tileClassName="bg-9e-navy dark:bg-white/10"
+                    />
+                  )}
+                  {batch.status === "open" ? (
+                    <Link
+                      href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
+                      className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-action dark:bg-9e-action dark:hover:bg-9e-brand"
+                    >
+                      ลงทะเบียน
+                    </Link>
+                  ) : (
+                    <button
+                      disabled
+                      className="cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 min-w-48 text-center text-base font-bold text-gray-400 dark:bg-gray-700"
+                    >
+                      {batch.status === "full" ? "เต็มแล้ว" : "ปิดรับสมัครแล้ว"}
+                    </button>
                   )}
                 </div>
-                {batch.status === 'open' ? (
-                  <Link
-                    href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
-                    className="rounded-full bg-9e-action px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
-                  >
-                    ลงทะเบียน
-                  </Link>
-                ) : (
-                  <button
-                    disabled
-                    className="cursor-not-allowed rounded-full bg-gray-200 px-6 py-3 text-sm font-medium text-gray-400 dark:bg-gray-700"
-                  >
-                    {batch.status === 'full' ? 'เต็มแล้ว' : 'ปิดรับสมัครแล้ว'}
-                  </button>
-                )}
               </div>
             </div>
           ))}
@@ -250,36 +389,64 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [E] Objectives */}
       {course.objectives?.length > 0 && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
-          <h2 className="text-xl font-bold text-9e-navy dark:text-white">วัตถุประสงค์</h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {course.objectives.map((obj, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 rounded-xl border border-gray-100 p-4 dark:border-gray-700"
-              >
-                <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-9e-brand" />
-                <p className="text-sm text-gray-700 dark:text-gray-200">{obj}</p>
-              </div>
-            ))}
+        <section className="bg-[#F8FAFD] dark:bg-transparent px-4 py-12">
+          <div className="max-w-[1200px] mx-auto">
+            <h2 className="mb-8 text-center text-xl font-bold text-9e-navy dark:text-white">
+              วัตถุประสงค์
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {course.objectives.map((obj, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm dark:bg-9e-card"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-9e-navy dark:bg-9e-action">
+                    <CheckCircle2 size={18} className="text-9e-lime" />
+                  </div>
+                  <p className="text-base leading-relaxed text-gray-700 dark:text-gray-200">
+                    {obj}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
       )}
 
       {/* [F] Suitable for */}
       {course.suitable_for?.length > 0 && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
-          <h2 className="text-xl font-bold text-9e-navy dark:text-white">หลักสูตรนี้เหมาะสำหรับ</h2>
-          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            {course.suitable_for.map((label, i) => {
-              const Icon = SUITABLE_ICONS[i % SUITABLE_ICONS.length];
+        <section className="max-w-[1200px] mx-auto px-4 py-10">
+          <h2 className="mb-6 text-center text-xl font-bold text-9e-navy dark:text-white">
+            หลักสูตรนี้เหมาะสำหรับ
+          </h2>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {course.suitable_for.map((item, i) => {
+              const label = typeof item === "string" ? item : item.label;
+              const image_url = typeof item === "string" ? "" : item.image_url;
+
               return (
                 <div
                   key={i}
-                  className="flex flex-col items-center gap-2 rounded-xl bg-[#0f2a3f] p-5 text-center dark:bg-[#0a1e2e]"
+                  className="group relative flex aspect-[4/3] overflow-hidden rounded-xl bg-9e-navy"
                 >
-                  <Icon size={28} className="text-9e-brand" />
-                  <span className="text-sm font-medium text-white">{label}</span>
+                  {image_url && (
+                    <Image
+                      src={image_url}
+                      alt={label}
+                      fill
+                      className="object-cover opacity-50 transition-all duration-300 group-hover:scale-105 group-hover:opacity-100"
+                      sizes="(max-width:640px) 50vw, (max-width:1024px) 33vw, 20vw"
+                    />
+                  )}
+
+                  <div className="absolute inset-0 bg-9e-brand/40 transition-opacity duration-500 ease-in-out group-hover:opacity-0" />
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-9e-action/90 via-9e-navy/30 to-transparent opacity-0 transition-opacity duration-500 ease-in-out group-hover:opacity-100" />
+
+                  <p className="absolute inset-x-0 bottom-1/2 z-10 translate-y-1/2 px-3 text-center text-base font-semibold leading-tight text-white transition-all duration-500 ease-in-out group-hover:bottom-4 group-hover:translate-y-0">
+                    {label}
+                  </p>
                 </div>
               );
             })}
@@ -289,13 +456,16 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [G] Prerequisites */}
       {course.prerequisites?.length > 0 && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
+        <section className="max-w-[1200px] mx-auto px-4 py-10">
           <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
             พื้นฐานของผู้เข้าอบรม
           </h2>
           <ol className="mt-4 list-inside list-decimal space-y-3">
             {course.prerequisites.map((item, i) => (
-              <li key={i} className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+              <li
+                key={i}
+                className="text-base leading-relaxed text-gray-700 dark:text-gray-200"
+              >
                 {item}
               </li>
             ))}
@@ -304,27 +474,37 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       )}
 
       {/* [H] System Requirements */}
-      {course.system_requirements && (
+      {course.system_requirements &&
         (() => {
           const sr = course.system_requirements;
           const sections = [
-            { label: 'ระบบปฏิบัติการ', items: sr.os },
-            { label: 'Web Browser', items: sr.browsers },
-            { label: 'บัญชีที่ต้องใช้', items: sr.accounts },
-            { label: 'โปรแกรมที่ต้องติดตั้ง', items: sr.software },
+            { label: "ระบบปฏิบัติการ", items: sr.os },
+            { label: "Web Browser", items: sr.browsers },
+            { label: "บัญชีที่ต้องใช้", items: sr.accounts },
+            { label: "โปรแกรมที่ต้องติดตั้ง", items: sr.software },
           ].filter((s) => s.items?.length > 0);
           if (!sections.length) return null;
           return (
-            <section className="max-w-4xl mx-auto px-4 py-10">
-              <h2 className="text-xl font-bold text-9e-navy dark:text-white">ความต้องการของระบบ</h2>
+            <section className="max-w-[1200px] mx-auto px-4 py-10">
+              <h2 className="text-xl font-bold text-9e-navy dark:text-white">
+                ความต้องการของระบบ
+              </h2>
               <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
                 {sections.map(({ label, items }) => (
                   <div key={label}>
-                    <p className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">{label}</p>
+                    <p className="mb-2 text-base font-semibold text-9e-navy dark:text-white">
+                      {label}
+                    </p>
                     <ul className="space-y-1.5">
                       {items.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200">
-                          <CheckCircle size={14} className="mt-0.5 shrink-0 text-9e-brand" />
+                        <li
+                          key={i}
+                          className="flex items-start gap-2 text-base text-gray-700 dark:text-gray-200"
+                        >
+                          <CheckCircle
+                            size={14}
+                            className="mt-0.5 shrink-0 text-9e-brand"
+                          />
                           {item}
                         </li>
                       ))}
@@ -334,18 +514,20 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               </div>
             </section>
           );
-        })()
-      )}
+        })()}
 
       {/* [I] Benefits */}
       {course.benefits?.length > 0 && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
+        <section className="max-w-[1200px] mx-auto px-4 py-10">
           <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
             ประโยชน์ที่จะได้รับ
           </h2>
           <ol className="mt-4 list-inside list-decimal space-y-3">
             {course.benefits.map((item, i) => (
-              <li key={i} className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+              <li
+                key={i}
+                className="text-base leading-relaxed text-gray-700 dark:text-gray-200"
+              >
                 {item}
               </li>
             ))}
@@ -355,20 +537,22 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [J] Curriculum */}
       {course.curriculum?.length > 0 && (
-        <section className="max-w-4xl mx-auto px-4 py-10">
+        <section className="max-w-[1200px] mx-auto px-4 py-10">
           <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-9e-navy dark:text-white">หัวข้อการฝึกอบรม</h2>
+            <h2 className="text-xl font-bold text-9e-navy dark:text-white">
+              หัวข้อการฝึกอบรม
+            </h2>
             <button
               type="button"
               onClick={toggleAll}
               className="text-sm text-9e-action hover:underline"
             >
-              {allOpen ? 'ย่อทั้งหมด' : 'ขยายทั้งหมด'}
+              {allOpen ? "ย่อทั้งหมด" : "ขยายทั้งหมด"}
             </button>
           </div>
           {course.curriculum.map((session, si) => (
             <div key={si}>
-              <p className="mb-3 mt-8 text-xs font-semibold uppercase tracking-widest text-9e-action">
+              <p className="mb-3 mt-5 text-base font-semibold uppercase tracking-widest text-9e-action">
                 {session.session_label}
               </p>
               {session.modules?.map((mod, mi) => {
@@ -389,35 +573,61 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       </span>
                       <ChevronDown
                         size={16}
-                        className={`shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+                        className={`shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                       />
                     </button>
                     <div
-                      className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-[800px]' : 'max-h-0'}`}
+                      className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
                     >
                       <div className="px-5 pb-5">
                         {mod.topics?.length > 0 && (
-                          <ul className="mt-1 space-y-1.5">
-                            {mod.topics.map((topic, ti) => (
-                              <li key={ti} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-300">
-                                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-brand" />
-                                {topic}
-                              </li>
-                            ))}
+                          <ul className="mt-1 space-y-1">
+                            {mod.topics.map((topic, ti) => {
+                              const isSub = topic.startsWith("- ");
+                              const text = isSub ? topic.slice(2) : topic;
+                              return (
+                                <li
+                                  key={ti}
+                                  className={`flex items-start gap-2 text-base text-gray-600 dark:text-gray-300 ${isSub ? "ml-5" : ""}`}
+                                >
+                                  <span
+                                    className={`mt-2 shrink-0 rounded-full ${
+                                      isSub
+                                        ? "h-1 w-1 bg-gray-400"
+                                        : "h-1.5 w-1.5 bg-9e-brand"
+                                    }`}
+                                  />
+                                  {text}
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                         {mod.workshop && (
                           <div className="mt-3 flex items-start gap-2 rounded-lg border border-9e-lime/30 bg-9e-lime/10 p-3">
-                            <FlaskConical size={14} className="mt-0.5 shrink-0 text-9e-lime" />
+                            <FlaskConical
+                              size={14}
+                              className="mt-0.5 shrink-0 text-9e-lime"
+                            />
                             <p className="text-sm text-gray-700 dark:text-gray-200">
-                              <strong>Workshop: </strong>{mod.workshop}
+                              <strong>Workshop: </strong>
+                              {mod.workshop}
                             </p>
                           </div>
                         )}
                         {mod.output && (
                           <p className="mt-2 text-xs text-gray-400">
-                            <strong>ผลลัพธ์: </strong>{mod.output}
+                            <strong>ผลลัพธ์: </strong>
+                            {mod.output}
                           </p>
+                        )}
+                        {mod.content_html && (
+                          <div
+                            className="mt-3 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
+                            dangerouslySetInnerHTML={{
+                              __html: mod.content_html,
+                            }}
+                          />
                         )}
                       </div>
                     </div>
@@ -432,47 +642,72 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {/* [K] Instructor */}
       {instructors.length > 0 && (
         <section className="bg-9e-navy px-4 py-16">
-          <div className="max-w-4xl mx-auto text-center">
+          <div className="max-w-[1200px] mx-auto text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-9e-lime">
               INSTRUCTOR
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-white">วิทยากรผู้สอน</h2>
+            <h2 className="mt-2 text-3xl font-bold text-white">
+              วิทยากรผู้สอน
+            </h2>
             <p className="mt-2 text-sm text-9e-air">
               ผู้เชี่ยวชาญประสบการณ์สอนมากกว่า 20 ปี ทั้งภาครัฐและภาคเอกชน
             </p>
             <div
-              className={`mt-10 grid gap-6 ${
+              className={`mt-10 grid items-stretch gap-6 ${
                 instructors.length === 1
-                  ? 'mx-auto max-w-xs'
-                  : 'mx-auto max-w-2xl grid-cols-1 sm:grid-cols-2'
+                  ? "mx-auto max-w-[420px]"
+                  : "mx-auto max-w-3xl grid-cols-1 sm:grid-cols-2"
               }`}
             >
               {instructors.map((inst) => (
-                <div key={inst._id} className="overflow-hidden rounded-2xl bg-[#0f2a3f]">
+                <div key={inst._id} className="relative flex h-full flex-col">
                   {inst.image_url && (
-                    <div className="relative aspect-square">
+                    <div className="relative z-20 mx-auto -mb-20 h-[320px] w-[260px] overflow-visible">
                       <Image
                         src={inst.image_url}
                         alt={inst.name}
                         fill
-                        className="object-cover"
-                        sizes="300px"
+                        className="object-contain object-top [mask-image:linear-gradient(to_bottom,#121f2e_72%,rgba(0,0,0,0)_100%)]"
+                        sizes="(max-width:768px) 100vw, 400px"
                       />
                     </div>
                   )}
-                  <div className="p-5 text-left">
-                    <p className="font-bold text-white">{inst.name}</p>
-                    <p className="mt-0.5 text-sm text-9e-action">{inst.title}</p>
-                    {inst.specialties?.length > 0 && (
-                      <ul className="mt-3 space-y-1">
-                        {inst.specialties.map((s) => (
-                          <li key={s} className="flex items-start gap-2 text-xs text-9e-air">
-                            <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-9e-lime" />
-                            {s}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+
+                  <div className="relative z-10 flex flex-1 rounded-[30px] bg-gradient-to-t from-9e-lime to-9e-lime/5 p-0.5">
+                    <div className="flex h-full w-full flex-col rounded-[28px] bg-gradient-to-t from-[#24303e] to-[#0e1c2b] px-5 pb-8 pt-[85px] text-center">
+                      <h3 className="text-2xl font-bold text-white">
+                        {inst.name}
+                      </h3>
+
+                      <p className="mt-0.5 text-[18px] font-medium text-9e-brand">
+                        {inst.title}
+                      </p>
+
+                      <div className="flex justify-center">
+                        {(() => {
+                          const bioLines = inst.bio
+                            ? inst.bio
+                                .split("\n")
+                                .map((s) => s.trim())
+                                .filter(Boolean)
+                            : (inst.specialties ?? []);
+
+                          return bioLines.length > 0 ? (
+                            <ul className="mt-3 space-y-1">
+                              {bioLines.map((s, idx) => (
+                                <li
+                                  key={idx}
+                                  className="flex items-start gap-2 text-base text-9e-slate-lt-50"
+                                >
+                                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-lime" />
+                                  {s}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null;
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -487,7 +722,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
           <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
             คำถามที่พบบ่อย
           </h2>
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          <div className="flex flex-col gap-4">
             {faqs.map((f) => (
               <FaqAccordionItem key={f._id} faq={f} />
             ))}

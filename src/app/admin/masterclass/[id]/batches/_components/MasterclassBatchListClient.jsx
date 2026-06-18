@@ -180,7 +180,7 @@ export function MasterclassBatchListClient({ course, batches }) {
       try {
         const res = editingBatch
           ? await updateMasterclassBatch(editingBatch._id, data)
-          : await createMasterclassBatch(course._id, data);
+          : await createMasterclassBatch(String(course._id), data);
         if (res?.ok === false) {
           setError(res.error || 'บันทึกไม่สำเร็จ');
           return;
@@ -302,6 +302,12 @@ export function MasterclassBatchListClient({ course, batches }) {
                 </td>
                 <td className="px-3 py-3 text-right">
                   <div className="inline-flex items-center gap-1.5">
+                    <Link
+                      href={`/admin/masterclass/registrations?courseId=${course._id}&batchId=${b._id}`}
+                      className="text-xs text-9e-action hover:underline"
+                    >
+                      ผู้ลงทะเบียน ({b.registered_count ?? 0}/{b.capacity ?? 0})
+                    </Link>
                     <button
                       type="button"
                       onClick={() => openEdit(b)}

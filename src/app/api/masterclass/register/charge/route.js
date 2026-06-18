@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
+import MasterclassBatch from '@/models/MasterclassBatch';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 
@@ -64,6 +65,27 @@ export async function POST(req) {
       update.status = 'paid';
     }
     await MasterclassRegistration.findByIdAndUpdate(registrationId, { $set: update });
+
+    // Increment registered_count on the batch when registration is paid.
+    // Then auto-flip batch status to 'full' if capacity is reached
+    // (mirrors updateMasterclassBatch's status auto-compute logic).
+    if (update.status === 'paid') {
+      const updatedBatch = await MasterclassBatch.findByIdAndUpdate(
+        doc.batch_id,
+        { $inc: { registered_count: 1 } },
+        { new: true }
+      );
+      if (
+        updatedBatch &&
+        !updatedBatch.status_override &&
+        updatedBatch.status === 'open' &&
+        updatedBatch.registered_count >= updatedBatch.capacity
+      ) {
+        await MasterclassBatch.findByIdAndUpdate(updatedBatch._id, {
+          $set: { status: 'full' },
+        });
+      }
+    }
 
     // Card settled synchronously — send receipt
     if (update.status === 'paid') {

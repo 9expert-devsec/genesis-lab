@@ -306,9 +306,9 @@ html.dark   { color-scheme: dark; }
   }
 
   /* Thai text often needs explicit family — utility for mixed content */
-  :lang(th) {
+  /* :lang(th) {
     @apply font-thai;
-  }
+  } */
 }
 
 /* ──────────────────────────────────────────────────────────────
