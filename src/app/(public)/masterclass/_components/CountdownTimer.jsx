@@ -33,10 +33,10 @@ export function CountdownTimer({ deadline, className = '' }) {
   if (!hydrated) return null;
 
   const units = [
-    { value: timeLeft.days,    label: 'วัน' },
-    { value: timeLeft.hours,   label: 'ชั่วโมง' },
-    { value: timeLeft.minutes, label: 'นาที' },
-    { value: timeLeft.seconds, label: 'วินาที' },
+    { value: timeLeft.days,    label: 'DAYS' },
+    { value: timeLeft.hours,   label: 'HOURS' },
+    { value: timeLeft.minutes, label: 'MINS' },
+    { value: timeLeft.seconds, label: 'SECS' },
   ];
 
   return (
@@ -49,7 +49,7 @@ export function CountdownTimer({ deadline, className = '' }) {
           <span className="tabular-nums text-2xl font-bold text-9e-navy">
             {String(value).padStart(2, '0')}
           </span>
-          <span className="text-[14px] text-9e-navy">
+          <span className="text-[10px] font-bold tracking-wider text-9e-navy">
             {label}
           </span>
         </div>

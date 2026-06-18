@@ -6,13 +6,12 @@ import Link from "next/link";
 import {
   Award,
   BarChart2,
-  CheckCircle,
   CheckCircle2,
   ChevronDown,
   Download,
-  FlaskConical,
   Plus,
   Wrench,
+  X
 } from "lucide-react";
 import { CountdownTimer } from "../../_components/CountdownTimer";
 
@@ -21,6 +20,22 @@ const LEVEL_MAP = {
   intermediate: "Intermediate",
   advanced: "Advanced",
 };
+
+/**
+ * Format a batch date to English: "Sat, 20 Jun 2026"
+ * Falls back to day_label if date field is unavailable.
+ */
+function formatBatchDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short", // "Sat"
+    day: "numeric", // "20"
+    month: "short", // "Jun"
+    year: "numeric", // "2026"
+  });
+}
 
 // ── Shared FAQ accordion (same as listing page) ───────────────────────────────
 function FaqAccordionItem({ faq }) {
@@ -100,10 +115,28 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
   const visibleBatches =
     course.batches?.filter((b) => b.status !== "cancelled") ?? [];
 
+  // [sticky bar] show after scrolling past the batch section
+  const [showStickyBar, setShowStickyBar] = useState(false);
+  const [barDismissed, setBarDismissed] = useState(false);
+
+  useEffect(() => {
+    if (visibleBatches.length === 0) return; // no point showing if no batches
+    const handleScroll = () => {
+      const batchEl = document.getElementById("batch-section");
+      if (!batchEl) return;
+      const rect = batchEl.getBoundingClientRect();
+      // show when the bottom of the batch section is above the top of the viewport
+      setShowStickyBar(rect.bottom < 0);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [visibleBatches.length]);
+
   return (
     <main>
       {/* [A] Hero */}
-      <section className="bg-[#0e2c4a] px-4 py-10">
+      <section id="mc-hero" className="bg-[#0e2c4a] px-4 py-10">
         <div className="max-w-[1200px] mx-auto relative grid grid-cols-1 lg:grid-cols-2 items-stretch gap-6">
           <div className="relative flex aspect-video overflow-hidden bg-9e-navy rounded-2xl p-8">
             {/* Subtle corner gradient blobs */}
@@ -213,7 +246,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               href={course.course_outline_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex flex-col px-8 py-5  items-center rounded-[20px] bg-9e-brand text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
+              className="flex flex-col px-8 py-5  items-center rounded-[20px] bg-9e-brand text-sm font-semibold text-white transition-colors hover:bg-9e-air"
             >
               <div className="flex flex-row items-center gap-2 text-2xl">
                 <Download size={24} /> Download
@@ -240,7 +273,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {course.description_html && (
         <section className="max-w-[1200px] mx-auto px-4 py-6">
           <div
-            className="prose prose-base dark:prose-invert max-w-none"
+            className="prose prose-base dark:prose-invert max-w-none [&_p]:indent-8"
             dangerouslySetInnerHTML={{ __html: course.description_html }}
           />
         </section>
@@ -294,7 +327,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                     >
                       {batch.batch_label || `รุ่นที่ ${batch.batch_no}`}
                     </p>
-                    {batch.dates?.[0]?.day_label && (
+                    {batch.dates?.[0]?.date && (
                       <p
                         className={`mt-0.5 text-[28px] font-bold ${
                           batch.is_early_bird
@@ -302,7 +335,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                             : "text-9e-navy dark:text-white"
                         }`}
                       >
-                        {batch.dates[0].day_label}
+                        {formatBatchDate(batch.dates[0].date)}
                       </p>
                     )}
                     <p
@@ -312,7 +345,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                           : "text-9e-slate-dp-50 dark:text-white"
                       }`}
                     >
-                      {course.time_start} – {course.time_end} น.
+                      {course.time_start} – {course.time_end}
                     </p>
                     <p
                       className={`text-[18px] ${
@@ -368,7 +401,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                   {batch.status === "open" ? (
                     <Link
                       href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
-                      className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-action dark:bg-9e-action dark:hover:bg-9e-brand"
+                      className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
                     >
                       ลงทะเบียน
                     </Link>
@@ -389,7 +422,10 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [E] Objectives */}
       {course.objectives?.length > 0 && (
-        <section className="bg-[#F8FAFD] dark:bg-transparent px-4 py-12">
+        <section
+          id="mc-objectives"
+          className="bg-[#F8FAFD] dark:bg-transparent px-4 py-12"
+        >
           <div className="max-w-[1200px] mx-auto">
             <h2 className="mb-8 text-center text-xl font-bold text-9e-navy dark:text-white">
               วัตถุประสงค์
@@ -474,47 +510,20 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       )}
 
       {/* [H] System Requirements */}
-      {course.system_requirements &&
-        (() => {
-          const sr = course.system_requirements;
-          const sections = [
-            { label: "ระบบปฏิบัติการ", items: sr.os },
-            { label: "Web Browser", items: sr.browsers },
-            { label: "บัญชีที่ต้องใช้", items: sr.accounts },
-            { label: "โปรแกรมที่ต้องติดตั้ง", items: sr.software },
-          ].filter((s) => s.items?.length > 0);
-          if (!sections.length) return null;
-          return (
-            <section className="max-w-[1200px] mx-auto px-4 py-10">
-              <h2 className="text-xl font-bold text-9e-navy dark:text-white">
-                ความต้องการของระบบ
-              </h2>
-              <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-                {sections.map(({ label, items }) => (
-                  <div key={label}>
-                    <p className="mb-2 text-base font-semibold text-9e-navy dark:text-white">
-                      {label}
-                    </p>
-                    <ul className="space-y-1.5">
-                      {items.map((item, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2 text-base text-gray-700 dark:text-gray-200"
-                        >
-                          <CheckCircle
-                            size={14}
-                            className="mt-0.5 shrink-0 text-9e-brand"
-                          />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </section>
-          );
-        })()}
+      {course.system_requirements_html && (
+        <section className="max-w-[1200px] mx-auto px-4 py-10">
+          <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
+            ความต้องการของระบบ
+          </h2>
+          <div
+            className="mt-4 prose prose-base dark:prose-invert max-w-none
+                       prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
+            dangerouslySetInnerHTML={{
+              __html: course.system_requirements_html,
+            }}
+          />
+        </section>
+      )}
 
       {/* [I] Benefits */}
       {course.benefits?.length > 0 && (
@@ -537,7 +546,10 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [J] Curriculum */}
       {course.curriculum?.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-4 py-10">
+        <section
+          id="mc-curriculum"
+          className="max-w-[1200px] mx-auto px-4 py-10"
+        >
           <div className="mb-6 flex items-center justify-between">
             <h2 className="text-xl font-bold text-9e-navy dark:text-white">
               หัวข้อการฝึกอบรม
@@ -580,39 +592,38 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
                     >
                       <div className="px-5 pb-5">
-                        {mod.topics?.length > 0 && (
-                          <ul className="mt-1 space-y-1">
-                            {mod.topics.map((topic, ti) => {
-                              const isSub = topic.startsWith("- ");
-                              const text = isSub ? topic.slice(2) : topic;
-                              return (
-                                <li
-                                  key={ti}
-                                  className={`flex items-start gap-2 text-base text-gray-600 dark:text-gray-300 ${isSub ? "ml-5" : ""}`}
-                                >
-                                  <span
-                                    className={`mt-2 shrink-0 rounded-full ${
-                                      isSub
-                                        ? "h-1 w-1 bg-gray-400"
-                                        : "h-1.5 w-1.5 bg-9e-brand"
-                                    }`}
-                                  />
-                                  {text}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                        {mod.workshop && (
-                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-9e-lime/30 bg-9e-lime/10 p-3">
-                            <FlaskConical
-                              size={14}
-                              className="mt-0.5 shrink-0 text-9e-lime"
-                            />
-                            <p className="text-sm text-gray-700 dark:text-gray-200">
-                              <strong>Workshop: </strong>
-                              {mod.workshop}
-                            </p>
+                        {(mod.topics_html || mod.topics?.length > 0) && (
+                          <div className="mt-1">
+                            {mod.topics_html ? (
+                              <div
+                                className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
+                                dangerouslySetInnerHTML={{
+                                  __html: mod.topics_html,
+                                }}
+                              />
+                            ) : (
+                              <ul className="space-y-1">
+                                {mod.topics.map((topic, ti) => {
+                                  const isSub = topic.startsWith("- ");
+                                  const text = isSub ? topic.slice(2) : topic;
+                                  return (
+                                    <li
+                                      key={ti}
+                                      className={`flex items-start gap-2 text-base text-gray-600 dark:text-gray-300 ${isSub ? "ml-5" : ""}`}
+                                    >
+                                      <span
+                                        className={`mt-2 shrink-0 rounded-full ${
+                                          isSub
+                                            ? "h-1 w-1 bg-gray-400"
+                                            : "h-1.5 w-1.5 bg-9e-brand"
+                                        }`}
+                                      />
+                                      {text}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
                           </div>
                         )}
                         {mod.output && (
@@ -641,7 +652,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [K] Instructor */}
       {instructors.length > 0 && (
-        <section className="bg-9e-navy px-4 py-16">
+        <section id="mc-instructor" className="bg-9e-navy px-4 py-16">
           <div className="max-w-[1200px] mx-auto text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-9e-lime">
               INSTRUCTOR
@@ -718,7 +729,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [L] FAQ */}
       {faqs.length > 0 && (
-        <section className="max-w-3xl mx-auto px-4 py-16">
+        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-16">
           <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
             คำถามที่พบบ่อย
           </h2>
@@ -728,6 +739,70 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Sticky bottom CTA bar */}
+      {visibleBatches.length > 0 && !barDismissed && (
+        <div
+          className={`fixed inset-x-0 bottom-6 z-50
+
+                transition-transform duration-300 ease-in-out
+                ${showStickyBar ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"}`}
+        >
+          <div className="relative mx-auto flex max-w-[900px] h-28 items-center overflow-hidden bg-white rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
+            {/* Cover image — flush left, full bar height, 16:9, no padding */}
+            {course.cover_image_url ? (
+              <div className="hidden sm:block shrink-0 self-stretch p-3 ">
+                {/* aspect-video = 16:9; height constrained by parent (items-stretch) */}
+                <img
+                  src={course.cover_image_url}
+                  alt={course.title_th}
+                  className="h-full w-auto aspect-video object-cover rounded-xl"
+                />
+              </div>
+            ) : null}
+
+            {/* Inner row: badge (mobile fallback) + text + actions */}
+            <div className="flex flex-1 items-center gap-3 pl-6 pr-10 py-3 min-w-0">
+              {/* MC badge — always visible on mobile; hidden on sm+ when cover image exists */}
+
+
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <p className="truncate text-lg font-bold text-9e-navy dark:text-white">
+                  สนใจ Masterclass &ldquo;{course.title_th}&rdquo; ?
+                </p>
+                <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+                  กดลงทะเบียนเพื่อกลับไปเลือกรอบอบรมที่เปิดรับสมัคร
+                </p>
+              </div>
+
+              <button
+                  type="button"
+                  onClick={() => setBarDismissed(true)}
+                  className="absolute right-1.5 top-1.5 p-1 text-9e-navy rounded-full hover:bg-9e-ice dark:text-white dark:hover:bg-white/5"
+                >
+                  <X size={16} />
+              </button>
+
+              {/* Actions */}
+              <div className="flex shrink-0 items-center gap-2">
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    document
+                      .getElementById("batch-section")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className="min-w-32 rounded-full bg-9e-action px-5 py-3 text-base font-bold text-white hover:bg-9e-brand"
+                >
+                  ลงทะเบียน
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

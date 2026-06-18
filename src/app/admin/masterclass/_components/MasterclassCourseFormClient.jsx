@@ -117,12 +117,8 @@ export function MasterclassCourseFormClient({ course }) {
   const [benefits, setBenefits] = useState(course?.benefits ?? []);
   const [equipmentRequired, setEquipmentRequired] = useState(course?.equipment_required ?? []);
 
-  // Section 7 — system requirements
-  const sr = course?.system_requirements ?? {};
-  const [srOs, setSrOs] = useState(sr.os ?? []);
-  const [srBrowsers, setSrBrowsers] = useState(sr.browsers ?? []);
-  const [srAccounts, setSrAccounts] = useState(sr.accounts ?? []);
-  const [srSoftware, setSrSoftware] = useState(sr.software ?? []);
+  // Section 7 — system requirements (rich text)
+  const [srHtml, setSrHtml] = useState(course?.system_requirements_html ?? '');
 
   // Section 8 — license options
   const [licenseEnabled, setLicenseEnabled] = useState(course?.license_options?.enabled ?? false);
@@ -187,7 +183,7 @@ export function MasterclassCourseFormClient({ course }) {
         const nextNo = (s.modules?.length ?? 0) + 1;
         return {
           ...s,
-          modules: [...(s.modules ?? []), { module_no: nextNo, title: '', topics: [], workshop: '', output: '' }],
+          modules: [...(s.modules ?? []), { module_no: nextNo, title: '', topics: [], topics_html: '', workshop: '', output: '' }],
         };
       })
     );
@@ -231,12 +227,7 @@ export function MasterclassCourseFormClient({ course }) {
       objectives: objectives.filter(Boolean),
       benefits: benefits.filter(Boolean),
       equipment_required: equipmentRequired.filter(Boolean),
-      system_requirements: {
-        os: srOs.filter(Boolean),
-        browsers: srBrowsers.filter(Boolean),
-        accounts: srAccounts.filter(Boolean),
-        software: srSoftware.filter(Boolean),
-      },
+      system_requirements_html: srHtml,
       license_options: {
         enabled: licenseEnabled,
         choices: licenseChoices.map((c) => ({
@@ -251,8 +242,9 @@ export function MasterclassCourseFormClient({ course }) {
           module_no: Number(m.module_no) || 0,
           title: m.title,
           topics: (m.topics ?? []).filter(Boolean),
-          workshop: m.workshop ?? '',
+          topics_html: m.topics_html ?? '',
           output: m.output ?? '',
+          content_html: m.content_html ?? '',
         })),
       })),
       is_published: isPublished,
@@ -643,37 +635,10 @@ export function MasterclassCourseFormClient({ course }) {
 
       {/* Section 7 — System requirements */}
       <Section title="7. ความต้องการของระบบ">
-        <BulletTextarea
-          label="ระบบปฏิบัติการ (OS)"
-          rows={3}
-          defaultValue={srOs ?? []}
-          onChange={(raw) =>
-            setSrOs(raw.split('\n').map((s) => s.trim()).filter(Boolean))
-          }
-        />
-        <BulletTextarea
-          label="เว็บเบราว์เซอร์ (browsers)"
-          rows={3}
-          defaultValue={srBrowsers ?? []}
-          onChange={(raw) =>
-            setSrBrowsers(raw.split('\n').map((s) => s.trim()).filter(Boolean))
-          }
-        />
-        <BulletTextarea
-          label="บัญชีที่ต้องใช้ (accounts)"
-          rows={3}
-          defaultValue={srAccounts ?? []}
-          onChange={(raw) =>
-            setSrAccounts(raw.split('\n').map((s) => s.trim()).filter(Boolean))
-          }
-        />
-        <BulletTextarea
-          label="โปรแกรมที่ต้องติดตั้ง (software)"
-          rows={3}
-          defaultValue={srSoftware ?? []}
-          onChange={(raw) =>
-            setSrSoftware(raw.split('\n').map((s) => s.trim()).filter(Boolean))
-          }
+        <SimpleRichTextEditor
+          value={srHtml}
+          onChange={(html) => setSrHtml(html)}
+          placeholder="พิมพ์ความต้องการของระบบ เช่น OS, Browser, บัญชี, โปรแกรม..."
         />
       </Section>
 
@@ -831,26 +796,21 @@ export function MasterclassCourseFormClient({ course }) {
                       </button>
                     </div>
                     <div className="mt-3">
-                      <BulletTextarea
-                        label="Topics"
-                        hint="1 บรรทัด = 1 topic  |  เริ่มด้วย '- ' (ขีด+เว้นวรรค) = sub-bullet"
-                        rows={4}
-                        defaultValue={mod.topics ?? []}
-                        onChange={(raw) => {
-                          const topics = raw.split('\n').map((t) => t.trim()).filter(Boolean);
-                          updateModule(si, mi, { topics });
-                        }}
+                      <label className="block text-sm font-medium text-9e-navy dark:text-white mb-1">Topics</label>
+                      <SimpleRichTextEditor
+                        value={mod.topics_html ?? ''}
+                        onChange={(html) => updateModule(si, mi, { topics_html: html })}
+                        placeholder="พิมพ์หัวข้อ... ใช้ Bullet List หรือ Ordered List ได้"
                       />
                     </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <div>
-                        <label className={labelCls}>Workshop</label>
-                        <input type="text" value={mod.workshop} onChange={(e) => updateModule(si, mi, { workshop: e.target.value })} className={inputCls} />
-                      </div>
-                      <div>
-                        <label className={labelCls}>ผลลัพธ์ (output)</label>
-                        <input type="text" value={mod.output} onChange={(e) => updateModule(si, mi, { output: e.target.value })} className={inputCls} />
-                      </div>
+                    <div className="mt-3">
+                      <label className={labelCls}>ผลลัพธ์ (output)</label>
+                      <input
+                        type="text"
+                        value={mod.output ?? ''}
+                        onChange={(e) => updateModule(si, mi, { output: e.target.value })}
+                        className={inputCls}
+                      />
                     </div>
                     {/* Additional content (rich text) */}
                     <div className="mt-2">

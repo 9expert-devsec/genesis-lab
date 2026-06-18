@@ -19,6 +19,7 @@ const CurriculumModuleSchema = new mongoose.Schema(
     topics:    { type: [String], default: [] },
     workshop:  { type: String, default: '' },
     output:    { type: String, default: '' },
+    topics_html: { type: String, default: '' },
     content_html: { type: String, default: '' },  // rich text for additional notes
   },
   { _id: false }
@@ -77,6 +78,7 @@ const MasterclassCourseSchema = new mongoose.Schema(
     benefits:            { type: [String], default: [] },
     equipment_required:  { type: [String], default: [] },
     system_requirements: { type: SystemRequirementsSchema, default: () => ({}) },
+    system_requirements_html: { type: String, default: '' },
 
     // License options — enable only for courses that require it
     license_options: {
