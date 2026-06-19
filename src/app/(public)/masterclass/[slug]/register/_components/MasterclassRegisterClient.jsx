@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import {
   Loader2, CheckCircle2, CreditCard, QrCode, Lock, ChevronRight, ArrowLeft,
+  ChevronDown, Download, RefreshCw,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { computePricing, formatTHB } from '@/lib/pricing';
@@ -16,13 +17,6 @@ import { cn } from '@/lib/utils';
 const STORAGE_KEY = 'masterclass-register-v1';
 
 const STEPS = ['กรอกข้อมูล', 'ตรวจสอบ + ชำระเงิน', 'สำเร็จ'];
-
-const CONSENT_ITEMS = [
-  { key: 'dataChecked',   label: 'ข้าพเจ้าตรวจสอบข้อมูลการสมัครเรียบร้อยแล้ว' },
-  { key: 'noRefund',      label: 'ข้าพเจ้ารับทราบว่าไม่สามารถขอคืนเงินได้หลังชำระเงินแล้ว' },
-  { key: 'changePolicy',  label: 'ข้าพเจ้ารับทราบเงื่อนไขการเลื่อน/เปลี่ยนแปลงรอบอบรม' },
-  { key: 'termsAccepted', label: 'ข้าพเจ้ายินยอมตามเงื่อนไขการอบรมของ 9Expert Training' },
-];
 
 const EMPTY_THAI_ADDRESS = {
   addressLine: '', subDistrict: '', district: '', province: '', postalCode: '',
@@ -51,9 +45,13 @@ const EMPTY_FORM = {
   attendees: [], // [{firstName, lastName, email, phone}]
   attendee_firstName: '', attendee_lastName: '', attendee_email: '', attendee_phone: '',
   license_choice: null, license_level: '', license_detail: '',
+  license_scope: 'all',       // 'all' | 'per_attendee'
+  license_per_attendee: [],    // Array<{ choice, level, detail }> indexed by attendee slot
   request_invoice: false,
   notes: '',
 };
+
+const LICENSE_LEVELS = ['Personal', 'Business', 'Enterprise', 'Academic'];
 
 // ── Progress indicator ────────────────────────────────────────────────────────
 function Stepper({ step }) {
@@ -310,36 +308,247 @@ function CardFields({ card, setCard }) {
   );
 }
 
-function QrDisplay({ charge, pricing, expired, secondsLeft }) {
+// ── Expanded PromptPay panel (left column, after charge created) ──────────────
+function QrPanelFull({ charge, pricing, expired, secondsLeft, onRegenerate, onSimulatePaid }) {
   const mmss = `${String(Math.floor((secondsLeft ?? 0) / 60)).padStart(2, '0')}:${String(
     (secondsLeft ?? 0) % 60
   ).padStart(2, '0')}`;
   return (
-    <div className="flex flex-col items-center rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-center">
-      <h3 className="mb-1 text-sm font-bold text-[var(--text-primary)]">
-        สแกนเพื่อชำระเงิน (QR PromptPay)
+    <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
+      <h3 className="text-base font-bold text-9e-navy dark:text-white">ชำระเงินผ่าน PromptPay QR</h3>
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+        สแกน QR ผ่าน Mobile Banking แล้วระบบจะตรวจสอบสถานะการชำระเงินให้อัตโนมัติ
+      </p>
+
+      <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+        {/* left: QR + amount + timer */}
+        <div className="flex flex-col items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={charge.qrUrl}
+            alt="PromptPay QR"
+            className="h-56 w-56 rounded-9e-md border border-[var(--surface-border)] bg-white p-2"
+          />
+          <p className="mt-3 text-sm text-[var(--text-secondary)]">
+            ยอดชำระ:{' '}
+            <span className="text-lg font-bold text-9e-action">
+              {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
+            </span>
+          </p>
+          {!expired ? (
+            <span className="mt-2 inline-flex items-center rounded-full border border-amber-400 px-3 py-0.5 text-xs font-semibold text-amber-600">
+              ชำระภายใน {mmss}
+            </span>
+          ) : (
+            <span className="mt-2 text-sm text-red-500">QR หมดอายุแล้ว กรุณาสร้าง QR ใหม่</span>
+          )}
+        </div>
+
+        {/* right: reference, status, steps */}
+        <div className="space-y-3">
+          {charge.referenceNumber && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-9e-slate-dp-50">
+                เลขที่อ้างอิง
+              </p>
+              <p className="text-sm font-semibold text-9e-navy dark:text-white">
+                {charge.referenceNumber}
+              </p>
+            </div>
+          )}
+          <div>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-semibold',
+                expired ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
+              )}
+            >
+              {expired ? 'หมดอายุ' : 'รอการชำระเงิน'}
+            </span>
+          </div>
+          <ol className="space-y-1 text-sm text-[var(--text-secondary)]">
+            <li>1. เปิดแอปธนาคารบนมือถือ</li>
+            <li>2. สแกน QR Code นี้</li>
+            <li>3. ตรวจสอบยอดและยืนยันการชำระเงิน</li>
+          </ol>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <a
+          href={charge.qrUrl}
+          download="promptpay-qr.png"
+          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--surface-border)] px-4 py-2 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
+        >
+          <Download size={14} /> ดาวน์โหลด QR
+        </a>
+        {expired && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--surface-border)] px-4 py-2 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
+          >
+            <RefreshCw size={14} /> สร้าง QR ใหม่
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onSimulatePaid}
+          className="inline-flex items-center gap-1.5 rounded-full bg-9e-lime px-4 py-2 text-sm font-semibold text-9e-navy hover:bg-9e-lime/80"
+        >
+          จำลองว่าชำระเงินสำเร็จ
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ── Expanded card panel (left column, after confirm) ──────────────────────────
+function CardPanelFull({ card, setCard, pricing, onCharge, onChangeMethod, submitting, payError, cardValid, omiseReady }) {
+  return (
+    <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
+      <h3 className="text-base font-bold text-9e-navy dark:text-white">
+        ชำระเงินผ่านบัตรเครดิต / เดบิต
       </h3>
-      <p className="mb-3 text-xs text-[var(--text-secondary)]">
-        เปิดแอปธนาคารของคุณแล้วสแกน QR ด้านล่าง
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">
+        กรอกข้อมูลบัตรอย่างปลอดภัยผ่าน Card Secure Fields
       </p>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={charge.qrUrl}
-        alt="PromptPay QR"
-        className="h-56 w-56 rounded-9e-md border border-[var(--surface-border)] bg-white p-2"
-      />
-      <p className="mt-3 text-sm text-[var(--text-secondary)]">
-        ยอดชำระ:{' '}
-        <span className="text-lg font-bold text-9e-action">
-          {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
-        </span>
-      </p>
-      {!expired ? (
-        <p className="mt-2 text-xs text-[var(--text-secondary)]">
-          QR หมดอายุใน <span className="font-semibold">{mmss}</span>
-        </p>
-      ) : (
-        <p className="mt-2 text-sm text-red-500">QR หมดอายุแล้ว กรุณาสร้าง QR ใหม่</p>
+
+      <div className="mt-3 flex items-start gap-2 rounded-9e-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        กรอกข้อมูลผ่าน Card Secure Fields จาก Payment Gateway โดยไม่เก็บเลขบัตรเต็มในระบบ
+      </div>
+
+      <div className="mt-4">
+        <CardFields card={card} setCard={setCard} />
+      </div>
+
+      {payError && (
+        <div className="mt-3 rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
+          {payError}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onCharge}
+        disabled={submitting || !cardValid || !omiseReady}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
+      >
+        {submitting ? (
+          <><Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…</>
+        ) : (
+          <><Lock size={14} /> ชำระเงิน {formatTHB(pricing.total)} บาท</>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={onChangeMethod}
+        className="mt-2 flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-medium text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
+      >
+        เปลี่ยนวิธีชำระเงิน
+      </button>
+    </section>
+  );
+}
+
+// ── License choice list (shared by 'all' and 'per_attendee' scopes) ───────────
+// value: { choice, level, detail }; onChange receives a partial patch.
+function LicenseChoices({ choices, value, onChange }) {
+  const chosen = choices.find((c) => c.value === value.choice);
+  return (
+    <div>
+      {/* Choice cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {choices.map((choice) => {
+          const isSelected = value.choice === choice.value;
+          const displayLabel = choice.value === 'own'
+            ? 'ใช้ License ของผู้เข้าอบรมเอง'
+            : choice.value === '9expert'
+              ? 'ให้ 9Expert จัดเตรียม License ให้'
+              : choice.label_th;
+          return (
+            <button
+              key={choice.value}
+              type="button"
+              onClick={() => onChange({ choice: choice.value, level: '', detail: '' })}
+              className={cn(
+                'flex items-start gap-3 rounded-9e-lg border p-4 text-left transition-all',
+                isSelected
+                  ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15'
+                  : 'border-[var(--surface-border)] hover:border-9e-brand/40'
+              )}
+            >
+              {/* Radio dot */}
+              <span className={cn(
+                'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
+                isSelected ? 'border-9e-brand' : 'border-[var(--surface-border)]'
+              )}>
+                {isSelected && <span className="h-2 w-2 rounded-full bg-9e-brand" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-[var(--text-primary)]">
+                  {displayLabel}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Detail fields — shown below the card grid when a choice requiring detail is selected */}
+      {chosen?.require_detail && (
+        <div className="mt-3 space-y-3">
+          {chosen.value === 'own' && (
+            <div>
+              <label className="mb-1 block text-xs font-medium text-9e-navy dark:text-white">
+                ประเภท License *
+              </label>
+              <select
+                value={value.level ?? ''}
+                onChange={(e) => onChange({ level: e.target.value })}
+                className={inputCls}
+              >
+                <option value="">-- เลือกประเภท --</option>
+                {LICENSE_LEVELS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {(chosen.value !== 'own' || value.level) && (
+            chosen.detail_type === 'dropdown' ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-9e-navy dark:text-white">
+                  {chosen.detail_label_th || 'รายละเอียด'}
+                </label>
+                <select
+                  value={value.level ?? ''}
+                  onChange={(e) => onChange({ level: e.target.value })}
+                  className={inputCls}
+                >
+                  <option value="">-- เลือก --</option>
+                  {chosen.detail_options.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-9e-navy dark:text-white">
+                  {chosen.detail_label_th || 'รายละเอียดเพิ่มเติม'}
+                </label>
+                <input
+                  type="text"
+                  placeholder={chosen.detail_label_th}
+                  value={value.detail ?? ''}
+                  onChange={(e) => onChange({ detail: e.target.value })}
+                  className={inputCls}
+                />
+              </div>
+            )
+          )}
+        </div>
       )}
     </div>
   );
@@ -355,9 +564,8 @@ export function MasterclassRegisterClient({ course, batch }) {
   const [registrationId, setRegistrationId] = useState(null);
   const [result, setResult] = useState(null);
   const [payError, setPayError] = useState(null);
-  const [consents, setConsents] = useState({
-    dataChecked: false, noRefund: false, changePolicy: false, termsAccepted: false,
-  });
+  const [allConsented, setAllConsented] = useState(false);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
 
   // Step 2 unified payment state (mirrors UnifiedPaymentStep in RegisterWizard)
   const [method, setMethod] = useState(null);          // 'instant' | 'quote'
@@ -367,11 +575,28 @@ export function MasterclassRegisterClient({ course, batch }) {
   const [qrCharge, setQrCharge] = useState(null);       // PromptPay QR result, once created
   const [qrExpired, setQrExpired] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(600);
+  // Step 2 document sub-option + inline-panel state
+  const [wantsDoc, setWantsDoc] = useState(null);       // null | false | true
+  const [quoteNeedsInvoice, setQuoteNeedsInvoice] = useState(false); // quote path inline invoice reveal
+  const [paymentStarted, setPaymentStarted] = useState(false);
+  const [openSections, setOpenSections] = useState({
+    course: true, coordinator: false, attendees: false, license: false, invoice: false, notes: false,
+  });
   // Dedupes registration across multiple payment attempts (e.g. switch QR → card).
   const registeredRef = useRef(null);
+  // Anchor for scrolling to the left-column payment panel after a charge is created.
+  const leftPanelRef = useRef(null);
+  // Anchor for the QR/Card payment panel itself (status widget "scroll to" target).
+  const paymentPanelRef = useRef(null);
+
+  const toggleSection = useCallback((key) => {
+    setOpenSections((p) => ({ ...p, [key]: !p[key] }));
+  }, []);
 
   const licenseEnabled = Boolean(course.license_options?.enabled);
   const pricing = computePricing(batch.effective_price, formState.attendeesCount ?? 1);
+  // Anchor for scrolling to the deferred-invoice zone in the left column.
+  const invoiceZoneRef = useRef(null);
 
   // Invoice subtree lives in react-hook-form so InvoiceFields keeps its
   // native register/watch/setValue/errors contract.
@@ -379,6 +604,12 @@ export function MasterclassRegisterClient({ course, batch }) {
     register, watch, setValue, getValues, reset,
     formState: { errors },
   } = useForm({ defaultValues: { invoice: EMPTY_INVOICE } });
+
+  // Reactive read of the invoice subtree — drives "is the invoice filled?" gating.
+  const invoiceData = watch('invoice');
+  const invoiceFilled = Boolean(
+    invoiceData?.companyName?.trim() || invoiceData?.firstName?.trim() || invoiceData?.lastName?.trim()
+  );
 
   // ── hydration + sessionStorage restore ──────────────────────────────────────
   useEffect(() => {
@@ -480,6 +711,45 @@ export function MasterclassRegisterClient({ course, batch }) {
     setFormState((p) => ({ ...p, [key]: value }));
   }
 
+  // Field-by-field invoice validation; returns an error message or null when valid.
+  function validateInvoiceFields() {
+    const inv = getValues('invoice');
+    const isThai = (inv?.country ?? 'TH') === 'TH';
+    const isCorprate = inv?.type === 'corporate';
+
+    // Name / company required
+    if (isCorprate) {
+      if (!inv?.companyName?.trim()) return 'กรุณากรอกชื่อบริษัทสำหรับออกใบเสนอราคา';
+    } else {
+      if (!inv?.firstName?.trim() || !inv?.lastName?.trim()) {
+        return 'กรุณากรอกชื่อ-นามสกุลสำหรับออกใบเสนอราคา';
+      }
+    }
+
+    // Tax ID required for Thai customers
+    if (isThai && !inv?.taxId?.trim()) return 'กรุณากรอกเลขประจำตัวผู้เสียภาษี';
+
+    // Thai address required
+    if (isThai) {
+      const addr = inv?.thaiAddress ?? {};
+      if (!addr.addressLine?.trim()) return 'กรุณากรอกที่อยู่สำหรับออกใบเสนอราคา';
+      if (!addr.postalCode?.trim()) return 'กรุณากรอกรหัสไปรษณีย์';
+      if (!addr.subDistrict?.trim()) return 'กรุณาเลือกแขวง/ตำบล (กรอกรหัสไปรษณีย์ก่อน)';
+      if (!addr.district?.trim()) return 'กรุณาเลือกเขต/อำเภอ';
+      if (!addr.province?.trim()) return 'กรุณาเลือกจังหวัด';
+    }
+
+    // International address required fields
+    if (!isThai) {
+      const addr = inv?.internationalAddress ?? {};
+      if (!addr.line1?.trim()) return 'Please enter address line 1';
+      if (!addr.city?.trim()) return 'Please enter city';
+      if (!addr.country?.trim()) return 'Please enter country';
+    }
+
+    return null;
+  }
+
   function handleStep1Next() {
     setSubmitError(null);
     const { firstName, lastName, email, phone } = formState;
@@ -501,71 +771,12 @@ export function MasterclassRegisterClient({ course, batch }) {
       }
     }
 
-    // Invoice validation — only when request_invoice is checked
+    // Invoice validation — only when the customer requested a document
     if (formState.request_invoice) {
-      const inv = getValues('invoice');
-      const isThai = (inv?.country ?? 'TH') === 'TH';
-      const isCorprate = inv?.type === 'corporate';
-
-      // Name / company required
-      if (isCorprate) {
-        if (!inv?.companyName?.trim()) {
-          setSubmitError('กรุณากรอกชื่อบริษัทสำหรับออกใบเสนอราคา');
-          return;
-        }
-      } else {
-        if (!inv?.firstName?.trim() || !inv?.lastName?.trim()) {
-          setSubmitError('กรุณากรอกชื่อ-นามสกุลสำหรับออกใบเสนอราคา');
-          return;
-        }
-      }
-
-      // Tax ID required for Thai customers
-      if (isThai && !inv?.taxId?.trim()) {
-        setSubmitError('กรุณากรอกเลขประจำตัวผู้เสียภาษี');
+      const invErr = validateInvoiceFields();
+      if (invErr) {
+        setSubmitError(invErr);
         return;
-      }
-
-      // Thai address required
-      if (isThai) {
-        const addr = inv?.thaiAddress ?? {};
-        if (!addr.addressLine?.trim()) {
-          setSubmitError('กรุณากรอกที่อยู่สำหรับออกใบเสนอราคา');
-          return;
-        }
-        if (!addr.postalCode?.trim()) {
-          setSubmitError('กรุณากรอกรหัสไปรษณีย์');
-          return;
-        }
-        if (!addr.subDistrict?.trim()) {
-          setSubmitError('กรุณาเลือกแขวง/ตำบล (กรอกรหัสไปรษณีย์ก่อน)');
-          return;
-        }
-        if (!addr.district?.trim()) {
-          setSubmitError('กรุณาเลือกเขต/อำเภอ');
-          return;
-        }
-        if (!addr.province?.trim()) {
-          setSubmitError('กรุณาเลือกจังหวัด');
-          return;
-        }
-      }
-
-      // International address required fields
-      if (!isThai) {
-        const addr = inv?.internationalAddress ?? {};
-        if (!addr.line1?.trim()) {
-          setSubmitError('Please enter address line 1');
-          return;
-        }
-        if (!addr.city?.trim()) {
-          setSubmitError('Please enter city');
-          return;
-        }
-        if (!addr.country?.trim()) {
-          setSubmitError('Please enter country');
-          return;
-        }
       }
     }
 
@@ -573,8 +784,6 @@ export function MasterclassRegisterClient({ course, batch }) {
     setStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
-
-  const allConsented = CONSENT_ITEMS.every((c) => consents[c.key]);
 
   // Card validity gates the card pay button (alongside omiseReady + consent).
   const cardBrand = detectCardBrand(card.number);
@@ -587,8 +796,17 @@ export function MasterclassRegisterClient({ course, batch }) {
   const canStep2Confirm =
     method === 'quote'
       ? allConsented
-      : method === 'instant' && channel && allConsented &&
-        (channel !== 'credit_card' || (cardValid && omiseReady));
+      : method === 'instant'
+        ? Boolean(channel) && allConsented && wantsDoc !== null &&
+          (wantsDoc !== true || formState.request_invoice || invoiceFilled)
+        : false;
+
+  // Step 2 left-column invoice form shows when a document was requested in Step 1
+  // or opted into via the wantsDoc toggle on Step 2.
+  const showStep2InvoiceZone =
+    formState.request_invoice ||   // filled in Step 1
+    wantsDoc === true ||            // user opted in via instant + doc sub-option
+    quoteNeedsInvoice;             // quote path auto-reveal
 
   // Registers the attendee exactly once; returns { registrationId, referenceNumber }
   // or null on failure. Deduped via registeredRef so switching payment channel
@@ -596,6 +814,8 @@ export function MasterclassRegisterClient({ course, batch }) {
   async function ensureRegistered() {
     if (registeredRef.current) return registeredRef.current;
     const invoice = getValues('invoice');
+    const wantsInvoice = Boolean(formState.request_invoice);
+    const perAttendeeLicense = (formState.license_scope ?? 'all') === 'per_attendee';
     const count = formState.attendeesCount ?? 1;
     const resolvedAttendees = Array.from({ length: count }, (_, i) => {
       if (i === 0 && formState.coordinator_is_attending) {
@@ -627,16 +847,30 @@ export function MasterclassRegisterClient({ course, batch }) {
       attendee: resolvedAttendees[0],
       attendees: resolvedAttendees,
       attendeesCount: count,
-      license_choice: formState.license_choice ?? null,
-      license_level: formState.license_level || null,
-      license_detail: formState.license_detail || null,
-      request_invoice: formState.request_invoice,
-      invoice: formState.request_invoice ? invoice : null,
+      license_scope: formState.license_scope ?? 'all',
+      license_choice: perAttendeeLicense ? null : (formState.license_choice ?? null),
+      license_level: perAttendeeLicense ? null : (formState.license_level || null),
+      license_detail: perAttendeeLicense ? null : (formState.license_detail || null),
+      license_per_attendee: perAttendeeLicense
+        ? Array.from({ length: count }, (_, i) => {
+            const slot = formState.license_per_attendee?.[i] ?? {};
+            return {
+              choice: slot.choice ?? null,
+              level: slot.level || null,
+              detail: slot.detail || null,
+            };
+          })
+        : null,
+      request_invoice: wantsInvoice,
+      invoice: wantsInvoice ? invoice : null,
       notes: formState.notes?.trim() || null,
       consent: {
-        ...consents,
-        accepted: true,
-        acceptedAt: new Date().toISOString(),
+        accepted: allConsented,
+        acceptedAt: allConsented ? new Date().toISOString() : null,
+        dataChecked: allConsented,
+        noRefund: allConsented,
+        changePolicy: allConsented,
+        termsAccepted: allConsented,
       },
     };
     const res = await fetch('/api/masterclass/register', {
@@ -740,6 +974,9 @@ export function MasterclassRegisterClient({ course, batch }) {
       setQrExpired(false);
       setQrSecondsLeft(600);
       setQrCharge(data);
+      setPaymentStarted(true);
+      // Defer scroll until the left-column panel has rendered.
+      setTimeout(() => leftPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (err) {
       setPayError(err?.message ?? 'สร้าง QR ไม่สำเร็จ');
     } finally {
@@ -750,27 +987,85 @@ export function MasterclassRegisterClient({ course, batch }) {
   async function handleStep2Confirm() {
     setSubmitError(null);
     setPayError(null);
+
+    // Quote always needs billing data for the invoice — reveal the form inline
+    // on first press, then validate + register on the second.
     if (method === 'quote') {
+      if (!formState.request_invoice && !quoteNeedsInvoice) {
+        setQuoteNeedsInvoice(true);
+        setOpenSections((p) => ({ ...p, invoice: true }));
+        setTimeout(() => invoiceZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+        return;
+      }
+      const invErr = validateInvoiceFields();
+      if (invErr) {
+        setSubmitError(invErr);
+        setOpenSections((p) => ({ ...p, invoice: true }));
+        invoiceZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
       await handleConfirmAndRegister();
       return;
     }
+
+    // Instant + document requested: validate the invoice form before charging.
+    if (method === 'instant' && (wantsDoc === true || formState.request_invoice)) {
+      const invErr = validateInvoiceFields();
+      if (invErr) {
+        setSubmitError(invErr);
+        setOpenSections((p) => ({ ...p, invoice: true }));
+        invoiceZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    }
+
     if (method === 'instant' && channel === 'promptpay') {
+      // On success createPromptPay flips paymentStarted and scrolls to the left panel.
       await createPromptPay();
       return;
     }
     if (method === 'instant' && channel === 'credit_card') {
-      await chargeCardDirect();
+      // Move the card form into the left-column panel; charge happens there.
+      setPaymentStarted(true);
+      setTimeout(() => leftPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
       return;
     }
   }
 
+  // Whether to render an inline per-attendee license picker inside each card.
+  const perAttendeeLicense = licenseEnabled && (formState.license_scope ?? 'all') === 'per_attendee';
+
+  // Inline license sub-form for attendee slot `i`. Rendered as plain JSX (not a
+  // nested component) so the controlled inputs keep focus across re-renders.
+  const renderAttendeeLicense = (i) => {
+    const slot = formState.license_per_attendee?.[i] ?? { choice: null, level: '', detail: '' };
+    return (
+      <div className="mt-4 border-t border-[var(--surface-border)] pt-4">
+        <p className="mb-2 text-xs font-semibold text-9e-action">ตัวเลือก License</p>
+        <LicenseChoices
+          choices={course.license_options.choices}
+          value={slot}
+          onChange={(partial) =>
+            setFormState((p) => {
+              const next = [...(p.license_per_attendee ?? [])];
+              next[i] = { ...(next[i] ?? { choice: null, level: '', detail: '' }), ...partial };
+              return { ...p, license_per_attendee: next };
+            })
+          }
+        />
+      </div>
+    );
+  };
+
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 lg:px-6">
-      <Stepper step={result ? 3 : step} />
+    <>
+      <TermsModal open={termsModalOpen} onClose={() => setTermsModalOpen(false)} />
+      <div className="mx-auto max-w-[1200px] px-4 py-10 lg:px-6">
+        <Stepper step={result ? 3 : step} />
 
       {/* ── STEP 1 ── */}
       {step === 1 && !result && (
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px] lg:items-start">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_330px] lg:items-start">
           <div>
             <h2 className="text-lg font-bold text-9e-navy dark:text-white">ข้อมูลผู้ประสานงาน</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -813,45 +1108,57 @@ export function MasterclassRegisterClient({ course, batch }) {
                 <h3 className="mb-3 text-sm font-semibold text-9e-navy dark:text-white">
                   ตัวเลือก License
                 </h3>
-                {course.license_options.choices.map((choice) => (
-                  <label key={choice.value} className="mb-3 flex cursor-pointer items-start gap-3">
-                    <input
-                      type="radio"
-                      name="license_choice"
-                      value={choice.value}
-                      checked={formState.license_choice === choice.value}
-                      onChange={() => setFormState((p) => ({ ...p, license_choice: choice.value, license_level: '', license_detail: '' }))}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-9e-navy dark:text-white">{choice.label_th}</span>
-                      {formState.license_choice === choice.value && choice.require_detail && (
-                        <div className="mt-2">
-                          {choice.detail_type === 'dropdown' ? (
-                            <select
-                              value={formState.license_level ?? ''}
-                              onChange={(e) => setFormState((p) => ({ ...p, license_level: e.target.value }))}
-                              className={inputCls}
-                            >
-                              <option value="">-- เลือก --</option>
-                              {choice.detail_options.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              type="text"
-                              placeholder={choice.detail_label_th}
-                              value={formState.license_detail ?? ''}
-                              onChange={(e) => setFormState((p) => ({ ...p, license_detail: e.target.value }))}
-                              className={inputCls}
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </label>
-                ))}
+
+                {/* Scope selector — only meaningful with more than one attendee */}
+                {(formState.attendeesCount ?? 1) > 1 && (
+                  <div className="mb-4 inline-flex rounded-9e-md border border-[var(--surface-border)] p-0.5">
+                    {[
+                      { value: 'all', label: 'ทุกคน' },
+                      { value: 'per_attendee', label: 'แยกรายคน' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setField('license_scope', opt.value)}
+                        className={cn(
+                          'rounded-[6px] px-4 py-1.5 text-xs font-semibold transition-colors',
+                          (formState.license_scope ?? 'all') === opt.value
+                            ? 'bg-9e-action text-white'
+                            : 'text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-white/5'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* scope = all (default) */}
+                {((formState.attendeesCount ?? 1) <= 1 || (formState.license_scope ?? 'all') === 'all') && (
+                  <LicenseChoices
+                    choices={course.license_options.choices}
+                    value={{
+                      choice: formState.license_choice,
+                      level: formState.license_level,
+                      detail: formState.license_detail,
+                    }}
+                    onChange={(partial) =>
+                      setFormState((p) => ({
+                        ...p,
+                        ...(partial.choice !== undefined ? { license_choice: partial.choice } : {}),
+                        ...(partial.level !== undefined ? { license_level: partial.level } : {}),
+                        ...(partial.detail !== undefined ? { license_detail: partial.detail } : {}),
+                      }))
+                    }
+                  />
+                )}
+
+                {/* scope = per_attendee — choices moved into each attendee card below */}
+                {(formState.attendeesCount ?? 1) > 1 && (formState.license_scope ?? 'all') === 'per_attendee' && (
+                  <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
+                    เลือก License ของผู้เข้าอบรมแต่ละท่านได้ในการ์ดผู้เข้าอบรมด้านล่าง
+                  </p>
+                )}
               </div>
             )}
 
@@ -925,6 +1232,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                           <p className="mt-2 text-xs text-gray-400">
                             ข้อมูลนี้อ้างอิงจากผู้ประสานงานด้านบน ไม่สามารถแก้ไขได้ที่นี่
                           </p>
+                          {perAttendeeLicense && renderAttendeeLicense(i)}
                         </div>
                       );
                     }
@@ -961,6 +1269,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                             <label className="mb-1 block text-xs font-medium text-9e-navy dark:text-white">เบอร์โทร *</label>
                             <input type="tel" value={att.phone} onChange={(e) => updateAttendee('phone', e.target.value)} className={inputCls} />
                           </div>
+                          {perAttendeeLicense && <div className="sm:col-span-2">{renderAttendeeLicense(i)}</div>}
                         </div>
                       </div>
                     );
@@ -986,14 +1295,41 @@ export function MasterclassRegisterClient({ course, batch }) {
 
             {/* Invoice section */}
             <div className="mt-6">
-              <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-9e-navy dark:text-white">
-                <input
-                  type="checkbox"
-                  checked={formState.request_invoice}
-                  onChange={(e) => setField('request_invoice', e.target.checked)}
-                />
-                ต้องการใบเสร็จ/ใบกำกับภาษี
-              </label>
+              <h3 className="mb-3 text-sm font-semibold text-9e-navy dark:text-white">
+                เอกสารหลังการสมัคร
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[
+                  { value: false, label: 'ไม่ต้องการใบกำกับภาษี', sub: 'ออกหลักฐานการสมัครตามปกติ' },
+                  { value: true,  label: 'ต้องการใบเสร็จ / ใบกำกับภาษี', sub: 'กรอกข้อมูลสำหรับออกเอกสาร' },
+                ].map(({ value, label, sub }) => {
+                  const isSelected = formState.request_invoice === value;
+                  return (
+                    <button
+                      key={String(value)}
+                      type="button"
+                      onClick={() => setField('request_invoice', value)}
+                      className={cn(
+                        'flex items-start gap-3 rounded-9e-lg border p-4 text-left transition-all',
+                        isSelected
+                          ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15'
+                          : 'border-[var(--surface-border)] hover:border-9e-brand/40'
+                      )}
+                    >
+                      <span className={cn(
+                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
+                        isSelected ? 'border-9e-brand' : 'border-[var(--surface-border)]'
+                      )}>
+                        {isSelected && <span className="h-2 w-2 rounded-full bg-9e-brand" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
+                        <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{sub}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {formState.request_invoice && (
                 <div className="mt-4">
                   <InvoiceFields register={register} watch={watch} setValue={setValue} errors={errors} />
@@ -1027,18 +1363,25 @@ export function MasterclassRegisterClient({ course, batch }) {
       {/* ── STEP 2 — Unified Review + Payment ── */}
       {step === 2 && !result && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_minmax(340px,400px)] lg:items-start">
-          {/* LEFT — read-only preview */}
+          {/* LEFT — read-only preview (course first, collapsible) */}
           <div className="space-y-5">
             <h2 className="text-lg font-bold text-9e-navy dark:text-white">ตรวจสอบข้อมูล</h2>
 
-            <Section title="ข้อมูลผู้ประสานงาน">
+            <Section title="หลักสูตร" collapsible open={openSections.course} onToggle={() => toggleSection('course')}>
+              <ReadRow label="หลักสูตร" value={course.title_th} />
+              <ReadRow label="รุ่น" value={batch.batch_label || `รุ่นที่ ${batch.batch_no}`} />
+              <ReadRow label="วันที่" value={batch.dates?.[0]?.day_label || '—'} />
+              <ReadRow label="สถานที่" value={batch.venue_name || '—'} />
+            </Section>
+
+            <Section title="ข้อมูลผู้ประสานงาน" collapsible open={openSections.coordinator} onToggle={() => toggleSection('coordinator')}>
               <ReadRow label="ชื่อ-นามสกุล" value={`${formState.firstName} ${formState.lastName}`.trim()} />
               <ReadRow label="อีเมล" value={formState.email} />
               <ReadRow label="เบอร์โทร" value={formState.phone} />
               <ReadRow label="ผู้ประสานงานเข้าอบรม" value={formState.coordinator_is_attending ? 'ใช่' : 'ไม่'} />
             </Section>
 
-            <Section title={`ผู้เข้าอบรม (${formState.attendeesCount ?? 1} ท่าน)`}>
+            <Section title={`ผู้เข้าอบรม (${formState.attendeesCount ?? 1} ท่าน)`} collapsible open={openSections.attendees} onToggle={() => toggleSection('attendees')}>
               {(formState.attendeesListProvided ?? true) ? (
                 Array.from({ length: formState.attendeesCount ?? 1 }, (_, i) => {
                   const att = (i === 0 && formState.coordinator_is_attending)
@@ -1049,6 +1392,43 @@ export function MasterclassRegisterClient({ course, batch }) {
                       <ReadRow label={`ท่านที่ ${i + 1}`} value={`${att.firstName ?? ''} ${att.lastName ?? ''}`.trim()} />
                       <ReadRow label="อีเมล" value={att.email ?? ''} />
                       <ReadRow label="เบอร์โทร" value={att.phone ?? ''} />
+
+                      {/* License — scope 'all': same value for every attendee */}
+                      {licenseEnabled && (formState.license_scope ?? 'all') === 'all' && formState.license_choice && (
+                        <>
+                          <ReadRow
+                            label="License"
+                            value={(() => {
+                              const chosen = course.license_options.choices.find((c) => c.value === formState.license_choice);
+                              return formState.license_choice === 'own'
+                                ? 'ใช้ License ของผู้เข้าอบรมเอง'
+                                : formState.license_choice === '9expert'
+                                  ? 'ให้ 9Expert จัดเตรียม License ให้'
+                                  : (chosen?.label_th ?? formState.license_choice);
+                            })()}
+                          />
+                          {formState.license_level && <ReadRow label="ประเภท" value={formState.license_level} />}
+                          {formState.license_detail && <ReadRow label="รายละเอียด" value={formState.license_detail} />}
+                        </>
+                      )}
+
+                      {/* License — scope 'per_attendee': value from this attendee's slot */}
+                      {licenseEnabled && formState.license_scope === 'per_attendee' && (() => {
+                        const perAtt = formState.license_per_attendee?.[i];
+                        if (!perAtt?.choice) return null;
+                        const baseLabel = perAtt.choice === 'own'
+                          ? 'ใช้ License ของผู้เข้าอบรมเอง'
+                          : perAtt.choice === '9expert'
+                            ? 'ให้ 9Expert จัดเตรียม License ให้'
+                            : (course.license_options.choices.find((c) => c.value === perAtt.choice)?.label_th ?? perAtt.choice);
+                        return (
+                          <>
+                            <ReadRow label="License" value={baseLabel} />
+                            {perAtt.level && <ReadRow label="ประเภท" value={perAtt.level} />}
+                            {perAtt.detail && <ReadRow label="รายละเอียด" value={perAtt.detail} />}
+                          </>
+                        );
+                      })()}
                     </div>
                   );
                 })
@@ -1057,38 +1437,57 @@ export function MasterclassRegisterClient({ course, batch }) {
               )}
             </Section>
 
-            {licenseEnabled && formState.license_choice && (
-              <Section title="ตัวเลือก License">
-                <ReadRow
-                  label="License"
-                  value={
-                    course.license_options.choices.find((c) => c.value === formState.license_choice)?.label_th
-                    ?? formState.license_choice
-                  }
-                />
-                {formState.license_level && <ReadRow label="ระดับ" value={formState.license_level} />}
-                {formState.license_detail && <ReadRow label="รายละเอียด" value={formState.license_detail} />}
-              </Section>
-            )}
-
-            <Section title="หลักสูตร">
-              <ReadRow label="หลักสูตร" value={course.title_th} />
-              <ReadRow label="รุ่น" value={batch.batch_label || `รุ่นที่ ${batch.batch_no}`} />
-              <ReadRow label="วันที่" value={batch.dates?.[0]?.day_label || '—'} />
-              <ReadRow label="สถานที่" value={batch.venue_name || '—'} />
-            </Section>
-
-            {formState.request_invoice && (
-              <Section title="ใบเสนอราคา / ใบกำกับภาษี">
-                <ReadRow label="ประเภท" value={getValues('invoice.type') === 'individual' ? 'บุคคลทั่วไป' : 'นิติบุคคล'} />
-              </Section>
-            )}
-
             {formState.notes && (
-              <Section title="หมายเหตุ">
+              <Section title="หมายเหตุ" collapsible open={openSections.notes} onToggle={() => toggleSection('notes')}>
                 <p className="text-sm text-9e-navy dark:text-white">{formState.notes}</p>
               </Section>
             )}
+
+            {/* ── ข้อมูลออกเอกสาร (invoice zone) ── */}
+            {showStep2InvoiceZone && (
+              <div ref={invoiceZoneRef}>
+                <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
+                  <h3 className="mb-3 text-base font-bold text-9e-navy dark:text-white">
+                    กรอกข้อมูลสำหรับออกเอกสาร
+                  </h3>
+                  {quoteNeedsInvoice && !formState.request_invoice && (
+                    <div className="mb-4 rounded-9e-md border border-9e-brand/30 bg-9e-brand/5 p-3 text-sm text-9e-action">
+                      กรุณากรอกข้อมูลสำหรับออกใบเสนอราคาด้านล่างนี้
+                    </div>
+                  )}
+                  <InvoiceFields register={register} watch={watch} setValue={setValue} errors={errors} />
+                </section>
+              </div>
+            )}
+
+            {/* ── Payment panel zone (moves here after confirm) ── */}
+            <div ref={leftPanelRef}>
+              {paymentStarted && channel === 'promptpay' && qrCharge?.qrUrl && (
+                <div ref={paymentPanelRef}>
+                  <QrPanelFull
+                    charge={qrCharge}
+                    pricing={pricing}
+                    expired={qrExpired}
+                    secondsLeft={qrSecondsLeft}
+                    onRegenerate={() => createPromptPay()}
+                    onSimulatePaid={() => setStep(3)}
+                  />
+                </div>
+              )}
+              {paymentStarted && channel === 'credit_card' && (
+                <CardPanelFull
+                  card={card}
+                  setCard={setCard}
+                  pricing={pricing}
+                  onCharge={chargeCardDirect}
+                  onChangeMethod={() => { setChannel(null); setPaymentStarted(false); }}
+                  submitting={submitting}
+                  payError={payError}
+                  cardValid={cardValid}
+                  omiseReady={omiseReady}
+                />
+              )}
+            </div>
           </div>
 
           {/* RIGHT — sticky payment card */}
@@ -1108,154 +1507,210 @@ export function MasterclassRegisterClient({ course, batch }) {
                 </div>
               </div>
 
-              {/* เลือกวิธีดำเนินการ */}
-              <div>
-                <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เลือกวิธีดำเนินการ</h3>
-                <div className="space-y-2">
-                  <MethodRadio
-                    selected={method === 'instant'}
-                    onClick={() => setMethod('instant')}
-                    title="ชำระทันที"
-                    subtitle="ชำระผ่าน PromptPay QR หรือบัตรเครดิต/เดบิต"
-                  />
-                  <MethodRadio
-                    selected={method === 'quote'}
-                    onClick={() => { setMethod('quote'); setChannel(null); }}
-                    title="ขอใบเสนอราคา"
-                    subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
-                  />
-                </div>
-              </div>
-
-              {/* เลือกช่องทางชำระเงิน */}
-              {method === 'instant' && !qrCharge?.qrUrl && (
+              {!paymentStarted && (
                 <>
+                  {/* เลือกวิธีดำเนินการ */}
                   <div>
-                    <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เลือกช่องทางชำระเงิน</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      <ChannelCard
-                        selected={channel === 'promptpay'}
-                        onClick={() => setChannel('promptpay')}
-                        Icon={QrCode}
-                        label="PromptPay QR"
+                    <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เลือกวิธีดำเนินการ</h3>
+                    <div className="space-y-2">
+                      <MethodRadio
+                        selected={method === 'instant'}
+                        onClick={() => { setMethod('instant'); setWantsDoc(null); setQuoteNeedsInvoice(false); }}
+                        title="ชำระทันที"
+                        subtitle="ชำระผ่าน PromptPay QR หรือบัตรเครดิต/เดบิต"
                       />
-                      <ChannelCard
-                        selected={channel === 'credit_card'}
-                        onClick={() => setChannel('credit_card')}
-                        Icon={CreditCard}
-                        label="บัตรเครดิต/เดบิต"
+                      <MethodRadio
+                        selected={method === 'quote'}
+                        onClick={() => { setMethod('quote'); setChannel(null); setWantsDoc(null); setQuoteNeedsInvoice(false); }}
+                        title="ขอใบเสนอราคา"
+                        subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
                       />
                     </div>
                   </div>
 
-                  {channel === 'credit_card' && <CardFields card={card} setCard={setCard} />}
-                  {channel === 'promptpay' && (
-                    <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
-                      กด &quot;ยืนยันการสมัครและชำระด้วย PromptPay&quot; เพื่อสร้าง QR สำหรับสแกนชำระเงิน
-                    </p>
+                  {method === 'instant' && (
+                    <>
+                      {/* ต้องการเอกสารหลังชำระ? */}
+                      <div>
+                        <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">ต้องการเอกสารหลังชำระ?</h3>
+                        <div className="space-y-2">
+                          <MethodRadio
+                            selected={wantsDoc === false}
+                            onClick={() => {
+                              setWantsDoc(false);
+                              // Hide + clear the invoice zone unless it was requested in Step 1.
+                              if (!formState.request_invoice) reset({ invoice: EMPTY_INVOICE });
+                            }}
+                            title="ไม่ต้องการใบกำกับภาษี"
+                            subtitle="ออกใบเสร็จรับเงินอย่างย่อให้อัตโนมัติ"
+                          />
+                          <MethodRadio
+                            selected={wantsDoc === true}
+                            onClick={() => {
+                              setWantsDoc(true);
+                              if (!invoiceFilled) {
+                                setOpenSections((s) => ({ ...s, invoice: true }));
+                                setTimeout(() => invoiceZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                              }
+                            }}
+                            title="ต้องการใบเสร็จ / ใบกำกับภาษี"
+                            subtitle="กรอกข้อมูลผู้รับเอกสารในโซนด้านซ้าย"
+                          />
+                        </div>
+                      </div>
+
+                      {/* prompt to fill invoice data in left zone */}
+                      {wantsDoc === true && !formState.request_invoice && !invoiceFilled && (
+                        <div className="rounded-9e-md border border-orange-400 bg-orange-50 p-3 text-sm text-orange-700">
+                          กรุณากรอกข้อมูลสำหรับออกเอกสารในโซนด้านซ้าย
+                        </div>
+                      )}
+
+                      {/* เลือกช่องทางชำระเงิน — only after document choice */}
+                      {wantsDoc !== null && (
+                        <>
+                          <div>
+                            <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เลือกช่องทางชำระเงิน</h3>
+                            <div className="grid grid-cols-2 gap-2">
+                              <ChannelCard
+                                selected={channel === 'promptpay'}
+                                onClick={() => setChannel('promptpay')}
+                                Icon={QrCode}
+                                label="PromptPay QR"
+                              />
+                              <ChannelCard
+                                selected={channel === 'credit_card'}
+                                onClick={() => setChannel('credit_card')}
+                                Icon={CreditCard}
+                                label="บัตรเครดิต/เดบิต"
+                              />
+                            </div>
+                          </div>
+
+                          {channel === 'promptpay' && (
+                            <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
+                              กด &quot;ยืนยันการสมัครและชำระด้วย PromptPay&quot; เพื่อสร้าง QR สำหรับสแกนชำระเงิน
+                            </p>
+                          )}
+                          {channel === 'credit_card' && (
+                            <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
+                              กด &quot;ยืนยัน&quot; เพื่อเปิดฟอร์มกรอกข้อมูลบัตรในโซนด้านซ้าย
+                            </p>
+                          )}
+
+                          {/* เงื่อนไขการชำระเงิน */}
+                          {channel && (
+                            <div>
+                              <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เงื่อนไขการชำระเงิน</h3>
+                              <label className="flex cursor-pointer items-start gap-3 text-sm text-9e-navy dark:text-white">
+                                <input
+                                  type="checkbox"
+                                  checked={allConsented}
+                                  onChange={(e) => setAllConsented(e.target.checked)}
+                                  className="mt-0.5 h-4 w-4 shrink-0 accent-9e-brand"
+                                />
+                                <span className="leading-5">
+                                  ข้าพเจ้าได้ตรวจสอบข้อมูลและยอมรับ{' '}
+                                  <button
+                                    type="button"
+                                    onClick={() => setTermsModalOpen(true)}
+                                    className="font-semibold text-9e-action underline underline-offset-2 hover:text-9e-brand"
+                                  >
+                                    เงื่อนไขการสมัครและการชำระเงิน
+                                  </button>
+                                </span>
+                              </label>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
                   )}
 
-                  {/* เงื่อนไขการชำระเงิน */}
-                  {channel && (
+                  {/* Quote path — consent only */}
+                  {method === 'quote' && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เงื่อนไขการชำระเงิน</h3>
-                      <div className="space-y-3">
-                        {CONSENT_ITEMS.map((c) => (
-                          <label key={c.key} className="flex cursor-pointer items-start gap-3 text-sm text-9e-navy dark:text-white">
-                            <input
-                              type="checkbox"
-                              checked={consents[c.key]}
-                              onChange={(e) => setConsents((p) => ({ ...p, [c.key]: e.target.checked }))}
-                              className="mt-0.5 h-4 w-4 shrink-0 accent-9e-brand"
-                            />
-                            <span className="leading-5">{c.label}</span>
-                          </label>
-                        ))}
-                      </div>
+                      <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เงื่อนไข</h3>
+                      <label className="flex cursor-pointer items-start gap-3 text-sm text-9e-navy dark:text-white">
+                        <input
+                          type="checkbox"
+                          checked={allConsented}
+                          onChange={(e) => setAllConsented(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-9e-brand"
+                        />
+                        <span className="leading-5">
+                          ข้าพเจ้าได้ตรวจสอบข้อมูลและยอมรับ{' '}
+                          <button
+                            type="button"
+                            onClick={() => setTermsModalOpen(true)}
+                            className="font-semibold text-9e-action underline underline-offset-2 hover:text-9e-brand"
+                          >
+                            เงื่อนไขการสมัครและการชำระเงิน
+                          </button>
+                        </span>
+                      </label>
                     </div>
                   )}
+
+                  {/* Errors */}
+                  {(submitError || payError) && (
+                    <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
+                      {submitError || payError}
+                    </div>
+                  )}
+
+                  {/* Confirm button */}
+                  <button
+                    type="button"
+                    onClick={handleStep2Confirm}
+                    disabled={!canStep2Confirm || submitting}
+                    className="flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <><Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…</>
+                    ) : (
+                      <>
+                        {method === 'instant' && <Lock size={14} />}
+                        {method === 'quote' ? 'ยืนยันการขอใบเสนอราคา' :
+                         channel === 'credit_card' ? 'ยืนยันและไปกรอกข้อมูลบัตร' :
+                         channel === 'promptpay' ? 'ยืนยันการสมัครและชำระด้วย PromptPay' :
+                         'เลือกวิธีดำเนินการ'}
+                      </>
+                    )}
+                  </button>
                 </>
               )}
 
-              {/* QR displayed after creation */}
-              {qrCharge?.qrUrl && (
-                <QrDisplay
-                  charge={qrCharge}
-                  pricing={pricing}
-                  expired={qrExpired}
-                  secondsLeft={qrSecondsLeft}
-                />
-              )}
-
-              {/* Quote path — consent only */}
-              {method === 'quote' && (
-                <div>
-                  <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เงื่อนไข</h3>
-                  <div className="space-y-3">
-                    {CONSENT_ITEMS.map((c) => (
-                      <label key={c.key} className="flex cursor-pointer items-start gap-3 text-sm text-9e-navy dark:text-white">
-                        <input
-                          type="checkbox"
-                          checked={consents[c.key]}
-                          onChange={(e) => setConsents((p) => ({ ...p, [c.key]: e.target.checked }))}
-                          className="mt-0.5 h-4 w-4 shrink-0 accent-9e-brand"
-                        />
-                        <span className="leading-5">{c.label}</span>
-                      </label>
-                    ))}
+              {/* Payment status widget (after a charge/panel has started) */}
+              {paymentStarted && (
+                <div className="rounded-2xl border border-[var(--surface-border)] bg-white p-4 shadow-sm dark:bg-[#111d2c]">
+                  <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-9e-navy dark:text-white">
+                    {channel === 'promptpay' ? <QrCode size={16} /> : <CreditCard size={16} />}
+                    สถานะการชำระเงิน
+                  </h3>
+                  <div className="space-y-1.5 text-sm">
+                    <p className="flex items-center gap-2 text-[var(--text-secondary)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-9e-action" />
+                      วิธี: {channel === 'promptpay' ? 'PromptPay QR' : 'บัตรเครดิต'}
+                    </p>
+                    <p className="flex items-center gap-2 text-[var(--text-secondary)]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                      สถานะ: รอการชำระเงิน
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => paymentPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="mt-3 w-full rounded-full border border-[var(--surface-border)] py-2.5 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
+                  >
+                    เลื่อนไปดู Payment Panel
+                  </button>
                 </div>
-              )}
-
-              {/* Errors */}
-              {(submitError || payError) && (
-                <div className="rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
-                  {submitError || payError}
-                </div>
-              )}
-
-              {/* Confirm button */}
-              {!qrCharge?.qrUrl && (
-                <button
-                  type="button"
-                  onClick={handleStep2Confirm}
-                  disabled={!canStep2Confirm || submitting}
-                  className="flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
-                >
-                  {submitting ? (
-                    <><Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…</>
-                  ) : (
-                    <>
-                      {method === 'instant' && <Lock size={14} />}
-                      {method === 'quote' ? 'ยืนยันการขอใบเสนอราคา' :
-                       channel === 'credit_card' ? 'ยืนยันการสมัครและชำระด้วยบัตร' :
-                       channel === 'promptpay' ? 'ยืนยันการสมัครและชำระด้วย PromptPay' :
-                       'เลือกวิธีดำเนินการ'}
-                    </>
-                  )}
-                </button>
-              )}
-
-              {qrCharge?.qrUrl && !qrExpired && (
-                <p className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                  <Loader2 size={14} className="animate-spin" />
-                  สถานะ: รอตรวจสอบผลการชำระเงิน
-                </p>
-              )}
-
-              {qrCharge?.qrUrl && qrExpired && (
-                <button
-                  type="button"
-                  onClick={() => { setQrCharge(null); setQrExpired(false); setQrSecondsLeft(600); }}
-                  className="w-full rounded-full border border-[var(--surface-border)] py-3 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
-                >
-                  สร้าง QR ใหม่
-                </button>
               )}
 
               <button
                 type="button"
-                onClick={() => { setStep(1); setMethod(null); setChannel(null); setQrCharge(null); registeredRef.current = null; window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onClick={() => { setStep(1); setMethod(null); setChannel(null); setQrCharge(null); setWantsDoc(null); setPaymentStarted(false); registeredRef.current = null; window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 disabled={submitting}
                 className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-medium text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
               >
@@ -1285,12 +1740,76 @@ export function MasterclassRegisterClient({ course, batch }) {
           </Link>
         </div>
       )}
+      </div>
+    </>
+  );
+}
+
+// ── Terms & conditions modal ──────────────────────────────────────────────────
+function TermsModal({ open, onClose }) {
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="เงื่อนไขการสมัครและการชำระเงิน"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Panel */}
+      <div className="relative z-10 w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--surface-border)] bg-white p-6 shadow-xl dark:bg-[#111d2c]">
+        <h2 className="text-base font-bold text-9e-navy dark:text-white mb-4">
+          เงื่อนไขการสมัครและการชำระเงิน
+        </h2>
+        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+          <p><strong className="text-9e-navy dark:text-white">1. การตรวจสอบข้อมูล</strong><br />
+          ผู้สมัครรับผิดชอบในการตรวจสอบความถูกต้องของข้อมูลการสมัครก่อนยืนยัน</p>
+          <p><strong className="text-9e-navy dark:text-white">2. นโยบายการคืนเงิน</strong><br />
+          บริษัทไม่มีนโยบายคืนเงินหลังจากชำระเงินแล้วในทุกกรณี</p>
+          <p><strong className="text-9e-navy dark:text-white">3. การเลื่อน / เปลี่ยนแปลงรอบอบรม</strong><br />
+          ผู้สมัครสามารถขอเลื่อนรอบอบรมได้ล่วงหน้าไม่น้อยกว่า 7 วันทำการ ทั้งนี้ขึ้นอยู่กับที่นั่งว่างของรอบที่ต้องการเปลี่ยน</p>
+          <p><strong className="text-9e-navy dark:text-white">4. เงื่อนไขการอบรม</strong><br />
+          ผู้สมัครยินยอมปฏิบัติตามกฎระเบียบและเงื่อนไขการอบรมของ 9Expert Training ตลอดระยะเวลาการอบรม</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 w-full rounded-full bg-9e-action py-2.5 text-sm font-semibold text-white hover:bg-9e-brand"
+        >
+          รับทราบและปิด
+        </button>
+      </div>
     </div>
   );
 }
 
 // ── Shared atoms ──────────────────────────────────────────────────────────────
-function Section({ title, children }) {
+function Section({ title, children, collapsible, open, onToggle }) {
+  if (collapsible) {
+    return (
+      <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <h3 className="text-base font-bold text-9e-navy dark:text-white">{title}</h3>
+          {open ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-9e-navy dark:text-white" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-9e-navy dark:text-white" />
+          )}
+        </button>
+        {open && <div className="mt-3">{children}</div>}
+      </section>
+    );
+  }
   return (
     <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
       <h3 className="mb-3 text-base font-bold text-9e-navy dark:text-white">{title}</h3>
