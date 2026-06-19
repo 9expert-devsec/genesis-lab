@@ -71,6 +71,7 @@ export function PublicHeaderClient({
   tnhsCourses = [],
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMasterclasses = [],
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Gate the portal until after first client render — `document.body`
@@ -117,6 +118,7 @@ export function PublicHeaderClient({
                   tnhsCourses={tnhsCourses}
                   navOnlineCourses={navOnlineCourses}
                   navMenuData={navMenuData}
+                  navMasterclasses={navMasterclasses}
                 />
               );
             }
@@ -174,6 +176,7 @@ export function PublicHeaderClient({
           tnhsCourses={tnhsCourses}
           navOnlineCourses={navOnlineCourses}
           navMenuData={navMenuData}
+          navMasterclasses={navMasterclasses}
           onClose={() => setDrawerOpen(false)}
         />,
         document.body
@@ -327,7 +330,7 @@ const COL1_ITEMS = [
   { key: 'programs',    label: 'Programs',         href: '/training-course',                     icon: Layers },
   { key: 'skills',      label: 'Skills',           href: '/training-course',                     icon: Sparkles },
   { key: 'career-path', label: 'Career Path',      href: '/career-path-project',                 icon: TrendingUp },
-  { key: 'masterclass', label: 'Masterclass',      href: '/masterclass',                         icon: GraduationCap, clickOnly: true },
+  { key: 'masterclass', label: 'Masterclass',      href: '/masterclass',                         icon: GraduationCap },
   { key: 'tnhs',        label: 'TNHS',             href: 'https://www.thenexthumansskills.com/', icon: Puzzle,       external: true },
   { key: 'online',      label: 'หลักสูตรออนไลน์',  href: siteConfig.academyUrl,                  icon: Monitor,      external: true },
 ];
@@ -360,6 +363,7 @@ function DesktopMega({
   tnhsCourses = [],
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMasterclasses = [],
 }) {
   const cpRows = careerPathRows(dynamicCareerPaths);
   const hasPrograms = programs.length > 0;
@@ -692,7 +696,7 @@ function DesktopMega({
               </div>
 
               {/* ── COL 2 — Dynamic list / cards ─────────────── */}
-              <div className={'max-h-[340px] min-h-0 overflow-y-auto ' + (col1Active === 'online' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
+              <div className={'max-h-[340px] min-h-0 overflow-y-auto ' + (col1Active === 'online' || col1Active === 'masterclass' ? '' : 'border-r border-[var(--surface-border)] px-2' ) + ' scrollbar-thin scrollbar-thumb-[var(--surface-border)] scrollbar-track-transparent'}>
                 {col1Active === 'programs' && (
                   <>
                     <div className="flex items-center justify-between px-3 pb-1 pt-3">
@@ -852,6 +856,59 @@ function DesktopMega({
                   </>
                 )}
 
+                {col1Active === 'masterclass' && (
+                  <div className="h-full p-3">
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
+                        Masterclass
+                      </span>
+                      <Link
+                        href="/masterclass"
+                        onClick={closeMegaMenu}
+                        className="text-[10px] text-9e-action dark:text-9e-air hover:underline"
+                      >
+                        ดูทั้งหมด →
+                      </Link>
+                    </div>
+                    {navMasterclasses.length > 0 ? (
+                      <div className="grid grid-cols-3 gap-3">
+                        {navMasterclasses.slice(0, 3).map((c) => (
+                          <Link
+                            key={String(c._id)}
+                            href={`/masterclass/${c.slug}`}
+                            onClick={closeMegaMenu}
+                            className="group flex flex-col gap-1.5 overflow-hidden rounded-md p-1.5 transition-colors duration-9e-micro hover:bg-[var(--surface-muted)]"
+                          >
+                            <div className="relative aspect-video w-full overflow-hidden rounded-md bg-[var(--surface-muted)]">
+                              {c.cover_image_url ? (
+                                <Image
+                                  src={c.cover_image_url}
+                                  alt={c.title_th ?? ''}
+                                  fill
+                                  unoptimized
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <GraduationCap className="h-5 w-5 text-[var(--text-muted)]" strokeWidth={1.75} />
+                                </div>
+                              )}
+                            </div>
+                            <p className="line-clamp-2 text-xs font-medium leading-snug text-[var(--text-primary)]">
+                              {c.title_th}
+                            </p>
+                            <span className="text-[10px] text-9e-action dark:text-9e-air group-hover:underline">
+                              ดูรายละเอียด →
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--text-muted)]">ยังไม่มี Masterclass</p>
+                    )}
+                  </div>
+                )}
+
                 {col1Active === 'online' && (
                   <div className="h-full p-3">
                     <div className="mb-3 flex items-center justify-between">
@@ -897,8 +954,8 @@ function DesktopMega({
                             <p className="line-clamp-2 text-xs font-medium leading-snug text-[var(--text-primary)]">
                               {c.course_name}
                             </p>
-                            <span className="text-[10px] text-9e-action dark:text-9e-air group-hover:underline">
-                              ดูรายละเอียด →
+                            <span className="flex items-center gap-0.5 text-[10px] text-9e-action dark:text-9e-air group-hover:underline">
+                              ดูรายละเอียด <ExternalLink className="h-2.5 w-2.5" strokeWidth={2} />
                             </span>
                           </a>
                         ))}
@@ -1086,6 +1143,7 @@ function MobileDrawer({
   tnhsCourses = [],
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMasterclasses = [],
   onClose,
 }) {
   // Always mounted so the translate-x slide animation has a stable
@@ -1139,6 +1197,7 @@ function MobileDrawer({
                   tnhsCourses={tnhsCourses}
                   navOnlineCourses={navOnlineCourses}
                   navMenuData={navMenuData}
+                  navMasterclasses={navMasterclasses}
                   onNavigate={onClose}
                 />
               );
@@ -1263,6 +1322,7 @@ function MobileMegaAccordion({
   tnhsCourses = [],
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMasterclasses = [],
   onNavigate,
 }) {
   const [open, setOpen] = useState(false);
@@ -1371,6 +1431,31 @@ function MobileMegaAccordion({
             ) : (
               <p className="px-3 py-2 text-sm text-[var(--text-muted)]">ยังไม่มีหลักสูตร</p>
             )}
+          </MobileSub>
+
+          {/* Masterclass */}
+          <MobileSub label="Masterclass" icon={GraduationCap}>
+            {navMasterclasses.length > 0 ? (
+              navMasterclasses.slice(0, 3).map((c) => (
+                <Link
+                  key={String(c._id)}
+                  href={`/masterclass/${c.slug}`}
+                  onClick={onNavigate}
+                  className={rowClass}
+                >
+                  <span className="line-clamp-2">{c.title_th}</span>
+                </Link>
+              ))
+            ) : (
+              <p className="px-3 py-2 text-sm text-[var(--text-muted)]">ยังไม่มี Masterclass</p>
+            )}
+            <Link
+              href="/masterclass"
+              onClick={onNavigate}
+              className="flex items-center px-3 py-2 text-xs font-medium text-9e-action dark:text-9e-air hover:underline"
+            >
+              ดูทั้งหมด →
+            </Link>
           </MobileSub>
 
           {/* หลักสูตรออนไลน์ */}

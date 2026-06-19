@@ -20,7 +20,6 @@ import { SidebarNav } from './_components/SidebarNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
-import { CourseGallery } from './_components/CourseGallery';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
 import {
@@ -457,7 +456,7 @@ function CourseDetail({
 
   return (
     <article className="bg-white">
-      <CourseHero course={course} heroColor={heroColor} />
+      <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
       <SkillBreadcrumb course={course} />
 
       <div className="mx-auto max-w-[1200px] py-8 ">
@@ -473,11 +472,6 @@ function CourseDetail({
             )}
             {Array.isArray(coursePromos) && coursePromos.length > 0 && (
               <CoursePromoSection coursePromos={coursePromos} />
-            )}
-            {gallery.length > 0 && (
-              <section aria-label="แกลเลอรี่หลักสูตร">
-                <CourseGallery gallery={gallery} />
-              </section>
             )}
             {!isInhouseOnly && (
               <ScheduleSection

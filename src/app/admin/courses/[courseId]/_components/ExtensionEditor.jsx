@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ImageIcon, Youtube, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { saveCourseExtension } from '@/lib/actions/course-extensions';
 import { cn } from '@/lib/utils';
+import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { CoursePromoLinksTab } from './CoursePromoLinksTab';
 import { EarlyBirdTab } from './EarlyBirdTab';
 
@@ -398,19 +399,18 @@ function GalleryRow({ item, index, lastIndex, onChange, onRemove, onMove }) {
         />
       ) : (
         <>
-          <input
-            type="url"
-            value={item.url}
-            onChange={(e) => onChange(index, 'url', e.target.value)}
-            placeholder="https://res.cloudinary.com/..."
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
+          <ImageUploadField
+            label="รูปภาพ"
+            currentUrl={item.url}
+            onChange={(url) => onChange(index, 'url', url)}
+            folder="9exp-genesis/gallery"
           />
           <input
             type="text"
             value={item.alt}
             onChange={(e) => onChange(index, 'alt', e.target.value)}
             placeholder="Alt text (สำหรับ accessibility + SEO)"
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
+            className="mt-2 w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20"
           />
         </>
       )}

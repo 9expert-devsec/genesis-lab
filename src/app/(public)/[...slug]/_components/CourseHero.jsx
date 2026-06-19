@@ -1,6 +1,9 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Award, Clock, MonitorPlay } from 'lucide-react';
+import { Award, Clock, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Hero for the course detail page.
@@ -14,7 +17,25 @@ import { Award, Clock, MonitorPlay } from 'lucide-react';
  * skill's color (fallback). Dark and saturated colors lighten
  * aggressively so the gradient never competes with the white card.
  */
-export function CourseHero({ course, heroColor }) {
+export function CourseHero({ course, heroColor, gallery = [] }) {
+  // Build ordered slide list for the cover zone:
+  //  1. YouTube items (from gallery, in order)
+  //  2. Cover image (course_cover_url) — always before image slides
+  //  3. Image items (from gallery, in order)
+  const youtubeSlides = gallery
+    .filter((g) => g.type === 'youtube')
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const imageSlides = gallery
+    .filter((g) => g.type === 'image')
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  const coverSlide = course.course_cover_url
+    ? [{ type: 'cover', url: course.course_cover_url, alt: course.course_name }]
+    : [];
+
+  // Final ordered list
+  const coverSlides = [...youtubeSlides, ...coverSlide, ...imageSlides];
+
   const base = heroColor || '#005CFF';
   const amt = perceivedBrightness(base) < 100 ? 0.7 : 0.15;
   const bgA = lightenColor(base, amt);
@@ -147,20 +168,10 @@ export function CourseHero({ course, heroColor }) {
             </div>
           </div>
 
-          {/* RIGHT — standalone rounded cover image card.
-              `overflow-hidden` clips the `fill` image at the rounded
-              corners. */}
+          {/* RIGHT — cover zone: static or slider */}
           <div className="relative hidden min-h-[360px] overflow-hidden rounded-2xl shadow-9e-sm lg:block">
-            {course.course_cover_url ? (
-              <Image
-                src={course.course_cover_url}
-                alt={course.course_name}
-                fill
-                sizes="640px"
-                className="object-cover object-center"
-                priority
-              />
-            ) : (
+            {coverSlides.length === 0 ? (
+              /* No cover + no gallery → colour placeholder */
               <div
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ background: bgA }}
@@ -175,11 +186,184 @@ export function CourseHero({ course, heroColor }) {
                   />
                 )}
               </div>
+            ) : (
+              <CoverSlider slides={coverSlides} />
             )}
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+// ── Cover zone slider ──────────────────────────────────────────────────────────
+// Fixed size: matches the existing hero grid right column (min-h 360).
+// YouTube slides render an iframe; image/cover slides render Next Image.
+
+const COVER_AUTO_MS = 5000;
+
+function CoverSlider({ slides }) {
+  const [current, setCurrent] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const [ytPlaying, setYtPlaying] = useState(false);
+  const ytPlayersRef = useRef({});   // { slideIndex: YT.Player }
+  const ytApiReadyRef = useRef(false);
+  const total = slides.length;
+
+  // ── Auto-advance ──────────────────────────────────────────────
+  // Pauses ONLY when: user hovers, or YouTube is actively playing.
+  // Slides continue to advance through YouTube slides that haven't been played.
+  useEffect(() => {
+    if (total <= 1 || hovered || ytPlaying) return;
+    const t = setInterval(() => setCurrent((i) => (i + 1) % total), COVER_AUTO_MS);
+    return () => clearInterval(t);
+  }, [total, hovered, current, ytPlaying]);
+
+  // ── YouTube IFrame API — load script once ─────────────────────
+  useEffect(() => {
+    const hasYoutube = slides.some((s) => s.type === 'youtube');
+    if (!hasYoutube) return;
+
+    if (window.YT && window.YT.Player) {
+      ytApiReadyRef.current = true;
+      initPlayers();
+      return;
+    }
+
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiReadyRef.current = true;
+      if (prevReady) prevReady();
+      initPlayers();
+    };
+
+    if (!document.getElementById('yt-iframe-api')) {
+      const script = document.createElement('script');
+      script.id = 'yt-iframe-api';
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(script);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function initPlayers() {
+    slides.forEach((slide, i) => {
+      if (slide.type !== 'youtube') return;
+      const iframeId = `yt-slide-${i}`;
+      const el = document.getElementById(iframeId);
+      if (!el || ytPlayersRef.current[i]) return;
+      ytPlayersRef.current[i] = new window.YT.Player(iframeId, {
+        events: {
+          onStateChange: (e) => {
+            // 1 = PLAYING → pause auto-advance
+            // 0 = ENDED, 2 = PAUSED → resume auto-advance
+            if (e.data === 1) {
+              setYtPlaying(true);
+            } else if (e.data === 0 || e.data === 2) {
+              setYtPlaying(false);
+            }
+          },
+        },
+      });
+    });
+  }
+
+  // Re-try init when current slide changes (iframe may just have mounted)
+  useEffect(() => {
+    if (!ytApiReadyRef.current) return;
+    const t = setTimeout(initPlayers, 150);
+    return () => clearTimeout(t);
+  }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When leaving a YouTube slide, reset playing state
+  useEffect(() => {
+    const isYt = slides[current]?.type === 'youtube';
+    if (!isYt) setYtPlaying(false);
+  }, [current, slides]);
+
+  const prev = () => setCurrent((i) => (i - 1 + total) % total);
+  const next = () => setCurrent((i) => (i + 1) % total);
+
+  return (
+    <div
+      className="relative h-full w-full"
+      style={{ minHeight: '360px' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Slide track */}
+      <div className="h-full overflow-hidden">
+        <div
+          className="flex h-full transition-transform duration-500 ease-in-out"
+          style={{ transform: `translateX(-${current * 100}%)` }}
+        >
+          {slides.map((slide, i) => (
+            <div
+              key={i}
+              className="relative h-full w-full flex-shrink-0"
+              style={{ minWidth: '100%' }}
+            >
+              {slide.type === 'youtube' ? (
+                <iframe
+                  id={`yt-slide-${i}`}
+                  className="absolute inset-0 h-full w-full"
+                  src={`https://www.youtube.com/embed/${slide.videoId}?rel=0&enablejsapi=1`}
+                  title="Course video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  loading={i === current ? 'eager' : 'lazy'}
+                />
+              ) : (
+                <Image
+                  src={slide.url}
+                  alt={slide.alt || ''}
+                  fill
+                  sizes="640px"
+                  className="object-cover object-center"
+                  priority={i === 0}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Prev/Next — only when > 1 slide */}
+      {total > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={prev}
+            aria-label="ก่อนหน้า"
+            className="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+          >
+            <ChevronLeft className="h-4 w-4 text-9e-navy" />
+          </button>
+          <button
+            type="button"
+            onClick={next}
+            aria-label="ถัดไป"
+            className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+          >
+            <ChevronRight className="h-4 w-4 text-9e-navy" />
+          </button>
+
+          {/* Dot indicators */}
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setCurrent(i)}
+                aria-label={`ไปยังสไลด์ ${i + 1}`}
+                className={`h-2 w-2 rounded-full transition-colors ${
+                  i === current ? 'bg-white' : 'bg-white/50'
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

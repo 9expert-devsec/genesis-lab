@@ -30,23 +30,30 @@ import { CountdownTimer } from './CountdownTimer';
 function FaqAccordionItem({ faq }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700">
+    <div
+      className={`border rounded-2xl dark:border-gray-700 ${open ? "border-9e-action-scale-600 shadow-lg shadow-9e-action-scale-600/20" : "border-gray-200"}`}
+    >
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-4 text-left text-sm font-medium text-9e-navy dark:text-white"
+        className="flex w-full items-center justify-between p-4 text-left text-[17px] font-bold text-9e-navy dark:text-white"
       >
         <span>{faq.question_th}</span>
-        <Plus
-          size={16}
-          className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-45' : ''}`}
-        />
+        <div
+          className="p-2
+         rounded-full bg-9e-signature-900"
+        >
+          <Plus
+            size={16}
+            className={`shrink-0 transition-transform duration-200 text-9e-action ${open ? "rotate-45" : ""}`}
+          />
+        </div>
       </button>
       <div
-        className={`overflow-hidden transition-all duration-300 ${open ? 'max-h-96' : 'max-h-0'}`}
+        className={`overflow-hidden transition-all duration-300 ${open ? "max-h-96" : "max-h-0"}`}
       >
         <div
-          className="prose prose-sm dark:prose-invert pb-4 text-gray-600 dark:text-gray-300"
+          className="prose prose-base dark:prose-invert px-4 pb-4 text-gray-600 dark:text-gray-300"
           dangerouslySetInnerHTML={{ __html: faq.answer_html }}
         />
       </div>
@@ -55,7 +62,7 @@ function FaqAccordionItem({ faq }) {
 }
 
 // ─── Course Card ─────────────────────────────────────────────────────────────
-const LEVEL_MAP = { beginner: 'เริ่มต้น', intermediate: 'กลาง', advanced: 'สูง' };
+const LEVEL_MAP = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
 
 function MasterclassCard({ course }) {
   const firstBatch = course.batches?.[0];
@@ -205,9 +212,9 @@ export function MasterclassListingClient({ courses = [], faqs = [] }) {
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
           {[
-            { icon: <Calendar size={15} />, label: 'เรียนเฉพาะเสาร์-อาทิตย์' },
-            { icon: <Users size={15} />, label: 'จำกัดที่นั่งแต่ละรุ่น' },
-            { icon: <Zap size={15} />, label: 'Workshop เน้นปฏิบัติ 70%' },
+            { icon: <Calendar size={15} />, label: 'Classes only on Saturdays and Sundays' },
+            { icon: <Users size={15} />, label: 'Limited seats per session' },
+            { icon: <Zap size={15} />, label: 'Hands-on workshop 70%' },
           ].map(({ icon, label }) => (
             <span
               key={label}
@@ -237,20 +244,18 @@ export function MasterclassListingClient({ courses = [], faqs = [] }) {
       </section>
 
       {/* [C] FAQ */}
-      <section className="max-w-3xl mx-auto px-4 py-16">
-        <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
-          คำถามที่พบบ่อย
-        </h2>
-        {faqs.length === 0 ? (
-          <p className="text-center text-sm text-gray-400">ยังไม่มีคำถามที่พบบ่อย</p>
-        ) : (
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+      {faqs.length > 0 && (
+        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-16">
+          <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
+            คำถามที่พบบ่อย
+          </h2>
+          <div className="flex flex-col gap-4">
             {faqs.map((f) => (
               <FaqAccordionItem key={f._id} faq={f} />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </main>
   );
 }
