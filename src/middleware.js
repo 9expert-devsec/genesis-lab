@@ -1,95 +1,98 @@
 /**
- * Edge middleware — runs before any /admin route hits a server
- * component or API handler.
+ * Edge middleware — gates the /admin/* surface.
  *
- * Behavior:
- *   1. Logged-in admins (valid NextAuth JWT) sail through to /admin/*.
- *   2. The login page (/admin/9x-portal) is always reachable so a
- *      logged-out admin whose cookie expired can re-enter creds.
- *   3. Anonymous visitors with `?knock=<ADMIN_ENTRY_TOKEN>` get
- *      redirected to the login page and a short-lived cookie is set
- *      so subsequent navigations within the admin surface work
- *      without the token in the URL.
- *   4. Anonymous visitors with the `admin_knock` cookie can reach any
- *      /admin/* path (real auth still gates server actions / role
- *      checks downstream).
- *   5. Everyone else gets a bare 404 — no redirect, because that
- *      would leak the admin path's existence.
+ * Access rules:
+ *  1. Valid admin session (NextAuth JWT)  → pass through to any /admin/* page.
+ *  2. Login page (/admin/9x-portal)       → always reachable (never blocked).
+ *  3. /admin/door                         → sets a 30-min gate cookie then
+ *                                           redirects to login. This is the
+ *                                           human-friendly entry point.
+ *  4. ?knock=<ADMIN_ENTRY_TOKEN>          → same as /door (URL-based entry
+ *                                           kept for back-compat / scripts).
+ *  5. No session + valid gate cookie      → redirect to login so an admin
+ *                                           whose session expired can re-auth.
+ *  6. No session + no gate cookie         → 404 (hides admin surface from public).
  *
- * On every passthrough we inject `x-pathname` onto the forwarded
- * request so the admin layout can read it via `headers()` and decide
- * whether to render the sidebar (skipped on the login page).
+ * The gate cookie ONLY permits seeing the login page — it never grants
+ * access to any protected /admin/* page. Session + role checks downstream
+ * are the real authority.
  *
- * Edge-safety: imports `authConfig` (no Mongoose / bcrypt). The Node
- * provider in `auth/options.js` never gets bundled here.
+ * Edge-safety: imports `authConfig` (no Mongoose / bcrypt).
  */
 
 import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authConfig } from '@/lib/auth/config';
 
-const KNOCK_COOKIE = 'admin_knock';
-const KNOCK_TTL_SECONDS = 300; // 5 min
-const LOGIN_PATH = '/admin/9x-portal';
+const GATE_COOKIE  = 'admin_gate';
+const GATE_TTL     = 60 * 30;          // 30 min — time window to complete login
+const LOGIN_PATH   = '/admin/9x-portal';
+const DOOR_PATH    = '/admin/door';
 
 const { auth } = NextAuth(authConfig);
 
-/** Pass-through that also leaks the pathname into request headers
- *  so server components downstream (`headers()`) can read it. */
+/** Inject x-pathname header so server components can read it via headers(). */
 function passThrough(req, pathname) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-pathname', pathname);
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
+/** Set gate cookie and redirect to login. */
+function grantGateAndRedirect(req) {
+  const url = new URL(LOGIN_PATH, req.url);
+  const res = NextResponse.redirect(url);
+  res.cookies.set(GATE_COOKIE, '1', {
+    httpOnly: true,
+    sameSite: 'strict',
+    path:     '/admin',
+    maxAge:   GATE_TTL,
+  });
+  return res;
+}
+
 export default auth((req) => {
   const { pathname, searchParams } = req.nextUrl;
 
-  // Only the /admin/* surface is gated.
+  // Only gate the admin surface.
   if (!pathname.startsWith('/admin')) {
     return NextResponse.next();
   }
 
+  // ── Rule 1: Valid session → pass through immediately. ──────────────────────
+  // Gate cookie state is irrelevant once a user is logged in.
   const isLoggedIn = Boolean(req.auth?.user);
   if (isLoggedIn) {
     return passThrough(req, pathname);
   }
 
-  // The login page IS the gate — never block it. Otherwise a logged-out
-  // admin whose session expired mid-flow gets a confusing 404 when
-  // NextAuth tries to redirect them back here.
+  // ── Rule 2: Login page is always reachable. ────────────────────────────────
   if (pathname === LOGIN_PATH) {
     return passThrough(req, pathname);
   }
 
-  const expected = process.env.ADMIN_ENTRY_TOKEN;
-  const knock = searchParams.get('knock');
-  const validKnock = expected && knock && knock === expected;
+  // ── Rule 3: /admin/door → set gate cookie + redirect to login. ────────────
+  if (pathname === DOOR_PATH) {
+    return grantGateAndRedirect(req);
+  }
 
-  if (validKnock) {
-    // Strip the knock from the URL by redirecting to the login page,
-    // and drop a short-lived cookie so subsequent navigations within
-    // the admin surface don't have to re-supply the token.
+  // ── Rule 4: ?knock=TOKEN → same as /door (URL-based back-compat). ─────────
+  const expected   = process.env.ADMIN_ENTRY_TOKEN;
+  const knockParam = searchParams.get('knock');
+  if (expected && knockParam && knockParam === expected) {
+    return grantGateAndRedirect(req);
+  }
+
+  // ── Rule 5: No session + gate cookie → redirect to login. ─────────────────
+  // The admin's session has expired but they came through the door legitimately.
+  // Let them re-authenticate instead of showing 404.
+  const hasGate = req.cookies.get(GATE_COOKIE)?.value === '1';
+  if (hasGate) {
     const url = new URL(LOGIN_PATH, req.url);
-    const res = NextResponse.redirect(url);
-    res.cookies.set(KNOCK_COOKIE, '1', {
-      httpOnly: true,
-      sameSite: 'strict',
-      path: '/admin',
-      maxAge: KNOCK_TTL_SECONDS,
-    });
-    return res;
+    return NextResponse.redirect(url);
   }
 
-  // Honour an existing knock cookie. The real auth gate is still
-  // NextAuth + server-side role checks; the cookie just keeps the
-  // page reachable instead of 404ing.
-  const hasCookie = req.cookies.get(KNOCK_COOKIE)?.value === '1';
-  if (hasCookie) {
-    return passThrough(req, pathname);
-  }
-
-  // Default: pretend the route doesn't exist.
+  // ── Rule 6: No session + no gate cookie → 404. ────────────────────────────
   return new NextResponse(null, { status: 404 });
 });
 

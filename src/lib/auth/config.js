@@ -15,17 +15,13 @@ export const authConfig = {
     error:  '/admin/9x-portal',
   },
 
-  session: { strategy: 'jwt', maxAge: 60 * 60 * 8 /* 8 hours */ },
+  session: {
+    strategy: 'jwt',
+    maxAge:   60 * 60 * 72,  // absolute timeout: 72 h — token invalid after this regardless of activity
+    updateAge: 60 * 60 * 16, // idle timeout: reissue token every 16 h; if user is idle longer, token expires
+  },
 
   callbacks: {
-    async authorized({ request, auth: session }) {
-      const path = request.nextUrl.pathname;
-      // Gate /admin/* except the login page itself
-      if (path.startsWith('/admin') && path !== '/admin/9x-portal') {
-        return Boolean(session?.user);
-      }
-      return true;
-    },
     async jwt({ token, user }) {
       if (user) {
         token.id   = user.id;

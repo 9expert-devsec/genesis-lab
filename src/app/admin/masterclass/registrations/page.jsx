@@ -3,12 +3,17 @@ import {
   getMasterclassRegStatusCounts,
   getMasterclassCourseOptions,
 } from '@/lib/actions/masterclass-registrations';
+import { forbidden } from 'next/navigation';
+import { auth } from '@/lib/auth/options';
 import { MasterclassRegistrationsClient } from './_components/MasterclassRegistrationsClient';
 
 export const metadata = { title: 'Masterclass — ผู้ลงทะเบียน' };
 export const dynamic  = 'force-dynamic';
 
 export default async function MasterclassRegistrationsPage({ searchParams }) {
+  const session = await auth();
+  if (!new Set(['superadmin', 'owner', 'admin', 'registration_admin', 'it_support_admin']).has(session?.user?.role)) forbidden();
+
   const sp      = (await searchParams) ?? {};
   const page    = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
   const status  = sp.status   ?? 'all';

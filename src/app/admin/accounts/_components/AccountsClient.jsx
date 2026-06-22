@@ -308,6 +308,8 @@ function CreateModal({ onClose, onSuccess, onError }) {
             <option value="superadmin">superadmin</option>
             <option value="admin">admin</option>
             <option value="editor">editor</option>
+            <option value="registration_admin">registration_admin</option>
+            <option value="it_support_admin">it_support_admin</option>
           </select>
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -372,6 +374,8 @@ function EditModal({ admin, onClose, onSuccess, onError }) {
             <option value="superadmin">superadmin</option>
             <option value="admin">admin</option>
             <option value="editor">editor</option>
+            <option value="registration_admin">registration_admin</option>
+            <option value="it_support_admin">it_support_admin</option>
           </select>
         </Field>
         <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">

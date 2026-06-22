@@ -9,7 +9,7 @@ const AdminSchema = new mongoose.Schema(
     // identically to `superadmin` by the role guards. New seeds should
     // use `superadmin`. The migration script in src/scripts/ flips
     // `owner` → `superadmin` in place.
-    role:     { type: String, enum: ['superadmin', 'owner', 'admin', 'editor'], default: 'admin' },
+    role:     { type: String, enum: ['superadmin', 'owner', 'admin', 'editor', 'registration_admin', 'it_support_admin'], default: 'admin' },
     active:   { type: Boolean, default: true },
     lastLoginAt: { type: Date },
 

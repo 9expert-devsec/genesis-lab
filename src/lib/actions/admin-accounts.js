@@ -24,7 +24,7 @@ import Admin from '@/models/Admin';
 import { auth } from '@/lib/auth/options';
 
 const SUPERADMIN_ROLES = new Set(['superadmin', 'owner']);
-const VALID_ROLES = ['superadmin', 'admin', 'editor'];
+const VALID_ROLES = ['superadmin', 'admin', 'editor', 'registration_admin', 'it_support_admin'];
 const ADMIN_PATH = '/admin/accounts';
 
 async function requireSuperAdmin() {

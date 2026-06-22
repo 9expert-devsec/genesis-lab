@@ -1,10 +1,15 @@
+import { forbidden } from 'next/navigation';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
+import { auth } from '@/lib/auth/options';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
 export const metadata = { title: 'การลงทะเบียน' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page({ searchParams }) {
+  const session = await auth();
+  if (!new Set(['superadmin', 'owner', 'admin', 'registration_admin', 'it_support_admin']).has(session?.user?.role)) forbidden();
+
   const sp     = (await searchParams) ?? {};
   const page   = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
   const status = sp.status ?? 'all';

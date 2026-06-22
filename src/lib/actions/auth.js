@@ -2,7 +2,7 @@
 
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
-import { signIn, auth } from '@/lib/auth/options';
+import { signIn, signOut, auth } from '@/lib/auth/options';
 
 /**
  * Throw if the current request is not from an authenticated admin.
@@ -67,5 +67,24 @@ export async function adminLogin(_prevState, formData) {
     throw err;
   }
 
+  // Renew the gate cookie so the browser has a fresh 30-min window
+  // to re-authenticate if this session later expires.
+  const { cookies } = await import('next/headers');
+  const jar = await cookies();
+  jar.set('admin_gate', '1', {
+    httpOnly: true,
+    sameSite: 'strict',
+    path:     '/admin',
+    maxAge:   60 * 30, // 30 min
+  });
+
   redirect('/admin');
+}
+
+/**
+ * Admin logout — signs out directly and redirects, skipping NextAuth's
+ * default "Are you sure?" confirmation page at /api/auth/signout.
+ */
+export async function logoutAction() {
+  await signOut({ redirectTo: '/admin/9x-portal' });
 }
