@@ -29,7 +29,7 @@ const VARIANT_SRC = {
 
 export function Logo({
   variant,
-  href = '/',
+  href = 'https://www.9experttraining.com/',
   className,
   priority = false,
   alt = '9Expert Training',
