@@ -61,8 +61,13 @@ function isMasterclassRoute(pathname) {
   if (/^\/masterclass\/[^/]+(\/register(\/.*)?)?$/.test(pathname)) return true;
   // API routes — always allow
   if (pathname.startsWith('/api/')) return true;
-  // Next.js internals
-  if (pathname.startsWith('/_next/') || pathname.startsWith('/favicon')) return true;
+  // Next.js internals + static assets served from /public
+  if (pathname.startsWith('/_next/')) return true;
+  if (pathname.startsWith('/favicon')) return true;
+  if (pathname.startsWith('/brand/')) return true;
+  if (pathname.startsWith('/assets/')) return true;
+  if (pathname.startsWith('/fonts/')) return true;
+  if (pathname.startsWith('/icons/')) return true;
   // Admin surface — handled below
   if (pathname.startsWith('/admin')) return true;
   return false;
@@ -121,6 +126,6 @@ export default auth((req) => {
 export const config = {
   matcher: [
     '/admin/:path*',
-    '/((?!_next/static|_next/image|favicon.ico|assets|fonts|icons|api).*)',
+    '/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|assets|fonts|icons|brand|api).*)',
   ],
 };
