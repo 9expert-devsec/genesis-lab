@@ -1760,8 +1760,8 @@ export function MasterclassRegisterClient({ course, batch }) {
             <p className="text-gray-500">ยอดชำระ: <strong>{formatTHB(result.amount)} บาท</strong></p>
           )}
           <p className="mt-4 text-sm text-gray-400">ระบบส่งอีเมลยืนยันไปที่ {formState?.email} แล้ว</p>
-          <Link href="/masterclass" className="mt-8 inline-block rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white">
-            กลับหน้า Masterclass
+          <Link href="https://www.9experttraining.com/" className="mt-8 inline-block rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white">
+            กลับหน้า Home
           </Link>
         </div>
       )}

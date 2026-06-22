@@ -51,8 +51,30 @@ function grantGateAndRedirect(req) {
   return res;
 }
 
+const MASTERCLASS_DOMAIN = 'https://www.9experttraining.com';
+
+/** Returns true for routes that are allowed on this masterclass-only deployment. */
+function isMasterclassRoute(pathname) {
+  // /masterclass/[slug]
+  // /masterclass/[slug]/register
+  // /masterclass/[slug]/register/* (any sub-step)
+  if (/^\/masterclass\/[^/]+(\/register(\/.*)?)?$/.test(pathname)) return true;
+  // API routes — always allow
+  if (pathname.startsWith('/api/')) return true;
+  // Next.js internals
+  if (pathname.startsWith('/_next/') || pathname.startsWith('/favicon')) return true;
+  // Admin surface — handled below
+  if (pathname.startsWith('/admin')) return true;
+  return false;
+}
+
 export default auth((req) => {
   const { pathname, searchParams } = req.nextUrl;
+
+  // ── Masterclass-only mode: redirect non-masterclass public routes ──────────
+  if (!isMasterclassRoute(pathname)) {
+    return NextResponse.redirect(MASTERCLASS_DOMAIN);
+  }
 
   // Only gate the admin surface.
   if (!pathname.startsWith('/admin')) {
@@ -97,5 +119,8 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: [
+    '/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|assets|fonts|icons|api).*)',
+  ],
 };

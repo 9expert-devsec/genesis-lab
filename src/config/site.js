@@ -163,19 +163,19 @@ export const mainNav = [
  */
 export const footerNav = {
   company: [
-    { label: 'เกี่ยวกับเรา', href: '/about-us' },
-    { label: 'ร่วมงานกับเรา', href: '/join-us' },
-    { label: 'ติดต่อเรา', href: '/contact-us' },
+    { label: 'เกี่ยวกับเรา',   href: 'https://www.9experttraining.com/about-us',           external: true },
+    { label: 'ร่วมงานกับเรา', href: 'https://www.9experttraining.com/join-us',             external: true },
+    { label: 'ติดต่อเรา',      href: 'https://www.9experttraining.com/contact-us',          external: true },
   ],
   learn: [
-    { label: 'หลักสูตร In-Class', href: '/training-course' },
-    { label: 'หลักสูตรออนไลน์', href: siteConfig.academyUrl, external: true },
-    { label: 'ตารางอบรม', href: '/schedule' },
-    { label: 'เส้นทางอาชีพ', href: '/career-path-project' },
+    { label: 'หลักสูตร In-Class', href: 'https://www.9experttraining.com/training-course',        external: true },
+    { label: 'หลักสูตรออนไลน์',  href: siteConfig.academyUrl,                                     external: true },
+    { label: 'ตารางอบรม',        href: 'https://www.9experttraining.com/schedule',                 external: true },
+    { label: 'เส้นทางอาชีพ',    href: 'https://www.9experttraining.com/career-path-project',      external: true },
   ],
   resources: [
-    { label: 'บทความ', href: '/articles' },
-    { label: 'โปรโมชัน', href: '/promotions' },
-    { label: 'คำถามที่พบบ่อย', href: '/faq' },
+    { label: 'บทความ',          href: 'https://www.9experttraining.com/articles',    external: true },
+    { label: 'โปรโมชัน',        href: 'https://www.9experttraining.com/promotions',  external: true },
+    { label: 'คำถามที่พบบ่อย',  href: 'https://www.9experttraining.com/faq',         external: true },
   ],
 };
