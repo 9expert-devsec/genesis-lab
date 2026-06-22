@@ -309,7 +309,7 @@ function CardFields({ card, setCard }) {
 }
 
 // ── Expanded PromptPay panel (left column, after charge created) ──────────────
-function QrPanelFull({ charge, pricing, expired, secondsLeft, onRegenerate, onSimulatePaid }) {
+function QrPanelFull({ charge, pricing, expired, secondsLeft, onRegenerate }) {
   const mmss = `${String(Math.floor((secondsLeft ?? 0) / 60)).padStart(2, '0')}:${String(
     (secondsLeft ?? 0) % 60
   ).padStart(2, '0')}`;
@@ -391,13 +391,6 @@ function QrPanelFull({ charge, pricing, expired, secondsLeft, onRegenerate, onSi
             <RefreshCw size={14} /> สร้าง QR ใหม่
           </button>
         )}
-        <button
-          type="button"
-          onClick={onSimulatePaid}
-          className="inline-flex items-center gap-1.5 rounded-full bg-9e-lime px-4 py-2 text-sm font-semibold text-9e-navy hover:bg-9e-lime/80"
-        >
-          จำลองว่าชำระเงินสำเร็จ
-        </button>
       </div>
     </section>
   );
@@ -771,15 +764,6 @@ export function MasterclassRegisterClient({ course, batch }) {
       }
     }
 
-    // Invoice validation — only when the customer requested a document
-    if (formState.request_invoice) {
-      const invErr = validateInvoiceFields();
-      if (invErr) {
-        setSubmitError(invErr);
-        return;
-      }
-    }
-
     persist();
     setStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -795,7 +779,7 @@ export function MasterclassRegisterClient({ course, batch }) {
 
   const canStep2Confirm =
     method === 'quote'
-      ? allConsented
+      ? allConsented && (formState.request_invoice ? invoiceFilled : (quoteNeedsInvoice ? invoiceFilled : false))
       : method === 'instant'
         ? Boolean(channel) && allConsented && wantsDoc !== null &&
           (wantsDoc !== true || formState.request_invoice || invoiceFilled)
@@ -836,7 +820,6 @@ export function MasterclassRegisterClient({ course, batch }) {
     });
     const payload = {
       batchId: String(batch._id),
-      method: method ?? 'instant',
       coordinator: {
         firstName: formState.firstName.trim(),
         lastName: formState.lastName.trim(),
@@ -1034,7 +1017,11 @@ export function MasterclassRegisterClient({ course, batch }) {
   }
 
   // Whether to render an inline per-attendee license picker inside each card.
-  const perAttendeeLicense = licenseEnabled && (formState.license_scope ?? 'all') === 'per_attendee';
+  // Force false when count ≤ 1 — per_attendee scope has no meaning with a single slot.
+  const perAttendeeLicense =
+    licenseEnabled &&
+    (formState.attendeesCount ?? 1) > 1 &&
+    (formState.license_scope ?? 'all') === 'per_attendee';
 
   // Inline license sub-form for attendee slot `i`. Rendered as plain JSX (not a
   // nested component) so the controlled inputs keep focus across re-renders.
@@ -1068,6 +1055,9 @@ export function MasterclassRegisterClient({ course, batch }) {
       {step === 1 && !result && (
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_330px] lg:items-start">
           <div>
+            <div>
+              
+            </div>
             <h2 className="text-lg font-bold text-9e-navy dark:text-white">ข้อมูลผู้ประสานงาน</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               ผู้ติดต่อที่ 9Expert จะใช้ในการสื่อสารเรื่องการอบรมและใบแจ้งหนี้
@@ -1103,66 +1093,6 @@ export function MasterclassRegisterClient({ course, batch }) {
               </div>
             </div>
 
-            {/* License section */}
-            {licenseEnabled && (
-              <div className="mt-6">
-                <h3 className="mb-3 text-sm font-semibold text-9e-navy dark:text-white">
-                  ตัวเลือก License
-                </h3>
-
-                {/* Scope selector — only meaningful with more than one attendee */}
-                {(formState.attendeesCount ?? 1) > 1 && (
-                  <div className="mb-4 inline-flex rounded-9e-md border border-[var(--surface-border)] p-0.5">
-                    {[
-                      { value: 'all', label: 'ทุกคน' },
-                      { value: 'per_attendee', label: 'แยกรายคน' },
-                    ].map((opt) => (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setField('license_scope', opt.value)}
-                        className={cn(
-                          'rounded-[6px] px-4 py-1.5 text-xs font-semibold transition-colors',
-                          (formState.license_scope ?? 'all') === opt.value
-                            ? 'bg-9e-action text-white'
-                            : 'text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-white/5'
-                        )}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* scope = all (default) */}
-                {((formState.attendeesCount ?? 1) <= 1 || (formState.license_scope ?? 'all') === 'all') && (
-                  <LicenseChoices
-                    choices={course.license_options.choices}
-                    value={{
-                      choice: formState.license_choice,
-                      level: formState.license_level,
-                      detail: formState.license_detail,
-                    }}
-                    onChange={(partial) =>
-                      setFormState((p) => ({
-                        ...p,
-                        ...(partial.choice !== undefined ? { license_choice: partial.choice } : {}),
-                        ...(partial.level !== undefined ? { license_level: partial.level } : {}),
-                        ...(partial.detail !== undefined ? { license_detail: partial.detail } : {}),
-                      }))
-                    }
-                  />
-                )}
-
-                {/* scope = per_attendee — choices moved into each attendee card below */}
-                {(formState.attendeesCount ?? 1) > 1 && (formState.license_scope ?? 'all') === 'per_attendee' && (
-                  <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
-                    เลือก License ของผู้เข้าอบรมแต่ละท่านได้ในการ์ดผู้เข้าอบรมด้านล่าง
-                  </p>
-                )}
-              </div>
-            )}
-
             {/* ── Attendee section ── */}
             <div className="mt-6">
               <h3 className="text-sm font-semibold text-9e-navy dark:text-white">ข้อมูลผู้เข้าอบรม</h3>
@@ -1183,6 +1113,8 @@ export function MasterclassRegisterClient({ course, batch }) {
                         attendeesCount: n,
                         coordinator_is_attending: p.coordinator_is_attending,
                         attendees: Array.from({ length: n }, (_, i) => p.attendees?.[i] ?? { firstName: '', lastName: '', email: '', phone: '' }),
+                        // Reset scope to 'all' when count drops to 1 — per_attendee has no meaning with a single slot
+                        ...(n <= 1 ? { license_scope: 'all', license_per_attendee: [] } : {}),
                       }));
                     }}
                     className={`${inputCls} w-28`}
@@ -1203,12 +1135,105 @@ export function MasterclassRegisterClient({ course, batch }) {
                 </label>
               </div>
 
+              {/* License sub-section */}
+              {licenseEnabled && (() => {
+                const _count = formState.attendeesCount ?? 1;
+                const _listProvided = formState.attendeesListProvided ?? true;
+                const _effectiveScope = (!_listProvided || _count <= 1) ? 'all' : (formState.license_scope ?? 'all');
+                const _showToggle = _count > 1 && _listProvided;
+                return (
+                  <div className="mt-4 rounded-9e-lg border border-[var(--surface-border)] p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-9e-navy dark:text-white">ตัวเลือก License</h4>
+                      {_showToggle && (
+                        <div className="inline-flex rounded-9e-md border border-[var(--surface-border)] p-0.5">
+                          {[{ value: 'all', label: 'ทุกคน' }, { value: 'per_attendee', label: 'แยกรายคน' }].map((opt) => (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => setField('license_scope', opt.value)}
+                              className={cn(
+                                'rounded-[6px] px-4 py-1.5 text-xs font-semibold transition-colors',
+                                _effectiveScope === opt.value
+                                  ? 'bg-9e-action text-white'
+                                  : 'text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-white/5'
+                              )}
+                            >{opt.label}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {_effectiveScope === 'all' && (
+                      <LicenseChoices
+                        choices={course.license_options.choices}
+                        value={{ choice: formState.license_choice, level: formState.license_level, detail: formState.license_detail }}
+                        onChange={(partial) => setFormState((p) => ({
+                          ...p,
+                          ...(partial.choice !== undefined ? { license_choice: partial.choice } : {}),
+                          ...(partial.level !== undefined ? { license_level: partial.level } : {}),
+                          ...(partial.detail !== undefined ? { license_detail: partial.detail } : {}),
+                        }))}
+                      />
+                    )}
+                    {_effectiveScope === 'per_attendee' && (
+                      <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
+                        เลือก License ของผู้เข้าอบรมแต่ละท่านได้ในการ์ดผู้เข้าอบรมด้านล่าง
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* If list skipped */}
-              {!(formState.attendeesListProvided ?? true) && (
-                <p className="mt-3 rounded-9e-md border border-dashed border-[var(--surface-border)] p-3 text-sm text-gray-500 dark:text-gray-400">
-                  จะแจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมงานจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม
-                </p>
-              )}
+              {!(formState.attendeesListProvided ?? true) && (() => {
+                const _count = formState.attendeesCount ?? 1;
+                const _coordAttending = formState.coordinator_is_attending ?? false;
+                const _showCoordCard = _coordAttending && _count > 1;
+
+                const _licenseLabel = licenseEnabled && formState.license_choice
+                  ? formState.license_choice === 'own'
+                    ? 'ใช้ License ของผู้เข้าอบรมเอง'
+                    : formState.license_choice === '9expert'
+                      ? 'ให้ 9Expert จัดเตรียม License ให้'
+                      : formState.license_choice
+                  : null;
+
+                if (_showCoordCard) {
+                  return (
+                    <div className="mt-3 space-y-3">
+                      {/* Coordinator card — read-only */}
+                      <div className="rounded-9e-md border border-9e-brand/30 bg-9e-brand/5 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-9e-action mb-1">
+                          ผู้เข้าอบรมท่านที่ 1 (ผู้ประสานงาน)
+                        </p>
+                        <p className="text-sm font-semibold text-9e-navy dark:text-white">
+                          {`${formState.firstName} ${formState.lastName}`.trim() || '—'}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                          {formState.email || '—'} · {formState.phone || '—'}
+                        </p>
+                        {/* {_licenseLabel && (
+                          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            License: <span className="font-medium text-9e-navy dark:text-white">{_licenseLabel}</span>
+                          </p>
+                        )} */}
+                      </div>
+                      {/* Notice for remaining attendees */}
+                      <div className="rounded-9e-md border border-dashed border-[var(--surface-border)] p-3 text-sm text-gray-500 dark:text-gray-400">
+                        ผู้เข้าอบรมท่านที่ 2{_count > 2 ? `–${_count}` : ''} จะแจ้งรายชื่อภายหลัง — ทีมงานจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม
+                        {/* {_licenseLabel && <span className="block mt-1">License: {_licenseLabel}</span>} */}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="mt-3 rounded-9e-md border border-dashed border-[var(--surface-border)] p-3 text-sm text-gray-500 dark:text-gray-400">
+                    <p>จะแจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมงานจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม</p>
+                    {_licenseLabel && <p className="mt-1">License: <span className="font-medium text-9e-navy dark:text-white">{_licenseLabel}</span></p>}
+                  </div>
+                );
+              })()}
 
               {/* If list provided — render per-attendee forms */}
               {(formState.attendeesListProvided ?? true) && (
@@ -1292,50 +1317,6 @@ export function MasterclassRegisterClient({ course, batch }) {
                 placeholder="เช่น อาหาร/เพลาอาหาร คำถามเกี่ยวกับหลักสูตร ฯลฯ (ไม่เกิน 500 ตัวอักษร)"
                 className={`${inputCls} resize-none`}
               />
-            </div>
-
-            {/* Invoice section */}
-            <div className="mt-6">
-              <h3 className="mb-3 text-sm font-semibold text-9e-navy dark:text-white">
-                เอกสารหลังการสมัคร
-              </h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {[
-                  { value: false, label: 'ไม่ต้องการใบกำกับภาษี', sub: 'ออกหลักฐานการสมัครตามปกติ' },
-                  { value: true,  label: 'ต้องการใบเสร็จ / ใบกำกับภาษี', sub: 'กรอกข้อมูลสำหรับออกเอกสาร' },
-                ].map(({ value, label, sub }) => {
-                  const isSelected = formState.request_invoice === value;
-                  return (
-                    <button
-                      key={String(value)}
-                      type="button"
-                      onClick={() => setField('request_invoice', value)}
-                      className={cn(
-                        'flex items-start gap-3 rounded-9e-lg border p-4 text-left transition-all',
-                        isSelected
-                          ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15'
-                          : 'border-[var(--surface-border)] hover:border-9e-brand/40'
-                      )}
-                    >
-                      <span className={cn(
-                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2',
-                        isSelected ? 'border-9e-brand' : 'border-[var(--surface-border)]'
-                      )}>
-                        {isSelected && <span className="h-2 w-2 rounded-full bg-9e-brand" />}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                        <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{sub}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              {formState.request_invoice && (
-                <div className="mt-4">
-                  <InvoiceFields register={register} watch={watch} setValue={setValue} errors={errors} />
-                </div>
-              )}
             </div>
 
             {submitError && (
@@ -1433,9 +1414,53 @@ export function MasterclassRegisterClient({ course, batch }) {
                     </div>
                   );
                 })
-              ) : (
-                <p className="text-sm text-gray-500">จะแจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมขายจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม</p>
-              )}
+              ) : (() => {
+                const _count = formState.attendeesCount ?? 1;
+                const _coordAttending = formState.coordinator_is_attending ?? false;
+                const _licenseLabel = licenseEnabled && formState.license_choice
+                  ? formState.license_choice === 'own'
+                    ? 'ใช้ License ของผู้เข้าอบรมเอง'
+                    : formState.license_choice === '9expert'
+                      ? 'ให้ 9Expert จัดเตรียม License ให้'
+                      : formState.license_choice
+                  : null;
+
+                if (_coordAttending) {
+                  return (
+                    <div className="space-y-2">
+                      {/* Coordinator row */}
+                      <div className={cn('pb-2', _count > 1 && 'border-b border-[var(--surface-border)]')}>
+                        <ReadRow label="ท่านที่ 1 (ผู้ประสานงาน)" value={`${formState.firstName ?? ''} ${formState.lastName ?? ''}`.trim()} />
+                        <ReadRow label="อีเมล" value={formState.email ?? ''} />
+                        <ReadRow label="เบอร์โทร" value={formState.phone ?? ''} />
+                        {_licenseLabel && <ReadRow label="License" value={_licenseLabel} />}
+                        {formState.license_level && <ReadRow label="ประเภท" value={formState.license_level} />}
+                        {formState.license_detail && <ReadRow label="รายละเอียด" value={formState.license_detail} />}
+                      </div>
+                      {/* Notice for remaining attendees when count > 1 */}
+                      {_count > 1 && (
+                        <p className="text-sm text-gray-500">
+                          ผู้เข้าอบรมท่านที่ 2{_count > 2 ? `–${_count}` : ''} จะแจ้งรายชื่อภายหลัง — ทีมงานจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม
+                          {_licenseLabel && <span className="block mt-0.5">License (ทุกท่าน): {_licenseLabel}</span>}
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Coordinator not attending — all attendees to be named later
+                return (
+                  <div>
+                    <p className="text-sm text-gray-500">จะแจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมงานจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม</p>
+                    {_licenseLabel && (
+                      <p className="mt-1 text-sm text-gray-500">
+                        License: <span className="font-medium text-9e-navy dark:text-white">{_licenseLabel}</span>
+                        {formState.license_level && <span> · {formState.license_level}</span>}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </Section>
 
             {formState.notes && (
@@ -1471,15 +1496,6 @@ export function MasterclassRegisterClient({ course, batch }) {
                     expired={qrExpired}
                     secondsLeft={qrSecondsLeft}
                     onRegenerate={() => createPromptPay()}
-                    onSimulatePaid={() => {
-                      setResult({
-                        kind: 'paid',
-                        referenceNumber: qrCharge?.referenceNumber,
-                        amount: qrCharge?.amount,
-                        method: 'promptpay',
-                      });
-                      setStep(3);
-                    }}
                   />
                 </div>
               )}
@@ -1506,7 +1522,7 @@ export function MasterclassRegisterClient({ course, batch }) {
               <div>
                 <h3 className="mb-3 text-base font-bold text-9e-navy dark:text-white">สรุปยอด</h3>
                 <div className="space-y-2 text-sm">
-                  <SummaryLine label={`ราคาต่อที่นั่ง × ${formState.attendeesCount ?? 1}`} value={`${formatTHB(pricing.pricePerSeat)} บาท`} />
+                  <SummaryLine label={`ราคาต่อที่นั่ง × ${pricing.seats}`} value={`${formatTHB(pricing.subtotal)} บาท`} />
                   <SummaryLine label="ส่วนลด" value={`${formatTHB(0)} บาท`} />
                   <SummaryLine label="VAT 7%" value={`${formatTHB(pricing.vatAmount)} บาท`} />
                   <div className="mt-2 flex items-baseline justify-between border-t border-[var(--surface-border)] pt-2">
@@ -1530,7 +1546,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                       />
                       <MethodRadio
                         selected={method === 'quote'}
-                        onClick={() => { setMethod('quote'); setChannel(null); setWantsDoc(null); setQuoteNeedsInvoice(false); }}
+                        onClick={() => { setMethod('quote'); setChannel(null); setWantsDoc(null); setQuoteNeedsInvoice(true); }}
                         title="ขอใบเสนอราคา"
                         subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
                       />
