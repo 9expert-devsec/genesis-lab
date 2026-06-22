@@ -45,7 +45,7 @@ export function Logo({
   // surfaces (header/footer), Blue & White on the dark navy ones. Before
   // first mount we don't know the theme, so default to 'blue' to match the
   // server-rendered light surface and avoid a white-on-white flash.
-  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'blue';
+  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'white';
   const src = VARIANT_SRC[variant] ?? VARIANT_SRC[themeVariant];
 
   const img = (
