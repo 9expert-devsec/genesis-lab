@@ -41,11 +41,11 @@ export function Logo({
     setMounted(true);
   }, []);
 
-  // Both themes use the white (Blue & White) logo. The Full Blue variant
-  // washes out against the translucent light-mode header
-  // (bg-[var(--page-bg)]/85 + backdrop-blur). Revisit if the light
-  // header gets a solid background treatment.
-  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'white';
+  // Follow the active theme: Full Blue on the solid white light-mode
+  // surfaces (header/footer), Blue & White on the dark navy ones. Before
+  // first mount we don't know the theme, so default to 'blue' to match the
+  // server-rendered light surface and avoid a white-on-white flash.
+  const themeVariant = mounted && resolvedTheme === 'dark' ? 'white' : 'blue';
   const src = VARIANT_SRC[variant] ?? VARIANT_SRC[themeVariant];
 
   const img = (
