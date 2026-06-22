@@ -89,9 +89,14 @@ export async function POST(req) {
 
     // Card settled synchronously — send receipt
     if (update.status === 'paid') {
-      const fresh = await MasterclassRegistration.findById(registrationId);
-      const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
-      await sendMasterclassReceipt(fresh);
+      try {
+        const fresh = await MasterclassRegistration.findById(registrationId);
+        const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
+        const receiptResult = await sendMasterclassReceipt(fresh);
+        console.log('[charge] receipt result:', JSON.stringify(receiptResult));
+      } catch (emailErr) {
+        console.error('[charge] receipt send failed:', emailErr);
+      }
     }
 
     if (paymentMethod === 'promptpay') {

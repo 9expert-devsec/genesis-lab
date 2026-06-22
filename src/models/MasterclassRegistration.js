@@ -55,7 +55,7 @@ const PricingSnapshotSchema = new mongoose.Schema(
 
 const PaymentSchema = new mongoose.Schema(
   {
-    method:         { type: String, enum: ['quote', 'credit_card', 'promptpay'], required: true },
+    method:         { type: String, enum: ['pending', 'quote', 'credit_card', 'promptpay'], required: true },
     omiseChargeId:  { type: String, default: null },
     omiseStatus:    { type: String, default: null },
     paidAt:         { type: Date, default: null },
@@ -91,6 +91,28 @@ const MasterclassRegistrationSchema = new mongoose.Schema(
     batch_date_label: { type: String, trim: true },
     venue_name:       { type: String, trim: true },
 
+    // Coordinator — the person who filled in the form (may also be an attendee)
+    coordinator: {
+      firstName:    { type: String, trim: true },
+      lastName:     { type: String, trim: true },
+      email:        { type: String, trim: true, lowercase: true },
+      phone:        { type: String, trim: true },
+      isAttending:  { type: Boolean, default: false },
+    },
+
+    // Multi-attendee list (resolved at registration time)
+    attendeesCount:         { type: Number, default: 1, min: 1 },
+    attendeesListProvided:  { type: Boolean, default: true },
+    attendees: [
+      {
+        firstName: { type: String, trim: true },
+        lastName:  { type: String, trim: true },
+        email:     { type: String, trim: true, lowercase: true },
+        phone:     { type: String, trim: true },
+        _id:       false,
+      },
+    ],
+
     // Single attendee (Masterclass = 1 person per registration)
     attendee: {
       firstName: { type: String, trim: true, required: true },
@@ -104,6 +126,8 @@ const MasterclassRegistrationSchema = new mongoose.Schema(
     license_choice: { type: String, default: null },   // "own" | "9expert"
     license_level:  { type: String, default: null },   // "Pro" / "Team" etc.
     license_detail: { type: String, default: null },   // free-text
+    license_scope:  { type: String, enum: ['all', 'per_attendee'], default: 'all' },
+    license_per_attendee: { type: [mongoose.Schema.Types.Mixed], default: null }, // per-slot { choice, level, detail }
 
     // Invoice
     request_invoice: { type: Boolean, default: false },
@@ -125,6 +149,7 @@ const MasterclassRegistrationSchema = new mongoose.Schema(
 MasterclassRegistrationSchema.index({ createdAt: -1, status: 1 });
 MasterclassRegistrationSchema.index({ batch_id: 1, status: 1 });
 MasterclassRegistrationSchema.index({ 'attendee.email': 1 });
+MasterclassRegistrationSchema.index({ 'coordinator.email': 1 });
 
 if (mongoose.models.MasterclassRegistration) delete mongoose.models.MasterclassRegistration;
 export default mongoose.model('MasterclassRegistration', MasterclassRegistrationSchema);

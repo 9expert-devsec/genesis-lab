@@ -13,10 +13,14 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
   const from = process.env.POSTMARK_FROM_EMAIL;
 
   if (!token || !from) {
-    console.warn(
-      '[postmark] Missing POSTMARK_SERVER_TOKEN or POSTMARK_FROM_EMAIL; skipping send'
+    console.error(
+      '[postmark] ❌ SKIPPED — missing env var.',
+      'POSTMARK_SERVER_TOKEN:', token ? '✓ set' : '✗ MISSING',
+      'POSTMARK_FROM_EMAIL:', from ? '✓ set' : '✗ MISSING',
+      '| To:', to,
+      '| Subject:', subject
     );
-    return { skipped: true };
+    return { skipped: true, reason: 'missing_env' };
   }
 
   try {
@@ -45,6 +49,7 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
     }
 
     const data = await res.json();
+    console.log('[postmark] ✅ Sent | MessageID:', data.MessageID, '| To:', to, '| Subject:', subject);
     return { messageId: data.MessageID };
   } catch (err) {
     console.error('[postmark] Network error', err);

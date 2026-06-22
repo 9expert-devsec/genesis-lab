@@ -836,6 +836,7 @@ export function MasterclassRegisterClient({ course, batch }) {
     });
     const payload = {
       batchId: String(batch._id),
+      method: method ?? 'instant',
       coordinator: {
         firstName: formState.firstName.trim(),
         lastName: formState.lastName.trim(),
@@ -1470,7 +1471,15 @@ export function MasterclassRegisterClient({ course, batch }) {
                     expired={qrExpired}
                     secondsLeft={qrSecondsLeft}
                     onRegenerate={() => createPromptPay()}
-                    onSimulatePaid={() => setStep(3)}
+                    onSimulatePaid={() => {
+                      setResult({
+                        kind: 'paid',
+                        referenceNumber: qrCharge?.referenceNumber,
+                        amount: qrCharge?.amount,
+                        method: 'promptpay',
+                      });
+                      setStep(3);
+                    }}
                   />
                 </div>
               )}
