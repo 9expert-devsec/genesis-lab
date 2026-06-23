@@ -856,6 +856,11 @@ export function MasterclassRegisterClient({ course, batch }) {
         changePolicy: allConsented,
         termsAccepted: allConsented,
       },
+      // Tells the register route which path this is. 'quote' triggers the
+      // quote-confirmation email immediately (no charge); 'instant' defers
+      // payment to the /charge route. Without this the route reads
+      // `undefined` and the quote email never fires.
+      method: method ?? 'instant',
     };
     const res = await fetch('/api/masterclass/register', {
       method: 'POST',
