@@ -56,3 +56,48 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
     return { error: err.message };
   }
 }
+
+export async function sendTemplateEmail({ to, bcc, templateAlias, templateModel }) {
+  const token = process.env.POSTMARK_SERVER_TOKEN;
+  const from  = process.env.POSTMARK_FROM_EMAIL;
+
+  if (!token || !from) {
+    console.error('[postmark] ❌ sendTemplateEmail SKIPPED — missing env var.',
+      'POSTMARK_SERVER_TOKEN:', token ? '✓ set' : '✗ MISSING',
+      'POSTMARK_FROM_EMAIL:', from ? '✓ set' : '✗ MISSING',
+      '| To:', to, '| TemplateAlias:', templateAlias);
+    return { skipped: true, reason: 'missing_env' };
+  }
+
+  try {
+    const res = await fetch('https://api.postmarkapp.com/email/withTemplate', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        'X-Postmark-Server-Token': token,
+      },
+      body: JSON.stringify({
+        From: from,
+        To: to,
+        Bcc: bcc || undefined,
+        TemplateAlias: templateAlias,
+        TemplateModel: templateModel,
+        MessageStream: 'outbound',
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error('[postmark] sendTemplateEmail failed', res.status, body.slice(0, 200));
+      return { error: `Postmark returned ${res.status}` };
+    }
+
+    const data = await res.json();
+    console.log('[postmark] ✅ Template sent | MessageID:', data.MessageID, '| To:', to, '| Alias:', templateAlias);
+    return { messageId: data.MessageID };
+  } catch (err) {
+    console.error('[postmark] sendTemplateEmail network error', err);
+    return { error: err.message };
+  }
+}

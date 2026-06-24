@@ -3,9 +3,7 @@ import { headers } from 'next/headers';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic from '@/models/RegisterPublic';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
-import { sendEmail } from '@/lib/email/postmark';
-import { userConfirmationEmail } from '@/lib/email/templates/registration-user';
-import { adminNotificationEmail } from '@/lib/email/templates/registration-admin';
+import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/public-registration';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 
 export async function POST(req) {
@@ -109,63 +107,15 @@ export async function POST(req) {
           .filter(Boolean)
           .join(' ');
 
-  const userMsg = userConfirmationEmail({
+  await sendPublicRegistrationEmails({
+    data,
     referenceNumber,
-    firstName: data.coordinator.firstName,
-    courseName: data.courseName || data.courseId,
-    classDate: data.classDate,
-    attendanceMode: data.attendanceMode ?? 'classroom',
-    scheduleType: data.scheduleType,
-    requestInvoice: Boolean(data.requestInvoice),
-    invoice: data.invoice ?? null,
+    attendees,
     invoiceCountry,
     invoiceAddress,
-    attendeesListProvided: data.attendeesListProvided,
-    attendees,
-    coordinatorIsAttending: data.coordinator.isAttending,
-    attendeesCount: data.attendeesCount,
-  });
-
-  const adminMsg = adminNotificationEmail({
-    referenceNumber,
-    data: {
-      ...data,
-      firstName: data.coordinator.firstName,
-      lastName: data.coordinator.lastName,
-      email: data.coordinator.email,
-      phone: data.coordinator.phone,
-      lineId: data.coordinator.lineId,
-      requestInvoice: Boolean(data.requestInvoice),
-      attendanceMode: data.attendanceMode ?? 'classroom',
-      invoiceCountry,
-      invoiceAddress,
-      attendees,
-      coordinatorIsAttending: data.coordinator.isAttending,
-    },
     adminDashboardUrl,
+    adminEmail,
   });
-
-  const emailPromises = [
-    sendEmail({
-      to: data.coordinator.email,
-      bcc: process.env.POSTMARK_ADMIN_EMAIL,
-      subject: `ยืนยันการสมัครอบรม ${data.courseName || ''} - ${referenceNumber}`,
-      html: userMsg.html,
-      text: userMsg.text,
-    }),
-  ];
-  if (adminEmail) {
-    emailPromises.push(
-      sendEmail({
-        to: adminEmail,
-        bcc: process.env.POSTMARK_ADMIN_EMAIL,
-        subject: `ใบสมัครใหม่ ${data.courseName || data.courseId} - ${referenceNumber}`,
-        html: adminMsg.html,
-        text: adminMsg.text,
-      })
-    );
-  }
-  await Promise.allSettled(emailPromises);
 
   return NextResponse.json({
     ok: true,
