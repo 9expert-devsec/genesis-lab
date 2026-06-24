@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import {
   Loader2, CheckCircle2, CreditCard, QrCode, Lock, ChevronRight, ArrowLeft,
-  ChevronDown, Download, RefreshCw,
+  ChevronDown, Download, RefreshCw, ChevronUp, X,
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { computePricing, formatTHB } from '@/lib/pricing';
@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'masterclass-register-v1';
 
-const STEPS = ['กรอกข้อมูล', 'ตรวจสอบ + ชำระเงิน', 'สำเร็จ'];
+const STEPS = ['กรอกข้อมูล', 'ตรวจสอบและดำเนินการ', 'สำเร็จ'];
 
 const EMPTY_THAI_ADDRESS = {
   addressLine: '', subDistrict: '', district: '', province: '', postalCode: '',
@@ -56,31 +56,38 @@ const LICENSE_LEVELS = ['Personal', 'Business', 'Enterprise', 'Academic'];
 // ── Progress indicator ────────────────────────────────────────────────────────
 function Stepper({ step }) {
   return (
-    <div className="mb-8 flex items-center justify-center gap-2">
+    <div className="relative mb-8 grid w-full grid-cols-3 items-start">
       {STEPS.map((label, i) => (
-        <Fragment key={i}>
-          <div
-            className={`flex items-center gap-2 text-sm font-medium ${
-              step > i + 1 ? 'text-green-600' : step === i + 1 ? 'text-9e-action' : 'text-gray-400'
+        <div
+          key={i}
+          className={`relative flex flex-col items-center gap-2 text-center text-sm font-medium ${
+            step > i + 1
+              ? 'text-green-600'
+              : step === i + 1
+                ? 'text-9e-action'
+                : 'text-gray-400'
+          }`}
+        >
+          {i < STEPS.length - 1 && (
+            <span className="absolute left-[calc(50%+20px)] top-3.5 h-px w-[calc(100%-40px)] bg-gray-200 dark:bg-gray-700" />
+          )}
+
+          <span
+            className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              step > i + 1
+                ? 'bg-green-100 text-green-600'
+                : step === i + 1
+                  ? 'bg-9e-action text-white'
+                  : 'bg-gray-100 text-gray-400'
             }`}
           >
-            <span
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                step > i + 1
-                  ? 'bg-green-100 text-green-600'
-                  : step === i + 1
-                    ? 'bg-9e-action text-white'
-                    : 'bg-gray-100 text-gray-400'
-              }`}
-            >
-              {step > i + 1 ? <CheckCircle2 size={14} /> : i + 1}
-            </span>
+            {step > i + 1 ? <CheckCircle2 size={14} /> : i + 1}
+          </span>
+
+          <span className="max-w-[100px] leading-snug md:max-w-none md:whitespace-nowrap">
             {label}
-          </div>
-          {i < STEPS.length - 1 && (
-            <span className="mx-2 h-px w-8 bg-gray-200 dark:bg-gray-700" />
-          )}
-        </Fragment>
+          </span>
+        </div>
       ))}
     </div>
   );
@@ -128,6 +135,87 @@ function SummaryLine({ label, value }) {
       <span className="text-[var(--text-secondary)]">{label}</span>
       <span className="text-[var(--text-primary)]">{value}</span>
     </div>
+  );
+}
+
+// Step 2 mobile-only bottom bar: collapsed total + CTA, with an expandable summary sheet.
+// Extracted as a component (not an inline IIFE) so its useState hook is called unconditionally.
+function Step2MobileBar({ pricing, canStep2Confirm, submitting, method, onConfirm, onBack }) {
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  return (
+    <>
+      {/* Expandable summary sheet */}
+      {summaryOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-end lg:hidden"
+          onClick={() => setSummaryOpen(false)}
+        >
+          <div
+            className="w-full rounded-t-2xl border-t border-[var(--surface-border)] bg-white p-5 shadow-2xl dark:bg-[#0D1B2A]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-9e-navy dark:text-white">สรุปยอด</h3>
+              <button type="button" onClick={() => setSummaryOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <SummaryLine label={`ราคาต่อที่นั่ง × ${pricing.seats}`} value={`${formatTHB(pricing.subtotal)} บาท`} />
+              <SummaryLine label="ส่วนลด" value={`${formatTHB(0)} บาท`} />
+              <SummaryLine label="VAT 7%" value={`${formatTHB(pricing.vatAmount)} บาท`} />
+              <div className="mt-2 flex items-baseline justify-between border-t border-[var(--surface-border)] pt-2">
+                <span className="font-semibold text-9e-navy dark:text-white">ยอดรวมสุทธิ</span>
+                <span className="text-xl font-bold text-9e-action">{formatTHB(pricing.total)} บาท</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom bar */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--surface-border)] bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] dark:bg-[#0D1B2A] lg:hidden">
+        <div className="flex items-center gap-2">
+          {/* Price + expand toggle */}
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((v) => !v)}
+            className="flex flex-1 flex-col items-start"
+          >
+            <span className="text-xs text-gray-500 dark:text-gray-400">ยอดรวมสุทธิ</span>
+            <span className="flex items-center gap-1 text-base font-bold text-9e-action">
+              {formatTHB(pricing.total)} บาท
+              <ChevronUp size={14} className={cn('transition-transform', summaryOpen && 'rotate-180')} />
+            </span>
+          </button>
+          {/* Back button */}
+          <button
+            type="button"
+            onClick={onBack}
+            disabled={submitting}
+            className="flex shrink-0 items-center justify-center rounded-full px-5 py-3 text-sm font-semibold border border-[var(--surface-border)] text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
+          >
+            ย้อนกลับ
+          </button>
+          {/* CTA — quote path only */}
+          {method === 'quote' && (
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={!canStep2Confirm || submitting}
+              className={cn(
+                'rounded-full px-5 py-3 text-sm font-semibold transition-colors',
+                canStep2Confirm && !submitting
+                  ? 'bg-9e-lime text-9e-navy hover:bg-9e-lime/80'
+                  : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+              )}
+            >
+              {submitting ? '...' : 'ขอใบเสนอราคา'}
+            </button>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -785,6 +873,13 @@ export function MasterclassRegisterClient({ course, batch }) {
           (wantsDoc !== true || formState.request_invoice || invoiceFilled)
         : false;
 
+  // Whether the Step 1 form has minimum data to proceed (coordinator fields filled)
+  const canStep1 =
+    Boolean(formState.firstName?.trim()) &&
+    Boolean(formState.lastName?.trim()) &&
+    Boolean(formState.email?.trim()) &&
+    Boolean(formState.phone?.trim());
+
   // Step 2 left-column invoice form shows when a document was requested in Step 1
   // or opted into via the wantsDoc toggle on Step 2.
   const showStep2InvoiceZone =
@@ -1053,10 +1148,14 @@ export function MasterclassRegisterClient({ course, batch }) {
 
       {/* ── STEP 1 ── */}
       {step === 1 && !result && (
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_330px] lg:items-start">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_330px] lg:items-start pb-24 lg:pb-0">
           <div>
+            {/* Course card — shown on mobile only (top of form), hidden on lg+ where it's in the right column */}
+            <div className="mb-6 lg:hidden">
+              <BatchSummary course={course} batch={batch} />
+            </div>
             <div>
-              
+
             </div>
             <h2 className="text-lg font-bold text-9e-navy dark:text-white">ข้อมูลผู้ประสานงาน</h2>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -1124,15 +1223,17 @@ export function MasterclassRegisterClient({ course, batch }) {
                     ))}
                   </select>
                 </div>
-                <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-9e-navy dark:text-white">
-                  <input
-                    type="checkbox"
-                    checked={!(formState.attendeesListProvided ?? true)}
-                    onChange={(e) => setField('attendeesListProvided', !e.target.checked)}
-                    className="mt-0.5"
-                  />
-                  ยังไม่ประสงค์แจ้งรายชื่อผู้เข้าอบรม
-                </label>
+                {!((formState.attendeesCount ?? 1) === 1 && (formState.coordinator_is_attending ?? false)) && (
+                  <label className="flex cursor-pointer items-center gap-2 pb-2 text-sm text-9e-navy dark:text-white">
+                    <input
+                      type="checkbox"
+                      checked={!(formState.attendeesListProvided ?? true)}
+                      onChange={(e) => setField('attendeesListProvided', !e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    ยังไม่ประสงค์แจ้งรายชื่อผู้เข้าอบรม
+                  </label>
+                )}
               </div>
 
               {/* License sub-section */}
@@ -1314,7 +1415,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                 onChange={(e) => setField('notes', e.target.value)}
                 rows={3}
                 maxLength={500}
-                placeholder="เช่น อาหาร/เพลาอาหาร คำถามเกี่ยวกับหลักสูตร ฯลฯ (ไม่เกิน 500 ตัวอักษร)"
+                placeholder="หมายเหตุ"
                 className={`${inputCls} resize-none`}
               />
             </div>
@@ -1325,7 +1426,8 @@ export function MasterclassRegisterClient({ course, batch }) {
               </div>
             )}
 
-            <div className="mt-6 flex justify-end">
+            {/* Desktop next button (hidden on mobile — use bottom bar instead) */}
+            <div className="mt-6 hidden justify-end lg:flex">
               <button
                 type="button"
                 onClick={handleStep1Next}
@@ -1336,16 +1438,38 @@ export function MasterclassRegisterClient({ course, batch }) {
             </div>
           </div>
 
-          <div className="lg:sticky lg:top-24 lg:self-start">
+          {/* Course card — desktop right column (hidden on mobile) */}
+          <div className="hidden lg:block lg:sticky lg:top-24 lg:self-start">
             <BatchSummary course={course} batch={batch} />
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 1 Mobile bottom bar ── */}
+      {step === 1 && !result && (
+        <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-[var(--surface-border)] bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] dark:bg-[#0D1B2A] lg:hidden">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleStep1Next}
+              disabled={!canStep1}
+              className={cn(
+                'flex flex-1 items-center justify-center gap-1 rounded-full py-3 text-sm font-semibold transition-colors',
+                canStep1
+                  ? 'bg-9e-action text-white hover:bg-9e-brand'
+                  : 'cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+              )}
+            >
+              ถัดไป <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       )}
 
       {/* ── STEP 2 — Unified Review + Payment ── */}
       {step === 2 && !result && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_minmax(340px,400px)] lg:items-start">
-          {/* LEFT — read-only preview (course first, collapsible) */}
+        <div className="grid grid-cols-1 gap-6 pb-24 lg:grid-cols-[1fr_minmax(340px,400px)] lg:items-start lg:pb-0">
+          {/* LEFT — read-only preview + payment options (full width on mobile) */}
           <div className="space-y-5">
             <h2 className="text-lg font-bold text-9e-navy dark:text-white">ตรวจสอบข้อมูล</h2>
 
@@ -1481,7 +1605,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                       กรุณากรอกข้อมูลสำหรับออกใบเสนอราคาด้านล่างนี้
                     </div>
                   )}
-                  <InvoiceFields register={register} watch={watch} setValue={setValue} errors={errors} />
+                  <InvoiceFields register={register} watch={watch} setValue={setValue} errors={errors} docType={method === 'instant' ? 'receipt' : 'quote'} />
                 </section>
               </div>
             )}
@@ -1515,11 +1639,11 @@ export function MasterclassRegisterClient({ course, batch }) {
             </div>
           </div>
 
-          {/* RIGHT — sticky payment card */}
+          {/* RIGHT — payment options + sticky summary (summary hidden on mobile, shown in bottom bar) */}
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <div className="space-y-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
-              {/* สรุปยอด */}
-              <div>
+            <div className={cn('flex flex-col gap-3 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]', paymentStarted && 'hidden lg:block')}>
+              {/* สรุปยอด — hidden on mobile (shown in bottom bar instead) */}
+              <div className="hidden lg:block">
                 <h3 className="mb-3 text-base font-bold text-9e-navy dark:text-white">สรุปยอด</h3>
                 <div className="space-y-2 text-sm">
                   <SummaryLine label={`ราคาต่อที่นั่ง × ${pricing.seats}`} value={`${formatTHB(pricing.subtotal)} บาท`} />
@@ -1535,7 +1659,7 @@ export function MasterclassRegisterClient({ course, batch }) {
               {!paymentStarted && (
                 <>
                   {/* เลือกวิธีดำเนินการ */}
-                  <div>
+                  <div className='my-2'>
                     <h3 className="mb-2 text-sm font-semibold text-9e-navy dark:text-white">เลือกวิธีดำเนินการ</h3>
                     <div className="space-y-2">
                       <MethodRadio
@@ -1579,17 +1703,17 @@ export function MasterclassRegisterClient({ course, batch }) {
                               }
                             }}
                             title="ต้องการใบเสร็จ / ใบกำกับภาษี"
-                            subtitle="กรอกข้อมูลผู้รับเอกสารในโซนด้านซ้าย"
+                            subtitle="กรอกข้อมูลในการออกเอกสาร"
                           />
                         </div>
                       </div>
 
                       {/* prompt to fill invoice data in left zone */}
-                      {wantsDoc === true && !formState.request_invoice && !invoiceFilled && (
+                      {/* {wantsDoc === true && !formState.request_invoice && !invoiceFilled && (
                         <div className="rounded-9e-md border border-orange-400 bg-orange-50 p-3 text-sm text-orange-700">
                           กรุณากรอกข้อมูลสำหรับออกเอกสารในโซนด้านซ้าย
                         </div>
-                      )}
+                      )} */}
 
                       {/* เลือกช่องทางชำระเงิน — only after document choice */}
                       {wantsDoc !== null && (
@@ -1612,7 +1736,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                             </div>
                           </div>
 
-                          {channel === 'promptpay' && (
+                          {/* {channel === 'promptpay' && (
                             <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
                               กด &quot;ยืนยันการสมัครและชำระด้วย PromptPay&quot; เพื่อสร้าง QR สำหรับสแกนชำระเงิน
                             </p>
@@ -1621,7 +1745,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                             <p className="rounded-9e-md bg-9e-brand/5 p-3 text-xs text-gray-500 dark:text-gray-400">
                               กด &quot;ยืนยัน&quot; เพื่อเปิดฟอร์มกรอกข้อมูลบัตรในโซนด้านซ้าย
                             </p>
-                          )}
+                          )} */}
 
                           {/* เงื่อนไขการชำระเงิน */}
                           {channel && (
@@ -1684,7 +1808,9 @@ export function MasterclassRegisterClient({ course, batch }) {
                     </div>
                   )}
 
-                  {/* Confirm button */}
+                  {/* Confirm button — shown on all breakpoints for instant; quote uses bottom bar */}
+                  {/* Instant path — show when channel selected */}
+                  {method === 'instant' && channel && (
                   <button
                     type="button"
                     onClick={handleStep2Confirm}
@@ -1695,20 +1821,31 @@ export function MasterclassRegisterClient({ course, batch }) {
                       <><Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…</>
                     ) : (
                       <>
-                        {method === 'instant' && <Lock size={14} />}
-                        {method === 'quote' ? 'ยืนยันการขอใบเสนอราคา' :
-                         channel === 'credit_card' ? 'ยืนยันและไปกรอกข้อมูลบัตร' :
-                         channel === 'promptpay' ? 'ยืนยันการสมัครและชำระด้วย PromptPay' :
-                         'เลือกวิธีดำเนินการ'}
+                        <Lock size={14} />
+                        {channel === 'credit_card' ? 'ยืนยันการสมัครและชำระด้วยบัตร' : 'ยืนยันการสมัครและชำระด้วย PromptPay'}
                       </>
                     )}
                   </button>
+                  )}
+                  {/* Quote path — desktop confirm button (mobile uses bottom bar) */}
+                  {method === 'quote' && (
+                  <button
+                    type="button"
+                    onClick={handleStep2Confirm}
+                    disabled={!canStep2Confirm || submitting}
+                    className="hidden w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 lg:flex"
+                  >
+                    {submitting ? (
+                      <><Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…</>
+                    ) : 'ยืนยันการขอใบเสนอราคา'}
+                  </button>
+                  )}
                 </>
               )}
 
               {/* Payment status widget (after a charge/panel has started) */}
               {paymentStarted && (
-                <div className="rounded-2xl border border-[var(--surface-border)] bg-white p-4 shadow-sm dark:bg-[#111d2c]">
+                <div className="hidden rounded-2xl border border-[var(--surface-border)] bg-white p-4 shadow-sm dark:bg-[#111d2c] lg:block ">
                   <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-9e-navy dark:text-white">
                     {channel === 'promptpay' ? <QrCode size={16} /> : <CreditCard size={16} />}
                     สถานะการชำระเงิน
@@ -1733,17 +1870,30 @@ export function MasterclassRegisterClient({ course, batch }) {
                 </div>
               )}
 
+              {/* Back button — hidden on mobile (use bottom bar instead) */}
               <button
                 type="button"
                 onClick={() => { setStep(1); setMethod(null); setChannel(null); setQrCharge(null); setWantsDoc(null); setPaymentStarted(false); registeredRef.current = null; window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-medium text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
+                className="hidden w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-medium text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5 lg:flex"
               >
                 <ArrowLeft size={14} /> ย้อนกลับไปแก้ไขข้อมูล
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── STEP 2 Mobile bottom bar ── */}
+      {step === 2 && !result && (
+        <Step2MobileBar
+          pricing={pricing}
+          canStep2Confirm={canStep2Confirm}
+          submitting={submitting}
+          method={method}
+          onConfirm={handleStep2Confirm}
+          onBack={() => { setStep(1); setMethod(null); setChannel(null); setQrCharge(null); setWantsDoc(null); setPaymentStarted(false); registeredRef.current = null; window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        />
       )}
 
       {/* ── STEP 3 — Success ── */}
@@ -1778,7 +1928,7 @@ function TermsModal({ open, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-label="เงื่อนไขการสมัครและการชำระเงิน"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
     >
       {/* Backdrop */}
       <div
@@ -1787,7 +1937,7 @@ function TermsModal({ open, onClose }) {
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--surface-border)] bg-white p-6 shadow-xl dark:bg-[#111d2c]">
+      <div className="relative z-[60] w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--surface-border)] bg-white p-6 shadow-xl dark:bg-[#111d2c]">
         <h2 className="text-base font-bold text-9e-navy dark:text-white mb-4">
           เงื่อนไขการสมัครและการชำระเงิน
         </h2>
