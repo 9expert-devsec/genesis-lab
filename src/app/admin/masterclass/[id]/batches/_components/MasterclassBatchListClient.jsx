@@ -9,6 +9,7 @@ import {
   updateMasterclassBatch,
   deleteMasterclassBatch,
 } from '@/lib/actions/masterclass';
+import { SimpleRichTextEditor } from '@/components/admin/SimpleRichTextEditor';
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
@@ -60,6 +61,7 @@ function emptyBatch(suggestedNo) {
     venue_address: '',
     venue_map_url: '',
     venue_note: '',
+    preparation_html: '',
     price_normal: '',
     price_early_bird: '',
     early_bird_deadline: '',
@@ -120,6 +122,7 @@ export function MasterclassBatchListClient({ course, batches }) {
       venue_address: batch.venue_address ?? '',
       venue_map_url: batch.venue_map_url ?? '',
       venue_note: batch.venue_note ?? '',
+      preparation_html: batch.preparation_html ?? '',
       price_normal: batch.price_normal ?? '',
       price_early_bird: batch.price_early_bird ?? '',
       early_bird_deadline: toDateTimeLocalValue(batch.early_bird_deadline),
@@ -156,6 +159,7 @@ export function MasterclassBatchListClient({ course, batches }) {
       venue_address: form.venue_address.trim(),
       venue_map_url: form.venue_map_url.trim(),
       venue_note: form.venue_note.trim(),
+      preparation_html: form.preparation_html ?? '',
       price_normal: Number(form.price_normal) || 0,
       price_early_bird: form.price_early_bird === '' ? null : Number(form.price_early_bird),
       early_bird_deadline: form.early_bird_deadline ? new Date(form.early_bird_deadline).toISOString() : null,
@@ -409,6 +413,17 @@ export function MasterclassBatchListClient({ course, batches }) {
             <div className="md:col-span-2">
               <label className={labelCls}>venue_note</label>
               <input type="text" value={form.venue_note} onChange={(e) => set({ venue_note: e.target.value })} className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className={labelCls}>ข้อมูลเตรียมความพร้อมก่อนอบรม</label>
+              <p className="mb-2 text-xs text-9e-slate-dp-50">
+                แสดงในหน้าตรวจสอบข้อมูลก่อนชำระเงิน — ใช้แจ้งสิ่งที่ผู้เรียนต้องเตรียม เช่น อุปกรณ์ ซอฟต์แวร์ Account
+              </p>
+              <SimpleRichTextEditor
+                value={form.preparation_html ?? ''}
+                onChange={(html) => set({ preparation_html: html })}
+                placeholder="เช่น ✅ Notebook ส่วนตัว ✅ Windows 10/11 ✅ Google Chrome เวอร์ชันล่าสุด…"
+              />
             </div>
           </div>
 

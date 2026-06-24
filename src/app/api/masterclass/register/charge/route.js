@@ -4,6 +4,7 @@ import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassBatch from '@/models/MasterclassBatch';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
+import { sendMasterclassReceipt } from '@/lib/masterclass/send-receipt';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,7 +61,7 @@ export async function POST(req) {
       'payment.omiseStatus': charge.status,
     };
 
-    if (paymentMethod === 'credit_card' && charge.status === 'successful' && charge.paid) {
+    if (paymentMethod === 'credit_card' && charge.status === 'successful') {
       update['payment.paidAt'] = new Date();
       update.status = 'paid';
     }
@@ -87,16 +88,27 @@ export async function POST(req) {
       }
     }
 
+    console.log('[charge] credit card result:', {
+      chargeStatus: charge.status,
+      chargePaid: charge.paid,
+      updateStatus: update.status,
+      registrationId,
+    });
+
     // Card settled synchronously — send receipt
     if (update.status === 'paid') {
       try {
         const fresh = await MasterclassRegistration.findById(registrationId);
-        const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
         const receiptResult = await sendMasterclassReceipt(fresh);
         console.log('[charge] receipt result:', JSON.stringify(receiptResult));
       } catch (emailErr) {
         console.error('[charge] receipt send failed:', emailErr);
       }
+    } else {
+      console.log('[charge] receipt skipped — status not paid:', {
+        updateStatus: update.status,
+        chargeStatus: charge.status,
+      });
     }
 
     if (paymentMethod === 'promptpay') {

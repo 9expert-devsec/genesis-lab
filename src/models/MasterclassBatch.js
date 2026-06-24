@@ -21,6 +21,7 @@ const MasterclassBatchSchema = new mongoose.Schema(
     venue_address: { type: String, default: '' },
     venue_map_url: { type: String, default: '' },
     venue_note:    { type: String, default: '' },
+    preparation_html: { type: String, default: '' },
 
     price_normal:         { type: Number, required: true, min: 0 },
     price_early_bird:     { type: Number, default: null },
