@@ -34,7 +34,7 @@ const EMPTY_INTL_ADDRESS = {
  *
  * Props: register, watch, setValue, errors  (react-hook-form bindings)
  */
-export function InvoiceFields({ register, watch, setValue, errors }) {
+export function InvoiceFields({ register, watch, setValue, errors, docType = 'quote' }) {
   const invoiceType    = watch('invoice.type')    || 'individual';
   const invoiceCountry = watch('invoice.country') || 'TH';
   const isThai         = invoiceCountry === 'TH';
@@ -82,10 +82,10 @@ export function InvoiceFields({ register, watch, setValue, errors }) {
     <section className="space-y-5 rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
       <header>
         <h2 className="text-base font-bold text-[var(--text-primary)]">
-          ข้อมูลสำหรับออกใบเสนอราคา
+          {docType === 'receipt' ? 'ข้อมูลการออกใบเสร็จรับเงิน / ใบกำกับภาษี' : 'ข้อมูลสำหรับออกใบเสนอราคา'}
         </h2>
         <p className="mt-1 text-xs text-[var(--text-secondary)]">
-          ใช้สำหรับออกใบเสนอราคา ใบแจ้งหนี้ และใบกำกับภาษี
+          {docType === 'receipt' ? 'ใช้สำหรับออกใบเสร็จรับเงินและใบกำกับภาษี' : 'ใช้สำหรับออกใบเสนอราคา ใบแจ้งหนี้ และใบกำกับภาษี'}
         </p>
       </header>
 
