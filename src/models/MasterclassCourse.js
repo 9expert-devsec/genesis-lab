@@ -8,6 +8,18 @@ const LicenseChoiceSchema = new mongoose.Schema(
     detail_type:     { type: String, enum: ['dropdown', 'text', null], default: null },
     detail_options:  { type: [String], default: [] },    // used when detail_type="dropdown"
     detail_label_th: { type: String, default: '' },
+    info_popup: {
+      type: new mongoose.Schema(
+        {
+          enabled:        { type: Boolean, default: false },
+          html_content:   { type: String,  default: '' },
+          checkbox_label: { type: String,  default: 'รับทราบเงื่อนไขทั้งหมด' },
+          popup_title:    { type: String,  default: '' },
+        },
+        { _id: false }
+      ),
+      default: () => ({ enabled: false, html_content: '', checkbox_label: 'รับทราบเงื่อนไขทั้งหมด' }),
+    },
   },
   { _id: false }
 );
@@ -84,6 +96,25 @@ const MasterclassCourseSchema = new mongoose.Schema(
     license_options: {
       enabled:  { type: Boolean, default: false },
       choices:  { type: [LicenseChoiceSchema], default: [] },
+      global_ack: {
+        type: new mongoose.Schema(
+          {
+            enabled:        { type: Boolean, default: false },
+            label_th:       { type: String,  default: 'ยอมรับเงื่อนไขสำหรับผู้เข้าอบรมทุกท่าน' },
+            popup_title:    { type: String,  default: '' },
+            html_content:   { type: String,  default: '' },
+            checkbox_label: { type: String,  default: 'รับทราบเงื่อนไขทั้งหมด' },
+          },
+          { _id: false }
+        ),
+        default: () => ({
+          enabled: false,
+          label_th: 'ยอมรับเงื่อนไขสำหรับผู้เข้าอบรมทุกท่าน',
+          popup_title: '',
+          html_content: '',
+          checkbox_label: 'รับทราบเงื่อนไขทั้งหมด',
+        }),
+      },
     },
 
     // Instructor references — array of Instructor._id (ObjectId as String)
