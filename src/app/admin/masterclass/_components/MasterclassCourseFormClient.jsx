@@ -123,6 +123,15 @@ export function MasterclassCourseFormClient({ course }) {
   // Section 8 — license options
   const [licenseEnabled, setLicenseEnabled] = useState(course?.license_options?.enabled ?? false);
   const [licenseChoices, setLicenseChoices] = useState(course?.license_options?.choices ?? []);
+  const [licenseGlobalAck, setLicenseGlobalAck] = useState(
+    course?.license_options?.global_ack ?? {
+      enabled: false,
+      label_th: 'ยอมรับเงื่อนไขสำหรับผู้เข้าอบรมทุกท่าน',
+      popup_title: '',
+      html_content: '',
+      checkbox_label: 'รับทราบเงื่อนไขทั้งหมด',
+    }
+  );
 
   // Section 9 — instructors
   const [instructorIds, setInstructorIds] = useState(course?.instructor_ids ?? []);
@@ -158,6 +167,8 @@ export function MasterclassCourseFormClient({ course }) {
     setLicenseChoices((cur) => cur.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
   const removeChoice = (i) =>
     setLicenseChoices((cur) => cur.filter((_, idx) => idx !== i));
+  const updateGlobalAck = (patch) =>
+    setLicenseGlobalAck((cur) => ({ ...cur, ...patch }));
 
   // curriculum sessions
   const addSession = () =>
@@ -234,6 +245,7 @@ export function MasterclassCourseFormClient({ course }) {
           ...c,
           detail_options: Array.isArray(c.detail_options) ? c.detail_options : parseCsv(c.detail_options),
         })),
+        global_ack: licenseGlobalAck,
       },
       instructor_ids: instructorIds,
       curriculum: curriculum.map((s) => ({
@@ -692,6 +704,55 @@ export function MasterclassCourseFormClient({ course }) {
                     <X size={12} /> ลบตัวเลือก
                   </button>
                 </div>
+                <div className="mt-3 border-t border-[var(--surface-border)] pt-3">
+                  <Toggle
+                    checked={c.info_popup?.enabled ?? false}
+                    onChange={(v) => updateChoice(i, { info_popup: { ...(c.info_popup ?? {}), enabled: v } })}
+                    label="เปิด Popup แจ้งเงื่อนไข"
+                  />
+                  {c.info_popup?.enabled && (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className={labelCls}>ชื่อหัวข้อ Popup</label>
+                        <input
+                          type="text"
+                          value={c.info_popup?.popup_title ?? ''}
+                          onChange={(e) =>
+                            updateChoice(i, {
+                              info_popup: { ...(c.info_popup ?? {}), popup_title: e.target.value },
+                            })
+                          }
+                          placeholder="เช่น ข้อกำหนดการใช้ License ส่วนตัว"
+                          className={inputCls}
+                        />
+                        <p className="mt-1 text-xs text-9e-slate-dp-50">
+                          ถ้าว่างจะใช้ label_th แทน
+                        </p>
+                      </div>
+                      <div>
+                        <label className={labelCls}>เนื้อหา Popup</label>
+                        <SimpleRichTextEditor
+                          value={c.info_popup?.html_content ?? ''}
+                          onChange={(html) =>
+                            updateChoice(i, {
+                              info_popup: { ...(c.info_popup ?? {}), html_content: html },
+                            })
+                          }
+                          placeholder="พิมพ์เนื้อหาเงื่อนไขที่จะแสดงใน Popup…"
+                        />
+                      </div>
+                      <div>
+                        <label className={labelCls}>ข้อความ Checkbox</label>
+                        <input
+                          type="text"
+                          value={c.info_popup?.checkbox_label ?? 'รับทราบเงื่อนไขทั้งหมด'}
+                          onChange={(e) => updateChoice(i, { info_popup: { ...(c.info_popup ?? {}), checkbox_label: e.target.value } })}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
             <button
@@ -701,6 +762,68 @@ export function MasterclassCourseFormClient({ course }) {
             >
               <Plus size={14} /> เพิ่มตัวเลือก
             </button>
+
+            <hr className="border-[var(--surface-border)]" />
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-9e-navy dark:text-white">
+                Global Acknowledgement (แสดงเมื่อเลือก แยกรายคน)
+              </p>
+
+              <Toggle
+                checked={licenseGlobalAck.enabled}
+                onChange={(v) => updateGlobalAck({ enabled: v })}
+                label="เปิดใช้ Global Checkbox"
+              />
+
+              {licenseGlobalAck.enabled && (
+                <div className="space-y-3 rounded-9e-md border border-[var(--surface-border)] p-3">
+
+                  <div>
+                    <label className={labelCls}>ข้อความบน Checkbox Card</label>
+                    <input
+                      type="text"
+                      value={licenseGlobalAck.label_th}
+                      onChange={(e) => updateGlobalAck({ label_th: e.target.value })}
+                      placeholder="ยอมรับเงื่อนไขสำหรับผู้เข้าอบรมทุกท่าน"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>ชื่อหัวข้อ Popup</label>
+                    <input
+                      type="text"
+                      value={licenseGlobalAck.popup_title}
+                      onChange={(e) => updateGlobalAck({ popup_title: e.target.value })}
+                      placeholder="เช่น เงื่อนไขการใช้ License ทั้งหมด"
+                      className={inputCls}
+                    />
+                    <p className="mt-1 text-xs text-9e-slate-dp-50">ถ้าว่างจะใช้ label_th แทน</p>
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>เนื้อหา Popup</label>
+                    <SimpleRichTextEditor
+                      value={licenseGlobalAck.html_content}
+                      onChange={(html) => updateGlobalAck({ html_content: html })}
+                      placeholder="พิมพ์เนื้อหาเงื่อนไขที่จะแสดงใน Popup…"
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>ข้อความ Checkbox ใน Popup</label>
+                    <input
+                      type="text"
+                      value={licenseGlobalAck.checkbox_label}
+                      onChange={(e) => updateGlobalAck({ checkbox_label: e.target.value })}
+                      className={inputCls}
+                    />
+                  </div>
+
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Section>
