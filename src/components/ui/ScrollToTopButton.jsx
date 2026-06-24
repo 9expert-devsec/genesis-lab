@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 /**
  * Floating back-to-top button — mounted from the public layout so it
@@ -9,6 +10,9 @@ import { useEffect, useState } from 'react';
  */
 export function ScrollToTopButton() {
   const [show, setShow] = useState(false);
+  const pathname = usePathname();
+  // Pages that have a mobile bottom bar — raise the button to clear it
+  const hasBottomBar = pathname?.includes('/register');
 
   useEffect(() => {
     const onScroll = () => setShow(window.scrollY > 400);
@@ -24,7 +28,7 @@ export function ScrollToTopButton() {
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       aria-label="กลับขึ้นด้านบน"
-      className="fixed bottom-8 right-8 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:text-blue-600 hover:shadow-lg hover:shadow-blue-100/50 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-[#94a3b8] dark:hover:border-blue-500 dark:hover:text-blue-400"
+      className={`fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-300 hover:text-blue-600 hover:shadow-lg hover:shadow-blue-100/50 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-[#94a3b8] dark:hover:border-blue-500 dark:hover:text-blue-400 lg:bottom-8 lg:right-8 ${hasBottomBar ? 'bottom-24' : 'bottom-8'}`}
     >
       <svg
         width="16"
