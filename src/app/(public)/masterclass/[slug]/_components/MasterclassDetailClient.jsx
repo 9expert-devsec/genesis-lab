@@ -152,19 +152,17 @@ export function MasterclassDetailClient({
               <div className="aspect-video w-full bg-gradient-to-br from-9e-brand to-9e-action" />
             )}
           </div>
-          <div className="relative isolate flex overflow-hidden bg-9e-navy lg:rounded-2xl lg:aspect-video px-6 py-4 md:py-8 lg:p-8 [-webkit-mask-image:-webkit-radial-gradient(white,black)]">
+          <div className="relative flex overflow-hidden bg-9e-navy lg:rounded-2xl lg:aspect-video px-6 py-4 md:py-8 lg:p-8 [will-change:transform]">
             {/* Subtle corner gradient blobs — wrapped for iOS Safari blur clip fix */}
 
-            <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[inherit]">
-              <div
-                className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
-                style={{ background: course.hero_gradient_from ?? "#2486FF" }}
-              />
-              <div
-                className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
-                style={{ background: course.hero_gradient_to ?? "#005CFF" }}
-              />
-            </div>
+            <div
+              className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
+              style={{ background: course.hero_gradient_from ?? "#2486FF" }}
+            />
+            <div
+              className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
+              style={{ background: course.hero_gradient_to ?? "#005CFF" }}
+            />
 
             <div className="relative z-10 flex w-full flex-col">
               <div>
@@ -320,10 +318,10 @@ export function MasterclassDetailClient({
               )}
               {/* Gradient background blobs — wrapped for iOS Safari blur clip fix */}
               {batch.is_early_bird && (
-                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[inherit]">
-                  <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
-                  <div className="absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
-                </div>
+                <>
+                  <div className="pointer-events-none absolute -left-20 -top-20 z-0 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
+                  <div className="pointer-events-none absolute -bottom-20 -right-20 z-0 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
+                </>
               )}
               {/* Early Bird badge */}
               {batch.is_early_bird && (
