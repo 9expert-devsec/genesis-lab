@@ -70,13 +70,13 @@ export async function POST(req) {
   }
   if (!doc) {
     // Unknown charge — likely belongs to Academy. Forward and ack.
-    forwardToLegacy(rawBody, omiseHeaders);
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, unknown: true });
   }
 
   // Idempotency — already settled. Still forward so Academy receives retried events.
   if (doc.status === 'paid' && doc.payment?.omiseStatus === 'successful') {
-    forwardToLegacy(rawBody, omiseHeaders);
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, alreadyPaid: true });
   }
 
@@ -110,7 +110,7 @@ export async function POST(req) {
       const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
       await sendPaidReceipt(doc);
     }
-    forwardToLegacy(rawBody, omiseHeaders);
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, paid: true });
   }
 
@@ -119,7 +119,7 @@ export async function POST(req) {
     doc.payment.failureCode = charge.failure_code || null;
     doc.payment.failureMessage = charge.failure_message || null;
     await doc.save();
-    forwardToLegacy(rawBody, omiseHeaders);
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, failed: true });
   }
 
@@ -127,12 +127,12 @@ export async function POST(req) {
     doc.payment.omiseStatus = 'expired';
     doc.status = 'cancelled';
     await doc.save();
-    forwardToLegacy(rawBody, omiseHeaders);
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, expired: true });
   }
 
-  // Forward raw event to legacy webhook (fire-and-forget, never blocks Omise ACK).
-  forwardToLegacy(rawBody, omiseHeaders);
+  // Forward raw event to legacy webhook (never blocks Omise ACK on failure).
+  await forwardToLegacy(rawBody, omiseHeaders);
 
   return NextResponse.json({ ok: true, status: charge.status });
 }
