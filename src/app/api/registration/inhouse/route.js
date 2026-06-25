@@ -3,9 +3,7 @@ import { headers } from 'next/headers';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { inhouseRegistrationSchema } from '@/lib/schemas/register-inhouse';
-import { sendEmail } from '@/lib/email/postmark';
-import { inhouseUserConfirmationEmail } from '@/lib/email/templates/registration-inhouse-user';
-import { inhouseAdminNotificationEmail } from '@/lib/email/templates/registration-inhouse-admin';
+import { sendInhouseRegistrationEmails } from '@/lib/email/template-senders/inhouse-registration';
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -61,42 +59,13 @@ export async function POST(req) {
           data.thaiAddress?.postalCode,
         ].filter(Boolean).join(' ');
 
-  const userMsg = inhouseUserConfirmationEmail({
-    referenceNumber,
-    contactFirstName: data.contactFirstName,
-    companyName:      data.companyName,
+  await sendInhouseRegistrationEmails({
     data,
-    quotationAddress,
-  });
-
-  const adminMsg = inhouseAdminNotificationEmail({
     referenceNumber,
-    data,
     quotationAddress,
     adminDashboardUrl,
+    adminEmail,
   });
-
-  const emailPromises = [
-    sendEmail({
-      to: data.contactEmail,
-      bcc: process.env.POSTMARK_ADMIN_EMAIL,
-      subject: `ได้รับคำขอใบเสนอราคา In-house ${data.companyName} - ${referenceNumber}`,
-      html: userMsg.html,
-      text: userMsg.text,
-    }),
-  ];
-  if (adminEmail) {
-    emailPromises.push(
-      sendEmail({
-        to: adminEmail,
-        bcc: process.env.POSTMARK_ADMIN_EMAIL,
-        subject: `In-house Request ใหม่ ${data.companyName} - ${referenceNumber}`,
-        html: adminMsg.html,
-        text: adminMsg.text,
-      })
-    );
-  }
-  await Promise.allSettled(emailPromises);
 
   return NextResponse.json({
     ok: true,

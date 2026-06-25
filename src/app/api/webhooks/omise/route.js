@@ -47,12 +47,13 @@ export async function POST(req) {
     return NextResponse.json({ ok: true, alreadyPaid: true });
   }
 
-  if (charge.status === 'successful' && charge.paid) {
+  if (charge.status === 'successful') {
     doc.status = 'paid';
     doc.payment.omiseStatus = 'successful';
     doc.payment.paidAt = new Date();
     await doc.save();
     if (isMasterclass) {
+      console.log('[webhook] masterclass paid, sending receipt for docId:', String(doc._id));
       const { sendMasterclassReceipt } = await import('@/lib/masterclass/send-receipt');
       await sendMasterclassReceipt(doc);
 
