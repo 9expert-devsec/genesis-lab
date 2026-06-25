@@ -18,12 +18,15 @@ async function forwardToLegacy(rawBody, originalHeaders) {
         headersToForward[key] = value;
       }
     }
+    console.log('[webhook] forwarding headers:', JSON.stringify(headersToForward));
     const res = await fetch(forwardUrl, {
       method: 'POST',
       headers: headersToForward,
       body: rawBody,
     });
     console.log('[webhook] forwarded to legacy | status:', res.status, '| url:', forwardUrl);
+    const resText = await res.text().catch(() => '');
+    console.log('[webhook] legacy response body:', resText.slice(0, 300));
   } catch (err) {
     console.error('[webhook] forward to legacy failed:', err?.message);
   }
