@@ -11,7 +11,7 @@ import {
   Download,
   Plus,
   Wrench,
-  X
+  X,
 } from "lucide-react";
 import { CountdownTimer } from "../../_components/CountdownTimer";
 
@@ -47,7 +47,7 @@ function FaqAccordionItem({ faq }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between p-4 text-left text-[17px] font-bold text-9e-navy dark:text-white"
+        className="flex w-full items-center justify-between gap-2 p-4 text-left text-base md:text-[17px] font-bold text-9e-navy dark:text-white"
       >
         <span>{faq.question_th}</span>
         <div
@@ -73,17 +73,7 @@ function FaqAccordionItem({ faq }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function MasterclassDetailClient({ course, faqs = [] }) {
-  // [K] Instructors fetch
-  const [instructors, setInstructors] = useState([]);
-  useEffect(() => {
-    if (!course.instructor_ids?.length) return;
-    fetch(`/api/admin/instructors?ids=${course.instructor_ids.join(",")}`)
-      .then((r) => r.json())
-      .then((data) => setInstructors(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  }, [course.instructor_ids]);
-
+export function MasterclassDetailClient({ course, faqs = [], instructors = [] }) {
   // [J] Curriculum open/close state
   const buildDefaultOpen = () => {
     const map = {};
@@ -136,31 +126,50 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
   return (
     <main>
       {/* [A] Hero */}
-      <section id="mc-hero" className="bg-[#0e2c4a] px-4 py-10">
-        <div className="max-w-[1200px] mx-auto relative grid grid-cols-1 lg:grid-cols-2 items-stretch gap-6">
-          <div className="relative flex aspect-video overflow-hidden bg-9e-navy rounded-2xl p-8">
-            {/* Subtle corner gradient blobs */}
-            <div
-              className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
-              style={{ background: course.hero_gradient_from ?? "#2486FF" }}
-            />
-            <div
-              className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
-              style={{ background: course.hero_gradient_to ?? "#005CFF" }}
-            />
+      <section id="mc-hero" className="bg-[#0e2c4a] lg:px-4 lg:py-10">
+        <div className="max-w-[1200px] mx-auto relative grid grid-cols-1 lg:grid-cols-2 lg:items-stretch lg:gap-6">
+          {/* Cover image — mobile only: full-width, above text, no padding */}
+          <div className="lg:hidden order-first">
+            {course.cover_image_url ? (
+              <div className="relative aspect-video w-full overflow-hidden">
+                <Image
+                  src={course.cover_image_url}
+                  alt={course.title_th}
+                  fill
+                  className="object-cover"
+                  sizes="100vw"
+                  priority
+                />
+              </div>
+            ) : (
+              <div className="aspect-video w-full bg-gradient-to-br from-9e-brand to-9e-action" />
+            )}
+          </div>
+          <div className="relative flex overflow-hidden bg-9e-navy lg:rounded-2xl lg:aspect-video px-6 py-4 md:py-8 lg:p-8">
+            {/* Subtle corner gradient blobs — wrapped for iOS Safari blur clip fix */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden  lg:rounded-2xl">
+              <div
+                className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
+                style={{ background: course.hero_gradient_from ?? "#2486FF" }}
+              />
+              <div
+                className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
+                style={{ background: course.hero_gradient_to ?? "#005CFF" }}
+              />
+            </div>
 
             <div className="relative flex w-full flex-col">
               <div>
-                <span className="text-base font-semibold tracking-widest text-9e-lime">
+                <span className="text-sm md:text-base font-semibold tracking-widest text-9e-lime">
                   Masterclass
                 </span>
 
-                <h1 className="mt-3 text-3xl font-bold leading-tight text-white lg:text-4xl">
+                <h1 className="mt-3 text-xl md:text-3xl font-bold leading-tight text-white lg:text-4xl">
                   {course.title_th}
                 </h1>
 
                 {course.subtitle_th && (
-                  <p className="mt-3 line-clamp-3 text-base text-white leading-relaxed">
+                  <p className="mt-3 line-clamp-3 text-sm md:text-base text-white leading-relaxed">
                     {course.subtitle_th}
                   </p>
                 )}
@@ -202,7 +211,8 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               </div>
             </div>
           </div>
-          <div>
+          {/* Cover image — desktop right column only (hidden on mobile, shown above instead) */}
+          <div className="hidden lg:block">
             {course.cover_image_url ? (
               <div className="relative aspect-video overflow-hidden rounded-2xl shadow-9e-xl">
                 <Image
@@ -210,7 +220,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                   alt={course.title_th}
                   fill
                   className="object-cover"
-                  sizes="(max-width:1024px) 100vw, 50vw"
+                  sizes="50vw"
                 />
               </div>
             ) : (
@@ -221,20 +231,20 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       </section>
 
       {/* [B] Stats bar */}
-      <section className="mt-10 mb-2">
-        <div className="max-w-[1000px] mx-auto grid grid-cols-3 items-center justify-center gap-4">
-          {/* 1 Day / INTENSIVE */}
-          <div className="flex flex-col px-8 py-5 bg-9e-ice rounded-[20px] items-center h-full">
-            <span className="text-2xl font-bold text-9e-navy dark:text-white">
+      <section className="mt-4 md:mt-10 mb-2">
+        <div className="max-w-[1000px] mx-auto grid grid-cols-1 items-center justify-center gap-2 md:gap-4 px-4 sm:grid-cols-3">
+          {/* 1 Day / EXCLUSIVE */}
+          <div className="flex flex-col px-8 py-5 bg-9e-ice dark:bg-9e-ice/10 rounded-[20px] items-center h-full">
+            <span className="text-lg md:text-2xl font-bold text-9e-navy dark:text-white">
               {course.duration_days} Day{course.duration_days > 1 ? "s" : ""}
             </span>
             <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
-              INTENSIVE
+              EXCLUSIVE
             </span>
           </div>
           {/* N Participants / MAX CAPACITY */}
-          <div className="flex flex-col px-8 py-5 bg-9e-ice rounded-[20px] items-center h-full">
-            <span className="text-2xl font-bold text-9e-navy dark:text-white">
+          <div className="flex flex-col px-8 py-5 bg-9e-ice dark:bg-9e-ice/10 rounded-[20px] items-center h-full">
+            <span className="text-lg md:text-2xl font-bold text-9e-navy dark:text-white">
               {visibleBatches[0]?.capacity ?? 50} Participants
             </span>
             <span className="text-[12px] font-semibold uppercase tracking-widest text-9e-brand mt-0.5">
@@ -248,7 +258,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               rel="noopener noreferrer"
               className="flex flex-col px-8 py-5  items-center rounded-[20px] bg-9e-brand text-sm font-semibold text-white transition-colors hover:bg-9e-air"
             >
-              <div className="flex flex-row items-center gap-2 text-2xl">
+              <div className="flex flex-row items-center gap-2 text-lg md:text-2xl">
                 <Download size={24} /> Download
               </div>
 
@@ -283,7 +293,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {visibleBatches.length > 0 && (
         <section
           id="batch-section"
-          className="max-w-[760px] mx-auto px-4 py-10 flex flex-col items-center"
+          className="max-w-[760px] mx-auto px-4 py-6 md:py-10 flex flex-col items-center"
         >
           <h2 className="mb-6 text-xl font-bold text-9e-navy dark:text-white">
             รุ่นที่เปิดรับสมัครและราคา
@@ -300,26 +310,26 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               {batch.status === "closed" && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-9e-slate-lt-800/50" />
               )}
-              {/* Gradient background blobs */}
+              {/* Gradient background blobs — wrapped for iOS Safari blur clip fix */}
               {batch.is_early_bird && (
-                <>
-                  <div className="pointer-events-none absolute -left-20 -top-20 z-0 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-20 -right-20 z-0 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
-                </>
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl z-0">
+                  <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
+                  <div className="absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
+                </div>
               )}
               {/* Early Bird badge */}
               {batch.is_early_bird && (
-                <span className="relative z-10 flex h-10 w-[160px] items-center justify-center rounded-br-2xl bg-9e-lime text-base font-bold text-9e-navy">
+                <span className="relative z-10 flex h-8 md:h-10 w-[120px] md:w-[160px] items-center justify-center rounded-br-2xl bg-9e-lime text-sm md:text-base font-bold text-9e-navy">
                   Early Bird
                 </span>
               )}
 
-              <div className="relative z-10 p-6">
+              <div className="relative z-10 p-4 md:p-6">
                 <div className="flex flex-row items-center justify-between">
-                  <div>
+                  <div className="flex flex-col gap-1">
                     {/* Top row: batch label + date */}
                     <p
-                      className={`text-base font-semibold ${
+                      className={`text-xs md:text-base font-semibold ${
                         batch.is_early_bird
                           ? "text-white"
                           : "text-9e-navy dark:text-white"
@@ -329,7 +339,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                     </p>
                     {batch.dates?.[0]?.date && (
                       <p
-                        className={`mt-0.5 text-[28px] font-bold ${
+                        className={` text-lg md:text-[28px] font-bold ${
                           batch.is_early_bird
                             ? "text-white"
                             : "text-9e-navy dark:text-white"
@@ -339,7 +349,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       </p>
                     )}
                     <p
-                      className={`text-[18px] ${
+                      className={`text-sm md:text-[18px] ${
                         batch.is_early_bird
                           ? "text-9e-slate-lt-50"
                           : "text-9e-slate-dp-50 dark:text-white"
@@ -348,7 +358,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       {course.time_start} – {course.time_end}
                     </p>
                     <p
-                      className={`text-[18px] ${
+                      className={`text-sm md:text-[18px] ${
                         batch.is_early_bird
                           ? "text-9e-slate-lt-50"
                           : "text-9e-slate-dp-50 dark:text-white"
@@ -358,9 +368,9 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                     </p>
                   </div>
 
-                  <div className="flex flex-col items-end">
+                  <div className="flex flex-col gap-1 items-end">
                     <span
-                      className={`text-[40px] font-bold  ${
+                      className={`text-3xl md:text-[40px] font-bold  ${
                         batch.is_early_bird
                           ? "bg-gradient-to-r from-9e-air to-9e-brand bg-clip-text text-transparent"
                           : "text-9e-navy dark:text-white"
@@ -369,7 +379,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       {batch.effective_price?.toLocaleString("th-TH")} บาท
                     </span>
                     {batch.is_early_bird && batch.original_price && (
-                      <span className="text-[20px] text-9e-slate-lt-50">
+                      <span className="text-base md:text-[20px] text-9e-slate-lt-50">
                         จากปกติ{" "}
                         <span className="line-through">
                           {batch.original_price?.toLocaleString("th-TH")} บาท
@@ -379,7 +389,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                     {batch.is_early_bird ? (
                       ""
                     ) : (
-                      <span className="text-[14px] text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
+                      <span className="text-xs md:text-[14px] text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
                         *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
                       </span>
                     )}
@@ -387,7 +397,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                 </div>
 
                 <div
-                  className={`mt-5 flex items-center  gap-4 ${
+                  className={`mt-5 flex items-center flex-col md:flex-row gap-4 ${
                     batch.is_early_bird ? "justify-between" : "justify-end "
                   }`}
                 >
@@ -424,7 +434,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {course.objectives?.length > 0 && (
         <section
           id="mc-objectives"
-          className="bg-[#F8FAFD] dark:bg-transparent px-4 py-12"
+          className="bg-[#F8FAFD] dark:bg-transparent px-4 py-6 md:py-12"
         >
           <div className="max-w-[1200px] mx-auto">
             <h2 className="mb-8 text-center text-xl font-bold text-9e-navy dark:text-white">
@@ -451,7 +461,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [F] Suitable for */}
       {course.suitable_for?.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-4 py-10">
+        <section className="max-w-[1200px] mx-auto px-4 py-6 md:py-10">
           <h2 className="mb-6 text-center text-xl font-bold text-9e-navy dark:text-white">
             หลักสูตรนี้เหมาะสำหรับ
           </h2>
@@ -492,8 +502,8 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [G] Prerequisites */}
       {course.prerequisites?.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-4 py-10">
-          <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
+        <section className="max-w-[1200px] mx-auto px-4 py-6 md:py-10">
+          <h2 className="border-l-4 border-9e-lime pl-4 text-lg md:text-xl font-bold text-9e-navy dark:text-white">
             พื้นฐานของผู้เข้าอบรม
           </h2>
           <ol className="mt-4 list-inside list-decimal space-y-3">
@@ -511,8 +521,8 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [H] System Requirements */}
       {course.system_requirements_html && (
-        <section className="max-w-[1200px] mx-auto px-4 py-10">
-          <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
+        <section className="max-w-[1200px] mx-auto px-4 py-6 md:py-10">
+          <h2 className="border-l-4 border-9e-lime pl-4 text-lg md:text-xl font-bold text-9e-navy dark:text-white">
             ความต้องการของระบบ
           </h2>
           <div
@@ -527,8 +537,8 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [I] Benefits */}
       {course.benefits?.length > 0 && (
-        <section className="max-w-[1200px] mx-auto px-4 py-10">
-          <h2 className="border-l-4 border-9e-lime pl-4 text-xl font-bold text-9e-navy dark:text-white">
+        <section className="max-w-[1200px] mx-auto px-4 py-6 md:py-10">
+          <h2 className="border-l-4 border-9e-lime pl-4 text-lg md:text-xl font-bold text-9e-navy dark:text-white">
             ประโยชน์ที่จะได้รับ
           </h2>
           <ol className="mt-4 list-inside list-decimal space-y-3">
@@ -548,10 +558,10 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {course.curriculum?.length > 0 && (
         <section
           id="mc-curriculum"
-          className="max-w-[1200px] mx-auto px-4 py-10"
+          className="max-w-[1200px] mx-auto px-4 py-6 md:py-10 flex flex-col"
         >
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-9e-navy dark:text-white">
+          <div className=" md:mb-1 flex items-center justify-between">
+            <h2 className="text-lg md:text-xl font-bold text-9e-navy dark:text-white">
               หัวข้อการฝึกอบรม
             </h2>
             <button
@@ -564,7 +574,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
           </div>
           {course.curriculum.map((session, si) => (
             <div key={si}>
-              <p className="mb-3 mt-5 text-base font-semibold uppercase tracking-widest text-9e-action">
+              <p className="mb-3 mt-4 text-base font-semibold uppercase tracking-widest text-9e-action">
                 {session.session_label}
               </p>
               {session.modules?.map((mod, mi) => {
@@ -652,15 +662,15 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [K] Instructor */}
       {instructors.length > 0 && (
-        <section id="mc-instructor" className="bg-9e-navy px-4 py-16">
+        <section id="mc-instructor" className="bg-9e-navy px-4 py-10 md:py-16">
           <div className="max-w-[1200px] mx-auto text-center">
             <p className="text-xs font-semibold uppercase tracking-widest text-9e-lime">
               INSTRUCTOR
             </p>
-            <h2 className="mt-2 text-3xl font-bold text-white">
+            <h2 className="mt-2 text-xl md:text-3xl font-bold text-white">
               วิทยากรผู้สอน
             </h2>
-            <p className="mt-2 text-sm text-9e-air">
+            <p className="mt-2 text-xs md:text-sm text-9e-air">
               ผู้เชี่ยวชาญประสบการณ์สอนมากกว่า 20 ปี ทั้งภาครัฐและภาคเอกชน
             </p>
             <div
@@ -686,11 +696,11 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
                   <div className="relative z-10 flex flex-1 rounded-[30px] bg-gradient-to-t from-9e-lime to-9e-lime/5 p-0.5">
                     <div className="flex h-full w-full flex-col rounded-[28px] bg-gradient-to-t from-[#24303e] to-[#0e1c2b] px-5 pb-8 pt-[85px] text-center">
-                      <h3 className="text-2xl font-bold text-white">
+                      <h3 className="text-xl md:text-2xl font-bold text-white">
                         {inst.name}
                       </h3>
 
-                      <p className="mt-0.5 text-[18px] font-medium text-9e-brand">
+                      <p className="mt-0.5 text-base md:text-[18px] font-medium text-9e-brand">
                         {inst.title}
                       </p>
 
@@ -708,7 +718,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                               {bioLines.map((s, idx) => (
                                 <li
                                   key={idx}
-                                  className="flex items-start gap-2 text-base text-9e-slate-lt-50"
+                                  className="flex items-start gap-2 text-sm md:text-base text-9e-slate-lt-50"
                                 >
                                   <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-9e-lime" />
                                   {s}
@@ -729,8 +739,8 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
 
       {/* [L] FAQ */}
       {faqs.length > 0 && (
-        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-16">
-          <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
+        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-10 md:py-16">
+          <h2 className="mb-8 text-center text-xl md:text-2xl font-bold text-9e-navy dark:text-white">
             คำถามที่พบบ่อย
           </h2>
           <div className="flex flex-col gap-4">
@@ -744,12 +754,12 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
       {/* Sticky bottom CTA bar */}
       {visibleBatches.length > 0 && !barDismissed && (
         <div
-          className={`fixed inset-x-0 bottom-6 z-50
+          className={`fixed inset-x-0 bottom-2 md:bottom-6 z-[60]
 
                 transition-transform duration-300 ease-in-out
                 ${showStickyBar ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"}`}
         >
-          <div className="relative mx-auto flex max-w-[900px] h-28 items-center overflow-hidden bg-white rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
+          <div className="relative mx-2 md:mx-auto flex max-w-[900px] min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
             {/* Cover image — flush left, full bar height, 16:9, no padding */}
             {course.cover_image_url ? (
               <div className="hidden sm:block shrink-0 self-stretch p-3 ">
@@ -757,37 +767,40 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                 <img
                   src={course.cover_image_url}
                   alt={course.title_th}
-                  className="h-full w-auto aspect-video object-cover rounded-xl"
+                  className="h-[6rem] w-auto aspect-video object-cover rounded-xl"
                 />
               </div>
             ) : null}
 
             {/* Inner row: badge (mobile fallback) + text + actions */}
-            <div className="flex flex-1 items-center gap-3 pl-6 pr-10 py-3 min-w-0">
+            <div className="flex flex-1 items-center gap-3 pl-6 pr-6 md:pr-10 py-3 min-w-0">
               {/* MC badge — always visible on mobile; hidden on sm+ when cover image exists */}
 
-
               {/* Text */}
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-lg font-bold text-9e-navy dark:text-white">
-                  สนใจ Masterclass &ldquo;{course.title_th}&rdquo; ?
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <p className="text-xs md:text-xs leading-tight font-medium text-gray-500 dark:text-gray-400">
+                  สนใจ Masterclass
                 </p>
-                <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+
+                <p className="truncate text-sm md:text-lg leading-tight font-bold text-9e-navy dark:text-white">
+                  &ldquo;{course.title_th}&rdquo;
+                </p>
+
+                <p className="text-xs md:text-sm leading-tight text-gray-500 dark:text-gray-400">
                   กดลงทะเบียนเพื่อกลับไปเลือกรอบอบรมที่เปิดรับสมัคร
                 </p>
               </div>
 
               <button
-                  type="button"
-                  onClick={() => setBarDismissed(true)}
-                  className="absolute right-1.5 top-1.5 p-1 text-9e-navy rounded-full hover:bg-9e-ice dark:text-white dark:hover:bg-white/5"
-                >
-                  <X size={16} />
+                type="button"
+                onClick={() => setBarDismissed(true)}
+                className="absolute right-1.5 top-1.5 p-1 text-9e-navy rounded-full hover:bg-9e-ice dark:text-white dark:hover:bg-white/5"
+              >
+                <X size={16} />
               </button>
 
               {/* Actions */}
               <div className="flex shrink-0 items-center gap-2">
-                
                 <button
                   type="button"
                   onClick={() => {
@@ -795,7 +808,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                       .getElementById("batch-section")
                       ?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="min-w-32 rounded-full bg-9e-action px-5 py-3 text-base font-bold text-white hover:bg-9e-brand"
+                  className="min-w-24 md:min-w-32 rounded-full bg-9e-action px-5 py-2 md:py-3 text-sm md:text-base font-bold text-white hover:bg-9e-brand"
                 >
                   ลงทะเบียน
                 </button>
