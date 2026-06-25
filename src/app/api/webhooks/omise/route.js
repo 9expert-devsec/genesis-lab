@@ -57,12 +57,14 @@ export async function POST(req) {
     isMasterclass = Boolean(doc);
   }
   if (!doc) {
-    // Unknown charge — ack so Omise stops retrying.
+    // Unknown charge — likely belongs to Academy. Forward and ack.
+    forwardToLegacy(rawBody);
     return NextResponse.json({ ok: true, unknown: true });
   }
 
-  // Idempotency — already settled.
+  // Idempotency — already settled. Still forward so Academy receives retried events.
   if (doc.status === 'paid' && doc.payment?.omiseStatus === 'successful') {
+    forwardToLegacy(rawBody);
     return NextResponse.json({ ok: true, alreadyPaid: true });
   }
 
