@@ -5,6 +5,22 @@ import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassBatch from '@/models/MasterclassBatch';
 import { retrieveCharge } from '@/lib/omise';
 
+/** Fire-and-forget forward to legacy webhook endpoint. Never throws. */
+async function forwardToLegacy(rawBody) {
+  const forwardUrl = process.env.OMISE_WEBHOOK_FORWARD_URL;
+  if (!forwardUrl) return;
+  try {
+    const res = await fetch(forwardUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: rawBody,
+    });
+    console.log('[webhook] forwarded to legacy | status:', res.status, '| url:', forwardUrl);
+  } catch (err) {
+    console.error('[webhook] forward to legacy failed:', err?.message);
+  }
+}
+
 export async function POST(req) {
   // URL-token check (Omise has no built-in HMAC; we gate via a secret query param).
   const url = new URL(req.url);
@@ -13,7 +29,10 @@ export async function POST(req) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const event = await req.json().catch(() => null);
+  // Capture raw text once so we can forward the original payload to the legacy webhook.
+  const rawBody = await req.text().catch(() => '');
+  let event;
+  try { event = JSON.parse(rawBody); } catch { event = null; }
   if (!event || !event.data) {
     return NextResponse.json({ error: 'bad_payload' }, { status: 400 });
   }
@@ -77,6 +96,7 @@ export async function POST(req) {
       const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
       await sendPaidReceipt(doc);
     }
+    forwardToLegacy(rawBody);
     return NextResponse.json({ ok: true, paid: true });
   }
 
@@ -85,6 +105,7 @@ export async function POST(req) {
     doc.payment.failureCode = charge.failure_code || null;
     doc.payment.failureMessage = charge.failure_message || null;
     await doc.save();
+    forwardToLegacy(rawBody);
     return NextResponse.json({ ok: true, failed: true });
   }
 
@@ -92,8 +113,12 @@ export async function POST(req) {
     doc.payment.omiseStatus = 'expired';
     doc.status = 'cancelled';
     await doc.save();
+    forwardToLegacy(rawBody);
     return NextResponse.json({ ok: true, expired: true });
   }
+
+  // Forward raw event to legacy webhook (fire-and-forget, never blocks Omise ACK).
+  forwardToLegacy(rawBody);
 
   return NextResponse.json({ ok: true, status: charge.status });
 }
