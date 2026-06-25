@@ -1259,6 +1259,13 @@ const CARD_BRAND_LABEL = {
   unknown: 'บัตร',
 };
 
+const CARD_BRAND_LOGO = {
+  visa:       'https://cdn.jsdelivr.net/npm/payment-icons@1.1.0/min/flat/visa.svg',
+  mastercard: 'https://cdn.jsdelivr.net/npm/payment-icons@1.1.0/min/flat/mastercard.svg',
+  amex:       'https://cdn.jsdelivr.net/npm/payment-icons@1.1.0/min/flat/amex.svg',
+  jcb:        'https://cdn.jsdelivr.net/npm/payment-icons@1.1.0/min/flat/jcb.svg',
+};
+
 function CardFields({ card, setCard }) {
   const brand = detectCardBrand(card.number);
   const numDigits = card.number.replace(/\D/g, '');
@@ -1270,10 +1277,13 @@ function CardFields({ card, setCard }) {
       <div>
         <div className="mb-1 flex items-center justify-between">
           <Label htmlFor="card-number">หมายเลขบัตร</Label>
-          {numDigits.length > 0 && (
-            <span className="text-xs font-semibold text-9e-action">
-              {CARD_BRAND_LABEL[brand]}
-            </span>
+          {numDigits.length > 0 && CARD_BRAND_LOGO[brand] && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={CARD_BRAND_LOGO[brand]}
+              alt={CARD_BRAND_LABEL[brand]}
+              className="h-7 w-auto object-contain"
+            />
           )}
         </div>
         <Input

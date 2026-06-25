@@ -72,7 +72,7 @@ const nextConfig = {
         key: 'Content-Security-Policy-Report-Only',
         value: [
           "default-src 'self'",
-          "img-src 'self' https://res.cloudinary.com https://ddva7xvdt.res.cloudinary.com https://9expert-cdn.s3.ap-southeast-1.amazonaws.com https://www.9experttraining.com https://9experttraining.com https://9exp-sec.com https://msdb.9expert.app https://i.ytimg.com data: blob:",
+          "img-src 'self' https://res.cloudinary.com https://ddva7xvdt.res.cloudinary.com https://9expert-cdn.s3.ap-southeast-1.amazonaws.com https://www.9experttraining.com https://9experttraining.com https://9exp-sec.com https://msdb.9expert.app https://i.ytimg.com https://cdn.jsdelivr.net data: blob:",
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.omise.co https://www.youtube.com https://www.googletagmanager.com",
           "style-src 'self' 'unsafe-inline'",
           "font-src 'self' data:",
