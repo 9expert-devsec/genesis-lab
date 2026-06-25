@@ -73,17 +73,7 @@ function FaqAccordionItem({ faq }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function MasterclassDetailClient({ course, faqs = [] }) {
-  // [K] Instructors fetch
-  const [instructors, setInstructors] = useState([]);
-  useEffect(() => {
-    if (!course.instructor_ids?.length) return;
-    fetch(`/api/admin/instructors?ids=${course.instructor_ids.join(",")}`)
-      .then((r) => r.json())
-      .then((data) => setInstructors(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  }, [course.instructor_ids]);
-
+export function MasterclassDetailClient({ course, faqs = [], instructors = [] }) {
   // [J] Curriculum open/close state
   const buildDefaultOpen = () => {
     const map = {};
@@ -156,15 +146,17 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
             )}
           </div>
           <div className="relative flex overflow-hidden bg-9e-navy lg:rounded-2xl lg:aspect-video px-6 py-4 md:py-8 lg:p-8">
-            {/* Subtle corner gradient blobs */}
-            <div
-              className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
-              style={{ background: course.hero_gradient_from ?? "#2486FF" }}
-            />
-            <div
-              className="pointer-events-none absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
-              style={{ background: course.hero_gradient_to ?? "#005CFF" }}
-            />
+            {/* Subtle corner gradient blobs — wrapped for iOS Safari blur clip fix */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden  lg:rounded-2xl">
+              <div
+                className="absolute -right-20 -top-20 h-64 w-64 rounded-full opacity-75 blur-3xl"
+                style={{ background: course.hero_gradient_from ?? "#2486FF" }}
+              />
+              <div
+                className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full opacity-70 blur-3xl"
+                style={{ background: course.hero_gradient_to ?? "#005CFF" }}
+              />
+            </div>
 
             <div className="relative flex w-full flex-col">
               <div>
@@ -318,12 +310,12 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
               {batch.status === "closed" && (
                 <div className="absolute inset-0 z-20 flex items-center justify-center bg-9e-slate-lt-800/50" />
               )}
-              {/* Gradient background blobs */}
+              {/* Gradient background blobs — wrapped for iOS Safari blur clip fix */}
               {batch.is_early_bird && (
-                <>
-                  <div className="pointer-events-none absolute -left-20 -top-20 z-0 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
-                  <div className="pointer-events-none absolute -bottom-20 -right-20 z-0 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
-                </>
+                <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl z-0">
+                  <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-[#2929c9] opacity-40 blur-3xl" />
+                  <div className="absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-9e-lime opacity-20 blur-3xl" />
+                </div>
               )}
               {/* Early Bird badge */}
               {batch.is_early_bird && (
@@ -376,7 +368,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                     </p>
                   </div>
 
-                  <div className="flex flex-col items-end">
+                  <div className="flex flex-col gap-1 items-end">
                     <span
                       className={`text-3xl md:text-[40px] font-bold  ${
                         batch.is_early_bird
@@ -568,7 +560,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
           id="mc-curriculum"
           className="max-w-[1200px] mx-auto px-4 py-6 md:py-10 flex flex-col"
         >
-          <div className=" md:mb-6 flex items-center justify-between">
+          <div className=" md:mb-1 flex items-center justify-between">
             <h2 className="text-lg md:text-xl font-bold text-9e-navy dark:text-white">
               หัวข้อการฝึกอบรม
             </h2>
@@ -767,7 +759,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                 transition-transform duration-300 ease-in-out
                 ${showStickyBar ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"}`}
         >
-          <div className="relative mx-2 md:mx-auto flex max-w-[900px] h-28 items-center overflow-hidden bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
+          <div className="relative mx-2 md:mx-auto flex max-w-[900px] min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
             {/* Cover image — flush left, full bar height, 16:9, no padding */}
             {course.cover_image_url ? (
               <div className="hidden sm:block shrink-0 self-stretch p-3 ">
@@ -775,7 +767,7 @@ export function MasterclassDetailClient({ course, faqs = [] }) {
                 <img
                   src={course.cover_image_url}
                   alt={course.title_th}
-                  className="h-full w-auto aspect-video object-cover rounded-xl"
+                  className="h-[6rem] w-auto aspect-video object-cover rounded-xl"
                 />
               </div>
             ) : null}

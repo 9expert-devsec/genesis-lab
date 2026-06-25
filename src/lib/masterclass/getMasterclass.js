@@ -133,3 +133,12 @@ export async function getAllLocalFaqs() {
   const docs = await LocalFaq.find({}).sort({ category: 1, display_order: 1 }).lean();
   return serialize(docs);
 }
+
+/** Fetch multiple Instructor docs by their string _id array. */
+export async function getInstructorsByIds(ids) {
+  if (!ids?.length) return [];
+  await dbConnect();
+  const Instructor = (await import('@/models/Instructor')).default;
+  const docs = await Instructor.find({ _id: { $in: ids } }).lean();
+  return serialize(docs);
+}
