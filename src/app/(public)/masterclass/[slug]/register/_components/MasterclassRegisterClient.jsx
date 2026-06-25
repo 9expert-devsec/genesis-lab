@@ -1236,7 +1236,7 @@ export function MasterclassRegisterClient({ course, batch }) {
   // Registers the attendee exactly once; returns { registrationId, referenceNumber }
   // or null on failure. Deduped via registeredRef so switching payment channel
   // (QR → card) never creates a second registration.
-  async function ensureRegistered() {
+  async function ensureRegistered(method = null) {
     if (registeredRef.current) return registeredRef.current;
     const invoice = getValues("invoice");
     const wantsInvoice =
@@ -1255,12 +1255,12 @@ export function MasterclassRegisterClient({ course, batch }) {
           phone: formState.phone.trim(),
         };
       }
-      const att = formState.attendees?.[i] ?? {};
+      const att = formState.attendees?.[i];
       return {
-        firstName: att.firstName?.trim() ?? "",
-        lastName: att.lastName?.trim() ?? "",
-        email: att.email?.trim() ?? "",
-        phone: att.phone?.trim() ?? "",
+        firstName: att?.firstName?.trim() || formState.firstName?.trim() || "",
+        lastName: att?.lastName?.trim() || formState.lastName?.trim() || "",
+        email: att?.email?.trim() || formState.email?.trim() || "",
+        phone: att?.phone?.trim() || formState.phone?.trim() || "",
       };
     });
     const payload = {
@@ -1274,8 +1274,9 @@ export function MasterclassRegisterClient({ course, batch }) {
       },
       // Keep single attendee field for backward-compat (first in list)
       attendee: resolvedAttendees[0],
-      attendees: resolvedAttendees,
+      attendees: (formState.attendeesListProvided ?? true) ? resolvedAttendees : [],
       attendeesCount: count,
+      attendeesListProvided: formState.attendeesListProvided ?? true,
       license_scope: formState.license_scope ?? "all",
       license_choice: perAttendeeLicense
         ? null
@@ -1299,6 +1300,7 @@ export function MasterclassRegisterClient({ course, batch }) {
       request_invoice: wantsInvoice,
       invoice: wantsInvoice ? invoice : null,
       notes: formState.notes?.trim() || null,
+      method: method ?? null,
       consent: {
         accepted: allConsented,
         acceptedAt: allConsented ? new Date().toISOString() : null,
@@ -1337,7 +1339,7 @@ export function MasterclassRegisterClient({ course, batch }) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const reg = await ensureRegistered();
+      const reg = await ensureRegistered('quote');
       if (!reg) return;
       setResult({
         kind: "quote",
