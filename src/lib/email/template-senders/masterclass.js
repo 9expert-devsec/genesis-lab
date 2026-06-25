@@ -1,37 +1,48 @@
-import { sendEmail, sendTemplateEmail } from '@/lib/email/postmark';
-import { formatTHB } from '@/lib/pricing';
+import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
+import { formatTHB } from "@/lib/pricing";
 
 // ── Helpers (copied inline from src/lib/masterclass/send-receipt.js) ──────────
-
-function buildInvoiceAddress(invoice) {
-  if (!invoice) return '';
-  if ((invoice.country ?? 'TH') === 'TH') {
-    const a = invoice.thaiAddress ?? {};
-    return [a.addressLine, a.subDistrict, a.district, a.province, a.postalCode]
-      .filter(Boolean).join(' ');
-  }
-  const a = invoice.internationalAddress ?? {};
-  return [a.line1, a.line2, a.city, a.state, a.postalCode, a.country]
-    .filter(Boolean).join(', ');
-}
 
 /** Prefer coordinator, fall back to attendee (old records). */
 function resolveRecipient(doc) {
   const coord = doc.coordinator;
   if (coord?.email) {
-    return { to: coord.email, firstName: coord.firstName ?? '', phone: coord.phone ?? '' };
+    return {
+      to: coord.email,
+      firstName: coord.firstName ?? "",
+      phone: coord.phone ?? "",
+    };
   }
   const att = doc.attendee ?? {};
-  return { to: att.email ?? '', firstName: att.firstName ?? '', phone: att.phone ?? '' };
+  return {
+    to: att.email ?? "",
+    firstName: att.firstName ?? "",
+    phone: att.phone ?? "",
+  };
 }
 
 function fmtDate(value) {
-  if (!value) return '—';
+  if (!value) return "—";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('th-TH', {
-    year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("th-TH", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatBatchDateShort(dateValue) {
+  if (!dateValue) return "";
+  const d = new Date(dateValue);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Bangkok",
   });
 }
 
@@ -45,53 +56,126 @@ export async function sendMasterclassPaidReceipt(doc) {
   if (!doc || doc.payment?.receiptSentAt) return { skipped: true };
 
   const recipient = resolveRecipient(doc);
-  if (!recipient.to) return { skipped: true, reason: 'no_email' };
+  if (!recipient.to) return { skipped: true, reason: "no_email" };
 
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_MC_PAID;
-  if (!alias) throw new Error('[mc-template] POSTMARK_TEMPLATE_ALIAS_MC_PAID not set');
+  if (!alias)
+    throw new Error("[mc-template] POSTMARK_TEMPLATE_ALIAS_MC_PAID not set");
+
+  const MasterclassCourse = (await import("@/models/MasterclassCourse"))
+    .default;
+  const courseDoc = await MasterclassCourse.findById(doc.course_id)
+    .select("cover_image_url")
+    .lean();
+  const courseImage = courseDoc?.cover_image_url || "";
+
+  const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
+  const batchDoc = await MasterclassBatch.findById(doc.batch_id)
+    .select("dates")
+    .lean();
+  const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
   const refNo = String(doc._id).slice(-8).toUpperCase();
-  const methodLabel = doc.payment?.method === 'credit_card' ? 'บัตรเครดิต/เดบิต' : 'QR PromptPay';
+  const methodLabel =
+    doc.payment?.method === "credit_card" ? "บัตรเครดิต/เดบิต" : "QR PromptPay";
+
+  const thaiAddrP = doc.invoice?.thaiAddress ?? {};
+  const intlAddrP = doc.invoice?.internationalAddress ?? {};
+  const isIntlP = (doc.invoice?.country ?? "TH") === "OTHER";
+  const billingAddressP = isIntlP
+    ? [
+        intlAddrP.line1,
+        intlAddrP.line2,
+        intlAddrP.city,
+        intlAddrP.state,
+        intlAddrP.postalCode,
+        intlAddrP.country,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : thaiAddrP.addressLine || "";
 
   const templateModel = {
-    first_name:               recipient.firstName,
-    ref_no:                   refNo,
-    method_label:             methodLabel,
-    paid_at_label:            fmtDate(doc.payment?.paidAt),
-    course_title:             doc.course_title,
-    batch_label:              doc.batch_label,
-    batch_date_label:         doc.batch_date_label || 'ตามรอบที่เลือก',
-    venue_name:               doc.venue_name || '',
-    show_venue:               Boolean(doc.venue_name),
-    price_per_seat:           formatTHB(doc.pricing?.pricePerSeat ?? 0),
-    seats:                    doc.pricing?.seats ?? doc.attendeesCount ?? 1,
-    subtotal:                 formatTHB(doc.pricing?.subtotal ?? 0),
-    vat_amount:               formatTHB(doc.pricing?.vatAmount ?? 0),
-    total:                    formatTHB(doc.pricing?.total ?? 0),
-    show_invoice:             Boolean(doc.request_invoice && doc.invoice),
-    invoice_type:             doc.invoice?.type || '',
-    invoice_name_line:        doc.invoice?.type === 'corporate' ? (doc.invoice?.companyName || '') : `${doc.invoice?.firstName ?? ''} ${doc.invoice?.lastName ?? ''}`.trim(),
-    invoice_tax_id:           doc.invoice?.taxId || '',
-    invoice_address:          buildInvoiceAddress(doc.invoice),
-    show_attendees:           Boolean(doc.attendeesListProvided) && (doc.attendees ?? []).length > 0,
-    attendees_deferred:       doc.attendeesListProvided === false,
-    attendees_count:          doc.attendeesCount ?? 1,
-    coordinator_is_attending: Boolean(doc.coordinator?.isAttending),
-    attendees: (doc.attendees ?? []).map((a, i) => ({
-      number:         i + 1,
-      first_name:     a.firstName,
-      last_name:      a.lastName,
-      full_name:      `${a.firstName} ${a.lastName}`.trim(),
-      email:          a.email,
-      phone:          a.phone,
-      is_coordinator: i === 0 && Boolean(doc.coordinator?.isAttending),
-    })),
+    coordinator_name:
+      `${doc.coordinator?.firstName ?? ""} ${doc.coordinator?.lastName ?? ""}`.trim() ||
+      `${doc.attendee?.firstName ?? ""} ${doc.attendee?.lastName ?? ""}`.trim(),
+    coordinator_email: doc.coordinator?.email || doc.attendee?.email || "",
+    coordinator_phone: doc.coordinator?.phone || doc.attendee?.phone || "",
+    paid_amount: formatTHB(doc.pricing?.total ?? 0),
+    payment_method_label: methodLabel,
+    ref_no: refNo,
+    paid_at_label: fmtDate(doc.payment?.paidAt),
+    course_image: courseImage,
+    course_name: doc.course_title || "",
+    course_date: batchDateShort || doc.batch_date_label || "ตามรอบที่เลือก",
+    location: doc.venue_name || "",
+    total_participants: doc.attendeesCount ?? 1,
+    price_per_seat: formatTHB(doc.pricing?.pricePerSeat ?? 0),
+    seats: doc.pricing?.seats ?? doc.attendeesCount ?? 1,
+    subtotal: formatTHB(doc.pricing?.subtotal ?? 0),
+    vat_amount: formatTHB(doc.pricing?.vatAmount ?? 0),
+    total: formatTHB(doc.pricing?.total ?? 0),
+    attendee_list:
+      doc.attendeesListProvided === true && (doc.attendees ?? []).length > 0
+        ? { items: (doc.attendees ?? []).map((a, i) => ({
+            index: i + 1,
+            name: `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim(),
+            email: a.email || "",
+            phone: a.phone || "",
+            license_label:
+              doc.license_scope === "per_attendee" &&
+              doc.license_per_attendee?.[i]
+                ? [
+                    `${doc.license_per_attendee[i].choice || ""}`,
+                    `${doc.license_per_attendee[i].level || ""}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || "—"
+                : doc.license_level || doc.license_choice || "—",
+          })) }
+        : false,
+    attendee_later:
+      doc.attendeesListProvided === false ? { show: true } : false,
+    document_requested: Boolean(doc.request_invoice && doc.invoice)
+      ? {
+          billing_personal:
+            doc.invoice?.type === "individual"
+              ? {
+                  billing_name: `${doc.invoice?.firstName ?? ""} ${doc.invoice?.lastName ?? ""}`.trim(),
+                  billing_tax_id: doc.invoice?.taxId || "",
+                  billing_address: billingAddressP,
+                  billing_subdistrict: isIntlP ? "" : thaiAddrP.subDistrict || "",
+                  billing_district: isIntlP ? "" : thaiAddrP.district || "",
+                  billing_province: isIntlP ? "" : thaiAddrP.province || "",
+                  billing_postal_code: isIntlP ? "" : thaiAddrP.postalCode || "",
+                }
+              : false,
+          billing_company:
+            doc.invoice?.type === "corporate"
+              ? {
+                  billing_company_name: doc.invoice?.companyName || "",
+                  billing_tax_id: doc.invoice?.taxId || "",
+                  billing_branch: doc.invoice?.branch || "",
+                  billing_address: billingAddressP,
+                  billing_subdistrict: isIntlP ? "" : thaiAddrP.subDistrict || "",
+                  billing_district: isIntlP ? "" : thaiAddrP.district || "",
+                  billing_province: isIntlP ? "" : thaiAddrP.province || "",
+                  billing_postal_code: isIntlP ? "" : thaiAddrP.postalCode || "",
+                }
+              : false,
+        }
+      : false,
+    billing_notes: doc.notes ? { text: doc.notes } : false,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
 
   await Promise.allSettled([
-    sendTemplateEmail({ to: recipient.to, templateAlias: alias, templateModel }),
+    sendTemplateEmail({
+      to: recipient.to,
+      templateAlias: alias,
+      templateModel,
+    }),
     adminEmail
       ? sendEmail({
           to: adminEmail,
@@ -102,9 +186,12 @@ export async function sendMasterclassPaidReceipt(doc) {
   ]);
 
   await doc.constructor.findByIdAndUpdate(doc._id, {
-    $set: { 'payment.receiptSentAt': new Date() },
+    $set: { "payment.receiptSentAt": new Date() },
   });
-  console.log('[mc-receipt] ✅ sendMasterclassReceipt complete | receiptSentAt set | docId:', String(doc._id));
+  console.log(
+    "[mc-receipt] ✅ sendMasterclassReceipt complete | receiptSentAt set | docId:",
+    String(doc._id),
+  );
   return { ok: true };
 }
 
@@ -116,44 +203,116 @@ export async function sendMasterclassPaidReceipt(doc) {
  */
 export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   const recipient = resolveRecipient(doc);
-  if (!recipient.to) return { skipped: true, reason: 'no_email' };
+  if (!recipient.to) return { skipped: true, reason: "no_email" };
 
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_MC_QUOTE;
-  if (!alias) throw new Error('[mc-template] POSTMARK_TEMPLATE_ALIAS_MC_QUOTE not set');
+  if (!alias)
+    throw new Error("[mc-template] POSTMARK_TEMPLATE_ALIAS_MC_QUOTE not set");
+
+  const MasterclassCourse = (await import("@/models/MasterclassCourse"))
+    .default;
+  const courseDoc = await MasterclassCourse.findById(doc.course_id)
+    .select("cover_image_url")
+    .lean();
+  const courseImage = courseDoc?.cover_image_url || "";
+
+  const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
+  const batchDoc = await MasterclassBatch.findById(doc.batch_id)
+    .select("dates")
+    .lean();
+  const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
   const refNo = referenceNumber ?? String(doc._id).slice(-8).toUpperCase();
-  const attList = doc.attendees ?? [];
+
+  const thaiAddrQ = doc.invoice?.thaiAddress ?? {};
+  const intlAddrQ = doc.invoice?.internationalAddress ?? {};
+  const isIntlQ = (doc.invoice?.country ?? "TH") === "OTHER";
+  const billingAddressQ = isIntlQ
+    ? [
+        intlAddrQ.line1,
+        intlAddrQ.line2,
+        intlAddrQ.city,
+        intlAddrQ.state,
+        intlAddrQ.postalCode,
+        intlAddrQ.country,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : thaiAddrQ.addressLine || "";
 
   const templateModel = {
-    first_name:            recipient.firstName,
-    ref_no:                refNo,
-    course_title:          doc.course_title,
-    batch_label:           doc.batch_label,
-    batch_date_label:      doc.batch_date_label || 'ตามรอบที่เลือก',
-    venue_name:            doc.venue_name || '',
-    show_venue:            Boolean(doc.venue_name),
-    attendees_count:       doc.attendeesCount ?? 1,
-    total:                 formatTHB(doc.pricing?.total ?? 0),
-    show_invoice:          Boolean(doc.request_invoice && doc.invoice),
-    invoice_type:          doc.invoice?.type || '',
-    invoice_name_line:     doc.invoice?.type === 'corporate' ? (doc.invoice?.companyName || '') : `${doc.invoice?.firstName ?? ''} ${doc.invoice?.lastName ?? ''}`.trim(),
-    invoice_tax_id:        doc.invoice?.taxId || '',
-    invoice_address:       buildInvoiceAddress(doc.invoice),
-    show_attendees:        Boolean(doc.attendeesListProvided) && attList.length > 0,
-    attendees_deferred:    doc.attendeesListProvided === false,
-    attendees: attList.map((a, i) => ({
-      number:     i + 1,
-      first_name: a.firstName,
-      last_name:  a.lastName,
-      full_name:  `${a.firstName} ${a.lastName}`.trim(),
-      email:      a.email,
-    })),
+    coordinator_name:
+      `${doc.coordinator?.firstName ?? ""} ${doc.coordinator?.lastName ?? ""}`.trim() ||
+      `${doc.attendee?.firstName ?? ""} ${doc.attendee?.lastName ?? ""}`.trim(),
+    coordinator_email: doc.coordinator?.email || doc.attendee?.email || "",
+    coordinator_phone: doc.coordinator?.phone || doc.attendee?.phone || "",
+    ref_no: refNo,
+    course_image: courseImage,
+    course_name: doc.course_title || "",
+    course_date: batchDateShort || doc.batch_date_label || "ตามรอบที่เลือก",
+    location: doc.venue_name || "",
+    total_participants: doc.attendeesCount ?? 1,
+    total: formatTHB(doc.pricing?.total ?? 0),
+    attendee_list:
+      doc.attendeesListProvided === true && (doc.attendees ?? []).length > 0
+        ? { items: (doc.attendees ?? []).map((a, i) => ({
+            index: i + 1,
+            name: `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim(),
+            email: a.email || "",
+            phone: a.phone || "",
+            license_label:
+              doc.license_scope === "per_attendee" &&
+              doc.license_per_attendee?.[i]
+                ? [
+                    `${doc.license_per_attendee[i].choice || ""}`,
+                    `${doc.license_per_attendee[i].level || ""}`,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || "—"
+                : doc.license_level || doc.license_choice || "—",
+          })) }
+        : false,
+    attendee_later:
+      doc.attendeesListProvided === false ? { show: true } : false,
+    document_requested: Boolean(doc.request_invoice && doc.invoice)
+      ? { show: true }
+      : false,
+    billing_personal:
+      doc.invoice?.type === "individual"
+        ? {
+            billing_name: `${doc.invoice?.firstName ?? ""} ${doc.invoice?.lastName ?? ""}`.trim(),
+            billing_tax_id: doc.invoice?.taxId || "",
+            billing_address: billingAddressQ,
+            billing_subdistrict: isIntlQ ? "" : thaiAddrQ.subDistrict || "",
+            billing_district: isIntlQ ? "" : thaiAddrQ.district || "",
+            billing_province: isIntlQ ? "" : thaiAddrQ.province || "",
+            billing_postal_code: isIntlQ ? "" : thaiAddrQ.postalCode || "",
+          }
+        : false,
+    billing_company:
+      doc.invoice?.type === "corporate"
+        ? {
+            billing_company_name: doc.invoice?.companyName || "",
+            billing_tax_id: doc.invoice?.taxId || "",
+            billing_branch: doc.invoice?.branch || "",
+            billing_address: billingAddressQ,
+            billing_subdistrict: isIntlQ ? "" : thaiAddrQ.subDistrict || "",
+            billing_district: isIntlQ ? "" : thaiAddrQ.district || "",
+            billing_province: isIntlQ ? "" : thaiAddrQ.province || "",
+            billing_postal_code: isIntlQ ? "" : thaiAddrQ.postalCode || "",
+          }
+        : false,
+    billing_notes: doc.notes ? { text: doc.notes } : false,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
 
   await Promise.allSettled([
-    sendTemplateEmail({ to: recipient.to, templateAlias: alias, templateModel }),
+    sendTemplateEmail({
+      to: recipient.to,
+      templateAlias: alias,
+      templateModel,
+    }),
     adminEmail
       ? sendEmail({
           to: adminEmail,
