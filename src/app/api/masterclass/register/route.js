@@ -114,15 +114,18 @@ export async function POST(req) {
 
     // Quote path: send confirmation email now (no charge needed)
     if (paymentMethod === 'quote') {
+      console.log('[quote-debug] entering quote email block, registrationId:', String(reg._id));
       try {
         await MasterclassRegistration.findByIdAndUpdate(reg._id, {
           $set: { 'payment.method': 'quote', status: 'confirmed' },
         });
         const fresh = await MasterclassRegistration.findById(reg._id);
+        console.log('[quote-debug] fresh doc fetched, course_id:', String(fresh?.course_id));
         const { sendMasterclassQuoteConfirmation } = await import('@/lib/masterclass/send-receipt');
         await sendMasterclassQuoteConfirmation(fresh, referenceNumber);
+        console.log('[quote-debug] email sent successfully');
       } catch (emailErr) {
-        console.error('[masterclass/register] quote email failed:', emailErr);
+        console.error('[masterclass/register] quote email failed:', emailErr?.message, emailErr?.stack);
       }
     }
 
