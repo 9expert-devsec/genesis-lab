@@ -91,6 +91,9 @@ export async function POST(req) {
     console.log('[charge] credit card result:', {
       chargeStatus: charge.status,
       chargePaid: charge.paid,
+      chargeAuthorizeUrl: charge.authorize_url ?? null,
+      chargeFailureCode: charge.failure_code ?? null,
+      chargeFailureMessage: charge.failure_message ?? null,
       updateStatus: update.status,
       registrationId,
     });
