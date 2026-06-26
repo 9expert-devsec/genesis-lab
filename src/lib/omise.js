@@ -54,7 +54,7 @@ async function omiseFetch(path, { method = 'POST', body } = {}) {
  * Create a charge from a card token (credit/debit card flow).
  * amountSatang: integer, smallest currency unit.
  */
-export async function createCardCharge({ amountSatang, token, metadata = {} }) {
+export async function createCardCharge({ amountSatang, token, metadata = {}, returnUri }) {
   const body = {
     amount: amountSatang,
     currency: 'thb',
@@ -62,6 +62,9 @@ export async function createCardCharge({ amountSatang, token, metadata = {} }) {
     'metadata[registrationId]': metadata.registrationId || '',
     'metadata[referenceNumber]': metadata.referenceNumber || '',
   };
+  if (returnUri) {
+    body['return_uri'] = returnUri;
+  }
   return omiseFetch('/charges', { body });
 }
 
