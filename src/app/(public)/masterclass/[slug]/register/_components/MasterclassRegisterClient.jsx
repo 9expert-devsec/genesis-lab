@@ -587,6 +587,7 @@ function CardPanelFull({
   onCharge,
   onChangeMethod,
   submitting,
+  processing,
   payError,
   cardValid,
   omiseReady,
@@ -619,12 +620,13 @@ function CardPanelFull({
       <button
         type="button"
         onClick={onCharge}
-        disabled={submitting || !cardValid || !omiseReady}
+        disabled={submitting || processing || !cardValid || !omiseReady}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
       >
-        {submitting ? (
+        {submitting || processing ? (
           <>
-            <Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…
+            <Loader2 size={16} className="animate-spin" />{" "}
+            {processing ? "กำลังตรวจสอบการชำระเงิน…" : "กำลังดำเนินการ…"}
           </>
         ) : (
           <>
@@ -944,6 +946,7 @@ export function MasterclassRegisterClient({ course, batch }) {
   const [qrCharge, setQrCharge] = useState(null); // PromptPay QR result, once created
   const [qrExpired, setQrExpired] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(600);
+  const [cardPending, setCardPending] = useState(null); // async card awaiting settlement
   // Step 2 document sub-option + inline-panel state
   const [wantsDoc, setWantsDoc] = useState(null); // null | false | true
   const [quoteNeedsInvoice, setQuoteNeedsInvoice] = useState(false); // quote path inline invoice reveal
@@ -1100,6 +1103,47 @@ export function MasterclassRegisterClient({ course, batch }) {
     }, 3000);
     return () => clearInterval(iv);
   }, [qrCharge, registrationId]);
+
+  // ── Card settlement polling (async / 3DS cards) ─────────────────────────────
+  // Mirrors the PromptPay poll above: when a card charge comes back not-yet-paid,
+  // poll the same status endpoint until Omise settles it (or time out).
+  useEffect(() => {
+    if (!cardPending || !registrationId) return undefined;
+    let elapsed = 0;
+    const MAX = 10 * 60 * 1000; // 10 minutes
+    const iv = setInterval(async () => {
+      elapsed += 3000;
+      try {
+        const r = await fetch(
+          `/api/masterclass/register/status?id=${registrationId}`,
+          { cache: "no-store" },
+        );
+        const d = await r.json();
+        if (d.status === "paid" || d.paymentStatus === "successful") {
+          clearInterval(iv);
+          setCardPending(null);
+          setResult({
+            kind: "paid",
+            referenceNumber: cardPending.referenceNumber,
+            amount: cardPending.amount,
+            method: "credit_card",
+            requestInvoice:
+              Boolean(formState.request_invoice) || wantsDoc === true,
+          });
+          setStep(3);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+      } catch {}
+      if (elapsed >= MAX) {
+        clearInterval(iv);
+        setCardPending(null);
+        setPayError(
+          "ไม่สามารถยืนยันการชำระเงินได้ในขณะนี้ กรุณาตรวจสอบสถานะหรือลองใหม่",
+        );
+      }
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [cardPending, registrationId]);
 
   if (!hydrated) {
     return (
@@ -1371,6 +1415,15 @@ export function MasterclassRegisterClient({ course, batch }) {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setPayError(data?.message || "การชำระเงินไม่สำเร็จ");
+        return;
+      }
+      if (!data.paid) {
+        // Async card (e.g. 3DS / deferred capture) — not settled synchronously.
+        // Poll the status endpoint instead of showing success prematurely.
+        setCardPending({
+          referenceNumber: data.referenceNumber,
+          amount: data.amount,
+        });
         return;
       }
       setResult({
@@ -2432,6 +2485,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                       setPaymentStarted(false);
                     }}
                     submitting={submitting}
+                    processing={Boolean(cardPending)}
                     payError={payError}
                     cardValid={cardValid}
                     omiseReady={omiseReady}
