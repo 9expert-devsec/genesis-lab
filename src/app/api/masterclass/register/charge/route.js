@@ -34,7 +34,8 @@ export async function POST(req) {
 
     let result;
     if (paymentMethod === 'credit_card') {
-      result = await createCardCharge({ amountSatang, token: omiseToken, metadata });
+      const returnUri = `${process.env.NEXT_PUBLIC_BASE_URL}/masterclass/payment/complete?registrationId=${registrationId}`;
+      result = await createCardCharge({ amountSatang, token: omiseToken, metadata, returnUri });
     } else {
       result = await createPromptPayCharge({ amountSatang, metadata });
     }
@@ -126,6 +127,9 @@ export async function POST(req) {
       ok: true, method: paymentMethod, referenceNumber,
       registrationId: String(doc._id), amount: doc.pricing.total,
       paid: update.status === 'paid',
+      // Present when the card needs 3DS / bank authorization. The client must
+      // redirect the user here; Omise sends them back to our return_uri after.
+      authorizeUrl: charge.authorize_url ?? null,
     });
   } catch (err) {
     console.error('[POST /api/masterclass/register/charge]', err);

@@ -1418,8 +1418,16 @@ export function MasterclassRegisterClient({ course, batch }) {
         return;
       }
       if (!data.paid) {
-        // Async card (e.g. 3DS / deferred capture) — not settled synchronously.
-        // Poll the status endpoint instead of showing success prematurely.
+        // Card not settled synchronously.
+        if (data.authorizeUrl) {
+          // 3DS / bank authorization required — hand the user off to Omise's
+          // authorize page. They return to /masterclass/payment/complete
+          // (our return_uri), which polls status until the charge settles.
+          window.location.href = data.authorizeUrl;
+          return;
+        }
+        // Async capture without a redirect — poll the status endpoint instead
+        // of showing success prematurely.
         setCardPending({
           referenceNumber: data.referenceNumber,
           amount: data.amount,
@@ -2625,12 +2633,12 @@ export function MasterclassRegisterClient({ course, batch }) {
                                   Icon={QrCode}
                                   label="PromptPay QR"
                                 />
-                                {/* <ChannelCard
+                                <ChannelCard
                                   selected={channel === "credit_card"}
                                   onClick={() => setChannel("credit_card")}
                                   Icon={CreditCard}
                                   label="บัตรเครดิต/เดบิต"
-                                /> */}
+                                />
                               </div>
                             </div>
 
