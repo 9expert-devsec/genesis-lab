@@ -1132,6 +1132,14 @@ export function MasterclassRegisterClient({ course, batch }) {
           });
           setStep(3);
           window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (d.paymentStatus === "failed") {
+          // Charge declined (e.g. insufficient funds) — surface immediately
+          // instead of waiting out the 10-minute timeout.
+          clearInterval(iv);
+          setCardPending(null);
+          setPayError(
+            "การชำระเงินไม่สำเร็จ กรุณาตรวจสอบยอดเงินในบัตรหรือลองใหม่อีกครั้ง",
+          );
         }
       } catch {}
       if (elapsed >= MAX) {
