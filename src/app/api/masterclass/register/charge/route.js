@@ -122,6 +122,7 @@ export async function POST(req) {
     return NextResponse.json({
       ok: true, method: paymentMethod, referenceNumber,
       registrationId: String(doc._id), amount: doc.pricing.total,
+      paid: update.status === 'paid',
     });
   } catch (err) {
     console.error('[POST /api/masterclass/register/charge]', err);
