@@ -2625,12 +2625,12 @@ export function MasterclassRegisterClient({ course, batch }) {
                                   Icon={QrCode}
                                   label="PromptPay QR"
                                 />
-                                <ChannelCard
+                                {/* <ChannelCard
                                   selected={channel === "credit_card"}
                                   onClick={() => setChannel("credit_card")}
                                   Icon={CreditCard}
                                   label="บัตรเครดิต/เดบิต"
-                                />
+                                /> */}
                               </div>
                             </div>
 
