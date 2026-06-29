@@ -92,7 +92,7 @@ export async function POST(req) {
     console.log('[charge] credit card result:', {
       chargeStatus: charge.status,
       chargePaid: charge.paid,
-      chargeAuthorizeUrl: charge.authorize_url ?? null,
+      chargeAuthorizeUrl: charge.authorize_uri ?? null,
       chargeFailureCode: charge.failure_code ?? null,
       chargeFailureMessage: charge.failure_message ?? null,
       updateStatus: update.status,
@@ -129,7 +129,7 @@ export async function POST(req) {
       paid: update.status === 'paid',
       // Present when the card needs 3DS / bank authorization. The client must
       // redirect the user here; Omise sends them back to our return_uri after.
-      authorizeUrl: charge.authorize_url ?? null,
+      authorizeUrl: charge.authorize_uri ?? null,
     });
   } catch (err) {
     console.error('[POST /api/masterclass/register/charge]', err);
