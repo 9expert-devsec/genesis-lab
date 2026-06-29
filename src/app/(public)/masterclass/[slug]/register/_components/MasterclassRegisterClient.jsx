@@ -1208,6 +1208,53 @@ export function MasterclassRegisterClient({ course, batch }) {
     return null;
   }
 
+  function validateLicense() {
+    if (!licenseEnabled) return null; // license not applicable for this course
+
+    const count = formState.attendeesCount ?? 1;
+    const listProvided = formState.attendeesListProvided ?? true;
+    const effectiveScope =
+      !listProvided || count <= 1
+        ? "all"
+        : (formState.license_scope ?? "all");
+
+    const choices = course.license_options?.choices ?? [];
+
+    if (effectiveScope === "all") {
+      if (!formState.license_choice) {
+        return "กรุณาเลือก License ก่อนดำเนินการต่อ";
+      }
+      const chosen = choices.find((c) => c.value === formState.license_choice);
+      if (chosen?.require_detail) {
+        if (chosen.value === "own" && !formState.license_level) {
+          return "กรุณาเลือกประเภท License (License Level)";
+        }
+        if (chosen.value !== "own" && !formState.license_detail?.trim()) {
+          return "กรุณากรอกรายละเอียด License";
+        }
+      }
+    } else {
+      // per_attendee: validate each slot
+      for (let i = 0; i < count; i++) {
+        const slot = formState.license_per_attendee?.[i] ?? {};
+        if (!slot.choice) {
+          return `กรุณาเลือก License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+        }
+        const chosen = choices.find((c) => c.value === slot.choice);
+        if (chosen?.require_detail) {
+          if (chosen.value === "own" && !slot.level) {
+            return `กรุณาเลือกประเภท License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+          }
+          if (chosen.value !== "own" && !slot.detail?.trim()) {
+            return `กรุณากรอกรายละเอียด License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+          }
+        }
+      }
+    }
+
+    return null; // valid
+  }
+
   function handleStep1Next() {
     setSubmitError(null);
     const { firstName, lastName, email, phone } = formState;
@@ -1243,6 +1290,13 @@ export function MasterclassRegisterClient({ course, batch }) {
       }
     }
 
+    // Validate license selection
+    const licenseErr = validateLicense();
+    if (licenseErr) {
+      setSubmitError(licenseErr);
+      return;
+    }
+
     persist();
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1272,11 +1326,17 @@ export function MasterclassRegisterClient({ course, batch }) {
         : false;
 
   // Whether the Step 1 form has minimum data to proceed (coordinator fields filled)
-  const canStep1 =
-    Boolean(formState.firstName?.trim()) &&
-    Boolean(formState.lastName?.trim()) &&
-    Boolean(formState.email?.trim()) &&
-    Boolean(formState.phone?.trim());
+  const canStep1 = (() => {
+    if (
+      !formState.firstName?.trim() ||
+      !formState.lastName?.trim() ||
+      !formState.email?.trim() ||
+      !formState.phone?.trim()
+    )
+      return false;
+    if (licenseEnabled && validateLicense() !== null) return false;
+    return true;
+  })();
 
   // Step 2 left-column invoice form shows when a document was requested in Step 1
   // or opted into via the wantsDoc toggle on Step 2.
