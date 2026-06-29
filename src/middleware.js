@@ -55,6 +55,8 @@ const MASTERCLASS_DOMAIN = 'https://www.9experttraining.com';
 
 /** Returns true for routes that are allowed on this masterclass-only deployment. */
 function isMasterclassRoute(pathname) {
+  // /masterclass/payment/* (Omise 3DS return page, etc.)
+  if (pathname.startsWith('/masterclass/payment/')) return true;
   // /masterclass/[slug]
   // /masterclass/[slug]/register
   // /masterclass/[slug]/register/* (any sub-step)
