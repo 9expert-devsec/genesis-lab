@@ -26,6 +26,24 @@ function buildBcc(callerBcc) {
   return merged.length > 0 ? merged.join(', ') : undefined;
 }
 
+/**
+ * Merge caller-supplied cc with the global POSTMARK_CC_EMAILS env var.
+ * POSTMARK_CC_EMAILS is comma-separated e.g. "a@example.com, b@example.com"
+ * Returns a single comma-joined string, or undefined if nothing to CC.
+ */
+function buildCc(callerCc) {
+  const envRaw = process.env.POSTMARK_CC_EMAILS ?? '';
+  const envList = envRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const callerList = callerCc
+    ? callerCc.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  const merged = [...new Set([...envList, ...callerList])];
+  return merged.length > 0 ? merged.join(', ') : undefined;
+}
+
 export async function sendEmail({ to, bcc, subject, html, text }) {
   const token = process.env.POSTMARK_SERVER_TOKEN;
   const from = process.env.POSTMARK_FROM_EMAIL;
@@ -52,6 +70,7 @@ export async function sendEmail({ to, bcc, subject, html, text }) {
       body: JSON.stringify({
         From: from,
         To: to,
+        Cc: buildCc(undefined),
         Bcc: buildBcc(bcc),
         Subject: subject,
         HtmlBody: html,
@@ -98,6 +117,7 @@ export async function sendTemplateEmail({ to, bcc, templateAlias, templateModel 
       body: JSON.stringify({
         From: from,
         To: to,
+        Cc: buildCc(undefined),
         Bcc: buildBcc(bcc),
         TemplateAlias: templateAlias,
         TemplateModel: templateModel,

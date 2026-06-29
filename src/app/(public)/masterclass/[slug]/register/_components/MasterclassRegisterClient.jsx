@@ -587,6 +587,7 @@ function CardPanelFull({
   onCharge,
   onChangeMethod,
   submitting,
+  processing,
   payError,
   cardValid,
   omiseReady,
@@ -619,12 +620,13 @@ function CardPanelFull({
       <button
         type="button"
         onClick={onCharge}
-        disabled={submitting || !cardValid || !omiseReady}
+        disabled={submitting || processing || !cardValid || !omiseReady}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
       >
-        {submitting ? (
+        {submitting || processing ? (
           <>
-            <Loader2 size={16} className="animate-spin" /> กำลังดำเนินการ…
+            <Loader2 size={16} className="animate-spin" />{" "}
+            {processing ? "กำลังตรวจสอบการชำระเงิน…" : "กำลังดำเนินการ…"}
           </>
         ) : (
           <>
@@ -944,6 +946,7 @@ export function MasterclassRegisterClient({ course, batch }) {
   const [qrCharge, setQrCharge] = useState(null); // PromptPay QR result, once created
   const [qrExpired, setQrExpired] = useState(false);
   const [qrSecondsLeft, setQrSecondsLeft] = useState(600);
+  const [cardPending, setCardPending] = useState(null); // async card awaiting settlement
   // Step 2 document sub-option + inline-panel state
   const [wantsDoc, setWantsDoc] = useState(null); // null | false | true
   const [quoteNeedsInvoice, setQuoteNeedsInvoice] = useState(false); // quote path inline invoice reveal
@@ -1101,6 +1104,55 @@ export function MasterclassRegisterClient({ course, batch }) {
     return () => clearInterval(iv);
   }, [qrCharge, registrationId]);
 
+  // ── Card settlement polling (async / 3DS cards) ─────────────────────────────
+  // Mirrors the PromptPay poll above: when a card charge comes back not-yet-paid,
+  // poll the same status endpoint until Omise settles it (or time out).
+  useEffect(() => {
+    if (!cardPending || !registrationId) return undefined;
+    let elapsed = 0;
+    const MAX = 10 * 60 * 1000; // 10 minutes
+    const iv = setInterval(async () => {
+      elapsed += 3000;
+      try {
+        const r = await fetch(
+          `/api/masterclass/register/status?id=${registrationId}`,
+          { cache: "no-store" },
+        );
+        const d = await r.json();
+        if (d.status === "paid" || d.paymentStatus === "successful") {
+          clearInterval(iv);
+          setCardPending(null);
+          setResult({
+            kind: "paid",
+            referenceNumber: cardPending.referenceNumber,
+            amount: cardPending.amount,
+            method: "credit_card",
+            requestInvoice:
+              Boolean(formState.request_invoice) || wantsDoc === true,
+          });
+          setStep(3);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        } else if (d.paymentStatus === "failed") {
+          // Charge declined (e.g. insufficient funds) — surface immediately
+          // instead of waiting out the 10-minute timeout.
+          clearInterval(iv);
+          setCardPending(null);
+          setPayError(
+            "การชำระเงินไม่สำเร็จ กรุณาตรวจสอบยอดเงินในบัตรหรือลองใหม่อีกครั้ง",
+          );
+        }
+      } catch {}
+      if (elapsed >= MAX) {
+        clearInterval(iv);
+        setCardPending(null);
+        setPayError(
+          "ไม่สามารถยืนยันการชำระเงินได้ในขณะนี้ กรุณาตรวจสอบสถานะหรือลองใหม่",
+        );
+      }
+    }, 3000);
+    return () => clearInterval(iv);
+  }, [cardPending, registrationId]);
+
   if (!hydrated) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -1156,6 +1208,53 @@ export function MasterclassRegisterClient({ course, batch }) {
     return null;
   }
 
+  function validateLicense() {
+    if (!licenseEnabled) return null; // license not applicable for this course
+
+    const count = formState.attendeesCount ?? 1;
+    const listProvided = formState.attendeesListProvided ?? true;
+    const effectiveScope =
+      !listProvided || count <= 1
+        ? "all"
+        : (formState.license_scope ?? "all");
+
+    const choices = course.license_options?.choices ?? [];
+
+    if (effectiveScope === "all") {
+      if (!formState.license_choice) {
+        return "กรุณาเลือก License ก่อนดำเนินการต่อ";
+      }
+      const chosen = choices.find((c) => c.value === formState.license_choice);
+      if (chosen?.require_detail) {
+        if (chosen.value === "own" && !formState.license_level) {
+          return "กรุณาเลือกประเภท License (License Level)";
+        }
+        if (chosen.value !== "own" && !formState.license_detail?.trim()) {
+          return "กรุณากรอกรายละเอียด License";
+        }
+      }
+    } else {
+      // per_attendee: validate each slot
+      for (let i = 0; i < count; i++) {
+        const slot = formState.license_per_attendee?.[i] ?? {};
+        if (!slot.choice) {
+          return `กรุณาเลือก License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+        }
+        const chosen = choices.find((c) => c.value === slot.choice);
+        if (chosen?.require_detail) {
+          if (chosen.value === "own" && !slot.level) {
+            return `กรุณาเลือกประเภท License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+          }
+          if (chosen.value !== "own" && !slot.detail?.trim()) {
+            return `กรุณากรอกรายละเอียด License สำหรับผู้เข้าอบรมท่านที่ ${i + 1}`;
+          }
+        }
+      }
+    }
+
+    return null; // valid
+  }
+
   function handleStep1Next() {
     setSubmitError(null);
     const { firstName, lastName, email, phone } = formState;
@@ -1191,6 +1290,13 @@ export function MasterclassRegisterClient({ course, batch }) {
       }
     }
 
+    // Validate license selection
+    const licenseErr = validateLicense();
+    if (licenseErr) {
+      setSubmitError(licenseErr);
+      return;
+    }
+
     persist();
     setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1220,11 +1326,17 @@ export function MasterclassRegisterClient({ course, batch }) {
         : false;
 
   // Whether the Step 1 form has minimum data to proceed (coordinator fields filled)
-  const canStep1 =
-    Boolean(formState.firstName?.trim()) &&
-    Boolean(formState.lastName?.trim()) &&
-    Boolean(formState.email?.trim()) &&
-    Boolean(formState.phone?.trim());
+  const canStep1 = (() => {
+    if (
+      !formState.firstName?.trim() ||
+      !formState.lastName?.trim() ||
+      !formState.email?.trim() ||
+      !formState.phone?.trim()
+    )
+      return false;
+    if (licenseEnabled && validateLicense() !== null) return false;
+    return true;
+  })();
 
   // Step 2 left-column invoice form shows when a document was requested in Step 1
   // or opted into via the wantsDoc toggle on Step 2.
@@ -1366,6 +1478,23 @@ export function MasterclassRegisterClient({ course, batch }) {
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setPayError(data?.message || "การชำระเงินไม่สำเร็จ");
+        return;
+      }
+      if (!data.paid) {
+        // Card not settled synchronously.
+        if (data.authorizeUrl) {
+          // 3DS / bank authorization required — hand the user off to Omise's
+          // authorize page. They return to /masterclass/payment/complete
+          // (our return_uri), which polls status until the charge settles.
+          window.location.href = data.authorizeUrl;
+          return;
+        }
+        // Async capture without a redirect — poll the status endpoint instead
+        // of showing success prematurely.
+        setCardPending({
+          referenceNumber: data.referenceNumber,
+          amount: data.amount,
+        });
         return;
       }
       setResult({
@@ -2427,6 +2556,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                       setPaymentStarted(false);
                     }}
                     submitting={submitting}
+                    processing={Boolean(cardPending)}
                     payError={payError}
                     cardValid={cardValid}
                     omiseReady={omiseReady}
@@ -2566,12 +2696,12 @@ export function MasterclassRegisterClient({ course, batch }) {
                                   Icon={QrCode}
                                   label="PromptPay QR"
                                 />
-                                <ChannelCard
+                                {/* <ChannelCard
                                   selected={channel === "credit_card"}
                                   onClick={() => setChannel("credit_card")}
                                   Icon={CreditCard}
                                   label="บัตรเครดิต/เดบิต"
-                                />
+                                /> */}
                               </div>
                             </div>
 
