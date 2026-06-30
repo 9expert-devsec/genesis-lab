@@ -24,7 +24,7 @@
  */
 export function buildLicenseModel(doc, courseDoc) {
   const opts = courseDoc?.license_options;
-  if (!opts?.enabled) return { license_summary: false };
+  if (!opts?.enabled) return null;
 
   const choices = opts.choices ?? [];
   const findChoice = (v) => choices.find((c) => c.value === v) || null;
@@ -41,13 +41,8 @@ export function buildLicenseModel(doc, courseDoc) {
     Array.isArray(doc.license_per_attendee) &&
     doc.license_per_attendee.length
   ) {
-    const items = doc.license_per_attendee.map((s, i) => ({
-      index: i + 1,
-      choice_label: labelOf(s.choice),
-      level: s.level || '',
-      detail: s.detail || '',
-    }));
-    // per_attendee → conditions come ONLY from global_ack
+    // per_attendee → never render a summary table (each attendee's license is
+    // already in the attendee table). Conditions come ONLY from global_ack.
     const g = opts.global_ack;
     const conditions =
       g?.enabled && g?.html_content
@@ -58,7 +53,10 @@ export function buildLicenseModel(doc, courseDoc) {
             },
           ]
         : false;
-    return { license_summary: { per_attendee: true, items, conditions } };
+    return {
+      license_per_attendee_mode: true, // truthy flag
+      license_conditions: conditions, // array | false (from global_ack)
+    };
   }
 
   // scope "all" → conditions come from the selected choice's info_popup
@@ -87,5 +85,10 @@ export function buildLicenseModel(doc, courseDoc) {
           },
         ]
       : false;
-  return { license_summary: { per_attendee: false, show_items, single, conditions } };
+  return {
+    license_per_attendee_mode: false,
+    // object|false so {{#license_show_table}} works AND exposes license_text
+    license_show_table: show_items ? { license_text: single.license_text } : false,
+    license_conditions: conditions, // array | false
+  };
 }
