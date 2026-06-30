@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
@@ -37,6 +37,13 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
+import {
+  getCustomPageBySlug,
+  getCustomPageBySlugAny,
+  findCustomPageByHistoricalSlug,
+} from '@/lib/actions/customPages';
+import { buildPageJsonLd } from '@/lib/customPages/buildPageJsonLd';
+import { CustomPageView } from './_components/CustomPageView';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -58,6 +65,23 @@ function segmentFromSlug(slug) {
   const segment = Array.isArray(slug) ? slug.join('/') : String(slug ?? '');
   if (segment.includes('/')) return null;
   return segment;
+}
+
+// Resolve a custom page for either public (published) or preview (any status
+// with a matching token) access. Returns { page, isPreview } or null.
+async function resolveCustomPageForRequest(segment, searchParams) {
+  const sp = await searchParams;               // App Router: searchParams is a promise
+  const token = sp?.preview ? String(sp.preview) : '';
+  if (token) {
+    const draft = await getCustomPageBySlugAny(segment);
+    if (draft && draft.previewToken && draft.previewToken === token) {
+      return { page: draft, isPreview: true };
+    }
+    // token present but wrong/!match → fall through to published-only
+  }
+  const published = await getCustomPageBySlug(segment);
+  if (published) return { page: published, isPreview: false };
+  return null;
 }
 
 // ── Program / skill pretty-URL pages ────────────────────────────────
@@ -133,7 +157,7 @@ async function loadSkill(slug) {
   return { skill, config, coursesByProgram, totalCourses: skillCourses.length };
 }
 
-export async function generateMetadata({ params }) {
+export async function generateMetadata({ params, searchParams }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
@@ -236,33 +260,70 @@ export async function generateMetadata({ params }) {
   }
 
   const resolved = await resolveCourse(segment);
-  if (!resolved) return {};
+  if (resolved) {
+    const { course, extension } = resolved;
+    const title =
+      extension?.metaTitle?.trim() ||
+      `${course.course_name}`;
+    const description =
+      extension?.metaDescription?.trim() ||
+      course.course_teaser?.slice(0, 160) ||
+      '';
+    const ogImage =
+      extension?.ogImage?.trim() || course.course_cover_url || '';
 
-  const { course, extension } = resolved;
-  const title =
-    extension?.metaTitle?.trim() ||
-    `${course.course_name}`;
-  const description =
-    extension?.metaDescription?.trim() ||
-    course.course_teaser?.slice(0, 160) ||
-    '';
-  const ogImage =
-    extension?.ogImage?.trim() || course.course_cover_url || '';
-
-  return {
-    title,
-    description,
-    alternates: { canonical: pageUrl },
-    openGraph: {
+    return {
       title,
       description,
-      url: pageUrl,
-      images: ogImage ? [{ url: ogImage }] : [],
-    },
-  };
+      alternates: { canonical: pageUrl },
+      openGraph: {
+        title,
+        description,
+        url: pageUrl,
+        images: ogImage ? [{ url: ogImage }] : [],
+      },
+    };
+  }
+
+  // Custom page metadata — lowest priority, after every built-in resolver.
+  const cp = await resolveCustomPageForRequest(segment, searchParams);
+  if (cp) {
+    const customPage = cp.page;
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    const canonical = customPage.canonicalUrl || `${base}/${segment}`;
+    const title = customPage.metaTitle || customPage.title;
+    const description = customPage.metaDescription || '';
+    const ogTitle = customPage.ogTitle || title;
+    const ogDesc = customPage.ogDescription || description;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      // Force noindex for preview renders so a shared preview URL can never
+      // get indexed, regardless of the page's own noIndex setting.
+      robots: (cp.isPreview || customPage.noIndex) ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title: ogTitle,
+        description: ogDesc,
+        url: canonical,
+        type: customPage.ogType || 'website',
+        images: customPage.ogImage ? [{ url: customPage.ogImage }] : [],
+        siteName: '9Expert Training',
+        locale: 'th_TH',
+      },
+      twitter: {
+        card: customPage.twitterCard || 'summary_large_image',
+        title: ogTitle,
+        description: ogDesc,
+        images: customPage.ogImage ? [customPage.ogImage] : [],
+      },
+    };
+  }
+
+  return {};
 }
 
-export default async function CatchAllPage({ params }) {
+export default async function CatchAllPage({ params, searchParams }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
 
@@ -421,6 +482,38 @@ export default async function CatchAllPage({ params }) {
         />
       </>
     );
+  }
+
+  // ── Custom page — lowest-priority resolver (after course resolution). ──
+  const cp = await resolveCustomPageForRequest(segment, searchParams);
+  if (cp) {
+    const customPage = cp.page;
+    const jsonLdData = buildPageJsonLd(customPage, process.env.NEXT_PUBLIC_SITE_URL);
+    return (
+      <>
+        {jsonLdData && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
+          />
+        )}
+        {cp.isPreview && (
+          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-9e-navy">
+            ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
+          </div>
+        )}
+        <CustomPageView page={customPage} />
+      </>
+    );
+  }
+
+  // 301 redirect for renamed custom-page slugs — only reached when nothing
+  // else (course/program/skill/career-path/published custom page) matched.
+  // permanentRedirect emits 308 (permanent), which throws internally, so it
+  // must sit outside any try/catch and be the last thing before notFound().
+  const historical = await findCustomPageByHistoricalSlug(segment);
+  if (historical?.slug && historical.slug !== segment) {
+    permanentRedirect(`/${historical.slug}`);
   }
 
   notFound();

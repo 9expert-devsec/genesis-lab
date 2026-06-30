@@ -38,6 +38,7 @@ const ALLOWED_FOLDERS = new Set([
   'instructors',
   'banners',
   'articles',
+  'custom-pages',
   'notifications',
   'about',
   'career-paths',
