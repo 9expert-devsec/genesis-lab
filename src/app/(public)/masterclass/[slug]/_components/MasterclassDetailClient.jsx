@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { CountdownTimer } from "../../_components/CountdownTimer";
+import { OutlineDownloadButton } from "./OutlineDownloadButton";
+import { LandingConversion } from "./LandingConversion";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -129,6 +131,8 @@ export function MasterclassDetailClient({
 
   return (
     <main className="overflow-x-hidden">
+      {/* Google Ads landing conversion — fires once on mount, scoped slug only */}
+      <LandingConversion slug={course.slug} />
       {/* [A] Hero */}
       <section
         id="mc-hero"
@@ -260,20 +264,10 @@ export function MasterclassDetailClient({
             </span>
           </div>
           {course.course_outline_url ? (
-            <a
+            <OutlineDownloadButton
               href={course.course_outline_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col px-8 py-5  items-center rounded-[20px] bg-9e-brand text-sm font-semibold text-white transition-colors hover:bg-9e-air"
-            >
-              <div className="flex flex-row items-center gap-2 text-lg md:text-2xl">
-                <Download size={24} /> Download
-              </div>
-
-              <span className="text-[12px] font-semibold uppercase tracking-widest text-white mt-0.5">
-                COURSE OUTLINE
-              </span>
-            </a>
+              fileName={course.slug}
+            />
           ) : (
             <span className="flex flex-col px-8 py-5  items-center rounded-[20px] border border-gray-200 text-sm font-medium text-gray-400 cursor-default">
               <div className="flex flex-row items-center gap-2 text-2xl">

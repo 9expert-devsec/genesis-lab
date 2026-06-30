@@ -23,6 +23,7 @@ import { CountdownTimer } from "../../../_components/CountdownTimer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { trackPurchase, trackFormSubmitLead } from "@/lib/analytics/conversions";
 
 const STORAGE_KEY = "masterclass-register-v1";
 
@@ -962,6 +963,9 @@ export function MasterclassRegisterClient({ course, batch }) {
   const [globalLicenseAcked, setGlobalLicenseAcked] = useState(false);
   // Dedupes registration across multiple payment attempts (e.g. switch QR → card).
   const registeredRef = useRef(null);
+  // Analytics guards — fire each conversion at most once regardless of re-render.
+  const purchaseTracked = useRef(false);
+  const formLeadTracked = useRef(false);
   // Anchor for scrolling to the left-column payment panel after a charge is created.
   const leftPanelRef = useRef(null);
   // Anchor for the QR/Card payment panel itself (status widget "scroll to" target).
@@ -1152,6 +1156,44 @@ export function MasterclassRegisterClient({ course, batch }) {
     }, 3000);
     return () => clearInterval(iv);
   }, [cardPending, registrationId]);
+
+  // ── Purchase conversion ─────────────────────────────────────────────────────
+  // Fire GA4 purchase + Google Ads conversion exactly ONCE when a paid result is
+  // shown. Covers BOTH promptpay and credit_card, sync and polled — all paid
+  // paths set kind:"paid" + a method. The quote path sets kind:"quote" with no
+  // method, so isPaid excludes it. The ref guard prevents double-counting on
+  // re-render / refresh-restored state / step changes.
+  useEffect(() => {
+    if (purchaseTracked.current) return;
+    if (step !== 3 || !result) return;
+    const method = result.method; // 'promptpay' | 'credit_card' | undefined (quote)
+    const isPaid =
+      result.kind === "paid" &&
+      (method === "promptpay" || method === "credit_card");
+    if (!isPaid) return; // skip quote/invoice path
+
+    const value = Number(result.amount ?? pricing?.total ?? 0);
+    // referenceNumber is always present on paid results; registrationId is a
+    // stable per-registration fallback so transaction_id is never empty (Ads
+    // dedupes conversions on transaction_id).
+    const transactionId = result.referenceNumber || registrationId;
+
+    purchaseTracked.current = true;
+    trackPurchase({
+      method,
+      value,
+      transactionId,
+      items: [
+        {
+          item_id: batch?._id ? String(batch._id) : course?.slug,
+          item_name: course?.title_th || "Masterclass",
+          price: pricing?.pricePerSeat,
+          quantity: pricing?.seats ?? 1,
+        },
+      ],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, result]);
 
   if (!hydrated) {
     return (
@@ -1438,6 +1480,19 @@ export function MasterclassRegisterClient({ course, batch }) {
     };
     registeredRef.current = reg;
     setRegistrationId(data.registrationId);
+
+    // Form-submit lead (จุด A) — fire once per registration, the moment the
+    // user commits their details and moves toward payment. Deduped here AND via
+    // the ref so switching QR↔card (which reuses this registration) never
+    // re-fires. Fires once regardless of downstream method (quote or paid).
+    if (!formLeadTracked.current) {
+      formLeadTracked.current = true;
+      trackFormSubmitLead({
+        value: pricing?.total,
+        transactionId: data.registrationId,
+      });
+    }
+
     return reg;
   }
 
