@@ -1,6 +1,7 @@
 import { siteConfig } from '@/config/site';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
+import CustomPage from '@/models/CustomPage';
 
 // Regenerate hourly — fresh enough for new articles, cheap enough that
 // crawlers don't trigger a Mongo round-trip on every hit.
@@ -51,5 +52,27 @@ export default async function sitemap() {
     // swallow — static entries still ship
   }
 
-  return [...staticEntries, ...articleEntries];
+  // Custom pages — best-effort, same defensive style as articles.
+  // noIndex pages are explicitly de-indexed, so they never enter the sitemap.
+  let customPageEntries = [];
+  try {
+    await dbConnect();
+    const pages = await CustomPage.find({
+      status: 'published',
+      noIndex: { $ne: true },
+    })
+      .select('slug updatedAt')
+      .limit(500)
+      .lean();
+    customPageEntries = pages.map((p) => ({
+      url: `${base}/${p.slug}`,
+      lastModified: p.updatedAt ?? new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.5,
+    }));
+  } catch {
+    // swallow — static + article entries still ship
+  }
+
+  return [...staticEntries, ...articleEntries, ...customPageEntries];
 }

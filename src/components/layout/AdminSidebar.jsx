@@ -129,6 +129,7 @@ const NAV_GROUPS = [
       { label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places',    icon: 'MapPin' },
       { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare' },
       { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText', roles: IT_SUPPORT_ROLES },
+      { label: 'จัดการหน้าเพจ',     href: '/admin/pages',            icon: 'LayoutTemplate', roles: IT_SUPPORT_ROLES },
       { label: 'FAQ',              href: '/admin/faqs',             icon: 'HelpCircle', roles: IT_SUPPORT_ROLES },
       { label: 'FAQ (Local)',      href: '/admin/local-faqs',       icon: 'HelpCircle', roles: IT_SUPPORT_ROLES },
       { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays', roles: IT_SUPPORT_ROLES },
