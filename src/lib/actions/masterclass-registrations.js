@@ -108,7 +108,7 @@ export async function getMasterclassRegistrationById(id) {
     .select('license_options')
     .lean();
   const out = serialize(doc);
-  out.licenseSummary = buildLicenseModel(doc, courseDoc).license_summary;
+  out.licenseSummary = buildLicenseModel(doc, courseDoc); // flat model | null
   return out;
 }
 
