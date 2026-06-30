@@ -1,6 +1,9 @@
+import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { siteConfig } from '@/config/site';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
+import { Analytics } from '@/components/analytics/Analytics';
+import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -104,6 +107,10 @@ export default function RootLayout({ children }) {
       suppressHydrationWarning
     >
       <body className="font-en antialiased ">
+        <Analytics />
+        <Suspense fallback={null}>
+          <AnalyticsPageTracker />
+        </Suspense>
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

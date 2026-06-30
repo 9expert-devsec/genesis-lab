@@ -1,8 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { trackPurchase } from '@/lib/analytics/conversions';
 
 /**
  * Return page after Omise 3DS/bank redirect.
@@ -20,6 +21,12 @@ function PaymentCompleteInner() {
   const registrationId = searchParams.get('registrationId');
 
   const [status, setStatus] = useState('checking'); // checking | paid | failed | timeout
+  // Fire the purchase conversion at most once. This page is the ONLY place the
+  // 3DS card purchase is confirmed client-side (those users never re-enter the
+  // register client's step 3 — they land here and route to '/'). QR / sync-card
+  // purchases fire in the register client and never reach this success screen,
+  // so the two paths are disjoint — no double counting.
+  const purchaseTracked = useRef(false);
 
   useEffect(() => {
     if (!registrationId) {
@@ -42,6 +49,18 @@ function PaymentCompleteInner() {
         const body = await res.json().catch(() => ({}));
         if (body?.status === 'paid') {
           clearInterval(timer);
+          // Track the purchase (3DS card path) using the trusted, server-supplied
+          // amount/method/charge id. trackPurchase maps method → the right Ads
+          // label (credit_card → masterclassCard).
+          if (body.purchase && !purchaseTracked.current) {
+            purchaseTracked.current = true;
+            trackPurchase({
+              method: body.purchase.method,
+              value: Number(body.purchase.value ?? 0),
+              transactionId: body.purchase.transactionId,
+              items: [], // line-item detail not available on this page; ok to omit
+            });
+          }
           setStatus('paid');
         } else if (body?.paymentStatus === 'failed') {
           clearInterval(timer);
