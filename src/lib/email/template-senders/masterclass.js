@@ -152,6 +152,19 @@ export async function sendMasterclassPaidReceipt(doc) {
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
 
+  // TODO(temp-debug): remove after verifying flat license keys reach Postmark.
+  console.log("[mc-license-debug]", JSON.stringify({
+    which: alias,
+    license_per_attendee_mode: templateModel.license_per_attendee_mode,
+    license_show_table: templateModel.license_show_table,
+    license_conditions: templateModel.license_conditions,
+    attendeesListProvided: doc.attendeesListProvided,
+    license_scope: doc.license_scope,
+    license_choice: doc.license_choice,
+    course_id: String(doc.course_id),
+    has_license_options: courseDoc?.license_options?.enabled,
+  }));
+
   await Promise.allSettled([
     sendTemplateEmail({
       to: recipient.to,
@@ -268,6 +281,19 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
+
+  // TODO(temp-debug): remove after verifying flat license keys reach Postmark.
+  console.log("[mc-license-debug]", JSON.stringify({
+    which: alias,
+    license_per_attendee_mode: templateModel.license_per_attendee_mode,
+    license_show_table: templateModel.license_show_table,
+    license_conditions: templateModel.license_conditions,
+    attendeesListProvided: doc.attendeesListProvided,
+    license_scope: doc.license_scope,
+    license_choice: doc.license_choice,
+    course_id: String(doc.course_id),
+    has_license_options: courseDoc?.license_options?.enabled,
+  }));
 
   await Promise.allSettled([
     sendTemplateEmail({
