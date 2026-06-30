@@ -6,6 +6,7 @@ import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
 import { auth }                from '@/lib/auth/options';
+import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;
@@ -100,7 +101,15 @@ export async function getMasterclassRegistrationById(id) {
   await dbConnect();
   if (!id) return null;
   const doc = await MasterclassRegistration.findById(id).lean();
-  return serialize(doc);
+  if (!doc) return null;
+  // Compute a license-summary view-field (incl. conditions) for admin parity.
+  // Not stored — derived from the course's license_options on read.
+  const courseDoc = await MasterclassCourse.findById(doc.course_id)
+    .select('license_options')
+    .lean();
+  const out = serialize(doc);
+  out.licenseSummary = buildLicenseModel(doc, courseDoc).license_summary;
+  return out;
 }
 
 // ── Update status ─────────────────────────────────────────────────

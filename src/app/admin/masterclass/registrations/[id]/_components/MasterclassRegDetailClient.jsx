@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Trash2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { sanitizePageHtml } from '@/lib/customPages/sanitizePageHtml';
 import {
   updateMasterclassRegistrationStatus,
   deleteMasterclassRegistration,
@@ -77,6 +79,7 @@ export function MasterclassRegDetailClient({ reg }) {
   const pay = reg.payment;
   const inv = reg.invoice;
   const consent = reg.consent;
+  const ls = reg.licenseSummary;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -118,13 +121,40 @@ export function MasterclassRegDetailClient({ reg }) {
         </Card>
 
         {/* ── License ── */}
-        {(reg.license_choice || reg.license_level || reg.license_detail) && (
+        {(ls || reg.license_choice || reg.license_level || reg.license_detail) && (
           <Card title="License">
-            {reg.license_choice && (
-              <Row label="ตัวเลือก" value={LICENSE_CHOICE_LABEL[reg.license_choice] ?? reg.license_choice} />
+            {/* per_attendee → licenses live in the attendee table; show conditions only.
+                scope "all"   → show the single license row only when the attendee list
+                                was NOT provided (otherwise it's in the attendee table). */}
+            {ls && ls.per_attendee ? null : ls && ls.single ? (
+              ls.show_items && (
+                <>
+                  <Row label="ตัวเลือก" value={ls.single.choice_label} />
+                  {ls.single.level  && <Row label="ระดับ"      value={ls.single.level} />}
+                  {ls.single.detail && <Row label="รายละเอียด" value={ls.single.detail} />}
+                </>
+              )
+            ) : (
+              <>
+                {reg.license_choice && (
+                  <Row label="ตัวเลือก" value={LICENSE_CHOICE_LABEL[reg.license_choice] ?? reg.license_choice} />
+                )}
+                {reg.license_level  && <Row label="ระดับ"      value={reg.license_level} />}
+                {reg.license_detail && <Row label="รายละเอียด" value={reg.license_detail} />}
+              </>
             )}
-            {reg.license_level  && <Row label="ระดับ"      value={reg.license_level} />}
-            {reg.license_detail && <Row label="รายละเอียด" value={reg.license_detail} />}
+
+            {ls && Array.isArray(ls.conditions) && ls.conditions.map((c, i) => (
+              <details key={i} className="mt-2 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2">
+                <summary className="cursor-pointer text-xs font-semibold text-[var(--text-secondary)]">
+                  {c.title}
+                </summary>
+                <div
+                  className="prose prose-sm mt-2 max-w-none text-sm text-[var(--text-primary)]"
+                  dangerouslySetInnerHTML={{ __html: sanitizePageHtml(c.html) }}
+                />
+              </details>
+            ))}
           </Card>
         )}
 
@@ -191,17 +221,8 @@ export function MasterclassRegDetailClient({ reg }) {
                 </>
               )}
               {inv.taxId && <Row label="เลขประจำตัวผู้เสียภาษี" value={inv.taxId} />}
-              {inv.country === 'TH' && inv.thaiAddress && (
-                <Row
-                  label="ที่อยู่"
-                  value={[inv.thaiAddress.addressLine, inv.thaiAddress.subDistrict, inv.thaiAddress.district, inv.thaiAddress.province, inv.thaiAddress.postalCode].filter(Boolean).join(' ')}
-                />
-              )}
-              {inv.country === 'OTHER' && inv.internationalAddress && (
-                <Row
-                  label="ที่อยู่"
-                  value={[inv.internationalAddress.line1, inv.internationalAddress.line2, inv.internationalAddress.city, inv.internationalAddress.state, inv.internationalAddress.postalCode, inv.internationalAddress.country].filter(Boolean).join(', ')}
-                />
+              {formatBillingAddress(inv) && (
+                <Row label="ที่อยู่" value={formatBillingAddress(inv)} />
               )}
             </>
           )}

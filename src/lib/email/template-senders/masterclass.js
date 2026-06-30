@@ -1,5 +1,7 @@
 import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
 import { formatTHB } from "@/lib/pricing";
+import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
+import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
 
 // ── Helpers (copied inline from src/lib/masterclass/send-receipt.js) ──────────
 
@@ -65,7 +67,7 @@ export async function sendMasterclassPaidReceipt(doc) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url")
+    .select("cover_image_url license_options")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
@@ -79,21 +81,8 @@ export async function sendMasterclassPaidReceipt(doc) {
   const methodLabel =
     doc.payment?.method === "credit_card" ? "บัตรเครดิต/เดบิต" : "QR PromptPay";
 
-  const thaiAddrP = doc.invoice?.thaiAddress ?? {};
-  const intlAddrP = doc.invoice?.internationalAddress ?? {};
-  const isIntlP = (doc.invoice?.country ?? "TH") === "OTHER";
-  const billingAddressP = isIntlP
-    ? [
-        intlAddrP.line1,
-        intlAddrP.line2,
-        intlAddrP.city,
-        intlAddrP.state,
-        intlAddrP.postalCode,
-        intlAddrP.country,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : thaiAddrP.addressLine || "";
+  const billingAddressP = formatBillingAddress(doc.invoice);
+  const licenseModel = buildLicenseModel(doc, courseDoc);
 
   const templateModel = {
     coordinator_name:
@@ -144,10 +133,6 @@ export async function sendMasterclassPaidReceipt(doc) {
                   billing_name: `${doc.invoice?.firstName ?? ""} ${doc.invoice?.lastName ?? ""}`.trim(),
                   billing_tax_id: doc.invoice?.taxId || "",
                   billing_address: billingAddressP,
-                  billing_subdistrict: isIntlP ? "" : thaiAddrP.subDistrict || "",
-                  billing_district: isIntlP ? "" : thaiAddrP.district || "",
-                  billing_province: isIntlP ? "" : thaiAddrP.province || "",
-                  billing_postal_code: isIntlP ? "" : thaiAddrP.postalCode || "",
                 }
               : false,
           billing_company:
@@ -157,15 +142,12 @@ export async function sendMasterclassPaidReceipt(doc) {
                   billing_tax_id: doc.invoice?.taxId || "",
                   billing_branch: doc.invoice?.branch || "",
                   billing_address: billingAddressP,
-                  billing_subdistrict: isIntlP ? "" : thaiAddrP.subDistrict || "",
-                  billing_district: isIntlP ? "" : thaiAddrP.district || "",
-                  billing_province: isIntlP ? "" : thaiAddrP.province || "",
-                  billing_postal_code: isIntlP ? "" : thaiAddrP.postalCode || "",
                 }
               : false,
         }
       : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
+    ...licenseModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
@@ -212,7 +194,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url")
+    .select("cover_image_url license_options")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
@@ -224,21 +206,8 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
 
   const refNo = referenceNumber ?? String(doc._id).slice(-8).toUpperCase();
 
-  const thaiAddrQ = doc.invoice?.thaiAddress ?? {};
-  const intlAddrQ = doc.invoice?.internationalAddress ?? {};
-  const isIntlQ = (doc.invoice?.country ?? "TH") === "OTHER";
-  const billingAddressQ = isIntlQ
-    ? [
-        intlAddrQ.line1,
-        intlAddrQ.line2,
-        intlAddrQ.city,
-        intlAddrQ.state,
-        intlAddrQ.postalCode,
-        intlAddrQ.country,
-      ]
-        .filter(Boolean)
-        .join(", ")
-    : thaiAddrQ.addressLine || "";
+  const billingAddressQ = formatBillingAddress(doc.invoice);
+  const licenseModel = buildLicenseModel(doc, courseDoc);
 
   const templateModel = {
     coordinator_name:
@@ -283,10 +252,6 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
             billing_name: `${doc.invoice?.firstName ?? ""} ${doc.invoice?.lastName ?? ""}`.trim(),
             billing_tax_id: doc.invoice?.taxId || "",
             billing_address: billingAddressQ,
-            billing_subdistrict: isIntlQ ? "" : thaiAddrQ.subDistrict || "",
-            billing_district: isIntlQ ? "" : thaiAddrQ.district || "",
-            billing_province: isIntlQ ? "" : thaiAddrQ.province || "",
-            billing_postal_code: isIntlQ ? "" : thaiAddrQ.postalCode || "",
           }
         : false,
     billing_company:
@@ -296,13 +261,10 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
             billing_tax_id: doc.invoice?.taxId || "",
             billing_branch: doc.invoice?.branch || "",
             billing_address: billingAddressQ,
-            billing_subdistrict: isIntlQ ? "" : thaiAddrQ.subDistrict || "",
-            billing_district: isIntlQ ? "" : thaiAddrQ.district || "",
-            billing_province: isIntlQ ? "" : thaiAddrQ.province || "",
-            billing_postal_code: isIntlQ ? "" : thaiAddrQ.postalCode || "",
           }
         : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
+    ...licenseModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
