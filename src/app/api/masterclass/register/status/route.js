@@ -10,12 +10,26 @@ export async function GET(req) {
   if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400, headers: NO_STORE });
   await dbConnect();
   const doc = await MasterclassRegistration.findById(id)
-    .select('status payment.omiseStatus')
+    .select('status payment.omiseStatus pricing.total pricing.currency payment.method payment.omiseChargeId')
     .lean()
     .catch(() => null);
   if (!doc) return NextResponse.json({ error: 'not_found' }, { status: 404, headers: NO_STORE });
+
+  // Expose purchase data ONLY for paid registrations — never leak pricing/charge
+  // info for pending/failed states. The holder of a registrationId for a PAID
+  // registration is the buyer, so seeing their own amount/method is acceptable.
+  const purchase =
+    doc.status === 'paid'
+      ? {
+          value: doc.pricing?.total ?? null,
+          currency: doc.pricing?.currency ?? 'THB',
+          method: doc.payment?.method ?? null, // 'credit_card' | 'promptpay'
+          transactionId: doc.payment?.omiseChargeId ?? id,
+        }
+      : null;
+
   return NextResponse.json(
-    { status: doc.status, paymentStatus: doc.payment?.omiseStatus ?? null },
+    { status: doc.status, paymentStatus: doc.payment?.omiseStatus ?? null, purchase },
     { headers: NO_STORE }
   );
 }
