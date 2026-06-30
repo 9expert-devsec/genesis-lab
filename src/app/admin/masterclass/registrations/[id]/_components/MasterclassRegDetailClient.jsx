@@ -128,11 +128,11 @@ export function MasterclassRegDetailClient({ reg }) {
                                 was NOT provided (otherwise it's in the attendee table).
                 no model (license_options disabled) → legacy stored fields. */}
             {ls ? (
-              ls.license_per_attendee_mode ? null : (
+              ls.license_all_mode ? (
                 ls.license_show_table && (
                   <Row label="License" value={ls.license_show_table.license_text} />
                 )
-              )
+              ) : null
             ) : (
               <>
                 {reg.license_choice && (

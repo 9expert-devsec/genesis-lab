@@ -55,6 +55,7 @@ export function buildLicenseModel(doc, courseDoc) {
         : false;
     return {
       license_per_attendee_mode: true, // truthy flag
+      license_all_mode: false, // explicit inverse — avoid inverted-section nesting
       license_conditions: conditions, // array | false (from global_ack)
     };
   }
@@ -87,6 +88,7 @@ export function buildLicenseModel(doc, courseDoc) {
       : false;
   return {
     license_per_attendee_mode: false,
+    license_all_mode: true, // explicit positive flag — avoid inverted-section nesting
     // object|false so {{#license_show_table}} works AND exposes license_text
     license_show_table: show_items ? { license_text: single.license_text } : false,
     license_conditions: conditions, // array | false

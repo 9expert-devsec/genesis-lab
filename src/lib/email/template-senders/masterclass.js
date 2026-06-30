@@ -156,6 +156,7 @@ export async function sendMasterclassPaidReceipt(doc) {
   console.log("[mc-license-debug]", JSON.stringify({
     which: alias,
     license_per_attendee_mode: templateModel.license_per_attendee_mode,
+    license_all_mode: templateModel.license_all_mode,
     license_show_table: templateModel.license_show_table,
     license_conditions: templateModel.license_conditions,
     attendeesListProvided: doc.attendeesListProvided,
@@ -286,6 +287,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   console.log("[mc-license-debug]", JSON.stringify({
     which: alias,
     license_per_attendee_mode: templateModel.license_per_attendee_mode,
+    license_all_mode: templateModel.license_all_mode,
     license_show_table: templateModel.license_show_table,
     license_conditions: templateModel.license_conditions,
     attendeesListProvided: doc.attendeesListProvided,
