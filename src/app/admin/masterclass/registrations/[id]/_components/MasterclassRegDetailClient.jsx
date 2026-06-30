@@ -123,16 +123,15 @@ export function MasterclassRegDetailClient({ reg }) {
         {/* ── License ── */}
         {(ls || reg.license_choice || reg.license_level || reg.license_detail) && (
           <Card title="License">
-            {/* per_attendee → licenses live in the attendee table; show conditions only.
+            {/* per_attendee → licenses live in the attendee table; conditions only.
                 scope "all"   → show the single license row only when the attendee list
-                                was NOT provided (otherwise it's in the attendee table). */}
-            {ls && ls.per_attendee ? null : ls && ls.single ? (
-              ls.show_items && (
-                <>
-                  <Row label="ตัวเลือก" value={ls.single.choice_label} />
-                  {ls.single.level  && <Row label="ระดับ"      value={ls.single.level} />}
-                  {ls.single.detail && <Row label="รายละเอียด" value={ls.single.detail} />}
-                </>
+                                was NOT provided (otherwise it's in the attendee table).
+                no model (license_options disabled) → legacy stored fields. */}
+            {ls ? (
+              ls.license_per_attendee_mode ? null : (
+                ls.license_show_table && (
+                  <Row label="License" value={ls.license_show_table.license_text} />
+                )
               )
             ) : (
               <>
@@ -144,7 +143,7 @@ export function MasterclassRegDetailClient({ reg }) {
               </>
             )}
 
-            {ls && Array.isArray(ls.conditions) && ls.conditions.map((c, i) => (
+            {ls && Array.isArray(ls.license_conditions) && ls.license_conditions.map((c, i) => (
               <details key={i} className="mt-2 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2">
                 <summary className="cursor-pointer text-xs font-semibold text-[var(--text-secondary)]">
                   {c.title}
