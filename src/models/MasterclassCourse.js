@@ -67,6 +67,19 @@ const MasterclassCourseSchema = new mongoose.Schema(
     // Hero banner gradient — two Tailwind color stops, used when no cover image
     hero_gradient_from: { type: String, default: '#2486FF' },  // CSS hex
     hero_gradient_to:   { type: String, default: '#005CFF' },
+
+    // Media gallery — ordered mix of images + YouTube embeds shown in the hero slider
+    gallery: {
+      type: [new mongoose.Schema({
+        type:    { type: String, enum: ['image', 'youtube'], required: true },
+        url:     { type: String, default: '' },
+        videoId: { type: String, default: '' },
+        alt:     { type: String, default: '' },
+        order:   { type: Number, default: 0 },
+      }, { _id: false })],
+      default: [],
+    },
+
     course_outline_url:    { type: String, default: '' },
 
     duration_days:  { type: Number, default: 1 },
