@@ -25,7 +25,12 @@ const PROGRAMS_PER_PAGE_MOBILE = 10; // Program tab: 2 cols × 5 rows
 const SKILL_PROGRAMS_PER_PAGE = 8; // Skill tab: 3 cols × 2 rows on all sizes
 const SKILL_PROGRAMS_PER_PAGE_MOBILE = 6;
 
-export function ProgramSelector({ programs = [], skills = [] }) {
+export function ProgramSelector({
+  programs = [],
+  skills = [],
+  programSlugs = {},
+  skillSlugs = {},
+}) {
   const [tab, setTab] = useState("program");
   const [page, setPage] = useState(0);
   const [selectedSkill, setSelectedSkill] = useState(skills[0] ?? null);
@@ -137,7 +142,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                       <ProgramRowCard
                         key={item.program_id ?? item._id}
                         item={item}
-                        hrefBuilder={programHref}
+                        hrefBuilder={(p) => buildProgramHref(p, programSlugs)}
                       />
                     ))}
                   </div>
@@ -243,7 +248,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                             {skillPrograms.length} โปรแกรม
                           </p>
                           <Link
-                            href={`/skill/${toKebab(selectedSkill.skill_name)}`}
+                            href={buildSkillHref(selectedSkill, skillSlugs)}
                             className="text-xs font-semibold text-white bg-9e-action hover:bg-9e-brand dark:text-9e-border dark:bg-9e-lime dark:hover:bg-9e-lime-dk  p-3 rounded-full"
                           >
                             ดูหลักสูตรใน Skill นี้
@@ -278,7 +283,7 @@ export function ProgramSelector({ programs = [], skills = [] }) {
                               <ProgramTileCard
                                 key={item.program_id ?? item._id}
                                 item={item}
-                                hrefBuilder={programHref}
+                                hrefBuilder={(p) => buildProgramHref(p, programSlugs)}
                               />
                             ))}
                           </div>
@@ -454,6 +459,33 @@ function ProgramTileCard({ item, hrefBuilder }) {
   );
 }
 
-function programHref(item) {
+/**
+ * Build the public URL for a program, mirroring the navbar's
+ * `programHref` exactly: an admin-set custom slug (from ProgramPageConfig,
+ * `slugMap` keyed by lower-cased program_id/_id) renders at the bare slug;
+ * programs without one fall back to the legacy /program/<kebab> path.
+ */
+function buildProgramHref(item, slugMap = {}) {
+  for (const id of [item.program_id, item._id]) {
+    if (!id) continue;
+    const custom = slugMap[String(id).toLowerCase()];
+    if (custom) return `/${custom}`;
+  }
   return `/program/${toKebab(item.program_name)}`;
+}
+
+/**
+ * Build the public URL for a skill. An admin custom slug (from
+ * SkillPageConfig, `slugMap` keyed by the lower-cased upstream skill id)
+ * renders at the bare slug; otherwise fall back to the legacy
+ * /skill/<kebab> path. The upstream skill id lands on `_id` here (config's
+ * `upstreamId` === the skill's `_id`); check the same id the navbar keys by.
+ */
+function buildSkillHref(skill, slugMap = {}) {
+  for (const id of [skill.upstreamId, skill._id, skill.skill_id]) {
+    if (!id) continue;
+    const custom = slugMap[String(id).toLowerCase()];
+    if (custom) return `/${custom}`;
+  }
+  return `/skill/${toKebab(skill.skill_name)}`;
 }
