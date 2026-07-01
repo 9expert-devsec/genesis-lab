@@ -132,6 +132,7 @@ export function MasterclassDetailClient({
   // [sticky bar] show after scrolling past the batch section
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [barDismissed, setBarDismissed] = useState(false);
+  const [selectedEarlyBirdBatch, setSelectedEarlyBirdBatch] = useState(null);
 
   useEffect(() => {
     if (visibleBatches.length === 0) return; // no point showing if no batches
@@ -365,7 +366,7 @@ export function MasterclassDetailClient({
                       {course.time_start} – {course.time_end}
                     </p>
                     <p
-                      className={`text-sm md:text-[18px] ${
+                      className={`text-sm md:text-[18px] font-bold ${
                         batch.is_early_bird
                           ? "text-9e-slate-lt-50"
                           : "text-9e-slate-dp-50 dark:text-white"
@@ -394,7 +395,13 @@ export function MasterclassDetailClient({
                       </span>
                     )}
                     {batch.is_early_bird ? (
-                      ""
+                       <button
+                        type="button"
+                        onClick={() => setSelectedEarlyBirdBatch(batch)}
+                        className="mt-1 text-xs md:text-sm font-normal text-9e-lime underline underline-offset-4 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-9e-lime focus:ring-offset-2 focus:ring-offset-9e-navy"
+                      >
+                        ดูเงื่อนไข Early Bird
+                      </button>
                     ) : (
                       <span className="text-xs md:text-[14px] text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
                         *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
@@ -435,6 +442,78 @@ export function MasterclassDetailClient({
             </div>
           ))}
         </section>
+      )}
+
+      {/* Early Bird condition modal */}
+      {selectedEarlyBirdBatch && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 px-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSelectedEarlyBirdBatch(null)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl dark:bg-9e-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                {/* <p className="text-sm font-bold text-9e-lime">Early Bird</p> */}
+                <h3 className="text-xl font-bold text-9e-navy dark:text-white ">
+                  เงื่อนไขโปรโมชัน Early Bird
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedEarlyBirdBatch(null)}
+                className="rounded-full p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10"
+                aria-label="ปิดหน้าต่าง"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-sm leading-6 text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
+              {/* <p>
+                ราคา Early Bird สำหรับรุ่นนี้คือ{" "}
+                <strong className="text-9e-navy dark:text-white">
+                  {selectedEarlyBirdBatch.effective_price?.toLocaleString(
+                    "th-TH"
+                  )}{" "}
+                  บาท
+                </strong>
+              </p> */}
+
+              {/* {selectedEarlyBirdBatch.original_price && (
+                <p>
+                  จากราคาปกติ{" "}
+                  <span className="line-through">
+                    {selectedEarlyBirdBatch.original_price?.toLocaleString(
+                      "th-TH"
+                    )}{" "}
+                    บาท
+                  </span>
+                </p>
+              )} */}
+
+              <ul className="list-disc space-y-1 pl-5">
+                <li>ราคานี้เป็นราคาก่อนภาษีมูลค่าเพิ่ม</li>
+                <li>สงวนสิทธิ์การเรียนซ้ำ เลื่อนรอบอบรม หรือยกเลิก ในทุกกรณี</li>
+                <li>หากผู้อบรมไม่สามารถอบรมได้ในวันดังกล่าว ถือว่าสละสิทธิ์</li>
+                <li>ทางสถาบันขอสงวนสิทธิ์คืนค่าอบรมในทุกกรณี</li>
+                <li>โปรโมชันดังกล่าว เฉพาะในรอบอบรมที่กำหนด ไม่สามารถย้ายรอบได้ในทุกกรณี และไม่สามารถใช้ร่วมกับโปรโมชันอื่นได้</li>
+                <li>โปรโมชันข้างต้น ไม่สามารถแยกเอกสาร การทำชำระได้ในทุกกรณี (ใบเสนอราคา, ใบแจ้งหนี้, ใบเสร็จรับเงิน, ใบกำกับภาษี)</li>
+                <li>สิทธิ์นี้ไม่สามารถแลกหรือเปลี่ยนเป็นเงินสดได้</li>
+                <li>สงวนสิทธิ์ในการเปลี่ยนแปลงวันที่การอบรม</li>
+                <li>สงวนสิทธิ์สำหรับผู้ที่ชำระเงินภายในระยะเวลาที่กำหนดเท่านั้น</li>
+                <li>หากมีการเปลี่ยนแปลงสิทธิพิเศษเป็นแบบอื่น ทางสถาบันฯ ขอสงวนสิทธิ์ในการแจ้งให้ท่านทราบล่วงหน้า</li>
+              </ul>
+            </div>
+
+            
+          </div>
+        </div>
       )}
 
       {/* [E] Objectives */}
