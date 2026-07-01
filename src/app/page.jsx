@@ -10,6 +10,7 @@ import { getActiveClientLogos } from "@/lib/actions/portfolio";
 import ClientLogosSection from "@/components/portfolio/ClientLogosSection";
 
 import { getLandingData } from "@/lib/landing/getLandingData";
+import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
 import { siteConfig } from "@/config/site";
 
 import { HeroBanner } from "./_components/home/HeroBanner";
@@ -70,11 +71,16 @@ export default async function HomePage() {
     bars,
     featuredArticles,
     clientLogos,
+    // Live slug maps from ProgramPageConfig / SkillPageConfig — the same
+    // source the navbar uses — so the Program/Skill selector emits the
+    // admin's current custom slug (no reliance on 308 redirects).
+    { programSlugs, skillSlugs },
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
     getFeaturedArticlesForLanding().catch(() => []),
     getActiveClientLogos().catch(() => []),
+    getNavMenuData().catch(() => ({ programSlugs: {}, skillSlugs: {} })),
   ]);
 
   return (
@@ -141,7 +147,12 @@ export default async function HomePage() {
 
         <ServicesSection />
 
-        <ProgramSelector programs={programs} skills={skills} />
+        <ProgramSelector
+          programs={programs}
+          skills={skills}
+          programSlugs={programSlugs}
+          skillSlugs={skillSlugs}
+        />
 
         <NewCoursesSection courses={newCoursesWithSchedules} />
 
