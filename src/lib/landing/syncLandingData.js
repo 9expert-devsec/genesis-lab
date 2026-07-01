@@ -242,6 +242,31 @@ export async function syncLandingData() {
       return rawSkills;
     }),
   ]);
+
+  // Home "Programs" selector is a public-course browser — drop programs
+  // with zero public courses (e.g. online-only) so they don't render as
+  // dead cards. Probe upstream per program (the same signal the nav-menu
+  // sync uses) rather than deriving from allCourses, whose program ref
+  // shape is inconsistent. Applied AFTER getOrderedPrograms so admin
+  // order + hidden-filtering are preserved.
+  const programProbes = await Promise.allSettled(
+    programs.map(async (p) => {
+      const pid = String(p.program_id ?? p._id ?? '');
+      const { items } = await listPublicCourses({ program: pid });
+      return { program: p, hasPublic: (items?.length ?? 0) > 0 };
+    })
+  );
+  const publicPrograms = [];
+  programProbes.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      if (r.value.hasPublic) publicPrograms.push(r.value.program);
+    } else {
+      const pid = String(programs[i]?.program_id ?? programs[i]?._id ?? '');
+      errors.push(`programPublicProbe:${pid}: ${r.reason?.message ?? 'failed'}`);
+      // exclude on error (fail-closed), consistent with nav-menu sync
+    }
+  });
+
   const banners = unwrapSettled(bannersResult, [], 'getActiveBanners', errors);
   const featuredCourseIds = unwrapSettled(
     featuredCourseIdsResult, [], 'getActiveFeaturedCourseIds', errors
@@ -277,7 +302,7 @@ export async function syncLandingData() {
 
   const sections = {
     banners: banners.length,
-    programs: programs.length,
+    programs: publicPrograms.length,
     skills: skills.length,
     newCourses: newCoursesWithSchedules.length,
     onlineCourses: onlineCoursesForSection.length,
@@ -301,7 +326,7 @@ export async function syncLandingData() {
   // page doesn't go blank because of a transient outage.
   let dataToWrite = {
     banners,
-    programs,
+    programs: publicPrograms,
     skills,
     newCoursesWithSchedules,
     onlineCoursesForSection,

@@ -9,6 +9,10 @@
  * getNavMenuData() instead. A failure on any single program/skill is
  * isolated (Promise.allSettled) so one bad upstream row can't sink the
  * whole snapshot; the overall status downgrades to 'partial'.
+ *
+ * Programs with zero public courses (e.g. online-only programs) are
+ * intentionally excluded from the snapshot: the mega menu is a public-course
+ * browser, so an empty program has nothing to show and must not appear.
  */
 
 import { dbConnect } from '@/lib/db/connect';
@@ -82,10 +86,16 @@ export async function syncNavMenuData() {
       programs.map(async (p) => {
         const pid = String(p.program_id ?? p._id ?? '');
         try {
-          programsData[pid] = await buildEntry({ program: pid });
+          const entry = await buildEntry({ program: pid });
+          // Mega menu is a public-course browser: omit programs that have
+          // no public courses (e.g. online-only programs) so they don't
+          // render as empty menu items.
+          if (entry.items.length > 0) {
+            programsData[pid] = entry;
+          }
         } catch (err) {
           errors.push(`program:${pid}: ${err.message}`);
-          programsData[pid] = { items: [], firstCover: null };
+          // omit on error — an empty program has nothing to show
         }
       })
     );
