@@ -2,7 +2,18 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronDown, Plus, X, Upload, Download } from 'lucide-react';
+import {
+  ChevronDown,
+  Plus,
+  X,
+  Upload,
+  Download,
+  Image as ImageIcon,
+  Youtube,
+  Trash2,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 import {
   createMasterclassCourse,
   updateMasterclassCourse,
@@ -96,6 +107,9 @@ export function MasterclassCourseFormClient({ course }) {
   const [gradientTo,   setGradientTo]   = useState(course?.hero_gradient_to   ?? '#005CFF');
   const [courseOutlineUrl, setCourseOutlineUrl] = useState(course?.course_outline_url ?? '');
 
+  // Section 2.5 — gallery (images + YouTube)
+  const [gallery, setGallery] = useState(course?.gallery ?? []);
+
   // Section 3 — schedule
   const [durationDays, setDurationDays] = useState(course?.duration_days ?? 1);
   const [durationHours, setDurationHours] = useState(course?.duration_hours ?? 7);
@@ -155,6 +169,29 @@ export function MasterclassCourseFormClient({ course }) {
   function handleTagsTextChange(v) {
     setTagsText(v);
     setTags(parseCsv(v));
+  }
+
+  // gallery operations
+  function addImage() {
+    setGallery((g) => [...g, { type: 'image', url: '', alt: '', order: g.length }]);
+  }
+  function addYoutube() {
+    setGallery((g) => [...g, { type: 'youtube', videoId: '', alt: '', order: g.length }]);
+  }
+  function updateRow(i, field, value) {
+    setGallery((g) => g.map((row, idx) => (idx === i ? { ...row, [field]: value } : row)));
+  }
+  function removeRow(i) {
+    setGallery((g) => g.filter((_, idx) => idx !== i));
+  }
+  function moveRow(i, dir) {
+    setGallery((g) => {
+      const j = i + dir;
+      if (j < 0 || j >= g.length) return g;
+      const next = [...g];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
   }
 
   // license choices
@@ -223,6 +260,7 @@ export function MasterclassCourseFormClient({ course }) {
       cover_image_url: coverImageUrl.trim(),
       hero_gradient_from: gradientFrom,
       hero_gradient_to:   gradientTo,
+      gallery: gallery.map((item, i) => ({ ...item, order: i })),
       course_outline_url: courseOutlineUrl.trim(),
       duration_days: Number(durationDays) || 0,
       duration_hours: Number(durationHours) || 0,
@@ -446,6 +484,129 @@ export function MasterclassCourseFormClient({ course }) {
             </a>
           )}
         </div>
+      </Section>
+
+      {/* Section 2.5 — Gallery (images + YouTube) */}
+      <Section title="2.5 แกลเลอรี (รูป / YouTube)">
+        <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          สไลด์ในส่วนหัว (Hero) — เรียงตามลำดับ: วิดีโอ YouTube ก่อน → รูปปก → รูปในแกลเลอรี
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={addImage}
+            className="inline-flex items-center gap-2 rounded-9e-md border border-9e-action px-4 py-2 text-sm text-9e-action transition-colors hover:bg-9e-action hover:text-white"
+          >
+            <ImageIcon className="h-4 w-4" />
+            เพิ่มรูปภาพ
+          </button>
+          <button
+            type="button"
+            onClick={addYoutube}
+            className="inline-flex items-center gap-2 rounded-9e-md border border-red-500 px-4 py-2 text-sm text-red-600 transition-colors hover:bg-red-500 hover:text-white"
+          >
+            <Youtube className="h-4 w-4" />
+            เพิ่ม YouTube
+          </button>
+        </div>
+
+        {gallery.length === 0 ? (
+          <p className="rounded-9e-md border border-dashed border-[var(--surface-border)] py-8 text-center text-sm text-9e-slate-dp-50">
+            ยังไม่มีรูปภาพหรือวิดีโอ
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {gallery.map((item, i) => (
+              <div
+                key={i}
+                className="flex flex-col gap-3 rounded-9e-md border border-[var(--surface-border)] bg-white p-4 dark:bg-[#0D1B2A]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                      item.type === 'youtube'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {item.type === 'youtube' ? (
+                      <Youtube className="h-3 w-3" />
+                    ) : (
+                      <ImageIcon className="h-3 w-3" />
+                    )}
+                    {item.type === 'youtube' ? 'YouTube' : 'Image'}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveRow(i, -1)}
+                      disabled={i === 0}
+                      aria-label="ย้ายขึ้น"
+                      className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice disabled:opacity-30 dark:hover:bg-white/5"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveRow(i, 1)}
+                      disabled={i === gallery.length - 1}
+                      aria-label="ย้ายลง"
+                      className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice disabled:opacity-30 dark:hover:bg-white/5"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(i)}
+                      aria-label="ลบ"
+                      className="rounded p-1 text-red-500 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {item.type === 'youtube' ? (
+                  <>
+                    <input
+                      type="text"
+                      value={item.videoId ?? ''}
+                      onChange={(e) => updateRow(i, 'videoId', e.target.value)}
+                      placeholder="YouTube Video ID (เช่น dQw4w9WgXcQ)"
+                      className={inputCls}
+                    />
+                    <input
+                      type="text"
+                      value={item.alt ?? ''}
+                      onChange={(e) => updateRow(i, 'alt', e.target.value)}
+                      placeholder="คำอธิบาย (alt)"
+                      className={inputCls}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ImageUploadField
+                      name={`gallery_image_${i}`}
+                      label="รูปภาพ"
+                      folder="masterclass"
+                      currentUrl={item.url ?? ''}
+                      aspect="16/9"
+                      onChange={(url) => updateRow(i, 'url', url)}
+                    />
+                    <input
+                      type="text"
+                      value={item.alt ?? ''}
+                      onChange={(e) => updateRow(i, 'alt', e.target.value)}
+                      placeholder="Alt text (สำหรับ accessibility + SEO)"
+                      className={inputCls}
+                    />
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       {/* Section 3 — Schedule */}
