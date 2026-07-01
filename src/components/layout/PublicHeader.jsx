@@ -53,9 +53,20 @@ export async function PublicHeader() {
       }),
     ]);
 
+  // The mega menu is a public-course browser. The program list comes from
+  // /programs, not the cache, so filter it down to programs that actually
+  // have a non-empty cached course entry — otherwise online-only / empty
+  // programs would still render as menu items with no courses on hover.
+  // Key derivation must mirror syncNavMenuData's `String(p.program_id ?? p._id ?? '')`.
+  const publicPrograms = programs.filter((p) => {
+    const pid = String(p.program_id ?? p._id ?? '');
+    const entry = navMenuData?.programs?.[pid];
+    return entry && Array.isArray(entry.items) && entry.items.length > 0;
+  });
+
   return (
     <PublicHeaderClient
-      programs={programs}
+      programs={publicPrograms}
       dynamicCareerPaths={dynamicCareerPaths}
       tnhsCourses={tnhsCourses}
       navOnlineCourses={navOnlineCourses}
