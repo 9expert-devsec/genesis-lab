@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -8,6 +8,8 @@ import {
   BarChart2,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Plus,
   Wrench,
@@ -111,6 +113,22 @@ export function MasterclassDetailClient({
   const visibleBatches =
     course.batches?.filter((b) => b.status !== "cancelled") ?? [];
 
+  // [A] Hero cover slider — ordered slide list (same rule as the course detail page):
+  //   1. YouTube items (by order)
+  //   2. Cover image (cover_image_url)
+  //   3. Image items (by order)
+  const gallery = course.gallery ?? [];
+  const youtubeSlides = gallery
+    .filter((g) => g.type === "youtube")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const imageSlides = gallery
+    .filter((g) => g.type === "image")
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const coverSlide = course.cover_image_url
+    ? [{ type: "cover", url: course.cover_image_url, alt: course.title_th }]
+    : [];
+  const coverSlides = [...youtubeSlides, ...coverSlide, ...imageSlides];
+
   // [sticky bar] show after scrolling past the batch section
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [barDismissed, setBarDismissed] = useState(false);
@@ -140,18 +158,11 @@ export function MasterclassDetailClient({
         className="overflow-hidden bg-[#0e2c4a] lg:px-4 lg:py-10"
       >
         <div className="max-w-[1200px] mx-auto relative grid grid-cols-1 lg:grid-cols-2 lg:items-stretch lg:gap-6">
-          {/* Cover image — mobile only: full-width, above text, no padding */}
+          {/* Cover slider — mobile only: full-width, above text, no padding */}
           <div className="lg:hidden order-first">
-            {course.cover_image_url ? (
+            {coverSlides.length > 0 ? (
               <div className="relative aspect-video w-full overflow-hidden">
-                <Image
-                  src={course.cover_image_url}
-                  alt={course.title_th}
-                  fill
-                  className="object-cover"
-                  sizes="100vw"
-                  priority
-                />
+                <MasterclassCoverSlider slides={coverSlides} />
               </div>
             ) : (
               <div className="aspect-video w-full bg-gradient-to-br from-9e-brand to-9e-action" />
@@ -224,17 +235,11 @@ export function MasterclassDetailClient({
               </div>
             </div>
           </div>
-          {/* Cover image — desktop right column only (hidden on mobile, shown above instead) */}
+          {/* Cover slider — desktop right column only (hidden on mobile, shown above instead) */}
           <div className="hidden lg:block">
-            {course.cover_image_url ? (
+            {coverSlides.length > 0 ? (
               <div className="relative aspect-video overflow-hidden rounded-2xl shadow-9e-xl">
-                <Image
-                  src={course.cover_image_url}
-                  alt={course.title_th}
-                  fill
-                  className="object-cover"
-                  sizes="50vw"
-                />
+                <MasterclassCoverSlider slides={coverSlides} />
               </div>
             ) : (
               <div className="aspect-video rounded-2xl bg-gradient-to-br from-9e-brand to-9e-action shadow-9e-xl" />
@@ -899,5 +904,183 @@ export function MasterclassDetailClient({
         </div>
       )}
     </main>
+  );
+}
+
+// ── Hero cover slider ──────────────────────────────────────────────────────────
+// Fills its aspect-video parent. YouTube slides render an iframe; cover/image
+// slides render Next Image. Auto-advances every 5s, pausing on hover or while a
+// YouTube video is actively playing. Mirrors CoverSlider from the course detail
+// page. `useId` namespaces the iframe element ids so the mobile + desktop
+// instances don't collide on the same DOM id.
+
+const MC_COVER_AUTO_MS = 5000;
+
+function MasterclassCoverSlider({ slides }) {
+  const uid = useId();
+  const [current, setCurrent] = useState(0);
+  const [hovered, setHovered] = useState(false);
+  const [ytPlaying, setYtPlaying] = useState(false);
+  const ytPlayersRef = useRef({}); // { slideIndex: YT.Player }
+  const ytApiReadyRef = useRef(false);
+  const total = slides.length;
+
+  const iframeId = (i) => `yt-${uid}-${i}`;
+
+  // ── Auto-advance ──────────────────────────────────────────────
+  // Pauses ONLY when: user hovers, or YouTube is actively playing.
+  useEffect(() => {
+    if (total <= 1 || hovered || ytPlaying) return;
+    const t = setInterval(
+      () => setCurrent((i) => (i + 1) % total),
+      MC_COVER_AUTO_MS
+    );
+    return () => clearInterval(t);
+  }, [total, hovered, current, ytPlaying]);
+
+  // ── YouTube IFrame API — load script once ─────────────────────
+  useEffect(() => {
+    const hasYoutube = slides.some((s) => s.type === "youtube");
+    if (!hasYoutube) return;
+
+    if (window.YT && window.YT.Player) {
+      ytApiReadyRef.current = true;
+      initPlayers();
+      return;
+    }
+
+    const prevReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiReadyRef.current = true;
+      if (prevReady) prevReady();
+      initPlayers();
+    };
+
+    if (!document.getElementById("yt-iframe-api")) {
+      const script = document.createElement("script");
+      script.id = "yt-iframe-api";
+      script.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(script);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function initPlayers() {
+    slides.forEach((slide, i) => {
+      if (slide.type !== "youtube") return;
+      const id = iframeId(i);
+      const el = document.getElementById(id);
+      if (!el || ytPlayersRef.current[i]) return;
+      ytPlayersRef.current[i] = new window.YT.Player(id, {
+        events: {
+          onStateChange: (e) => {
+            // 1 = PLAYING → pause auto-advance
+            // 0 = ENDED, 2 = PAUSED → resume auto-advance
+            if (e.data === 1) {
+              setYtPlaying(true);
+            } else if (e.data === 0 || e.data === 2) {
+              setYtPlaying(false);
+            }
+          },
+        },
+      });
+    });
+  }
+
+  // Re-try init when current slide changes (iframe may just have mounted)
+  useEffect(() => {
+    if (!ytApiReadyRef.current) return;
+    const t = setTimeout(initPlayers, 150);
+    return () => clearTimeout(t);
+  }, [current]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When leaving a YouTube slide, reset playing state
+  useEffect(() => {
+    const isYt = slides[current]?.type === "youtube";
+    if (!isYt) setYtPlaying(false);
+  }, [current, slides]);
+
+  const prev = () => setCurrent((i) => (i - 1 + total) % total);
+  const next = () => setCurrent((i) => (i + 1) % total);
+
+  return (
+    <div
+      className="absolute inset-0 h-full w-full"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Slide track */}
+      <div className="h-full overflow-hidden">
+        <div
+          className="flex h-full transition-transform duration-500 ease-in-out"
+          style={{ transform: `translateX(-${current * 100}%)` }}
+        >
+          {slides.map((slide, i) => (
+            <div
+              key={i}
+              className="relative h-full w-full flex-shrink-0"
+              style={{ minWidth: "100%" }}
+            >
+              {slide.type === "youtube" ? (
+                <iframe
+                  id={iframeId(i)}
+                  className="absolute inset-0 h-full w-full"
+                  src={`https://www.youtube.com/embed/${slide.videoId}?rel=0&enablejsapi=1`}
+                  title="Course video"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  loading={i === current ? "eager" : "lazy"}
+                />
+              ) : (
+                <Image
+                  src={slide.url}
+                  alt={slide.alt || ""}
+                  fill
+                  sizes="(max-width:1024px) 100vw, 50vw"
+                  className="object-cover object-center"
+                  priority={i === 0}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Prev/Next — only when > 1 slide */}
+      {total > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={prev}
+            aria-label="ก่อนหน้า"
+            className="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+          >
+            <ChevronLeft className="h-4 w-4 text-9e-navy" />
+          </button>
+          <button
+            type="button"
+            onClick={next}
+            aria-label="ถัดไป"
+            className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+          >
+            <ChevronRight className="h-4 w-4 text-9e-navy" />
+          </button>
+
+          {/* Dot indicators */}
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+            {slides.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setCurrent(i)}
+                aria-label={`ไปยังสไลด์ ${i + 1}`}
+                className={`h-2 w-2 rounded-full transition-colors ${
+                  i === current ? "bg-white" : "bg-white/50"
+                }`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
