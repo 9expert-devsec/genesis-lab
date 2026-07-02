@@ -10,6 +10,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
+import { requirePage } from '@/lib/rbac/guard';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import {
@@ -31,6 +32,8 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function AdminCourseExtensionPage({ params }) {
+  await requirePage('courses');
+
   const { courseId: rawCourseId } = await params;
   const courseId = decodeURIComponent(rawCourseId);
 

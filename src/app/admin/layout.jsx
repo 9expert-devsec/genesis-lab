@@ -48,7 +48,11 @@ export default async function AdminLayout({ children }) {
   return (
     <div className="flex h-screen overflow-hidden">
       <AdminSidebar
-        role={user?.role ?? null}
+        pages={user?.pages ?? []}                          // array, or null = all (superadmin)
+        isSuperadmin={user?.isSuperadmin ?? false}
+        roleKey={user?.roleKey ?? null}
+        roleName={user?.roleName ?? user?.roleKey ?? null}
+        roleColor={user?.roleColor ?? null}
         userName={user?.name ?? null}
         userEmail={user?.email ?? null}
       />

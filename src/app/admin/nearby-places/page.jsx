@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllNearbyPlaces } from '@/lib/actions/nearby-places';
 import { NearbyPlacesAdminClient } from './_components/NearbyPlacesAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'โรงแรมและร้านอา�
 export const dynamic = 'force-dynamic';
 
 export default async function NearbyPlacesAdminPage() {
+  await requirePage('nearby_places');
+
   const places = await getAllNearbyPlaces();
   return (
     <div>

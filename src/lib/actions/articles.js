@@ -216,7 +216,7 @@ function buildModelData(data) {
 }
 
 export async function createArticle(formData) {
-  await requireAdmin();
+  await requireAdmin('articles');
   await dbConnect();
 
   const raw = parseFormData(formData);
@@ -238,7 +238,7 @@ export async function createArticle(formData) {
 }
 
 export async function updateArticle(id, formData) {
-  await requireAdmin();
+  await requireAdmin('articles');
   if (!id) return { ok: false, error: 'Missing article id' };
   await dbConnect();
 
@@ -266,7 +266,7 @@ export async function updateArticle(id, formData) {
 }
 
 export async function deleteArticle(id) {
-  await requireAdmin();
+  await requireAdmin('articles');
   if (!id) return { ok: false, error: 'Missing article id' };
   await dbConnect();
   const doc = await Article.findByIdAndDelete(id);
@@ -276,7 +276,7 @@ export async function deleteArticle(id) {
 }
 
 export async function toggleArticleActive(id, active) {
-  await requireAdmin();
+  await requireAdmin('articles');
   if (!id) return { ok: false, error: 'Missing article id' };
   await dbConnect();
   const doc = await Article.findByIdAndUpdate(
@@ -290,7 +290,7 @@ export async function toggleArticleActive(id, active) {
 }
 
 export async function toggleArticlePinnedOnArticlePage(id, value) {
-  await requireAdmin();
+  await requireAdmin('articles');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await Article.findByIdAndUpdate(id, { $set: { isPinnedOnArticlePage: Boolean(value) } });
@@ -300,7 +300,7 @@ export async function toggleArticlePinnedOnArticlePage(id, value) {
 }
 
 export async function toggleArticleFeaturedOnLanding(id, value) {
-  await requireAdmin();
+  await requireAdmin('articles');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await Article.findByIdAndUpdate(id, { $set: { featuredOnLanding: Boolean(value) } });
@@ -310,7 +310,7 @@ export async function toggleArticleFeaturedOnLanding(id, value) {
 }
 
 export async function updateArticlePinOrder(id, pinOrder) {
-  await requireAdmin();
+  await requireAdmin('articles');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   const numeric = Number.isFinite(Number(pinOrder)) ? Number(pinOrder) : 0;

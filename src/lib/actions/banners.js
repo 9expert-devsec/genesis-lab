@@ -6,6 +6,7 @@ import { Banner } from '@/models/Banner';
 import { bannerSchema } from '@/lib/schemas/banner';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { requireAdmin } from '@/lib/actions/auth';
 
 export async function getBanners() {
   await dbConnect();
@@ -33,6 +34,7 @@ export async function getActiveBanners() {
 }
 
 export async function createBanner(formData) {
+  await requireAdmin('banners');
   await dbConnect();
 
   let image_url = formData.get('image_url') || '';
@@ -71,6 +73,7 @@ export async function createBanner(formData) {
 }
 
 export async function updateBanner(id, formData) {
+  await requireAdmin('banners');
   await dbConnect();
 
   const existing = await Banner.findById(id);
@@ -115,6 +118,7 @@ export async function updateBanner(id, formData) {
 }
 
 export async function deleteBanner(id) {
+  await requireAdmin('banners');
   await dbConnect();
   const banner = await Banner.findById(id);
   if (banner?.image_public_id) {

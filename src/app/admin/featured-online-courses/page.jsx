@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getFeaturedOnlineCourses } from '@/lib/actions/featured-online-courses';
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { AddFeaturedOnlineCourseForm } from './_components/AddFeaturedOnlineCourseForm';
@@ -7,6 +8,8 @@ export const metadata = { title: 'คอร์สออนไลน์แนะ�
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requirePage('featured_online_courses');
+
   const [featured, online] = await Promise.all([
     getFeaturedOnlineCourses(),
     getOnlineCourses().catch(() => ({ items: [] })),

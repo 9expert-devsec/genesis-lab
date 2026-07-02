@@ -9,6 +9,7 @@
  * (`matcher: ['/admin/:path*']` in src/middleware.js).
  */
 
+import { requirePage } from '@/lib/rbac/guard';
 import { dbConnect } from '@/lib/db/connect';
 import LandingCache from '@/models/LandingCache';
 import { LandingCacheClient } from './_components/LandingCacheClient';
@@ -22,6 +23,8 @@ export const metadata = {
 };
 
 export default async function LandingCachePage() {
+  await requirePage('landing_cache');
+
   await dbConnect();
 
   // Strip the heavy `data` payload — the page only needs status meta.

@@ -10,19 +10,10 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Recruit from '@/models/Recruit';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const PUBLIC_PATH = '/join-us';
 const ADMIN_PATH  = '/admin/recruits';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -59,7 +50,7 @@ export async function getActiveRecruits() {
 // ── Admin reads ────────────────────────────────────────────────────
 
 export async function getAllRecruits() {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
   const docs = await Recruit.find({})
     .sort({ order: 1, createdAt: -1 })
@@ -68,7 +59,7 @@ export async function getAllRecruits() {
 }
 
 export async function getRecruitById(id) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
   if (!id) return null;
   const doc = await Recruit.findById(id).lean();
@@ -78,7 +69,7 @@ export async function getRecruitById(id) {
 // ── Writes ────────────────────────────────────────────────────────
 
 export async function createRecruit(data) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
 
   const title = String(data?.title ?? '').trim();
@@ -136,7 +127,7 @@ export async function createRecruit(data) {
 }
 
 export async function updateRecruit(id, data) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -187,7 +178,7 @@ export async function updateRecruit(id, data) {
 }
 
 export async function deleteRecruit(id) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await Recruit.findByIdAndDelete(id);
@@ -197,7 +188,7 @@ export async function deleteRecruit(id) {
 }
 
 export async function toggleRecruitActive(id, active) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await Recruit.findByIdAndUpdate(id, { active: Boolean(active) }, { new: true });
@@ -207,7 +198,7 @@ export async function toggleRecruitActive(id, active) {
 }
 
 export async function reorderRecruits(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('recruits');
   await dbConnect();
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
     return { ok: false, error: 'orderedIds must be a non-empty array' };

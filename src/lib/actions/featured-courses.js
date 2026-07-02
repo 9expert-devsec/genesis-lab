@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import { FeaturedCourse } from '@/models/FeaturedCourse';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { requireAdmin } from '@/lib/actions/auth';
 
 export async function getFeaturedCourses() {
   await dbConnect();
@@ -23,6 +24,7 @@ export async function getActiveFeaturedCourseIds() {
 }
 
 export async function addFeaturedCourse(formData) {
+  await requireAdmin('featured_courses');
   await dbConnect();
 
   const rawId = formData.get('course_id');
@@ -82,6 +84,7 @@ export async function addFeaturedCourse(formData) {
 }
 
 export async function updateFeaturedCourse(id, formData) {
+  await requireAdmin('featured_courses');
   await dbConnect();
 
   const sort_order = Number(formData.get('sort_order') ?? 0);
@@ -95,6 +98,7 @@ export async function updateFeaturedCourse(id, formData) {
 }
 
 export async function deleteFeaturedCourse(id) {
+  await requireAdmin('featured_courses');
   await dbConnect();
   await FeaturedCourse.findByIdAndDelete(id);
   revalidatePath('/');

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getFeaturedReviews } from '@/lib/actions/featured-reviews';
 import { getAllReviews } from '@/lib/api/reviews';
 import { ReviewSelector } from './_components/ReviewSelector';
@@ -7,6 +8,8 @@ export const metadata = { title: 'รีวิวแนะนำ' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requirePage('featured_reviews');
+
   const [featured, all] = await Promise.all([
     getFeaturedReviews(),
     getAllReviews(),

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import SchedulePDFClient from './_components/SchedulePDFClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'ตารางฝึกอบรม PDF' };
 export const dynamic = 'force-dynamic';
 
 export default async function SchedulePDFPage() {
+  await requirePage('schedule_pdf');
+
   const current = await getSchedulePDF();
   return (
     <div>

@@ -11,18 +11,9 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/page-configs';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(doc) {
   if (!doc) return null;
@@ -66,14 +57,14 @@ export async function getProgramConfigBySlug(slug) {
 }
 
 export async function listProgramConfigs() {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
   const docs = await ProgramPageConfig.find({}).sort({ updatedAt: -1 }).lean();
   return serialize(docs);
 }
 
 export async function saveProgramConfig(programId, data) {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
 
   if (!programId || typeof programId !== 'string') {
@@ -103,7 +94,7 @@ export async function saveProgramConfig(programId, data) {
 }
 
 export async function deleteProgramConfig(programId) {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
   await ProgramPageConfig.deleteOne({ programId });
   revalidatePath(ADMIN_PATH);
@@ -130,14 +121,14 @@ export async function getSkillConfigBySlug(slug) {
 }
 
 export async function listSkillConfigs() {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
   const docs = await SkillPageConfig.find({}).sort({ updatedAt: -1 }).lean();
   return serialize(docs);
 }
 
 export async function saveSkillConfig(skillId, data) {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
 
   if (!skillId || typeof skillId !== 'string') {
@@ -167,7 +158,7 @@ export async function saveSkillConfig(skillId, data) {
 }
 
 export async function deleteSkillConfig(skillId) {
-  await requireAdmin();
+  await requireAdmin('page_configs');
   await dbConnect();
   await SkillPageConfig.deleteOne({ skillId });
   revalidatePath(ADMIN_PATH);

@@ -13,6 +13,8 @@ export const adminCreateSchema = z.object({
   email:    z.string().trim().toLowerCase().email(),
   name:     z.string().trim().min(1).max(100),
   password: z.string().min(8, 'รหัสผ่านอย่างน้อย 8 ตัวอักษร').max(100),
-  role:     z.enum(['owner', 'admin', 'editor', 'registration_admin', 'it_support_admin']).default('admin'),
+  // The select value IS the role key; the server validates it against the
+  // roles that exist in the DB (never a hardcoded enum here).
+  role:     z.string().trim().min(1).default('admin'),
   active:   z.boolean().default(true),
 });

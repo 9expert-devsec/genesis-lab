@@ -11,20 +11,11 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import WebhookLog from '@/models/WebhookLog';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { dispatchEvent } from '@/lib/webhooks/handlers';
 
 const ADMIN_PATH = '/admin/webhook-logs';
 const PAGE_SIZE  = 50;
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(v) {
   if (v == null) return v;
@@ -41,7 +32,7 @@ function serialize(v) {
  *   - status: 'ok' | 'error' | '' for all.
  */
 export async function getWebhookLogs({ page = 1, event = '', status = '' } = {}) {
-  await requireAdmin();
+  await requireAdmin('webhook_logs');
   await dbConnect();
 
   const filter = {};
@@ -75,7 +66,7 @@ export async function getWebhookLogs({ page = 1, event = '', status = '' } = {})
  * shows that a replay happened).
  */
 export async function replayWebhookEvent(logId) {
-  await requireAdmin();
+  await requireAdmin('webhook_logs');
   await dbConnect();
 
   if (!logId) return { ok: false, error: 'Missing logId' };

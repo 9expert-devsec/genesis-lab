@@ -3,21 +3,36 @@
 import { AuthError } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { signIn, signOut, auth } from '@/lib/auth/options';
+import { canAccess } from '@/lib/rbac/access';
 
 /**
- * Throw if the current request is not from an authenticated admin.
+ * Permission-aware action guard. Pass the page key the action belongs to.
  *
- * Use at the top of any server action that mutates data. The thrown
- * error carries `.status = 401` so a route handler can map it to a
- * proper HTTP status if it surfaces there.
+ * Use at the top of any server action that mutates admin data (and any
+ * admin-only read). Behavior:
+ *   - No session            → throws Error('UNAUTHENTICATED'), `.status = 401`.
+ *   - Lacking the page perm  → throws Error('FORBIDDEN'),      `.status = 403`.
+ *   - Superadmin (`pages == null`) passes any key.
+ *   - `pageKey` omitted → login-only check (legacy behavior). AVOID in new
+ *     code; only for actions with no page association (see 3d-2 exceptions).
+ *
+ * Returns the session so callers that need `session.user` can reuse it.
+ * Throws a plain Error (not redirect) — actions aren't render paths; the
+ * `.status` lets a route handler map it to an HTTP status if it surfaces.
  */
-export async function requireAdmin() {
+export async function requireAdmin(pageKey) {
   const session = await auth();
   if (!session?.user) {
-    const err = new Error('Unauthorized');
+    const err = new Error('UNAUTHENTICATED');
     err.status = 401;
     throw err;
   }
+  if (pageKey && !canAccess(session.user, pageKey)) {
+    const err = new Error('FORBIDDEN');
+    err.status = 403;
+    throw err;
+  }
+  return session;
 }
 
 /**

@@ -12,16 +12,7 @@ import { dbConnect } from '@/lib/db/connect';
 import CoursePromoLink from '@/models/CoursePromoLink';
 import EarlyBirdConfig from '@/models/EarlyBirdConfig';
 import Promotion from '@/models/Promotion';
-import { auth } from '@/lib/auth/options';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
+import { requireAdmin } from '@/lib/actions/auth';
 
 function serialize(value) {
   if (value == null) return value;
@@ -79,7 +70,7 @@ export async function getActiveCoursePromos(courseId) {
 
 /** Admin read — get all promo links for a course (active + inactive). */
 export async function getAllCoursePromoLinks(courseId) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const links = await CoursePromoLink
     .find({ course_id: courseId })
@@ -89,7 +80,7 @@ export async function getAllCoursePromoLinks(courseId) {
 }
 
 export async function createCoursePromoLink(courseId, data) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   try {
     const count = await CoursePromoLink.countDocuments({ course_id: courseId });
@@ -113,7 +104,7 @@ export async function createCoursePromoLink(courseId, data) {
 }
 
 export async function updateCoursePromoLink(linkId, data) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const link = await CoursePromoLink.findById(linkId).lean();
   if (!link) return { ok: false, error: 'ไม่พบข้อมูล' };
@@ -130,7 +121,7 @@ export async function updateCoursePromoLink(linkId, data) {
 }
 
 export async function deleteCoursePromoLink(linkId) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const link = await CoursePromoLink.findById(linkId).lean();
   if (!link) return { ok: false, error: 'ไม่พบข้อมูล' };
@@ -140,7 +131,7 @@ export async function deleteCoursePromoLink(linkId) {
 }
 
 export async function reorderCoursePromoLinks(courseId, orderedIds) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   await CoursePromoLink.bulkWrite(
     orderedIds.map((id, i) => ({
@@ -202,14 +193,14 @@ export async function getAllActiveEarlyBirdMap() {
 
 /** Admin read — always returns (even if inactive/expired). */
 export async function getEarlyBirdAdminByCourse(courseId) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const doc = await EarlyBirdConfig.findOne({ course_id: courseId }).lean();
   return serialize(doc);
 }
 
 export async function saveEarlyBird(courseId, data) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const update = {
     promotion_id:  String(data?.promotion_id ?? '').trim(),

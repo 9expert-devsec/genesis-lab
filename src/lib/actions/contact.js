@@ -10,7 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import ContactVideo from '@/models/ContactVideo';
 import TransportMap from '@/models/TransportMap';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const PUBLIC_PATH = '/contact-us';
@@ -21,15 +21,6 @@ const DEFAULT_VIDEO = {
   title_th:    '',
   title_en:    '',
 };
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -46,7 +37,7 @@ export async function getContactVideo() {
 }
 
 export async function saveContactVideo(formDataOrObj) {
-  await requireAdmin();
+  await requireAdmin('contact');
   await dbConnect();
 
   const isForm = typeof formDataOrObj?.get === 'function';
@@ -79,7 +70,7 @@ export async function getTransportMap() {
 }
 
 export async function saveTransportMap(formDataOrObj) {
-  await requireAdmin();
+  await requireAdmin('contact');
   await dbConnect();
 
   const isForm = typeof formDataOrObj?.get === 'function';

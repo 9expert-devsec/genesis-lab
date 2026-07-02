@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { requirePage } from '@/lib/rbac/guard';
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
@@ -16,6 +17,8 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function PromotionConfigPage({ params }) {
+  await requirePage('promotions');
+
   const { id } = await params;
   await dbConnect();
 

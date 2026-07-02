@@ -3,20 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterInhouse from '@/models/RegisterInhouse';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_LIST_PATH   = '/admin/registrations';
 const ADMIN_DETAIL_PATH = '/admin/registrations/inhouse';
 const PAGE_SIZE         = 20;
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -34,7 +25,7 @@ function serialize(value) {
  * @param {string}  opts.q       search term matched against companyName, contact name/email
  */
 export async function listInhouseRegistrations({ page = 1, status = 'all', q = '' } = {}) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
 
   const filter = {};
@@ -77,7 +68,7 @@ export async function listInhouseRegistrations({ page = 1, status = 'all', q = '
 // ── Detail ─────────────────────────────────────────────────────────
 
 export async function getInhouseRegistrationById(id) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
   if (!id) return null;
   const doc = await RegisterInhouse.findById(id).lean();
@@ -89,7 +80,7 @@ export async function getInhouseRegistrationById(id) {
 const VALID_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
 
 export async function updateInhouseStatus(id, status) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   if (!VALID_STATUSES.has(status)) {
     return { ok: false, error: 'สถานะไม่ถูกต้อง' };
   }
@@ -108,7 +99,7 @@ export async function updateInhouseStatus(id, status) {
 // ── Admin notes update ─────────────────────────────────────────────
 
 export async function updateInhouseAdminNotes(id, adminNotes) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
   await dbConnect();
   const doc = await RegisterInhouse.findByIdAndUpdate(
@@ -124,7 +115,7 @@ export async function updateInhouseAdminNotes(id, adminNotes) {
 // ── Delete ─────────────────────────────────────────────────────────
 
 export async function deleteInhouseRegistration(id) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
   await dbConnect();
   const doc = await RegisterInhouse.findByIdAndDelete(id);
@@ -140,7 +131,7 @@ export async function deleteInhouseRegistration(id) {
  * @param {'today'|'week'|'month'|'all'} range
  */
 export async function getInhouseStatusCounts({ range = 'all' } = {}) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
 
   const now = new Date();
