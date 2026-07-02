@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Check, ArrowRight, Clock, FileText } from 'lucide-react';
+import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 
 function Breadcrumb({ title }) {
   return (
@@ -367,7 +368,7 @@ function CTABanner() {
   );
 }
 
-export function CareerPathDetail({ careerPath }) {
+export function CareerPathDetail({ careerPath, faqs = [] }) {
   const hasPriceOrLinks =
     careerPath.price?.fullPrice ||
     careerPath.links?.signupUrl ||
@@ -391,6 +392,12 @@ export function CareerPathDetail({ careerPath }) {
             <HighlightsGrid careerPath={careerPath} />
             <RoadmapSection careerPath={careerPath} />
             <CurriculumSection careerPath={careerPath} />
+            <FaqAccordionSection
+              faqs={faqs}
+              id="faq"
+              className="scroll-mt-24"
+              headingClassName="mb-6 border-l-4 border-[#005CFF] pl-3 text-2xl font-bold text-[#0D1B2A]"
+            />
           </div>
           {hasPriceOrLinks && (
             <div className="lg:sticky lg:top-24 lg:self-start">

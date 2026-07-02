@@ -5,7 +5,6 @@
 import { dbConnect } from '@/lib/db/connect';
 import MasterclassCourse   from '@/models/MasterclassCourse';
 import MasterclassBatch    from '@/models/MasterclassBatch';
-import LocalFaq            from '@/models/LocalFaq';
 
 function serialize(v) {
   return JSON.parse(JSON.stringify(v));
@@ -91,14 +90,7 @@ export async function getMasterclassBySlug(slug) {
   });
 }
 
-/** Local FAQs by category. */
-export async function getLocalFaqs(category) {
-  await dbConnect();
-  const docs = await LocalFaq.find({ category, is_active: true })
-    .sort({ display_order: 1 })
-    .lean();
-  return serialize(docs);
-}
+// Per-course FAQ reads live in src/lib/local-faqs/getLocalFaqs.js.
 
 // ── Admin reads ────────────────────────────────────────────────────────────────
 
@@ -126,12 +118,6 @@ export async function getBatchById(id) {
   await dbConnect();
   const doc = await MasterclassBatch.findById(id).lean();
   return doc ? serialize(doc) : null;
-}
-
-export async function getAllLocalFaqs() {
-  await dbConnect();
-  const docs = await LocalFaq.find({}).sort({ category: 1, display_order: 1 }).lean();
-  return serialize(docs);
 }
 
 /** Fetch multiple Instructor docs by their string _id array. */
