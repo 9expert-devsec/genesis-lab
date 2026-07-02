@@ -2,12 +2,15 @@ import {
   getAllClientLogos,
   getAllAtmospherePhotos,
 } from '@/lib/actions/portfolio';
+import { requirePage } from '@/lib/rbac/guard';
 import { PortfolioAdminClient } from './_components/PortfolioAdminClient';
 
 export const metadata = { title: 'จัดการหน้าผลงาน' };
 export const dynamic = 'force-dynamic';
 
 export default async function PortfolioAdminPage() {
+  await requirePage('portfolio');
+
   const [logos, photos] = await Promise.all([
     getAllClientLogos(),
     getAllAtmospherePhotos(),

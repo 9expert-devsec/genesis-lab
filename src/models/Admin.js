@@ -5,11 +5,10 @@ const AdminSchema = new mongoose.Schema(
     email:    { type: String, required: true, unique: true, lowercase: true, trim: true },
     name:     { type: String, required: true, trim: true },
     password: { type: String, required: true }, // bcrypt hash; $2b$10$... compatible with legacy
-    // `owner` retained for back-compat with existing records — treated
-    // identically to `superadmin` by the role guards. New seeds should
-    // use `superadmin`. The migration script in src/scripts/ flips
-    // `owner` → `superadmin` in place.
-    role:     { type: String, enum: ['superadmin', 'owner', 'admin', 'editor', 'registration_admin', 'it_support_admin'], default: 'admin' },
+    // Dynamic-RBAC role reference → Role.key. THE authority for permissions.
+    // (The legacy `role` enum was removed in Phase 6; existing docs may still
+    // carry a stale `role` value in Mongo — harmless, Mongoose ignores it.)
+    roleKey:  { type: String, trim: true, lowercase: true, index: true },
     active:   { type: Boolean, default: true },
     lastLoginAt: { type: Date },
 

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { requirePage } from '@/lib/rbac/guard';
 import { aiFetch, unwrap } from '@/lib/api/client';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
@@ -19,6 +20,8 @@ export const dynamic = 'force-dynamic';
  * don't actually collide.
  */
 export default async function EditCoursePage({ params }) {
+  await requirePage('courses');
+
   const { courseId } = await params;
   const id = decodeURIComponent(courseId);
 

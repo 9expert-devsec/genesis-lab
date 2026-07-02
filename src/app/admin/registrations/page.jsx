@@ -1,14 +1,12 @@
-import { forbidden } from 'next/navigation';
+import { requirePage } from '@/lib/rbac/guard';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
-import { auth } from '@/lib/auth/options';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
 export const metadata = { title: 'การลงทะเบียน' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page({ searchParams }) {
-  const session = await auth();
-  if (!new Set(['superadmin', 'owner', 'admin', 'registration_admin', 'it_support_admin']).has(session?.user?.role)) forbidden();
+  await requirePage('registrations');
 
   const sp     = (await searchParams) ?? {};
   const page   = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);

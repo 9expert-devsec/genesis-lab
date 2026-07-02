@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { NavFeaturedOnlineCourse } from '@/models/NavFeaturedOnlineCourse';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/nav-featured-online-courses';
 const MAX_ACTIVE = 3;
@@ -37,6 +38,7 @@ export async function getActiveNavFeaturedOnlineCourses() {
 }
 
 export async function addNavFeaturedOnlineCourse(formData) {
+  await requireAdmin('nav_featured_online_courses');
   await dbConnect();
 
   const rawId = formData.get('course_id');
@@ -87,6 +89,7 @@ export async function addNavFeaturedOnlineCourse(formData) {
 }
 
 export async function updateNavFeaturedOnlineCourse(id, formData) {
+  await requireAdmin('nav_featured_online_courses');
   await dbConnect();
 
   const sort_order = Number(formData.get('sort_order') ?? 0) || 0;
@@ -112,6 +115,7 @@ export async function updateNavFeaturedOnlineCourse(id, formData) {
 }
 
 export async function deleteNavFeaturedOnlineCourse(id) {
+  await requireAdmin('nav_featured_online_courses');
   await dbConnect();
   await NavFeaturedOnlineCourse.findByIdAndDelete(id);
   revalidate();

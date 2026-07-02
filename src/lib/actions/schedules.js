@@ -16,7 +16,7 @@
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { resolveCourseObjectId } from '@/lib/api/resolveIds';
@@ -42,15 +42,6 @@ function bustScheduleCaches(courseObjectId) {
   }
   try { revalidatePath(ADMIN_PATH); } catch (err) {
     console.warn('[schedules] revalidatePath failed:', err?.message);
-  }
-}
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
   }
 }
 
@@ -140,7 +131,7 @@ function buildAutoSignupUrl(courseIdString, scheduleId) {
 }
 
 export async function createSchedule(formData) {
-  await requireAdmin();
+  await requireAdmin('schedules');
 
   const courseIdString = toStr(formData.get('course_id'));
   if (!courseIdString) return { ok: false, error: 'กรุณาเลือกหลักสูตร' };
@@ -201,7 +192,7 @@ export async function createSchedule(formData) {
  * call without juggling two args).
  */
 export async function updateSchedule(idOrFormData, maybeFormData) {
-  await requireAdmin();
+  await requireAdmin('schedules');
 
   // Resolve which arg is which.
   let id, formData;
@@ -243,7 +234,7 @@ export async function updateSchedule(idOrFormData, maybeFormData) {
 }
 
 export async function deleteSchedule(id) {
-  await requireAdmin();
+  await requireAdmin('schedules');
   if (!id) return { ok: false, error: 'Missing schedule id' };
 
   // Sidecar lookup — if present, we can also bust the per-course

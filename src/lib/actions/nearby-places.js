@@ -10,7 +10,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import NearbyPlace from '@/models/NearbyPlace';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const PUBLIC_PATH = '/restaurant-and-hotel-nearby-9expert-training';
@@ -23,15 +23,6 @@ const TYPE_LABELS = {
   bar:   'ผับและร้านอาหาร',
   drink: 'เครื่องดื่ม',
 };
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -53,7 +44,7 @@ export async function getActiveNearbyPlaces() {
 }
 
 export async function getAllNearbyPlaces() {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
   const docs = await NearbyPlace.find({})
     .sort({ display_order: 1, distance: 1 })
@@ -64,7 +55,7 @@ export async function getAllNearbyPlaces() {
 // ── Create ─────────────────────────────────────────────────────────
 
 export async function createNearbyPlace(formData) {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
 
   const isForm = typeof formData?.get === 'function';
@@ -128,7 +119,7 @@ export async function createNearbyPlace(formData) {
 // ── Update ─────────────────────────────────────────────────────────
 
 export async function updateNearbyPlace(id, formData) {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -221,7 +212,7 @@ export async function updateNearbyPlace(id, formData) {
 // ── Toggle active ──────────────────────────────────────────────────
 
 export async function toggleNearbyPlaceActive(id, nextValue) {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -242,7 +233,7 @@ export async function toggleNearbyPlaceActive(id, nextValue) {
 // ── Delete ─────────────────────────────────────────────────────────
 
 export async function deleteNearbyPlace(id) {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -260,7 +251,7 @@ export async function deleteNearbyPlace(id) {
 // ── Reorder ────────────────────────────────────────────────────────
 
 export async function reorderNearbyPlaces(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('nearby_places');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {

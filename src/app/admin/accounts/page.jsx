@@ -7,9 +7,8 @@
  * only check.
  */
 
-import { notFound } from 'next/navigation';
-import { auth } from '@/lib/auth/options';
-import { listAdmins } from '@/lib/actions/admin-accounts';
+import { requirePage } from '@/lib/rbac/guard';
+import { listAdmins, listRoles } from '@/lib/actions/admin-accounts';
 import { AccountsClient } from './_components/AccountsClient';
 
 export const runtime = 'nodejs';
@@ -20,15 +19,10 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-const SUPERADMIN_ROLES = new Set(['superadmin', 'owner']);
-
 export default async function AdminAccountsPage() {
-  const session = await auth();
-  if (!SUPERADMIN_ROLES.has(session?.user?.role)) {
-    notFound();
-  }
+  const session = await requirePage('accounts');
 
-  const admins = await listAdmins();
+  const [admins, roles] = await Promise.all([listAdmins(), listRoles()]);
 
   return (
     <div>
@@ -45,6 +39,7 @@ export default async function AdminAccountsPage() {
 
       <AccountsClient
         initialAdmins={admins}
+        roles={roles}
         currentUserId={session.user.id}
       />
     </div>

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getContactVideo, getTransportMap } from '@/lib/actions/contact';
 import { ContactAdminClient } from './_components/ContactAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'จัดการหน้าติดต่�
 export const dynamic = 'force-dynamic';
 
 export default async function ContactAdminPage() {
+  await requirePage('contact');
+
   const [video, map] = await Promise.all([
     getContactVideo(),
     getTransportMap(),

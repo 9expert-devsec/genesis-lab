@@ -5,6 +5,7 @@
  */
 
 import Link from 'next/link';
+import { requirePage } from '@/lib/rbac/guard';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { listCourseExtensions } from '@/lib/actions/course-extensions';
@@ -19,6 +20,8 @@ export const metadata = {
 };
 
 export default async function AdminCoursesPage() {
+  await requirePage('courses');
+
   const [coursesRes, extensionsRes, programsRes] = await Promise.allSettled([
     listPublicCourses(),
     listCourseExtensions(),

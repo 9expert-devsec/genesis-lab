@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
+import { requirePage } from '@/lib/rbac/guard';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { getAllCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { CareerPathForm } from '../../_components/CareerPathForm';
@@ -9,6 +10,8 @@ export const metadata = { title: 'แก้ไข Career Path' };
 export const dynamic = 'force-dynamic';
 
 export default async function EditCareerPathPage({ params }) {
+  await requirePage('career_paths');
+
   const { id } = await params;
 
   const [all, coursesResult] = await Promise.all([

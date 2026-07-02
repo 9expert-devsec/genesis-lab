@@ -23,7 +23,7 @@ function bustCaches(slug) {
 // ── MasterclassCourse ─────────────────────────────────────────────────────────
 
 export async function createMasterclassCourse(data) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
   const doc = await MasterclassCourse.create(data);
   bustCaches();
@@ -31,7 +31,7 @@ export async function createMasterclassCourse(data) {
 }
 
 export async function updateMasterclassCourse(id, data) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
   const doc = await MasterclassCourse.findByIdAndUpdate(
     id,
@@ -44,7 +44,7 @@ export async function updateMasterclassCourse(id, data) {
 }
 
 export async function deleteMasterclassCourse(id) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
   const doc = await MasterclassCourse.findByIdAndDelete(id).lean();
   if (doc?.slug) bustCaches(doc.slug);
@@ -56,7 +56,7 @@ export async function deleteMasterclassCourse(id) {
 // ── MasterclassBatch ──────────────────────────────────────────────────────────
 
 export async function createMasterclassBatch(courseId, data) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
   // Auto-increment batch_no if not provided
   if (!data.batch_no) {
@@ -79,7 +79,7 @@ export async function createMasterclassBatch(courseId, data) {
 }
 
 export async function updateMasterclassBatch(batchId, data) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
 
   // Auto-compute status if status_override is false
@@ -102,7 +102,7 @@ export async function updateMasterclassBatch(batchId, data) {
 }
 
 export async function deleteMasterclassBatch(batchId) {
-  await requireAdmin();
+  await requireAdmin('masterclass');
   await dbConnect();
   await MasterclassBatch.findByIdAndDelete(batchId);
   revalidatePath(ADMIN_COURSE_PATH);
@@ -112,7 +112,7 @@ export async function deleteMasterclassBatch(batchId) {
 // ── LocalFaq ──────────────────────────────────────────────────────────────────
 
 export async function createLocalFaq(data) {
-  await requireAdmin();
+  await requireAdmin('local_faqs');
   await dbConnect();
   const doc = await LocalFaq.create(data);
   revalidatePath('/admin/local-faqs');
@@ -122,7 +122,7 @@ export async function createLocalFaq(data) {
 }
 
 export async function updateLocalFaq(id, data) {
-  await requireAdmin();
+  await requireAdmin('local_faqs');
   await dbConnect();
   await LocalFaq.findByIdAndUpdate(id, { $set: data });
   revalidatePath('/admin/local-faqs');
@@ -131,7 +131,7 @@ export async function updateLocalFaq(id, data) {
 }
 
 export async function deleteLocalFaq(id) {
-  await requireAdmin();
+  await requireAdmin('local_faqs');
   await dbConnect();
   await LocalFaq.findByIdAndDelete(id);
   revalidatePath('/admin/local-faqs');

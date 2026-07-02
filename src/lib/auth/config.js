@@ -22,19 +22,38 @@ export const authConfig = {
   },
 
   callbacks: {
+    // NO DB access here — this file runs on the Edge (middleware.js). The
+    // RBAC fields (roleKey/isSuperadmin/pages) are resolved once in
+    // options.js authorize() (Node runtime) and only copied through here.
+    //
+    // Staleness (documented, not fixed in Phase 2): `pages` is baked into
+    // the JWT at login, so a role-permission edit (Phase 5 UI) won't reach
+    // already-logged-in admins until their token refreshes (updateAge = 16h)
+    // or they re-login. Acceptable for this app's cadence. If immediate
+    // propagation is later needed: (a) re-fetch the role in `jwt` when
+    // `trigger === 'update'` and call unstable_update() after edits, or
+    // (b) shorten updateAge. Implement nothing now.
     async jwt({ token, user }) {
       if (user) {
-        token.id   = user.id;
-        token.role = user.role;
-        token.name = user.name;
+        token.id           = user.id;
+        token.name         = user.name;
+        token.roleKey      = user.roleKey;
+        token.roleName     = user.roleName;
+        token.roleColor    = user.roleColor;
+        token.isSuperadmin = user.isSuperadmin;
+        token.pages        = user.pages;   // array | null
       }
       return token;
     },
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id   = token.id;
-        session.user.role = token.role;
         if (token.name) session.user.name = token.name;
+        session.user.roleKey      = token.roleKey;
+        session.user.roleName     = token.roleName;
+        session.user.roleColor    = token.roleColor;
+        session.user.isSuperadmin = token.isSuperadmin;
+        session.user.pages        = token.pages; // array | null
       }
       return session;
     },

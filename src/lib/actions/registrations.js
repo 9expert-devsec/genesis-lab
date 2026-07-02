@@ -4,19 +4,10 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -31,7 +22,7 @@ function getModel(source) {
 // ── List (paginated + filtered) ────────────────────────────────────
 
 export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public' } = {}) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
 
   const Model  = getModel(source);
@@ -92,7 +83,7 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
 // ── Detail ─────────────────────────────────────────────────────────
 
 export async function getRegistrationById(id, source = 'public') {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
   if (!id) return null;
   const Model = getModel(source);
@@ -106,7 +97,7 @@ const PUBLIC_STATUSES  = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
 const INHOUSE_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
 
 export async function updateRegistrationStatus(id, status, source = 'public') {
-  await requireAdmin();
+  await requireAdmin('registrations');
   const validSet = source === 'inhouse' ? INHOUSE_STATUSES : PUBLIC_STATUSES;
   if (!validSet.has(status)) return { ok: false, error: 'สถานะไม่ถูกต้อง' };
 
@@ -123,7 +114,7 @@ export async function updateRegistrationStatus(id, status, source = 'public') {
 // ── Update fields ──────────────────────────────────────────────────
 
 export async function updateRegistration(id, data, source = 'public') {
-  await requireAdmin();
+  await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
 
   const update = {};
@@ -219,7 +210,7 @@ export async function updateRegistration(id, data, source = 'public') {
 // ── Delete ─────────────────────────────────────────────────────────
 
 export async function deleteRegistration(id, source = 'public') {
-  await requireAdmin();
+  await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
 
   await dbConnect();
@@ -234,7 +225,7 @@ export async function deleteRegistration(id, source = 'public') {
 // ── Status counts for stat strip ──────────────────────────────────
 
 export async function getRegistrationStatusCounts({ range = 'all', source = 'public' } = {}) {
-  await requireAdmin();
+  await requireAdmin('registrations');
   await dbConnect();
 
   const now = new Date();

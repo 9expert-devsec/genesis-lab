@@ -12,22 +12,13 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { syncPromotions } from '@/lib/promotions/syncPromotions';
 import { triggerPromotionSync } from '@/lib/promotions/triggerPromotionSync';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { resolveCourseObjectIdsVerbose } from '@/lib/api/resolveIds';
 
 const ADMIN_PATH = '/admin/promotions';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -43,7 +34,7 @@ function normalizeSlug(input) {
 // ── Mutations ──────────────────────────────────────────────────────
 
 export async function togglePromotionActive(promotionId, isActive) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
 
   if (!promotionId) return { ok: false, error: 'Missing promotion_id' };
@@ -63,7 +54,7 @@ export async function togglePromotionActive(promotionId, isActive) {
  * index in the array.
  */
 export async function updatePromotionOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -83,7 +74,7 @@ export async function updatePromotionOrder(orderedIds) {
 }
 
 export async function savePromotionConfig(promotionId, data) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
 
   if (!promotionId) return { ok: false, error: 'Missing promotion_id' };
@@ -118,7 +109,7 @@ export async function savePromotionConfig(promotionId, data) {
 }
 
 export async function deletePromotionConfig(promotionId) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
   await PromotionConfig.deleteOne({ promotion_id: promotionId });
   revalidatePath(ADMIN_PATH);
@@ -127,7 +118,7 @@ export async function deletePromotionConfig(promotionId) {
 }
 
 export async function syncPromotionsAction() {
-  await requireAdmin();
+  await requireAdmin('promotions');
   const result = await syncPromotions();
   revalidatePath(ADMIN_PATH);
   revalidatePath('/promotions');
@@ -140,7 +131,7 @@ export async function syncPromotionsAction() {
  * EarlyBirdTab).
  */
 export async function getActivePromotionsForAdmin() {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
   const docs = await Promotion
     .find({ is_active: true })
@@ -264,7 +255,7 @@ function shapeBody(formData) {
  * retry from the edit modal.
  */
 export async function createPromotion(formData) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
 
   const body = shapeBody(formData);
@@ -338,7 +329,7 @@ export async function createPromotion(formData) {
 }
 
 export async function updatePromotion(localId, formData) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
   if (!localId) return { ok: false, error: 'Missing promotion id' };
 
@@ -418,7 +409,7 @@ function isObjectIdLike(v) {
  *      unable to remove broken rows at all).
  */
 export async function deletePromotion(localId) {
-  await requireAdmin();
+  await requireAdmin('promotions');
   await dbConnect();
   if (!localId) return { ok: false, error: 'Missing promotion id' };
 

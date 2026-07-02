@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllRecruits } from '@/lib/actions/recruits';
 import { RecruitsAdminClient } from './_components/RecruitsAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'จัดการประกาศงาน'
 export const dynamic = 'force-dynamic';
 
 export default async function RecruitsAdminPage() {
+  await requirePage('recruits');
+
   const recruits = await getAllRecruits();
   return (
     <div>
