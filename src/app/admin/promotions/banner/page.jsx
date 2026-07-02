@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requirePage } from '@/lib/rbac/guard';
 import { listPromotionBanners } from '@/lib/actions/promotion-banner';
 import { PromotionBannerAdminClient } from './_components/PromotionBannerAdminClient';
 
@@ -6,6 +7,8 @@ export const metadata = { title: 'แบนเนอร์โปรโมชั�
 export const dynamic = 'force-dynamic';
 
 export default async function PromotionBannerPage() {
+  await requirePage('promotions_banner');
+
   const banners = await listPromotionBanners();
 
   return (

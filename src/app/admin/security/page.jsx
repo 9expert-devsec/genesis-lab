@@ -7,7 +7,7 @@
  * (`matcher: ['/admin/:path*']`).
  */
 
-import { auth } from '@/lib/auth/options';
+import { requirePage } from '@/lib/rbac/guard';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import { SecurityClient } from './_components/SecurityClient';
@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 export default async function SecurityPage() {
-  const session = await auth();
+  const session = await requirePage('security');
   const email = session?.user?.email;
 
   let totpEnabled = false;

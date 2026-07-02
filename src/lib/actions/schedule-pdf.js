@@ -3,17 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import SchedulePDF from '@/models/SchedulePDF';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const KEY = 'schedule_pdf';
 const MAX_BYTES = 25 * 1024 * 1024; // 25 MB — generous for a PDF
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session) throw new Error('Unauthorized');
-  return session;
-}
 
 export async function getSchedulePDF() {
   await dbConnect();
@@ -22,7 +16,7 @@ export async function getSchedulePDF() {
 }
 
 export async function uploadSchedulePDF(formData) {
-  const session = await requireAdmin();
+  const session = await requireAdmin('schedule_pdf');
 
   const file = formData.get('file');
   if (!file || typeof file !== 'object' || !file.size) {
@@ -67,7 +61,7 @@ export async function uploadSchedulePDF(formData) {
 }
 
 export async function deleteSchedulePDF() {
-  await requireAdmin();
+  await requireAdmin('schedule_pdf');
   await dbConnect();
   const doc = await SchedulePDF.findOne({ key: KEY });
   if (!doc) return { ok: true };

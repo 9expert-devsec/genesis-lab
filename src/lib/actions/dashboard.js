@@ -8,12 +8,7 @@ import Promotion       from '@/models/Promotion';
 import Article         from '@/models/Article';
 import FeaturedReview  from '@/models/FeaturedReview';
 import Recruit         from '@/models/Recruit';
-import { auth } from '@/lib/auth/options';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) throw Object.assign(new Error('Unauthorized'), { status: 401 });
-}
+import { requireAdmin } from '@/lib/actions/auth';
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -51,7 +46,7 @@ function dateRange(range) {
  * @param {'today'|'week'|'month'|'all'} range - date filter for registration counts
  */
 export async function getDashboardMetrics(range = 'today') {
-  await requireAdmin();
+  await requireAdmin('dashboard');
   await dbConnect();
 
   const { from, to } = dateRange(range);

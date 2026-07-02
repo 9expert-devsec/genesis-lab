@@ -9,23 +9,14 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Faq from '@/models/Faq';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { syncFaqs } from '@/lib/faqs/syncFaqs';
 
 const ADMIN_PATH  = '/admin/faqs';
 const PUBLIC_PATH = '/faq';
 
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
-
 export async function toggleFaqActive(faqId, isActive) {
-  await requireAdmin();
+  await requireAdmin('faqs');
   await dbConnect();
 
   if (!faqId) return { ok: false, error: 'Missing faq_id' };
@@ -45,7 +36,7 @@ export async function toggleFaqActive(faqId, isActive) {
  * index in the array.
  */
 export async function updateFaqOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('faqs');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -69,7 +60,7 @@ export async function updateFaqOrder(orderedIds) {
  * Empty / null / whitespace → clears the override (use upstream_category).
  */
 export async function updateFaqCategoryOverride(faqId, categoryOverride) {
-  await requireAdmin();
+  await requireAdmin('faqs');
   await dbConnect();
 
   if (!faqId) return { ok: false, error: 'Missing faq_id' };
@@ -89,7 +80,7 @@ export async function updateFaqCategoryOverride(faqId, categoryOverride) {
 }
 
 export async function syncFaqsAction() {
-  await requireAdmin();
+  await requireAdmin('faqs');
   const result = await syncFaqs();
   revalidatePath(ADMIN_PATH);
   revalidatePath(PUBLIC_PATH);

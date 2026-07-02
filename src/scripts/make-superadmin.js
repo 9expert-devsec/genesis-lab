@@ -1,6 +1,7 @@
 /**
- * One-time migration: flip the bootstrap admin and any legacy `owner`
- * records to `superadmin`.
+ * Break-glass superadmin tool. Promotes an account to the `superadmin`
+ * role by setting its `roleKey` (the sole RBAC authority — the legacy
+ * `role` enum was removed in Phase 6).
  *
  * Run from the repo root with the env file loaded:
  *   node --env-file=.env.local src/scripts/make-superadmin.js
@@ -10,7 +11,7 @@
  *
  * No build step needed — this is a standalone script that connects
  * to MongoDB directly and uses a minimal schema. It does NOT touch
- * passwords or 2FA fields; only `role` and `active`.
+ * passwords or 2FA fields; only `roleKey` and `active`.
  */
 
 const mongoose = require('mongoose');
@@ -27,10 +28,10 @@ if (!MONGODB_URI) {
 
 const AdminSchema = new mongoose.Schema(
   {
-    email:  String,
-    name:   String,
-    role:   { type: String, default: 'admin' },
-    active: { type: Boolean, default: true },
+    email:   String,
+    name:    String,
+    roleKey: { type: String, default: 'admin' },
+    active:  { type: Boolean, default: true },
   },
   { collection: 'admins', strict: false }
 );
@@ -41,10 +42,11 @@ const Admin =
 async function run() {
   await mongoose.connect(MONGODB_URI, { dbName: MONGODB_DB_NAME });
 
-  // 1) Flip every legacy `owner` record to `superadmin` (active stays).
+  // 1) Flip any straggler `owner` roleKey to `superadmin` (active stays).
+  // (The Phase-1 migration already folded owner→superadmin; usually a no-op.)
   const ownerResult = await Admin.updateMany(
-    { role: 'owner' },
-    { $set: { role: 'superadmin' } }
+    { roleKey: 'owner' },
+    { $set: { roleKey: 'superadmin' } }
   );
   console.log(`owner → superadmin: ${ownerResult.modifiedCount} record(s)`);
 
@@ -53,19 +55,19 @@ async function run() {
   if (targetEmail) {
     const result = await Admin.findOneAndUpdate(
       { email: targetEmail },
-      { $set: { role: 'superadmin', active: true } },
+      { $set: { roleKey: 'superadmin', active: true } },
       { new: true }
     );
     if (result) {
       console.log(
-        `Updated ${result.email}: role=${result.role} active=${result.active}`
+        `Updated ${result.email}: roleKey=${result.roleKey} active=${result.active}`
       );
     } else {
       console.warn(`No admin found with email "${targetEmail}"`);
     }
   } else {
     // 3) Sanity check: warn if no superadmin exists at all.
-    const count = await Admin.countDocuments({ role: 'superadmin', active: true });
+    const count = await Admin.countDocuments({ roleKey: 'superadmin', active: true });
     if (count === 0) {
       console.warn(
         'WARNING: no active superadmin in the DB. ' +

@@ -16,19 +16,10 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import SiteNotification from '@/models/SiteNotification';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const ADMIN_PATH = '/admin/notifications';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -149,7 +140,7 @@ function imageKeys(displayType) {
 // ── Mutations ──────────────────────────────────────────────────────
 
 export async function createNotification(data) {
-  await requireAdmin();
+  await requireAdmin('notifications');
   await dbConnect();
 
   const payload = shapePayload(data);
@@ -172,7 +163,7 @@ export async function createNotification(data) {
 }
 
 export async function updateNotification(id, data) {
-  await requireAdmin();
+  await requireAdmin('notifications');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -208,7 +199,7 @@ export async function updateNotification(id, data) {
 }
 
 export async function deleteNotification(id) {
-  await requireAdmin();
+  await requireAdmin('notifications');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
 
@@ -224,7 +215,7 @@ export async function deleteNotification(id) {
 }
 
 export async function toggleNotificationActive(id, active) {
-  await requireAdmin();
+  await requireAdmin('notifications');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await SiteNotification.findByIdAndUpdate(id, { active: Boolean(active) });
@@ -233,7 +224,7 @@ export async function toggleNotificationActive(id, active) {
 }
 
 export async function updateNotificationWeight(id, weight) {
-  await requireAdmin();
+  await requireAdmin('notifications');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   const numeric = Number.isFinite(Number(weight)) ? Number(weight) : 0;

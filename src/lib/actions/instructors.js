@@ -24,20 +24,11 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Instructor from '@/models/Instructor';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const ADMIN_PATH = '/admin/instructors';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -134,7 +125,7 @@ async function readFormAndUpload(formData, current) {
 }
 
 export async function createInstructor(formData) {
-  await requireAdmin();
+  await requireAdmin('instructors');
   await dbConnect();
 
   const { msdb, local } = await readFormAndUpload(formData, null);
@@ -169,7 +160,7 @@ export async function createInstructor(formData) {
 }
 
 export async function updateInstructor(localId, formData) {
-  await requireAdmin();
+  await requireAdmin('instructors');
   await dbConnect();
   if (!localId) return { ok: false, error: 'Missing instructor id' };
 
@@ -208,7 +199,7 @@ export async function updateInstructor(localId, formData) {
 }
 
 export async function deleteInstructor(localId) {
-  await requireAdmin();
+  await requireAdmin('instructors');
   await dbConnect();
   if (!localId) return { ok: false, error: 'Missing instructor id' };
 
@@ -233,7 +224,7 @@ export async function deleteInstructor(localId) {
 }
 
 export async function listInstructorsForAdmin() {
-  await requireAdmin();
+  await requireAdmin('instructors');
   await dbConnect();
   const docs = await Instructor.find({})
     .sort({ display_order: 1, createdAt: -1 })

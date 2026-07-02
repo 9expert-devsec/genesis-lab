@@ -3,51 +3,61 @@
 /**
  * Admin account management — server actions.
  *
- * All "list / create / update / delete" actions are guarded by
- * `requireSuperAdmin()`. The `updateOwnProfile` action is open to any
- * logged-in admin so they can rename themselves and change their own
- * password.
+ * The "list / create / update / delete" actions are guarded by
+ * `requireAdmin('accounts')` — the `accounts` page is seeded superadmin-only,
+ * so only a superadmin passes (and, via the null-sentinel, can never be
+ * locked out). The `updateOwnProfile` action is login-only (any admin may
+ * rename themselves / change their own password) — it operates solely on
+ * `session.user`, never on arbitrary accounts.
  *
- * Field-name note: this code uses `active` (matching the existing
- * Admin schema and other action files in this repo). The original
- * task spec calls the same flag `isActive`; semantics are identical.
+ * Field-name note: this code uses `active` (matching the existing Admin
+ * schema and other action files in this repo).
  *
- * Role-name note: legacy seed records use `owner`; new code uses
- * `superadmin`. The guard treats both as full-privilege so existing
- * `owner` accounts keep working until the migration script flips them.
+ * Role note: the system now authorizes by `roleKey`. We dual-write the
+ * legacy `role` enum in sync so nothing that still reads `role` breaks
+ * before Phase 6 (which drops the enum and this dual-write). "Is this admin
+ * a superadmin?" is derived from `roleKey` → a Role with `isSuperadmin`,
+ * NOT the legacy enum.
  */
 
 import bcrypt from 'bcryptjs';
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
+import Role from '@/models/Role';
 import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
-const SUPERADMIN_ROLES = new Set(['superadmin', 'owner']);
-const VALID_ROLES = ['superadmin', 'admin', 'editor', 'registration_admin', 'it_support_admin'];
 const ADMIN_PATH = '/admin/accounts';
-
-async function requireSuperAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-  if (!SUPERADMIN_ROLES.has(session.user.role)) {
-    const err = new Error('Forbidden — superadmin only');
-    err.status = 403;
-    throw err;
-  }
-  return session;
-}
 
 function serialize(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
 
+/**
+ * The set of role keys that are superadmin. Superadmin is a singleton
+ * (Phase 1), but we resolve from the Role collection so a future rename
+ * still works; fall back to the known 'superadmin' key.
+ * Requires an active DB connection.
+ */
+async function superadminRoleKeys() {
+  const roles = await Role.find({ isSuperadmin: true }).select('key').lean();
+  const keys = roles.map((r) => r.key);
+  return keys.length ? keys : ['superadmin'];
+}
+
+/**
+ * Validate an incoming role value against the roles that actually exist in
+ * the DB (never a hardcoded enum). Unknown → 'admin' (safe non-superadmin).
+ * Requires an active DB connection.
+ */
+async function resolveRoleKey(incoming) {
+  const validKeys = (await Role.find().select('key').lean()).map((r) => r.key);
+  return validKeys.includes(incoming) ? incoming : 'admin';
+}
+
 export async function listAdmins() {
-  await requireSuperAdmin();
+  await requireAdmin('accounts');
   await dbConnect();
   // Exclude password hash; totpSecret already `select: false` so won't come back.
   const docs = await Admin.find({}, '-password')
@@ -56,13 +66,28 @@ export async function listAdmins() {
   return serialize(docs);
 }
 
+/**
+ * Assignable roles for the account form (options + badge colors). System
+ * roles first, then alphabetical by name. DB-driven — never a hardcoded
+ * list — so custom roles (Phase 5b) appear automatically.
+ */
+export async function listRoles() {
+  await requireAdmin('accounts');
+  await dbConnect();
+  const roles = await Role.find()
+    .select('key name color isSuperadmin')
+    .sort({ isSystem: -1, name: 1 })
+    .lean();
+  return serialize(roles);
+}
+
 export async function createAdmin({ email, password, name, role }) {
-  await requireSuperAdmin();
+  await requireAdmin('accounts');
   await dbConnect();
 
   const cleanEmail = String(email ?? '').trim().toLowerCase();
   const cleanName = String(name ?? '').trim();
-  const cleanRole = VALID_ROLES.includes(role) ? role : 'admin';
+  const cleanRoleKey = await resolveRoleKey(role);
 
   if (!cleanEmail) return { ok: false, error: 'กรุณากรอกอีเมล' };
   if (!cleanName) return { ok: false, error: 'กรุณากรอกชื่อ' };
@@ -78,7 +103,7 @@ export async function createAdmin({ email, password, name, role }) {
     email: cleanEmail,
     password: hashed,
     name: cleanName,
-    role: cleanRole,
+    roleKey: cleanRoleKey, // sole authority (the legacy `role` enum is gone)
     active: true,
   });
 
@@ -87,22 +112,28 @@ export async function createAdmin({ email, password, name, role }) {
 }
 
 export async function updateAdmin(id, { name, role, active }) {
-  await requireSuperAdmin();
+  await requireAdmin('accounts');
   await dbConnect();
 
   const update = {};
   if (typeof name === 'string') update.name = name.trim();
-  if (VALID_ROLES.includes(role)) update.role = role;
+  if (typeof role === 'string' && role) {
+    // The select value IS the role key; validate against DB roles.
+    update.roleKey = await resolveRoleKey(role); // sole authority
+  }
   if (typeof active === 'boolean') update.active = active;
 
+  const superKeys = await superadminRoleKeys();
+
   // Don't let the LAST superadmin downgrade themselves into a lockout.
-  if (update.role && update.role !== 'superadmin') {
+  // "Is superadmin" is by roleKey, not the legacy enum.
+  if (update.roleKey && !superKeys.includes(update.roleKey)) {
     const target = await Admin.findById(id).lean();
-    if (target && SUPERADMIN_ROLES.has(target.role)) {
+    if (target && superKeys.includes(target.roleKey)) {
       const remaining = await Admin.countDocuments({
         _id: { $ne: id },
-        role: { $in: ['superadmin', 'owner'] },
         active: true,
+        roleKey: { $in: superKeys },
       });
       if (remaining === 0) {
         return {
@@ -116,11 +147,11 @@ export async function updateAdmin(id, { name, role, active }) {
   // Same guard if deactivating the last superadmin.
   if (update.active === false) {
     const target = await Admin.findById(id).lean();
-    if (target && SUPERADMIN_ROLES.has(target.role)) {
+    if (target && superKeys.includes(target.roleKey)) {
       const remaining = await Admin.countDocuments({
         _id: { $ne: id },
-        role: { $in: ['superadmin', 'owner'] },
         active: true,
+        roleKey: { $in: superKeys },
       });
       if (remaining === 0) {
         return {
@@ -137,7 +168,7 @@ export async function updateAdmin(id, { name, role, active }) {
 }
 
 export async function resetAdminPassword(id, newPassword) {
-  await requireSuperAdmin();
+  await requireAdmin('accounts');
   await dbConnect();
 
   if (!newPassword || newPassword.length < 8) {
@@ -151,7 +182,7 @@ export async function resetAdminPassword(id, newPassword) {
 }
 
 export async function deleteAdmin(id) {
-  const session = await requireSuperAdmin();
+  const session = await requireAdmin('accounts');
   await dbConnect();
 
   // Cannot delete self.
@@ -162,12 +193,13 @@ export async function deleteAdmin(id) {
   const target = await Admin.findById(id).lean();
   if (!target) return { ok: false, error: 'ไม่พบบัญชี' };
 
-  // Cannot delete the last active superadmin.
-  if (SUPERADMIN_ROLES.has(target.role)) {
+  // Cannot delete the last active superadmin — counted by roleKey.
+  const superKeys = await superadminRoleKeys();
+  if (superKeys.includes(target.roleKey)) {
     const remaining = await Admin.countDocuments({
       _id: { $ne: id },
-      role: { $in: ['superadmin', 'owner'] },
       active: true,
+      roleKey: { $in: superKeys },
     });
     if (remaining === 0) {
       return { ok: false, error: 'ไม่สามารถลบ superadmin คนสุดท้ายได้' };
@@ -180,10 +212,11 @@ export async function deleteAdmin(id) {
 }
 
 /**
- * Self-service profile update — any logged-in admin can rename
- * themselves and rotate their password. Requires the current
- * password if rotating (defense against a stolen session cookie
- * silently changing the password).
+ * Self-service profile update — any logged-in admin can rename themselves
+ * and rotate their password. Login-only (NOT gated by `accounts`): it
+ * operates on `session.user` only, never on arbitrary accounts. Requires
+ * the current password if rotating (defense against a stolen session
+ * cookie silently changing the password).
  */
 export async function updateOwnProfile({ name, currentPassword, newPassword }) {
   const session = await auth();

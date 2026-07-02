@@ -72,7 +72,7 @@ export async function getCareerPathRegistrationById(id) {
 }
 
 export async function updateRegistrationStatus(id, status) {
-  await requireAdmin();
+  await requireAdmin('career_path_registrations');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await CareerPathRegistration.findByIdAndUpdate(id, { $set: { status } });
@@ -82,7 +82,7 @@ export async function updateRegistrationStatus(id, status) {
 }
 
 export async function deleteCareerPathRegistration(id) {
-  await requireAdmin();
+  await requireAdmin('career_path_registrations');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
   await CareerPathRegistration.findByIdAndDelete(id);

@@ -16,6 +16,7 @@ import {
   Briefcase,
   Database,
   Shield,
+  ShieldCheck,
   User,
   GraduationCap,
   Layers,
@@ -36,22 +37,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
-
-const ROLE_BADGE = {
-  superadmin:        'bg-blue-100 text-blue-700',
-  owner:             'bg-blue-100 text-blue-700',
-  admin:             'bg-gray-100 text-gray-700',
-  editor:            'bg-yellow-100 text-yellow-700',
-  registration_admin: 'bg-green-100 text-green-700',
-  it_support_admin:  'bg-purple-100 text-purple-700',
-};
-
-const SUPERADMIN_ROLES = new Set(['superadmin', 'owner']);
-
-// Roles that are NOT superadmin/admin but still have explicit access to specific nav items.
-// Used by the `roles` whitelist on NAV_GROUPS items below.
-const REGISTRATION_ADMIN_ROLES = new Set(['superadmin', 'owner', 'admin', 'registration_admin', 'it_support_admin']);
-const IT_SUPPORT_ROLES         = new Set(['superadmin', 'owner', 'admin', 'it_support_admin']);
+import { canAccess } from '@/lib/rbac/access';
+import { roleBadgeStyle } from '@/lib/rbac/roleColor';
 
 // Icon name → component map. Group config below references icons by
 // string so the data shape stays serializable / easy to scan.
@@ -67,6 +54,7 @@ const ICONS = {
   Briefcase,
   Database,
   Shield,
+  ShieldCheck,
   User,
   GraduationCap,
   Layers,
@@ -83,74 +71,64 @@ const ICONS = {
   ExternalLink,
 };
 
-// Access key: which roles can see a nav item.
-// `roles` is a Set — item is visible only if the current role is in the set.
-// Items WITHOUT a `roles` key are visible to superadmin/owner only (default-closed).
-// Special sets:
-//   ALL_ADMIN_ROLES  — every role including the two new ones
-//   REGISTRATION_ADMIN_ROLES — superadmin + admin + registration_admin + it_support_admin
-//   IT_SUPPORT_ROLES         — superadmin + admin + it_support_admin
-const ALL_ADMIN_ROLES = new Set(['superadmin', 'owner', 'admin', 'editor', 'registration_admin', 'it_support_admin']);
-
+// Nav config. Each item declares the `pageKey` it maps to (matching
+// ADMIN_PAGES / the page + action guards from Phase 3). Visibility is
+// decided purely by `canAccess(user, pageKey)` below — no role whitelists.
 const NAV_GROUPS = [
   {
     label: 'ภาพรวม',
     items: [
-      { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, roles: ALL_ADMIN_ROLES },
+      { label: 'แดชบอร์ด', href: '/admin', icon: 'LayoutDashboard', exact: true, pageKey: 'dashboard' },
     ],
   },
   {
     label: 'จัดการหลักสูตร',
     items: [
-      { label: 'หลักสูตรแนะนำ',        href: '/admin/featured-courses',          icon: 'Star',          roles: IT_SUPPORT_ROLES },
-      { label: 'คอร์สออนไลน์แนะนำ',    href: '/admin/featured-online-courses',   icon: 'Monitor',       roles: IT_SUPPORT_ROLES },
-      { label: 'คอร์สออนไลน์ (Navbar)', href: '/admin/nav-featured-online-courses', icon: 'Monitor' },
-      { label: 'หลักสูตร',             href: '/admin/courses',                   icon: 'GraduationCap', roles: IT_SUPPORT_ROLES },
-      { label: 'ตารางอบรม',            href: '/admin/schedules',                 icon: 'CalendarDays',  roles: ALL_ADMIN_ROLES },
-      { label: 'วิทยากร',              href: '/admin/instructors',               icon: 'User' },
-      { label: 'โปรแกรม & Skills',     href: '/admin/programs',                  icon: 'Layers',        roles: IT_SUPPORT_ROLES },
-      { label: 'Career Path',          href: '/admin/career-paths',              icon: 'Map',           roles: IT_SUPPORT_ROLES },
-      { label: 'Masterclass',          href: '/admin/masterclass',               icon: 'GraduationCap', roles: IT_SUPPORT_ROLES },
-      { label: 'MC — ผู้ลงทะเบียน',   href: '/admin/masterclass/registrations', icon: 'ClipboardList', roles: REGISTRATION_ADMIN_ROLES },
-      { label: 'TNHS Courses',         href: '/admin/tnhs-courses',              icon: 'ExternalLink' },
-      { label: 'Program/Skill URL',    href: '/admin/page-configs',              icon: 'FileText' },
+      { label: 'หลักสูตรแนะนำ',        href: '/admin/featured-courses',          icon: 'Star',          pageKey: 'featured_courses' },
+      { label: 'คอร์สออนไลน์แนะนำ',    href: '/admin/featured-online-courses',   icon: 'Monitor',       pageKey: 'featured_online_courses' },
+      { label: 'คอร์สออนไลน์ (Navbar)', href: '/admin/nav-featured-online-courses', icon: 'Monitor',    pageKey: 'nav_featured_online_courses' },
+      { label: 'หลักสูตร',             href: '/admin/courses',                   icon: 'GraduationCap', pageKey: 'courses' },
+      { label: 'ตารางอบรม',            href: '/admin/schedules',                 icon: 'CalendarDays',  pageKey: 'schedules' },
+      { label: 'วิทยากร',              href: '/admin/instructors',               icon: 'User',          pageKey: 'instructors' },
+      { label: 'โปรแกรม & Skills',     href: '/admin/programs',                  icon: 'Layers',        pageKey: 'programs' },
+      { label: 'Career Path',          href: '/admin/career-paths',              icon: 'Map',           pageKey: 'career_paths' },
+      { label: 'Masterclass',          href: '/admin/masterclass',               icon: 'GraduationCap', pageKey: 'masterclass' },
+      { label: 'MC — ผู้ลงทะเบียน',   href: '/admin/masterclass/registrations', icon: 'ClipboardList', pageKey: 'mc_registrations' },
+      { label: 'TNHS Courses',         href: '/admin/tnhs-courses',              icon: 'ExternalLink',  pageKey: 'tnhs_courses' },
+      { label: 'Program/Skill URL',    href: '/admin/page-configs',              icon: 'FileText',      pageKey: 'page_configs' },
     ],
   },
   {
     label: 'จัดการคอนเทนต์',
     items: [
-      { label: 'แบนเนอร์',         href: '/admin/banners',          icon: 'Image' },
-      { label: 'โปรโมชั่น',        href: '/admin/promotions',       icon: 'Tag', exact: true },
-      { label: 'แบนเนอร์โปรโมชั่น', href: '/admin/promotions/banner', icon: 'Image' },
-      { label: 'Notifications',    href: '/admin/notifications',    icon: 'Bell' },
-      { label: 'เกี่ยวกับเรา',     href: '/admin/about',            icon: 'Info' },
-      { label: 'ติดต่อเรา',        href: '/admin/contact',          icon: 'Phone' },
-      { label: 'ผลงานของเรา',      href: '/admin/portfolio',        icon: 'LayoutTemplate' },
-      { label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places',    icon: 'MapPin' },
-      { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare' },
-      { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText', roles: IT_SUPPORT_ROLES },
-      { label: 'จัดการหน้าเพจ',     href: '/admin/pages',            icon: 'LayoutTemplate', roles: IT_SUPPORT_ROLES },
-      { label: 'FAQ',              href: '/admin/faqs',             icon: 'HelpCircle', roles: IT_SUPPORT_ROLES },
-      { label: 'FAQ (Local)',      href: '/admin/local-faqs',       icon: 'HelpCircle', roles: IT_SUPPORT_ROLES },
-      { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays', roles: IT_SUPPORT_ROLES },
+      { label: 'แบนเนอร์',         href: '/admin/banners',          icon: 'Image',          pageKey: 'banners' },
+      { label: 'โปรโมชั่น',        href: '/admin/promotions',       icon: 'Tag', exact: true, pageKey: 'promotions' },
+      { label: 'แบนเนอร์โปรโมชั่น', href: '/admin/promotions/banner', icon: 'Image',          pageKey: 'promotions_banner' },
+      { label: 'Notifications',    href: '/admin/notifications',    icon: 'Bell',           pageKey: 'notifications' },
+      { label: 'เกี่ยวกับเรา',     href: '/admin/about',            icon: 'Info',           pageKey: 'about' },
+      { label: 'ติดต่อเรา',        href: '/admin/contact',          icon: 'Phone',          pageKey: 'contact' },
+      { label: 'ผลงานของเรา',      href: '/admin/portfolio',        icon: 'LayoutTemplate', pageKey: 'portfolio' },
+      { label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places',    icon: 'MapPin',         pageKey: 'nearby_places' },
+      { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare',  pageKey: 'featured_reviews' },
+      { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText',       pageKey: 'articles' },
+      { label: 'จัดการหน้าเพจ',     href: '/admin/pages',            icon: 'LayoutTemplate', pageKey: 'pages' },
+      { label: 'FAQ',              href: '/admin/faqs',             icon: 'HelpCircle',     pageKey: 'faqs' },
+      { label: 'FAQ (Local)',      href: '/admin/local-faqs',       icon: 'HelpCircle',     pageKey: 'local_faqs' },
+      { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays',   pageKey: 'schedule_pdf' },
     ],
   },
   {
     label: 'ระบบ',
     items: [
-      { label: 'การลงทะเบียน',              href: '/admin/registrations',              icon: 'ClipboardList', roles: REGISTRATION_ADMIN_ROLES },
-      { label: 'Career Path Registrations', href: '/admin/career-path-registrations', icon: 'ClipboardList', roles: REGISTRATION_ADMIN_ROLES },
-      { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase' },
-      { label: 'Landing Cache', href: '/admin/landing-cache',  icon: 'Database' },
-      { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook' },
-      { label: 'ความปลอดภัย',   href: '/admin/security',       icon: 'Shield' },
-      { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User',    roles: ALL_ADMIN_ROLES },
-      {
-        label: 'บัญชีผู้ดูแล',
-        href: '/admin/accounts',
-        icon: 'Users',
-        superadminOnly: true,
-      },
+      { label: 'การลงทะเบียน',              href: '/admin/registrations',              icon: 'ClipboardList', pageKey: 'registrations' },
+      { label: 'Career Path Registrations', href: '/admin/career-path-registrations', icon: 'ClipboardList', pageKey: 'career_path_registrations' },
+      { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase', pageKey: 'recruits' },
+      { label: 'Landing Cache', href: '/admin/landing-cache',  icon: 'Database',  pageKey: 'landing_cache' },
+      { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook',   pageKey: 'webhook_logs' },
+      { label: 'ความปลอดภัย',   href: '/admin/security',       icon: 'Shield',    pageKey: 'security' },
+      { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User',      pageKey: 'profile' },
+      { label: 'บัญชีผู้ดูแล',   href: '/admin/accounts',       icon: 'Users',     pageKey: 'accounts' },
+      { label: 'จัดการ Role',   href: '/admin/roles',          icon: 'ShieldCheck', pageKey: 'roles' },
     ],
   },
 ];
@@ -235,10 +213,7 @@ function GroupHeader({ label }) {
   );
 }
 
-function SidebarItem({ item, currentPath, isSuper, role }) {
-  if (item.superadminOnly && !isSuper) return null;
-  if (item.roles && !item.roles.has(role)) return null;
-
+function SidebarItem({ item, currentPath }) {
   const Icon = ICONS[item.icon];
   const isActive = item.exact
     ? currentPath === item.href
@@ -263,10 +238,29 @@ function SidebarItem({ item, currentPath, isSuper, role }) {
   );
 }
 
-export function AdminSidebar({ role = null, userName = null, userEmail = null }) {
+export function AdminSidebar({
+  pages = [],
+  isSuperadmin = false,
+  roleKey = null,
+  roleName = null,
+  roleColor = null,
+  userName = null,
+  userEmail = null,
+}) {
   const pathname = usePathname();
-  const isSuper = SUPERADMIN_ROLES.has(role);
   const [logoutOpen, setLogoutOpen] = useState(false);
+
+  // Visibility is permission-driven: a nav item shows iff the user can
+  // access its page. Superadmin (`isSuperadmin`) passes every key via the
+  // allow-all path in canAccess. This is presentation only — the page and
+  // action guards from Phase 3 are the real enforcement.
+  const user = { pages, isSuperadmin };
+
+  // Display label + free-hex color for the role badge come from the DB
+  // Role doc (via the session). Inline style + readable ink keep any custom
+  // color legible — Tailwind can't compile dynamic hex.
+  const badgeLabel = roleName ?? roleKey;
+  const badgeStyle = roleBadgeStyle(roleColor).soft;
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col md:border-r md:border-[var(--surface-border)] md:bg-[var(--surface)] h-screen">
@@ -279,13 +273,7 @@ export function AdminSidebar({ role = null, userName = null, userEmail = null })
 
       <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 " aria-label="Admin">
         {NAV_GROUPS.map((group) => {
-          const visibleItems = group.items.filter((item) => {
-            if (item.superadminOnly && !isSuper) return false;
-            // If item has an explicit roles Set, check membership
-            if (item.roles) return item.roles.has(role);
-            // No roles key → superadmin/owner only (default-closed for new roles)
-            return isSuper;
-          });
+          const visibleItems = group.items.filter((item) => canAccess(user, item.pageKey));
           if (visibleItems.length === 0) return null;
           return (
             <div key={group.label}>
@@ -296,8 +284,6 @@ export function AdminSidebar({ role = null, userName = null, userEmail = null })
                     key={item.href}
                     item={item}
                     currentPath={pathname}
-                    isSuper={isSuper}
-                    role={role}
                   />
                 ))}
               </ul>
@@ -318,14 +304,12 @@ export function AdminSidebar({ role = null, userName = null, userEmail = null })
                 <p className="truncate text-[var(--text-muted)]">{userEmail}</p>
               )}
             </div>
-            {role && (
+            {badgeLabel && (
               <span
-                className={cn(
-                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
-                  ROLE_BADGE[role] ?? 'bg-gray-100 text-gray-700'
-                )}
+                className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                style={badgeStyle}
               >
-                {role}
+                {badgeLabel}
               </span>
             )}
           </div>

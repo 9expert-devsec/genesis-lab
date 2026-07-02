@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
+import { requirePage } from '@/lib/rbac/guard';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { CareerPathForm } from '../_components/CareerPathForm';
 
@@ -7,6 +8,8 @@ export const metadata = { title: 'สร้าง Career Path' };
 export const dynamic = 'force-dynamic';
 
 export default async function NewCareerPathPage() {
+  await requirePage('career_paths');
+
   // We pass the full list so the curriculum item editor can do a local,
   // typeahead-style filter without a roundtrip per keystroke.
   const result = await listPublicCourses().catch(() => ({ items: [] }));
