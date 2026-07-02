@@ -4,7 +4,7 @@ import { ChevronRight } from 'lucide-react';
  * In-page jump links. Each entry is filtered by whether its target
  * section will actually render — no dead anchors.
  */
-export function SidebarNav({ course, hasSchedules, hasRelated }) {
+export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
   const links = [
     { id: 'schedule', label: 'ตารางฝึกอบรม', show: hasSchedules },
     {
@@ -44,6 +44,7 @@ export function SidebarNav({ course, hasSchedules, hasRelated }) {
         course?.course_roadmap_desktop_url || course?.course_roadmap_mobile_url
       ),
     },
+    { id: 'faq', label: 'คำถามที่พบบ่อย', show: Boolean(hasFaqs) },
     { id: 'related', label: 'หลักสูตรที่เกี่ยวข้อง', show: hasRelated },
   ].filter((l) => l.show);
 

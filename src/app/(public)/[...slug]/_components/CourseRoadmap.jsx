@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import DOMPurify from 'isomorphic-dompurify';
 import { ContentSection } from './ContentSection';
 
 const isSvgUrl = (url) => /\.svg(\?|#|$)/i.test(url || '');
@@ -52,7 +51,15 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
         if (!res.ok) throw new Error(`roadmap fetch ${res.status}`);
         return res.text();
       })
-      .then((svgText) => {
+      .then(async (svgText) => {
+        if (cancelled) return;
+        // Load DOMPurify lazily, in the browser only. A static top-level
+        // import would be evaluated in the server bundle during SSR (even
+        // though this is a client component), pulling in jsdom →
+        // cssstyle → the ESM-only @csstools/css-calc, which Next's CJS
+        // server build can't require(). The dynamic import keeps it off
+        // the server entirely — this .then() runs only in the browser.
+        const { default: DOMPurify } = await import('isomorphic-dompurify');
         if (cancelled) return;
         const clean = DOMPurify.sanitize(svgText, {
           USE_PROFILES: { svg: true, svgFilters: true },

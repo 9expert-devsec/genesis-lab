@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { CoursePromoLinksTab } from './CoursePromoLinksTab';
 import { EarlyBirdTab } from './EarlyBirdTab';
+import { FaqTab } from './FaqTab';
 
 /**
  * SEO + gallery editor for a single course.
@@ -25,6 +26,7 @@ export function ExtensionEditor({
   initialPromoLinks = [],
   initialEarlyBird = null,
   initialPromos = [],
+  initialFaqs = [],
 }) {
   const router = useRouter();
 
@@ -133,6 +135,7 @@ export function ExtensionEditor({
           { id: 'gallery', label: `Gallery (${gallery.length})` },
           { id: 'promos', label: 'โปรโมชัน' },
           { id: 'earlybird', label: 'Early Bird' },
+          { id: 'faq', label: `FAQ (${initialFaqs.length})` },
           { id: 'payment', label: 'การชำระเงิน' },
         ].map((t) => (
           <button
@@ -277,6 +280,10 @@ export function ExtensionEditor({
           initialData={initialEarlyBird}
           initialPromos={initialPromos}
         />
+      )}
+
+      {tab === 'faq' && (
+        <FaqTab courseId={courseId} initialFaqs={initialFaqs} />
       )}
 
       {tab === 'payment' && (

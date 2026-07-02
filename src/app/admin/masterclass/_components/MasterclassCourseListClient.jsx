@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { CalendarRange, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CalendarRange, ExternalLink, HelpCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { deleteMasterclassCourse } from '@/lib/actions/masterclass';
 
 export function MasterclassCourseListClient({ courses: initial }) {
@@ -124,6 +124,12 @@ export function MasterclassCourseListClient({ courses: initial }) {
                       className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                     >
                       <CalendarRange className="h-3 w-3" /> จัดการรุ่น
+                    </Link>
+                    <Link
+                      href={`/admin/masterclass/${c._id}/faqs`}
+                      className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                    >
+                      <HelpCircle className="h-3 w-3" /> FAQ
                     </Link>
                     <button
                       type="button"

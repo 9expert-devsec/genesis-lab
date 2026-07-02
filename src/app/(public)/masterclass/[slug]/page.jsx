@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { getMasterclassBySlug, getLocalFaqs, getInstructorsByIds } from '@/lib/masterclass/getMasterclass';
+import { getMasterclassBySlug, getInstructorsByIds } from '@/lib/masterclass/getMasterclass';
+import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
 
@@ -20,7 +21,7 @@ export default async function MasterclassDetailPage({ params }) {
   const course = await getMasterclassBySlug(slug);
   if (!course) notFound();
   const [faqs, instructors] = await Promise.all([
-    getLocalFaqs('masterclass'),
+    getLocalFaqsForCourse('masterclass', String(course._id)),
     getInstructorsByIds(course.instructor_ids ?? []),
   ]);
 

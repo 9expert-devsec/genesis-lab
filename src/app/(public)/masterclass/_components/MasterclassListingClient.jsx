@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -16,7 +15,6 @@ import {
   Download,
   FlaskConical,
   GraduationCap,
-  Plus,
   Tag,
   TrendingUp,
   UserCheck,
@@ -25,41 +23,6 @@ import {
   Zap,
 } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
-
-// ─── FAQ Accordion ──────────────────────────────────────────────────────────
-function FaqAccordionItem({ faq }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div
-      className={`border rounded-2xl dark:border-gray-700 ${open ? "border-9e-action-scale-600 shadow-lg shadow-9e-action-scale-600/20" : "border-gray-200"}`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between p-4 text-left text-[17px] font-bold text-9e-navy dark:text-white"
-      >
-        <span>{faq.question_th}</span>
-        <div
-          className="p-2
-         rounded-full bg-9e-signature-900"
-        >
-          <Plus
-            size={16}
-            className={`shrink-0 transition-transform duration-200 text-9e-action ${open ? "rotate-45" : ""}`}
-          />
-        </div>
-      </button>
-      <div
-        className={`overflow-hidden transition-all duration-300 ${open ? "max-h-96" : "max-h-0"}`}
-      >
-        <div
-          className="prose prose-base dark:prose-invert px-4 pb-4 text-gray-600 dark:text-gray-300"
-          dangerouslySetInnerHTML={{ __html: faq.answer_html }}
-        />
-      </div>
-    </div>
-  );
-}
 
 // ─── Course Card ─────────────────────────────────────────────────────────────
 const LEVEL_MAP = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
@@ -196,7 +159,7 @@ function MasterclassCard({ course }) {
 }
 
 // ─── Main listing component ──────────────────────────────────────────────────
-export function MasterclassListingClient({ courses = [], faqs = [] }) {
+export function MasterclassListingClient({ courses = [] }) {
   return (
     <main>
       {/* [A] Hero */}
@@ -242,20 +205,6 @@ export function MasterclassListingClient({ courses = [], faqs = [] }) {
           </div>
         )}
       </section>
-
-      {/* [C] FAQ */}
-      {faqs.length > 0 && (
-        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-16">
-          <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
-            คำถามที่พบบ่อย
-          </h2>
-          <div className="flex flex-col gap-4">
-            {faqs.map((f) => (
-              <FaqAccordionItem key={f._id} faq={f} />
-            ))}
-          </div>
-        </section>
-      )}
     </main>
   );
 }

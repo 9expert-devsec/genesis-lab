@@ -4,7 +4,9 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
+import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { CareerPathDetail } from './_components/CareerPathDetail';
+import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { CourseCard } from '@/components/course/CourseCard';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
@@ -368,7 +370,11 @@ export default async function CatchAllPage({ params, searchParams }) {
   if (segment.endsWith('-career-path')) {
     const careerPath = await getCareerPathBySlug(segment);
     if (!careerPath || careerPath.is_active === false) notFound();
-    return <CareerPathDetail careerPath={careerPath} />;
+    const faqs = await getLocalFaqsForCourse(
+      'career_path',
+      careerPath.career_path_id
+    );
+    return <CareerPathDetail careerPath={careerPath} faqs={faqs} />;
   }
 
   // All-courses catalog — public listing filtered by skill or program.
@@ -408,12 +414,13 @@ export default async function CatchAllPage({ params, searchParams }) {
     // which the hero gradient uses; the course detail response doesn't
     // include it. If the programs fetch fails we fall through to the
     // skillcolor fallback in CourseDetail.
-    const [scheduleRes, programsRes, earlyBirdRes, coursePromosRes] =
+    const [scheduleRes, programsRes, earlyBirdRes, coursePromosRes, faqsRes] =
       await Promise.allSettled([
         listSchedulesByCourse(course._id, { limit: 10 }),
         listPrograms(),
         getEarlyBirdByCourse(course.course_id),
         getActiveCoursePromos(course.course_id),
+        getLocalFaqsForCourse('public', course.course_id),
       ]);
     const schedules =
       scheduleRes.status === 'fulfilled' ? scheduleRes.value.items : [];
@@ -423,6 +430,8 @@ export default async function CatchAllPage({ params, searchParams }) {
       earlyBirdRes.status === 'fulfilled' ? earlyBirdRes.value : null;
     const coursePromos =
       coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
+    const faqs =
+      faqsRes.status === 'fulfilled' ? faqsRes.value : [];
 
     // Course + BreadcrumbList JSON-LD (separate <script> tags, as Google
     // recommends). courseUrl mirrors the slug logic in buildCourseJsonLd.
@@ -479,6 +488,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           programs={programs}
           earlyBird={earlyBird}
           coursePromos={coursePromos}
+          faqs={faqs}
         />
       </>
     );
@@ -526,6 +536,7 @@ function CourseDetail({
   programs,
   earlyBird,
   coursePromos,
+  faqs = [],
 }) {
   const hasSchedules = Boolean(schedules?.length);
   const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
@@ -580,6 +591,12 @@ function CourseDetail({
             <CourseRequirements course={course} />
             <CourseOutline course={course} />
             <CourseRoadmap course={course} />
+            <FaqAccordionSection
+              faqs={faqs}
+              id="faq"
+              className="scroll-mt-24"
+              headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-9e-navy"
+            />
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-24">
@@ -587,6 +604,7 @@ function CourseDetail({
               course={course}
               hasSchedules={hasSchedules}
               hasRelated={hasRelated}
+              hasFaqs={Boolean(faqs?.length)}
             />
             {/* <InhouseCTA courseId={course.course_id} /> */}
             <PDFDownload course={course} />
