@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db/connect';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
-import MasterclassBatch from '@/models/MasterclassBatch';
+import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 import { sendMasterclassReceipt } from '@/lib/masterclass/send-receipt';
@@ -68,25 +68,9 @@ export async function POST(req) {
     }
     await MasterclassRegistration.findByIdAndUpdate(registrationId, { $set: update });
 
-    // Increment registered_count on the batch when registration is paid.
-    // Then auto-flip batch status to 'full' if capacity is reached
-    // (mirrors updateMasterclassBatch's status auto-compute logic).
+    // Recompute seats from source of truth (paid registrations × attendeesCount).
     if (update.status === 'paid') {
-      const updatedBatch = await MasterclassBatch.findByIdAndUpdate(
-        doc.batch_id,
-        { $inc: { registered_count: 1 } },
-        { new: true }
-      );
-      if (
-        updatedBatch &&
-        !updatedBatch.status_override &&
-        updatedBatch.status === 'open' &&
-        updatedBatch.registered_count >= updatedBatch.capacity
-      ) {
-        await MasterclassBatch.findByIdAndUpdate(updatedBatch._id, {
-          $set: { status: 'full' },
-        });
-      }
+      await recomputeBatchSeats(doc.batch_id);
     }
 
     console.log('[charge] credit card result:', {

@@ -7,6 +7,7 @@ import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
 import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
+import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
@@ -133,6 +134,7 @@ export async function updateMasterclassRegistrationStatus(id, newStatus) {
     { new: true }
   ).lean();
   if (!doc) return { ok: false, error: 'not_found' };
+  await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
   return { ok: true };
 }
@@ -144,10 +146,8 @@ export async function deleteMasterclassRegistration(id) {
   await dbConnect();
   const doc = await MasterclassRegistration.findByIdAndDelete(id).lean();
   if (!doc) return { ok: false, error: 'not_found' };
-  // Decrement registered_count on the batch
-  await MasterclassBatch.findByIdAndUpdate(doc.batch_id, {
-    $inc: { registered_count: -1 },
-  });
+  // Recompute seats from source of truth (fixes negative-count drift).
+  await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
   return { ok: true };
 }
@@ -179,7 +179,7 @@ export async function getMasterclassBatchOptions(courseId) {
 // `rows` is [{ firstName, lastName, email, phone, license? }] where
 // license = { choice, level, detail } | null, index-aligned with attendees.
 export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
   if (!id) return { ok: false, error: 'missing_id' };
   if (!Array.isArray(rows)) return { ok: false, error: 'invalid_payload' };
@@ -228,6 +228,7 @@ export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}
     { new: true }
   ).lean();
   if (!doc) return { ok: false, error: 'not_found' };
+  await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
   return { ok: true };
