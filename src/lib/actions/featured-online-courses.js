@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { FeaturedOnlineCourse } from '@/models/FeaturedOnlineCourse';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/featured-online-courses';
 
@@ -24,6 +25,7 @@ export async function getActiveFeaturedOnlineCourseIds() {
 }
 
 export async function addFeaturedOnlineCourse(formData) {
+  await requireAdmin('featured_online_courses');
   await dbConnect();
 
   const rawId = formData.get('course_id');
@@ -60,6 +62,7 @@ export async function addFeaturedOnlineCourse(formData) {
 }
 
 export async function updateFeaturedOnlineCourse(id, formData) {
+  await requireAdmin('featured_online_courses');
   await dbConnect();
 
   const sort_order = Number(formData.get('sort_order') ?? 0);
@@ -73,6 +76,7 @@ export async function updateFeaturedOnlineCourse(id, formData) {
 }
 
 export async function deleteFeaturedOnlineCourse(id) {
+  await requireAdmin('featured_online_courses');
   await dbConnect();
   await FeaturedOnlineCourse.findByIdAndDelete(id);
   revalidatePath('/');

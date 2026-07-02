@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
+import Role from '@/models/Role';
 import { adminLoginSchema } from '@/lib/schemas/admin';
 import { verifyTotp } from '@/lib/totp';
 import { authConfig } from './config';
@@ -78,11 +79,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Admin.updateOne({ _id: admin._id }, { $set: { lastLoginAt: new Date() } })
           .catch(() => {});
 
+        // ── Resolve dynamic-RBAC permissions (Phase 2) ─────────────
+        // DB access happens HERE (Node runtime) so the Edge-safe
+        // callbacks in config.js can stay DB-free — they just copy
+        // these fields token→session.
+        //
+        // Prefer the backfilled roleKey; fall back to the legacy enum
+        // then 'admin'. The Phase-1 migration should guarantee roleKey
+        // exists — warn if it somehow doesn't.
+        const lookupKey = admin.roleKey ?? 'admin';
+        if (!admin.roleKey) {
+          console.warn(
+            `[auth] admin ${admin.email} has no roleKey; falling back to '${lookupKey}'`
+          );
+        }
+        const role = await Role.findOne({ key: lookupKey }).lean();
+        const isSuperadmin = !!role?.isSuperadmin;
+        // `null` = allow-all sentinel for superadmin so we never store or
+        // ship the full page list; the guard treats null as "all pages".
+        const pages = isSuperadmin ? null : (role?.pages ?? []);
+
         return {
           id:    String(admin._id),
           email: admin.email,
           name:  admin.name,
-          role:  admin.role,
+          roleKey: admin.roleKey ?? role?.key ?? 'admin',
+          roleName:  role?.name ?? null,   // for the sidebar badge label
+          roleColor: role?.color ?? null,  // free hex from the Role doc
+          isSuperadmin,
+          pages,                           // array, or null = all (superadmin)
         };
       },
     }),

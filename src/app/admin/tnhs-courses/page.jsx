@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllTnhsCourses } from '@/lib/actions/tnhs-courses';
 import { TnhsCourseForm } from './_components/TnhsCourseForm';
 import { TnhsCourseList } from './_components/TnhsCourseList';
@@ -6,6 +7,8 @@ export const metadata = { title: 'TNHS Courses' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requirePage('tnhs_courses');
+
   const courses = await getAllTnhsCourses();
   const activeCount = courses.filter((c) => c.is_active).length;
 

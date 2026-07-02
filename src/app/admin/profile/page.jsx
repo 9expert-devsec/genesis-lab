@@ -8,9 +8,10 @@
 
 import Link from 'next/link';
 import { ShieldCheck } from 'lucide-react';
-import { auth } from '@/lib/auth/options';
+import { requirePage } from '@/lib/rbac/guard';
 import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
+import { roleBadgeStyle } from '@/lib/rbac/roleColor';
 import { ProfileClient } from './_components/ProfileClient';
 
 export const runtime = 'nodejs';
@@ -22,17 +23,22 @@ export const metadata = {
 };
 
 export default async function ProfilePage() {
-  const session = await auth();
+  const session = await requirePage('profile');
   const email = session?.user?.email;
 
   let me = null;
   if (email) {
     await dbConnect();
     const doc = await Admin.findOne({ email })
-      .select('email name role active totpEnabled lastLoginAt createdAt')
+      .select('email name roleKey active totpEnabled lastLoginAt createdAt')
       .lean();
     me = doc ? JSON.parse(JSON.stringify(doc)) : null;
   }
+
+  // Role display comes from the session (this is the current user's own
+  // profile) — human-readable name + free-hex color resolved from roleKey.
+  const roleLabel = session?.user?.roleName ?? me?.roleKey ?? '—';
+  const roleColor = session?.user?.roleColor ?? null;
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-6">
@@ -48,7 +54,14 @@ export default async function ProfilePage() {
           <dt className="text-[var(--text-muted)]">อีเมล</dt>
           <dd className="col-span-2 text-[var(--text-primary)]">{me?.email ?? '—'}</dd>
           <dt className="text-[var(--text-muted)]">Role</dt>
-          <dd className="col-span-2 text-[var(--text-primary)]">{me?.role ?? '—'}</dd>
+          <dd className="col-span-2">
+            <span
+              className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+              style={roleBadgeStyle(roleColor).soft}
+            >
+              {roleLabel}
+            </span>
+          </dd>
           <dt className="text-[var(--text-muted)]">สถานะ</dt>
           <dd className="col-span-2 text-[var(--text-primary)]">
             {me?.active ? 'ใช้งาน' : 'ปิดใช้'}

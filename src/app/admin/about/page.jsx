@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllInstructors, getAboutConfig } from '@/lib/actions/about';
 import { AboutAdminClient } from './_components/AboutAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'จัดการหน้าเกี่ย�
 export const dynamic = 'force-dynamic';
 
 export default async function AboutAdminPage() {
+  await requirePage('about');
+
   const [instructors, config] = await Promise.all([
     getAllInstructors(),
     getAboutConfig(),

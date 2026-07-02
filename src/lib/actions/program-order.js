@@ -4,13 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import ProgramOrder from '@/models/ProgramOrder';
 import SkillOrder from '@/models/SkillOrder';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session) throw new Error('Unauthorized');
-}
 
 function programIdOf(p) {
   return String(p.program_id ?? p._id ?? '');
@@ -28,7 +23,7 @@ function skillIdOf(s) {
  * order. Always refreshes the cached display name + icon.
  */
 export async function syncProgramsFromAPI(apiPrograms) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
 
   for (const prog of apiPrograms ?? []) {
@@ -77,7 +72,7 @@ export async function getOrderedPrograms(apiPrograms) {
  * sort position.
  */
 export async function saveProgramOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
 
   const ops = (orderedIds ?? []).map((id, index) => ({
@@ -96,7 +91,7 @@ export async function saveProgramOrder(orderedIds) {
 }
 
 export async function toggleProgramHidden(programId, isHidden) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
   await ProgramOrder.findOneAndUpdate(
     { programId: String(programId) },
@@ -111,7 +106,7 @@ export async function toggleProgramHidden(programId, isHidden) {
 // ── Skills ──────────────────────────────────────────────────────────
 
 export async function syncSkillsFromAPI(apiSkills) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
 
   for (const skill of apiSkills ?? []) {
@@ -181,7 +176,7 @@ export async function getOrderedSkills(apiSkills) {
 }
 
 export async function saveSkillOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
 
   const ops = (orderedIds ?? []).map((id, index) => ({
@@ -200,7 +195,7 @@ export async function saveSkillOrder(orderedIds) {
 }
 
 export async function saveSkillProgramOrder(skillId, orderedProgramIds) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
   await SkillOrder.findOneAndUpdate(
     { skillId: String(skillId) },
@@ -213,7 +208,7 @@ export async function saveSkillProgramOrder(skillId, orderedProgramIds) {
 }
 
 export async function toggleSkillHidden(skillId, isHidden) {
-  await requireAdmin();
+  await requireAdmin('programs');
   await dbConnect();
   await SkillOrder.findOneAndUpdate(
     { skillId: String(skillId) },

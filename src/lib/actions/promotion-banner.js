@@ -9,20 +9,11 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import PromotionBanner from '@/models/PromotionBanner';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const PUBLIC_PATH = '/promotions';
 const ADMIN_PATH  = '/admin/promotions/banner';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -40,7 +31,7 @@ export async function getActivePromotionBanners() {
 }
 
 export async function listPromotionBanners() {
-  await requireAdmin();
+  await requireAdmin('promotions_banner');
   await dbConnect();
   const docs = await PromotionBanner.find({})
     .sort({ display_order: 1, createdAt: 1 })
@@ -55,7 +46,7 @@ export async function listPromotionBanners() {
  * Required: an image file (`image_file`) OR a pre-set `image_url`.
  */
 export async function savePromotionBanner(formDataOrObj) {
-  await requireAdmin();
+  await requireAdmin('promotions_banner');
   await dbConnect();
 
   const isForm = typeof formDataOrObj?.get === 'function';
@@ -100,7 +91,7 @@ export async function savePromotionBanner(formDataOrObj) {
 }
 
 export async function updatePromotionBanner(id, formDataOrObj) {
-  await requireAdmin();
+  await requireAdmin('promotions_banner');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -145,7 +136,7 @@ export async function updatePromotionBanner(id, formDataOrObj) {
 }
 
 export async function deletePromotionBanner(id) {
-  await requireAdmin();
+  await requireAdmin('promotions_banner');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -161,7 +152,7 @@ export async function deletePromotionBanner(id) {
 }
 
 export async function updatePromotionBannerOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('promotions_banner');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {

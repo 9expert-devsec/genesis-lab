@@ -1,10 +1,13 @@
 import Link from 'next/link';
+import { requirePage } from '@/lib/rbac/guard';
 import { getBanners } from '@/lib/actions/banners';
 import { AdminBannerList } from './_components/AdminBannerList';
 
 export const metadata = { title: 'Banner' };
 
 export default async function Page() {
+  await requirePage('banners');
+
   const banners = await getBanners();
   return (
     <div>

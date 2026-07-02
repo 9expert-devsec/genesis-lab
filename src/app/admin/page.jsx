@@ -1,6 +1,6 @@
 import { getDashboardMetrics } from '@/lib/actions/dashboard';
 import { getAllSchedules } from '@/lib/api/schedules';
-import { auth } from '@/lib/auth/options';
+import { requirePage } from '@/lib/rbac/guard';
 import { DashboardClient } from './_components/DashboardClient';
 
 export const metadata = { title: 'แดชบอร์ด' };
@@ -10,8 +10,8 @@ export default async function Page({ searchParams }) {
   const sp = (await searchParams) ?? {};
   const range = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'today';
 
-  const session = await auth();
-  const role = session?.user?.role ?? null;
+  const session = await requirePage('dashboard');
+  const isSuperadmin = session?.user?.isSuperadmin ?? false;
 
   // Fetch metrics and open schedules in parallel
   const [metrics, schedulesRes] = await Promise.allSettled([
@@ -30,7 +30,7 @@ export default async function Page({ searchParams }) {
       data={data}
       openSchedulesCount={openSchedulesCount}
       initialRange={range}
-      role={role}
+      isSuperadmin={isSuperadmin}
     />
   );
 }

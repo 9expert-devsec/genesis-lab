@@ -3,8 +3,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
-import { forbidden } from 'next/navigation';
-import { auth } from '@/lib/auth/options';
+import { requirePage } from '@/lib/rbac/guard';
 import { SchedulesAdminClient } from './_components/SchedulesAdminClient';
 
 export const metadata = {
@@ -22,8 +21,7 @@ function toIsoDate(d) {
 }
 
 export default async function AdminSchedulesPage() {
-  const session = await auth();
-  if (!new Set(['superadmin', 'owner', 'admin', 'editor', 'registration_admin', 'it_support_admin']).has(session?.user?.role)) forbidden();
+  await requirePage('schedules');
 
   // 4-month window — current month + next 3. The page renders one
   // column per month, so this defines the visible horizon. We pass a

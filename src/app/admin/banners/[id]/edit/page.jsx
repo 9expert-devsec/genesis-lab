@@ -1,10 +1,13 @@
 import { notFound } from 'next/navigation';
+import { requirePage } from '@/lib/rbac/guard';
 import { getBanners } from '@/lib/actions/banners';
 import { BannerForm } from '../../_components/BannerForm';
 
 export const metadata = { title: 'แก้ไข Banner' };
 
 export default async function Page({ params }) {
+  await requirePage('banners');
+
   const { id } = await params;
   const banners = await getBanners();
   const banner = banners.find((b) => b._id === id);

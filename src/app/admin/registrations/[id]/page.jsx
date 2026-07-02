@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { requirePage } from '@/lib/rbac/guard';
 import { getRegistrationById } from '@/lib/actions/registrations';
 import { RegistrationDetailClient } from '../_components/RegistrationDetailClient';
 
@@ -10,6 +11,8 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function Page({ params }) {
+  await requirePage('registrations');
+
   const { id } = await params;
   const doc = await getRegistrationById(id);
   if (!doc) notFound();

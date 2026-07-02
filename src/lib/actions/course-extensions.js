@@ -17,18 +17,9 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/courses';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(doc) {
   if (!doc) return null;
@@ -62,7 +53,7 @@ export async function getCourseExtensionByAlias(alias) {
 
 /** Admin-only — list every extension for the management table. */
 export async function listCourseExtensions() {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   const docs = await CourseExtension.find({}).sort({ updatedAt: -1 }).lean();
   return serialize(docs);
@@ -70,7 +61,7 @@ export async function listCourseExtensions() {
 
 /** Admin-only — create or update by `courseId`. */
 export async function saveCourseExtension(courseId, data) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
 
   if (!courseId || typeof courseId !== 'string') {
@@ -142,7 +133,7 @@ export async function saveCourseExtension(courseId, data) {
 /** Admin-only — delete an extension document. The upstream course
  *  itself remains; only the SEO/gallery layer is removed. */
 export async function deleteCourseExtension(courseId) {
-  await requireAdmin();
+  await requireAdmin('courses');
   await dbConnect();
   await CourseExtension.deleteOne({ courseId });
   revalidatePath(ADMIN_PATH);

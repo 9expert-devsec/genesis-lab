@@ -194,7 +194,7 @@ export async function findCustomPageByHistoricalSlug(slug) {
 // ── mutations ────────────────────────────────────────────────────
 
 export async function createCustomPage(formData) {
-  await requireAdmin();
+  await requireAdmin('pages');
   await dbConnect();
 
   const raw = parseFormData(formData);
@@ -227,7 +227,7 @@ export async function createCustomPage(formData) {
 }
 
 export async function updateCustomPage(id, formData) {
-  await requireAdmin();
+  await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   await dbConnect();
 
@@ -277,7 +277,7 @@ export async function updateCustomPage(id, formData) {
 }
 
 export async function deleteCustomPage(id) {
-  await requireAdmin();
+  await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   await dbConnect();
   const doc = await CustomPage.findByIdAndDelete(id);
@@ -297,7 +297,7 @@ export async function deleteCustomPage(id) {
 }
 
 export async function toggleCustomPageStatus(id, status) {
-  await requireAdmin();
+  await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   if (!['draft', 'published'].includes(status)) {
     return { ok: false, error: 'สถานะไม่ถูกต้อง' };
@@ -314,7 +314,7 @@ export async function toggleCustomPageStatus(id, status) {
 }
 
 export async function regeneratePreviewToken(id) {
-  await requireAdmin();
+  await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   await dbConnect();
   const token = randomUUID();

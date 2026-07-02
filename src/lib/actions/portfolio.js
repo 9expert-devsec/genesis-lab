@@ -11,20 +11,11 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import ClientLogo from '@/models/ClientLogo';
 import AtmospherePhoto from '@/models/AtmospherePhoto';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { uploadToCloudinary, deleteFromCloudinary } from '@/lib/cloudinary';
 
 const PUBLIC_PATH = '/portfolio';
 const ADMIN_PATH  = '/admin/portfolio';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(value) {
   if (value == null) return value;
@@ -46,7 +37,7 @@ export async function getActiveClientLogos() {
 }
 
 export async function getAllClientLogos() {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
   const docs = await ClientLogo.find({})
     .sort({ display_order: 1, createdAt: 1 })
@@ -55,7 +46,7 @@ export async function getAllClientLogos() {
 }
 
 export async function createClientLogo(formData) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   const isForm = typeof formData?.get === 'function';
@@ -102,7 +93,7 @@ export async function createClientLogo(formData) {
 }
 
 export async function updateClientLogo(id, formData) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -149,7 +140,7 @@ export async function updateClientLogo(id, formData) {
 }
 
 export async function deleteClientLogo(id) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -165,7 +156,7 @@ export async function deleteClientLogo(id) {
 }
 
 export async function reorderClientLogos(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -196,7 +187,7 @@ export async function getActiveAtmospherePhotos() {
 }
 
 export async function getAllAtmospherePhotos() {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
   const docs = await AtmospherePhoto.find({})
     .sort({ display_order: 1, createdAt: 1 })
@@ -205,7 +196,7 @@ export async function getAllAtmospherePhotos() {
 }
 
 export async function createAtmospherePhoto(formData) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   const isForm = typeof formData?.get === 'function';
@@ -247,7 +238,7 @@ export async function createAtmospherePhoto(formData) {
 }
 
 export async function updateAtmospherePhoto(id, formData) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -294,7 +285,7 @@ export async function updateAtmospherePhoto(id, formData) {
 }
 
 export async function deleteAtmospherePhoto(id) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!id) return { ok: false, error: 'Missing id' };
@@ -310,7 +301,7 @@ export async function deleteAtmospherePhoto(id) {
 }
 
 export async function reorderAtmospherePhotos(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('portfolio');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getWebhookLogs } from '@/lib/actions/webhook-logs';
 import { WebhookLogsClient } from './_components/WebhookLogsClient';
 
@@ -9,6 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export default async function WebhookLogsPage({ searchParams }) {
+  await requirePage('webhook_logs');
+
   const sp = (await searchParams) ?? {};
   const page   = Number(sp.page)   || 1;
   const event  = String(sp.event  ?? '');

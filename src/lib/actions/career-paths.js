@@ -16,7 +16,7 @@ import mongoose from 'mongoose';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { getCourseByCode } from '@/lib/api/public-courses';
@@ -28,15 +28,6 @@ function serialize(v) {
 
 const ADMIN_PATH  = '/admin/career-paths';
 const PUBLIC_PATH = '/career-path-project';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 // ── cache busting ─────────────────────────────────────────────────
 //
@@ -64,7 +55,7 @@ function bustCaches() {
 // ── existing toggle / reorder / sync (preserved) ──────────────────
 
 export async function toggleCareerPathActive(careerPathId, isActive) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   await dbConnect();
 
   if (!careerPathId) return { ok: false, error: 'Missing career_path_id' };
@@ -83,7 +74,7 @@ export async function toggleCareerPathActive(careerPathId, isActive) {
  * to its index in the array.
  */
 export async function updateCareerPathOrder(orderedIds) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   await dbConnect();
 
   if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
@@ -102,7 +93,7 @@ export async function updateCareerPathOrder(orderedIds) {
 }
 
 export async function syncCareerPathsAction() {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   const result = await syncCareerPaths();
   bustCaches();
   return result;
@@ -327,7 +318,7 @@ function mongoSetFromMsdbItem(item, courses, payloadCurriculum) {
 }
 
 export async function createCareerPath(formData, courses) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
 
   let payload;
   try {
@@ -372,7 +363,7 @@ export async function createCareerPath(formData, courses) {
 }
 
 export async function updateCareerPath(careerPathId, formData, courses) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   await dbConnect();
 
   if (!careerPathId) return { ok: false, error: 'Missing career_path_id' };
@@ -421,7 +412,7 @@ export async function updateCareerPath(careerPathId, formData, courses) {
 }
 
 export async function deleteCareerPath(careerPathId) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   await dbConnect();
 
   if (!careerPathId) return { ok: false, error: 'Missing career_path_id' };
@@ -484,7 +475,7 @@ export async function getCareerPathById(id) {
  * surface (admin-only data) so we don't dual-write — just Mongo.
  */
 export async function updateCareerPathCourses(id, payload = {}) {
-  await requireAdmin();
+  await requireAdmin('career_paths');
   await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
 

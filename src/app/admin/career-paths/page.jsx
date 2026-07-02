@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { CareerPathsAdminClient } from './_components/CareerPathsAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'จัดการ Career Path' };
 export const dynamic = 'force-dynamic';
 
 export default async function CareerPathsAdminPage() {
+  await requirePage('career_paths');
+
   const careerPaths = await getAllCareerPaths();
 
   // Latest synced_at across all rows — admin-visible "last sync" indicator.

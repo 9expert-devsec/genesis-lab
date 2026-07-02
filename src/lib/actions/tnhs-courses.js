@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { TnhsCourse } from '@/models/TnhsCourse';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/tnhs-courses';
 
@@ -35,6 +36,7 @@ export async function getAllTnhsCourses() {
 }
 
 export async function createTnhsCourse(formData) {
+  await requireAdmin('tnhs_courses');
   await dbConnect();
 
   const course_name =
@@ -67,6 +69,7 @@ export async function createTnhsCourse(formData) {
 }
 
 export async function updateTnhsCourse(id, formData) {
+  await requireAdmin('tnhs_courses');
   await dbConnect();
 
   const update = {};
@@ -92,6 +95,7 @@ export async function updateTnhsCourse(id, formData) {
 }
 
 export async function deleteTnhsCourse(id) {
+  await requireAdmin('tnhs_courses');
   await dbConnect();
   await TnhsCourse.findByIdAndDelete(id);
   revalidate();

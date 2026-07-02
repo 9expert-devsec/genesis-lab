@@ -49,7 +49,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth/options';
+import { requireAdmin } from '@/lib/actions/auth';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -57,15 +57,6 @@ import {
 } from '@/lib/api/resolveIds';
 
 const ADMIN_PATH = '/admin/courses';
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 // ── coercion helpers ────────────────────────────────────────────────
 
@@ -226,7 +217,7 @@ async function resolveCourseRefs(body) {
 }
 
 export async function createCourse(formData) {
-  await requireAdmin();
+  await requireAdmin('courses');
   const body = shapePayload(formData);
   if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
   if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
@@ -242,7 +233,7 @@ export async function createCourse(formData) {
 }
 
 export async function updateCourse(id, formData) {
-  await requireAdmin();
+  await requireAdmin('courses');
   if (!id) return { ok: false, error: 'Missing course id' };
 
   const body = shapePayload(formData);
@@ -258,7 +249,7 @@ export async function updateCourse(id, formData) {
 }
 
 export async function deleteCourse(id) {
-  await requireAdmin();
+  await requireAdmin('courses');
   if (!id) return { ok: false, error: 'Missing course id' };
 
   try {

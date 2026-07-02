@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
+import { requirePage } from '@/lib/rbac/guard';
 import { getCareerPathRegistrationById } from '@/lib/actions/career-path-registrations';
 import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelect';
 
@@ -23,6 +24,8 @@ function fmtDate(iso) {
 }
 
 export default async function RegistrationDetailPage({ params }) {
+  await requirePage('career_path_registrations');
+
   const { id } = await params;
   const reg = await getCareerPathRegistrationById(id);
   if (!reg) notFound();

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getFeaturedCourses } from '@/lib/actions/featured-courses';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { AddFeaturedCourseForm } from './_components/AddFeaturedCourseForm';
@@ -7,6 +8,8 @@ export const metadata = { title: 'คอร์สแนะนำ' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requirePage('featured_courses');
+
   const [featured, publicCourses] = await Promise.all([
     getFeaturedCourses(),
     listPublicCourses().catch(() => ({ items: [] })),

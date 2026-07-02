@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
@@ -11,6 +12,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export default async function NewCoursePage() {
+  await requirePage('courses');
+
   // Best-effort — if any upstream lookup fails, the form still renders;
   // the missing selector just shows an empty state.
   const [skillsRes, programsRes, coursesRes] = await Promise.allSettled([

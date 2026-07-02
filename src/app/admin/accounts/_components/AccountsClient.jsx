@@ -9,24 +9,23 @@ import {
   resetAdminPassword,
   deleteAdmin,
 } from '@/lib/actions/admin-accounts';
-import { cn } from '@/lib/utils';
+import { roleBadgeStyle } from '@/lib/rbac/roleColor';
 
-const ROLE_STYLES = {
-  superadmin: 'bg-blue-100 text-blue-700',
-  owner:      'bg-blue-100 text-blue-700',
-  admin:      'bg-gray-100 text-gray-700',
-  editor:     'bg-yellow-100 text-yellow-700',
-};
-
-function RoleBadge({ role }) {
+/**
+ * Role badge — resolves the admin's roleKey (fallback legacy `role`) to a
+ * role from the DB list for its name + free-hex color. Inline style +
+ * readable ink keep any custom color legible (Tailwind can't compile
+ * dynamic hex). Unknown key → neutral gray via roleBadgeStyle's fallback.
+ */
+function RoleBadge({ roleKey, roles }) {
+  const role = roles.find((r) => r.key === roleKey);
+  const label = role?.name ?? roleKey ?? '—';
   return (
     <span
-      className={cn(
-        'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
-        ROLE_STYLES[role] ?? 'bg-gray-100 text-gray-700'
-      )}
+      className="inline-block rounded-full px-2 py-0.5 text-xs font-medium"
+      style={roleBadgeStyle(role?.color).soft}
     >
-      {role}
+      {label}
     </span>
   );
 }
@@ -35,7 +34,7 @@ function fmt(date) {
   return date ? new Date(date).toLocaleString('th-TH') : '—';
 }
 
-export function AccountsClient({ initialAdmins, currentUserId }) {
+export function AccountsClient({ initialAdmins, roles = [], currentUserId }) {
   const router = useRouter();
   const [admins, setAdmins] = useState(initialAdmins);
   const [isPending, startTransition] = useTransition();
@@ -101,7 +100,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
                   </td>
                   <td className="px-4 py-3 text-[var(--text-primary)]">{a.name}</td>
                   <td className="px-4 py-3">
-                    <RoleBadge role={a.role} />
+                    <RoleBadge roleKey={a.roleKey ?? a.role} roles={roles} />
                   </td>
                   <td className="px-4 py-3">
                     {a.active ? (
@@ -161,6 +160,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
 
       {showCreate && (
         <CreateModal
+          roles={roles}
           onClose={() => setShowCreate(false)}
           onSuccess={() => {
             setShowCreate(false);
@@ -173,6 +173,7 @@ export function AccountsClient({ initialAdmins, currentUserId }) {
       {editing && (
         <EditModal
           admin={editing}
+          roles={roles}
           onClose={() => setEditing(null)}
           onSuccess={() => {
             setEditing(null);
@@ -241,7 +242,7 @@ function ModalShell({ title, onClose, children }) {
 
 // ── Create ──────────────────────────────────────────────────────
 
-function CreateModal({ onClose, onSuccess, onError }) {
+function CreateModal({ roles = [], onClose, onSuccess, onError }) {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -305,11 +306,11 @@ function CreateModal({ onClose, onSuccess, onError }) {
             onChange={(e) => setRole(e.target.value)}
             className="input"
           >
-            <option value="superadmin">superadmin</option>
-            <option value="admin">admin</option>
-            <option value="editor">editor</option>
-            <option value="registration_admin">registration_admin</option>
-            <option value="it_support_admin">it_support_admin</option>
+            {roles.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.name} ({r.key})
+              </option>
+            ))}
           </select>
         </Field>
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -328,9 +329,9 @@ function CreateModal({ onClose, onSuccess, onError }) {
 
 // ── Edit ────────────────────────────────────────────────────────
 
-function EditModal({ admin, onClose, onSuccess, onError }) {
+function EditModal({ admin, roles = [], onClose, onSuccess, onError }) {
   const [name, setName] = useState(admin.name ?? '');
-  const [role, setRole] = useState(admin.role ?? 'admin');
+  const [role, setRole] = useState(admin.roleKey ?? 'admin');
   const [active, setActive] = useState(Boolean(admin.active));
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
@@ -371,11 +372,11 @@ function EditModal({ admin, onClose, onSuccess, onError }) {
             onChange={(e) => setRole(e.target.value)}
             className="input"
           >
-            <option value="superadmin">superadmin</option>
-            <option value="admin">admin</option>
-            <option value="editor">editor</option>
-            <option value="registration_admin">registration_admin</option>
-            <option value="it_support_admin">it_support_admin</option>
+            {roles.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.name} ({r.key})
+              </option>
+            ))}
           </select>
         </Field>
         <label className="flex items-center gap-2 text-sm text-[var(--text-primary)]">

@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getNavFeaturedOnlineCourses } from '@/lib/actions/nav-featured-online-courses';
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { siteConfig } from '@/config/site';
@@ -8,6 +9,8 @@ export const metadata = { title: 'คอร์สออนไลน์แนะ�
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requirePage('nav_featured_online_courses');
+
   const [featured, online] = await Promise.all([
     getNavFeaturedOnlineCourses(),
     getOnlineCourses().catch(() => ({ items: [] })),

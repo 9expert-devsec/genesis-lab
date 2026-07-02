@@ -23,9 +23,7 @@ function fmtDateShort(iso) {
 
 // ── Component ──────────────────────────────────────────────────────
 
-const SUPERADMIN_ROLES = new Set(['superadmin', 'owner']);
-
-export function DashboardClient({ data, openSchedulesCount, initialRange, role }) {
+export function DashboardClient({ data, openSchedulesCount, initialRange, isSuperadmin }) {
   const router   = useRouter();
   const pathname = usePathname();
   const sp       = useSearchParams();
@@ -208,7 +206,7 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, role }
       </section>
 
       {/* ── Section 3: System overview (superadmin only) ── */}
-      {SUPERADMIN_ROLES.has(role) && <section className="space-y-3">
+      {isSuperadmin && <section className="space-y-3">
         <SectionHeader
           title="ภาพรวมระบบ"
           subtitle="ข้อมูล Live — ไม่กรองตามวันที่"

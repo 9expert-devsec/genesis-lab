@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import { FeaturedReview } from '@/models/FeaturedReview';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH = '/admin/featured-reviews';
 
@@ -24,6 +25,7 @@ export async function getActiveFeaturedReviewIds() {
 }
 
 export async function addFeaturedReview(formData) {
+  await requireAdmin('featured_reviews');
   await dbConnect();
 
   const rawId = formData.get('review_id');
@@ -47,6 +49,7 @@ export async function addFeaturedReview(formData) {
 }
 
 export async function updateFeaturedReview(id, formData) {
+  await requireAdmin('featured_reviews');
   await dbConnect();
 
   const sort_order = Number(formData.get('sort_order') ?? 0);
@@ -60,6 +63,7 @@ export async function updateFeaturedReview(id, formData) {
 }
 
 export async function deleteFeaturedReview(id) {
+  await requireAdmin('featured_reviews');
   await dbConnect();
   await FeaturedReview.findByIdAndDelete(id);
   revalidatePath('/');

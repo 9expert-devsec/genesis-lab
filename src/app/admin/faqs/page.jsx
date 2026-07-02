@@ -1,3 +1,4 @@
+import { requirePage } from '@/lib/rbac/guard';
 import { getAllFaqs } from '@/lib/faqs/getFaqs';
 import { FaqsAdminClient } from './_components/FaqsAdminClient';
 
@@ -5,6 +6,8 @@ export const metadata = { title: 'จัดการ FAQ' };
 export const dynamic = 'force-dynamic';
 
 export default async function FaqsAdminPage() {
+  await requirePage('faqs');
+
   const faqs = await getAllFaqs();
 
   // Latest synced_at across all rows — admin-visible "last sync" indicator.

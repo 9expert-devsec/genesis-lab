@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { requirePage } from '@/lib/rbac/guard';
 import { dbConnect } from '@/lib/db/connect';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
@@ -11,6 +12,8 @@ export const metadata = { title: 'จัดการลำดับโปรแ�
 export const dynamic = 'force-dynamic';
 
 export default async function ProgramsAdminPage({ searchParams }) {
+  await requirePage('programs');
+
   const sp = (await searchParams) ?? {};
   const tab = sp.tab === 'skills' ? 'skills' : 'programs';
 

@@ -5,22 +5,13 @@ import { dbConnect } from '@/lib/db/connect';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
-import { auth }                from '@/lib/auth/options';
+import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
 const MIN_PPP    = 5;
 const MAX_PPP    = 100;
-
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
-  }
-}
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -35,7 +26,7 @@ export async function listMasterclassRegistrations({
   licenseScope = '',
   perPage = PAGE_SIZE,
 } = {}) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
 
   const pageSize = Math.min(MAX_PPP, Math.max(MIN_PPP, Number(perPage) || PAGE_SIZE));
@@ -86,7 +77,7 @@ export async function listMasterclassRegistrations({
 // ── Status counts ─────────────────────────────────────────────────
 
 export async function getMasterclassRegStatusCounts({ range = 'all' } = {}) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
 
   const now = new Date();
@@ -113,7 +104,7 @@ export async function getMasterclassRegStatusCounts({ range = 'all' } = {}) {
 // ── Single registration ───────────────────────────────────────────
 
 export async function getMasterclassRegistrationById(id) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
   if (!id) return null;
   const doc = await MasterclassRegistration.findById(id).lean();
@@ -131,7 +122,7 @@ export async function getMasterclassRegistrationById(id) {
 // ── Update status ─────────────────────────────────────────────────
 
 export async function updateMasterclassRegistrationStatus(id, newStatus) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   if (!['pending', 'confirmed', 'paid', 'cancelled'].includes(newStatus)) {
     return { ok: false, error: 'invalid_status' };
   }
@@ -149,7 +140,7 @@ export async function updateMasterclassRegistrationStatus(id, newStatus) {
 // ── Delete ────────────────────────────────────────────────────────
 
 export async function deleteMasterclassRegistration(id) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
   const doc = await MasterclassRegistration.findByIdAndDelete(id).lean();
   if (!doc) return { ok: false, error: 'not_found' };
@@ -164,7 +155,7 @@ export async function deleteMasterclassRegistration(id) {
 // ── Course + batch selectors (for filter dropdowns) ───────────────
 
 export async function getMasterclassCourseOptions() {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
   const docs = await MasterclassCourse.find({ is_published: true })
     .select('_id title_th')
@@ -174,7 +165,7 @@ export async function getMasterclassCourseOptions() {
 }
 
 export async function getMasterclassBatchOptions(courseId) {
-  await requireAdmin();
+  await requireAdmin('mc_registrations');
   await dbConnect();
   const filter = courseId ? { course_id: courseId } : {};
   const docs = await MasterclassBatch.find(filter)
