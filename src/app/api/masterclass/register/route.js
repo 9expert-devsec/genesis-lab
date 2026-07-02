@@ -117,7 +117,7 @@ export async function POST(req) {
       console.log('[quote-debug] entering quote email block, registrationId:', String(reg._id));
       try {
         await MasterclassRegistration.findByIdAndUpdate(reg._id, {
-          $set: { 'payment.method': 'quote', status: 'confirmed' },
+          $set: { 'payment.method': 'quote', status: 'pending' },
         });
         const fresh = await MasterclassRegistration.findById(reg._id);
         console.log('[quote-debug] fresh doc fetched, course_id:', String(fresh?.course_id));

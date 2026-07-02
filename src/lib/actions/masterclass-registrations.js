@@ -9,7 +9,9 @@ import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
-const PAGE_SIZE  = 20;
+const PAGE_SIZE  = 20;          // fallback / SSR default
+const MIN_PPP    = 5;
+const MAX_PPP    = 100;
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -21,40 +23,54 @@ export async function listMasterclassRegistrations({
   q       = '',
   courseId = '',
   batchId  = '',
+  licenseScope = '',
+  perPage = PAGE_SIZE,
 } = {}) {
   await requireAdmin('mc_registrations');
   await dbConnect();
+
+  const pageSize = Math.min(MAX_PPP, Math.max(MIN_PPP, Number(perPage) || PAGE_SIZE));
 
   const filter = {};
   if (status && status !== 'all') filter.status = status;
   if (courseId) filter.course_id = courseId;
   if (batchId)  filter.batch_id  = batchId;
+  if (licenseScope === 'all' || licenseScope === 'per_attendee') {
+    filter.license_scope = licenseScope;
+  }
   if (q && q.trim()) {
     const term = q.trim();
     filter.$or = [
-      { course_title:          { $regex: term, $options: 'i' } },
-      { 'attendee.firstName':  { $regex: term, $options: 'i' } },
-      { 'attendee.lastName':   { $regex: term, $options: 'i' } },
-      { 'attendee.email':      { $regex: term, $options: 'i' } },
-      { 'attendee.phone':      { $regex: term, $options: 'i' } },
+      { course_title:            { $regex: term, $options: 'i' } },
+      { 'attendee.firstName':    { $regex: term, $options: 'i' } },
+      { 'attendee.lastName':     { $regex: term, $options: 'i' } },
+      { 'attendee.email':        { $regex: term, $options: 'i' } },
+      { 'attendee.phone':        { $regex: term, $options: 'i' } },
+      { 'coordinator.firstName': { $regex: term, $options: 'i' } },
+      { 'coordinator.lastName':  { $regex: term, $options: 'i' } },
+      { 'coordinator.email':     { $regex: term, $options: 'i' } },
+      { 'coordinator.phone':     { $regex: term, $options: 'i' } },
+      { 'attendees.firstName':   { $regex: term, $options: 'i' } },
+      { 'attendees.lastName':    { $regex: term, $options: 'i' } },
+      { 'attendees.email':       { $regex: term, $options: 'i' } },
     ];
   }
 
-  const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
+  const skip  = (Math.max(1, page) - 1) * pageSize;
   const total = await MasterclassRegistration.countDocuments(filter);
   const docs  = await MasterclassRegistration.find(filter)
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(PAGE_SIZE)
-    .select('course_title batch_label batch_date_label venue_name attendee license_choice license_level status payment pricing createdAt')
+    .limit(pageSize)
+    .select('course_title batch_label batch_date_label venue_name coordinator attendee attendees attendeesCount attendeesListProvided license_choice license_level license_detail license_scope license_per_attendee status payment pricing createdAt')
     .lean();
 
   return {
     items:     serialize(docs),
     total,
     page:      Math.max(1, page),
-    pageSize:  PAGE_SIZE,
-    pageCount: Math.ceil(total / PAGE_SIZE),
+    pageSize,
+    pageCount: Math.ceil(total / pageSize),
   };
 }
 
@@ -157,4 +173,62 @@ export async function getMasterclassBatchOptions(courseId) {
     .sort({ batch_no: 1 })
     .lean();
   return serialize(docs);
+}
+
+// ── Update attendees list + per-attendee license (admin edit) ─────
+// `rows` is [{ firstName, lastName, email, phone, license? }] where
+// license = { choice, level, detail } | null, index-aligned with attendees.
+export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}) {
+  await requireAdmin();
+  await dbConnect();
+  if (!id) return { ok: false, error: 'missing_id' };
+  if (!Array.isArray(rows)) return { ok: false, error: 'invalid_payload' };
+
+  const { perAttendeeIntent = false } = opts;
+  const VALID_CHOICE = new Set(['own', '9expert']);
+
+  // Sanitize attendee fields.
+  const attendees = rows.map((a) => ({
+    firstName: String(a?.firstName ?? '').trim(),
+    lastName:  String(a?.lastName  ?? '').trim(),
+    email:     String(a?.email     ?? '').trim().toLowerCase(),
+    phone:     String(a?.phone     ?? '').trim(),
+  }));
+
+  // Sanitize per-attendee license (index-aligned). A row with no valid choice
+  // becomes { choice: null, level: null, detail: null }.
+  const licensePerAttendee = rows.map((a) => {
+    const l = a?.license ?? {};
+    const choice = VALID_CHOICE.has(l.choice) ? l.choice : null;
+    return {
+      choice,
+      level:  choice === 'own'      ? (String(l.level  ?? '').trim() || null) : null,
+      detail: choice === '9expert'  ? (String(l.detail ?? '').trim() || null) : null,
+    };
+  });
+
+  const anyLicense = licensePerAttendee.some((l) => l.choice);
+
+  const update = {
+    attendees,
+    attendeesCount: attendees.length,
+  };
+  // Promote to per-attendee scope ONLY when the caller signals intent (the admin
+  // diverged a row from the shared license, or it was already per-attendee) AND at
+  // least one valid choice exists. Otherwise leave license_scope untouched so an
+  // "all" registration stays "all" on incidental saves (e.g. name edits).
+  if (perAttendeeIntent && anyLicense) {
+    update.license_scope        = 'per_attendee';
+    update.license_per_attendee = licensePerAttendee;
+  }
+
+  const doc = await MasterclassRegistration.findByIdAndUpdate(
+    id,
+    { $set: update },
+    { new: true }
+  ).lean();
+  if (!doc) return { ok: false, error: 'not_found' };
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(`${ADMIN_PATH}/${id}`);
+  return { ok: true };
 }
