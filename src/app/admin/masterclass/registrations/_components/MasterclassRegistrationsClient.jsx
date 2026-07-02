@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useTransition, useCallback } from 'react';
+import { useState, useEffect, useTransition, useCallback, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Search, Loader2, Download, Trash2 } from 'lucide-react';
+import { Search, Loader2, Download, Trash2, MoreVertical, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   getMasterclassBatchOptions,
@@ -57,6 +57,25 @@ const RANGE_OPTIONS = [
   { value: 'month', label: 'เดือนนี้' },
 ];
 
+const LICENSE_SCOPE_OPTIONS = [
+  { value: '',             label: 'ทุก License' },
+  { value: 'all',          label: 'เลือกรวม' },
+  { value: 'per_attendee', label: 'แยกรายคน' },
+];
+
+// Human-readable license summary for the list cell.
+function licenseCellText(reg) {
+  if (reg.license_scope === 'per_attendee') return 'แยกรายคน';
+  const choice = reg.license_choice;
+  if (!choice) return '—';
+  const base =
+    choice === 'own'     ? 'License ตนเอง'
+  : choice === '9expert' ? 'License 9Expert'
+  : choice;
+  const extra = reg.license_level || reg.license_detail;
+  return extra ? `${base} · ${extra}` : base;
+}
+
 const STAT_CARDS = [
   { key: 'total',     label: 'ทั้งหมด',     filterVal: 'all',       cls: 'border-l-4 border-l-[var(--surface-border)]' },
   { key: 'pending',   label: 'รอดำเนินการ', filterVal: 'pending',   cls: 'border-l-4 border-l-amber-400' },
@@ -82,6 +101,7 @@ export function MasterclassRegistrationsClient({
   initialRange    = 'all',
   initialCourseId = '',
   initialBatchId  = '',
+  initialLicenseScope = '',
   counts,
   courseOptions = [],
 }) {
@@ -95,26 +115,30 @@ export function MasterclassRegistrationsClient({
   const [range,    setRange]    = useState(initialRange);
   const [courseId, setCourseId] = useState(initialCourseId);
   const [batchId,  setBatchId]  = useState(initialBatchId);
+  const [licenseScope, setLicenseScope] = useState(initialLicenseScope);
   const [batchOptions, setBatchOptions] = useState([]);
+  const [openMenuId, setOpenMenuId] = useState(null);
   // For inline status update
   const [updatingId, setUpdatingId] = useState(null);
 
   const navigate = useCallback((overrides = {}) => {
     const params = new URLSearchParams(searchParams.toString());
-    const next = { page: '1', status, q, range, courseId, batchId, ...overrides };
+    // `ppp` (per-page) is managed separately by the auto-fit effect; preserve it.
+    const next = { page: '1', status, q, range, courseId, batchId, licenseScope, ...overrides };
     Object.entries(next).forEach(([k, v]) => {
       const isDefault =
-        (k === 'status'   && v === 'all') ||
-        (k === 'q'        && v === '')    ||
-        (k === 'range'    && v === 'all') ||
-        (k === 'courseId' && v === '')    ||
-        (k === 'batchId'  && v === '')    ||
-        (k === 'page'     && v === '1');
+        (k === 'status'       && v === 'all') ||
+        (k === 'q'            && v === '')    ||
+        (k === 'range'        && v === 'all') ||
+        (k === 'courseId'     && v === '')    ||
+        (k === 'batchId'      && v === '')    ||
+        (k === 'licenseScope' && v === '')    ||
+        (k === 'page'         && v === '1');
       if (!isDefault && v !== '' && v != null) params.set(k, String(v));
       else params.delete(k);
     });
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
-  }, [pathname, searchParams, router, status, q, range, courseId, batchId]);
+  }, [pathname, searchParams, router, status, q, range, courseId, batchId, licenseScope]);
 
   // Fetch batch options when the selected course changes.
   useEffect(() => {
@@ -123,6 +147,37 @@ export function MasterclassRegistrationsClient({
       .then((opts) => setBatchOptions(Array.isArray(opts) ? opts : []))
       .catch(() => {});
   }, [courseId]);
+
+  // Auto-fit page size to the viewport: measure free vertical space below the
+  // table's top, divide by an approximate row height, and sync to the `ppp` URL
+  // param. Runs on mount and on window resize (debounced).
+  const tableWrapRef = useRef(null);
+  useEffect(() => {
+    const ROW_H = 64;   // approx per-row height (px), matches py-3 rows
+    const FOOTER = 120; // reserve space for pagination + page padding
+
+    function computeFit() {
+      const el = tableWrapRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const avail = window.innerHeight - top - FOOTER;
+      const fit = Math.max(5, Math.min(100, Math.floor(avail / ROW_H)));
+
+      const current = parseInt(searchParams.get('ppp') ?? '', 10) || 20;
+      if (fit !== current) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('ppp', String(fit));
+        params.delete('page'); // reset to first page when page size changes
+        startTransition(() => router.replace(`${pathname}?${params.toString()}`));
+      }
+    }
+
+    computeFit();
+    let t;
+    function onResize() { clearTimeout(t); t = setTimeout(computeFit, 200); }
+    window.addEventListener('resize', onResize);
+    return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
+  }, [pathname, searchParams, router]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -297,6 +352,24 @@ export function MasterclassRegistrationsClient({
           </select>
         </div>
 
+        {/* License scope dropdown */}
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">License</label>
+          <select
+            value={licenseScope}
+            onChange={(e) => {
+              const next = e.target.value;
+              setLicenseScope(next);
+              navigate({ licenseScope: next, page: '1' });
+            }}
+            className={selectCls()}
+          >
+            {LICENSE_SCOPE_OPTIONS.map((o) => (
+              <option key={o.value || 'any'} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
         {/* Status filter pills */}
         <div className="flex flex-wrap gap-1.5">
           {STATUS_OPTIONS.map((opt) => (
@@ -329,26 +402,27 @@ export function MasterclassRegistrationsClient({
       </div>
 
       {/* ── [C] Table ── */}
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
+      <div ref={tableWrapRef} className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-[var(--surface-border)] bg-[var(--surface-muted)]">
               <tr>
                 <Th>รหัส</Th>
-                <Th>ชื่อ-อีเมล</Th>
+                <Th>ผู้ประสานงาน</Th>
                 <Th>หลักสูตร / รุ่น</Th>
+                <Th center>ผู้เข้าอบรม</Th>
                 <Th>License</Th>
                 <Th>ราคา</Th>
                 <Th center>การชำระ</Th>
                 <Th>สถานะ</Th>
-                <Th>วันที่</Th>
+                <Th>วันที่ลงทะเบียน</Th>
                 <Th></Th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-[var(--text-muted)]">
+                  <td colSpan={10} className="px-4 py-10 text-center text-[var(--text-muted)]">
                     ไม่พบรายการที่ตรงกับเงื่อนไข
                   </td>
                 </tr>
@@ -363,15 +437,23 @@ export function MasterclassRegistrationsClient({
                     {refNo(reg._id)}
                   </td>
 
-                  {/* ชื่อ-อีเมล */}
-                  <td className="max-w-[200px] px-4 py-3">
-                    <p className="truncate text-sm font-bold text-[var(--text-primary)]">
-                      {reg.attendee?.firstName} {reg.attendee?.lastName}
-                    </p>
-                    <p className="truncate text-xs text-[var(--text-muted)]">{reg.attendee?.email}</p>
-                    {reg.attendee?.phone && (
-                      <p className="truncate text-xs text-[var(--text-muted)]">{reg.attendee.phone}</p>
-                    )}
+                  {/* ผู้ประสานงาน */}
+                  <td className="max-w-[220px] px-4 py-3">
+                    {(() => {
+                      const c = reg.coordinator || {};
+                      const name = `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim()
+                        || `${reg.attendee?.firstName ?? ''} ${reg.attendee?.lastName ?? ''}`.trim()
+                        || '—';
+                      const email = c.email || reg.attendee?.email || '';
+                      const phone = c.phone || reg.attendee?.phone || '';
+                      return (
+                        <>
+                          <p className="truncate text-sm font-bold text-[var(--text-primary)]">{name}</p>
+                          {email && <p className="truncate text-xs text-[var(--text-muted)]">{email}</p>}
+                          {phone && <p className="truncate text-xs text-[var(--text-muted)]">{phone}</p>}
+                        </>
+                      );
+                    })()}
                   </td>
 
                   {/* หลักสูตร / รุ่น */}
@@ -382,13 +464,14 @@ export function MasterclassRegistrationsClient({
                     </p>
                   </td>
 
+                  {/* ผู้เข้าอบรม */}
+                  <td className="px-4 py-3 text-center text-sm tabular-nums font-semibold text-[var(--text-primary)] whitespace-nowrap">
+                    {reg.attendeesCount ?? (Array.isArray(reg.attendees) ? reg.attendees.length : 1) ?? 1}
+                  </td>
+
                   {/* License */}
                   <td className="px-4 py-3 text-xs text-[var(--text-secondary)] whitespace-nowrap">
-                    {reg.license_choice === 'own'
-                      ? `own${reg.license_level ? ` · ${reg.license_level}` : ''}`
-                      : reg.license_choice === '9expert'
-                        ? '9Expert license'
-                        : '—'}
+                    {licenseCellText(reg)}
                   </td>
 
                   {/* ราคา */}
@@ -431,25 +514,16 @@ export function MasterclassRegistrationsClient({
                     {fmtDate(reg.createdAt)}
                   </td>
 
-                  {/* Actions */}
+                  {/* Actions — kebab menu */}
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-3">
-                      <Link
-                        href={`/admin/masterclass/registrations/${reg._id}`}
-                        className="text-xs font-semibold text-9e-action hover:underline"
-                      >
-                        ดูรายละเอียด →
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(reg._id)}
-                        disabled={updatingId === reg._id}
-                        className="text-[var(--text-muted)] hover:text-red-500 transition-colors disabled:opacity-40"
-                        aria-label="ลบ"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <RowActionsMenu
+                      reg={reg}
+                      isOpen={openMenuId === reg._id}
+                      onToggle={() => setOpenMenuId((cur) => (cur === reg._id ? null : reg._id))}
+                      onClose={() => setOpenMenuId(null)}
+                      onDelete={() => { setOpenMenuId(null); handleDelete(reg._id); }}
+                      busy={updatingId === reg._id}
+                    />
                   </td>
                 </tr>
               ))}
@@ -473,6 +547,89 @@ export function MasterclassRegistrationsClient({
 }
 
 // ── Sub-components ─────────────────────────────────────────────────
+
+function RowActionsMenu({ reg, isOpen, onToggle, onClose, onDelete, busy }) {
+  const btnRef  = useRef(null);
+  const menuRef = useRef(null);
+  const [coords, setCoords] = useState(null); // { top, right } in viewport space
+
+  // Compute fixed-position coords from the trigger button.
+  const place = useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setCoords({ top: r.bottom + 4, right: window.innerWidth - r.right });
+  }, []);
+
+  const handleToggle = () => {
+    if (!isOpen) place();
+    onToggle();
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    place();
+
+    function onDocClick(e) {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target) &&
+        menuRef.current && !menuRef.current.contains(e.target)
+      ) onClose();
+    }
+    function onDismiss() { onClose(); } // any scroll/resize closes the menu
+
+    document.addEventListener('mousedown', onDocClick);
+    window.addEventListener('scroll', onDismiss, true); // capture: catch inner scrollers
+    window.addEventListener('resize', onDismiss);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('scroll', onDismiss, true);
+      window.removeEventListener('resize', onDismiss);
+    };
+  }, [isOpen, onClose, place]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={handleToggle}
+        disabled={busy}
+        aria-label="ตัวเลือก"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        className="rounded-9e-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)] disabled:opacity-40"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
+      </button>
+
+      {isOpen && coords && (
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: 'fixed', top: coords.top, right: coords.right, zIndex: 50 }}
+          className="w-44 overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-1 shadow-9e-md"
+        >
+          <Link
+            href={`/admin/masterclass/registrations/${reg._id}`}
+            role="menuitem"
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-muted)]"
+          >
+            <Eye className="h-3.5 w-3.5" /> ดูรายละเอียด
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={onDelete}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-red-600 hover:bg-red-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" /> ลบรายการ
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
 
 function selectCls() {
   return cn(

@@ -21,9 +21,11 @@ export default async function MasterclassRegistrationsPage({ searchParams }) {
   const range   = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
   const courseId = sp.courseId ?? '';
   const batchId  = sp.batchId  ?? '';
+  const licenseScope = ['all', 'per_attendee'].includes(sp.licenseScope) ? sp.licenseScope : '';
+  const perPage = Math.min(100, Math.max(5, parseInt(sp.ppp ?? '', 10) || 20));
 
   const [data, counts, courseOptions] = await Promise.all([
-    listMasterclassRegistrations({ page, status, q, courseId, batchId }),
+    listMasterclassRegistrations({ page, status, q, courseId, batchId, licenseScope, perPage }),
     getMasterclassRegStatusCounts({ range }),
     getMasterclassCourseOptions(),
   ]);
@@ -47,6 +49,7 @@ export default async function MasterclassRegistrationsPage({ searchParams }) {
         initialRange={range}
         initialCourseId={courseId}
         initialBatchId={batchId}
+        initialLicenseScope={licenseScope}
         counts={counts}
         courseOptions={courseOptions}
       />
