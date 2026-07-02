@@ -1,54 +1,46 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { cn } from '@/lib/utils';
 import { PlanetSphere, SKILL_THEMES, DEFAULT_THEME, MOON_THEME } from './PlanetSphere';
 
-if (typeof window !== 'undefined') {
-  gsap.registerPlugin(ScrollTrigger);
-}
-
 /**
- * Act 3 — the Planet Voyage. A scroll-driven CSS-3D camera fly-through:
- * slides are stacked on translateZ (-i * SPACING) inside a preserve-3d
- * "camera" whose `z` is scrubbed by one GSAP ScrollTrigger, so each
- * skill planet in turn arrives in front of the viewer and snaps to dock.
+ * Act 3 — the Planet Voyage. A LIGHT sticky storytelling section (the
+ * Phase 5 rewrite that replaced the scroll-scrubbed CSS-3D fly-through):
+ *
+ *   Left   — skill navigation list + progress dots.
+ *   Center — exactly one active premium planet.
+ *   Right  — the active skill's title, course count, program links, CTA.
+ *
+ * A single sticky stage stays pinned while the reader scrolls through N
+ * full-height "step" sentinels. Which step is active is decided by one
+ * IntersectionObserver with a centre-line root margin — no GSAP, no
+ * scroll-scrubbed tween, and no React state updates on every frame. The
+ * active planet cross-fades + scales in; inactive planets sit static at
+ * opacity 0 (the compositor never repaints them). This is what makes
+ * reverse scrolling smooth: activation is symmetric and event-driven,
+ * not a heavy per-frame depth calculation over a 3D translateZ stack.
  *
  * Planets are the 6 Skills; each info panel lists the Programs on that
- * skill (real links), and the moons are the skill's top programs.
- *
- * Scroll-performance contract (the Phase 4 fix):
- *  - NO animated background-position anywhere. Sphere textures are
- *    fully static (PlanetSphere) — even a transform-only idle-drift
- *    overlay measured too expensive, so the only idle motion is the
- *    active planet's moons.
- *  - Slides faded below 0.02 opacity get `visibility: hidden` (cached
- *    per-slide flag — style is touched only on state change), so the
- *    renderer skips paint + hit-testing for off-screen planets.
- *  - Every slide has `contain: layout style paint`.
- *  - Moon orbits are `animation-play-state: paused` on every non-active
- *    slide.
+ * skill (real links), and the active planet carries its top programs as
+ * decorative orbiting moons (kept in the centre column, never over the
+ * text panel).
  *
  * Two rendering modes, decided once on mount (SSR renders the fallback
  * so hydration is consistent and crawlers/screen readers get semantic
  * vertical sections on first paint).
  */
 
-const SPACING = 2600; // px between planets on the Z axis
-
-/** Moon orbit slots — radii stay within ~1.15× the sphere radius so the
-    moons hug the sphere instead of drifting over the info panel. */
+/** Decorative moon orbit slots — radii hug the sphere. */
 const MOON_ORBITS = [
-  { diameter: 104, period: 18, angle: 50, size: 30 },
-  { diameter: 111, period: 24, angle: 200, size: 24 },
-  { diameter: 118, period: 30, angle: 320, size: 34 },
+  { diameter: 116, period: 20, angle: 45, size: 28 },
+  { diameter: 128, period: 27, angle: 190, size: 22 },
+  { diameter: 138, period: 34, angle: 310, size: 32 },
 ];
 
-function truncateLabel(text, max = 28) {
+function truncateLabel(text, max = 24) {
   const s = String(text ?? '');
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
@@ -57,36 +49,38 @@ function themeFor(planet) {
   return SKILL_THEMES[planet.slug] ?? DEFAULT_THEME;
 }
 
-/** Decorative program moons — duplicates of the panel links, aria-hidden. */
+/** Decorative program moons — duplicates of the panel links, aria-hidden.
+    Only ever rendered for the active planet, so orbit animation runs for
+    a single planet at a time. */
 function Moons({ programs }) {
   return (
-    <div className="absolute inset-0" aria-hidden="true">
+    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
       {programs.slice(0, MOON_ORBITS.length).map((program, i) => {
         const orbit = MOON_ORBITS[i];
         return (
           <div
             key={program.href}
-            className="u9v-orbiter absolute left-1/2 top-1/2"
+            className="u9j-orbiter absolute left-1/2 top-1/2"
             style={{
               width: `${orbit.diameter}%`,
               height: `${orbit.diameter}%`,
-              '--u9v-angle': `${orbit.angle}deg`,
+              '--u9j-angle': `${orbit.angle}deg`,
               animationDuration: `${orbit.period}s`,
               animationDelay: `${-(orbit.period * orbit.angle) / 360}s`,
             }}
           >
             <div className="absolute left-1/2 top-0" style={{ transform: 'translate(-50%, -50%)' }}>
               <div
-                className="u9v-counter"
+                className="u9j-counter"
                 style={{
-                  '--u9v-angle': `${orbit.angle}deg`,
+                  '--u9j-angle': `${orbit.angle}deg`,
                   animationDuration: `${orbit.period}s`,
                   animationDelay: `${-(orbit.period * orbit.angle) / 360}s`,
                 }}
               >
                 <div className="relative" style={{ width: orbit.size, height: orbit.size }}>
                   <PlanetSphere theme={MOON_THEME} size="100%" detail="moon" className="absolute inset-0" />
-                  <span className="u9v-chip absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-9e-card/90 px-2.5 py-0.5 font-thai text-[10px] text-9e-ice">
+                  <span className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-full border border-white/10 bg-9e-card/90 px-2.5 py-0.5 font-thai text-[10px] text-9e-ice">
                     {truncateLabel(program.name)}
                   </span>
                 </div>
@@ -102,7 +96,7 @@ function Moons({ programs }) {
 /** Info panel — the accessible content for one skill, shared by both modes. */
 function PlanetInfo({ planet, index, total, active }) {
   return (
-    <div className="u9v-panel-content max-w-md">
+    <div className="u9j-panel-content max-w-md">
       <p className="text-sm font-semibold tracking-wide text-9e-air">
         ดาวแห่งทักษะ · {index + 1}/{total}
       </p>
@@ -140,13 +134,7 @@ function PlanetInfo({ planet, index, total, active }) {
 }
 
 export function PlanetVoyage({ planets, apiRef }) {
-  const sectionRef = useRef(null);
-  const cameraRef = useRef(null);
-  const starsARef = useRef(null);
-  const starsBRef = useRef(null);
-  const slideRefs = useRef([]);
-  const veilRefs = useRef([]);
-  const stRef = useRef(null);
+  const stepRefs = useRef([]);
   const activeIndexRef = useRef(0);
   const [activeIndex, setActiveIndex] = useState(0);
   // SSR + first client render = fallback, so hydration always matches and
@@ -158,21 +146,17 @@ export function PlanetVoyage({ planets, apiRef }) {
   useEffect(() => {
     const desktop = window.matchMedia('(min-width: 1024px)').matches;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (desktop && !reduced && total >= 2) setMode('voyage');
+    if (desktop && !reduced && total >= 2) setMode('sticky');
   }, [total]);
 
-  const scrollToPlanet = useCallback(
-    (i) => {
-      const st = stRef.current;
-      if (st && total > 1) {
-        const top = st.start + (i / (total - 1)) * (st.end - st.start);
-        window.scrollTo({ top, behavior: 'smooth' });
-      } else {
-        document.getElementById('voyage')?.scrollIntoView({ behavior: 'smooth' });
-      }
-    },
-    [total]
-  );
+  const scrollToPlanet = useCallback((i) => {
+    const el = stepRefs.current[i];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      document.getElementById('voyage')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
 
   // Expose the jump API upward (GalaxyMap desktop clicks fly here).
   useEffect(() => {
@@ -183,114 +167,32 @@ export function PlanetVoyage({ planets, apiRef }) {
     };
   }, [apiRef, scrollToPlanet]);
 
-  useLayoutEffect(() => {
-    if (mode !== 'voyage') return undefined;
-    if (total < 2 || !sectionRef.current || !cameraRef.current) return undefined;
-
-    let disposed = false;
-    const ctx = gsap.context(() => {
-      const slides = slideRefs.current.slice(0, total).filter(Boolean);
-      const veils = veilRefs.current.slice(0, total).filter(Boolean);
-      const slideSet = slides.map((el) => gsap.quickSetter(el, 'opacity'));
-      const veilSet = veils.map((el) => gsap.quickSetter(el, 'opacity'));
-      // Cached visibility flags — touch style.visibility only on change,
-      // never per frame.
-      const shown = slides.map(() => true);
-
-      // Depth cues: fade slides by camera distance; slides the camera has
-      // already passed fade out much faster so their back side never
-      // shows. Fully-faded slides are visibility:hidden so the renderer
-      // skips them entirely (the Phase 4 reverse-scroll jank fix).
-      const applyDepth = (progress) => {
-        const pos = progress * (total - 1);
-        for (let i = 0; i < slides.length; i += 1) {
-          const dist = Math.abs(pos - i);
-          let opacity = 1 - (dist - 0.35) * 1.6;
-          if (pos > i) opacity = Math.min(opacity, 1 - (dist - 0.1) * 2.4);
-          opacity = Math.max(0, Math.min(1, opacity));
-          slideSet[i](opacity);
-          if (veilSet[i]) veilSet[i](Math.max(0, Math.min(0.75, (dist - 0.18) * 1.1)));
-          // Hysteresis: show at ≥0.035, hide below 0.015. A single
-          // threshold would thrash visibility every frame while the
-          // snap settles right on the boundary — each flip is a full
-          // slide repaint.
-          const visible = shown[i] ? opacity >= 0.015 : opacity >= 0.035;
-          if (visible !== shown[i]) {
-            shown[i] = visible;
-            slides[i].style.visibility = visible ? 'visible' : 'hidden';
+  // Event-driven activation: one observer, a centre-line band. Each step
+  // sentinel is a full viewport tall, so exactly one crosses the centre
+  // at a time. No per-frame work — this is the reverse-scroll fix.
+  useEffect(() => {
+    if (mode !== 'sticky' || total < 2) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const idx = Number(entry.target.dataset.step);
+          if (idx !== activeIndexRef.current) {
+            activeIndexRef.current = idx;
+            setActiveIndex(idx);
           }
         }
-      };
-
-      const tween = gsap.to(cameraRef.current, {
-        z: (total - 1) * SPACING,
-        ease: 'none',
-        scrollTrigger: {
-          trigger: sectionRef.current,
-          start: 'top top',
-          // one viewport of scroll per planet transition
-          end: () => `+=${(total - 1) * window.innerHeight}`,
-          pin: true,
-          anticipatePin: 1,
-          scrub: 0.6,
-          invalidateOnRefresh: true,
-          snap: {
-            snapTo: 1 / (total - 1),
-            duration: { min: 0.15, max: 0.4 },
-            ease: 'power2.out',
-            // no velocity prediction — a fast flick (or our smooth-scroll
-            // jumps) would otherwise overshoot and dock planets away
-            inertia: false,
-            directional: false,
-          },
-          onUpdate: (self) => {
-            applyDepth(self.progress);
-            const idx = Math.round(self.progress * (total - 1));
-            if (idx !== activeIndexRef.current) {
-              activeIndexRef.current = idx;
-              setActiveIndex(idx);
-            }
-          },
-        },
-      });
-      stRef.current = tween.scrollTrigger;
-
-      // Star parallax — one extra ScrollTrigger over the same pinned range.
-      gsap
-        .timeline({
-          scrollTrigger: {
-            trigger: sectionRef.current,
-            start: 'top top',
-            end: () => `+=${(total - 1) * window.innerHeight}`,
-            scrub: true,
-          },
-        })
-        .to(starsARef.current, { yPercent: -12, ease: 'none' }, 0)
-        .to(starsBRef.current, { yPercent: -24, ease: 'none' }, 0);
-
-      applyDepth(stRef.current.progress || 0);
-    }, sectionRef);
-
-    // Font swaps can shift layout above the pin — re-measure once settled.
-    if (document.fonts?.ready) {
-      document.fonts.ready
-        .then(() => {
-          if (!disposed) ScrollTrigger.refresh();
-        })
-        .catch(() => {});
-    }
-
-    return () => {
-      disposed = true;
-      stRef.current = null;
-      ctx.revert();
-    };
+      },
+      { rootMargin: '-50% 0px -50% 0px', threshold: 0 }
+    );
+    stepRefs.current.slice(0, total).forEach((el) => el && observer.observe(el));
+    return () => observer.disconnect();
   }, [mode, total]);
 
   if (total === 0) return null;
 
   // ── Fallback: vertical semantic sections (mobile / reduced motion / SSR) ──
-  if (mode !== 'voyage') {
+  if (mode !== 'sticky') {
     return (
       <section id="voyage" className="relative px-6 py-24">
         <h2 className="sr-only">สำรวจดาวแห่งทักษะ</h2>
@@ -316,113 +218,122 @@ export function PlanetVoyage({ planets, apiRef }) {
     );
   }
 
-  // ── Voyage: pinned 3D fly-through (desktop with motion) ──
+  // ── Sticky journey: pinned stage + step sentinels (desktop w/ motion) ──
   return (
     <>
       <h2 className="sr-only">สำรวจดาวแห่งทักษะ</h2>
-      <section id="voyage" ref={sectionRef} className="relative h-screen overflow-hidden">
-        {/* star parallax layers — repeating gradient dots, not canvas */}
+      <section id="voyage" className="relative">
+        {/* pinned stage */}
         <div
-          ref={starsARef}
-          className="pointer-events-none absolute inset-x-0 top-0 h-[140%]"
-          style={{
-            backgroundImage: 'radial-gradient(rgba(248,250,253,0.5) 1px, transparent 1.6px)',
-            backgroundSize: '260px 200px',
-          }}
-        />
-        <div
-          ref={starsBRef}
-          className="pointer-events-none absolute inset-x-0 top-0 h-[150%]"
-          style={{
-            backgroundImage: 'radial-gradient(rgba(72,176,255,0.4) 1px, transparent 1.7px)',
-            backgroundSize: '150px 170px',
-          }}
-        />
-
-        <div
-          className="absolute inset-0"
-          style={{ perspective: '1200px', perspectiveOrigin: '50% 45%' }}
+          className="sticky top-0 flex h-[100svh] items-center overflow-hidden"
+          style={{ '--u9j-step': activeIndex, contain: 'layout paint' }}
         >
+          {/* star parallax layers — step-based, transform-only, no scroll listener */}
           <div
-            ref={cameraRef}
-            className="absolute inset-0"
-            style={{ transformStyle: 'preserve-3d', willChange: 'transform' }}
-          >
-            {planets.map((planet, i) => {
-              const isActive = i === activeIndex;
-              return (
-                <article
-                  key={planet.id}
-                  ref={(el) => {
-                    slideRefs.current[i] = el;
-                  }}
-                  className={cn(
-                    'u9v-slide absolute left-1/2 top-1/2 w-[min(1200px,92vw)] px-20 py-16',
-                    isActive && 'is-active'
-                  )}
-                  style={{ transform: `translate(-50%, -50%) translateZ(${-i * SPACING}px)` }}
-                >
-                  <div className="flex items-center justify-center gap-20">
-                    {/* sphere + moons — kept BELOW the panel's stacking context */}
-                    <div
-                      className="relative z-10 shrink-0"
-                      style={{ width: 'min(52vh, 480px)', height: 'min(52vh, 480px)' }}
+            className="u9j-stars pointer-events-none absolute inset-x-0 -top-[10%] h-[130%]"
+            style={{
+              backgroundImage: 'radial-gradient(rgba(248,250,253,0.45) 1px, transparent 1.6px)',
+              backgroundSize: '260px 200px',
+              transform: 'translateY(calc(var(--u9j-step) * -8px))',
+            }}
+          />
+          <div
+            className="u9j-stars pointer-events-none absolute inset-x-0 -top-[10%] h-[130%]"
+            style={{
+              backgroundImage: 'radial-gradient(rgba(72,176,255,0.4) 1px, transparent 1.7px)',
+              backgroundSize: '150px 170px',
+              transform: 'translateY(calc(var(--u9j-step) * -16px))',
+            }}
+          />
+
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-[170px_minmax(0,1fr)_minmax(0,380px)] items-center gap-10 px-8">
+            {/* left — skill navigation + progress */}
+            <nav aria-label="เลือกดาวแห่งทักษะ">
+              <ul className="space-y-3">
+                {planets.map((planet, i) => (
+                  <li key={planet.id}>
+                    <button
+                      type="button"
+                      onClick={() => scrollToPlanet(i)}
+                      className={cn(
+                        'group flex items-center gap-3 text-left font-thai text-sm transition-colors duration-9e-micro ease-9e',
+                        i === activeIndex ? 'text-9e-ice' : 'text-9e-slate-dp-100 hover:text-9e-ice/80'
+                      )}
                     >
-                      <PlanetSphere
-                        theme={themeFor(planet)}
-                        size="100%"
-                        className="absolute inset-0"
+                      <span
+                        className={cn(
+                          'h-2 w-2 shrink-0 rounded-full transition-all duration-9e-micro ease-9e',
+                          i === activeIndex
+                            ? 'scale-125 bg-9e-lime'
+                            : 'bg-[#22405E] group-hover:bg-9e-air'
+                        )}
                       />
-                      <Moons programs={planet.programs} />
+                      {planet.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {/* center — one active planet (all stacked, only active visible) */}
+            <div className="flex items-center justify-center">
+              <div
+                className="relative"
+                style={{ width: 'min(46vh, 440px)', height: 'min(46vh, 440px)' }}
+              >
+                {planets.map((planet, i) => {
+                  const isActive = i === activeIndex;
+                  return (
+                    <div
+                      key={planet.id}
+                      className={cn('u9j-planet absolute inset-0', isActive && 'is-active')}
+                    >
+                      <div className="u9j-float absolute inset-0">
+                        <PlanetSphere theme={themeFor(planet)} size="100%" className="absolute inset-0" />
+                        {isActive && <Moons programs={planet.programs} />}
+                      </div>
                     </div>
-                    {/* info panel — its own stacking context ABOVE the moon
-                        layer, so orbiting chips can never cover the text */}
-                    <div className="relative z-20">
-                      <PlanetInfo planet={planet} index={i} total={total} active={isActive} />
-                    </div>
-                  </div>
-                  {/* distance veil — same navy as the page bg, reads as depth haze */}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* right — info panel (all stacked, only active visible + tabbable) */}
+            <div className="relative min-h-[420px]">
+              {planets.map((planet, i) => {
+                const isActive = i === activeIndex;
+                return (
                   <div
-                    ref={(el) => {
-                      veilRefs.current[i] = el;
-                    }}
-                    className="pointer-events-none absolute inset-0 bg-9e-navy"
-                    style={{ opacity: 0 }}
-                  />
-                </article>
-              );
-            })}
+                    key={planet.id}
+                    className={cn(
+                      'u9j-panel absolute inset-0 flex flex-col justify-center',
+                      isActive && 'is-active'
+                    )}
+                    aria-hidden={!isActive}
+                  >
+                    <PlanetInfo planet={planet} index={i} total={total} active={isActive} />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* left planet menu */}
-        <aside
-          aria-label="เลือกดาวแห่งทักษะ"
-          className="absolute left-6 top-1/2 z-20 hidden -translate-y-1/2 lg:block"
-        >
-          <ul className="space-y-3">
-            {planets.map((planet, i) => (
-              <li key={planet.id}>
-                <button
-                  type="button"
-                  onClick={() => scrollToPlanet(i)}
-                  className={cn(
-                    'group flex items-center gap-3 text-left font-thai text-sm transition-colors duration-9e-micro ease-9e',
-                    i === activeIndex ? 'text-9e-ice' : 'text-9e-slate-dp-100 hover:text-9e-ice/80'
-                  )}
-                >
-                  <span
-                    className={cn(
-                      'h-2 w-2 shrink-0 rounded-full transition-colors duration-9e-micro ease-9e',
-                      i === activeIndex ? 'bg-9e-lime' : 'bg-[#22405E] group-hover:bg-9e-air'
-                    )}
-                  />
-                  {planet.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        {/* step sentinels — give the section its scroll length; pulled up to
+            overlap the sticky stage so step i centres on the viewport when
+            planet i should be active. */}
+        <div className="relative -mt-[100svh]" aria-hidden="true">
+          {planets.map((planet, i) => (
+            <div
+              key={planet.id}
+              data-step={i}
+              ref={(el) => {
+                stepRefs.current[i] = el;
+              }}
+              className="h-[100svh]"
+            />
+          ))}
+        </div>
 
         <style>{VOYAGE_CSS}</style>
       </section>
@@ -431,63 +342,66 @@ export function PlanetVoyage({ planets, apiRef }) {
 }
 
 const VOYAGE_CSS = `
-  @keyframes u9v-orbit {
+  @keyframes u9j-orbit {
     from { transform: translate(-50%, -50%) rotate(0deg); }
     to { transform: translate(-50%, -50%) rotate(360deg); }
   }
-  @keyframes u9v-orbit-rev {
+  @keyframes u9j-orbit-rev {
     from { transform: rotate(0deg); }
     to { transform: rotate(-360deg); }
   }
-  .u9v-slide {
+  @keyframes u9j-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  .u9j-stars {
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+  /* center planets: only the active one is visible + gently floating */
+  .u9j-planet {
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
-    contain: layout style paint;
   }
-  .u9v-slide.is-active {
-    pointer-events: auto;
-  }
-  .u9v-orbiter {
-    pointer-events: none;
-    transform: translate(-50%, -50%) rotate(var(--u9v-angle, 0deg));
-    animation: u9v-orbit linear infinite;
-  }
-  .u9v-counter {
-    transform: rotate(calc(var(--u9v-angle, 0deg) * -1));
-    animation: u9v-orbit-rev linear infinite;
-  }
-  /* Perf: moons orbit ONLY on the active planet; idle spin overlay too.
-     Everything else is frozen (compositor does zero work for them). */
-  .u9v-slide .u9v-orbiter,
-  .u9v-slide .u9v-counter {
-    animation-play-state: paused;
-  }
-  .u9v-slide.is-active .u9v-orbiter,
-  .u9v-slide.is-active .u9v-counter {
-    animation-play-state: running;
-  }
-  .u9v-panel-content {
+  .u9j-planet.is-active {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
-  .u9v-slide .u9v-panel-content {
+  .u9j-planet.is-active .u9j-float {
+    animation: u9j-float 9s ease-in-out infinite;
+  }
+  .u9j-orbiter {
+    pointer-events: none;
+    transform: translate(-50%, -50%) rotate(var(--u9j-angle, 0deg));
+    animation: u9j-orbit linear infinite;
+  }
+  .u9j-counter {
+    transform: rotate(calc(var(--u9j-angle, 0deg) * -1));
+    animation: u9j-orbit-rev linear infinite;
+  }
+  /* right panels: only the active one is visible + tabbable */
+  .u9j-panel {
     opacity: 0;
     transform: translateY(16px);
-    transition: opacity 0.5s ease 0.1s, transform 0.5s ease 0.1s;
+    transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
   }
-  .u9v-slide.is-active .u9v-panel-content {
+  .u9j-panel.is-active {
     opacity: 1;
     transform: translateY(0);
-  }
-  .u9v-chip {
-    opacity: 0;
-    transition: opacity 0.4s ease;
-  }
-  .is-active .u9v-chip {
-    opacity: 1;
+    pointer-events: auto;
   }
   @media (prefers-reduced-motion: reduce) {
-    .u9v-orbiter,
-    .u9v-counter {
+    .u9j-stars,
+    .u9j-planet,
+    .u9j-panel {
+      transition: none !important;
+    }
+    .u9j-float,
+    .u9j-orbiter,
+    .u9j-counter {
       animation: none !important;
     }
   }
