@@ -12,8 +12,10 @@ import sanitizeHtml from 'sanitize-html';
  * We use `sanitize-html` (pure Node, no jsdom) rather than DOMPurify here
  * because this runs at RENDER time on the SERVER. isomorphic-dompurify pulls
  * in jsdom server-side, which transitively `require()`s an ESM-only module
- * and crashes under Next. CourseRoadmap keeps using DOMPurify because it's a
- * client component (real browser DOM, no jsdom).
+ * (@csstools/css-calc, via cssstyle) and crashes under Next. CourseRoadmap
+ * also uses DOMPurify, but loads it via a browser-only dynamic import inside
+ * a useEffect so it never enters the server bundle (a top-level import in a
+ * client component is still evaluated during SSR and would pull in jsdom).
  *
  * The stored body is treated as untrusted on every render: this runs at
  * RENDER time (server) and must not assume the body was cleaned at save.

@@ -1,4 +1,4 @@
-import { getPublishedMasterclasses, getLocalFaqs } from '@/lib/masterclass/getMasterclass';
+import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 import { MasterclassListingClient } from './_components/MasterclassListingClient';
 
 export const dynamic = 'force-dynamic';
@@ -10,9 +10,6 @@ export const metadata = {
 };
 
 export default async function MasterclassListingPage() {
-  const [courses, faqs] = await Promise.all([
-    getPublishedMasterclasses(),
-    getLocalFaqs('masterclass'),
-  ]);
-  return <MasterclassListingClient courses={courses} faqs={faqs} />;
+  const courses = await getPublishedMasterclasses();
+  return <MasterclassListingClient courses={courses} />;
 }
