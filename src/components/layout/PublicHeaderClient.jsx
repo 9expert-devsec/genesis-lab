@@ -15,6 +15,7 @@ import {
   Layers,
   Menu,
   Monitor,
+  Orbit,
   Puzzle,
   Search,
   Sparkles,
@@ -131,6 +132,17 @@ export function PublicHeaderClient({
 
         {/* ── Right-side actions ───────────────────────────────── */}
         <div className="ml-auto flex flex-none items-center gap-2 lg:ml-0">
+          <Link
+            href="/universe"
+            aria-label="9Expert Universe"
+            className="group/universe inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[#0D1B2A] hover:text-[#D4F73F]"
+          >
+            <Orbit
+              className="h-5 w-5 transition-transform duration-500 ease-9e group-hover/universe:rotate-90"
+              strokeWidth={1.75}
+            />
+          </Link>
+
           <Link
             href="/search"
             aria-label="ค้นหา"
