@@ -517,7 +517,7 @@ export function MasterclassDetailClient({
             หลักสูตรนี้เหมาะสำหรับ
           </h2>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="flex flex-wrap justify-center gap-3">
             {course.suitable_for.map((item, i) => {
               const label = typeof item === "string" ? item : item.label;
               const image_url = typeof item === "string" ? "" : item.image_url;
@@ -525,7 +525,7 @@ export function MasterclassDetailClient({
               return (
                 <div
                   key={i}
-                  className="group relative flex aspect-[4/3] overflow-hidden rounded-xl bg-9e-navy"
+                  className="group relative flex aspect-[4/3] grow-0 shrink-0 basis-[calc((100%_-_0.75rem)/2)] sm:basis-[calc((100%_-_1.5rem)/3)] lg:basis-[calc((100%_-_2.25rem)/4)] overflow-hidden rounded-xl bg-9e-navy"
                 >
                   {image_url && (
                     <Image
