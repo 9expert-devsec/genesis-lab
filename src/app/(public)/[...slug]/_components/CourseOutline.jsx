@@ -42,7 +42,7 @@ export function CourseOutline({ course }) {
         <button
           type="button"
           onClick={toggleAll}
-          className="text-xs font-medium text-9e-action hover:underline"
+          className="text-sm font-medium text-9e-action hover:underline"
         >
           {allOpen ? 'ซ่อนทั้งหมด' : 'แสดงทั้งหมด'}
         </button>
@@ -66,7 +66,7 @@ export function CourseOutline({ course }) {
                 aria-expanded={open}
                 className="flex w-full items-center justify-between gap-3 bg-white px-5 py-3 text-left transition-colors duration-9e-micro ease-9e hover:bg-9e-ice"
               >
-                <span className="text-sm font-semibold text-9e-navy">
+                <span className="text-base font-semibold text-9e-navy">
                   {i + 1}. {title}
                 </span>
                 {open ? (
@@ -93,9 +93,9 @@ export function CourseOutline({ course }) {
                     {bullets.map((bullet, j) => (
                       <li
                         key={j}
-                        className="flex items-start gap-2 text-sm text-9e-slate-dp-50"
+                        className="flex items-start gap-2 text-base text-9e-slate-dp-50"
                       >
-                        <span className="mt-1 shrink-0 text-9e-air">•</span>
+                        <span className="mt-0.25 shrink-0 text-9e-air">•</span>
                         <span>{bullet}</span>
                       </li>
                     ))}

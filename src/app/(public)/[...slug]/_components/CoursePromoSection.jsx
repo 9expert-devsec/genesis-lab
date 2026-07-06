@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Link from "next/link";
 
 /**
  * CoursePromoSection — promotions linked to a course.
@@ -25,14 +25,14 @@ export function CoursePromoSection({ coursePromos }) {
       className="rounded-9e-lg border border-dashed border-9e-brand/30 p-4 dark:border-9e-brand/20"
     >
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-en text-xs font-bold uppercase tracking-wider text-9e-action">
+        <h2 className="text-base font-bold uppercase tracking-wider text-9e-action">
           โปรโมชัน
-        </p>
+        </h2>
         <Link
           href="/promotions"
           className="font-en text-xs font-medium text-9e-action hover:underline"
         >
-          ดูโปรโมชันทั้งหมด →
+          ดูโปรโมชันทั้งหมด
         </Link>
       </div>
 
@@ -54,47 +54,49 @@ function PromoRow({ promotion }) {
   const dateLabel = (() => {
     const end = promotion.end_date ? new Date(promotion.end_date) : null;
     if (!end || Number.isNaN(end.getTime())) return null;
-    return `ถึง ${end.toLocaleDateString('th-TH', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+    return `ถึง ${end.toLocaleDateString("th-TH", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
     })}`;
   })();
 
   return (
-    <div className="flex items-center gap-3 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] p-3 transition-colors duration-9e-micro hover:border-9e-brand/30">
-      {promotion.thumbnail_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={promotion.thumbnail_url}
-          alt=""
-          className="h-[60px] w-[80px] shrink-0 rounded-9e-sm object-cover"
-        />
-      ) : (
-        <div className="h-[60px] w-[80px] shrink-0 rounded-9e-sm bg-9e-ice dark:bg-9e-card" />
-      )}
+    <div className="flex items-center gap-3 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] transition-colors duration-9e-micro hover:border-9e-brand/30">
+      <div className="flex gap-3 items-center p-3">
+        {promotion.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={promotion.thumbnail_url}
+            alt=""
+            className="h-[80px] w-[80px] shrink-0 rounded-9e-sm object-cover"
+          />
+        ) : (
+          <div className="h-[60px] w-[80px] shrink-0 rounded-9e-sm bg-9e-ice dark:bg-9e-card" />
+        )}
 
-      <div className="min-w-0 flex-1">
-        {promotion.is_pinned && (
-          <span className="mb-1 inline-block rounded border border-9e-lime/30 bg-9e-lime/20 px-1.5 py-0.5 font-en text-[10px] font-bold text-9e-navy dark:text-9e-lime">
-            Pinned
-          </span>
-        )}
-        <p className="line-clamp-2 font-thai text-sm font-medium leading-snug text-9e-navy dark:text-white">
-          {promotion.title}
-        </p>
-        {dateLabel && (
-          <p className="mt-0.5 font-thai text-xs text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
-            ระยะเวลา: {dateLabel}
+        <div className="min-w-0 flex-1">
+          {promotion.is_pinned && (
+            <span className="mb-1 inline-block rounded border border-9e-lime/30 bg-9e-lime/20 px-1.5 py-0.5 font-en text-[10px] font-bold text-9e-navy dark:text-9e-lime">
+              Pinned
+            </span>
+          )}
+          <p className="line-clamp-2 font-thai text-base font-medium leading-snug text-9e-navy dark:text-white">
+            {promotion.title}
           </p>
-        )}
+          {dateLabel && (
+            <p className="mt-0.5 font-thai text-sm text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
+              ระยะเวลา: {dateLabel}
+            </p>
+          )}
+        </div>
       </div>
 
       <Link
         href={href}
-        className="shrink-0 whitespace-nowrap font-en text-xs font-medium text-9e-action hover:underline"
+        className="shrink-0 inline-flex items-center justify-center bg-9e-action px-4 py-2 font-en text-sm font-medium h-full rounded-r-9e-md text-9e-ice hover:bg-9e-brand transition-colors"
       >
-        ดูโปรโมชัน →
+        ดูโปรโมชัน
       </Link>
     </div>
   );

@@ -65,19 +65,19 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
   return (
     <section style={sectionStyle} className="w-full px-4 py-6 lg:px-6">
       <div className="mx-auto max-w-[1200px]">
-        <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2 lg:gap-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
           {/* LEFT — standalone rounded white info card */}
-          <div className="flex flex-col justify-center rounded-2xl bg-white p-6 shadow-9e-sm lg:p-8">
+          <div className="min-w-0 flex flex-col justify-center rounded-2xl bg-white p-6 shadow-9e-sm lg:w-[40%] lg:flex-none lg:px-8 lg:py-6 ">
             <div className="w-full">
               <p className="mb-1 text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
                 {course.course_id}
               </p>
 
-              <h1 className="mb-4 text-xl font-bold leading-tight text-9e-navy lg:text-2xl">
+              <h1 className="mb-4 line-clamp-2 min-h-[3.5rem] text-xl font-bold leading-tight text-9e-navy lg:text-2xl">
                 {course.course_name}
               </h1>
 
-              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-sm text-9e-slate-dp-50">
+              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-lg text-9e-slate-dp-50">
                 <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                 <span className="font-bold text-9e-navy">
                   {course.course_trainingdays} วัน
@@ -86,7 +86,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
               </div>
 
-              <div className="mb-5 flex flex-wrap gap-2">
+              <div className="mb-4 flex flex-wrap gap-2">
                 {course.course_type_public && (
                   <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
                     Classroom
@@ -104,10 +104,10 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
-                  <span className="text-2xl font-extrabold text-9e-action">Call</span>
+                  <span className="text-3xl font-extrabold text-9e-action">Call</span>
                 ) : (
                   <>
-                    <span className="text-2xl font-extrabold text-9e-action">
+                    <span className="text-3xl font-extrabold text-9e-action">
                       {Number(
                         hasPromotion ? course.course_netprice : course.course_price
                       ).toLocaleString('th-TH')}
@@ -127,7 +127,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
 
               {(course.course_workshop_status ||
                 course.course_certificate_status) && (
-                <div className="mb-5 flex flex-wrap gap-4 text-xs text-9e-slate-dp-50">
+                <div className="mb-4 flex flex-wrap gap-4 text-xs text-9e-slate-dp-50">
                   {course.course_workshop_status && (
                     <span className="flex items-center gap-1">
                       <MonitorPlay
@@ -149,27 +149,27 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-row gap-3">
                 {!isInhouseOnly && (
                   <Link
                     href={registrationHref}
-                    className="rounded-xl bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand"
+                    className="rounded-xl w-full text-center border-2 border-9e-action bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-brand hover:border-9e-brand"
                   >
-                    ลงทะเบียน
+                    ขอใบเสนอราคา Public
                   </Link>
                 )}
                 <Link
                   href={inhouseHref}
-                  className="rounded-xl border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white"
+                  className="rounded-xl w-full text-center border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white"
                 >
-                  ขอใบเสนอราคา
+                  ขอใบเสนอราคา Inhouse
                 </Link>
               </div>
             </div>
           </div>
 
           {/* RIGHT — cover zone: static or slider */}
-          <div className="relative hidden min-h-[360px] overflow-hidden rounded-2xl shadow-9e-sm lg:block">
+          <div className="relative hidden min-w-0 flex-1 overflow-hidden rounded-2xl shadow-9e-sm lg:block lg:aspect-video lg:self-start">
             {coverSlides.length === 0 ? (
               /* No cover + no gallery → colour placeholder */
               <div
@@ -286,7 +286,7 @@ function CoverSlider({ slides }) {
   return (
     <div
       className="relative h-full w-full"
-      style={{ minHeight: '360px' }}
+      // style={{ minHeight: '360px' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >

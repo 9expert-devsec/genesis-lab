@@ -51,13 +51,13 @@ export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
   if (!links.length) return null;
 
   return (
-    <nav className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+    <nav className="rounded-2xl border border-gray-100 bg-white p-4 shadow-md">
       <ul className="space-y-1">
         {links.map((link) => (
           <li key={link.id}>
             <a
               href={`#${link.id}`}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-base text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
             >
               <ChevronRight
                 className="h-3 w-3 text-9e-air"
