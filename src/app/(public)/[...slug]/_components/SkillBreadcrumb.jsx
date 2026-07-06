@@ -50,7 +50,7 @@ export function SkillBreadcrumb({ course }) {
         )}
       </div>
 
-      {previous && previousHref && (
+      {/* {previous && previousHref && (
         <div className="flex flex-wrap items-center gap-2 pb-3 text-xs text-9e-slate-dp-50">
           <span>หลักสูตรก่อนหน้า:</span>
           <Link
@@ -60,7 +60,7 @@ export function SkillBreadcrumb({ course }) {
             {previous.course_name}
           </Link>
         </div>
-      )}
+      )} */}
     </div>
   );
 }
