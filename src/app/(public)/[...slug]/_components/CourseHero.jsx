@@ -37,11 +37,16 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
   const coverSlides = [...youtubeSlides, ...coverSlide, ...imageSlides];
 
   const base = heroColor || '#005CFF';
-  const amt = perceivedBrightness(base) < 100 ? 0.7 : 0.15;
-  const bgA = lightenColor(base, amt);
-  const bgB = lightenColor(base, amt + 0.08);
+  const isDark = perceivedBrightness(base) < 100;
+  // Dark anchor: use the raw brand color almost as-is (tiny 0.05 lighten
+  // just to avoid a harsh pure-saturated corner). Light anchor: lighten
+  // aggressively if the source is dark, mildly if it's already light —
+  // so the gradient always reads as a visible dark→light sweep regardless
+  // of what color is set in Program/Skill master data.
+  const bgA = lightenColor(base, 0.05);
+  const bgB = lightenColor(base, 0.75);
   const sectionStyle = {
-    background: `linear-gradient(180deg, ${bgA} 0%, ${bgB} 100%)`,
+    background: `linear-gradient(135deg, ${bgA} 0%, ${bgB} 100%)`,
   };
 
   const registrationHref = `/registration/public?course=${String(
@@ -174,7 +179,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
               /* No cover + no gallery → colour placeholder */
               <div
                 className="absolute inset-0 flex items-center justify-center"
-                style={{ background: bgA }}
+                style={{ background: sectionStyle.background }}
               >
                 {course.program?.programiconurl && (
                   <Image
