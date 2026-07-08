@@ -78,6 +78,15 @@ export function MasterclassDetailClient({
   const visibleBatches =
     course.batches?.filter((b) => b.status !== "cancelled") ?? [];
 
+  const openBatches = visibleBatches.filter((b) => b.status === "open");
+  const earliestOpenBatch =
+    openBatches.length > 0
+      ? [...openBatches].sort(
+          (a, b) =>
+            new Date(a.dates?.[0]?.date ?? 0) - new Date(b.dates?.[0]?.date ?? 0)
+        )[0]
+      : null;
+
   // [A] Hero cover slider — ordered slide list (same rule as the course detail page):
   //   1. YouTube items (by order)
   //   2. Cover image (cover_image_url)
@@ -186,17 +195,22 @@ export function MasterclassDetailClient({
                     ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    document
-                      .getElementById("batch-section")
-                      ?.scrollIntoView({ behavior: "smooth" })
-                  }
-                  className="mt-2 rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
-                >
-                  ลงทะเบียน
-                </button>
+                {earliestOpenBatch ? (
+                  <Link
+                    href={`/masterclass/${course.slug}/register?batch=${earliestOpenBatch._id}`}
+                    className="mt-2 inline-block rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
+                  >
+                    ลงทะเบียน
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="mt-2 cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 text-sm font-semibold text-gray-400 dark:bg-gray-700"
+                  >
+                    เร็วๆ นี้
+                  </button>
+                )}
               </div>
             </div>
           </div>
