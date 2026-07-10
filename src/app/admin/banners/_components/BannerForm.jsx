@@ -3,7 +3,10 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import * as LucideIcons from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { createBanner, updateBanner } from '@/lib/actions/banners';
+import { FEATURE_TAG_ICONS } from '@/lib/schemas/banner';
 
 const TYPE_OPTIONS = [
   { value: 'youtube',              label: 'Video Banner (YouTube)' },
@@ -19,6 +22,7 @@ export function BannerForm({ banner }) {
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState(banner?.type ?? 'image_desktop');
   const [imagePreview, setImagePreview] = useState(banner?.image_url ?? '');
+  const [featureTags, setFeatureTags] = useState(banner?.feature_tags ?? []);
   const [errors, setErrors] = useState({});
 
   const isYouTube = type === 'youtube';
@@ -28,6 +32,22 @@ export function BannerForm({ banner }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (file) setImagePreview(URL.createObjectURL(file));
+  }
+
+  function addFeatureTag() {
+    setFeatureTags((tags) =>
+      tags.length >= 3 ? tags : [...tags, { icon: '', line1: '', line2: '' }]
+    );
+  }
+
+  function updateFeatureTag(index, field, value) {
+    setFeatureTags((tags) =>
+      tags.map((t, i) => (i === index ? { ...t, [field]: value } : t))
+    );
+  }
+
+  function removeFeatureTag(index) {
+    setFeatureTags((tags) => tags.filter((_, i) => i !== index));
   }
 
   async function handleSubmit(e) {
@@ -106,6 +126,89 @@ export function BannerForm({ banner }) {
               className={inputCls(errors.slide_text)}
             />
           </Field>
+
+          {/* Feature tags editor — youtube only */}
+          <div>
+            <label className="block text-sm font-bold text-9e-navy mb-1.5">
+              Feature Tags (สูงสุด 3)
+            </label>
+            <p className="mb-3 text-xs text-9e-slate-dp-50">
+              แสดงใต้ข้อความในแบนเนอร์ YouTube — ไม่บังคับ
+            </p>
+
+            <div className="space-y-3">
+              {featureTags.map((tag, i) => {
+                const Ico = tag.icon ? LucideIcons[tag.icon] : null;
+                return (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2 rounded-9e-md border border-gray-200 bg-9e-ice/40 p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-9e-md bg-white border border-gray-200 text-9e-navy">
+                        {Ico ? <Ico size={18} /> : <span className="text-xs text-9e-slate-dp-50">—</span>}
+                      </span>
+                      <select
+                        value={tag.icon}
+                        onChange={(e) => updateFeatureTag(i, 'icon', e.target.value)}
+                        className={inputCls(false) + ' w-40'}
+                      >
+                        <option value="">— ไม่มีไอคอน —</option>
+                        {FEATURE_TAG_ICONS.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex-1 space-y-2">
+                      <input
+                        value={tag.line1}
+                        onChange={(e) => updateFeatureTag(i, 'line1', e.target.value)}
+                        className={inputCls(false)}
+                        placeholder="บรรทัด 1 เช่น ผู้นำระดับโลก"
+                        maxLength={60}
+                      />
+                      <input
+                        value={tag.line2}
+                        onChange={(e) => updateFeatureTag(i, 'line2', e.target.value)}
+                        className={inputCls(false)}
+                        placeholder="บรรทัด 2 เช่น ร่วมแบ่งปันมุมมอง"
+                        maxLength={60}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeFeatureTag(i)}
+                      aria-label="ลบแท็ก"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-9e-md
+                        text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={addFeatureTag}
+              disabled={featureTags.length >= 3}
+              className="mt-3 px-4 py-2 text-sm font-bold rounded-9e-md border border-gray-300
+                text-9e-navy hover:bg-9e-ice transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              เพิ่มแท็ก
+            </button>
+
+            <input
+              type="hidden"
+              name="feature_tags_json"
+              value={JSON.stringify(featureTags)}
+            />
+          </div>
         </>
       )}
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { useSwipe } from '@/hooks/useSwipe';
 
 /**
@@ -213,7 +214,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
       {/* Dots + Play/Pause — centered on the full section */}
       {total > 1 && (
         <div className="absolute bottom-5 left-0 right-0 flex justify-center z-20 px-4">
-          <div className="flex items-center gap-3 bg-black/25 backdrop-blur-sm px-3 py-2 rounded-full">
+          <div className="flex items-center gap-3 bg-black/25 px-3 py-2 rounded-full">
             {banners.map((_, i) => (
               <button
                 key={i}
@@ -352,7 +353,7 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
             sizes="1440px"
           />
           {banner.link_text && banner.link_url && (
-            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 lg:left-[360px] lg:translate-x-0">
+            <div className="absolute bottom-24 left-8 lg:left-16">
               <a
                 href={banner.link_url}
                 className="px-7 py-3 bg-[#19B5FE] hover:bg-[#0071BC] text-white font-bold
@@ -366,54 +367,103 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
       );
     }
 
-    case 'youtube': {
-      return (
-        <div className="w-full h-full flex items-center">
-          <div className="mx-auto max-w-[1200px] w-full px-4 lg:px-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-8 items-center">
-              {/* Video: first on mobile (order-1), right column on desktop (order-2) */}
-              {banner.youtube_id && (
-                <div className="relative aspect-video rounded-9e-lg overflow-hidden shadow-9e-lg order-1 lg:order-2">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${banner.youtube_id}?rel=0`}
-                    title={banner.title || 'YouTube video'}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full"
-                  />
-                </div>
-              )}
-
-              {/* Text: below video on mobile (order-2, centered), left column on desktop (order-1) */}
-              <div className="space-y-4 order-2 lg:order-1 text-center lg:text-left">
-                <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight">
-                  {banner.title}
-                </h2>
-                {banner.slide_text && (
-                  <div
-                    className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: banner.slide_text }}
-                  />
-                )}
-                {banner.link_url && banner.link_text && (
-                  <div className="flex justify-center lg:justify-start">
-                    <a
-                      href={banner.link_url}
-                      className="inline-flex items-center px-6 py-3 bg-[#19B5FE] hover:bg-[#0071BC]
-                        text-white font-bold rounded-full text-sm transition-colors shadow-9e-md"
-                    >
-                      {banner.link_text}
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
+    case 'youtube':
+      return <YouTubeHeroSlide banner={banner} />;
 
     default:
       return null;
   }
+}
+
+/**
+ * YouTube slide — two-column card layout (reference style 03).
+ *
+ * LEFT: a white rounded card with title, description, CTA, and up to 3
+ * feature tags (from banner.feature_tags). RIGHT: a separate video card
+ * with a plain iframe (user clicks inside to play — no custom overlay).
+ * On mobile the video sits on top (order-1) and the text card below.
+ */
+function YouTubeHeroSlide({ banner }) {
+  const tags = Array.isArray(banner.feature_tags) ? banner.feature_tags.slice(0, 3) : [];
+  const hasTags = tags.some((t) => t.line1 || t.line2 || t.icon);
+
+  return (
+    <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-white to-[#E8F4FD] dark:from-9e-navy dark:to-9e-card">
+      {/* Decorative blobs (style 03) */}
+      <div aria-hidden className="pointer-events-none absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-9e-air/20 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute right-0 bottom-0 h-64 w-64 rounded-full bg-9e-action/10 blur-3xl" />
+
+      <div className="relative mx-auto flex h-full max-w-[1200px] items-center px-4 lg:px-6">
+        <div className="grid w-full grid-cols-1 items-center gap-6 lg:grid-cols-2 lg:gap-10">
+          {/* LEFT — text card. On mobile it goes BELOW the video (order-2). */}
+          <div className="order-2 lg:order-1">
+            <div className="rounded-2xl bg-white/90 dark:bg-9e-card/90 backdrop-blur-sm shadow-9e-lg p-6 lg:p-8 space-y-4">
+              <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight">
+                {banner.title}
+              </h2>
+
+              {banner.slide_text && (
+                <div
+                  className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed lg:line-clamp-4"
+                  dangerouslySetInnerHTML={{ __html: banner.slide_text }}
+                />
+              )}
+
+              {banner.link_url && banner.link_text && (
+                <a
+                  href={banner.link_url}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#19B5FE] hover:bg-[#0071BC]
+                    text-white font-bold rounded-full text-sm transition-colors shadow-9e-md"
+                >
+                  {banner.link_text}
+                </a>
+              )}
+
+              {/* Feature tags row */}
+              {hasTags && (
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+                  {tags.map((t, i) => {
+                    if (!t.line1 && !t.line2 && !t.icon) return null;
+                    const Ico = t.icon ? LucideIcons[t.icon] : null;
+                    return (
+                      <div key={i} className="flex items-start gap-2.5">
+                        {Ico && (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-9e-air/15 text-9e-action">
+                            <Ico size={18} />
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          {t.line1 && (
+                            <p className="text-sm font-bold text-9e-navy dark:text-white leading-snug">{t.line1}</p>
+                          )}
+                          {t.line2 && (
+                            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] leading-snug">{t.line2}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT — video card. First on mobile (order-1), right column on desktop (order-2). */}
+          <div className="order-1 lg:order-2">
+            {banner.youtube_id && (
+              <div className="relative aspect-video w-full rounded-2xl overflow-hidden">
+                <iframe
+                  src={`https://www.youtube.com/embed/${banner.youtube_id}?rel=0&controls=0&modestbranding=1&playsinline=1`}
+                  title={banner.title || 'YouTube video'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
