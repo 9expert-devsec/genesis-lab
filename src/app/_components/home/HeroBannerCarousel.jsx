@@ -389,9 +389,34 @@ function YouTubeHeroSlide({ banner }) {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-gradient-to-br from-white to-[#E8F4FD] dark:from-9e-navy dark:to-9e-card">
-      {/* Decorative blobs (style 03) */}
-      <div aria-hidden className="pointer-events-none absolute -left-24 top-1/4 h-72 w-72 rounded-full bg-9e-air/20 blur-3xl" />
-      <div aria-hidden className="pointer-events-none absolute right-0 bottom-0 h-64 w-64 rounded-full bg-9e-action/10 blur-3xl" />
+      {/* ── Style-03 decorative background ──────────────────────────── */}
+      {/* Layer 1: large soft blob, bottom-left, brand air tone */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-32 -left-40 h-[28rem] w-[28rem]
+          rounded-full bg-9e-air/25 blur-3xl dark:bg-9e-air/10"
+      />
+      {/* Layer 2: secondary blob, top-left, cooler action tone, offset for organic overlap */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-24 left-1/4 h-72 w-72
+          rounded-full bg-9e-action/15 blur-3xl dark:bg-9e-action/10"
+      />
+      {/* Layer 3: crisp organic blob outline, bottom-left, no blur (the visible curved shape in ref 03) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-20 h-80 w-80
+          rounded-[45%_55%_60%_40%/50%_45%_55%_50%] bg-9e-air/10 dark:bg-9e-air/5"
+      />
+      {/* Layer 4: dotted grid pattern, top-right corner (radial-dot CSS, no image asset) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-6 top-8 h-24 w-32 opacity-40 dark:opacity-20"
+        style={{
+          backgroundImage: 'radial-gradient(#2486FF 1.5px, transparent 1.5px)',
+          backgroundSize: '14px 14px',
+        }}
+      />
 
       <div className="relative mx-auto flex h-full max-w-[1200px] items-center px-4 lg:px-6">
         <div className="grid w-full grid-cols-1 items-center gap-6 lg:grid-cols-2 lg:gap-10">
