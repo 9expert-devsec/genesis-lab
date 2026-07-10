@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Image from 'next/image';
-import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
-import * as LucideIcons from 'lucide-react';
-import { useSwipe } from '@/hooks/useSwipe';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import * as LucideIcons from "lucide-react";
+import { useSwipe } from "@/hooks/useSwipe";
 
 /**
  * Public hero banner carousel.
@@ -24,8 +24,8 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   const [current, setCurrent] = useState(0);
   // Respect prefers-reduced-motion — initialize isPlaying to false if user prefers reduced motion
   const [isPlaying, setIsPlaying] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    return !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof window === "undefined") return true;
+    return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   });
   const [isHovered, setIsHovered] = useState(false);
   const [isPointerDown, setIsPointerDown] = useState(false);
@@ -58,13 +58,13 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   // Pause when the YouTube iframe steals focus (user clicked Play inside)
   useEffect(() => {
     function handleBlur() {
-      const iframe = sectionRef.current?.querySelector('iframe');
+      const iframe = sectionRef.current?.querySelector("iframe");
       if (iframe && document.activeElement === iframe) {
         setIsPlaying(false);
       }
     }
-    window.addEventListener('blur', handleBlur);
-    return () => window.removeEventListener('blur', handleBlur);
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
   }, []);
 
   // Touch swipe — the hook attaches native touch listeners with
@@ -78,7 +78,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   // Mouse drag (desktop only) — pointer events fire for mouse; we
   // filter by pointerType so touch goes through useSwipe alone.
   function handlePointerDown(e) {
-    if (e.pointerType !== 'mouse') return;
+    if (e.pointerType !== "mouse") return;
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -90,7 +90,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   }
 
   function handlePointerMove(e) {
-    if (e.pointerType !== 'mouse') return;
+    if (e.pointerType !== "mouse") return;
     if (!dragRef.current.isDragging) return;
     if (Math.abs(e.clientX - dragRef.current.startX) > 5) {
       dragRef.current.moved = true;
@@ -98,7 +98,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
   }
 
   function handlePointerUp(e) {
-    if (e.pointerType !== 'mouse') return;
+    if (e.pointerType !== "mouse") return;
     if (!dragRef.current.isDragging) return;
     const diff = e.clientX - dragRef.current.startX;
     dragRef.current.isDragging = false;
@@ -149,8 +149,8 @@ export function HeroBannerCarousel({ banners: allBanners }) {
           min-[1537px]:max-w-[1440px] min-[1537px]:rounded-3xl
           select-none"
         style={{
-          touchAction: isMobile ? 'pan-y' : 'auto',
-          cursor: isMobile ? 'grab' : 'auto',
+          touchAction: isMobile ? "pan-y" : "auto",
+          cursor: isMobile ? "grab" : "auto",
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -163,7 +163,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
             so moving by 1 container-width is (100 / N)%, not 100%. */}
         <div
           className={`flex h-full ${
-            isPointerDown ? '' : 'transition-transform duration-500 ease-in-out'
+            isPointerDown ? "" : "transition-transform duration-500 ease-in-out"
           }`}
           style={{
             transform: `translateX(-${(current * 100) / total}%)`,
@@ -176,7 +176,11 @@ export function HeroBannerCarousel({ banners: allBanners }) {
               className="h-full shrink-0"
               style={{ width: `${100 / total}%` }}
             >
-              <BannerSlide banner={b} isActive={i === current} isFirst={i === 0} />
+              <BannerSlide
+                banner={b}
+                isActive={i === current}
+                isFirst={i === 0}
+              />
             </div>
           ))}
         </div>
@@ -227,8 +231,8 @@ export function HeroBannerCarousel({ banners: allBanners }) {
                   aria-hidden
                   className={`block rounded-full transition-all duration-200 ${
                     i === current
-                      ? 'w-8 h-2.5 bg-white shadow-9e-sm'
-                      : 'w-2.5 h-2.5 bg-white/50 hover:bg-white/80'
+                      ? "w-8 h-2.5 bg-white shadow-9e-sm"
+                      : "w-2.5 h-2.5 bg-white/50 hover:bg-white/80"
                   }`}
                 />
               </button>
@@ -239,7 +243,7 @@ export function HeroBannerCarousel({ banners: allBanners }) {
             <button
               type="button"
               onClick={() => setIsPlaying((v) => !v)}
-              aria-label={isPlaying ? 'หยุดสไลด์' : 'เล่นสไลด์'}
+              aria-label={isPlaying ? "หยุดสไลด์" : "เล่นสไลด์"}
               className="flex h-11 w-11 items-center justify-center
                 text-white hover:text-white/80 transition-colors"
             >
@@ -270,8 +274,8 @@ function useFilteredBanners(allBanners) {
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024); // lg breakpoint
     check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   // Memoize so the filtered array keeps a stable identity across renders
@@ -279,13 +283,13 @@ function useFilteredBanners(allBanners) {
   const banners = useMemo(
     () =>
       allBanners.filter((b) => {
-        if (b.type === 'youtube') return true;
+        if (b.type === "youtube") return true;
         if (isMobile) {
-          return b.type === 'image_mobile' || b.type === 'image_button_mobile';
+          return b.type === "image_mobile" || b.type === "image_button_mobile";
         }
-        return b.type === 'image_desktop' || b.type === 'image_button_desktop';
+        return b.type === "image_desktop" || b.type === "image_button_desktop";
       }),
-    [allBanners, isMobile]
+    [allBanners, isMobile],
   );
 
   return { banners, isMobile };
@@ -293,8 +297,8 @@ function useFilteredBanners(allBanners) {
 
 function BannerSlide({ banner, isActive = true, isFirst = false }) {
   switch (banner.type) {
-    case 'image_desktop':
-    case 'image_mobile': {
+    case "image_desktop":
+    case "image_mobile": {
       if (!banner.image_url) return null;
       const content = (
         <div className="relative w-full h-full">
@@ -311,10 +315,10 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
         </div>
       );
       if (!banner.link_url) return content;
-      const external = banner.link_url.startsWith('http');
+      const external = banner.link_url.startsWith("http");
       const openLink = () => {
         if (external) {
-          window.open(banner.link_url, '_blank', 'noopener,noreferrer');
+          window.open(banner.link_url, "_blank", "noopener,noreferrer");
         } else {
           window.location.href = banner.link_url;
         }
@@ -325,7 +329,7 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
           tabIndex={0}
           onClick={openLink}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+            if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               openLink();
             }
@@ -337,8 +341,8 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
       );
     }
 
-    case 'image_button_desktop':
-    case 'image_button_mobile': {
+    case "image_button_desktop":
+    case "image_button_mobile": {
       if (!banner.image_url) return null;
       return (
         <div className="relative w-full h-full">
@@ -367,7 +371,7 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
       );
     }
 
-    case 'youtube':
+    case "youtube":
       return <YouTubeHeroSlide banner={banner} />;
 
     default:
@@ -384,7 +388,9 @@ function BannerSlide({ banner, isActive = true, isFirst = false }) {
  * On mobile the video sits on top (order-1) and the text card below.
  */
 function YouTubeHeroSlide({ banner }) {
-  const tags = Array.isArray(banner.feature_tags) ? banner.feature_tags.slice(0, 3) : [];
+  const tags = Array.isArray(banner.feature_tags)
+    ? banner.feature_tags.slice(0, 3)
+    : [];
   const hasTags = tags.some((t) => t.line1 || t.line2 || t.icon);
 
   return (
@@ -413,8 +419,8 @@ function YouTubeHeroSlide({ banner }) {
         aria-hidden
         className="pointer-events-none absolute right-6 top-8 h-24 w-32 opacity-40 dark:opacity-20"
         style={{
-          backgroundImage: 'radial-gradient(#2486FF 1.5px, transparent 1.5px)',
-          backgroundSize: '14px 14px',
+          backgroundImage: "radial-gradient(#2486FF 1.5px, transparent 1.5px)",
+          backgroundSize: "14px 14px",
         }}
       />
 
@@ -423,35 +429,37 @@ function YouTubeHeroSlide({ banner }) {
           {/* LEFT — text card. On mobile it goes BELOW the video (order-2). */}
           <div className="order-2 lg:order-1">
             <div className="rounded-2xl bg-white/90 dark:bg-9e-card/90 backdrop-blur-sm shadow-9e-lg p-6 lg:p-8 space-y-4">
-              <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight">
+              <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight text-center lg:text-left">
                 {banner.title}
               </h2>
 
               {banner.slide_text && (
                 <div
-                  className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed lg:line-clamp-4"
+                  className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed lg:line-clamp-4 text-center lg:text-left"
                   dangerouslySetInnerHTML={{ __html: banner.slide_text }}
                 />
               )}
 
               {banner.link_url && banner.link_text && (
-                <a
-                  href={banner.link_url}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#19B5FE] hover:bg-[#0071BC]
+                <div className="flex justify-center lg:justify-start">
+                  <a
+                    href={banner.link_url}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-[#19B5FE] hover:bg-[#0071BC]
                     text-white font-bold rounded-full text-sm transition-colors shadow-9e-md"
-                >
-                  {banner.link_text}
-                </a>
+                  >
+                    {banner.link_text}
+                  </a>
+                </div>
               )}
 
               {/* Feature tags row */}
               {hasTags && (
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+                <div className="mt-2 flex justify-center lg:justify-start gap-4 pt-4">
                   {tags.map((t, i) => {
                     if (!t.line1 && !t.line2 && !t.icon) return null;
                     const Ico = t.icon ? LucideIcons[t.icon] : null;
                     return (
-                      <div key={i} className="flex items-start gap-2.5">
+                      <div key={i} className="flex items-center lg:items-start gap-2.5 flex-col lg:flex-row">
                         {Ico && (
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-9e-air/15 text-9e-action">
                             <Ico size={18} />
@@ -459,10 +467,14 @@ function YouTubeHeroSlide({ banner }) {
                         )}
                         <div className="min-w-0">
                           {t.line1 && (
-                            <p className="text-sm font-bold text-9e-navy dark:text-white leading-snug">{t.line1}</p>
+                            <p className="text-sm font-bold text-9e-navy dark:text-white leading-snug text-center lg:text-left">
+                              {t.line1}
+                            </p>
                           )}
                           {t.line2 && (
-                            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] leading-snug">{t.line2}</p>
+                            <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] leading-snug text-center lg:text-left">
+                              {t.line2}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -479,7 +491,7 @@ function YouTubeHeroSlide({ banner }) {
               <div className="relative aspect-video w-full rounded-2xl overflow-hidden">
                 <iframe
                   src={`https://www.youtube.com/embed/${banner.youtube_id}?rel=0&controls=0&modestbranding=1&playsinline=1`}
-                  title={banner.title || 'YouTube video'}
+                  title={banner.title || "YouTube video"}
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   className="absolute inset-0 w-full h-full"
