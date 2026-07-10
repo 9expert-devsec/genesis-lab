@@ -47,11 +47,20 @@ export async function createBanner(formData) {
     image_public_id = uploaded.public_id;
   }
 
+  let feature_tags = [];
+  try {
+    const raw = formData.get('feature_tags_json');
+    if (raw) feature_tags = JSON.parse(raw);
+  } catch {
+    feature_tags = [];
+  }
+
   const data = {
     title:      formData.get('title'),
     type:       formData.get('type'),
     youtube_id: formData.get('youtube_id') || '',
     slide_text: formData.get('slide_text') || '',
+    feature_tags,
     image_url,
     image_public_id,
     link_url:   formData.get('link_url') || '',
@@ -92,11 +101,20 @@ export async function updateBanner(id, formData) {
     image_public_id = uploaded.public_id;
   }
 
+  let feature_tags = [];
+  try {
+    const raw = formData.get('feature_tags_json');
+    if (raw) feature_tags = JSON.parse(raw);
+  } catch {
+    feature_tags = [];
+  }
+
   const data = {
     title:      formData.get('title'),
     type:       formData.get('type'),
     youtube_id: formData.get('youtube_id') || '',
     slide_text: formData.get('slide_text') || '',
+    feature_tags,
     image_url,
     image_public_id,
     link_url:   formData.get('link_url') || '',

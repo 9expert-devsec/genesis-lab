@@ -26,6 +26,21 @@ const bannerSchema = new mongoose.Schema(
     youtube_id:      { type: String, default: '' },
     slide_text:      { type: String, default: '' },
 
+    // Used by youtube banners to show up to 3 feature highlights below the text
+    feature_tags: {
+      type: [
+        new mongoose.Schema(
+          {
+            icon:  { type: String, default: '' },
+            line1: { type: String, default: '', trim: true, maxlength: 60 },
+            line2: { type: String, default: '', trim: true, maxlength: 60 },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+
     // Image type fields
     image_url:       { type: String, default: '' },
     image_public_id: { type: String, default: '' },
