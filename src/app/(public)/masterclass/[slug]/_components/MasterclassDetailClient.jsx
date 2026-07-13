@@ -38,7 +38,8 @@ function formatBatchDate(dateStr) {
     day: "numeric", // "20"
     month: "short", // "Jun"
     year: "numeric", // "2026"
-  });
+  })
+  .replace("Sept", "Sep") // fix "Sept" to "Sep";
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
