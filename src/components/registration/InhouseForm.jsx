@@ -410,7 +410,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                 </optgroup>
               ))}
           </select>
-          <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+          <p className="mt-1.5 text-[12px] text-[var(--text-muted)]">
             หากต้องการหลักสูตร custom หรือหลายหลักสูตร กรุณาระบุในหมายเหตุด้านล่าง
           </p>
         </FieldGroup>
@@ -471,8 +471,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -506,8 +506,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -564,8 +564,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -574,8 +574,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
         </div>
 
         {isOnsite && (
-          <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 space-y-4">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">รายละเอียดสถานที่จัดอบรม</p>
+          <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 space-y-5">
+            <p className="text-base font-semibold text-[var(--text-primary)]">รายละเอียดสถานที่จัดอบรม</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldGroup label="ที่อยู่สถานที่" required error={errors.onsiteAddress?.message} className="sm:col-span-2">
                 <Input {...register('onsiteAddress')} placeholder="อาคาร / ชั้น / ห้อง / ถนน" aria-invalid={!!errors.onsiteAddress} />
@@ -588,7 +588,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
               </FieldGroup>
             </div>
             <div>
-              <Label className="mb-2 block text-xs">อุปกรณ์ที่มีให้</Label>
+              <Label className="mb-2 block text-sm">อุปกรณ์ที่มีให้</Label>
               <div className="grid gap-2 sm:grid-cols-2">
                 {ONSITE_EQUIPMENT.map((item) => {
                   const active = (watch('onsiteEquipment') ?? []).includes(item);
@@ -650,9 +650,9 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
 
       {/* ── Section 4: Quotation (Corporate only) ── */}
       <FormSection icon={<Building2 className="h-5 w-5" />} title="ข้อมูลสำหรับออกใบเสนอราคา">
-        <p className="text-xs text-[var(--text-muted)]">
+        {/* <p className="text-xs text-[var(--text-muted)]">
           ข้อมูลนี้ใช้สำหรับออกใบเสนอราคา — ไม่บังคับ ทีมขายจะติดต่อขอเพิ่มเติมหากจำเป็น
-        </p>
+        </p> */}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup label="ประเทศ / Country" required>

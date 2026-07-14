@@ -84,7 +84,7 @@ export function InvoiceFields({ register, watch, setValue, errors, docType = 'qu
         <h2 className="text-base font-bold text-[var(--text-primary)]">
           {docType === 'receipt' ? 'ข้อมูลการออกใบเสร็จรับเงิน / ใบกำกับภาษี' : 'ข้อมูลสำหรับออกใบเสนอราคา'}
         </h2>
-        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
           {docType === 'receipt' ? 'ใช้สำหรับออกใบเสร็จรับเงินและใบกำกับภาษี' : 'ใช้สำหรับออกใบเสนอราคา ใบแจ้งหนี้ และใบกำกับภาษี'}
         </p>
       </header>
