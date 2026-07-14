@@ -349,15 +349,15 @@ function ArticleResultCard({ article, term }) {
   return (
     <Link
       href={`/articles/${article.slug}`}
-      className="group flex gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+      className="group grid min-h-36 grid-cols-[auto_1fr] overflow-hidden  rounded-xl border border-gray-100 bg-white  shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+      <div className="relative aspect-video h-full shrink-0 overflow-hidden bg-gray-100">
         {article.coverUrl ? (
           <Image
             src={article.coverUrl}
             alt={article.title ?? ''}
             fill
-            sizes="80px"
+            sizes="240px"
             className="object-cover"
           />
         ) : (
@@ -367,7 +367,7 @@ function ArticleResultCard({ article, term }) {
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 p-4">
         <h3 className="line-clamp-2 text-sm font-semibold text-[#0D1B2A] group-hover:text-[#005CFF]">
           {highlightText(article.title, term)}
         </h3>
@@ -546,7 +546,7 @@ export function SearchClient({
   const visibleCareerPaths   = isAll ? matchedCareerPaths.slice(0, 4)  : matchedCareerPaths;
   const visibleSchedules     = isAll ? matchedSchedules.slice(0, 4)    : matchedSchedules;
   const visiblePromotions    = isAll ? matchedPromotions.slice(0, 3)   : matchedPromotions;
-  const visibleArticles      = isAll ? matchedArticles.slice(0, 3)     : matchedArticles;
+  const visibleArticles      = isAll ? matchedArticles.slice(0, 6)     : matchedArticles;
 
   return (
     <div className="min-h-screen bg-[#F8FAFD]">
@@ -570,7 +570,7 @@ export function SearchClient({
               aria-label="ค้นหา"
               className="h-full w-full bg-transparent text-lg text-[#0D1B2A] placeholder:text-gray-400 focus:outline-none"
             />
-            {q.length > 0 && (
+            {/* {q.length > 0 && (
               <button
                 type="button"
                 onClick={clearQuery}
@@ -579,7 +579,7 @@ export function SearchClient({
               >
                 <X className="h-5 w-5" />
               </button>
-            )}
+            )} */}
           </div>
         </div>
       </section>
@@ -825,7 +825,7 @@ export function SearchClient({
                       />
                     ) : (
                       <>
-                        <div className="space-y-3">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {visibleArticles.map((a) => (
                             <ArticleResultCard
                               key={a.slug ?? a._id}
