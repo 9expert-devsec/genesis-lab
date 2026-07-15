@@ -3,6 +3,9 @@ module.exports = {
   content: [
     './src/app/**/*.{js,jsx}',
     './src/components/**/*.{js,jsx}',
+    // Page Builder preset→class maps live in lib; their class literals must be
+    // scanned by the JIT or the generated pages render unstyled.
+    './src/lib/pageBuilder/**/*.{js,jsx}',
   ],
   darkMode: 'class',
   theme: {
@@ -57,6 +60,33 @@ module.exports = {
           50:  '#5E6A7E', 100: '#6E798B', 200: '#7E8898', 300: '#8E97A5',
           400: '#9EA6B2', 500: '#AEB4BE', 600: '#BFC3CB', 700: '#CFD2D8',
           800: '#DFE1E5', 900: '#EFF0F2', 950: '#F7F8F9',
+        },
+
+        // ── Page Builder accent scales (§7 accentColor / theme presets) ──
+        // Same construction as the blues/lime: step 50 = base, tinting toward
+        // white. These hex values are LIGHT-mode; dark-mode adaptation lives
+        // in the --9e-<name>-<step> CSS vars (globals.css .dark), same split
+        // as the other scales. Bases derived at brand-blue's S100/L57 EXCEPT
+        // green, which is a deliberate emerald (see globals.css note).
+        '9e-purple': {
+          50:  '#9124FF', 100: '#9C3AFF', 200: '#A750FF', 300: '#B266FF',
+          400: '#BD7CFF', 500: '#C892FF', 600: '#D3A7FF', 700: '#DEBDFF',
+          800: '#E9D3FF', 900: '#F4E9FF', 950: '#FAF4FF',
+        },
+        '9e-orange': {
+          50:  '#FF9124', 100: '#FF9C3A', 200: '#FFA750', 300: '#FFB266',
+          400: '#FFBD7C', 500: '#FFC892', 600: '#FFD3A7', 700: '#FFDEBD',
+          800: '#FFE9D3', 900: '#FFF4E9', 950: '#FFFAF4',
+        },
+        '9e-cyan': {
+          50:  '#24DAFF', 100: '#3ADEFF', 200: '#50E1FF', 300: '#66E5FF',
+          400: '#7CE9FF', 500: '#92EDFF', 600: '#A7F0FF', 700: '#BDF4FF',
+          800: '#D3F8FF', 900: '#E9FBFF', 950: '#F4FDFF',
+        },
+        '9e-green': {
+          50:  '#1FC17E', 100: '#35C78B', 200: '#4CCD98', 300: '#62D4A5',
+          400: '#79DAB2', 500: '#8FE0BF', 600: '#A5E6CB', 700: '#BCECD8',
+          800: '#D2F3E5', 900: '#E9F9F2', 950: '#F4FCF9',
         },
       },
 

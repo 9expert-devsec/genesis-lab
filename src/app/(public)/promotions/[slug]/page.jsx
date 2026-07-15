@@ -2,6 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolvePromotion } from "@/lib/resolvePromotion";
+import { getPageBuilderPageBySlugAny } from "@/lib/actions/pageBuilder";
+import { shouldRenderBuilderPromotion } from "@/lib/pageBuilder/promotionMode";
+import { PageBuilderView } from "@/components/pageBuilder/PageBuilderView";
 
 export const revalidate = 3600;
 
@@ -38,7 +41,45 @@ function dateRangeLong(startISO, endISO) {
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  const resolved = await resolvePromotion(slug);
+  const segment = String(slug);
+
+  // Builder promotion FIRST (Phase 2). Mirrors the catch-all's builder metadata
+  // shape, but canonical is FORCED to /promotions/<slug> (auto-derived — the
+  // author never types it, and seo.canonicalUrl is deliberately ignored here so a
+  // promotion's one home is always /promotions/<slug>).
+  const builderPage = await getPageBuilderPageBySlugAny(segment);
+  if (shouldRenderBuilderPromotion(builderPage)) {
+    const seo = builderPage.seo ?? {};
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    const canonical = `${base}/promotions/${segment}`;
+    const title = seo.metaTitle || builderPage.title;
+    const description = seo.metaDescription || "";
+    const ogTitle = seo.ogTitle || title;
+    const ogDesc = seo.ogDescription || description;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      robots: seo.noIndex ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title: ogTitle,
+        description: ogDesc,
+        url: canonical,
+        type: seo.ogType || "website",
+        images: seo.ogImage ? [{ url: seo.ogImage }] : [],
+        siteName: "9Expert Training",
+        locale: "th_TH",
+      },
+      twitter: {
+        card: seo.twitterCard || "summary_large_image",
+        title: ogTitle,
+        description: ogDesc,
+        images: seo.ogImage ? [seo.ogImage] : [],
+      },
+    };
+  }
+
+  const resolved = await resolvePromotion(segment);
   if (!resolved) return {};
 
   const { promotion, config } = resolved;
@@ -64,7 +105,39 @@ export async function generateMetadata({ params }) {
 
 export default async function PromotionDetailPage({ params }) {
   const { slug } = await params;
-  const resolved = await resolvePromotion(slug);
+  const segment = String(slug);
+
+  // ── Precedence (Phase 2): builder promotion FIRST, then MSDB html_content,
+  //    then 404. A visible promotion-type builder page renders its authored
+  //    sections; an expired/unpublished one does NOT fall through to MSDB (a
+  //    builder slug won't resolve there) — it 404s, matching what its bare-slug
+  //    render would have done, which the Phase-3 grid relies on. See
+  //    promotionDetailTarget in lib/pageBuilder/promotionMode.js. ──
+  const builderPage = await getPageBuilderPageBySlugAny(segment);
+  if (shouldRenderBuilderPromotion(builderPage)) {
+    // FULL-BLEED (Phase 3): only the back link sits in a contained strip; the
+    // PageBuilderView below runs edge-to-edge so authored heroes / full_width
+    // sections can break out of the 1200px column. PageBuilderView manages its
+    // own per-section widths + theme surface, so it does not assume an outer
+    // max-width. The MSDB html_content branch keeps its contained chrome. The
+    // MSDB header (title/date/tags) is NOT reused — a builder promotion composes
+    // its own headings via sections.
+    return (
+      <div className="bg-[#F8FAFD] dark:bg-[#0D1B2A]">
+        <div className="mx-auto max-w-[1200px] px-4 pt-10 lg:pt-14">
+          <Link
+            href="/promotions"
+            className="inline-flex items-center gap-1 text-sm text-[#005CFF] hover:underline dark:text-[#48B0FF]"
+          >
+            <span aria-hidden="true">←</span> กลับไปหน้าโปรโมชัน
+          </Link>
+        </div>
+        <PageBuilderView page={builderPage} />
+      </div>
+    );
+  }
+
+  const resolved = await resolvePromotion(segment);
   if (!resolved) notFound();
 
   const { promotion } = resolved;

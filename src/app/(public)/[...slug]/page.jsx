@@ -45,7 +45,14 @@ import {
   findCustomPageByHistoricalSlug,
 } from '@/lib/actions/customPages';
 import { buildPageJsonLd } from '@/lib/customPages/buildPageJsonLd';
+import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
+import { isPromotionPage } from '@/lib/pageBuilder/promotionMode';
 import { CustomPageView } from './_components/CustomPageView';
+import {
+  getPageBuilderPageBySlugAny,
+  findPageBuilderPageByHistoricalSlug,
+} from '@/lib/actions/pageBuilder';
+import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -97,6 +104,22 @@ async function resolveCustomPageForRequest(segment, searchParams) {
   const published = await getCustomPageBySlug(segment);
   if (published) return { page: published, isPreview: false };
   return null;
+}
+
+// The publish-window rules moved to lib/pageBuilder/visibility.js — ONE
+// definition, because the 2B editor's publish dialog must give the author the
+// SAME answer this route gives the visitor. A second copy would drift into
+// telling an author a page is live while this route 404s it. The ISR caveat
+// (revalidate = 3600, so a scheduled page goes live within the hour, not on the
+// second) is documented there.
+
+// Resolve a PUBLIC builder page. Reads any-status (the published-only action
+// can't express the date window) and gates in JS. Preview lives on its own
+// /preview/[slug] route and never resolves here.
+async function resolveBuilderPageForRequest(segment) {
+  const page = await getPageBuilderPageBySlugAny(segment);
+  if (!page) return null;
+  return isPubliclyVisible(page) ? page : null;
 }
 
 // ── Program / skill pretty-URL pages ────────────────────────────────
@@ -298,6 +321,49 @@ export async function generateMetadata({ params, searchParams }) {
         description,
         url: pageUrl,
         images: ogImage ? [{ url: ogImage }] : [],
+      },
+    };
+  }
+
+  // Builder page metadata — same precedence tier as custom pages, after every
+  // built-in resolver. Builder is probed first purely for determinism: Phase 1
+  // guarantees a slug can exist in only ONE of the two collections (the shared
+  // guard rejects a slug that is live OR historical in the other), so the two
+  // can never both match and the order is arbitrary. Builder wins the coin
+  // toss as the go-forward primitive.
+  const bp = await resolveBuilderPageForRequest(segment);
+  if (bp) {
+    const seo = bp.seo ?? {};
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    // Promotion mode (Phase 2): a promotion page's one home is /promotions/<slug>,
+    // so its canonical points there even when a crawler hits the bare slug before
+    // the component's 308 fires. Non-promotion pages keep seo.canonicalUrl ‖ bare.
+    const canonical = isPromotionPage(bp)
+      ? `${base}/promotions/${segment}`
+      : (seo.canonicalUrl || `${base}/${segment}`);
+    const title = seo.metaTitle || bp.title;
+    const description = seo.metaDescription || '';
+    const ogTitle = seo.ogTitle || title;
+    const ogDesc = seo.ogDescription || description;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      robots: seo.noIndex ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title: ogTitle,
+        description: ogDesc,
+        url: canonical,
+        type: seo.ogType || 'website',
+        images: seo.ogImage ? [{ url: seo.ogImage }] : [],
+        siteName: '9Expert Training',
+        locale: 'th_TH',
+      },
+      twitter: {
+        card: seo.twitterCard || 'summary_large_image',
+        title: ogTitle,
+        description: ogDesc,
+        images: seo.ogImage ? [seo.ogImage] : [],
       },
     };
   }
@@ -511,6 +577,27 @@ export default async function CatchAllPage({ params, searchParams }) {
     );
   }
 
+  // ── Builder page — same tier as custom pages (see generateMetadata for why
+  //    the order between the two is arbitrary but deterministic). ──
+  const builderPage = await resolveBuilderPageForRequest(segment);
+  if (builderPage) {
+    // Promotion mode (Phase 2): a promotion-type builder page lives ONLY at
+    // /promotions/<slug> — one public home, no duplicate content. Divert the
+    // bare-slug URL there with a 308 (permanentRedirect throws, so this is the
+    // last thing this branch does; the function body has no enclosing try/catch,
+    // like the historical-slug redirects at the bottom). ONE rule for BOTH kinds
+    // (standalone AND MSDB-linked) — no per-discriminator branching.
+    if (isPromotionPage(builderPage)) {
+      permanentRedirect(`/promotions/${builderPage.slug}`);
+    }
+    // JSON-LD HOOK POINT — generation is 2C, deliberately not built here.
+    // When it lands, derive the document from builderPage.jsonLd (+ seo) and
+    // emit it as a <script type="application/ld+json"> right here, exactly as
+    // the course and custom-page branches above do. Never emit Review or
+    // AggregateRating.
+    return <PageBuilderView page={builderPage} />;
+  }
+
   // ── Custom page — lowest-priority resolver (after course resolution). ──
   const cp = await resolveCustomPageForRequest(segment, searchParams);
   if (cp) {
@@ -534,10 +621,20 @@ export default async function CatchAllPage({ params, searchParams }) {
     );
   }
 
-  // 301 redirect for renamed custom-page slugs — only reached when nothing
-  // else (course/program/skill/career-path/published custom page) matched.
-  // permanentRedirect emits 308 (permanent), which throws internally, so it
+  // 301 redirect for renamed slugs — only reached when nothing else matched.
+  // permanentRedirect emits 308 (permanent), which throws internally, so these
   // must sit outside any try/catch and be the last thing before notFound().
+  //
+  // Both page types are checked. They CANNOT both hit: the shared slug guard
+  // rejects any slug that already exists as a live OR historical slug in the
+  // other collection, so a slug string lives in at most one collection. The
+  // order below is therefore determinism (e.g. for a hand-seeded doc that
+  // bypassed the guard), not a tiebreak.
+  const historicalBuilder = await findPageBuilderPageByHistoricalSlug(segment);
+  if (historicalBuilder?.slug && historicalBuilder.slug !== segment) {
+    permanentRedirect(`/${historicalBuilder.slug}`);
+  }
+
   const historical = await findCustomPageByHistoricalSlug(segment);
   if (historical?.slug && historical.slug !== segment) {
     permanentRedirect(`/${historical.slug}`);

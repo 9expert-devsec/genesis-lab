@@ -323,7 +323,7 @@ export function MasterclassDetailClient({
                           : "text-9e-navy dark:text-white"
                       }`}
                     >
-                      {batch.batch_label || `รุ่นที่ ${batch.batch_no}`}
+                      {batch.batch_label || `รุ่นที่ ${batch.batch_no}`} 
                     </p>
                     {batch.dates?.[0]?.date && (
                       <p
@@ -336,6 +336,9 @@ export function MasterclassDetailClient({
                         {formatBatchDate(batch.dates[0].date)}
                       </p>
                     )}
+                    <p className={`text-sm font-bold md:text-[18px] ${batch.is_early_bird ? "text-9e-air" : "text-9e-slate-dp-50 dark:text-white"}`}>
+                      [Weekend Only]
+                    </p>
                     <p
                       className={`text-sm md:text-[18px] ${
                         batch.is_early_bird

@@ -19,9 +19,15 @@ import Admin from '@/models/Admin';
 import { requireAdmin } from '@/lib/actions/auth';
 import { normalizeHex } from '@/lib/rbac/roleColor';
 import { ALL_PAGE_KEYS } from '@/lib/rbac/pages';
+import { ROLE_TIERS, DEFAULT_TIER } from '@/lib/rbac/access';
 
 const ADMIN_PATH = '/admin/roles';
 const DEFAULT_COLOR = '#6b7280';
+
+/** Coerce a raw tier input to a valid tier, defaulting to least privilege. */
+function cleanTier(tier) {
+  return ROLE_TIERS.includes(tier) ? tier : DEFAULT_TIER;
+}
 
 function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
@@ -60,7 +66,7 @@ export async function listRolesFull() {
   return serialize(withCounts);
 }
 
-export async function createRole({ key, name, description, pages, color, isSuperadmin }) {
+export async function createRole({ key, name, description, pages, color, isSuperadmin, tier }) {
   const session = await requireAdmin('roles');
   await dbConnect();
 
@@ -88,6 +94,10 @@ export async function createRole({ key, name, description, pages, color, isSuper
     // Superadmin bypasses page checks → store [] (cosmetic).
     pages: wantSuper ? [] : cleanPages(pages),
     color: normalizeHex(color) || DEFAULT_COLOR,
+    // Tier is orthogonal to isSuperadmin; superadmin is treated as
+    // developer at read time (getTier) so the stored value is advisory
+    // for that role, but we still persist what the UI sent.
+    tier: cleanTier(tier),
     isSystem: false, // UI-created roles are never system roles
     isSuperadmin: wantSuper,
     createdBy: session.user?.id ?? null,
@@ -97,7 +107,7 @@ export async function createRole({ key, name, description, pages, color, isSuper
   return { ok: true, role: serialize(role.toObject()) };
 }
 
-export async function updateRole(key, { name, description, pages, color, isSuperadmin }) {
+export async function updateRole(key, { name, description, pages, color, isSuperadmin, tier }) {
   await requireAdmin('roles');
   await dbConnect();
 
@@ -126,6 +136,7 @@ export async function updateRole(key, { name, description, pages, color, isSuper
   if (typeof name === 'string' && name.trim()) role.name = name.trim();
   if (typeof description === 'string') role.description = description.trim();
   if (color !== undefined) role.color = normalizeHex(color) || DEFAULT_COLOR;
+  if (tier !== undefined) role.tier = cleanTier(tier);
   role.isSuperadmin = wantSuper;
   role.pages = wantSuper ? [] : cleanPages(pages);
 

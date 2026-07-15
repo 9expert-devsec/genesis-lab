@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { sanitizeRoadmapSvg } from '@/lib/roadmap/sanitizeRoadmapSvg';
 import { ContentSection } from './ContentSection';
 
 const isSvgUrl = (url) => /\.svg(\?|#|$)/i.test(url || '');
@@ -33,7 +34,10 @@ function RasterRoadmap({ src, alt, className }) {
  *
  * Sanitized with DOMPurify (SVG profile) before injection — these come
  * from our own MSDB admin uploads, but inline SVG can still carry script,
- * so raw injection is never acceptable.
+ * so raw injection is never acceptable. `sanitizeRoadmapSvg` strips scripts +
+ * on* handlers (DOMPurify) and additionally scrubs the CSS inside any <style>
+ * block (allowed so roadmaps can author hover as safe CSS `:hover` instead of
+ * the `onmouseover` handlers DOMPurify strips — see that module).
  */
 function InteractiveSvgRoadmap({ src, alt, className }) {
   const wrapperRef = useRef(null);
@@ -61,11 +65,7 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
         // the server entirely — this .then() runs only in the browser.
         const { default: DOMPurify } = await import('isomorphic-dompurify');
         if (cancelled) return;
-        const clean = DOMPurify.sanitize(svgText, {
-          USE_PROFILES: { svg: true, svgFilters: true },
-          ADD_ATTR: ['target', 'href', 'xlink:href'],
-          ADD_TAGS: ['use'],
-        });
+        const clean = sanitizeRoadmapSvg(svgText, DOMPurify);
         setMarkup(clean);
         setStatus('ready');
       })
