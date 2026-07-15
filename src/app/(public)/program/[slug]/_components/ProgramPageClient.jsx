@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
+import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 
 /**
  * Public program detail page.
@@ -15,7 +16,7 @@ import { CourseCard } from '@/app/(public)/training-course/_components/CourseCar
  * The roadmap image isn't part of the verified `/programs` shape, but
  * we look for likely field names so it shows up if upstream adds one.
  */
-export function ProgramPageClient({ program, config, courses, earlyBirdMap = {} }) {
+export function ProgramPageClient({ program, config, courses, earlyBirdMap = {}, faqs = [] }) {
   const roadmapUrl =
     program?.program_roadmap_url ??
     program?.programroadmapurl ??
@@ -130,6 +131,8 @@ export function ProgramPageClient({ program, config, courses, earlyBirdMap = {} 
         )}
       </section>
 
+      {/* ── FAQ ───────────────────────────────────────────────────── */}
+      <FaqAccordionSection faqs={faqs} />
     </main>
   );
 }

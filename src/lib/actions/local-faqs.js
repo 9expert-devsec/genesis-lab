@@ -9,6 +9,8 @@
  *   public      → 'courses'       (/admin/courses/[courseId] FAQ tab)
  *   career_path → 'career_paths'  (/admin/career-paths/[id]/faqs)
  *   masterclass → 'masterclass'   (/admin/masterclass/[id]/faqs)
+ *   program     → 'local_faqs'    (/admin/local-faqs/program/[id])
+ *   skill       → 'local_faqs'    (/admin/local-faqs/skill/[id])
  *
  * Errors are returned as { ok: false, error } rather than thrown, matching the
  * style of src/lib/actions/faqs.js.
@@ -22,7 +24,7 @@ import CareerPath from '@/models/CareerPath';
 import MasterclassCourse from '@/models/MasterclassCourse';
 import { requireAdmin } from '@/lib/actions/auth';
 
-const COURSE_TYPES = ['public', 'career_path', 'masterclass'];
+const COURSE_TYPES = ['public', 'career_path', 'masterclass', 'program', 'skill'];
 
 /** RBAC page key that owns each course type's admin area. */
 function pageKeyForType(course_type) {
@@ -30,6 +32,10 @@ function pageKeyForType(course_type) {
     case 'public':      return 'courses';
     case 'career_path': return 'career_paths';
     case 'masterclass': return 'masterclass';
+    // Program / skill FAQs have no dedicated RBAC page — the FAQ admin area
+    // (/admin/local-faqs) owns them.
+    case 'program':     return 'local_faqs';
+    case 'skill':       return 'local_faqs';
     default:            return 'local_faqs';
   }
 }
@@ -75,6 +81,24 @@ async function revalidateForFaq(course_type, ref_id) {
       revalidatePath('/masterclass');
       revalidatePath(`/masterclass/${mc.slug}`);
     }
+    return;
+  }
+
+  if (course_type === 'program') {
+    revalidatePath(`/admin/local-faqs/program/${ref_id}`);
+    // The public program page lives at /program/<computed-slug> and, when set,
+    // a custom urlSlug — resolving the exact path needs the same
+    // resolveProgramBySlug/config lookup the pages use, which is heavier than
+    // this best-effort helper should be. Both public routes use ISR
+    // (revalidate = 3600), so the change surfaces within an hour without a
+    // fragile slug computation here.
+    return;
+  }
+
+  if (course_type === 'skill') {
+    revalidatePath(`/admin/local-faqs/skill/${ref_id}`);
+    // Public skill page resolution is intentionally skipped for the same reason
+    // as program above — public ISR (1h) picks up the change on its own.
     return;
   }
 }

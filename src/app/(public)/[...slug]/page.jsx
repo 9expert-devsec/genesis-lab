@@ -63,6 +63,19 @@ import { CustomPageView } from './_components/CustomPageView';
 
 export const revalidate = 3600;
 
+/**
+ * Stable FAQ refs for program/skill — prefer the upstream business code
+ * (`program_id` / `skill_id`), fall back to `_id`. Same precedence as the
+ * admin order clients and resolvePageSlug, so FAQs key on a durable code
+ * rather than a re-issuable ObjectId.
+ */
+function programRefId(program) {
+  return String(program?.program_id ?? program?._id ?? '');
+}
+function skillRefId(skill) {
+  return String(skill?.skill_id ?? skill?._id ?? '');
+}
+
 function segmentFromSlug(slug) {
   const segment = Array.isArray(slug) ? slug.join('/') : String(slug ?? '');
   if (segment.includes('/')) return null;
@@ -114,7 +127,8 @@ async function loadProgram(slug) {
     (c) => String(c?.program?._id ?? '') === programKey
   );
   const courses = await enrichCoursesWithDetails(programCourses);
-  return { program, config, courses, earlyBirdMap };
+  const faqs = await getLocalFaqsForCourse('program', programRefId(program)).catch(() => []);
+  return { program, config, courses, earlyBirdMap, faqs };
 }
 
 function courseInSkill(course, skillId) {
@@ -156,7 +170,8 @@ async function loadSkill(slug) {
     }))
     .filter((g) => g.courses.length > 0);
 
-  return { skill, config, coursesByProgram, totalCourses: skillCourses.length };
+  const faqs = await getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []);
+  return { skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs };
 }
 
 export async function generateMetadata({ params, searchParams }) {
@@ -347,6 +362,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           config={programData.config}
           courses={programData.courses}
           earlyBirdMap={programData.earlyBirdMap}
+          faqs={programData.faqs}
         />
       );
     }
@@ -358,6 +374,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           skill={skillData.skill}
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
+          faqs={skillData.faqs}
         />
       );
     }

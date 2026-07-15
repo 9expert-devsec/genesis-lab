@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { toKebab } from '@/lib/slug';
+import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 
 /**
  * Public skill detail page.
@@ -14,7 +15,7 @@ import { toKebab } from '@/lib/slug';
  *      can scan how a skill is broken down across programs.
  *   3. Optional roadmap image when `skill_roadmap_url` is present.
  */
-export function SkillPageClient({ skill, coursesByProgram, totalCourses }) {
+export function SkillPageClient({ skill, coursesByProgram, totalCourses, faqs = [] }) {
   const description =
     skill?.skill_description || skill?.skill_teaser || '';
   const roadmapUrl = skill?.skill_roadmap_url ?? null;
@@ -119,6 +120,8 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses }) {
         )}
       </div>
 
+      {/* ── FAQ ───────────────────────────────────────────────────── */}
+      <FaqAccordionSection faqs={faqs} />
     </main>
   );
 }

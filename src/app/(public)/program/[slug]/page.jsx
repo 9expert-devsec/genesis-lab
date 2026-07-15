@@ -4,9 +4,19 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug } from '@/lib/resolvePageSlug';
+import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { ProgramPageClient } from './_components/ProgramPageClient';
 
 export const revalidate = 3600;
+
+/**
+ * Stable FAQ ref for a program — prefer the upstream business code
+ * (`program_id`), fall back to `_id`. Matches the precedence used across the
+ * admin order clients and resolvePageSlug so FAQs key on a durable code.
+ */
+function programRefId(program) {
+  return String(program?.program_id ?? program?._id ?? '');
+}
 
 /**
  * /program/[slug] is now a transitional route. When the program has an
@@ -33,9 +43,10 @@ export default async function ProgramPage({ params }) {
 
   // No custom slug — render inline under /program/<slug>.
   const { program, config } = resolved;
-  const [coursesRes, earlyBirdMap] = await Promise.all([
+  const [coursesRes, earlyBirdMap, faqs] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
+    getLocalFaqsForCourse('program', programRefId(program)).catch(() => []),
   ]);
   const programKey = String(program._id);
   const programCourses = (coursesRes.items ?? []).filter(
@@ -49,6 +60,7 @@ export default async function ProgramPage({ params }) {
       config={config}
       courses={courses}
       earlyBirdMap={earlyBirdMap}
+      faqs={faqs}
     />
   );
 }
