@@ -10,6 +10,8 @@ import mongoose from 'mongoose';
  *                               (CourseExtension.courseId / TnhsCourse.course_id)
  *   course_type 'career_path' → ref_id = CareerPath.career_path_id
  *   course_type 'masterclass' → ref_id = MasterclassCourse._id (stringified)
+ *   course_type 'program'     → ref_id = Program._id (stringified)
+ *   course_type 'skill'       → ref_id = Skill._id (stringified)
  *
  * There is no "general/fallback" scope: a course with no FAQs simply renders
  * no FAQ section. A doc with an empty `ref_id` matches no course (hidden until
@@ -19,7 +21,7 @@ const LocalFaqSchema = new mongoose.Schema(
   {
     course_type: {
       type: String,
-      enum: ['public', 'career_path', 'masterclass'],
+      enum: ['public', 'career_path', 'masterclass', 'program', 'skill'],
       required: true,
       index: true,
     },

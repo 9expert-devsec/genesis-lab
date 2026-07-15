@@ -3,8 +3,21 @@ import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
 import MasterclassCourse from '@/models/MasterclassCourse';
 import { getCourseByCode } from '@/lib/api/public-courses';
+import { listPrograms } from '@/lib/api/programs';
+import { listSkills } from '@/lib/api/skills';
 import { getAllLocalFaqs } from '@/lib/local-faqs/getLocalFaqs';
 import { LocalFaqAdminClient } from './_components/LocalFaqAdminClient';
+
+/**
+ * Stable FAQ refs — prefer the upstream code (`program_id` / `skill_id`), fall
+ * back to `_id`. Program/skill FAQ rows are keyed by this code.
+ */
+function programRefId(p) {
+  return String(p?.program_id ?? p?._id ?? '');
+}
+function skillRefId(s) {
+  return String(s?.skill_id ?? s?._id ?? '');
+}
 
 export const metadata = { title: 'FAQ (Local) — ภาพรวม' };
 export const dynamic = 'force-dynamic';
@@ -13,6 +26,8 @@ const TYPE_LABELS = {
   public: 'Public / In-house',
   career_path: 'Career Path',
   masterclass: 'Masterclass',
+  program: 'Program',
+  skill: 'Skill',
 };
 
 function hrefForCourse(course_type, ref_id) {
@@ -20,6 +35,8 @@ function hrefForCourse(course_type, ref_id) {
     case 'public':      return `/admin/courses/${ref_id}`;
     case 'career_path': return `/admin/career-paths/${ref_id}/faqs`;
     case 'masterclass': return `/admin/masterclass/${ref_id}/faqs`;
+    case 'program':     return `/admin/local-faqs/program/${ref_id}`;
+    case 'skill':       return `/admin/local-faqs/skill/${ref_id}`;
     default:            return '/admin/local-faqs';
   }
 }
@@ -32,7 +49,7 @@ async function resolveCourseNames(pairs) {
   await dbConnect();
   const names = new Map();
 
-  const byType = { public: [], career_path: [], masterclass: [] };
+  const byType = { public: [], career_path: [], masterclass: [], program: [], skill: [] };
   for (const { course_type, ref_id } of pairs) {
     if (byType[course_type]) byType[course_type].push(ref_id);
   }
@@ -63,6 +80,27 @@ async function resolveCourseNames(pairs) {
     const name = course?.course_name_th || course?.course_name || code;
     names.set(`public::${code}`, name);
   });
+
+  // Programs — one list fetch, then match by the stable code (best-effort;
+  // fall back to the ref). ref_id here is the program code.
+  if (byType.program.length) {
+    const res = await listPrograms().catch(() => ({ items: [] }));
+    const items = res.items ?? [];
+    for (const ref_id of byType.program) {
+      const p = items.find((x) => programRefId(x) === ref_id);
+      names.set(`program::${ref_id}`, p?.program_name || ref_id);
+    }
+  }
+
+  // Skills — same shape, keyed by the skill code.
+  if (byType.skill.length) {
+    const res = await listSkills().catch(() => ({ items: [] }));
+    const items = res.items ?? [];
+    for (const ref_id of byType.skill) {
+      const s = items.find((x) => skillRefId(x) === ref_id);
+      names.set(`skill::${ref_id}`, s?.skill_name || ref_id);
+    }
+  }
 
   return names;
 }
@@ -99,7 +137,7 @@ export default async function LocalFaqOverviewPage() {
   );
 
   // Assemble grouped structure for the client, ordered by course type.
-  const order = ['public', 'career_path', 'masterclass'];
+  const order = ['public', 'career_path', 'masterclass', 'program', 'skill'];
   const groups = order
     .map((course_type) => ({
       course_type,
