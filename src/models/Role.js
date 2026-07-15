@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { ALL_PAGE_KEYS } from '@/lib/rbac/pages';
+import { ROLE_TIERS, DEFAULT_TIER } from '@/lib/rbac/access';
 import { normalizeHex } from '@/lib/rbac/roleColor';
 
 /**
@@ -25,6 +26,13 @@ const RoleSchema = new mongoose.Schema(
 
     // Page keys from ADMIN_PAGES. Unknown keys are dropped on validate.
     pages: { type: [String], default: [] },
+
+    // Capability tier — ORTHOGONAL to `pages`. `pages` gates access to a
+    // page; `tier` gates what you may do inside it (author vs publish vs
+    // write raw code). Superadmin is treated as `developer` regardless of
+    // this stored value — that override lives in getTier() (access.js), so
+    // we keep the raw tier here untouched. See the tier predicates there.
+    tier: { type: String, enum: ROLE_TIERS, default: DEFAULT_TIER },
 
     // Normalized '#rrggbb' (see pre-validate below). Free hex, inline-styled.
     color: { type: String, default: DEFAULT_COLOR },

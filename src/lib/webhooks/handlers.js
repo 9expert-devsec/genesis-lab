@@ -6,11 +6,10 @@
  * via WebhookLog, then returns 200 so MSDB does not retry. Handlers
  * MUST NOT call MSDB write APIs (dual-write loop risk).
  *
- * Anti-loop:
- *   When Genesis writes a record into MSDB, it stamps `source: 'genesis'`
- *   on the payload. MSDB then dispatches the same payload back to us.
- *   The promotion handler checks for that marker and skips the upsert
- *   (we already have the local row from the original write).
+ * All webhook domains here are strictly inbound (MSDB → Genesis). Promotions
+ * used to dual-write back to MSDB with a `source: 'genesis'` anti-loop marker;
+ * that path has been removed (MANIFESTO §6 — promotions are read-only), so
+ * there is no loop to guard against.
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache';
@@ -141,34 +140,16 @@ export async function handlePromotionEvent(event, data) {
     throw new Error('promotion payload missing _id');
   }
 
-  // Genesis-created rows live under TWO different keys on the local
-  // doc until MSDB ack returns: `promotion_id` may still be the
-  // placeholder `genesis-pending-…` while `msdb_id` holds the real
-  // upstream `_id`. Match on either so an inbound `promotion.updated`
-  // for that row hits the right Mongo document.
-  const filter = {
-    $or: [
-      { promotion_id },
-      { msdb_id: promotion_id },
-    ],
-  };
+  // Promotions are strictly read-only from MSDB (MANIFESTO §6): match the
+  // local row by the upstream key alone. The old dual-write path stored an
+  // `msdb_id` alias and matched on either key — that path is gone.
+  const filter = { promotion_id };
 
   if (event === 'promotion.deleted') {
     await Promotion.findOneAndDelete(filter);
     safeRevalidate('/promotions');
     safeRevalidate('/promotions/[slug]', 'page');
     safeRevalidate('/search');
-    return;
-  }
-
-  // Anti-loop applies ONLY to `promotion.created` — MSDB echoes back
-  // our own POST, and the local row already exists from the dual-write
-  // server action. `promotion.updated` must still upsert, even when
-  // `source === 'genesis'`: it could be an MSDB admin editing a row
-  // that was originally created from Genesis.
-  if (toStr(data?.source) === 'genesis' && event === 'promotion.created') {
-    safeRevalidate('/promotions');
-    safeRevalidate('/promotions/[slug]', 'page');
     return;
   }
 
@@ -182,7 +163,6 @@ export async function handlePromotionEvent(event, data) {
     {
       $set: {
         promotion_id,
-        msdb_id:        promotion_id,
         // Display name — write the MSDB field (`name`) AND the legacy
         // Genesis field (`title`) so old readers keep working.
         name,
@@ -215,7 +195,6 @@ export async function handlePromotionEvent(event, data) {
         is_pinned:      Boolean(data?.is_pinned),
         publish_status: toStr(data?.publish_status),
         time_status:    toStr(data?.time_status),
-        source:         toStr(data?.source) || 'msdb',
         synced_at:      new Date(),
       },
       $setOnInsert: {

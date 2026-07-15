@@ -1,0 +1,78 @@
+# Verification suite CI — the "middle path" decided for status-doc row 1-CI.
+#
+# WHAT THIS IS, AND WHAT IT DELIBERATELY IS NOT (read before editing):
+#   `npm test` runs here as a REQUIRED, merge-blocking check — a red run blocks
+#   the PR, so no regression reaches `main`. That is the whole value. But it is
+#   deliberately NOT presented as a glanceable green badge: the suite summary
+#   (the [suite] pass/fail/floor line and the [meta-control] line) is written to
+#   the run's Step Summary so a REVIEWER STILL READS THE HARNESS — the exact
+#   property a bare green badge destroys (see docs/page-builder-status.md row
+#   1-CI: this codebase has produced three false-greens, and a green CI badge is
+#   a STRONGER false-green than a green `next build` because nobody re-runs it).
+#
+#   Three things are intentionally absent — do NOT "helpfully" add them:
+#     1. NO green success badge (README or elsewhere). The check in the PR's
+#        checks list is enough; do not amplify it into a trusted ornament.
+#     2. NO automated canary. `CANARY=1 npm test` is MANUAL by design — a human
+#        flips it and looks when they suspect the runner went silent (e.g. after
+#        touching test/run.mjs). Automating an assertion whose whole point is
+#        "a human flips it and reads the red" just relocates the unread badge.
+#     3. NO smoke tier. `npm run test:smoke` needs live MSDB creds and is
+#        deliberately outside the gated suite; it stays manual.
+#
+# Follow-up the workflow cannot do itself: a human must enable branch protection
+# on `main` to make this check REQUIRED for merge (a repo setting, not YAML).
+
+name: test
+
+on:
+  pull_request: {}            # all target branches — PRs are where a human reads it
+  push:
+    branches: [main]          # default-branch safety net (post-merge)
+
+jobs:
+  test:
+    name: verification suite (npm test)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'   # matches package.json engines.node (>=20)
+          cache: npm
+
+      - name: Install (clean, from lockfile)
+        run: npm ci
+
+      # The gated suite ONLY. No CANARY=1 (manual by design — see header), no
+      # test:smoke (live MSDB, manual). pipefail (GitHub's bash default, set here
+      # explicitly too) makes npm's non-zero exit propagate through the tee, so a
+      # failing suite fails this step and blocks the merge.
+      - name: Run verification suite
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee test-output.txt
+
+      # Surface the harness summary on the run page so a reviewer READS what ran
+      # (counts + floor + meta-control), not just that it ran. Runs even on
+      # failure (if: always()) so a red run still shows its summary. This does NOT
+      # override the step above — the job still fails when the suite fails.
+      - name: Publish suite summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Verification suite — \`npm test\`"
+            echo ""
+            echo "Read the harness, don't just trust the check. Manual follow-ups stay manual:"
+            echo "\`CANARY=1 npm test\` (confirm the runner can still go red) and \`npm run test:smoke\` (live MSDB)."
+            echo ""
+            echo '```'
+            grep -E '^\[suite\]|^\[meta-control\]' test-output.txt \
+              || echo "(no [suite] line — the run may have crashed before the summary; read the step log)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

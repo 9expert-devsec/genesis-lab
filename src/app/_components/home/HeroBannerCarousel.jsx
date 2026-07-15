@@ -415,20 +415,31 @@ function YouTubeHeroSlide({ banner }) {
           rounded-[45%_55%_60%_40%/50%_45%_55%_50%] bg-9e-air/10 dark:bg-9e-air/5"
       />
       {/* Layer 4: dotted grid pattern, top-right corner (radial-dot CSS, no image asset) */}
-      <div
+      {/* <div
         aria-hidden
         className="pointer-events-none absolute right-6 top-8 h-24 w-32 opacity-40 dark:opacity-20"
         style={{
           backgroundImage: "radial-gradient(#2486FF 1.5px, transparent 1.5px)",
           backgroundSize: "14px 14px",
         }}
+        
+      /> */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-32 -top-40 h-[28rem] w-[28rem]
+          rounded-full bg-9e-air/25 blur-3xl dark:bg-9e-air/10"
       />
+      {/* <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 -top-20 h-80 w-80
+          rounded-full bg-9e-air/10 dark:bg-9e-air/5"
+      /> */}
 
       <div className="relative mx-auto flex h-full max-w-[1200px] items-center px-4 lg:px-6">
         <div className="grid w-full grid-cols-1 items-center gap-6 lg:grid-cols-2 lg:gap-10">
           {/* LEFT — text card. On mobile it goes BELOW the video (order-2). */}
           <div className="order-2 lg:order-1">
-            <div className="rounded-2xl bg-white/90 dark:bg-9e-card/90 backdrop-blur-sm shadow-9e-lg p-6 lg:p-8 space-y-4">
+            <div className="rounded-9e-xl bg-white/90 dark:bg-9e-card/90 backdrop-blur-sm shadow-9e-lg p-6 lg:p-8 space-y-4">
               <h2 className="text-xl lg:text-2xl xl:text-3xl font-bold text-9e-navy dark:text-white leading-tight text-center lg:text-left">
                 {banner.title}
               </h2>
@@ -459,7 +470,10 @@ function YouTubeHeroSlide({ banner }) {
                     if (!t.line1 && !t.line2 && !t.icon) return null;
                     const Ico = t.icon ? LucideIcons[t.icon] : null;
                     return (
-                      <div key={i} className="flex items-center lg:items-start gap-2.5 flex-col lg:flex-row">
+                      <div
+                        key={i}
+                        className="flex items-center lg:items-start gap-2.5 flex-col lg:flex-row"
+                      >
                         {Ico && (
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-9e-air/15 text-9e-action">
                             <Ico size={18} />

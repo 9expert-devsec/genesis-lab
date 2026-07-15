@@ -1,7 +1,8 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { getActivePromotions, getSlugMap } from '@/lib/promotions/getPromotions';
+import { getActivePromotions, getSlugMap, getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
 import { getActivePromotionBanners } from '@/lib/actions/promotion-banner';
+import { builderPromotionToCard, orderedPromotionCards } from '@/lib/pageBuilder/promotionMode';
 import { PromotionBannerCarousel } from '@/components/promotions/PromotionBannerCarousel';
 
 export const revalidate = 3600;
@@ -32,21 +33,24 @@ function dateRangeLabel(startISO, endISO) {
   return `วันนี้ - ${end}`;
 }
 
-function PromotionCard({ promotion, slugMap }) {
-  const slug = slugMap[promotion.promotion_id] || promotion.promotion_id;
-  const range = dateRangeLabel(promotion.start_date, promotion.end_date);
-  const cover = promotion.thumbnail_url;
+// ONE card for both sources — fed a uniform view-model (see cardFromMsdb /
+// builderPromotionToCard). NOT forked into builder/MSDB variants: the two are
+// mapped to the same { href, title, cover, alt, start, end } shape upstream, so
+// they render identically.
+function PromotionCard({ card }) {
+  const range = dateRangeLabel(card.start, card.end);
+  const cover = card.cover;
 
   return (
     <Link
-      href={`/promotions/${slug}`}
+      href={card.href}
       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-white shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg dark:bg-9e-navy"
     >
       <div className="relative aspect-square w-full overflow-hidden bg-[#F8FAFD] dark:bg-[#0D1B2A]">
         {cover ? (
           <Image
             src={cover}
-            alt={promotion.image_alt || promotion.title || ''}
+            alt={card.alt || card.title || ''}
             fill
             sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
             className="object-cover transition-transform duration-300 group-hover:scale-105 aspect-square"
@@ -60,7 +64,7 @@ function PromotionCard({ promotion, slugMap }) {
 
       <div className="flex flex-1 flex-col gap-3 p-5">
         <h2 className="line-clamp-2 text-base font-bold leading-snug text-[#0D1B2A] dark:text-white md:text-lg">
-          {promotion.title}
+          {card.title}
         </h2>
 
         {range && (
@@ -80,12 +84,38 @@ function PromotionCard({ promotion, slugMap }) {
   );
 }
 
+// MSDB promotion → the same card view-model as builderPromotionToCard. slug
+// resolves via the config slugMap, falling back to the raw promotion_id.
+function cardFromMsdb(promotion, slugMap) {
+  const slug = slugMap[promotion.promotion_id] || promotion.promotion_id;
+  return {
+    key: `msdb:${promotion.promotion_id}`,
+    href: `/promotions/${slug}`,
+    title: promotion.title,
+    cover: promotion.thumbnail_url,
+    alt: promotion.image_alt || promotion.title || '',
+    start: promotion.start_date,
+    end: promotion.end_date,
+    source: 'msdb',
+  };
+}
+
 export default async function PromotionsListPage() {
-  const [promotions, slugMap, banners] = await Promise.all([
+  const [promotions, slugMap, banners, builderPromotions] = await Promise.all([
     getActivePromotions(),
     getSlugMap(),
     getActivePromotionBanners(),
+    getActiveBuilderPromotions(),
   ]);
+
+  // Read-time union (§6 — neither collection is written). Builder promotions form
+  // ONE block BEFORE the MSDB promotions (orderedPromotionCards); within the
+  // builder block, promotionOrder asc (already sorted by the loader). The two
+  // sources are NOT interleaved by a shared key — unified ordering is future work.
+  const cards = orderedPromotionCards(
+    builderPromotions.map(builderPromotionToCard),
+    promotions.map((p) => cardFromMsdb(p, slugMap)),
+  );
 
   return (
     <div className="bg-[#F8FAFD] dark:bg-9e-border">
@@ -118,7 +148,7 @@ export default async function PromotionsListPage() {
 
       {/* Grid */}
       <section className="mx-auto max-w-[1200px] py-10 lg:py-14">
-        {promotions.length === 0 ? (
+        {cards.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--surface-border)] bg-white p-10 text-center dark:bg-9e-border">
             <p className="text-base text-[#465469] dark:text-[#C5CEDA]">
               ยังไม่มีโปรโมชันในตอนนี้
@@ -129,8 +159,8 @@ export default async function PromotionsListPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {promotions.map((p) => (
-              <PromotionCard key={p.promotion_id} promotion={p} slugMap={slugMap} />
+            {cards.map((c) => (
+              <PromotionCard key={c.key} card={c} />
             ))}
           </div>
         )}

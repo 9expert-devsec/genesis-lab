@@ -3,20 +3,25 @@
 /**
  * Server actions for the Promotion + PromotionConfig collections.
  *
- * Reads are public; writes require an authenticated admin session.
- * Mutations call `triggerPromotionSync()` to schedule a background
- * resync + revalidation after the response is flushed.
+ * Promotions are strictly READ-ONLY from MSDB (MANIFESTO §6): this module
+ * never creates, edits, or deletes a Promotion, and never writes back to
+ * MSDB. The only admin-controlled Promotion fields are `is_active` and
+ * `display_order` (curation), preserved across syncs. A promotion's detail
+ * page is authored in the Page Builder and linked by id — that link lives on
+ * the PageBuilder doc (`promotionId`), written by setPromotionPageLink below.
+ *
+ * (PromotionConfig — url_slug / SEO — is frozen legacy kept as-is; it will
+ * be retired in a later phase once the builder renderer supersedes it.)
  */
 
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
+import PageBuilder from '@/models/PageBuilder';
 import { requireAdmin } from '@/lib/actions/auth';
 import { syncPromotions } from '@/lib/promotions/syncPromotions';
 import { triggerPromotionSync } from '@/lib/promotions/triggerPromotionSync';
-import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
-import { resolveCourseObjectIdsVerbose } from '@/lib/api/resolveIds';
 
 const ADMIN_PATH = '/admin/promotions';
 
@@ -31,7 +36,7 @@ function normalizeSlug(input) {
   return trimmed || null;
 }
 
-// ── Mutations ──────────────────────────────────────────────────────
+// ── Curation (the only admin-controlled Promotion fields) ──────────
 
 export async function togglePromotionActive(promotionId, isActive) {
   await requireAdmin('promotions');
@@ -141,307 +146,55 @@ export async function getActivePromotionsForAdmin() {
   return serialize(docs);
 }
 
-// ── Dual-Write CRUD ───────────────────────────────────────────────
+// ── Page Builder link ──────────────────────────────────────────────
 //
-// Local Mongo is the master once an admin creates a promotion via this
-// UI (source: 'genesis'). We mirror the write to MSDB so the upstream
-// stays in sync — MSDB then dispatches `promotion.*` webhooks; our
-// receiver detects `source === 'genesis'` and skips the upsert to
-// avoid a loop (see lib/webhooks/handlers.js handlePromotionEvent).
-
-function toStr(v) {
-  return typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim();
-}
-function toDateOrNull(v) {
-  if (!v) return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-function toBool(v) {
-  if (typeof v === 'boolean') return v;
-  return v === 'on' || v === 'true' || v === '1';
-}
-function toStrArr(v) {
-  if (Array.isArray(v)) return v.map(toStr).filter(Boolean);
-  if (typeof v === 'string' && v.length > 0) {
-    return v.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return [];
-}
+// The link between a promotion and its detail page lives on the PageBuilder
+// doc (`promotionId`). These actions write ONLY the PageBuilder side — the
+// Promotion doc stays read-only.
 
 /**
- * Strip HTML tags from `html` and collapse whitespace. Used to derive a
- * `detail_plain` when the admin only filled in the rich-text editor —
- * MSDB requires the plain field for card/SEO consumption.
+ * List builder pages of type `promotion` for the link selector, with the
+ * minimal shape the admin row needs (id, title, slug, status, current link).
  */
-function htmlToPlain(html) {
-  return String(html ?? '')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 500);
-}
-
-/**
- * Shape the form payload for MSDB. Field mapping (curl-verified):
- *   name                   ← title             (required, display name)
- *   label                  ← label             (required, e.g. "ลด 20%")
- *   slug                   ← slug              (optional)
- *   image_url              ← image_url
- *   detail_plain           ← detail_plain      (auto-derived from html if empty)
- *   detail_html            ← detail_html       (rich body)
- *   start_at               ← start_date
- *   end_at                 ← end_date
- *   is_published           ← is_published
- *   is_pinned              ← is_pinned
- *   related_public_courses ← related_courses[] (ObjectId[] — resolved
- *                              from course_id strings by the caller)
- *
- * `related_public_courses` is left as raw course_id strings here so the
- * caller can both (a) resolve them for MSDB and (b) keep them as-is for
- * the local Promotion document's `related_course_ids` field.
- */
-function shapeBody(formData) {
-  const get = (k) =>
-    formData instanceof FormData ? formData.get(k) : formData?.[k];
-  const getAll = (k) => {
-    if (formData instanceof FormData) return formData.getAll(k);
-    const v = formData?.[k];
-    return Array.isArray(v) ? v : [];
-  };
-
-  const detailHtml  = toStr(get('detail_html')  || get('description_html'));
-  let   detailPlain = toStr(get('detail_plain') || get('description'));
-  if (!detailPlain && detailHtml) detailPlain = htmlToPlain(detailHtml);
-
-  return {
-    name:           toStr(get('name')        || get('title')),
-    label:          toStr(get('label'))      || 'โปรโมชัน',
-    slug:           toStr(get('slug')) || undefined,
-    image_url:      toStr(get('image_url')),
-    detail_plain:   detailPlain,
-    detail_html:    detailHtml,
-    start_at:       toStr(get('start_at')    || get('start_date')) || null,
-    end_at:         toStr(get('end_at')      || get('end_date'))   || null,
-    is_published:   toBool(get('is_published')),
-    is_pinned:      toBool(get('is_pinned')),
-    // Raw course_id strings — resolved to ObjectIds by caller.
-    related_public_courses: toStrArr(
-      getAll('related_public_courses').length
-        ? getAll('related_public_courses')
-        : getAll('related_courses')
-    ),
-    source:         'genesis',
-  };
-}
-
-/**
- * Create a promotion. Sequence is local-first, then MSDB:
- *   1. Insert the row in our Mongo with source='genesis', placeholder
- *      msdb_id='' until upstream replies.
- *   2. POST to MSDB with the stamp `source: 'genesis'` and our local
- *      _id as `genesis_id` so the webhook receiver can correlate.
- *   3. Record the upstream `_id` back onto the local row so future
- *      updates can target it.
- * If step 2 fails we keep the local row but flag an error — admin can
- * retry from the edit modal.
- */
-export async function createPromotion(formData) {
+export async function getLinkablePromotionPages() {
   await requireAdmin('promotions');
   await dbConnect();
-
-  const body = shapeBody(formData);
-  if (!body.name)  return { ok: false, error: 'กรุณากรอกชื่อโปรโมชั่น' };
-  if (!body.label) return { ok: false, error: 'กรุณากรอกป้ายกำกับ' };
-
-  // course_id strings come straight off the form. MSDB needs ObjectIds,
-  // but the LOCAL document keeps the course_id strings (matches what
-  // syncPromotions writes from upstream).
-  const courseIdStrings = body.related_public_courses;
-  const { ids: objectIds, dropped } = await resolveCourseObjectIdsVerbose(courseIdStrings);
-
-  // 1. Local insert (placeholder promotion_id until MSDB ack'd)
-  let localDoc;
-  try {
-    localDoc = await Promotion.create({
-      promotion_id:    `genesis-pending-${Date.now()}`,
-      title:           body.name,
-      thumbnail_url:   body.image_url,
-      detail_html:     body.detail_html,
-      html_content:    body.detail_html, // legacy mirror
-      detail_plain:    body.detail_plain,
-      start_date:      toDateOrNull(body.start_at),
-      end_date:        toDateOrNull(body.end_at),
-      related_course_ids: courseIdStrings,
-      is_published:    body.is_published,
-      is_pinned:       body.is_pinned,
-      is_active:       body.is_published,
-      source:          'genesis',
-      msdb_id:         '',
-    });
-  } catch (err) {
-    return { ok: false, error: err?.message ?? 'บันทึก local ไม่สำเร็จ' };
-  }
-
-  // 2. Write through to MSDB. The receiver detects source=genesis +
-  //    genesis_id and skips the inbound-webhook upsert (anti-loop).
-  let upstreamId = '';
-  try {
-    const { item } = await msdbCreate('promotions', {
-      ...body,
-      related_public_courses: objectIds, // ObjectId[] required upstream
-      genesis_id: String(localDoc._id),
-    });
-    upstreamId = String(item?._id ?? '');
-  } catch (err) {
-    return {
-      ok: false,
-      error: `บันทึกลง MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
-      data: serialize(localDoc),
-    };
-  }
-
-  // 3. Stamp upstream id onto local doc
-  if (upstreamId) {
-    await Promotion.updateOne(
-      { _id: localDoc._id },
-      { $set: { msdb_id: upstreamId, promotion_id: upstreamId } }
-    );
-  }
-
-  revalidatePath(ADMIN_PATH);
-  revalidatePath('/promotions');
-  return {
-    ok: true,
-    data: { ...serialize(localDoc), msdb_id: upstreamId },
-    warning: dropped.length
-      ? `ไม่พบ course_id: ${dropped.join(', ')} (ไม่ได้บันทึกใน related_public_courses)`
-      : undefined,
-  };
+  const docs = await PageBuilder
+    .find({ pageType: 'promotion' })
+    .select('title slug status promotionId')
+    .sort({ updatedAt: -1 })
+    .lean();
+  return serialize(docs);
 }
 
-export async function updatePromotion(localId, formData) {
+/**
+ * Link (or unlink) a builder page to a promotion by writing the PageBuilder
+ * doc's `promotionId` — NEVER the Promotion doc. One page per promotion:
+ * linking page X first clears the link from any other page pointing at the
+ * same promotion. An empty `pageBuilderId` just clears the current link.
+ */
+export async function setPromotionPageLink(promotionId, pageBuilderId) {
   await requireAdmin('promotions');
+  if (!promotionId) return { ok: false, error: 'Missing promotion_id' };
   await dbConnect();
-  if (!localId) return { ok: false, error: 'Missing promotion id' };
 
-  const promo = await Promotion.findById(localId).lean();
-  if (!promo) return { ok: false, error: 'ไม่พบโปรโมชั่น' };
-
-  const body = shapeBody(formData);
-  if (!body.name)  return { ok: false, error: 'กรุณากรอกชื่อโปรโมชั่น' };
-  if (!body.label) return { ok: false, error: 'กรุณากรอกป้ายกำกับ' };
-
-  const courseIdStrings = body.related_public_courses;
-  const { ids: objectIds, dropped } = await resolveCourseObjectIdsVerbose(courseIdStrings);
-
-  // 1. Local update
-  await Promotion.updateOne(
-    { _id: localId },
-    {
-      $set: {
-        title:              body.name,
-        thumbnail_url:      body.image_url,
-        detail_html:        body.detail_html,
-        html_content:       body.detail_html, // legacy mirror
-        detail_plain:       body.detail_plain,
-        start_date:         toDateOrNull(body.start_at),
-        end_date:           toDateOrNull(body.end_at),
-        related_course_ids: courseIdStrings,
-        is_published:       body.is_published,
-        is_pinned:          body.is_pinned,
-      },
-    }
+  // Enforce one-to-one: drop any page currently linked to this promotion.
+  await PageBuilder.updateMany(
+    { promotionId: String(promotionId) },
+    { $set: { promotionId: '' } }
   );
 
-  // 2. MSDB write-back — only if we have an upstream id (promotions
-  //    owned by MSDB use `promotion_id`; genesis-created rows store the
-  //    same value in `msdb_id`).
-  const upstreamId = promo.msdb_id || promo.promotion_id;
-  if (upstreamId) {
-    try {
-      await msdbUpdate('promotions', upstreamId, {
-        ...body,
-        related_public_courses: objectIds,
-      });
-    } catch (err) {
-      return {
-        ok: false,
-        error: `อัปเดต MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
-      };
-    }
+  if (pageBuilderId) {
+    const linked = await PageBuilder.findByIdAndUpdate(
+      pageBuilderId,
+      { $set: { promotionId: String(promotionId) } },
+      { new: true }
+    );
+    if (!linked) return { ok: false, error: 'ไม่พบหน้าเพจ' };
   }
 
+  revalidateTag('page-builder');
   revalidatePath(ADMIN_PATH);
   revalidatePath('/promotions');
-  return {
-    ok: true,
-    warning: dropped.length
-      ? `ไม่พบ course_id: ${dropped.join(', ')} (ไม่ได้บันทึกใน related_public_courses)`
-      : undefined,
-  };
-}
-
-// MongoDB ObjectIds are 24 hex chars. Anything else is a stale
-// placeholder (e.g. `genesis-pending-<timestamp>` left by promotions
-// created before the dual-write fix landed) and would make MSDB throw
-// `Cast to ObjectId failed` if we forwarded it.
-function isObjectIdLike(v) {
-  return typeof v === 'string' && /^[a-f\d]{24}$/i.test(v);
-}
-
-/**
- * Delete a promotion. Local-first:
- *   1. Drop the Mongo row + its PromotionConfig.
- *   2. Best-effort write-back to MSDB, but only if `msdb_id` looks
- *      like a real ObjectId. Orphan rows from the pre-fix era simply
- *      vanish locally; there's nothing valid to delete upstream.
- *   3. Upstream failures are logged + surfaced as a `warning` — they
- *      don't undo the local delete (which would leave the admin
- *      unable to remove broken rows at all).
- */
-export async function deletePromotion(localId) {
-  await requireAdmin('promotions');
-  await dbConnect();
-  if (!localId) return { ok: false, error: 'Missing promotion id' };
-
-  const promo = await Promotion.findById(localId).lean();
-  if (!promo) return { ok: false, error: 'ไม่พบโปรโมชั่น' };
-
-  // 1. Local delete first
-  await Promotion.deleteOne({ _id: localId });
-  if (promo.promotion_id) {
-    await PromotionConfig.deleteOne({ promotion_id: promo.promotion_id });
-  }
-  revalidatePath(ADMIN_PATH);
-  revalidatePath('/promotions');
-
-  // 2. Pick the most likely real upstream id and write-back if valid.
-  const candidates = [promo.msdb_id, promo.promotion_id].filter(Boolean);
-  const upstreamId = candidates.find(isObjectIdLike);
-
-  if (!upstreamId) {
-    // No usable upstream id (e.g. placeholder `genesis-pending-…` from
-    // pre-fix era). Local delete already happened — done.
-    return { ok: true };
-  }
-
-  try {
-    await msdbDelete('promotions', upstreamId);
-    return { ok: true };
-  } catch (err) {
-    console.warn('[deletePromotion] MSDB delete failed:', err?.message);
-    return {
-      ok: true,
-      warning: `ลบ local สำเร็จ แต่ลบที่ MSDB ไม่สำเร็จ: ${err?.message ?? 'unknown'}`,
-    };
-  }
+  return { ok: true };
 }

@@ -4,7 +4,6 @@
  * Cloudinary upload endpoint for admin forms. Wraps `uploadToCloudinary`
  * with size + MIME validation and an auth gate. Used by:
  *   - <ImageUploadField> in CourseForm (folder: "courses/covers")
- *   - <ImageUploadField> in PromotionModal (folder: "promotions")
  *   - other admin forms as needed
  *
  * Request: multipart/form-data
@@ -39,6 +38,13 @@ const ALLOWED_FOLDERS = new Set([
   'banners',
   'articles',
   'custom-pages',
+  'page-builder',   // PageBuilder image sections (2B editor)
+  // Genesis promotion covers (promotion mode, Phase 1). DELIBERATELY a sibling of
+  // 'page-builder', NOT under it: the item-5 Cloudinary GC scopes to
+  // '<base>/page-builder/', and promotionCover stores a URL with no publicId
+  // reference, so a cover inside that scope would look like an orphan. Keeping it
+  // out of scope makes "not GC-tracked yet" (option B) also mean "not at risk".
+  'promotion-covers',
   'notifications',
   'about',
   'career-paths',

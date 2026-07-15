@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node test/run.mjs",
+    "test:smoke": "node --env-file=.env.local test/smoke.mjs",
+    "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",
@@ -69,6 +72,7 @@
     "eslint": "^9.13.0",
     "eslint-config-next": "^15.0.0",
     "postcss": "^8.4.47",
+    "sucrase": "^3.35.1",
     "tailwindcss": "^3.4.14"
   },
   "engines": {

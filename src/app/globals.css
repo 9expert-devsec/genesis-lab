@@ -131,6 +131,75 @@
   --9e-slate-lt-900: #F8F9FB;
   --9e-slate-lt-950: #FBFCFD;
 
+  /* ── Page Builder accent scales (§7 accentColor / theme presets) ──
+   * Step 50 = base, tinting toward white (light) / toward #080E16 (dark),
+   * identical construction to the blue/lime scales above.
+   *
+   * Contrast (base step 50 as TEXT, WCAG AA 4.5:1):
+   *   orange #FF9124 → navy 7.7 / card 6.9 ✅   cyan #24DAFF → 10.4 / 9.2 ✅
+   *   green  #1FC17E → navy 7.4 / card 6.6 ✅
+   *   purple #9124FF → navy 3.2 / card 2.9 ✗ — fill / large-text / decorative
+   *     ONLY on dark surfaces, never small body text. Enforced as a usage
+   *     rule in Phase 2 (accent-as-fill vs accent-as-text).
+   *
+   * `green` deliberately BREAKS the S100/L57 base derivation used by the
+   * others: at that lightness a green lands on mint (#24FF7F) that both
+   * competes with the reserved lime CTA (#D4F73F) and reads as neon, not the
+   * "positive/success" green the accent name implies. It is pinned instead to
+   * an emerald (H155 S72 L44) that clears AA and is distinct from lime. */
+
+  /* Purple scale */
+  --9e-purple-50:  #9124FF;
+  --9e-purple-100: #9C3AFF;
+  --9e-purple-200: #A750FF;
+  --9e-purple-300: #B266FF;
+  --9e-purple-400: #BD7CFF;
+  --9e-purple-500: #C892FF;
+  --9e-purple-600: #D3A7FF;
+  --9e-purple-700: #DEBDFF;
+  --9e-purple-800: #E9D3FF;
+  --9e-purple-900: #F4E9FF;
+  --9e-purple-950: #FAF4FF;
+
+  /* Orange scale */
+  --9e-orange-50:  #FF9124;
+  --9e-orange-100: #FF9C3A;
+  --9e-orange-200: #FFA750;
+  --9e-orange-300: #FFB266;
+  --9e-orange-400: #FFBD7C;
+  --9e-orange-500: #FFC892;
+  --9e-orange-600: #FFD3A7;
+  --9e-orange-700: #FFDEBD;
+  --9e-orange-800: #FFE9D3;
+  --9e-orange-900: #FFF4E9;
+  --9e-orange-950: #FFFAF4;
+
+  /* Cyan scale */
+  --9e-cyan-50:  #24DAFF;
+  --9e-cyan-100: #3ADEFF;
+  --9e-cyan-200: #50E1FF;
+  --9e-cyan-300: #66E5FF;
+  --9e-cyan-400: #7CE9FF;
+  --9e-cyan-500: #92EDFF;
+  --9e-cyan-600: #A7F0FF;
+  --9e-cyan-700: #BDF4FF;
+  --9e-cyan-800: #D3F8FF;
+  --9e-cyan-900: #E9FBFF;
+  --9e-cyan-950: #F4FDFF;
+
+  /* Green scale (emerald — see note above) */
+  --9e-green-50:  #1FC17E;
+  --9e-green-100: #35C78B;
+  --9e-green-200: #4CCD98;
+  --9e-green-300: #62D4A5;
+  --9e-green-400: #79DAB2;
+  --9e-green-500: #8FE0BF;
+  --9e-green-600: #A5E6CB;
+  --9e-green-700: #BCECD8;
+  --9e-green-800: #D2F3E5;
+  --9e-green-900: #E9F9F2;
+  --9e-green-950: #F4FCF9;
+
 }
 
 /* ── Semantic tokens — DARK MODE overrides ── */
@@ -225,6 +294,60 @@
   --9e-slate-lt-800: #F1F3F6;
   --9e-slate-lt-900: #F8F9FB;
   --9e-slate-lt-950: #FBFCFD;
+
+  /* ── Page Builder accent scales — DARK (see :root note) ── */
+
+  /* Purple scale */
+  --9e-purple-50:  #9124FF;
+  --9e-purple-100: #8322E8;
+  --9e-purple-200: #7620D0;
+  --9e-purple-300: #681DB9;
+  --9e-purple-400: #5A1BA2;
+  --9e-purple-500: #4D198B;
+  --9e-purple-600: #3F1773;
+  --9e-purple-700: #31155C;
+  --9e-purple-800: #231245;
+  --9e-purple-900: #16102D;
+  --9e-purple-950: #0F0F22;
+
+  /* Orange scale */
+  --9e-orange-50:  #FF9124;
+  --9e-orange-100: #E68423;
+  --9e-orange-200: #CE7721;
+  --9e-orange-300: #B56A20;
+  --9e-orange-400: #9C5D1E;
+  --9e-orange-500: #84501D;
+  --9e-orange-600: #6B421C;
+  --9e-orange-700: #52351A;
+  --9e-orange-800: #392819;
+  --9e-orange-900: #211B17;
+  --9e-orange-950: #141517;
+
+  /* Cyan scale */
+  --9e-cyan-50:  #24DAFF;
+  --9e-cyan-100: #21C6E8;
+  --9e-cyan-200: #1EB1D0;
+  --9e-cyan-300: #1C9DB9;
+  --9e-cyan-400: #1988A2;
+  --9e-cyan-500: #16748B;
+  --9e-cyan-600: #136073;
+  --9e-cyan-700: #104B5C;
+  --9e-cyan-800: #0E3745;
+  --9e-cyan-900: #0B222D;
+  --9e-cyan-950: #091822;
+
+  /* Green scale (emerald) */
+  --9e-green-50:  #1FC17E;
+  --9e-green-100: #1DAF74;
+  --9e-green-200: #1A9D69;
+  --9e-green-300: #188B5F;
+  --9e-green-400: #167954;
+  --9e-green-500: #14684A;
+  --9e-green-600: #115640;
+  --9e-green-700: #0F4435;
+  --9e-green-800: #0D322B;
+  --9e-green-900: #0A2020;
+  --9e-green-950: #09171B;
 }
 
 /* Native form controls and scrollbars follow the active theme */
