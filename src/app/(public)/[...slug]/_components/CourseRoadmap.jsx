@@ -7,21 +7,53 @@ import { ContentSection } from './ContentSection';
 
 const isSvgUrl = (url) => /\.svg(\?|#|$)/i.test(url || '');
 
-const CONTAINER =
-  'relative aspect-video w-full overflow-hidden rounded-xl border border-gray-200 bg-9e-ice';
+// The container no longer forces a 16:9 box (`aspect-video`) — roadmaps are wide
+// and short (e.g. Power BI's 5:1) and letterboxed badly inside it. Each path
+// below sizes the container to the asset's real proportions instead. `relative`
+// stays because the SVG skeleton/overlay are positioned against it; `w-full` and
+// `overflow-hidden` stay per spec.
+const CONTAINER = 'relative w-full overflow-hidden';
+
+// Reserve a non-zero height while the SVG's real aspect ratio is still unknown
+// (during load, or if a fetched SVG has no viewBox to measure). Prevents the
+// container collapsing to 0 and the skeleton vanishing / the page below jumping
+// from 0 → full height once the markup lands.
+const HEIGHT_RESERVE = 'min-h-[200px]';
 
 /**
- * Raster roadmap (png/jpg) — keep next/image optimization.
+ * Derive the intrinsic w/h ratio from an SVG's `viewBox` so the container can
+ * reserve the asset's true proportions before injecting the markup. Returns null
+ * when there's no usable viewBox (caller falls back to HEIGHT_RESERVE).
+ */
+function parseSvgAspect(svg) {
+  const m =
+    /viewBox\s*=\s*["']\s*[\d.eE+-]+[\s,]+[\d.eE+-]+[\s,]+([\d.eE+-]+)[\s,]+([\d.eE+-]+)\s*["']/.exec(
+      svg || '',
+    );
+  if (!m) return null;
+  const w = parseFloat(m[1]);
+  const h = parseFloat(m[2]);
+  return w > 0 && h > 0 ? w / h : null;
+}
+
+/**
+ * Raster roadmap (png/jpg). `next/image` with `fill` needs a positioned ancestor
+ * of KNOWN size — exactly the fixed box we're removing — so it can't inherit an
+ * intrinsic height. Switched to width/height-based sizing (the repo's standard
+ * `h-auto w-full` pattern, see ImageSection): the width/height only seed an
+ * aspect ratio to reserve space pre-load; once the image loads the browser uses
+ * its true intrinsic ratio, so no fixed letterbox and no zero-height collapse.
  */
 function RasterRoadmap({ src, alt, className }) {
   return (
-    <div className={`${CONTAINER} ${className}`}>
+    <div className={`${CONTAINER} ${className}`} data-roadmap-container>
       <Image
         src={src}
         alt={alt}
-        fill
+        width={1600}
+        height={900}
         sizes="(max-width: 1024px) 100vw, 800px"
-        className="object-contain"
+        className="h-auto w-full object-contain"
       />
     </div>
   );
@@ -44,11 +76,14 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
   // 'loading' | 'ready' | 'error'
   const [status, setStatus] = useState('loading');
   const [markup, setMarkup] = useState('');
+  // Intrinsic w/h from the SVG's viewBox; null until measured.
+  const [aspect, setAspect] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     setStatus('loading');
     setMarkup('');
+    setAspect(null);
 
     fetch(src)
       .then((res) => {
@@ -66,6 +101,7 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
         const { default: DOMPurify } = await import('isomorphic-dompurify');
         if (cancelled) return;
         const clean = sanitizeRoadmapSvg(svgText, DOMPurify);
+        setAspect(parseSvgAspect(clean));
         setMarkup(clean);
         setStatus('ready');
       })
@@ -94,22 +130,28 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
     });
   }, [status, markup]);
 
-  // Failed fetch/sanitize → still show the roadmap, non-interactive.
+  // Failed fetch/sanitize → still show the roadmap, non-interactive. The <img>
+  // flows normally (`h-auto w-full`) so the container takes the image's intrinsic
+  // height — no positioned ancestor, no reserve, and it can't collapse to zero.
   if (status === 'error') {
     return (
-      <div className={`${CONTAINER} ${className}`}>
+      <div className={`${CONTAINER} ${className}`} data-roadmap-container>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt={alt}
-          className="absolute inset-0 h-full w-full object-contain"
-        />
+        <img src={src} alt={alt} className="h-auto w-full object-contain" />
       </div>
     );
   }
 
+  // When the viewBox is known, drive the container height from the asset's real
+  // aspect ratio so the injected SVG (w-full, h-auto) fills it with no empty
+  // band. Until then (loading, or a viewBox-less SVG) fall back to a min-height
+  // reserve so the skeleton is visible and the layout doesn't jump from zero.
   return (
-    <div className={`${CONTAINER} ${className}`}>
+    <div
+      className={`${CONTAINER} ${aspect ? '' : HEIGHT_RESERVE} ${className}`}
+      style={aspect ? { aspectRatio: aspect } : undefined}
+      data-roadmap-container
+    >
       {status === 'loading' && (
         <div className="absolute inset-0 animate-pulse bg-gray-100" />
       )}

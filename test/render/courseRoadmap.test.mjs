@@ -8,13 +8,20 @@ import {
 
 // Duplicate-ID collision fix. The SVG is injected in a browser-only effect, so
 // server markup can't hold the inlined <svg>; what it CAN measure is how many
-// asset COPIES the component emits — one container div (`.aspect-video`) per
-// inlined SVG. Two copies of the same file = every id duplicated in the DOM =
+// asset COPIES the component emits — one container div (`[data-roadmap-container]`)
+// per inlined SVG. Two copies of the same file = every id duplicated in the DOM =
 // the bug. So container-count is a faithful proxy for the duplication here; the
 // exact injected-ID count (=1) is proven separately by the client-DOM script.
+//
+// Selector note: this used to key on `.aspect-video`, but that class was removed
+// when the container switched to sizing itself from the asset's real aspect ratio.
+// `data-roadmap-container` is a stable, one-per-copy marker on each container div
+// across all paths (svg loading/ready/error + raster), so the counts below are
+// unchanged and the CONTROL test still fails against the pre-fix (two-copy) plan.
 
 const R = (course) => renderToStaticMarkup(CourseRoadmap({ course }));
-const countAssets = (html) => (html.match(/aspect-video/g) || []).length;
+const countAssets = (html) =>
+  (html.match(/data-roadmap-container/g) || []).length;
 
 const NAME = 'Excel Advanced';
 const DESK = 'https://cdn/excel-advanced-desktop.svg';
@@ -37,6 +44,35 @@ test('different URLs still inline BOTH copies, md-gated (no regression)', () => 
   assert.equal(countAssets(html), 2, 'two copies when the files genuinely differ');
   assert.ok(html.includes('block md:hidden'), 'mobile copy gated < md');
   assert.ok(html.includes('hidden md:block'), 'desktop copy gated >= md');
+});
+
+// Container-sizing change: the fixed 16:9 box (`aspect-video`) is gone; the
+// container is sized to the asset's real proportions instead. These assert the
+// class is removed and the replacement markers are present on the paths a
+// server render can reach (the SVG path renders its initial `status==='loading'`
+// branch because renderToStaticMarkup never runs the browser-only fetch effect).
+test('SVG container drops aspect-video and stays identifiable', () => {
+  const html = R({ course_name: NAME, course_roadmap_desktop_url: DESK });
+  assert.ok(!/aspect-video/.test(html), 'the hardcoded 16:9 box is gone');
+  assert.ok(/data-roadmap-container/.test(html), 'container still identifiable');
+});
+
+test('loading state reserves a non-zero height and shows the skeleton', () => {
+  const html = R({ course_name: NAME, course_roadmap_desktop_url: DESK });
+  assert.ok(
+    /min-h-\[200px\]/.test(html),
+    'container reserves a min height while the real ratio is unknown',
+  );
+  assert.ok(/animate-pulse/.test(html), 'skeleton still rendered inside it');
+});
+
+test('raster (non-svg) asset also drops aspect-video and keeps its container', () => {
+  const html = R({
+    course_name: NAME,
+    course_roadmap_desktop_url: 'https://cdn/roadmap.png',
+  });
+  assert.ok(!/aspect-video/.test(html), 'raster path is not letterboxed either');
+  assert.equal(countAssets(html), 1, 'raster still emits exactly one container');
 });
 
 test('neither URL set → renders nothing (SidebarNav gate unchanged)', () => {
