@@ -18,6 +18,11 @@ import Promotion from '@/models/Promotion';
 import CareerPath from '@/models/CareerPath';
 import Faq from '@/models/Faq';
 import Instructor from '@/models/Instructor';
+import CourseExtension from '@/models/CourseExtension';
+import {
+  coursePathFromId,
+  planCourseRevalidation,
+} from '@/lib/webhooks/courseRevalidatePlan';
 
 // ── shared utils (mirror the sync libs) ─────────────────────────────
 
@@ -43,66 +48,62 @@ function shapeTags(tags) {
 
 // Best-effort revalidate — never let a path-not-found error reach the
 // route handler, since that would cause a 5xx and an MSDB retry storm.
+// Each returns a record of WHAT was revalidated and WHETHER it succeeded, so a
+// handler can surface the outcome into WebhookLog (a swallowed console.warn is
+// invisible in the audit trail — which is exactly what made the roadmap-stale
+// incident an investigation instead of a one-line query).
 function safeRevalidate(path, type) {
+  const target = type ? `${path} (${type})` : path;
   try {
     if (type) revalidatePath(path, type);
     else revalidatePath(path);
+    return { type: 'path', target, ok: true };
   } catch (err) {
     console.warn('[webhook] revalidatePath failed for', path, err?.message);
+    return { type: 'path', target, ok: false, error: err?.message ?? String(err) };
   }
 }
 function safeRevalidateTag(tag) {
   try {
     revalidateTag(tag);
+    return { type: 'tag', target: tag, ok: true };
   } catch (err) {
     console.warn('[webhook] revalidateTag failed for', tag, err?.message);
+    return { type: 'tag', target: tag, ok: false, error: err?.message ?? String(err) };
   }
 }
 
 // ── handlers ────────────────────────────────────────────────────────
 
 /**
- * Build the public detail-page path for a course code. The public
- * route at `/[...slug]` matches `<slug>-training-course`; the slug is
- * `course_id` lowercased with underscores → dashes.
- *   "MSE-L1"     → "/mse-l1-training-course"
- *   "POWER_BI"   → "/power-bi-training-course"
+ * Resolve every PUBLISHED urlAlias for a course_id. Each is a distinct public
+ * URL with its own Full Route (HTML) cache, so each must be revalidated by path.
+ * A course may have zero aliases (legacy-only URL) or several. Empty/unset
+ * aliases (stored as '' / null) are filtered out.
+ *
+ * `deps` is a test seam only — production passes nothing and the real
+ * db/connect + CourseExtension model are used.
  */
-function coursePathFromId(courseId) {
-  if (!courseId) return null;
-  const slug = String(courseId).toLowerCase().replace(/_/g, '-');
-  return `/${slug}-training-course`;
+export async function collectCourseAliasPaths(courseId, deps = {}) {
+  const {
+    dbConnect: _dbConnect = dbConnect,
+    CourseExtension: _CourseExtension = CourseExtension,
+  } = deps;
+  if (!courseId) return [];
+  await _dbConnect();
+  const exts = await _CourseExtension
+    .find({ courseId, isPublished: { $ne: false } })
+    .select('urlAlias')
+    .lean();
+  return (Array.isArray(exts) ? exts : [])
+    .map((e) => toStr(e?.urlAlias))
+    .filter(Boolean);
 }
 
-export async function handleCourseEvent(event, data) {
-  // We don't mirror course detail rows into Mongo — public pages fetch
-  // via aiFetch with cache tags + ISR (revalidate=3600). Bust the
-  // tags + paths so the next request hits upstream.
-  const courseId = toStr(data?.course_id); // human code, e.g. "MSE-L1"
-
-  if (event === 'course.deleted') {
-    // Detail page will 404 on its own once MSDB no longer returns the
-    // course — we just need the list surfaces refreshed.
-    safeRevalidateTag('public-courses');
-    safeRevalidate('/search');
-    safeRevalidate('/');
-    return;
-  }
-
-  // created or updated → flush detail + list caches
-  if (courseId) {
-    safeRevalidateTag(`course:${courseId}`); // tag used by getCourseByCode
-  }
-  safeRevalidateTag('public-courses');
-  const path = coursePathFromId(courseId);
-  if (path) safeRevalidate(path);
-  safeRevalidate('/search');
-  safeRevalidate('/');
-
-  // Homepage reads from a Mongo LandingCache snapshot built by the
-  // landing-sync cron. Trigger a one-shot resync in the background so
-  // the snapshot reflects the change without waiting up to 3h for the
-  // next cron tick. Fire-and-forget: errors are non-critical.
+// Homepage reads from a Mongo LandingCache snapshot built by the landing-sync
+// cron. Trigger a one-shot resync in the background so the snapshot reflects the
+// change without waiting up to 3h for the next tick. Fire-and-forget.
+async function defaultSyncLanding() {
   try {
     const { syncLandingData } = await import('@/lib/landing/syncLandingData');
     syncLandingData().catch((err) =>
@@ -111,6 +112,39 @@ export async function handleCourseEvent(event, data) {
   } catch (err) {
     console.warn('[handleCourseEvent] could not load syncLandingData:', err?.message ?? err);
   }
+}
+
+export async function handleCourseEvent(event, data, deps = {}) {
+  // We don't mirror course detail rows into Mongo — public pages fetch via
+  // aiFetch with cache tags + ISR (revalidate=3600). Bust the tags + every
+  // reachable path so the next request hits upstream. Returns a structured
+  // record of what was revalidated (surfaced into WebhookLog by the route).
+  const { syncLanding = defaultSyncLanding } = deps;
+  const courseId = toStr(data?.course_id); // human code, e.g. "MSE-L1"
+  const revalidated = [];
+  const track = (r) => { if (r) revalidated.push(r); };
+
+  // Resolve alias paths FIRST, isolated in its own try/catch: a DB hiccup here
+  // must not cost the tag + legacy-path revalidation below. On failure we record
+  // the miss and proceed with an empty alias list (legacy URL still works).
+  let aliasPaths = [];
+  if (event !== 'course.deleted' && courseId) {
+    try {
+      aliasPaths = await collectCourseAliasPaths(courseId, deps);
+    } catch (err) {
+      const msg = err?.message ?? String(err);
+      console.warn('[handleCourseEvent] alias lookup failed:', msg);
+      track({ type: 'alias-lookup', target: `course_id:${courseId}`, ok: false, error: msg });
+    }
+  }
+
+  const { tags, paths } = planCourseRevalidation(event, courseId, aliasPaths);
+  for (const t of tags) track(safeRevalidateTag(t));
+  for (const p of paths) track(safeRevalidate(p));
+
+  if (event !== 'course.deleted') await syncLanding();
+
+  return { revalidated };
 }
 
 export async function handleScheduleEvent(_event, data) {
