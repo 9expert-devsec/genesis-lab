@@ -134,24 +134,59 @@ function RoadmapAsset({ src, alt, className }) {
   );
 }
 
-export function CourseRoadmap({ course }) {
+/**
+ * Decide which roadmap asset(s) to inline and how each is gated responsively.
+ *
+ * Returns `[]` (→ no section) when neither URL is set. Otherwise:
+ *   - Different resolved URLs → TWO copies, mobile `block md:hidden` +
+ *     desktop `hidden md:block` (unchanged behaviour).
+ *   - SAME resolved URL (the common desktop-only case) → ONE copy shown at all
+ *     breakpoints. Inlining the identical SVG twice duplicates every `id` in the
+ *     file within one document; `url(#gradient)` refs then resolve to the FIRST
+ *     match — which sits in the `display:none` mobile copy — and paint nothing.
+ *     Rendering it once removes the collision while showing the same asset at
+ *     every breakpoint. Compare the RESOLVED src strings, not which DB field was
+ *     populated (both fields set to the same URL must also collapse to one).
+ *
+ * Pure + exported so the dedup decision is unit-testable without a client mount
+ * (the SVG itself is injected in a browser-only effect).
+ */
+export function roadmapAssetPlan(course) {
   const desktop = course?.course_roadmap_desktop_url || '';
   const mobile = course?.course_roadmap_mobile_url || '';
 
-  if (!desktop && !mobile) return null;
+  if (!desktop && !mobile) return [];
 
   // Fall back to whichever asset exists so a single-image course still
   // renders at every breakpoint.
   const desktopSrc = desktop || mobile;
   const mobileSrc = mobile || desktop;
+
+  if (desktopSrc === mobileSrc) {
+    return [{ src: desktopSrc, className: 'block' }];
+  }
+  return [
+    { src: mobileSrc, className: 'block md:hidden' },
+    { src: desktopSrc, className: 'hidden md:block' },
+  ];
+}
+
+export function CourseRoadmap({ course }) {
+  const assets = roadmapAssetPlan(course);
+  if (assets.length === 0) return null;
+
   const alt = `${course.course_name} roadmap`;
 
   return (
     <ContentSection id="roadmap" title="Road Map">
-      {/* Mobile asset < md */}
-      <RoadmapAsset src={mobileSrc} alt={alt} className="block md:hidden" />
-      {/* Desktop asset >= md */}
-      <RoadmapAsset src={desktopSrc} alt={alt} className="hidden md:block" />
+      {assets.map((asset) => (
+        <RoadmapAsset
+          key={asset.className}
+          src={asset.src}
+          alt={alt}
+          className={asset.className}
+        />
+      ))}
     </ContentSection>
   );
 }
