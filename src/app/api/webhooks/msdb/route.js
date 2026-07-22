@@ -44,7 +44,7 @@ function verifySignature(rawBody, headerValue, secret) {
   }
 }
 
-async function logEvent({ event, payload, status, error }) {
+async function logEvent({ event, payload, status, error, revalidated }) {
   try {
     await dbConnect();
     await WebhookLog.create({
@@ -53,6 +53,10 @@ async function logEvent({ event, payload, status, error }) {
       payload:      payload ?? null,
       status:       status === 'error' ? 'error' : 'ok',
       error:        error || '',
+      // Audit trail of what this delivery actually revalidated (tags + paths)
+      // and whether each call succeeded — so a stale-cache report is one query,
+      // not an investigation. Null for events whose handler returns nothing.
+      revalidated:  revalidated ?? null,
       processed_at: new Date(),
     });
   } catch (err) {
@@ -122,8 +126,14 @@ export async function POST(req) {
   }
 
   try {
-    await dispatchEvent(event, data);
-    await logEvent({ event, payload: parsed, status: 'ok', error: '' });
+    const result = await dispatchEvent(event, data);
+    await logEvent({
+      event,
+      payload: parsed,
+      status: 'ok',
+      error: '',
+      revalidated: result?.revalidated ?? null,
+    });
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (err) {
     const msg = err?.message ?? String(err);

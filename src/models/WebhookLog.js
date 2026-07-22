@@ -19,6 +19,10 @@ const WebhookLogSchema = new mongoose.Schema(
     payload:      { type: mongoose.Schema.Types.Mixed, default: null },
     status:       { type: String, enum: ['ok', 'error'], default: 'ok', index: true },
     error:        { type: String, default: '' },
+    // Audit of cache revalidation performed by the handler: an array of
+    // { type: 'tag'|'path'|'alias-lookup', target, ok, error? }. Null when the
+    // event's handler performs/returns no revalidation.
+    revalidated:  { type: mongoose.Schema.Types.Mixed, default: null },
     processed_at: { type: Date,   default: () => new Date() },
   },
   { timestamps: true, collection: 'webhook_logs' }

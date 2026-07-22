@@ -35,6 +35,10 @@ const EXTS = ['.js', '.jsx'];
 const STUBS = {
   'next/link': path.join(ROOT, 'test', 'stub-next-link.mjs'),
   'next/image': path.join(ROOT, 'test', 'stub-next-image.mjs'),
+  // next/cache + next/server don't resolve outside a Next runtime; stub them so
+  // webhook handler/route code can be exercised under this loader.
+  'next/cache': path.join(ROOT, 'test', 'stub-next-cache.mjs'),
+  'next/server': path.join(ROOT, 'test', 'stub-next-server.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);
