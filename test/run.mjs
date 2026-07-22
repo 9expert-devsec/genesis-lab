@@ -32,7 +32,7 @@ register(new URL('./loader.mjs', import.meta.url));
 const { run } = await import('node:test');
 const { spec } = await import('node:test/reporters');
 
-const FLOOR = 137; // minimum tests expected across pure/fs/render (see meta-control note). 126 after 2C.2b + 5b-audit + fail-loud hardening + promotion-mode Phases 1-3 + roadmap-svg scrub; 132 after webhook course-revalidate planner (6); 137 after CourseRoadmap dedup (5).
+const FLOOR = 140; // minimum tests expected across pure/fs/render (see meta-control note). 126 after 2C.2b + 5b-audit + fail-loud hardening + promotion-mode Phases 1-3 + roadmap-svg scrub; 132 after webhook course-revalidate planner (6); 137 after CourseRoadmap dedup (5); 140 after roadmap intrinsic-aspect sizing (+3).
 const TIERS = ['pure', 'fs', 'render'];
 const TEST_DIR = path.dirname(fileURLToPath(import.meta.url));
 
