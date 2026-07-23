@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import localFont from 'next/font/local';
 import { siteConfig } from '@/config/site';
+import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Analytics } from '@/components/analytics/Analytics';
 import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
@@ -72,16 +73,21 @@ export const metadata = {
     siteName:    siteConfig.name,
     title:       `${siteConfig.name} — ${siteConfig.tagline}`,
     description: siteConfig.description,
-    images: [{ url: '/logo/9exp-stand.png' }],
+    // Dedicated 1.91:1 (1200×630) social card. metadataBase makes the
+    // root-relative url absolute in the emitted tag. width/height let
+    // crawlers lay out the card before downloading the image.
+    images: [OG_DEFAULT_IMAGE],
   },
   twitter: {
     card:        'summary_large_image',
     title:       siteConfig.name,
     description: siteConfig.description,
-    images: ['/logo/9exp-stand.png'],
+    images: [OG_DEFAULT_IMAGE.url],
   },
   // Next.js App Router auto-discovers src/app/favicon.ico; the entries
   // below add a PNG fallback (Apple/Android home-screen icons need it).
+  // These stay on the SQUARE asset (9exp-stand.png is 400×400) — icons
+  // must be square, which is why the OG card above uses a separate file.
   icons: {
     icon: '/logo/9exp-stand.png',
     apple: '/logo/9exp-stand.png',
