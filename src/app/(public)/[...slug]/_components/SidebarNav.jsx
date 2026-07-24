@@ -1,4 +1,15 @@
-import { ChevronRight } from 'lucide-react';
+import {
+  BookOpen,
+  CalendarDays,
+  CircleHelp,
+  FileText,
+  GraduationCap,
+  ListChecks,
+  Map,
+  Monitor,
+  Target,
+  Users,
+} from 'lucide-react';
 
 /**
  * In-page jump links. Each entry is filtered by whether its target
@@ -6,46 +17,68 @@ import { ChevronRight } from 'lucide-react';
  */
 export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
   const links = [
-    { id: 'schedule', label: 'ตารางฝึกอบรม', show: hasSchedules },
+    {
+      id: 'schedule',
+      label: 'ตารางฝึกอบรม',
+      icon: CalendarDays,
+      show: hasSchedules,
+    },
     {
       id: 'description',
       label: 'รายละเอียดหลักสูตร',
+      icon: FileText,
       show: !!course?.course_teaser,
     },
     {
       id: 'objective',
       label: 'วัตถุประสงค์',
+      icon: Target,
       show: !!course?.course_objectives?.length,
     },
     {
       id: 'target',
       label: 'หลักสูตรนี้เหมาะสำหรับ',
+      icon: Users,
       show: !!course?.course_target_audience?.length,
     },
     {
       id: 'prerequisite',
       label: 'พื้นฐานของผู้เข้าอบรม',
+      icon: GraduationCap,
       show: !!course?.course_prerequisites?.length,
     },
     {
       id: 'requirement',
       label: 'ความต้องการของระบบ',
+      icon: Monitor,
       show: !!course?.course_system_requirements?.length,
     },
     {
       id: 'outline',
       label: 'หัวข้อการฝึกอบรม',
+      icon: ListChecks,
       show: !!course?.training_topics?.length,
     },
     {
       id: 'roadmap',
       label: 'Road Map',
+      icon: Map,
       show: !!(
         course?.course_roadmap_desktop_url || course?.course_roadmap_mobile_url
       ),
     },
-    { id: 'faq', label: 'คำถามที่พบบ่อย', show: Boolean(hasFaqs) },
-    { id: 'related', label: 'หลักสูตรที่เกี่ยวข้อง', show: hasRelated },
+    {
+      id: 'faq',
+      label: 'คำถามที่พบบ่อย',
+      icon: CircleHelp,
+      show: Boolean(hasFaqs),
+    },
+    {
+      id: 'related',
+      label: 'หลักสูตรที่เกี่ยวข้อง',
+      icon: BookOpen,
+      show: hasRelated,
+    },
   ].filter((l) => l.show);
 
   if (!links.length) return null;
@@ -53,20 +86,24 @@ export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
   return (
     <nav className="rounded-2xl border border-gray-100 bg-white p-4 shadow-md">
       <ul className="space-y-1">
-        {links.map((link) => (
-          <li key={link.id}>
-            <a
-              href={`#${link.id}`}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-base text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
-            >
-              <ChevronRight
-                className="h-3 w-3 text-9e-air"
-                strokeWidth={2.5}
-              />
-              {link.label}
-            </a>
-          </li>
-        ))}
+        {links.map((link) => {
+          const Icon = link.icon;
+          return (
+            <li key={link.id}>
+              <a
+                href={`#${link.id}`}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-base text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
+              >
+                <Icon
+                  className="h-[18px] w-[18px] shrink-0 text-9e-air"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                />
+                {link.label}
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

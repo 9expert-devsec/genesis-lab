@@ -95,7 +95,7 @@ export function PublicHeaderClient({
 
   return (
     <>
-    <header className="sticky top-0 left-0 right-0 z-50 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
+    <header className="sticky top-0 left-0 right-0 z-60 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
       <div className="mx-auto flex h-20 max-w-[1200px] items-center gap-4 max-md:px-4">
         {/* ── Logo ─────────────────────────────────────────────── */}
         <div className="flex-none">
@@ -163,10 +163,10 @@ export function PublicHeaderClient({
     {/* ── Mobile drawer ──────────────────────────────────────────
         Rendered through a portal into <body> so the fixed-positioned
         backdrop and panel escape any stacking context created by the
-        sticky header (z:50) or by transformed/will-changed page
+        sticky header (z:60) or by transformed/will-changed page
         sections (carousels, etc.). The drawer's own z-[9999] then
         only competes with body-level siblings, not with nested
-        contexts that would otherwise cap us at z:50. */}
+        contexts that would otherwise cap us at z:60. */}
     {mounted &&
       createPortal(
         <MobileDrawer
@@ -237,7 +237,7 @@ function DesktopDropdown({ item }) {
 
       <div
         className={cn(
-          'absolute left-0 top-full z-50 pt-2',
+          'absolute left-0 top-full z-60 pt-2',
           'transition-opacity duration-9e-micro ease-9e',
           isOpen
             ? 'pointer-events-auto opacity-100'
@@ -618,7 +618,7 @@ function DesktopMega({
 
       <div
         className={cn(
-          'absolute left-0 right-0 top-full z-50',
+          'absolute left-0 right-0 top-full z-60',
           'transition-opacity duration-9e-micro ease-9e',
           isOpen
             ? 'pointer-events-auto opacity-100'
