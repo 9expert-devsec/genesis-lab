@@ -109,10 +109,14 @@ module.exports = {
       },
 
       // ── Shadows ───────────────────────────────────────────────────
+      // Color comes from the --shadow-color CSS var (navy in light, black in
+      // dark — see globals.css). In light this resolves to the exact original
+      // rgba(13,27,42,α), so light mode is unchanged; in dark it becomes
+      // rgba(0,0,0,α) so faint depth still registers on the dark canvas.
       boxShadow: {
-        '9e-sm': '0 1px 2px rgba(13,27,42,0.05)',
-        '9e-md': '0 4px 12px rgba(13,27,42,0.08)',
-        '9e-lg': '0 8px 24px rgba(13,27,42,0.12)',
+        '9e-sm': '0 1px 2px rgb(var(--shadow-color) / 0.05)',
+        '9e-md': '0 4px 12px rgb(var(--shadow-color) / 0.08)',
+        '9e-lg': '0 8px 24px rgb(var(--shadow-color) / 0.12)',
       },
 
       // ── Motion ────────────────────────────────────────────────────

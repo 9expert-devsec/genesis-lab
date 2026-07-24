@@ -477,7 +477,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           <p className="text-sm font-medium uppercase tracking-wider text-9e-action">
             หลักสูตรทั้งหมด
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-9e-navy md:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold text-[var(--text-primary)] md:text-3xl">
             {catalogSlug.replace(/-/g, ' ')}
           </h1>
         </header>
@@ -614,7 +614,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           />
         )}
         {cp.isPreview && (
-          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-9e-navy">
+          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
             ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
           </div>
         )}
@@ -682,7 +682,7 @@ function CourseDetail({
     '#005CFF';
 
   return (
-    <article className="bg-white">
+    <article className="bg-[var(--page-bg)]">
       <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
       <SkillBreadcrumb course={course} />
 
@@ -730,7 +730,7 @@ function CourseDetail({
               faqs={faqs}
               id="faq"
               className="scroll-mt-24"
-              headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-9e-navy"
+              headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
             />
           </div>
 

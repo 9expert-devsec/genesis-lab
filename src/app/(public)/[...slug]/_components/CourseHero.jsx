@@ -72,19 +72,25 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
       <div className="mx-auto max-w-[1200px]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
           {/* LEFT — standalone rounded white info card */}
-          <div className="min-w-0 flex flex-col justify-center rounded-2xl bg-white p-6 shadow-9e-sm lg:w-[40%] lg:flex-none lg:px-8 lg:py-6 ">
+          {/* dark:ring — color-agnostic edge separator. On the dark card the
+              runtime hero gradient (programcolor/skillcolor) can, for a rare
+              dark-navy source, lighten to a tone near #1E3A5F and blur the
+              card's outer edge. A faint inset light ring keeps the edge
+              readable for ANY gradient without special-casing a colour.
+              Dark-only, so light mode is unchanged. */}
+          <div className="min-w-0 flex flex-col justify-center rounded-2xl bg-[var(--surface-raised)] p-6 shadow-9e-sm dark:ring-1 dark:ring-inset dark:ring-white/10 lg:w-[40%] lg:flex-none lg:px-8 lg:py-6 ">
             <div className="w-full">
-              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
                 {course.course_id}
               </p>
 
-              <h1 className="mb-4 line-clamp-2 min-h-[3.5rem] text-xl font-bold leading-tight text-9e-navy lg:text-2xl">
+              <h1 className="mb-4 line-clamp-2 min-h-[3.5rem] text-xl font-bold leading-tight text-[var(--text-primary)] lg:text-2xl">
                 {course.course_name}
               </h1>
 
-              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-lg text-9e-slate-dp-50">
+              <div className="mb-4 flex flex-wrap items-center gap-1.5 text-lg text-[var(--text-secondary)]">
                 <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                <span className="font-bold text-9e-navy">
+                <span className="font-bold text-[var(--text-primary)]">
                   {course.course_trainingdays} วัน
                   {hours ? ` (${hours} ชม.)` : ''}
                 </span>
@@ -109,34 +115,34 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
-                  <span className="text-3xl font-extrabold text-9e-action">Call</span>
+                  <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">Call</span>
                 ) : (
                   <>
-                    <span className="text-3xl font-extrabold text-9e-action">
+                    <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">
                       {Number(
                         hasPromotion ? course.course_netprice : course.course_price
                       ).toLocaleString('th-TH')}
                     </span>
-                    <span className="text-lg font-bold text-9e-action">บาท</span>
+                    <span className="text-lg font-bold text-9e-action dark:text-9e-air">บาท</span>
                     {hasPromotion && (
-                      <span className="text-sm text-9e-slate-dp-50 line-through">
+                      <span className="text-sm text-[var(--text-secondary)] line-through">
                         ปกติ {Number(course.course_price).toLocaleString('th-TH')} บาท
                       </span>
                     )}
                   </>
                 )}
               </div>
-              <p className="mb-4 text-xs text-9e-slate-dp-50">
+              <p className="mb-4 text-xs text-[var(--text-secondary)]">
                 {isInhouseOnly ? '*รับเฉพาะ InHouse Training เท่านั้น' : '*ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม'}
               </p>
 
               {(course.course_workshop_status ||
                 course.course_certificate_status) && (
-                <div className="mb-4 flex flex-wrap gap-4 text-xs text-9e-slate-dp-50">
+                <div className="mb-4 flex flex-wrap gap-4 text-xs text-[var(--text-secondary)]">
                   {course.course_workshop_status && (
                     <span className="flex items-center gap-1">
                       <MonitorPlay
-                        className="h-3.5 w-3.5 text-9e-action"
+                        className="h-3.5 w-3.5 text-9e-action dark:text-9e-air"
                         strokeWidth={2}
                       />
                       Workshop
@@ -145,7 +151,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                   {course.course_certificate_status && (
                     <span className="flex items-center gap-1">
                       <Award
-                        className="h-3.5 w-3.5 text-9e-action"
+                        className="h-3.5 w-3.5 text-9e-action dark:text-9e-air"
                         strokeWidth={2}
                       />
                       e-Certificate
@@ -165,7 +171,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 )}
                 <Link
                   href={inhouseHref}
-                  className="rounded-xl w-full text-center border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white"
+                  className="rounded-xl w-full text-center border-2 border-9e-action px-5 py-2.5 text-sm font-bold text-9e-action transition-colors duration-9e-micro ease-9e hover:bg-9e-action hover:text-white dark:border-9e-air dark:text-9e-air"
                 >
                   ขอใบเสนอราคา Inhouse
                 </Link>
@@ -339,17 +345,17 @@ function CoverSlider({ slides }) {
             type="button"
             onClick={prev}
             aria-label="ก่อนหน้า"
-            className="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+            className="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow-9e-md transition-colors hover:bg-white dark:bg-9e-navy/80 dark:hover:bg-9e-navy"
           >
-            <ChevronLeft className="h-4 w-4 text-9e-navy" />
+            <ChevronLeft className="h-4 w-4 text-9e-navy dark:text-white" />
           </button>
           <button
             type="button"
             onClick={next}
             aria-label="ถัดไป"
-            className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow transition-colors hover:bg-white"
+            className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 shadow-9e-md transition-colors hover:bg-white dark:bg-9e-navy/80 dark:hover:bg-9e-navy"
           >
-            <ChevronRight className="h-4 w-4 text-9e-navy" />
+            <ChevronRight className="h-4 w-4 text-9e-navy dark:text-white" />
           </button>
 
           {/* Dot indicators */}

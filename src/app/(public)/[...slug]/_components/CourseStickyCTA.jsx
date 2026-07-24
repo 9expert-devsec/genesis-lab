@@ -194,7 +194,7 @@ export function CourseStickyCTA({
               <button
                 type="button"
                 onClick={() => setBarDismissed(true)}
-                className="absolute right-1.5 top-1.5 p-1 text-9e-navy rounded-full hover:bg-9e-ice dark:text-white dark:hover:bg-white/5"
+                className="absolute right-1.5 top-1.5 p-1 rounded-full text-[var(--text-primary)] hover:bg-[var(--surface-hover)]"
               >
                 <X size={16} />
               </button>

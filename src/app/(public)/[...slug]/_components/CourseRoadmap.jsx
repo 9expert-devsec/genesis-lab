@@ -153,7 +153,7 @@ function InteractiveSvgRoadmap({ src, alt, className }) {
       data-roadmap-container
     >
       {status === 'loading' && (
-        <div className="absolute inset-0 animate-pulse bg-gray-100" />
+        <div className="absolute inset-0 animate-pulse bg-[var(--surface-muted)]" />
       )}
       {status === 'ready' && (
         <div

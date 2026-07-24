@@ -5,9 +5,9 @@ export function RelatedCourses({ courses }) {
   if (!list.length) return null;
 
   return (
-    <section id="related" className="mt-16 scroll-mt-24 bg-9e-ice py-12">
+    <section id="related" className="mt-16 scroll-mt-24 bg-[var(--surface-muted)] py-12">
       <div className="mx-auto max-w-[1280px] px-4 lg:px-6">
-        <h2 className="mb-6 text-center text-xl font-bold text-9e-navy">
+        <h2 className="mb-6 text-center text-xl font-bold text-[var(--text-primary)]">
           หลักสูตรที่เกี่ยวข้อง
         </h2>
         <div className="flex gap-4 overflow-x-auto pb-4 lg:grid lg:grid-cols-4 lg:overflow-visible">

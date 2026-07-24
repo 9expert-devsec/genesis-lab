@@ -51,6 +51,22 @@
   --text-secondary: #465469;
   --text-muted:     #5E6A7E;
 
+  /* ── Elevation & interaction (light defaults) ──
+   * Light values deliberately EQUAL the hardcoded classes they replace, so
+   * light mode renders pixel-identical. Dark overrides live in .dark below.
+   *   --surface-raised  = --surface (#FFFFFF): elevated cards/nav/tooltips.
+   *   --surface-hover   = --9e-ice  (#F8FAFD): replaces hover:bg-9e-ice/white.
+   *   --surface-divider = gray-100  (#F3F4F6): internal dividers, subtler
+   *                       than --surface-border (which maps gray-200/300).
+   *   --shadow-color    = --9e-navy RGB channels (space-separated, for the
+   *                       modern rgb(<channels> / α) form); consumed by
+   *                       shadow-9e-* so the per-step alphas (0.05/0.08/0.12)
+   *                       are preserved. */
+  --surface-raised:  #FFFFFF;
+  --surface-hover:   #F8FAFD;
+  --surface-divider: #F3F4F6;
+  --shadow-color:    13 27 42;
+
   /* === 11-step scales (light mode) === */
 
   /* Signature Blue scale */
@@ -214,6 +230,22 @@
   --text-primary:   #F8FAFD;
   --text-secondary: #C5CEDA;
   --text-muted:     #5E6A7E;
+
+  /* ── Elevation & interaction (dark overrides) ──
+   * Dark elevation is conveyed by a LIGHTER surface, not a shadow (shadows
+   * are invisible on the dark canvas). Values step up the navy ramp
+   *   --9e-navy #0D1B2A < --9e-card #132638 < --9e-border #1A2D42:
+   *   --surface-raised  #1E3A5F — one clear step above --surface (#132638);
+   *                     text-primary #F8FAFD on it ≈ 10.4:1, secondary ≈ 7:1 (AA ✅).
+   *   --surface-hover   #20344C — subtle lift readable over surface AND muted.
+   *   --surface-divider #17293C — between --surface and --surface-border, so
+   *                     internal lines stay quieter than container borders.
+   *   --shadow-color    pure black — navy shadows vanish on dark; black at the
+   *                     same low alphas still gives faint, correct depth. */
+  --surface-raised:  #1E3A5F;
+  --surface-hover:   #20344C;
+  --surface-divider: #17293C;
+  --shadow-color:    0 0 0;
 
   /* === 11-step scales (dark mode) === */
 
