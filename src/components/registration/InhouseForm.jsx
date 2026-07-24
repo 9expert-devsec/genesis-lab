@@ -11,6 +11,7 @@ import {
   HelpCircle, Plus, Minus,
 } from 'lucide-react';
 import { inhouseRegistrationSchema, inhouseRegistrationDefaults } from '@/lib/schemas/register-inhouse';
+import { resolveInitialCourseId, buildInhouseInitialValues } from '@/lib/registration/resolveInitialCourse';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,9 @@ import { cn } from '@/lib/utils';
 const STORAGE_KEY  = 'registration-inhouse-v1';
 const FORMDATA_KEY = 'registration-inhouse-formdata-v1';
 const RESULT_KEY   = 'registration-inhouse-result-v1';
+// The resolved course id the current draft was started from — lets a fresh
+// ?course= override a stale draft without clobbering an in-session change.
+const SOURCE_COURSE_KEY = 'registration-inhouse-source-course-v1';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -204,6 +208,7 @@ export function InhouseWizard({
       // step-3 route can render it.
       try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
       try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+      try { sessionStorage.removeItem(SOURCE_COURSE_KEY); } catch {}
       try {
         sessionStorage.setItem(RESULT_KEY, JSON.stringify({ result: body, formData }));
       } catch {}
@@ -313,13 +318,34 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
     return acc;
   }, {});
 
-  // Resolve the initial course id: a restored selection wins, otherwise the
-  // ?course= preselect (case-insensitive).
-  const restoredCourseId = initialValues?.coursesInterested?.[0];
+  // Resolve the initial course id. An explicit, resolvable ?course= wins over a
+  // STALE draft (a leftover from a different course) but must not clobber an
+  // in-progress choice while moving between wizard steps for the SAME course.
+  // The "source course" marker distinguishes the two — see resolveInitialCourseId.
+  const restoredCourseId = initialValues?.coursesInterested?.[0] ?? '';
   const preselectedId = preselectedCourse
-    ? (courses.find((c) => c.id.toUpperCase() === preselectedCourse.toUpperCase())?.id ?? '')
-    : '';
-  const initialCourseId = restoredCourseId || preselectedId || '';
+    ? (courses.find((c) => c.id.toUpperCase() === preselectedCourse.toUpperCase())?.id ?? null)
+    : null;
+
+  const [initialCourseId] = useState(() => {
+    let sourceCourse = null;
+    try { sourceCourse = sessionStorage.getItem(SOURCE_COURSE_KEY); } catch {}
+    return resolveInitialCourseId({ preselectedId, restoredCourseId, sourceCourse });
+  });
+
+  // Mark this draft as belonging to the URL's course, so a later remount (moving
+  // between steps) recognises the session and won't re-override the user's
+  // selection. Writes only on a genuine change (a fresh arrival at a new course).
+  useEffect(() => {
+    if (!preselectedId) return;
+    try {
+      if (sessionStorage.getItem(SOURCE_COURSE_KEY) !== preselectedId) {
+        sessionStorage.setItem(SOURCE_COURSE_KEY, preselectedId);
+      }
+    } catch {
+      // storage disabled — the fallback (draft wins) is still safe
+    }
+  }, [preselectedId]);
 
   const {
     register, handleSubmit, watch, setValue,
@@ -328,11 +354,11 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
     resolver: zodResolver(inhouseRegistrationSchema),
     mode: 'onChange',
     reValidateMode: 'onChange',
-    defaultValues: {
-      ...inhouseRegistrationDefaults,
-      coursesInterested: initialCourseId ? [initialCourseId] : [],
-      ...(initialValues ?? {}),
-    },
+    defaultValues: buildInhouseInitialValues({
+      defaults: inhouseRegistrationDefaults,
+      restored: initialValues,
+      initialCourseId,
+    }),
   });
 
   const watched = watch();

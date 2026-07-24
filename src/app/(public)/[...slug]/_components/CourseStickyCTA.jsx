@@ -32,6 +32,43 @@ export function stickyCtaAction({ hasSchedules, inhouseHref }) {
 }
 
 /**
+ * Pure reveal predicate. Exported so the show/hide window is testable without a
+ * DOM — the effect below just feeds it live `getBoundingClientRect()` values.
+ *
+ * Lower bound (unchanged): branch 1 reveals once #schedule has scrolled fully
+ * above the viewport top; branches 2 & 3 reveal past 3/4 of a viewport.
+ *
+ * Upper bound (both branches), whichever comes first:
+ *   - the related-courses section (#related) is intersecting the viewport — its
+ *     top edge has entered — hide immediately; show again only once it's fully
+ *     back below the fold; OR
+ *   - there is no related section, so fall back to the content zone
+ *     (#course-content) having scrolled past the viewport top.
+ * `relatedTop == null` (no related section) and `contentBottom == null` (marker
+ * absent) both mean "don't force-hide", so a missing element never silently
+ * kills the bar.
+ */
+export function shouldShowStickyBar({
+  hasSchedules,
+  scheduleBottom,
+  contentBottom,
+  relatedTop,
+  relatedBottom,
+  scrollY,
+  innerHeight,
+}) {
+  const relatedVisible =
+    relatedTop != null && relatedTop < innerHeight && relatedBottom > 0;
+  const pastContent = contentBottom != null && contentBottom < 0;
+  if (relatedVisible || pastContent) return false;
+
+  if (hasSchedules) {
+    return scheduleBottom != null && scheduleBottom < 0;
+  }
+  return scrollY > innerHeight * 0.75;
+}
+
+/**
  * Sticky bottom CTA bar for the course detail page. Ported from the
  * masterclass detail page's bar (MasterclassDetailClient.jsx ~L813) so the
  * two pages feel like one product — same z-index, positioning, translate
@@ -66,18 +103,35 @@ export function CourseStickyCTA({
 
   useEffect(() => {
     const handleScroll = () => {
+      // Upper bound: hide as soon as the related-courses section (#related)
+      // intersects the viewport. Fallback for a course with no related section:
+      // hide once the content zone (#course-content) has scrolled past the top.
+      const relatedEl = document.getElementById("related");
+      const relatedRect = relatedEl ? relatedEl.getBoundingClientRect() : null;
+
+      const contentEl = document.getElementById("course-content");
+      const contentBottom = contentEl
+        ? contentEl.getBoundingClientRect().bottom
+        : null;
+
+      let scheduleBottom = null;
       if (hasSchedules) {
-        // Branch 1: reveal once the schedule section has fully scrolled above
-        // the top of the viewport (mirrors the masterclass batch-section gate).
         const scheduleEl = document.getElementById("schedule");
-        if (!scheduleEl) return;
-        setShowStickyBar(scheduleEl.getBoundingClientRect().bottom < 0);
-        return;
+        if (!scheduleEl) return; // no #schedule yet — leave the current state
+        scheduleBottom = scheduleEl.getBoundingClientRect().bottom;
       }
-      // Branches 2 & 3: three-quarters of a viewport down — past the hero, never
-      // at the very top. Re-evaluated every scroll, so scroll-to-top (branch 2)
-      // self-dismisses the bar and scrolling back down brings it back.
-      setShowStickyBar(window.scrollY > window.innerHeight * 0.75);
+
+      setShowStickyBar(
+        shouldShowStickyBar({
+          hasSchedules,
+          scheduleBottom,
+          contentBottom,
+          relatedTop: relatedRect ? relatedRect.top : null,
+          relatedBottom: relatedRect ? relatedRect.bottom : null,
+          scrollY: window.scrollY,
+          innerHeight: window.innerHeight,
+        }),
+      );
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
