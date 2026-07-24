@@ -134,6 +134,24 @@ module.exports = {
         '9e-gradient-accent':    'linear-gradient(to right, #B8D930, #D8F852)',
         '9e-gradient-signature': 'linear-gradient(135deg, #0D1B2A 0%, #005CFF 100%)',
       },
+
+      // ── Stacking scale (z-index) — one documented ladder for the ────
+      // whole public site. Native Tailwind already provides 0/10/20/30/40/50;
+      // we ADD 60/70/80 so the header (60) actually generates — a bare `z-60`
+      // is NOT in the default scale and silently falls back to `auto` — and so
+      // future chrome has gaps to slot into. Elements, low → high:
+      //   40  CourseStickyCTA sticky bar   (below the sidebar + button)
+      //   50  sidebar <aside>, back-to-top (above the bar)
+      //   60  PublicHeader                 (above the hero cover slider)
+      //   70, 80  reserved for future chrome
+      // Overlay tier — must cover all chrome; kept as arbitrary values so the
+      // ladder above stays readable: SitePopup z-[9000], drawer backdrop
+      // z-[9998], mobile drawer z-[9999] (portalled to <body>).
+      zIndex: {
+        60: '60',
+        70: '70',
+        80: '80',
+      },
     },
 
     // ── Breakpoints (locked in Manifesto) ───────────────────────────

@@ -7,6 +7,10 @@ import { usePathname } from 'next/navigation';
  * Floating back-to-top button — mounted from the public layout so it
  * covers every non-admin page. Appears once the reader has scrolled
  * past 400px, smooth-scrolls to the top on click.
+ *
+ * It stays at `z-50` — the app's elevated-UI tier (same as the header and the
+ * course sticky CTA sits BELOW at z-40) — so it remains clickable over that bar
+ * without moving out of the way. It does not need to lift for the bar.
  */
 export function ScrollToTopButton() {
   const [show, setShow] = useState(false);

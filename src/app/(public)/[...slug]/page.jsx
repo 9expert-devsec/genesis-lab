@@ -3,6 +3,7 @@ import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { CareerPathDetail } from './_components/CareerPathDetail';
@@ -22,6 +23,7 @@ import { SidebarNav } from './_components/SidebarNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
+import { CourseStickyCTA } from './_components/CourseStickyCTA';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
 import {
@@ -654,6 +656,13 @@ function CourseDetail({
 }) {
   const hasSchedules = Boolean(schedules?.length);
   const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+  // Sticky-bar navigation target — only an inhouse-only course navigates (to
+  // the in-house quote). A public course with no open sessions instead
+  // scrolls to the top so the hero's Public/Inhouse buttons let the user pick;
+  // null signals that in-page-scroll behaviour to the bar.
+  const stickyInhouseHref = isInhouseOnly
+    ? inhouseRegistrationHref(course.course_id)
+    : null;
   const relatedCourses = Array.isArray(course.related_courses)
     ? course.related_courses
     : [];
@@ -677,7 +686,12 @@ function CourseDetail({
       <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
       <SkillBreadcrumb course={course} />
 
-      <div className="mx-auto max-w-[1200px] py-8 ">
+      {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
+          reflowed sidebar (Course Outline downloads) can scroll clear of it on
+          small screens; this is content-length-independent (works when a short
+          course has no RelatedCourses below). lg keeps the original pb-8 — the
+          large-screen bar is centered and its presentation is unchanged. */}
+      <div className="mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8 ">
         <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]">
           <div className="min-w-0 space-y-10">
             {earlyBird && (
@@ -713,7 +727,13 @@ function CourseDetail({
             />
           </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-24">
+          {/* relative z-50 raises the sidebar above the fixed CourseStickyCTA
+              bar (z-40) so the Course Outline downloads stay clickable where the
+              centered bar's box passes behind this column at lg+. `relative`
+              (overridden by lg:sticky at lg) makes the z-index apply at every
+              breakpoint; no ancestor creates a stacking context that would trap
+              it. z-50 matches the app's elevated-UI tier (header, back-to-top). */}
+          <aside className="relative z-50 space-y-4 lg:sticky lg:top-24">
             <SidebarNav
               course={course}
               hasSchedules={hasSchedules}
@@ -727,6 +747,13 @@ function CourseDetail({
       </div>
 
       <RelatedCourses courses={relatedCourses} />
+
+      <CourseStickyCTA
+        title={course.course_name}
+        coverUrl={course.course_cover_url}
+        hasSchedules={hasSchedules}
+        inhouseHref={stickyInhouseHref}
+      />
     </article>
   );
 }
