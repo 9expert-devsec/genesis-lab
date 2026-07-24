@@ -692,7 +692,14 @@ function CourseDetail({
           course has no RelatedCourses below). lg keeps the original pb-8 — the
           large-screen bar is centered and its presentation is unchanged. */}
       <div className="mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8 ">
-        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]">
+        {/* id="course-content" marks the content zone (main column + sidebar).
+            CourseStickyCTA hides once this element's bottom scrolls above the
+            viewport — i.e. before the related-courses section / footer — and
+            reappears on scrolling back up. */}
+        <div
+          id="course-content"
+          className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]"
+        >
           <div className="min-w-0 space-y-10">
             {earlyBird && (
               <EarlyBirdBanner
