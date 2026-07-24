@@ -67,6 +67,26 @@ export async function getPublishedMasterclasses() {
   );
 }
 
+/**
+ * Slugs of every published course, with their last-modified timestamp.
+ *
+ * Lean by design: sitemap.js and the detail page's generateStaticParams only
+ * need slug + updatedAt, so this skips the batch join that
+ * getPublishedMasterclasses() pays for.
+ */
+export async function getPublishedMasterclassSlugs() {
+  await dbConnect();
+  const courses = await MasterclassCourse.find({ is_published: true })
+    .select({ slug: 1, updatedAt: 1 })
+    .sort({ display_order: 1 })
+    .lean();
+
+  return courses.map((c) => ({
+    slug: c.slug,
+    updatedAt: c.updatedAt ?? null,
+  }));
+}
+
 /** Single published course + all non-cancelled batches (for detail page). */
 export async function getMasterclassBySlug(slug) {
   if (!slug) return null;

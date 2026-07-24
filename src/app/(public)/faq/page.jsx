@@ -1,10 +1,11 @@
+import { getSiteUrl } from '@/config/site';
 import { getActiveFaqsGrouped } from '@/lib/faqs/getFaqs';
 import { FaqClient } from './_components/FaqClient';
 
 export const metadata = {
   title: 'คำถามที่พบบ่อย',
-  alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
-  openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/faq` },
+  alternates: { canonical: `${getSiteUrl()}/faq` },
+  openGraph: { url: `${getSiteUrl()}/faq` },
 };
 export const dynamic = 'force-dynamic';
 

@@ -1,3 +1,4 @@
+import { getSiteUrl } from "@/config/site";
 import ContactHero from "@/components/contact/ContactHero";
 import GetInTouchSection from "@/components/contact/GetInTouchSection";
 import VideoSection from "@/components/contact/VideoSection";
@@ -13,8 +14,8 @@ export function generateMetadata() {
     title: "ติดต่อเรา",
     description:
       "ติดต่อ 9Expert Training โทร 02-219-4304 อาคารเอเวอร์กรีน เพลส ซอยวรฤทธิ์ ถนนพญาไท เขตราชเทวี กรุงเทพฯ",
-    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/contact-us` },
-    openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/contact-us` },
+    alternates: { canonical: `${getSiteUrl()}/contact-us` },
+    openGraph: { url: `${getSiteUrl()}/contact-us` },
   };
 }
 

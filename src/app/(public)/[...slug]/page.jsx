@@ -3,6 +3,7 @@ import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { getSiteUrl } from '@/config/site';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { CareerPathDetail } from './_components/CareerPathDetail';
@@ -164,7 +165,7 @@ export async function generateMetadata({ params, searchParams }) {
   const segment = segmentFromSlug(slug);
   if (!segment) return {};
 
-  const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${segment}`;
+  const pageUrl = `${getSiteUrl()}/${segment}`;
 
   // Program / skill custom-slug metadata. Cheap indexed probe first so
   // course-alias hits don't pay for the program/skill list fetches.
@@ -291,7 +292,7 @@ export async function generateMetadata({ params, searchParams }) {
   const cp = await resolveCustomPageForRequest(segment, searchParams);
   if (cp) {
     const customPage = cp.page;
-    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    const base = getSiteUrl();
     const canonical = customPage.canonicalUrl || `${base}/${segment}`;
     const title = customPage.metaTitle || customPage.title;
     const description = customPage.metaDescription || '';
@@ -439,11 +440,11 @@ export default async function CatchAllPage({ params, searchParams }) {
       course,
       extension,
       schedules,
-      siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+      siteUrl: getSiteUrl(),
     });
     const courseSlug =
       extension?.urlAlias || `${course.course_id?.toLowerCase?.()}-training-course`;
-    const courseUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${courseSlug}`;
+    const courseUrl = `${getSiteUrl()}/${courseSlug}`;
     const breadcrumbJsonLd = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
@@ -452,13 +453,13 @@ export default async function CatchAllPage({ params, searchParams }) {
           '@type': 'ListItem',
           position: 1,
           name: 'หน้าแรก',
-          item: process.env.NEXT_PUBLIC_SITE_URL,
+          item: getSiteUrl(),
         },
         {
           '@type': 'ListItem',
           position: 2,
           name: course.program?.program_name ?? 'หลักสูตร',
-          item: `${process.env.NEXT_PUBLIC_SITE_URL}/training-course`,
+          item: `${getSiteUrl()}/training-course`,
         },
         {
           '@type': 'ListItem',
@@ -498,7 +499,7 @@ export default async function CatchAllPage({ params, searchParams }) {
   const cp = await resolveCustomPageForRequest(segment, searchParams);
   if (cp) {
     const customPage = cp.page;
-    const jsonLdData = buildPageJsonLd(customPage, process.env.NEXT_PUBLIC_SITE_URL);
+    const jsonLdData = buildPageJsonLd(customPage, getSiteUrl());
     return (
       <>
         {jsonLdData && (

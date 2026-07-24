@@ -16,6 +16,7 @@
  */
 
 import { revalidatePath, revalidateTag } from 'next/cache';
+import { getSiteUrl } from '@/config/site';
 import { requireAdmin } from '@/lib/actions/auth';
 import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
@@ -118,13 +119,13 @@ async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
  *
  *   slug rule: course_id lowercased, "_" → "-" (matches the public
  *              detail-page route at /<slug>-training-course).
- *   base:      NEXT_PUBLIC_SITE_URL with any trailing slashes stripped.
+ *   base:      the deployment's own origin (getSiteUrl(), already normalised).
  *
- * Returns '' when env or inputs are missing — caller falls back to
- * whatever the admin typed.
+ * Returns '' when inputs are missing — caller falls back to whatever the
+ * admin typed.
  */
 function buildAutoSignupUrl(courseIdString, scheduleId) {
-  const base = String(process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+  const base = getSiteUrl();
   if (!base || !courseIdString || !scheduleId) return '';
   const slug = String(courseIdString).toLowerCase().replace(/_/g, '-');
   return `${base}/registration/public?course=${encodeURIComponent(slug)}&class=${encodeURIComponent(String(scheduleId))}`;

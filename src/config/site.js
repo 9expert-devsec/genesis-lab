@@ -8,6 +8,68 @@
  * component.
  */
 
+/**
+ * Resolve the deployment's own origin.
+ *
+ * This codebase ships to more than one domain (www + masterclass), so the
+ * canonical/OG/JSON-LD URL MUST be the domain actually serving the request.
+ * A hardcoded fallback silently poisons SEO on every other domain: pages
+ * declare a canonical on a host where they don't exist and Google drops them.
+ * So there is no domain literal here — the value comes from the environment,
+ * and its absence is made loud rather than papered over.
+ *
+ * Resolution order (first hit wins):
+ *   1. NEXT_PUBLIC_SITE_URL          — explicit, per-domain; the only value
+ *                                      that is correct on a multi-domain deploy
+ *                                      and the only one inlined into the client.
+ *   2. VERCEL_PROJECT_PRODUCTION_URL — the project's stable production domain.
+ *   3. VERCEL_URL                     — the per-deployment URL (preview builds).
+ *   4. http://localhost:3000          — local dev only.
+ *
+ * Vercel supplies (2)/(3) without a scheme, so both are normalised below.
+ */
+function normalizeSiteUrl(raw) {
+  // Guarantee a protocol (Vercel envs are bare hosts) and strip trailing
+  // slashes so `${base}/path` never doubles up.
+  const trimmed = String(raw).trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function resolveSiteUrl() {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
+  if (explicit) return normalizeSiteUrl(explicit);
+
+  // No explicit URL in production means canonical tags are about to point at
+  // whatever Vercel guesses — usually the wrong domain. Don't throw (that
+  // breaks the build); make it impossible to miss in the deploy logs instead.
+  if (process.env.NODE_ENV === 'production') {
+    // eslint-disable-next-line no-console
+    console.error(
+      '[site] NEXT_PUBLIC_SITE_URL is not set. Canonical, Open Graph and ' +
+        'JSON-LD URLs will fall back to a Vercel-derived host and likely point ' +
+        'at the wrong domain. Set NEXT_PUBLIC_SITE_URL in the Vercel project.'
+    );
+  }
+
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return normalizeSiteUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  }
+  if (process.env.VERCEL_URL) {
+    return normalizeSiteUrl(process.env.VERCEL_URL);
+  }
+  return 'http://localhost:3000';
+}
+
+/**
+ * The deployment's own absolute origin, normalised (protocol guaranteed, no
+ * trailing slash). Use this everywhere a URL is emitted into markup — never
+ * read `process.env.NEXT_PUBLIC_SITE_URL` directly, or the fallbacks and
+ * normalisation above get bypassed.
+ */
+export function getSiteUrl() {
+  return resolveSiteUrl();
+}
+
 export const siteConfig = {
   name:        '9Expert Training',
   nameFull:    'บริษัท นายน์เอ็กซ์เพิร์ท จำกัด',
@@ -16,7 +78,7 @@ export const siteConfig = {
   motto:       'สอนสไตล์ใช้งานจริง',
   concept:     'Never Stop Learning',
   description: 'สอนแบ่งปันความรู้ เทคโนโลยี เพื่อขับเคลื่อนประเทศไทย',
-  url:         process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.9experttraining.com',
+  url:         getSiteUrl(),
 
   // External academy for online courses (not built here)
   academyUrl: 'https://academy.9experttraining.com',

@@ -5,6 +5,7 @@ import {
   getArticlesByIds,
 } from '@/lib/actions/articles';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { getSiteUrl } from '@/config/site';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
@@ -20,7 +21,7 @@ export async function generateMetadata({ params }) {
   const article = await getArticleBySlug(slug);
   if (!article) return { title: 'ไม่พบบทความ' };
   const description = article.seoDescription || article.excerpt || article.title;
-  const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
+  const pageUrl = `${getSiteUrl()}/articles/${slug}`;
   return {
     title:       article.seoTitle || article.title,
     description,

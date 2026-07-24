@@ -1,12 +1,27 @@
 import { notFound } from 'next/navigation';
 import { siteConfig } from '@/config/site';
-import { getMasterclassBySlug, getInstructorsByIds } from '@/lib/masterclass/getMasterclass';
+import {
+  getMasterclassBySlug,
+  getInstructorsByIds,
+  getPublishedMasterclassSlugs,
+} from '@/lib/masterclass/getMasterclass';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { generateMasterclassJsonLd } from '@/lib/masterclass/generateJsonLd';
 import { OG_DEFAULT_IMAGE, resolveCourseOgImage, toAbsoluteUrl } from '@/lib/seo/ogImage';
 import { MasterclassDetailClient } from './_components/MasterclassDetailClient';
 
-export const dynamic = 'force-dynamic';
+// ISR: the page renders purely from slug-keyed DB reads — no cookies/headers/
+// searchParams anywhere in the tree — so it's safe to cache and revalidate on a
+// 5-min window. force-dynamic disabled all caching, which hurt both crawl
+// budget and ad landing-page speed. Prices/batches show at most 5 min stale.
+export const revalidate = 300;
+
+// Pre-render every published course at build time; unknown slugs still render
+// on demand (dynamicParams defaults to true) and notFound() handles misses.
+export async function generateStaticParams() {
+  const courses = await getPublishedMasterclassSlugs();
+  return courses.map(({ slug }) => ({ slug }));
+}
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;

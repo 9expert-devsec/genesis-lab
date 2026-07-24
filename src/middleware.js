@@ -23,6 +23,12 @@
 import NextAuth from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authConfig } from '@/lib/auth/config';
+import { isMasterclassRoute, parentMasterclassPath } from '@/lib/masterclass/routeAccess';
+
+// Re-exported so `isMasterclassRoute` is reachable from the middleware module
+// itself; the pure definition lives in routeAccess.js so tests can exercise it
+// without importing this file (which boots NextAuth at load).
+export { isMasterclassRoute };
 
 const GATE_COOKIE  = 'admin_gate';
 const GATE_TTL     = 60 * 30;          // 30 min — time window to complete login
@@ -53,33 +59,18 @@ function grantGateAndRedirect(req) {
 
 const MASTERCLASS_DOMAIN = 'https://www.9experttraining.com';
 
-/** Returns true for routes that are allowed on this masterclass-only deployment. */
-function isMasterclassRoute(pathname) {
-  // /masterclass/payment/* (Omise 3DS return page, etc.)
-  if (pathname.startsWith('/masterclass/payment/')) return true;
-  // /masterclass/[slug]
-  // /masterclass/[slug]/register
-  // /masterclass/[slug]/register/* (any sub-step)
-  if (/^\/masterclass\/[^/]+(\/register(\/.*)?)?$/.test(pathname)) return true;
-  // API routes — always allow
-  if (pathname.startsWith('/api/')) return true;
-  // Next.js internals + static assets served from /public
-  if (pathname.startsWith('/_next/')) return true;
-  if (pathname.startsWith('/favicon')) return true;
-  if (pathname.startsWith('/brand/')) return true;
-  if (pathname.startsWith('/assets/')) return true;
-  if (pathname.startsWith('/fonts/')) return true;
-  if (pathname.startsWith('/icons/')) return true;
-  // Admin surface — handled below
-  if (pathname.startsWith('/admin')) return true;
-  return false;
-}
-
 export default auth((req) => {
   const { pathname, searchParams } = req.nextUrl;
 
   // ── Masterclass-only mode: redirect non-masterclass public routes ──────────
   if (!isMasterclassRoute(pathname)) {
+    // A deeper /masterclass/<slug>/… path → recover to the course page on THIS
+    // same domain (308, so the method/permanence is preserved) instead of
+    // bouncing the visitor to the other domain's homepage.
+    const parent = parentMasterclassPath(pathname);
+    if (parent) {
+      return NextResponse.redirect(new URL(parent, req.url), 308);
+    }
     return NextResponse.redirect(MASTERCLASS_DOMAIN);
   }
 

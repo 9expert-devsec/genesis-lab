@@ -8,10 +8,15 @@
  * Docs: https://schema.org/Course
  * Google rich results: https://developers.google.com/search/docs/appearance/structured-data/course
  */
+import { getSiteUrl } from '@/config/site';
+
 export function buildCourseJsonLd({ course, extension, schedules = [], siteUrl }) {
   if (!course?.course_name) return null;
 
-  const base = siteUrl ?? process.env.NEXT_PUBLIC_SITE_URL ?? 'https://genesis-lab.9expert.app';
+  // Prefer the caller's siteUrl; otherwise resolve the deployment's own origin.
+  // No domain literal here — a hardcoded base emits a canonical/@id on a host
+  // where the page may not exist, and Google drops the record.
+  const base = siteUrl ?? getSiteUrl();
 
   // Resolve the canonical URL — prefer urlAlias from CourseExtension if available,
   // fall back to the standard slug pattern.

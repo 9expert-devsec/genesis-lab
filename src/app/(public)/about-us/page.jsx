@@ -6,6 +6,7 @@ import InstructorSection2 from "@/components/about/InstructorSection2";
 import JoinUsSection from "@/components/about/JoinUsSection";
 import AtmosphereSection from "@/components/portfolio/AtmosphereSection";
 
+import { getSiteUrl } from "@/config/site";
 import { getInstructors } from "@/lib/actions/about";
 import { getActiveAtmospherePhotos } from "@/lib/actions/portfolio";
 
@@ -16,8 +17,8 @@ export function generateMetadata() {
     title: "เกี่ยวกับเรา",
     description:
       "9Expert Learning Universe — ผู้นำด้านการอบรม Data, AI, Business และ Technology ในประเทศไทย",
-    alternates: { canonical: `${process.env.NEXT_PUBLIC_SITE_URL}/about-us` },
-    openGraph: { url: `${process.env.NEXT_PUBLIC_SITE_URL}/about-us` },
+    alternates: { canonical: `${getSiteUrl()}/about-us` },
+    openGraph: { url: `${getSiteUrl()}/about-us` },
   };
 }
 

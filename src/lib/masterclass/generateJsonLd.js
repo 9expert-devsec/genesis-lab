@@ -3,7 +3,11 @@
  * Rendered server-side as <script type="application/ld+json">.
  */
 
-const BASE_URL = 'https://masterclass.9experttraining.com';
+import { getSiteUrl } from '@/config/site';
+
+// The JSON-LD @id/url host MUST match the canonical the page emits, or the two
+// disagree and Google discounts the structured data. Both now derive from the
+// same source (getSiteUrl) rather than a hardcoded domain, so they can't drift.
 
 /** Format a date + "HH:mm" time into an ISO 8601 string with the +07:00 offset. */
 function toThaiIso(dateValue, timeStr) {
@@ -33,7 +37,7 @@ function deadlineToIso(deadline) {
 }
 
 export function generateMasterclassJsonLd(course, instructors, faqs) {
-  const courseUrl = `${BASE_URL}/masterclass/${course.slug}`;
+  const courseUrl = `${getSiteUrl()}/masterclass/${course.slug}`;
 
   // ── Course node ──────────────────────────────────────────────────────────
   const courseNode = {
