@@ -84,7 +84,7 @@ export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
   if (!links.length) return null;
 
   return (
-    <nav className="rounded-2xl border border-gray-100 bg-white p-4 shadow-md">
+    <nav className="rounded-2xl border border-[var(--surface-divider)] bg-[var(--surface-raised)] p-4 shadow-9e-md">
       <ul className="space-y-1">
         {links.map((link) => {
           const Icon = link.icon;
@@ -92,7 +92,7 @@ export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
             <li key={link.id}>
               <a
                 href={`#${link.id}`}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-base text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:bg-9e-ice hover:text-9e-action"
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-base text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-hover)] hover:text-9e-action"
               >
                 <Icon
                   className="h-[18px] w-[18px] shrink-0 text-9e-air"

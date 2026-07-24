@@ -16,7 +16,7 @@ function OutlineButton({ lang, outline }) {
       href={outline.download_url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 rounded-xl border-2 border-gray-200 px-4 py-2 text-sm font-semibold text-9e-navy transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:bg-9e-ice hover:text-9e-action"
+      className="inline-flex items-center gap-2 rounded-xl border-2 border-[var(--surface-border)] px-4 py-2 text-sm font-semibold text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:bg-[var(--surface-hover)] hover:text-9e-action"
     >
       <Download className="h-4 w-4 shrink-0" strokeWidth={2} />
       {lang}
@@ -33,7 +33,7 @@ export function PDFDownload({ course }) {
   if (!buttons.length) return null;
 
   return (
-    <div className="flex flex-row rounded-2xl border items-center border-gray-100 bg-white p-3 shadow-md">
+    <div className="flex flex-row rounded-2xl border items-center border-[var(--surface-divider)] bg-[var(--surface-raised)] p-3 shadow-9e-md">
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-50">
           <FileText className="h-8 w-8 text-red-500" strokeWidth={1.75} />
         </div>
@@ -42,7 +42,7 @@ export function PDFDownload({ course }) {
         {/* <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-50">
           <FileText className="h-4 w-4 text-red-500" strokeWidth={1.75} />
         </div> */}
-        <p className="text-sm font-semibold text-9e-navy">
+        <p className="text-sm font-semibold text-[var(--text-primary)]">
           ดาวน์โหลด Course Outline
         </p>
        <div className="flex flex-wrap gap-2 ">

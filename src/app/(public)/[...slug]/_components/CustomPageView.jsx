@@ -13,7 +13,7 @@ export function CustomPageView({ page }) {
 
   return (
     <article className="mx-auto max-w-[1200px] px-4 py-8">
-      <h1 className="text-2xl font-bold text-9e-navy md:text-3xl">
+      <h1 className="text-2xl font-bold text-[var(--text-primary)] md:text-3xl">
         {page?.title}
       </h1>
 

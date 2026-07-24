@@ -18,7 +18,7 @@ export function SkillBreadcrumb({ course }) {
         {skills.map((s) => (
           <span
             key={s._id ?? s.skill_id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-9e-ice px-3 py-1 text-xs font-semibold text-9e-navy"
+            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-primary)]"
           >
             {s.skilliconurl && (
               <Image
@@ -34,7 +34,7 @@ export function SkillBreadcrumb({ course }) {
           </span>
         ))}
         {program?.program_name && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-air/40 bg-9e-air/20 px-3 py-1 text-xs font-semibold text-9e-action">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-9e-air/40 bg-9e-air/20 px-3 py-1 text-xs font-semibold text-9e-action dark:text-9e-air">
             {program.programiconurl && (
               <Image
                 src={program.programiconurl}
