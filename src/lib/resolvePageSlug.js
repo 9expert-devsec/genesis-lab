@@ -86,3 +86,68 @@ export async function resolveSkillBySlug(slug, skills) {
     config: config ? JSON.parse(JSON.stringify(config)) : null,
   };
 }
+
+/**
+ * Which program/skill chips may become links, and where they point.
+ *
+ * The trap this closes: linking a chip unconditionally produces links into
+ * 404s. Both /program/[slug] and /skill/[slug] — and the catch-all that
+ * serves the pretty URLs — call notFound() when `config.isPublished ===
+ * false`, so a chip must only become a link when its destination actually
+ * resolves AND is published.
+ *
+ * Three states per entity, and the middle one is easy to get wrong:
+ *   - config exists, isPublished === false  -> NOT linkable
+ *   - config exists, published              -> linkable (custom slug if set)
+ *   - NO config at all                      -> linkable via the legacy path.
+ *     `notFound()` fires only on an explicit `false`; a missing config is
+ *     not "unpublished", and resolvePageSlug's kebab fallback still finds
+ *     the record. Treating no-config as unpublished would silently kill
+ *     every chip for entities the admin never opened.
+ *
+ * One indexed read per collection, resolved once per page render — not per
+ * chip, and never from the client.
+ *
+ * @returns {{
+ *   programSlugs: Record<string,string>, skillSlugs: Record<string,string>,
+ *   programBlocked: Set<string>, skillBlocked: Set<string>,
+ * }} slug maps keyed like the ones getNavMenuData builds (lower-cased id),
+ *    plus the lower-cased ids whose page is explicitly unpublished.
+ */
+export async function getPageLinkability() {
+  const empty = {
+    programSlugs: {}, skillSlugs: {},
+    programBlocked: new Set(), skillBlocked: new Set(),
+  };
+  try {
+    await dbConnect();
+    const [programConfigs, skillConfigs] = await Promise.all([
+      ProgramPageConfig.find({}).select('programId urlSlug isPublished').lean(),
+      SkillPageConfig.find({}).select('skillId urlSlug isPublished').lean(),
+    ]);
+
+    const build = (rows, idField) => {
+      const slugs = {};
+      const blocked = new Set();
+      for (const row of rows) {
+        const key = String(row?.[idField] ?? '').toLowerCase();
+        if (!key) continue;
+        if (row.isPublished === false) { blocked.add(key); continue; }
+        const slug = row.urlSlug?.trim();
+        if (slug) slugs[key] = slug;
+      }
+      return { slugs, blocked };
+    };
+
+    const p = build(programConfigs, 'programId');
+    const s = build(skillConfigs, 'skillId');
+    return {
+      programSlugs: p.slugs, skillSlugs: s.slugs,
+      programBlocked: p.blocked, skillBlocked: s.blocked,
+    };
+  } catch {
+    // Fail closed on the LINK, not on the page: no maps means every chip
+    // renders as the plain <span> it is today.
+    return empty;
+  }
+}

@@ -1,3 +1,5 @@
+import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
+
 /**
  * แปลง schedule object จาก API → dateLabel string สำหรับ <ScheduleCard />
  *
@@ -47,8 +49,20 @@ export function formatScheduleDate(schedule) {
   return `${startDay} ${startMonth}\n- ${endDay} ${endMonth}`;
 }
 
+/**
+ * Canonicalise an upstream status for <ScheduleCard />.
+ *
+ * This used to keep its own table — `{open, nearly_full→nearFull, full}` with
+ * `?? "open"` — which made it a SECOND fallback policy sitting upstream of the
+ * shared one. Two problems, both silent: it did not know `closed`, and its
+ * default laundered every unrecognised value into green "open" before
+ * lib/scheduleStatus was ever consulted. There is now one policy: delegate,
+ * and pass anything unrecognised through UNCHANGED so the renderer can show it
+ * neutrally instead of guessing.
+ *
+ * Kept as a named export because <ScheduleCard /> is fed through it from
+ * CourseCard; it is now a thin alias of normalizeScheduleStatus.
+ */
 export function formatStatusFromAPI(apiStatus) {
-  return (
-    { open: "open", nearly_full: "nearFull", full: "full" }[apiStatus] ?? "open"
-  );
+  return normalizeScheduleStatus(apiStatus) ?? apiStatus;
 }

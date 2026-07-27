@@ -1,5 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { resolveScheduleBadge } from '@/lib/scheduleStatus';
 
 /**
  * course_schedule — upcoming sessions for one course (2C.2b). Server component;
@@ -20,12 +21,6 @@ import { cn } from '@/lib/utils';
  */
 
 const MONTH_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-
-const STATUS = {
-  open:        { label: 'รับสมัคร', cls: 'bg-9e-green-900 text-9e-green-50' },
-  nearly_full: { label: 'ใกล้เต็ม', cls: 'bg-9e-orange-900 text-9e-orange-50' },
-  full:        { label: 'เต็ม',     cls: 'bg-red-50 text-red-600' },
-};
 
 const TYPE_TH = { classroom: 'ในห้องเรียน', hybrid: 'ไฮบริด', online: 'ออนไลน์' };
 
@@ -66,7 +61,7 @@ export function CourseScheduleSection({ content, data }) {
       <ul className="divide-y divide-[var(--surface-border)]">
         {schedules.map((s, i) => {
           const range = formatRange(s?.dates);
-          const status = STATUS[s?.status] ?? STATUS.open;
+          const status = resolveScheduleBadge(s?.status);
           const typeLabel = TYPE_TH[s?.type] ?? null;
           const href = scheduleHref(s, code);
 
@@ -77,9 +72,12 @@ export function CourseScheduleSection({ content, data }) {
                 <span className="block text-sm font-bold text-[var(--text-primary)]">{range ?? 'ยังไม่ระบุวันที่'}</span>
                 {typeLabel && <span className="block text-xs text-[var(--text-secondary)]">{typeLabel}</span>}
               </span>
-              <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', status.cls)}>
-                {status.label}
-              </span>
+              {/* Omitted entirely when the status is missing/blank. */}
+              {status && (
+                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', status.soft)}>
+                  {status.label}
+                </span>
+              )}
             </div>
           );
 

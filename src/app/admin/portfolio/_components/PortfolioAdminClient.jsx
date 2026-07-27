@@ -88,6 +88,22 @@ function ClientLogosTab({ initialLogos }) {
     });
   }
 
+  // Opts a logo out of the dark-mode white knockout. See
+  // ClientLogo.keepColorOnDark: brightness(0) erases enclosed counter-forms,
+  // so logos whose mark depends on them render in original colour instead.
+  function handleToggleKeepColor(row) {
+    setBusy(row._id);
+    const fd = new FormData();
+    fd.set('keepColorOnDark', String(!row.keepColorOnDark));
+    startTransition(async () => {
+      await updateClientLogo(row._id, fd);
+      setLogos((cur) =>
+        cur.map((r) => (r._id === row._id ? { ...r, keepColorOnDark: !r.keepColorOnDark } : r))
+      );
+      setBusy(null);
+    });
+  }
+
   function handleDelete(row) {
     if (!window.confirm('ลบโลโก้นี้?')) return;
     setBusy(row._id);
@@ -140,13 +156,20 @@ function ClientLogosTab({ initialLogos }) {
               <th className="w-[80px] px-3 py-3 text-left font-bold text-9e-navy dark:text-white">โลโก้</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">บริษัท</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
+              <th
+                className="w-28 px-3 py-3 text-center font-bold text-9e-navy dark:text-white"
+                title="เปิด = แสดงสีจริงในโหมดมืด (สำหรับโลโก้ที่เสียรูปเมื่อทำเป็นสีขาวล้วน)"
+              >
+                สีจริง (Dark)
+              </th>
               <th className="w-32 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {logos.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                {/* 7 columns: drag, #, logo, company, Active, สีจริง(Dark), จัดการ */}
+                <td colSpan={7} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   ยังไม่มีโลโก้ — กด <strong>เพิ่มโลโก้</strong> เพื่อเริ่มต้น
                 </td>
               </tr>
@@ -205,6 +228,23 @@ function ClientLogosTab({ initialLogos }) {
                       <span
                         className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
                           row.is_active ? 'left-4' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </td>
+                  <td className="px-3 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleKeepColor(row)}
+                      disabled={busy === row._id}
+                      aria-label={row.keepColorOnDark ? 'ใช้สีขาวในโหมดมืด' : 'คงสีจริงในโหมดมืด'}
+                      className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
+                        row.keepColorOnDark ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
+                          row.keepColorOnDark ? 'left-4' : 'left-0.5'
                         }`}
                       />
                     </button>

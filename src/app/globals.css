@@ -582,6 +582,31 @@ html.dark   { color-scheme: dark; }
 .dark .article-content hr                 { border-color: #1e3a5f; }
 
 /* ──────────────────────────────────────────────────────────────
+   Authored inline colours (see lib/articles/normalizeAuthoredColors.js).
+   Article bodies carry hardcoded Tiptap colours such as
+   `style="color: rgb(13, 27, 42)"`; an inline style outranks both
+   `dark:prose-invert` and every rule above, so the only reach into it
+   is `!important` keyed off the data attribute the server transform
+   adds. The declaration itself is left exactly as authored.
+
+   These no longer DISCARD the colour. The transform emits a per-theme
+   replacement that holds the authored hue and saturation and moves only
+   lightness until it clears the 3:1 floor against that theme's page
+   background; these rules just select which one applies. A colour that
+   already cleared the floor in a given theme gets its original value back
+   in that theme, so the rule is a no-op there — and a colour that cleared
+   BOTH is never marked at all, so neither rule matches it.
+
+   Selection is by attribute PRESENCE; the attribute's value records which
+   theme needed the adjustment, for diagnosis.
+   ────────────────────────────────────────────────────────────── */
+.dark           .article-content [data-authored-fg] { color: var(--authored-fg-dark) !important; }
+html:not(.dark) .article-content [data-authored-fg] { color: var(--authored-fg-light) !important; }
+
+.dark           .article-content [data-authored-bg] { background-color: var(--authored-bg-dark) !important; }
+html:not(.dark) .article-content [data-authored-bg] { background-color: var(--authored-bg-light) !important; }
+
+/* ──────────────────────────────────────────────────────────────
    Tiptap placeholder — the Placeholder extension sets the
    `is-editor-empty` class on the first empty block. Default
    styling hides it; we surface the prompt text instead.

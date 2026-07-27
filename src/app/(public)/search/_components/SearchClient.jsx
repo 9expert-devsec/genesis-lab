@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { resolveScheduleBadge } from '@/lib/scheduleStatus';
 import {
   Search,
   X,
@@ -21,12 +22,6 @@ const MONTH_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
-
-const STATUS_STYLE = {
-  open:        { dot: 'bg-[#39b980]', text: 'text-[#39b980]', label: 'รับสมัคร' },
-  nearly_full: { dot: 'bg-[#ffc94a]', text: 'text-[#d4a017]', label: 'ใกล้เต็ม' },
-  full:        { dot: 'bg-[#ff4b55]', text: 'text-[#ff4b55]', label: 'เต็ม' },
-};
 
 const TYPE_COLOR = {
   classroom: '#00CCFF',
@@ -162,7 +157,7 @@ function CourseResultCard({ course, term }) {
 function ScheduleResultRow({ schedule, course, term }) {
   const courseName = course?.course_name ?? schedule.course_name ?? '(ไม่ทราบชื่อหลักสูตร)';
   const type = schedule.type ?? 'classroom';
-  const status = STATUS_STYLE[schedule.status] ?? STATUS_STYLE.open;
+  const status = resolveScheduleBadge(schedule.status);
   const typeColor = TYPE_COLOR[type] ?? TYPE_COLOR.classroom;
   const typeLabel = TYPE_LABEL[type] ?? type;
   const price = course?.course_price;
@@ -201,12 +196,15 @@ function ScheduleResultRow({ schedule, course, term }) {
         <p className="mt-0.5 text-xs text-gray-500">{formatDateLabel(schedule)}</p>
       </div>
 
-      <span
-        className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
-      >
-        <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
-        {status.label}
-      </span>
+      {/* Omitted entirely when the status is missing/blank. */}
+      {status && (
+        <span
+          className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
+        >
+          <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
+          {status.label}
+        </span>
+      )}
 
       <span className="shrink-0 text-sm font-bold text-[#0D1B2A]">
         {!price || Number(price) === 0

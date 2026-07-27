@@ -4,7 +4,7 @@ import { getNavMenuData } from '@/lib/navmenu/getNavMenuData';
 import { getPublishedMasterclasses } from '@/lib/masterclass/getMasterclass';
 import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { skills as SKILLS_CONFIG } from '@/config/site';
-import { toKebab } from '@/lib/slug';
+import { programHref, skillHref } from '@/lib/utils';
 import { UniverseClient } from './_components/UniverseClient';
 
 /**
@@ -121,27 +121,6 @@ function shapeConstellations(careerPaths) {
   return out;
 }
 
-/**
- * Build the public href for a program — mirrors programHref() in
- * PublicHeaderClient.jsx: a custom admin slug renders at the bare slug,
- * otherwise fall back to the legacy /program/<kebab> path.
- */
-function programHref(id, programName, programSlugs) {
-  const custom = programSlugs?.[id.toLowerCase()];
-  if (custom) return `/${custom}`;
-  return `/program/${toKebab(programName)}`;
-}
-
-/**
- * Build the public href for a skill — mirrors skillHref() in
- * PublicHeaderClient.jsx: an admin-set custom slug (keyed by lower-cased
- * upstreamId) renders at the bare slug, else the legacy /skill/<slug>.
- */
-function skillHref(skill, skillSlugs) {
-  const custom = skillSlugs?.[skill.upstreamId?.toLowerCase?.()];
-  return custom ? `/${custom}` : `/skill/${skill.slug}`;
-}
-
 export default async function UniversePage() {
   const [orderedPrograms, navMenuData, masterclasses, careerPaths] = await Promise.all([
     listPrograms()
@@ -170,7 +149,7 @@ export default async function UniversePage() {
     }
     programCatalog.push({
       name: p.program_name ?? '',
-      href: programHref(id, p.program_name, navMenuData.programSlugs),
+      href: programHref(p, navMenuData.programSlugs),
       courseIds: entry.items.map((c) => String(c.course_id)),
     });
   }

@@ -5,6 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { Download, FileText, HelpCircle } from "lucide-react";
 import { courseHref } from "@/lib/utils";
+import {
+  SCHEDULE_STATUS_OPTIONS,
+  resolveScheduleBadge,
+} from "@/lib/scheduleStatus";
 
 const MONTH_TH = [
   "ม.ค.",
@@ -20,16 +24,6 @@ const MONTH_TH = [
   "พ.ย.",
   "ธ.ค.",
 ];
-
-const STATUS_STYLE = {
-  open: { dot: "bg-[#39b980]", text: "text-[#39b980]", label: "รับสมัคร" },
-  nearly_full: {
-    dot: "bg-[#ffc94a]",
-    text: "text-[#d4a017]",
-    label: "ใกล้เต็ม",
-  },
-  full: { dot: "bg-[#ff4b55]", text: "text-[#ff4b55]", label: "เต็ม" },
-};
 
 const TYPE_COLOR = {
   classroom: "#00CCFF",
@@ -216,9 +210,11 @@ export function ScheduleClient({
             ariaLabel="สถานะ"
           >
             <option value="all">สถานะทั้งหมด</option>
-            <option value="open">รับสมัคร</option>
-            <option value="nearly_full">ใกล้เต็ม</option>
-            <option value="full">เต็ม</option>
+            {/* Driven off the same source as the badges, so the filter wording
+                cannot drift from what the rows actually say. */}
+            {SCHEDULE_STATUS_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
           </FilterSelect>
 
           <div className="flex items-center gap-2">
@@ -628,7 +624,7 @@ function ProgramTable({
 }
 
 function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
-  const statusStyle = STATUS_STYLE[schedule.status] ?? STATUS_STYLE.open;
+  const statusStyle = resolveScheduleBadge(schedule.status);
   const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
   const dateLabel = formatDateLabel(schedule);
   // Prefer the internal registration page with the schedule's _id pre-selected.
@@ -650,9 +646,12 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
       <span className="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
         {dateLabel}
       </span>
+      {/* Omitted entirely when the status is missing/blank. */}
+      {statusStyle && (
       <span className={`text-[9px] font-bold leading-none ${statusStyle.text}`}>
         {statusStyle.label}
       </span>
+      )}
     </span>
   );
 

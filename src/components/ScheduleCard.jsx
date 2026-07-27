@@ -1,17 +1,12 @@
 "use client";
 
 import { useId } from "react";
+import { NEUTRAL_STATUS, resolveScheduleBadge } from "@/lib/scheduleStatus";
 
 const TYPE_STYLES = {
   classroom: { stroke: "#005eff", dot: "#005eff" },
   hybrid: { stroke: "#a854f7", dot: "#a854f7" },
   online: { stroke: "#22C55E", dot: "#22C55E" },
-};
-
-const STATUS_STYLES = {
-  full: { bg: "bg-[#ff4b55]", text: "text-white", label: "เต็ม" },
-  nearFull: { bg: "bg-[#ffc94a]", text: "text-white", label: "ใกล้เต็ม" },
-  open: { bg: "bg-[#39b980]", text: "text-white", label: "รับสมัคร" },
 };
 
 function cx(...classes) {
@@ -27,7 +22,10 @@ export default function ScheduleCard({
 }) {
   const maskId = useId();
   const typeStyle = TYPE_STYLES[type] || TYPE_STYLES.classroom;
-  const statusStyle = STATUS_STYLES[status] || STATUS_STYLES.open;
+  // Accepts either MSDB's `nearly_full` or the camel-cased `nearFull` that
+  // formatStatusFromAPI hands in — both resolve to the same entry, so a
+  // nearly-full session can no longer fall through to green "open".
+  const statusStyle = resolveScheduleBadge(status);
 
   const lines = dateLabel.split("\n");
 
@@ -76,15 +74,18 @@ export default function ScheduleCard({
             </div>
           ))}
 
-          <div
-            className={cx(
-              "mt-[1px] rounded-full px-1.5 py-[2px] text-[0.55rem] font-bold leading-none whitespace-nowrap sm:mt-[2px] sm:px-2 sm:py-[3px] sm:text-[0.65rem]",
-              statusStyle.bg,
-              statusStyle.text,
-            )}
-          >
-            {statusLabel || statusStyle.label}
-          </div>
+          {/* No badge at all when the status is missing/blank — never a
+              green default. See resolveScheduleBadge. */}
+          {(statusStyle || statusLabel) && (
+            <div
+              className={cx(
+                "mt-[1px] rounded-full px-1.5 py-[2px] text-[0.55rem] font-bold leading-none whitespace-nowrap sm:mt-[2px] sm:px-2 sm:py-[3px] sm:text-[0.65rem]",
+                statusStyle?.solid ?? NEUTRAL_STATUS.solid,
+              )}
+            >
+              {statusLabel || statusStyle.label}
+            </div>
+          )}
         </div>
       </div>
 
