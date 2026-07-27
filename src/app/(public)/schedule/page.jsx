@@ -4,6 +4,7 @@ import { getAllSchedules } from '@/lib/api/schedules';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
+import { joinCourseSchedules } from '@/lib/schedule/joinCourseSchedules';
 import { ScheduleClient } from './_components/ScheduleClient';
 
 export const metadata = {
@@ -39,43 +40,29 @@ export default async function SchedulePage() {
     () => rawPrograms
   );
 
-  // Server-side join schedules → courses by course ObjectId, so the
-  // client doesn't have to re-derive the map. /schedules items carry
-  // the course as a string ObjectId in `course`.
-  const schedulesByCourseId = new Map();
-  for (const s of schedules) {
-    const ref = typeof s.course === 'string' ? s.course : s.course?._id;
-    if (!ref) continue;
-    const list = schedulesByCourseId.get(String(ref)) ?? [];
-    list.push(s);
-    schedulesByCourseId.set(String(ref), list);
-  }
+  // Server-side join schedules → courses by course ObjectId, so the client
+  // doesn't have to re-derive the map. Courses with no upcoming schedule are
+  // dropped — the schedule page is about "what's actually open."
+  const {
+    rows: coursesWithSchedules,
+    dropped,
+    orphans,
+  } = joinCourseSchedules(courses, schedules);
 
-  // Strip the course list down to the fields the table actually renders
-  // and attach this course's schedules. Drops courses with no upcoming
-  // schedules — the schedule page is about "what's actually open."
-  const coursesWithSchedules = courses
-    .map((c) => {
-      const list = schedulesByCourseId.get(String(c._id)) ?? [];
-      if (list.length === 0) return null;
-      return {
-        _id: c._id,
-        course_id: c.course_id,
-        course_name: c.course_name,
-        course_trainingdays: c.course_trainingdays ?? null,
-        course_price: c.course_price ?? null,
-        program: c.program
-          ? {
-              _id: c.program._id,
-              program_id: c.program.program_id,
-              program_name: c.program.program_name,
-              programiconurl: c.program.programiconurl ?? null,
-            }
-          : null,
-        schedules: list,
-      };
-    })
-    .filter(Boolean);
+  // Reconcile-and-warn. The drop above is correct but lossy and silent: a course
+  // missing because upstream filtered its schedule out (empty `signup_url` →
+  // excluded from /schedules) is indistinguishable from one correctly absent.
+  // ONE line per render, codes capped so the log stays readable.
+  if (dropped.length > 0 || orphans.length > 0) {
+    const shown = dropped.slice(0, 10).join(', ');
+    const more = dropped.length > 10 ? `, +${dropped.length - 10} more` : '';
+    const orphanRows = orphans.reduce((n, o) => n + o.count, 0);
+    console.warn(
+      `[schedule] joined ${coursesWithSchedules.length}/${courses.length} courses ` +
+        `from ${schedules.length} schedules — dropped ${dropped.length} with zero ` +
+        `upcoming schedules (${shown}${more}), ${orphanRows} orphan schedules`
+    );
+  }
 
   // Reduce programs payload to what the filter dropdown needs.
   const programsLite = programs.map((p) => ({
