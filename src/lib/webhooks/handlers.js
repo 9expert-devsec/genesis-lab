@@ -23,6 +23,7 @@ import {
   coursePathFromId,
   planCourseRevalidation,
 } from '@/lib/webhooks/courseRevalidatePlan';
+import { assessSchedulePublicVisibility } from '@/lib/webhooks/schedulePublicVisibility';
 
 // ── shared utils (mirror the sync libs) ─────────────────────────────
 
@@ -147,11 +148,11 @@ export async function handleCourseEvent(event, data, deps = {}) {
   return { revalidated };
 }
 
-export async function handleScheduleEvent(_event, data) {
+export async function handleScheduleEvent(event, data) {
   // Genesis does not cache schedules in Mongo — public pages call
   // listSchedulesByCourse() with ISR (30-min revalidate + 'schedules'
-  // tag). Same revalidation for create/update/delete, so `event` is
-  // intentionally unused here (renamed `_event` to signal intent).
+  // tag). Same revalidation for create/update/delete; `event` is read only to
+  // skip the visibility assessment on deletes (see below).
   //
   // Upstream payload carries the linked course as either an ObjectId
   // string (`data.course`) or a populated object (`{ course_id }`).
@@ -159,11 +160,59 @@ export async function handleScheduleEvent(_event, data) {
     toStr(data?.course?.course_id) || // populated
     toStr(data?.course_id) ||         // explicit
     '';
+  const revalidated = [];
+  const track = (r) => { if (r) revalidated.push(r); };
 
-  safeRevalidateTag('schedules');
+  // UNCHANGED targets — the 'schedules' tag already covers the /schedule page's
+  // fetch. What changed is that we now RECORD them: this handler used to return
+  // nothing, so WebhookLog.revalidated was null while status said "ok", and the
+  // log attested "processed" without saying what it touched.
+  track(safeRevalidateTag('schedules'));
   const path = coursePathFromId(courseId);
-  if (path) safeRevalidate(path);
-  safeRevalidate('/search');
+  if (path) track(safeRevalidate(path));
+  track(safeRevalidate('/search'));
+
+  // Will this row actually be visible to us? Upstream's /schedules endpoint
+  // filters rows out silently (docs/api-domains.md:276-278), so a perfectly
+  // "ok" delivery can describe a row no public surface will ever show. Record
+  // the failing criterion + raw value NOW, while we still hold the document.
+  //
+  // Deletes carry no schedule fields (verified: deleted payloads are `_id`
+  // only), so assessing them would log three bogus failures every time.
+  if (event !== 'schedule.deleted') {
+    const { visible, failures, uncertainties } =
+      assessSchedulePublicVisibility(data);
+    if (!visible) {
+      // Rides the existing `revalidated` audit array — same shape the route
+      // already persists, and it already carries non-revalidation entries
+      // (`alias-lookup`). `ok: false` marks it as "something to look at", NOT a
+      // delivery failure: status stays 'ok' and the route still 200s.
+      //
+      // TWO types, not one: `visibility` is a fact about upstream's filter,
+      // `visibility-uncertain` is an open question (see the status note in
+      // schedulePublicVisibility.js). Whoever reads WebhookLog.revalidated later
+      // must be able to tell "definitely invisible" from "possibly invisible"
+      // without opening this file, so the distinction lives in `type` — a field
+      // you can query on — rather than only in the prose of `error`.
+      for (const f of failures) {
+        track({ type: 'visibility', target: f.criterion, ok: false, error: f.reason, value: f.value });
+      }
+      for (const u of uncertainties) {
+        track({ type: 'visibility-uncertain', target: u.criterion, ok: false, error: u.reason, value: u.value });
+      }
+      // One line, so it also lands in the runtime log rather than waiting to be
+      // queried. The raw values were in our DB the whole time last incident.
+      // A row with no hard failure is reported as MAY BE, not IS — overstating
+      // an unknown is its own kind of false report.
+      const reasons = [...failures, ...uncertainties].map((f) => f.reason).join('; ');
+      console.warn(
+        `[webhook] ${event} ${toStr(data?._id)} (${courseId || 'unknown course'}) ` +
+          `${failures.length ? 'is INVISIBLE' : 'MAY BE INVISIBLE'} to /schedules — ${reasons}`
+      );
+    }
+  }
+
+  return { revalidated };
 }
 
 export async function handlePromotionEvent(event, data) {

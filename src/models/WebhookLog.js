@@ -19,9 +19,19 @@ const WebhookLogSchema = new mongoose.Schema(
     payload:      { type: mongoose.Schema.Types.Mixed, default: null },
     status:       { type: String, enum: ['ok', 'error'], default: 'ok', index: true },
     error:        { type: String, default: '' },
-    // Audit of cache revalidation performed by the handler: an array of
-    // { type: 'tag'|'path'|'alias-lookup', target, ok, error? }. Null when the
-    // event's handler performs/returns no revalidation.
+    // Audit of what the handler did: an array of
+    // { type: 'tag'|'path'|'alias-lookup'|'visibility'|'visibility-uncertain',
+    //   target, ok, error?, value? }. Null when the handler returns nothing.
+    //
+    // Not every entry is a revalidation — `alias-lookup` records a DB lookup.
+    // `visibility` records that an incoming row FAILS MSDB's own /schedules read
+    // filter (docs/api-domains.md:276-278) and will therefore never reach a
+    // public surface; `visibility-uncertain` records that we could not DECIDE
+    // (e.g. a status that only matches after case-folding, where upstream's own
+    // comparison is unverified) so the row MAY be invisible. Query on `type` to
+    // separate the two — definite and possible must not be read as the same
+    // claim. Both carry ok:false, and neither is a delivery failure: the
+    // document-level `status` stays 'ok' and the route still returns 200.
     revalidated:  { type: mongoose.Schema.Types.Mixed, default: null },
     processed_at: { type: Date,   default: () => new Date() },
   },
