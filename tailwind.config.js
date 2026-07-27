@@ -3,9 +3,20 @@ module.exports = {
   content: [
     './src/app/**/*.{js,jsx}',
     './src/components/**/*.{js,jsx}',
-    // Page Builder preset→class maps live in lib; their class literals must be
-    // scanned by the JIT or the generated pages render unstyled.
-    './src/lib/pageBuilder/**/*.{js,jsx}',
+    // ALL of lib, not a per-folder allowlist. Class literals do not only live in
+    // components: any module that centralises a preset→class map holds them too
+    // (Page Builder's theme presets, scheduleStatus's status colours). The JIT
+    // only emits what it can SEE, so a class map outside these globs compiles to
+    // nothing and the surface renders unstyled — with no build error, no failing
+    // test, and no runtime warning.
+    //
+    // This entry was `lib/pageBuilder/**` alone. Centralising the five duplicated
+    // schedule-status maps into lib/scheduleStatus.js moved four hex colours out
+    // of scanned components and into an unscanned file, and every status badge
+    // silently lost its colour. Naming one folder is what let that happen, so the
+    // rule is now general: if it is in src/lib and it holds a class string, it is
+    // scanned. test/pure/tailwindContentCoverage.test.mjs enforces it.
+    './src/lib/**/*.{js,jsx}',
   ],
   darkMode: 'class',
   theme: {

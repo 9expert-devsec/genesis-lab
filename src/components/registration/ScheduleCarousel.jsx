@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EarlyBirdRibbon } from '@/components/ui/EarlyBirdRibbon';
-import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+import { NEUTRAL_STATUS, resolveScheduleBadge } from '@/lib/scheduleStatus';
 
 /**
  * Horizontal scrollable list of schedule cards.
@@ -132,7 +132,7 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
   // raw value rather than being advertised as green "เปิดรับ".
   const statusStyle = resolveScheduleBadge(schedule.status);
   const statusLabel = statusStyle?.label ?? schedule.status;
-  const statusClass = statusStyle?.soft ?? 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300';
+  const statusClass = statusStyle?.soft ?? NEUTRAL_STATUS.soft;
 
   return (
     <button
