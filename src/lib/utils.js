@@ -70,8 +70,9 @@ export function courseHref(slug) {
  * /program/<kebab-of-name> path, which resolvePageSlug still resolves.
  *
  * Consolidated from three near-identical copies (public header mega-menu,
- * home ProgramSelector, /universe). Verified against live data: all 27
- * programs produce byte-identical URLs at all three call sites.
+ * home ProgramSelector, and a third route since removed). Verified against
+ * live data at consolidation time: all 27 programs produced byte-identical
+ * URLs at all three copies; two call sites remain.
  *
  * @param {object} program  needs `program_id` / `_id` / `program_name`
  * @param {Record<string,string>} slugMap  lower-cased id → urlSlug
@@ -111,9 +112,10 @@ export function programHref(program, slugMap = {}) {
  * exactly one id per skill, preferring the code. Measured today: 0 such
  * collisions.
  *
- * `upstreamCode` is in the list because without it the header mega-menu
- * and /universe emitted `/skill/<slug>`, which 308-redirects at best and
- * 404s at worst (`/skill/programming` resolved to nothing at all).
+ * `upstreamCode` is in the list because without it every caller passing a
+ * config/site.js entry — the header mega-menu among them — emitted
+ * `/skill/<slug>`, which 308-redirects at best and 404s at worst
+ * (`/skill/programming` resolved to nothing at all).
  *
  * The fallback prefers an explicit `slug` — config/site.js entries have
  * one and it does NOT always equal the kebab-cased name ("Development"

@@ -42,6 +42,10 @@ const STUBS = {
   // webhook handler/route code can be exercised under this loader.
   'next/cache': path.join(ROOT, 'test', 'stub-next-cache.mjs'),
   'next/server': path.join(ROOT, 'test', 'stub-next-server.mjs'),
+  // The header's nav-preview server actions import @/lib/db/connect, which
+  // throws at module load with no MONGODB_URI. They are never called during a
+  // server render — see the stub for the full note.
+  '@/lib/actions/nav-course-preview': path.join(ROOT, 'test', 'stub-nav-course-preview.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);

@@ -7,10 +7,13 @@ import { chipHref, courseHref, programHref, skillHref } from '@/lib/utils';
  * linkability rule that decides whether a chip may become a link at all.
  *
  * These replaced three near-identical copies (public header mega-menu, home
- * ProgramSelector, /universe) that had drifted apart in two ways: which id
- * fields they looked up, and what they fell back to. The drift was invisible
- * because each site is handed a DIFFERENT object shape, so no site exercised
- * another site's path. That is what the shape-specific cases below pin down.
+ * ProgramSelector, and a third route since removed) that had drifted apart in
+ * two ways: which id fields they looked up, and what they fell back to. The
+ * drift was invisible because each site is handed a DIFFERENT object shape, so
+ * no site exercised another site's path. That is what the shape-specific cases
+ * below pin down. TWO call sites remain; the shape matrix below is unchanged by
+ * the removal — it covers SHAPES, not sites, and both surviving sites pass the
+ * config-entry and API-item shapes.
  */
 
 // The three real shapes, as measured against live data.
@@ -45,9 +48,10 @@ test('program lookup prefers program_id over _id', () => {
 
 /**
  * THE SHAPE MATRIX. Every caller shape must reach the same custom slug. The
- * bug this replaced: the header and /universe key skills by `upstreamId` (an
- * ObjectId) while the config map is keyed by the CODE, so they never matched
- * and emitted a legacy URL that redirected — or, for Development, 404'd.
+ * bug this replaced: callers keying skills by `upstreamId` (an ObjectId) —
+ * the header among them — while the config map is keyed by the CODE, so they
+ * never matched and emitted a legacy URL that redirected — or, for
+ * Development, 404'd.
  */
 test('every caller shape resolves a skill to the same custom slug', () => {
   assert.equal(skillHref(CONFIG_SKILL, SKILL_SLUGS), '/programming-all-courses');
@@ -171,7 +175,7 @@ test('linkability: a nullish entity is never linkable', () => {
  * and require the result to equal the input.
  *
  * It runs against the REAL config/site.js entries — the exact shape the
- * header and /universe pass — with a slug map mirroring the live
+ * header and the home ProgramSelector pass — with a slug map mirroring the live
  * SkillPageConfig rows (keyed by code, verified: 0 of 6 keys are
  * ObjectId-shaped). Reverting the `upstreamCode` key makes every skill
  * here fail.
