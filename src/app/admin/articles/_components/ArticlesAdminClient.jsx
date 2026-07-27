@@ -11,17 +11,23 @@ import {
   updateArticlePinOrder,
 } from '@/lib/actions/articles';
 
-function formatDate(iso) {
-  if (!iso) return '—';
+// Split into two parts so the "เผยแพร่" column can stack date over time and
+// stay inside a w-32 budget instead of forcing a single wide line.
+function formatDateParts(iso) {
+  if (!iso) return { date: '—', time: '' };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('th-TH', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  if (Number.isNaN(d.getTime())) return { date: '—', time: '' };
+  return {
+    date: d.toLocaleDateString('th-TH', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+    time: d.toLocaleTimeString('th-TH', {
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  };
 }
 
 export function ArticlesAdminClient({ articles: initial }) {
@@ -162,26 +168,28 @@ export function ArticlesAdminClient({ articles: initial }) {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
+        <table className="min-w-[900px] w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
               <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
-              <th className="w-[80px] px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ภาพ</th>
+              <th className="w-16 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ภาพ</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">หัวข้อ / Slug</th>
-              <th className="w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ประเภท</th>
-              <th className="w-48 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Tags</th>
-              <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ผู้เขียน</th>
-              <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">เผยแพร่</th>
+              <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ประเภท</th>
+              <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Tags</th>
+              <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ผู้เขียน</th>
+              <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">เผยแพร่</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
-              <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Pin /articles</th>
+              <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white" title="Pin บนหน้า /articles">Pin</th>
               <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Landing</th>
-              <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
+              <th className="w-20 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
+                {/* Stays 11: ประเภท/ผู้เขียน are hidden with `hidden xl:table-cell`,
+                    never unmounted, so the header always has 11 <th> to span. */}
                 <td colSpan={11} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   {rows.length === 0 ? (
                     <>ยังไม่มีบทความ — กด <strong>สร้างบทความ</strong> เพื่อเริ่มต้น</>
@@ -226,8 +234,13 @@ export function ArticlesAdminClient({ articles: initial }) {
                   <p className="mt-0.5 truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {a.slug || '—'}
                   </p>
+                  {/* Below xl the ประเภท / ผู้เขียน columns are collapsed — the
+                      same two values surface here so nothing is lost. */}
+                  <p className="mt-0.5 truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] xl:hidden">
+                    {a.articleType === 'video' ? 'วิดีโอ' : 'บทความ'} · {a.author || '—'}
+                  </p>
                 </td>
-                <td className="px-3 py-3">
+                <td className="hidden px-3 py-3 xl:table-cell">
                   <span
                     className={
                       'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
@@ -241,7 +254,7 @@ export function ArticlesAdminClient({ articles: initial }) {
                 </td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {(a.tags ?? []).slice(0, 3).map((t) => (
+                    {(a.tags ?? []).slice(0, 2).map((t) => (
                       <span
                         key={t}
                         className="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action dark:bg-[#0D1B2A]"
@@ -249,18 +262,32 @@ export function ArticlesAdminClient({ articles: initial }) {
                         {t}
                       </span>
                     ))}
-                    {(a.tags?.length ?? 0) > 3 && (
+                    {(a.tags?.length ?? 0) > 2 && (
                       <span className="text-[11px] text-9e-slate-dp-50">
-                        +{a.tags.length - 3}
+                        +{a.tags.length - 2}
                       </span>
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-3 text-xs text-9e-navy dark:text-white">
-                  {a.author || '—'}
+                <td className="hidden px-3 py-3 text-xs text-9e-navy dark:text-white xl:table-cell">
+                  <span className="block max-w-[5.5rem] truncate" title={a.author || undefined}>
+                    {a.author || '—'}
+                  </span>
                 </td>
                 <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {formatDate(a.publishedAt)}
+                  {(() => {
+                    const { date, time } = formatDateParts(a.publishedAt);
+                    return (
+                      <>
+                        <span className="block">{date}</span>
+                        {time && (
+                          <span className="block text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                            {time}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </td>
                 <td className="px-3 py-3 text-center">
                   <button
@@ -335,7 +362,9 @@ export function ArticlesAdminClient({ articles: initial }) {
                       className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                       aria-label="แก้ไข"
                     >
-                      <Pencil className="h-3 w-3" /> แก้ไข
+                      <Pencil className="h-3 w-3" />
+                      {/* Icon-only below xl; the aria-label above keeps it named. */}
+                      <span className="hidden xl:inline">แก้ไข</span>
                     </Link>
                     <button
                       type="button"
@@ -347,7 +376,8 @@ export function ArticlesAdminClient({ articles: initial }) {
                       className="inline-flex items-center gap-1 rounded-9e-sm border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                       aria-label="ลบ"
                     >
-                      <Trash2 className="h-3 w-3" /> ลบ
+                      <Trash2 className="h-3 w-3" />
+                      <span className="hidden xl:inline">ลบ</span>
                     </button>
                   </div>
                 </td>

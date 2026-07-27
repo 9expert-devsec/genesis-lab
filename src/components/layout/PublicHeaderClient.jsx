@@ -24,8 +24,7 @@ import {
 import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
-import { cn, courseHref } from '@/lib/utils';
-import { toKebab } from '@/lib/slug';
+import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
 import {
   getCoursesByProgram,
   getCoursesBySkill,
@@ -278,33 +277,6 @@ function DesktopDropdown({ item }) {
       </div>
     </div>
   );
-}
-
-/**
- * Build the public URL for a program mega-menu entry. An admin-set custom
- * `urlSlug` (from ProgramPageConfig, passed in as `slugMap` keyed by
- * lower-cased program_id/_id) now renders at the bare slug — no /program
- * prefix. Programs without a custom slug fall back to the legacy
- * /program/<kebab> path. `slugMap` defaults to {} for backward-compat.
- */
-function programHref(program, slugMap = {}) {
-  for (const id of [program.program_id, program._id]) {
-    if (!id) continue;
-    const custom = slugMap[String(id).toLowerCase()];
-    if (custom) return `/${custom}`;
-  }
-  return `/program/${toKebab(program.program_name)}`;
-}
-
-/**
- * Build the public URL for a skill mega-menu entry. An admin-set custom
- * `urlSlug` (keyed by the skill's lower-cased upstreamId) renders at the
- * bare slug — no /skill prefix. Skills without one fall back to the
- * legacy /skill/<slug> path from the static config.
- */
-function skillHref(skill, slugMap = {}) {
-  const custom = slugMap[skill.upstreamId?.toLowerCase?.()];
-  return custom ? `/${custom}` : `/skill/${skill.slug}`;
 }
 
 function ProgramIcon({ src, size, alt }) {

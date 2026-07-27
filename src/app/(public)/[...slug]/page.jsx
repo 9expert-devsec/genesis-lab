@@ -34,7 +34,12 @@ import {
 import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
-import { resolveProgramBySlug, resolveSkillBySlug } from '@/lib/resolvePageSlug';
+import {
+  getPageLinkability,
+  resolveProgramBySlug,
+  resolveSkillBySlug,
+} from '@/lib/resolvePageSlug';
+import { chipHref, programHref, skillHref } from '@/lib/utils';
 import { listSkills } from '@/lib/api/skills';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
@@ -499,13 +504,21 @@ export default async function CatchAllPage({ params, searchParams }) {
     // which the hero gradient uses; the course detail response doesn't
     // include it. If the programs fetch fails we fall through to the
     // skillcolor fallback in CourseDetail.
-    const [scheduleRes, programsRes, earlyBirdRes, coursePromosRes, faqsRes] =
+    const [
+      scheduleRes, programsRes, earlyBirdRes, coursePromosRes, faqsRes,
+      skillsRes, linkabilityRes,
+    ] =
       await Promise.allSettled([
         listSchedulesByCourse(course._id, { limit: 10 }),
         listPrograms(),
         getEarlyBirdByCourse(course.course_id),
         getActiveCoursePromos(course.course_id),
         getLocalFaqsForCourse('public', course.course_id),
+        // Both feed the SkillBreadcrumb chips only. listSkills is already
+        // warm on this route (the program/skill branches above call it) and
+        // both run inside the existing allSettled, so neither adds latency.
+        listSkills(),
+        getPageLinkability(),
       ]);
     const schedules =
       scheduleRes.status === 'fulfilled' ? scheduleRes.value.items : [];
@@ -517,6 +530,38 @@ export default async function CatchAllPage({ params, searchParams }) {
       coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
     const faqs =
       faqsRes.status === 'fulfilled' ? faqsRes.value : [];
+    const liveSkills =
+      skillsRes.status === 'fulfilled' ? skillsRes.value.items ?? [] : [];
+    const linkability =
+      linkabilityRes.status === 'fulfilled'
+        ? linkabilityRes.value
+        : {
+            programSlugs: {}, skillSlugs: {},
+            programBlocked: new Set(), skillBlocked: new Set(),
+          };
+
+    // Chip hrefs, resolved ONCE here — not per chip, and never on the client.
+    // A skill missing from the live /skills list stays unlinked: its
+    // /skill/<slug> destination would not resolve.
+    const liveSkillIds = new Set(
+      liveSkills.flatMap((s) =>
+        [s?._id, s?.skill_id].filter(Boolean).map((v) => String(v).toLowerCase())
+      )
+    );
+    const skillHrefs = {};
+    for (const s of Array.isArray(course.skills) ? course.skills : []) {
+      const key = s?._id ?? s?.skill_id;
+      if (!key) continue;
+      const known = [s._id, s.skill_id]
+        .filter(Boolean)
+        .some((v) => liveSkillIds.has(String(v).toLowerCase()));
+      if (!known) continue;
+      const href = chipHref(s, 'skill', linkability, skillHref);
+      if (href) skillHrefs[String(key)] = href;
+    }
+    const courseProgramHref = chipHref(
+      course.program, 'program', linkability, programHref
+    );
 
     // Course + BreadcrumbList JSON-LD (separate <script> tags, as Google
     // recommends). courseUrl mirrors the slug logic in buildCourseJsonLd.
@@ -568,6 +613,8 @@ export default async function CatchAllPage({ params, searchParams }) {
         />
         <CourseDetail
           course={course}
+          skillHrefs={skillHrefs}
+          courseProgramHref={courseProgramHref}
           extension={extension}
           schedules={schedules}
           programs={programs}
@@ -647,6 +694,8 @@ export default async function CatchAllPage({ params, searchParams }) {
 
 function CourseDetail({
   course,
+  skillHrefs = {},
+  courseProgramHref = null,
   extension,
   schedules,
   programs,
@@ -684,7 +733,11 @@ function CourseDetail({
   return (
     <article className="bg-[var(--page-bg)]">
       <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
-      <SkillBreadcrumb course={course} />
+      <SkillBreadcrumb
+        course={course}
+        skillHrefs={skillHrefs}
+        programHref={courseProgramHref}
+      />
 
       {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
           reflowed sidebar (Course Outline downloads) can scroll clear of it on

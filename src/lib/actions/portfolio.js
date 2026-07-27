@@ -83,6 +83,7 @@ export async function createClientLogo(formData) {
     image_public_id,
     display_order,
     is_active: get('is_active') == null ? true : toBool(get('is_active')),
+    keepColorOnDark: toBool(get('keepColorOnDark')),
   };
 
   const doc = await ClientLogo.create(data);
@@ -130,6 +131,11 @@ export async function updateClientLogo(id, formData) {
   const activeRaw = get('is_active');
   if (activeRaw !== undefined && activeRaw !== null) {
     update.is_active = toBool(activeRaw);
+  }
+
+  const keepRaw = get('keepColorOnDark');
+  if (keepRaw !== undefined && keepRaw !== null) {
+    update.keepColorOnDark = toBool(keepRaw);
   }
 
   const doc = await ClientLogo.findByIdAndUpdate(id, update, { new: true });

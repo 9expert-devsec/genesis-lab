@@ -35,6 +35,9 @@ const EXTS = ['.js', '.jsx'];
 const STUBS = {
   'next/link': path.join(ROOT, 'test', 'stub-next-link.mjs'),
   'next/image': path.join(ROOT, 'test', 'stub-next-image.mjs'),
+  // Client components in the render tier call useRouter/useSearchParams during
+  // SSR; next/navigation does not resolve outside a Next runtime.
+  'next/navigation': path.join(ROOT, 'test', 'stub-next-navigation.mjs'),
   // next/cache + next/server don't resolve outside a Next runtime; stub them so
   // webhook handler/route code can be exercised under this loader.
   'next/cache': path.join(ROOT, 'test', 'stub-next-cache.mjs'),

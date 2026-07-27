@@ -40,6 +40,10 @@ export default function ClientLogosSection({ logos }) {
   return (
     <section
       aria-label="องค์กรที่ให้ความไว้วางใจ"
+      /* py-20 in BOTH themes. The `dark:py-12` that used to be here existed
+       * only to cancel the panel's `dark:py-8`; with the panel gone there is
+       * nothing to compensate, and a theme-conditional padding would be the
+       * very reflow-on-toggle it was added to prevent. */
       className="overflow-hidden bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]"
     >
       <div className="mx-auto max-w-[1200px] text-center">
@@ -55,6 +59,11 @@ export default function ClientLogosSection({ logos }) {
         บริษัทและองค์กรชั้นนำที่ใช้บริการ ได้แก่ {rowA.concat(rowB).map(l => l.company_name).join(', ')}
       </p>
 
+      {/* No panel, no tiles. The rows sit directly on the section background,
+        * so each row's `mask-image` fades its edges into the page colour —
+        * which is what a mask does when nothing is layered behind it. The
+        * light-panel version terminated the fade on the panel's own hard
+        * edge, which read as clipping rather than fading. */}
       <div className="mt-14 space-y-6">
         <MarqueeRow logos={rowA} direction="left" speed={40} />
         <MarqueeRow logos={rowB} direction="right" speed={35} />
@@ -132,14 +141,32 @@ function MarqueeRow({ logos, direction, speed = 40 }) {
         style={{ width: 'max-content' }}
       >
         {items.map((logo, i) => (
+          /* Plain slot — no background, no rounding, in either mode. */
           <div
             key={`${logo._id}-${i}`}
             className="flex h-[72px] w-[140px] shrink-0 items-center justify-center"
           >
+            {/* MONOCHROME WALL, dark mode only.
+              *
+              * `brightness-0 invert` maps every opaque pixel to the same
+              * white, at FULL opacity — the `opacity-40` that used to sit
+              * alongside it was the actual defect, turning the wall into
+              * ghosts. Light mode is untouched: original colour, full opacity.
+              *
+              * The exception is data, not a name list: brightness(0) erases
+              * every ENCLOSED counter-form, so a logo whose mark depends on
+              * one (the gold tree inside SCB's purple square, the '9' inside
+              * Praram 9's teal block) collapses to a featureless blob. Those
+              * carry `keepColorOnDark` and render in original colour, which
+              * is legible because their bright elements sit inside their own
+              * coloured fields. See ClientLogo.keepColorOnDark. */}
             <img
               src={logo.image_url}
               alt={logo.company_name}
-              className="h-auto max-h-[52px] w-auto max-w-[130px] object-contain opacity-70 transition-opacity duration-300 hover:opacity-100 dark:opacity-40 dark:brightness-0 dark:invert"
+              className={
+                'h-auto max-h-[52px] w-auto max-w-[130px] object-contain' +
+                (logo.keepColorOnDark ? '' : ' dark:brightness-0 dark:invert')
+              }
               loading="lazy"
               draggable={false}
             />

@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
+import { ArrowSlider } from '@/components/ui/ArrowSlider';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -448,7 +449,13 @@ export function ArticleDetailClient({
                 <h3 className="mb-5 text-lg font-bold text-9e-navy dark:text-white">
                   หลักสูตรที่เกี่ยวข้อง
                 </h3>
-                <RelatedCoursesSlider courses={relatedCoursesData} />
+                {/* `arrows="outside"` — this section's own p-6 gives the
+                    -left-4 / -right-4 arrows room to hang into. */}
+                <ArrowSlider
+                  items={relatedCoursesData}
+                  getKey={(c) => c.course_id}
+                  renderItem={(c) => <RelatedCourseCard course={c} />}
+                />
               </section>
             )}
 
@@ -458,10 +465,19 @@ export function ArticleDetailClient({
                 <h2 className="text-xl font-bold text-9e-navy dark:text-white">
                   บทความที่เกี่ยวข้อง
                 </h2>
-                <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                  {related.slice(0, 3).map((a) => (
-                    <RelatedArticleCard key={a._id} article={a} />
-                  ))}
+                {/* Every pinned article, in the admin-defined order — the
+                    server applies no cap on the explicit-picks path.
+                    `arrows="inside"` because this section is a bare
+                    `border-t` with no horizontal padding: outside arrows
+                    would sit in the xl column gutter (next to the share
+                    strip / TOC) and hug the viewport edge below xl. */}
+                <div className="mt-5">
+                  <ArrowSlider
+                    items={related}
+                    getKey={(a) => a._id}
+                    renderItem={(a) => <RelatedArticleCard article={a} />}
+                    arrows="inside"
+                  />
                 </div>
               </section>
             )}
@@ -756,65 +772,6 @@ function RelatedCourseCard({ course }) {
         )}
       </div>
     </a>
-  );
-}
-
-/**
- * Horizontal arrow slider — 3 cards visible, advances one card at a time.
- * Arrows hide at the bounds so the user can't scroll past the edges.
- */
-function RelatedCoursesSlider({ courses }) {
-  const [index, setIndex] = useState(0);
-  const perPage  = 3;
-  const total    = courses.length;
-  const maxIndex = Math.max(0, total - perPage);
-
-  const prev = () => setIndex((i) => Math.max(0, i - 1));
-  const next = () => setIndex((i) => Math.min(maxIndex, i + 1));
-
-  return (
-    <div className="relative">
-      {/* Arrow: prev */}
-      {index > 0 && (
-        <button
-          type="button"
-          onClick={prev}
-          aria-label="ก่อนหน้า"
-          className="absolute -left-4 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
-        </button>
-      )}
-
-      {/* Visible window — 3 cards */}
-      <div className="overflow-hidden">
-        <div
-          className="flex gap-4 transition-transform duration-300 ease-in-out"
-          style={{ transform: `translateX(calc(-${index} * (100% / ${perPage} + 16px / ${perPage})))` }}
-        >
-          {courses.map((course) => (
-            <div
-              key={course.course_id}
-              className="w-[calc((100%-32px)/3)] flex-shrink-0"
-            >
-              <RelatedCourseCard course={course} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Arrow: next */}
-      {index < maxIndex && (
-        <button
-          type="button"
-          onClick={next}
-          aria-label="ถัดไป"
-          className="absolute -right-4 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[var(--surface-border)] bg-white shadow-sm hover:bg-9e-ice dark:bg-[#111d2c] dark:hover:bg-[#0D1B2A]"
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
-        </button>
-      )}
-    </div>
   );
 }
 
