@@ -43,37 +43,136 @@ function createsStackingContext(cls) {
 // z-auto flow content.
 const rank = ({ positioned, z }) => (!positioned || z == null ? 0 : z);
 
-// ── ISSUE 1a: the sidebar is not trapped below the bar ──────────────────────
-// The aside's ancestors up to the root, with the exact classes each carries.
-const ASIDE_ANCESTORS = [
-  { name: 'grid', src: PAGE, classes: 'grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]' },
-  { name: 'content-wrapper', src: PAGE, classes: 'mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8' },
-  { name: 'article', src: PAGE, classes: 'bg-white' },
-  { name: 'layout-main', src: LAYOUT, classes: 'flex-1' },
-  { name: 'layout-shell', src: LAYOUT, classes: 'relative min-h-[100dvh] flex flex-col' },
-];
-
-test('no ancestor traps the sidebar in a lower stacking context', () => {
-  for (const anc of ASIDE_ANCESTORS) {
-    // tie the model to reality: the class string must still be in the source
-    assert.ok(anc.src.includes(anc.classes), `ancestor "${anc.name}" classes still present in source`);
-    // and none of them may create a stacking context
-    assert.equal(
-      createsStackingContext(anc.classes),
-      false,
-      `ancestor "${anc.name}" must NOT create a stacking context (would trap the aside)`,
+// ── The model is DERIVED from source, never transcribed ─────────────────────
+// Transcribing it is what broke this file: be78611 changed <article> from
+// `bg-white` to `bg-[var(--page-bg)]` — a colour-only dark-mode swap that
+// creates NO stacking context — and the hardcoded copy went stale, turning a
+// no-op edit into a red suite and a multi-day detour. Reading the class off the
+// source means the assertion runs against what the page actually ships, so it
+// can only go red for a reason that is really about stacking.
+//
+// A missing anchor THROWS rather than degrading: an element that was renamed or
+// deleted must not silently drop out of the model, because a dropped entry is an
+// unchecked ancestor.
+function classOf({ label, re, src = PAGE, file = 'page.jsx' }) {
+  const m = src.match(re);
+  if (!m) {
+    throw new Error(
+      `[stacking model] could not locate "${label}" in ${file}. It was renamed, ` +
+      `deleted, or its attributes were reordered — the stacking model is now ` +
+      `BLIND to that ancestor. Re-anchor the selector; do NOT drop the entry.`
     );
   }
-  // The layout shell is `relative` — the classic trap IF it also had a z-index.
-  // Confirm the predicate would catch that, so the check above isn't vacuous.
+  return m[1];
+}
+
+// GROUP 1 — ancestors BETWEEN the <aside> and <article>. These are the ones that
+// decide sidebar-vs-bar. CourseStickyCTA is a DIRECT CHILD of <article>, so
+// <article> is the common ancestor of both; trapping a common ancestor cannot
+// reorder its own descendants, which is why it is not in this group.
+const BETWEEN_ASIDE_AND_BAR = [
+  { label: 'grid (#course-content)', re: /<div\s+id="course-content"\s+className="([^"]*)"/ },
+  { label: 'content-wrapper',        re: /<div\s+className="([^"]*max-w-\[1200px\][^"]*)"/ },
+];
+
+// GROUP 2 — ancestors AT AND ABOVE <article>. These decide a DIFFERENT pairing:
+// the whole article subtree versus the layout's z-50 UI (header, back-to-top
+// button), which are siblings of <main>, not descendants of <article>.
+// The aside itself. Routed through classOf like everything else so a renamed or
+// deleted <aside> reports WHICH element vanished, instead of the bare
+// "Cannot read properties of null (reading '1')" that a raw .match(...)[1] gives.
+const ASIDE = { label: 'aside (sidebar)', re: /<aside\s+className="([^"]*)"/ };
+
+const AT_AND_ABOVE_ARTICLE = [
+  { label: 'article',      re: /<article\s+className="([^"]*)"/ },
+  { label: 'layout-main',  re: /<main[^>]*\sclassName="([^"]*)"/,                  src: LAYOUT, file: 'layout.jsx' },
+  { label: 'layout-shell', re: /<div\s+className="([^"]*min-h-\[100dvh\][^"]*)"/,  src: LAYOUT, file: 'layout.jsx' },
+];
+
+// ── ISSUE 1a (i): sidebar vs. the sticky bar ────────────────────────────────
+test('sidebar-vs-bar: no ancestor between the aside and <article> traps the sidebar under the bar', () => {
+  for (const anc of BETWEEN_ASIDE_AND_BAR) {
+    const cls = classOf(anc); // throws if the element is gone — see classOf
+    assert.equal(
+      createsStackingContext(cls),
+      false,
+      `ancestor "${anc.label}" must NOT create a stacking context — it would confine the ` +
+        `aside's z-50 inside it, and the bar's z-40 would then paint OVER the sidebar. ` +
+        `Shipped classes: "${cls}"`,
+    );
+  }
+  // Non-vacuity: the predicate must still be capable of returning true, or the
+  // loop above degrades to "always passes". The layout shell is `relative` —
+  // the classic trap IF it ever also gained a z-index.
   assert.equal(createsStackingContext('relative min-h-[100dvh] flex flex-col'), false);
   assert.equal(createsStackingContext('relative z-10 min-h-[100dvh]'), true, 'relative+z WOULD trap');
+});
+
+// ── ISSUE 1a (ii): the article subtree vs. the layout's elevated UI ─────────
+test('article-vs-layout-UI: no ancestor at/above <article> traps its subtree under the header or back-to-top', () => {
+  for (const anc of AT_AND_ABOVE_ARTICLE) {
+    const cls = classOf(anc);
+    assert.equal(
+      createsStackingContext(cls),
+      false,
+      `ancestor "${anc.label}" must NOT create a stacking context — it would seal the whole ` +
+        `article subtree into one layer and change how it interleaves with the layout's ` +
+        `z-50 header / back-to-top button. Shipped classes: "${cls}"`,
+    );
+  }
+});
+
+// ── ISSUE 1a (iii): the chain must not GROW ─────────────────────────────────
+// The hole this closes: the two lists above enumerate the ancestors we know
+// about, and NOTHING made them complete. Wrapping the grid in
+// <div className="isolate"> genuinely traps the sidebar (the bar's z-40 would
+// paint over the aside's z-50) while every assertion above stays green, because
+// the new wrapper simply is not in the list.
+//
+// Mechanism: count the net nesting depth of layout elements between <article>
+// and <aside>. It is a depth counter, not a JSX parser — it matches only
+// lowercase HTML container tags, so React components (Capitalized, and always
+// either self-closing or balanced) are skipped entirely. Verified against the
+// real file: the span contains `div` and nothing else, and no matched tag has a
+// ">" inside an attribute value. If either stops being true this goes red rather
+// than quietly mis-counting.
+const CONTAINER_TAG =
+  /<(\/?)(?:div|section|article|aside|main|header|footer|nav|form|figure|ul|ol|li|p|table)\b([^>]*)>/g;
+
+const EXPECTED_ASIDE_DEPTH = 2; // content-wrapper → grid, then the aside
+
+function asideDepthBelowArticle() {
+  const from = PAGE.match(/<article\s+className="[^"]*"/);
+  const to = PAGE.match(/<aside\s+className="[^"]*"/);
+  if (!from || !to) throw new Error('[stacking model] <article> or <aside> not found in page.jsx');
+  let depth = 0;
+  CONTAINER_TAG.lastIndex = from.index + from[0].length;
+  let m;
+  while ((m = CONTAINER_TAG.exec(PAGE)) && m.index < to.index) {
+    if (m[1] === '/') depth -= 1;                             // </div>
+    else if (!m[2].trimEnd().endsWith('/')) depth += 1;       // <div ...> (not self-closing)
+  }
+  return depth;
+}
+
+test('the aside→article chain has not GROWN: a new wrapper would trap the sidebar unchecked', () => {
+  assert.equal(
+    asideDepthBelowArticle(),
+    EXPECTED_ASIDE_DEPTH,
+    `The number of elements wrapping the <aside> inside <article> changed. A NEW ANCESTOR ` +
+      `APPEARED (or one was removed). Do not just bump this number and do not merely add it ` +
+      `to BETWEEN_ASIDE_AND_BAR: first assess whether the new element creates a stacking ` +
+      `context (transform / filter / backdrop-filter / opacity<1 / isolate / mix-blend / ` +
+      `will-change / contain / perspective / clip-path / mask, or position+z-index). If it ` +
+      `does, it confines the aside's z-50 and the sticky bar's z-40 will paint OVER the ` +
+      `sidebar, making the Course Outline downloads unclickable at lg+.`,
+  );
 });
 
 // ── ISSUE 1b: computed paint order from the real z-values ───────────────────
 test('sidebar and button paint above the bar; the bar paints above ordinary content', () => {
   const barZ = Number(barHtml().match(/\bz-(\d+)\b/)[1]);
-  const asideClass = PAGE.match(/<aside\s+className="([^"]*)"/)[1];
+  const asideClass = classOf(ASIDE);
   const buttonZ = Number(BUTTON.match(/\bz-(\d+)\b/)[1]);
   const asideZ = Number(asideClass.match(/\bz-(\d+)\b/)[1]);
 
@@ -140,7 +239,7 @@ test('CONTROL: the pre-fix z-values painted the sidebar BELOW the bar', () => {
   assert.ok(rank(oldAside) < rank(oldBar), 'old: sidebar painted below the bar (the bug)');
   // post-fix flips it (uses the real shipped values)
   const barZ = Number(barHtml().match(/\bz-(\d+)\b/)[1]);
-  const asideZ = Number(PAGE.match(/<aside\s+className="([^"]*)"/)[1].match(/\bz-(\d+)\b/)[1]);
+  const asideZ = Number(classOf(ASIDE).match(/\bz-(\d+)\b/)[1]);
   assert.ok(asideZ > barZ, 'new: sidebar paints above the bar');
 });
 
