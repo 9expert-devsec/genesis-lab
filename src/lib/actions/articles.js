@@ -309,6 +309,42 @@ export async function toggleArticleFeaturedOnLanding(id, value) {
   return { ok: true };
 }
 
+/**
+ * Apply a positioning plan produced by src/lib/articlePositioning.js
+ * (`planPromotion` / `planDemotion` / `planBadgeToggle`).
+ *
+ * ONE bulkWrite rather than a call per document: demoting an article renumbers
+ * every survivor, and a per-document loop that fails halfway leaves the block
+ * with a hole — exactly the state the renumbering exists to prevent.
+ *
+ * Only the three positioning fields are writable through here; anything else in
+ * the payload is dropped rather than trusted, since the plan is computed on the
+ * client from the list it was handed.
+ */
+export async function applyArticlePositionPlan(plan) {
+  await requireAdmin('articles');
+  const writes = Array.isArray(plan?.writes) ? plan.writes : [];
+  if (writes.length === 0) return { ok: true, modified: 0 };
+  await dbConnect();
+
+  const ops = [];
+  for (const w of writes) {
+    if (!mongoose.isValidObjectId(w?._id)) continue;
+    const $set = {};
+    if (typeof w.isPinnedOnArticlePage === 'boolean') $set.isPinnedOnArticlePage = w.isPinnedOnArticlePage;
+    if (typeof w.showPinBadge === 'boolean') $set.showPinBadge = w.showPinBadge;
+    if (Number.isFinite(Number(w.pinOrder))) $set.pinOrder = Number(w.pinOrder);
+    if (Object.keys($set).length === 0) continue;
+    ops.push({ updateOne: { filter: { _id: w._id }, update: { $set } } });
+  }
+  if (ops.length === 0) return { ok: true, modified: 0 };
+
+  const res = await Article.bulkWrite(ops);
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(PUBLIC_PATH);
+  return { ok: true, modified: res?.modifiedCount ?? ops.length };
+}
+
 export async function updateArticlePinOrder(id, pinOrder) {
   await requireAdmin('articles');
   await dbConnect();

@@ -2,15 +2,31 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Pencil, Pin, Plus, Search, Star, Trash2 } from 'lucide-react';
 import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  Pencil,
+  Pin,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+} from 'lucide-react';
+import {
+  applyArticlePositionPlan,
   deleteArticle,
   toggleArticleActive,
   toggleArticleFeaturedOnLanding,
-  toggleArticlePinnedOnArticlePage,
   updateArticlePinOrder,
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
+import {
+  applyPositionPlan,
+  planBadgeToggle,
+  planDemotion,
+  planPromotion,
+  shouldShowPinBadge,
+} from '@/lib/articlePositioning';
 
 // Split into two parts so the "เผยแพร่" column can stack date over time and
 // stay inside a w-32 budget instead of forcing a single wide line.
@@ -97,19 +113,26 @@ export function ArticlesAdminClient({ articles: initial }) {
     });
   }
 
-  function handleTogglePin(a) {
-    const next = !a.isPinnedOnArticlePage;
+  /**
+   * Promote / demote / badge all go through the same path: a pure planner
+   * computes the writes from the CURRENT full list, one action applies them in
+   * a single bulkWrite, and the same plan is replayed locally so the optimistic
+   * state and the persisted state come out of one piece of logic rather than
+   * two that have to be kept in step.
+   */
+  function runPlan(a, plan) {
     setBusyId(a._id);
     startTransition(async () => {
-      const res = await toggleArticlePinnedOnArticlePage(a._id, next);
-      if (res?.ok) {
-        setRows((cur) =>
-          cur.map((r) => (r._id === a._id ? { ...r, isPinnedOnArticlePage: next } : r))
-        );
-      }
+      const res = await applyArticlePositionPlan(plan);
+      if (res?.ok) setRows((cur) => applyPositionPlan(cur, plan));
       setBusyId(null);
     });
   }
+
+  const handlePromote = (a) => runPlan(a, planPromotion(rows, a._id));
+  const handleDemote = (a) => runPlan(a, planDemotion(rows, a._id));
+  const handleBadgeToggle = (a) =>
+    runPlan(a, planBadgeToggle(a._id, !shouldShowPinBadge({ ...a, isPinnedOnArticlePage: true })));
 
   function handleToggleFeatured(a) {
     const next = !a.featuredOnLanding;
@@ -202,7 +225,12 @@ export function ArticlesAdminClient({ articles: initial }) {
               <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ผู้เขียน</th>
               <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">เผยแพร่</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
-              <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white" title="Pin บนหน้า /articles">Pin</th>
+              <th
+                className="w-48 px-3 py-3 text-left font-bold text-9e-navy dark:text-white"
+                title="ตำแหน่ง = ย้ายบทความขึ้นบล็อกบนสุด · ป้าย = แสดงหมุดบนการ์ด (คนละเรื่องกัน)"
+              >
+                ตำแหน่ง / ป้าย
+              </th>
               <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Landing</th>
               <th className="w-20 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
@@ -328,36 +356,15 @@ export function ArticlesAdminClient({ articles: initial }) {
                     />
                   </button>
                 </td>
-                <td className="px-3 py-3 text-center">
-                  <div className="flex flex-col items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePin(a)}
-                      disabled={busyId === a._id}
-                      aria-label={a.isPinnedOnArticlePage ? 'ยกเลิกการปักหมุด' : 'ปักหมุดที่หน้า /articles'}
-                      title={a.isPinnedOnArticlePage ? 'ยกเลิก Pin' : 'Pin บทความนี้'}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-9e-ice disabled:opacity-50 dark:hover:bg-[#0D1B2A]"
-                    >
-                      <Pin
-                        className={`h-4 w-4 transition-colors ${
-                          a.isPinnedOnArticlePage
-                            ? 'fill-9e-action text-9e-action'
-                            : 'text-gray-300 dark:text-[#1e3a5f]'
-                        }`}
-                        strokeWidth={2}
-                      />
-                    </button>
-                    {a.isPinnedOnArticlePage && (
-                      <input
-                        type="number"
-                        min="0"
-                        value={a.pinOrder ?? 0}
-                        onChange={(e) => handlePinOrderChange(a, e.target.value)}
-                        title="ลำดับ Pin (น้อย = ขึ้นก่อน)"
-                        className="w-12 rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-center text-xs text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
-                      />
-                    )}
-                  </div>
+                <td className="px-3 py-3">
+                  <PositionCell
+                    article={a}
+                    busy={busyId === a._id}
+                    onPromote={() => handlePromote(a)}
+                    onDemote={() => handleDemote(a)}
+                    onOrderChange={(v) => handlePinOrderChange(a, v)}
+                    onBadgeToggle={() => handleBadgeToggle(a)}
+                  />
                 </td>
                 <td className="px-3 py-3 text-center">
                   <button
@@ -457,6 +464,120 @@ export function ArticlesAdminClient({ articles: initial }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Position and badge — two concerns that used to be one checkbox.
+ *
+ * ── LAYOUT ──────────────────────────────────────────────────────────────────
+ * Three controls do not fit as three peer icons in a narrow column: they would
+ * read as three settings of one thing, which is exactly the confusion this
+ * commit exists to remove. So the cell is split into TWO LABELLED ZONES with a
+ * hairline between them — ตำแหน่ง (what moves the article) above, ป้าย (what
+ * decorates it) below — and the column is widened from w-24 to w-48 to hold
+ * them. Two zones, not three, because the order number is not a third concern:
+ * it only exists once an article is positioned, so it lives inside the position
+ * zone and is absent otherwise.
+ *
+ * ── TELLING THE TWO TOGGLES APART WITHOUT A TOOLTIP ──────────────────────────
+ * They are deliberately not the same kind of control:
+ *   position → a BUTTON with a DIRECTIONAL ARROW and a text label
+ *              (↑ จัดตำแหน่ง / ↓ ปลดตำแหน่ง). Arrows mean movement.
+ *   badge    → a SWITCH carrying the PIN GLYPH, no direction, no movement.
+ * Different shape, different icon family, different verb. A reader scanning the
+ * column sees "button with an arrow" versus "switch with a pin".
+ *
+ * ── THE MODEL'S LIMIT IS RESPECTED HERE ─────────────────────────────────────
+ * A date-ordered row gets a PROMOTE BUTTON and no number field. The list is two
+ * contiguous blocks, so the only ranks that can be stored are 1..(block + 1);
+ * offering a free rank box on a date-ordered row would invite "put this at 12"
+ * and silently do something else. The number field appears only once the
+ * article is in the block, where it genuinely applies.
+ */
+function PositionCell({ article, busy, onPromote, onDemote, onOrderChange, onBadgeToggle }) {
+  const positioned = article.isPinnedOnArticlePage === true;
+  const badgeOn = article.showPinBadge !== false;
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* ── zone 1: position ── */}
+      <div>
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          ตำแหน่ง
+        </p>
+        {positioned ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min="0"
+              value={article.pinOrder ?? 0}
+              onChange={(e) => onOrderChange(e.target.value)}
+              title="ลำดับในบล็อกบนสุด (น้อย = ขึ้นก่อน)"
+              aria-label="ลำดับในบล็อกบนสุด"
+              className="w-12 rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-center text-xs text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
+            />
+            <button
+              type="button"
+              onClick={onDemote}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+            >
+              <ArrowDownToLine className="h-3 w-3" />
+              ปลด
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onPromote}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-9e-sm border border-9e-action px-2 py-1 text-[11px] font-medium text-9e-action hover:bg-9e-action/10 disabled:opacity-50"
+          >
+            <ArrowUpToLine className="h-3 w-3" />
+            จัดตำแหน่ง
+          </button>
+        )}
+      </div>
+
+      {/* ── zone 2: badge ── */}
+      <div className="border-t border-[var(--surface-border)] pt-2">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          ป้าย
+        </p>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={badgeOn}
+            onClick={onBadgeToggle}
+            disabled={busy}
+            aria-label={badgeOn ? 'ซ่อนป้ายหมุด' : 'แสดงป้ายหมุด'}
+            className={`relative h-4 w-8 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+              badgeOn ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-white shadow transition-all ${
+                badgeOn ? 'left-4' : 'left-0.5'
+              }`}
+            >
+              <Pin className="h-2 w-2 text-9e-action" strokeWidth={3} />
+            </span>
+          </button>
+          {/* Badge-without-position is ALLOWED and stored, but has no public
+              effect — shouldShowPinBadge gates on positioning too. Say so here
+              rather than disabling the switch: demoting must not silently erase
+              a badge preference the admin set, and they may reasonably set it
+              before promoting. */}
+          {!positioned && badgeOn && (
+            <span className="text-[10px] leading-tight text-amber-600">
+              จะแสดงเมื่อจัดตำแหน่งแล้ว
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
