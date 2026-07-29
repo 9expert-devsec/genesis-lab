@@ -10,6 +10,7 @@ import {
   toggleArticlePinnedOnArticlePage,
   updateArticlePinOrder,
 } from '@/lib/actions/articles';
+import { assignArticleRanks } from '@/lib/articleRank';
 
 // Split into two parts so the "เผยแพร่" column can stack date over time and
 // stay inside a w-32 budget instead of forcing a single wide line.
@@ -37,6 +38,22 @@ export function ArticlesAdminClient({ articles: initial }) {
   const [deleteError, setDeleteError] = useState(null);
   const [query, setQuery] = useState('');
   const [, startTransition] = useTransition();
+
+  // ── Public-ordering rank ───────────────────────────────────────
+  // Computed over `rows` — the COMPLETE set the server handed us — and never
+  // over `filtered` or `pageRows`. Pagination here is client-side
+  // (`filtered.slice`), so a rank derived from the visible rows would restart
+  // at 1 on page 2 and would change whenever someone typed in the search box.
+  // Keyed by id and looked up during render instead of being spliced into the
+  // row objects, so `rows` stays the plain server payload that every mutation
+  // handler already updates.
+  const rankById = useMemo(() => {
+    const m = new Map();
+    for (const a of assignArticleRanks(rows)) {
+      m.set(String(a._id), { rank: a.rank, rankBasis: a.rankBasis, pinTie: a.pinTie });
+    }
+    return m;
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -172,7 +189,12 @@ export function ArticlesAdminClient({ articles: initial }) {
         <table className="min-w-[900px] w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
-              <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
+              <th
+                className="w-24 px-3 py-3 text-left font-bold text-9e-navy dark:text-white"
+                title="ลำดับจริงบนหน้า /articles — นับจากบทความทั้งหมด ไม่ใช่เฉพาะหน้านี้"
+              >
+                ลำดับบน /articles
+              </th>
               <th className="w-16 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ภาพ</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">หัวข้อ / Slug</th>
               <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ประเภท</th>
@@ -199,7 +221,7 @@ export function ArticlesAdminClient({ articles: initial }) {
                 </td>
               </tr>
             )}
-            {pageRows.map((a, i) => (
+            {pageRows.map((a) => (
               <tr
                 key={a._id}
                 className={
@@ -209,8 +231,8 @@ export function ArticlesAdminClient({ articles: initial }) {
                     : 'opacity-60 hover:bg-gray-50 dark:hover:bg-[#0D1B2A]/30')
                 }
               >
-                <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {(page - 1) * PAGE_SIZE + i + 1}
+                <td className="px-3 py-3">
+                  <RankCell info={rankById.get(String(a._id))} pinOrder={a.pinOrder} />
                 </td>
                 <td className="px-3 py-3">
                   {a.coverUrl ? (
@@ -435,6 +457,75 @@ export function ArticlesAdminClient({ articles: initial }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The article's position on /articles.
+ *
+ * A bare number would read identically for two different claims: "someone put
+ * this here" and "this is simply the Nth most recent article". The three states
+ * are given three different SHAPES, not three shades of the same one — a filled
+ * pill with a pin, plain muted text, or no number at all — so the difference
+ * survives a glance down the column:
+ *
+ *   pinned            solid brand pill + pin glyph — a manual position
+ *   pinned, tied      solid AMBER pill + pin glyph — a manual position that is
+ *                     not actually being honoured: another pinned article holds
+ *                     the same pinOrder, so `publishedAt` broke the tie and the
+ *                     number the admin typed did not decide this spot
+ *   by date           plain muted number, no pill, labelled ตามวันที่
+ *   not published     no number at all — an inactive article is absent from
+ *                     /articles, so it HAS no position, and inventing one would
+ *                     also shift every real rank
+ */
+function RankCell({ info, pinOrder }) {
+  if (!info || info.rank == null) {
+    return (
+      <div className="text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        <span className="text-sm">—</span>
+        <span className="block text-[10px] leading-tight">ไม่เผยแพร่</span>
+      </div>
+    );
+  }
+
+  if (info.rankBasis === 'pinned') {
+    const tie = info.pinTie;
+    return (
+      <div>
+        <span
+          className={
+            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold text-white ' +
+            (tie ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-9e-action')
+          }
+          title={
+            tie
+              ? `ปักหมุดไว้ที่ลำดับ ${pinOrder ?? 0} — แต่มีบทความอื่นใช้ลำดับเดียวกัน ตำแหน่งจริงจึงตัดสินด้วยวันที่เผยแพร่`
+              : `ตำแหน่งที่กำหนดเอง — ปักหมุดไว้ที่ลำดับ ${pinOrder ?? 0}`
+          }
+        >
+          <Pin className="h-3 w-3 fill-white" strokeWidth={2} />
+          {info.rank}
+        </span>
+        <span
+          className={
+            'block text-[10px] leading-tight ' +
+            (tie ? 'font-medium text-amber-600' : 'text-9e-action')
+          }
+        >
+          {tie ? 'ลำดับ Pin ซ้ำ' : 'ปักหมุด'}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-9e-slate-dp-50 dark:text-[#94a3b8]">
+      <span className="text-sm tabular-nums" title="ตำแหน่งนี้มาจากวันที่เผยแพร่ ไม่ได้กำหนดเอง">
+        {info.rank}
+      </span>
+      <span className="block text-[10px] leading-tight">ตามวันที่</span>
     </div>
   );
 }
