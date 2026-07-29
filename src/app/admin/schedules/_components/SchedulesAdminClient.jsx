@@ -13,6 +13,10 @@ import {
   updateSchedule,
   deleteSchedule,
 } from '@/lib/actions/schedules';
+import {
+  ADMIN_SCHEDULE_MONTHS,
+  adminScheduleMonthCols,
+} from '@/lib/adminScheduleHorizon';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -78,21 +82,18 @@ export function SchedulesAdminClient({
   const [collapsed, setCollapsed]         = useState({});
   const [modal, setModal]                 = useState(null);
 
-  // ── 4-month column headers ─────────────────────────────────────
-  const monthCols = useMemo(() => {
-    const cols = [];
-    const now = new Date();
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      cols.push({
-        key: monthKey(d),
-        label: TH_MONTH_FMT.format(d),
-        year: d.getFullYear(),
-        month: d.getMonth(),
-      });
-    }
-    return cols;
-  }, []);
+  // ── month column headers ───────────────────────────────────────
+  // Columns and the page's MSDB `to` bound both come out of
+  // adminScheduleHorizon, so the window rendered here is the window
+  // fetched — a row can no longer arrive with no column to land in.
+  const monthCols = useMemo(
+    () =>
+      adminScheduleMonthCols().map((c) => ({
+        ...c,
+        label: TH_MONTH_FMT.format(new Date(c.year, c.month, 1)),
+      })),
+    []
+  );
 
   // ── lookups ────────────────────────────────────────────────────
   const localBySchedId = useMemo(() => {
@@ -236,7 +237,7 @@ export function SchedulesAdminClient({
             จัดการตารางอบรม
           </h1>
           <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            แสดง 4 เดือนข้างหน้า — max_seats และวิทยากรเก็บใน Genesis
+            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และวิทยากรเก็บใน Genesis
           </p>
         </div>
         <button
@@ -648,6 +649,16 @@ function ScheduleModal({
   });
 
   // Calendar window — start at the hinted month (or current month).
+  //
+  // THIS 4 IS NOT THE GRID HORIZON. It bounds how many months a user can
+  // scroll while PICKING session dates in this modal — a UI-comfort
+  // number anchored on `initialMonthKey`, not on today. It was equal to
+  // the old grid horizon by coincidence, and the grid's is now
+  // ADMIN_SCHEDULE_MONTHS (12). Do NOT "unify" them: importing that
+  // constant here would render a twelve-month scroll of day grids in a
+  // max-h-80 box and would couple a date picker to a table's width
+  // budget. If this number should change, change it on its own evidence.
+  // test/pure/adminScheduleHorizon.test.mjs pins the separation.
   const calendarMonths = useMemo(() => {
     const start = initialMonthKey
       ? new Date(`${initialMonthKey}-01T00:00:00`)
