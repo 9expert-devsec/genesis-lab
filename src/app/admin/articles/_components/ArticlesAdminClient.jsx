@@ -56,7 +56,11 @@ function formatDateParts(iso) {
   };
 }
 
-export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0, limit = 0 }) {
+export function ArticlesAdminClient({
+  articles: initial,
+  total: serverTotal = 0,
+  reachable: serverReachable = 0,
+}) {
   const [rows, setRows] = useState(initial);
   // The COLLECTION size, from countDocuments — not the number of rows fetched.
   // Seeded once from the server payload, exactly like `rows` above, so the two
@@ -64,6 +68,13 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
   // handlers move. The delete handler decrements it, or the banner would keep
   // counting a row that no longer exists among the hidden ones.
   const [total, setTotal] = useState(serverTotal);
+  // How many of those the admin can actually GET TO from here — see the
+  // contract on describeListWindow. Deliberately a prop rather than
+  // `rows.length`: today they are equal, but once a pager exists this page will
+  // hold 12 rows and be able to reach all 484, and a component that derived
+  // this from its own row count would then announce 472 phantom missing
+  // articles on every page.
+  const [reachable, setReachable] = useState(serverReachable);
   const [busyId, setBusyId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -115,13 +126,13 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // ── Is this list showing everything? ───────────────────────────
-  // `rows` is what the server sent, NOT `filtered` or `pageRows`: those two are
-  // the admin's own narrowing, which they chose and can see. `rows` vs `total`
-  // is the drop nobody asked for.
+  // ── Can this list reach everything? ────────────────────────────
+  // NOT measured against `filtered` or `pageRows`: those two are the admin's
+  // own narrowing, which they chose and can see. `reachable` vs `total` is the
+  // drop nobody asked for.
   const listWindow = useMemo(
-    () => describeListWindow({ shown: rows.length, total, limit }),
-    [rows.length, total, limit]
+    () => describeListWindow({ reachable, total }),
+    [reachable, total]
   );
 
   function handleToggle(a) {
@@ -193,9 +204,12 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
         return;
       }
       setRows((cur) => cur.filter((r) => r._id !== a._id));
-      // Keep the collection count honest — otherwise the banner would report
-      // the deleted article as one of the hidden ones.
+      // BOTH counts move, or the banner starts lying in one direction or the
+      // other: the deleted article left the collection AND left the set this
+      // page can reach. Decrementing only `total` would show it as newly
+      // hidden; decrementing only `reachable` would invent a hidden row.
       setTotal((t) => Math.max(0, t - 1));
+      setReachable((r) => Math.max(0, r - 1));
       setConfirmDelete(null);
     } catch (err) {
       setDeleteError(err?.message ?? 'ลบไม่สำเร็จ');
@@ -215,7 +229,7 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
             {/* `total` — the COLLECTION size from countDocuments. This line used
                 to read `rows.length`, i.e. it reported the fetch size as the
                 collection size: authoritative, and wrong by 284. */}
-            ทั้งหมด {total} บทความ · โหลดมา {listWindow.shown} · แสดง {pageRows.length} จาก {filtered.length} รายการ
+            ทั้งหมด {total} บทความ · เข้าถึงได้ {listWindow.reachable} · แสดง {pageRows.length} จาก {filtered.length} รายการ
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -249,10 +263,14 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
           it says outright that the search box cannot reach them, because
           "ไม่พบบทความ" from a search over a truncated set is what convinced an
           admin the article had been deleted. It is `role="alert"` rather than
-          decorative styling so it is announced, and it must OUTLIVE the limit:
-          server-side pagination removes this window, but any future window that
-          returns fewer rows than the collection holds gets the same treatment
-          instead of a second silent drop. */}
+          decorative styling so it is announced.
+
+          IT MUST OUTLIVE THIS FETCH. Server-side pagination makes every row
+          reachable, so this banner goes SILENT rather than firing on every page
+          — that is the correct behaviour, not a reason to delete it. It stays
+          because the NEXT surface that cannot reach part of its collection (a
+          capped filter, a partial fetch, a search that only covers one page)
+          gets the same treatment instead of a second silent drop. */}
       {listWindow.truncated && (
         <div
           role="alert"
@@ -264,9 +282,10 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
               รายการนี้ไม่ครบ — ซ่อนอยู่ {listWindow.hidden} บทความ
             </p>
             <p className="mt-0.5 text-amber-800 dark:text-amber-300">
-              โหลดมาแสดงเพียง {listWindow.shown} จากทั้งหมด {listWindow.total} บทความ
-              และช่องค้นหาด้านบนกรองเฉพาะ {listWindow.shown} รายการที่โหลดมาแล้วเท่านั้น
-              — บทความอีก {listWindow.hidden} รายการจึงค้นหาไม่พบที่นี่ แม้จะยังมีอยู่จริงและแสดงบนหน้าเว็บตามปกติ
+              หน้านี้เข้าถึงได้เพียง {listWindow.reachable} จากทั้งหมด {listWindow.total} บทความ
+              และช่องค้นหาด้านบนกรองเฉพาะ {listWindow.reachable} รายการที่เข้าถึงได้เท่านั้น
+              — บทความอีก {listWindow.hidden} รายการจึงค้นหาไม่พบที่นี่ ไม่ว่าจะเปลี่ยนหน้าอย่างไรก็ตาม
+              แม้จะยังมีอยู่จริงและแสดงบนหน้าเว็บตามปกติ
             </p>
           </div>
         </div>
@@ -289,9 +308,18 @@ export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0,
               <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ผู้เขียน</th>
               <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">เผยแพร่</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
+              {/* The tooltip used to end with a parenthetical insisting that
+                  position and badge were two different things. It existed only
+                  to talk the reader out of a conclusion the UI itself was
+                  inviting — the rank column was drawing the badge's pin and
+                  saying the badge's noun. With the vocabularies now disjoint
+                  that clause defends against nothing, so it is gone; the
+                  description of what each zone does stays, because that is
+                  useful either way. A tooltip whose job is to explain why the
+                  UI is confusing is the signal to change the UI. */}
               <th
                 className="w-48 px-3 py-3 text-left font-bold text-9e-navy dark:text-white"
-                title="ตำแหน่ง = ย้ายบทความขึ้นบล็อกบนสุด · ป้าย = แสดงหมุดบนการ์ด (คนละเรื่องกัน)"
+                title="ตำแหน่ง = ย้ายบทความขึ้นบล็อกบนสุด · ป้าย = แสดงหมุดบนการ์ด"
               >
                 ตำแหน่ง / ป้าย
               </th>
@@ -586,10 +614,15 @@ function PositionCell({ article, busy, onPromote, onDemote, onOrderChange, onBad
               type="button"
               onClick={onDemote}
               disabled={busy}
-              className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+              className="inline-flex items-center gap-1 whitespace-nowrap rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
             >
               <ArrowDownToLine className="h-3 w-3" />
-              ปลด
+              {/* Not a bare `ปลด` — with position and badge now spelled
+                  differently everywhere else, an unqualified verb here is the
+                  one control left that does not say WHICH of the two it
+                  releases. `whitespace-nowrap` keeps the longer label on one
+                  line beside the w-12 order input. */}
+              ปลดตำแหน่ง
             </button>
           </div>
         ) : (
@@ -651,19 +684,35 @@ function PositionCell({ article, busy, onPromote, onDemote, onOrderChange, onBad
  *
  * A bare number would read identically for two different claims: "someone put
  * this here" and "this is simply the Nth most recent article". The three states
- * are given three different SHAPES, not three shades of the same one — a filled
- * pill with a pin, plain muted text, or no number at all — so the difference
+ * are given three different SHAPES, not three shades of the same one — a solid
+ * pill with an arrow, plain muted text, or no number at all — so the difference
  * survives a glance down the column:
  *
- *   pinned            solid brand pill + pin glyph — a manual position
- *   pinned, tied      solid AMBER pill + pin glyph — a manual position that is
- *                     not actually being honoured: another pinned article holds
- *                     the same pinOrder, so `publishedAt` broke the tie and the
- *                     number the admin typed did not decide this spot
+ *   manual            solid brand pill + ↑ glyph — a chosen position
+ *   manual, tied      solid AMBER pill + ↑ glyph — a chosen position that is
+ *                     not actually being honoured: another positioned article
+ *                     holds the same pinOrder, so `publishedAt` broke the tie
+ *                     and the number the admin typed did not decide this spot
  *   by date           plain muted number, no pill, labelled ตามวันที่
  *   not published     no number at all — an inactive article is absent from
  *                     /articles, so it HAS no position, and inventing one would
  *                     also shift every real rank
+ *
+ * ── THIS COLUMN DOES NOT SPEAK THE BADGE'S VOCABULARY (b-004) ───────────────
+ * `isPinnedOnArticlePage` (has a manual POSITION) and `showPinBadge` (draws the
+ * pin BADGE on the public card) were split into two independent fields, and the
+ * ป้าย switch in PositionCell owns the badge. This cell keys off `rankBasis`,
+ * i.e. POSITION — so when it drew a Pin glyph and the word ปักหมุด it was using
+ * the badge's icon and the badge's noun to report something else entirely. An
+ * admin who switched ป้าย off saw a pin still sitting in this column and read
+ * it as "I removed the pin and it is still there".
+ *
+ * So: the pin glyph and the word หมุด belong to the badge and nowhere else. The
+ * arrow here is deliberately the SAME glyph as the จัดตำแหน่ง button that
+ * creates this state, so the pill reads as the result of that button. The
+ * labels are a matched pair — กำหนดเอง / ตามวันที่ — which is the actual
+ * question this column answers: did someone choose this spot, or did the date?
+ * test/fs/adminRankVocabulary.test.mjs holds the boundary.
  */
 function RankCell({ info, pinOrder }) {
   if (!info || info.rank == null) {
@@ -686,11 +735,12 @@ function RankCell({ info, pinOrder }) {
           }
           title={
             tie
-              ? `ปักหมุดไว้ที่ลำดับ ${pinOrder ?? 0} — แต่มีบทความอื่นใช้ลำดับเดียวกัน ตำแหน่งจริงจึงตัดสินด้วยวันที่เผยแพร่`
-              : `ตำแหน่งที่กำหนดเอง — ปักหมุดไว้ที่ลำดับ ${pinOrder ?? 0}`
+              ? `กำหนดตำแหน่งไว้ที่ลำดับ ${pinOrder ?? 0} — แต่มีบทความอื่นใช้ลำดับเดียวกัน ตำแหน่งจริงจึงตัดสินด้วยวันที่เผยแพร่`
+              : `ตำแหน่งที่กำหนดเอง — กำหนดตำแหน่งไว้ที่ลำดับ ${pinOrder ?? 0}`
           }
         >
-          <Pin className="h-3 w-3 fill-white" strokeWidth={2} />
+          {/* The glyph from the จัดตำแหน่ง button, not the badge's pin. */}
+          <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
           {info.rank}
         </span>
         <span
@@ -699,7 +749,10 @@ function RankCell({ info, pinOrder }) {
             (tie ? 'font-medium text-amber-600' : 'text-9e-action')
           }
         >
-          {tie ? 'ลำดับ Pin ซ้ำ' : 'ปักหมุด'}
+          {/* `ลำดับซ้ำ` is a tripwire branch: b-005 makes duplicate order numbers
+              unrepresentable, after which this is unreachable. Renamed, not
+              invested in, and deliberately not deleted. */}
+          {tie ? 'ลำดับซ้ำ' : 'กำหนดเอง'}
         </span>
       </div>
     );

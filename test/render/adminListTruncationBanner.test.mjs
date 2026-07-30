@@ -52,15 +52,15 @@ const hasBanner = (markup) => /role="alert"/.test(markup);
 
 // ── half 1: it fires ─────────────────────────────────────────────────────────
 
-test('total > shown → the banner is rendered', () => {
-  const markup = html({ articles: rows(3), total: 484, limit: 3 });
+test('total > reachable → the banner is rendered', () => {
+  const markup = html({ articles: rows(3), total: 484, reachable: 3 });
   assert.equal(hasBanner(markup), true, 'the list is hiding 481 articles and said nothing');
 });
 
 test('the banner names the HIDDEN COUNT, not just "some rows are missing"', () => {
   // A vague warning is dismissable. The number is what makes an admin act, and
   // it is the number the old page could not compute because it discarded total.
-  const markup = html({ articles: rows(3), total: 484, limit: 3 });
+  const markup = html({ articles: rows(3), total: 484, reachable: 3 });
   assert.match(markup, /481/, 'the hidden count (484 - 3) must appear in the banner');
   assert.match(markup, /ไม่ครบ/, 'the banner must say outright that the list is incomplete');
 });
@@ -75,20 +75,20 @@ test('the banner warns that the search box cannot reach the hidden rows', () => 
   // banner on the page at all — verified by hardcoding `truncated: false` and
   // watching this test stay green while nine others went red. Match the
   // banner's own sentence.
-  const markup = html({ articles: rows(3), total: 484, limit: 3 });
+  const markup = html({ articles: rows(3), total: 484, reachable: 3 });
   assert.match(
     markup, /ช่องค้นหาด้านบนกรองเฉพาะ/,
-    'the banner must say the search box only filters the rows already loaded',
+    'the banner must say the search box only filters the rows it can reach',
   );
   assert.equal(
-    /ช่องค้นหาด้านบนกรองเฉพาะ/.test(html({ articles: rows(3), total: 3, limit: 3 })),
+    /ช่องค้นหาด้านบนกรองเฉพาะ/.test(html({ articles: rows(3), total: 3, reachable: 3 })),
     false,
     'and that sentence must belong to the banner, not to the page chrome',
   );
 });
 
 test('the banner is loud — amber, bordered, and announced', () => {
-  const markup = html({ articles: rows(3), total: 484, limit: 3 });
+  const markup = html({ articles: rows(3), total: 484, reachable: 3 });
   assert.match(markup, /role="alert"/, 'announced to assistive tech, not merely coloured');
   assert.match(markup, /border-amber-400/, 'amber border per the required treatment');
   assert.match(markup, /bg-amber-50/, 'amber fill');
@@ -96,8 +96,8 @@ test('the banner is loud — amber, bordered, and announced', () => {
 
 // ── half 2: it stays quiet ───────────────────────────────────────────────────
 
-test('total === shown → NO banner (the half that stops it crying wolf)', () => {
-  const markup = html({ articles: rows(12), total: 12, limit: 200 });
+test('total === reachable → NO banner (the half that stops it crying wolf)', () => {
+  const markup = html({ articles: rows(12), total: 12, reachable: 12 });
   assert.equal(
     hasBanner(markup), false,
     'a banner on a complete list is a banner nobody reads, which is the same ' +
@@ -105,8 +105,11 @@ test('total === shown → NO banner (the half that stops it crying wolf)', () =>
   );
 });
 
-test('total === shown === limit → still no banner (the exact-fit boundary)', () => {
-  const markup = html({ articles: rows(5), total: 5, limit: 5 });
+test('every row reachable → still no banner (the exact-fit boundary, and the commit-3 shape)', () => {
+  // This is ALSO the shape commit 3's pager produces (reachable === total while
+  // far fewer rows are painted), so this half already blocks a commit-3 change
+  // that deletes the banner or redefines reachable back to the painted count.
+  const markup = html({ articles: rows(5), total: 5, reachable: 5 });
   assert.equal(hasBanner(markup), false, 'a full window is not a truncated one');
 });
 
@@ -114,8 +117,8 @@ test('CONTROL: the same markup differs between the two cases — the matcher is 
   // Without this, `hasBanner` could be broken (a bad regex, a component that
   // fails to render) and BOTH halves above would pass for the wrong reason:
   // "no banner" is the default answer of a matcher that never matches.
-  const truncated = html({ articles: rows(3), total: 484, limit: 3 });
-  const complete = html({ articles: rows(3), total: 3, limit: 3 });
+  const truncated = html({ articles: rows(3), total: 484, reachable: 3 });
+  const complete = html({ articles: rows(3), total: 3, reachable: 3 });
   assert.notEqual(truncated, complete, 'the two renders are identical — nothing is conditional');
   assert.equal(hasBanner(truncated), true);
   assert.equal(hasBanner(complete), false);
@@ -128,7 +131,7 @@ test('CONTROL: the same markup differs between the two cases — the matcher is 
 test('the header reports TOTAL, never the fetched row count', () => {
   // `ทั้งหมด {rows.length}` was authoritative and wrong by 284. Render 3 rows
   // against a total of 484 and the header must say 484.
-  const markup = html({ articles: rows(3), total: 484, limit: 3 });
+  const markup = html({ articles: rows(3), total: 484, reachable: 3 });
   assert.match(markup, /ทั้งหมด\s*(<!-- -->)?484/, 'the header must show the collection size');
   assert.equal(
     /ทั้งหมด\s*(<!-- -->)?3\s*(<!-- -->)?บทความ/.test(markup), false,
@@ -137,6 +140,6 @@ test('the header reports TOTAL, never the fetched row count', () => {
 });
 
 test('CONTROL: the header count follows `total` and is not a hardcoded 484', () => {
-  const markup = html({ articles: rows(3), total: 77, limit: 3 });
+  const markup = html({ articles: rows(3), total: 77, reachable: 3 });
   assert.match(markup, /ทั้งหมด\s*(<!-- -->)?77/);
 });
