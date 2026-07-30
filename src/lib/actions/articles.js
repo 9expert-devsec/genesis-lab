@@ -12,6 +12,8 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
 import { articleSchema } from '@/lib/schemas/article';
+import { parseArticleFormData } from '@/lib/articleFormPayload';
+import { planDemotion, planPromotion } from '@/lib/articlePositioning';
 import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH  = '/admin/articles';
@@ -27,61 +29,6 @@ function bustCaches(slug) {
   revalidatePath(ADMIN_PATH);
   revalidatePath(PUBLIC_PATH);
   if (slug) revalidatePath(`${PUBLIC_PATH}/${slug}`);
-}
-
-/**
- * Parse the FormData posted by ArticleForm into a plain object the
- * Zod schema can validate. All array-shaped fields ride across the wire
- * as JSON strings so the client-side editor can keep one canonical
- * source of truth.
- */
-function parseFormData(formData) {
-  function jsonArr(key) {
-    try {
-      const parsed = JSON.parse(String(formData.get(key) ?? '[]'));
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  // datetime-local emits `YYYY-MM-DDTHH:mm`, which is NOT a valid
-  // ISO-8601 string for Zod's `.datetime()` check. Normalize.
-  const publishedAtRaw = String(formData.get('publishedAt') ?? '').trim();
-  const publishedAt = publishedAtRaw
-    ? new Date(publishedAtRaw).toISOString()
-    : '';
-
-  // jsonLd ships as a JSON blob — let Zod sanitize it on the way in.
-  let jsonLd = {};
-  try {
-    const parsed = JSON.parse(String(formData.get('jsonLd') ?? '{}'));
-    if (parsed && typeof parsed === 'object') jsonLd = parsed;
-  } catch {
-    jsonLd = {};
-  }
-
-  return {
-    slug:            String(formData.get('slug') ?? '').trim(),
-    title:           String(formData.get('title') ?? '').trim(),
-    excerpt:         String(formData.get('excerpt') ?? '').trim(),
-    content:         String(formData.get('content') ?? ''),
-    coverUrl:        String(formData.get('coverUrl') ?? '').trim(),
-    coverPublicId:   String(formData.get('coverPublicId') ?? '').trim(),
-    tags:            jsonArr('tags'),
-    programs:        jsonArr('programs'),
-    skills:          jsonArr('skills'),
-    relatedArticles: jsonArr('relatedArticles'),
-    relatedCourses:  jsonArr('relatedCourses'),
-    articleType:     String(formData.get('articleType') ?? 'article'),
-    seoTitle:        String(formData.get('seoTitle') ?? ''),
-    seoDescription:  String(formData.get('seoDescription') ?? ''),
-    focusKeyword:    String(formData.get('focusKeyword') ?? ''),
-    author:          String(formData.get('author') ?? '').trim(),
-    publishedAt,
-    active:          formData.get('active') === 'true',
-    jsonLd,
-  };
 }
 
 function firstZodMessage(error) {
@@ -219,7 +166,7 @@ export async function createArticle(formData) {
   await requireAdmin('articles');
   await dbConnect();
 
-  const raw = parseFormData(formData);
+  const raw = parseArticleFormData(formData);
   const parsed = articleSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, error: firstZodMessage(parsed.error) };
@@ -242,7 +189,7 @@ export async function updateArticle(id, formData) {
   if (!id) return { ok: false, error: 'Missing article id' };
   await dbConnect();
 
-  const raw = parseFormData(formData);
+  const raw = parseArticleFormData(formData);
   const parsed = articleSchema.safeParse(raw);
   if (!parsed.success) {
     return { ok: false, error: firstZodMessage(parsed.error) };
@@ -343,6 +290,42 @@ export async function applyArticlePositionPlan(plan) {
   revalidatePath(ADMIN_PATH);
   revalidatePath(PUBLIC_PATH);
   return { ok: true, modified: res?.modifiedCount ?? ops.length };
+}
+
+/**
+ * Promote / demote an article from a surface that does NOT hold the whole list.
+ *
+ * The admin list computes its plan client-side because it already has every
+ * article in state. The edit form has ONE document, and `planPromotion` needs
+ * the whole block to answer "what is the highest pinOrder?" — so rather than
+ * invent a second numbering rule for the form, this re-reads the block and runs
+ * the SAME planners the list uses. There is still exactly one place that knows
+ * how the block is numbered.
+ *
+ * Only the positioning fields are projected: the plan needs the cascade keys and
+ * nothing else, and pulling full documents to compute one integer would be a
+ * pointless read of every article body.
+ */
+export async function repositionArticle(id, direction) {
+  await requireAdmin('articles');
+  if (!id) return { ok: false, error: 'Missing id' };
+  if (direction !== 'promote' && direction !== 'demote') {
+    return { ok: false, error: `Unknown direction: ${direction}` };
+  }
+  await dbConnect();
+
+  const docs = await Article.find(
+    {},
+    '_id isPinnedOnArticlePage pinOrder publishedAt createdAt active'
+  ).lean();
+  const articles = serialize(docs);
+
+  const plan =
+    direction === 'promote'
+      ? planPromotion(articles, id)
+      : planDemotion(articles, id);
+
+  return applyArticlePositionPlan(plan);
 }
 
 export async function updateArticlePinOrder(id, pinOrder) {

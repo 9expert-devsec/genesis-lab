@@ -21,6 +21,18 @@ export const articleSchema = z.object({
   author:          z.string().trim().max(100).default(''),
   publishedAt:     z.string().datetime().optional().or(z.literal('')),
   active:          z.boolean().default(true),
+  // Pin BADGE only — never positioning. `isPinnedOnArticlePage` and `pinOrder`
+  // are deliberately NOT declared here: this schema is the form's write
+  // contract, and the form does not own the block's numbering (see
+  // src/lib/articleFormPayload.js). Adding either one hands the save button
+  // ownership of cross-row state.
+  //
+  // `.default(true)` covers a DIFFERENT case from parseArticleFormData's
+  // `=== 'true'`. There, absent means "checkbox unticked" → false. Here, absent
+  // means "the caller does not know this field exists" → keep the badge, which
+  // matches shouldShowPinBadge treating an absent value as ON. The form always
+  // sends the key, so in practice this default never fires.
+  showPinBadge:    z.boolean().default(true),
 
   jsonLd: z.object({
     enabled:    z.boolean().default(true),

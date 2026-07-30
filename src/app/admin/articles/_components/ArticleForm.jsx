@@ -70,6 +70,7 @@ import {
   updateArticle,
   searchArticles,
   getArticlesByIds,
+  repositionArticle,
 } from '@/lib/actions/articles';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
 
@@ -190,6 +191,26 @@ export function ArticleForm({
   const [author,      setAuthor]      = useState(article?.author ?? '');
   const [articleType, setArticleType] = useState(article?.articleType ?? 'article');
   const [active,      setActive]      = useState(article?.active !== false);
+  // Badge only — the form owns this one. `!== false` not `?? true`: under
+  // `.lean()` an article written before showPinBadge existed reads back with
+  // the key ABSENT, and absent means ON (see shouldShowPinBadge). A `??` would
+  // agree here by luck; `!== false` says why.
+  const [showPinBadge, setShowPinBadge] = useState(article?.showPinBadge !== false);
+  // Positioning is NOT form state — it is not part of the save payload. These
+  // mirror the document so the panel can show the current position, and are
+  // refreshed from the server after a promote/demote.
+  const [positioned, setPositioned] = useState(article?.isPinnedOnArticlePage === true);
+  const [pinOrder, setPinOrder]     = useState(article?.pinOrder ?? 0);
+  const [posBusy, setPosBusy]       = useState(false);
+  const [posError, setPosError]     = useState(null);
+  // repositionArticle computes the new pinOrder on the SERVER (it needs the
+  // whole block), so after router.refresh() the fresh document is the only
+  // place that knows the number. useState would keep its initial value forever;
+  // this re-syncs the mirror instead of duplicating the numbering client-side.
+  useEffect(() => {
+    setPositioned(article?.isPinnedOnArticlePage === true);
+    setPinOrder(article?.pinOrder ?? 0);
+  }, [article?.isPinnedOnArticlePage, article?.pinOrder]);
 
   // Sidebar — Tags (textarea, live-preview chips)
   const [tagsText, setTagsText] = useState(
@@ -399,6 +420,14 @@ export function ArticleForm({
     fd.set('author',         author);
     fd.set('publishedAt',    finalPublishedAt);
     fd.set('active',         String(finalActive));
+    // Badge rides with the payload. Positioning does NOT — `pinOrder` and
+    // `isPinnedOnArticlePage` are deliberately absent from this FormData and
+    // from articleSchema, so the save button cannot overwrite a position set
+    // from the admin list in another tab. Position changes go through
+    // repositionArticle() on click. Adding either key here reintroduces the
+    // lost update; test/pure/articleFormFieldCoverage.test.mjs asserts their
+    // absence from the payload.
+    fd.set('showPinBadge',   String(showPinBadge));
     fd.set('jsonLd', JSON.stringify({
       enabled:    jsonLdEnabled,
       schemaType,
@@ -438,7 +467,7 @@ export function ArticleForm({
     parsedTags, selectedPrograms, selectedSkills,
     relatedArticles, relatedCourses, articleType,
     seoTitle, seoDescription, focusKeyword,
-    author, publishedAt, active,
+    author, publishedAt, active, showPinBadge,
     jsonLdEnabled, schemaType, jsonLdOverrides,
     rawOverride, rawOverrideEnabled, isSuperAdmin,
     isEdit, article, router,
@@ -805,6 +834,88 @@ export function ArticleForm({
             <p className="mt-1 text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
               เว้นว่าง = draft
             </p>
+          </Section>
+
+          {/* 8b. Position + badge — TWO DIFFERENT WRITE PATHS, on purpose.
+              The badge is a per-document property and rides with ปุ่มบันทึก.
+              The position is cross-row state (the block's numbering), so it is
+              read-only here and any change fires repositionArticle immediately
+              — the same planners the admin list uses. If the save button owned
+              it, a stale tab could undo a position set elsewhere. */}
+          <Section title="ตำแหน่ง / ป้าย">
+            <div className="rounded-9e-md border border-[var(--surface-border)] p-2">
+              <p className="text-[11px] font-semibold text-9e-navy dark:text-white">
+                ตำแหน่งบน /articles
+              </p>
+              <p className="mt-0.5 text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                {positioned
+                  ? `จัดตำแหน่งเอง · ลำดับ ${pinOrder}`
+                  : 'เรียงตามวันที่เผยแพร่'}
+              </p>
+
+              {isEdit ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={posBusy}
+                    onClick={() => {
+                      setPosError(null);
+                      setPosBusy(true);
+                      startTransition(async () => {
+                        const res = await repositionArticle(
+                          article._id,
+                          positioned ? 'demote' : 'promote'
+                        );
+                        if (res?.ok) {
+                          // The server re-read the block to compute the plan, so
+                          // rather than mirror its arithmetic here, take the
+                          // refreshed document as the source of truth.
+                          setPositioned(!positioned);
+                          router.refresh();
+                        } else {
+                          setPosError(res?.error ?? 'เปลี่ยนตำแหน่งไม่สำเร็จ');
+                        }
+                        setPosBusy(false);
+                      });
+                    }}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-9e-sm border border-9e-action px-2 py-1 text-[11px] font-medium text-9e-action hover:bg-9e-action/10 disabled:opacity-50"
+                  >
+                    {posBusy
+                      ? 'กำลังบันทึก…'
+                      : positioned
+                        ? 'ปลดตำแหน่ง (กลับไปเรียงตามวันที่)'
+                        : 'จัดตำแหน่ง (ต่อท้ายบล็อกบนสุด)'}
+                  </button>
+                  <p className="mt-1 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                    บันทึกทันที ไม่ต้องกดปุ่มบันทึก · แก้ลำดับได้ที่หน้ารายการบทความ
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-[10px] leading-tight text-amber-600">
+                  บันทึกบทความก่อนจึงจะจัดตำแหน่งได้
+                </p>
+              )}
+              {posError && (
+                <p className="mt-1 text-[10px] text-red-600">{posError}</p>
+              )}
+            </div>
+
+            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-9e-md border border-[var(--surface-border)] p-2">
+              <input
+                type="checkbox"
+                checked={showPinBadge}
+                onChange={(e) => setShowPinBadge(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5"
+              />
+              <span>
+                <span className="block text-[11px] font-semibold text-9e-navy dark:text-white">
+                  แสดงป้ายหมุดบนการ์ด
+                </span>
+                <span className="block text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                  บันทึกพร้อมฟอร์ม · ป้ายจะแสดงเมื่อจัดตำแหน่งแล้วเท่านั้น
+                </span>
+              </span>
+            </label>
           </Section>
 
           {/* 9. SEO */}
