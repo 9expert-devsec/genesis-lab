@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
+import { formatSiteDateTime } from '@/lib/articlePublishTime';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -620,11 +621,12 @@ function slugifyHeading(text) {
   return base || 'heading-' + Math.random().toString(36).slice(2, 7);
 }
 
+// Pinned to the site timezone rather than the viewer's — see the note on
+// formatSiteDateTime. A bare toLocaleDateString here rendered UTC during SSR
+// and the visitor's zone after hydration, so an evening Bangkok publish showed
+// tomorrow's date on the first paint.
 function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('th-TH', {
+  return formatSiteDateTime(iso, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

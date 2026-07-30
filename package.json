@@ -10,7 +10,8 @@
     "lint": "next lint",
     "test": "node test/run.mjs",
     "test:smoke": "node --env-file=.env.local test/smoke.mjs",
-    "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs"
+    "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs",
+    "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",

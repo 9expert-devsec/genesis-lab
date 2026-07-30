@@ -20,6 +20,7 @@ import {
   updateArticlePinOrder,
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
+import { formatSiteDateTime } from '@/lib/articlePublishTime';
 import {
   applyPositionPlan,
   planBadgeToggle,
@@ -30,17 +31,23 @@ import {
 
 // Split into two parts so the "เผยแพร่" column can stack date over time and
 // stay inside a w-32 budget instead of forcing a single wide line.
+//
+// Both halves are pinned to the SITE timezone, not the viewer's. This is a
+// client component that Next server-renders first, so bare toLocaleDateString/
+// toLocaleTimeString produced the server's zone (UTC on Vercel) on the first
+// paint and the browser's zone after hydration — React swaps the text in with
+// no warning, so the column could read "31 ก.ค. 01:00" for one frame and
+// "30 ก.ค. 18:00" after, for the same document.
 function formatDateParts(iso) {
   if (!iso) return { date: '—', time: '' };
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { date: '—', time: '' };
+  if (!formatSiteDateTime(iso)) return { date: '—', time: '' };
   return {
-    date: d.toLocaleDateString('th-TH', {
+    date: formatSiteDateTime(iso, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     }),
-    time: d.toLocaleTimeString('th-TH', {
+    time: formatSiteDateTime(iso, {
       hour: '2-digit',
       minute: '2-digit',
     }),

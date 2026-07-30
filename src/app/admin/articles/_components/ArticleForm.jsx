@@ -73,6 +73,11 @@ import {
   repositionArticle,
 } from '@/lib/actions/articles';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
+import {
+  formatSiteDateTime,
+  fromLocalInput,
+  toLocalInput,
+} from '@/lib/articlePublishTime';
 
 const MAX_TAGS = 20;
 
@@ -81,13 +86,13 @@ const inputCls =
 
 // ── small utilities ──────────────────────────────────────────────
 
-function toLocalDateTimeInputValue(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+// The local `toLocalDateTimeInputValue` that used to live here read the
+// BROWSER's timezone via getFullYear/getHours. This is a client component that
+// is server-rendered first, so the initial paint used the server's zone (UTC on
+// Vercel) and hydration silently rewrote the field to the visitor's — a change
+// React does not warn about for a controlled input's initial state. Both halves
+// of the round trip now go through @/lib/articlePublishTime, which is pinned to
+// the site timezone and therefore renders the same on both sides.
 
 function slugify(input) {
   // Preserve Thai characters and the admin's original casing — slugs
@@ -263,7 +268,7 @@ export function ArticleForm({
 
   // Sidebar — Schedule
   const [publishedAt, setPublishedAt] = useState(
-    toLocalDateTimeInputValue(article?.publishedAt)
+    toLocalInput(article?.publishedAt)
   );
 
   // Sidebar — SEO
@@ -398,7 +403,7 @@ export function ArticleForm({
     if (asDraft) {
       finalActive = false;
     } else if (finalActive && !finalPublishedAt) {
-      finalPublishedAt = toLocalDateTimeInputValue(new Date().toISOString());
+      finalPublishedAt = toLocalInput(new Date().toISOString());
     }
 
     const fd = new FormData();
@@ -488,7 +493,11 @@ export function ArticleForm({
       excerpt,
       coverUrl,
       author,
-      publishedAt: publishedAt || new Date().toISOString(),
+      // `publishedAt` is the form's WALL-CLOCK state, not an instant.
+      // buildJsonLd feeds it straight into `new Date(...).toISOString()`, so
+      // handing it over unconverted would put the browser's zone into the
+      // structured data the admin is about to copy out.
+      publishedAt: fromLocalInput(publishedAt) || new Date().toISOString(),
       updatedAt:   new Date().toISOString(),
       active: true,
       jsonLd: {
@@ -509,7 +518,7 @@ export function ArticleForm({
   const isPublished = Boolean(
     active &&
     publishedAt &&
-    new Date(publishedAt).getTime() <= Date.now()
+    new Date(fromLocalInput(publishedAt)).getTime() <= Date.now()
   );
   const statusBadge = isPublished
     ? { label: 'Published', cls: 'bg-green-50 text-green-700 border-green-100' }
@@ -1099,7 +1108,9 @@ export function ArticleForm({
             coverUrl,
             author,
             tags: parsedTags,
-            publishedAt: publishedAt || new Date().toISOString(),
+            // Wall clock → instant, so the overlay formats the same value the
+            // public page will once this is saved.
+            publishedAt: fromLocalInput(publishedAt) || new Date().toISOString(),
           }}
           onClose={() => setShowPreview(false)}
         />
@@ -1185,7 +1196,7 @@ function ArticlePreviewOverlay({ previewData, onClose }) {
             </span>
           )}
           <span>
-            {new Date(previewData.publishedAt).toLocaleDateString('th-TH', {
+            {formatSiteDateTime(previewData.publishedAt, {
               year: 'numeric', month: 'long', day: 'numeric',
             })}
           </span>
