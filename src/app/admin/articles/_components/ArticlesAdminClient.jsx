@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowDownToLine,
   ArrowUpToLine,
   Pencil,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
+import { describeListWindow } from '@/lib/adminListWindow';
 import {
   applyPositionPlan,
   planBadgeToggle,
@@ -54,8 +56,14 @@ function formatDateParts(iso) {
   };
 }
 
-export function ArticlesAdminClient({ articles: initial }) {
+export function ArticlesAdminClient({ articles: initial, total: serverTotal = 0, limit = 0 }) {
   const [rows, setRows] = useState(initial);
+  // The COLLECTION size, from countDocuments — not the number of rows fetched.
+  // Seeded once from the server payload, exactly like `rows` above, so the two
+  // stay in step: both are local mirrors that only this component's mutation
+  // handlers move. The delete handler decrements it, or the banner would keep
+  // counting a row that no longer exists among the hidden ones.
+  const [total, setTotal] = useState(serverTotal);
   const [busyId, setBusyId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
@@ -106,6 +114,15 @@ export function ArticlesAdminClient({ articles: initial }) {
     const start = (page - 1) * PAGE_SIZE;
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
+
+  // ── Is this list showing everything? ───────────────────────────
+  // `rows` is what the server sent, NOT `filtered` or `pageRows`: those two are
+  // the admin's own narrowing, which they chose and can see. `rows` vs `total`
+  // is the drop nobody asked for.
+  const listWindow = useMemo(
+    () => describeListWindow({ shown: rows.length, total, limit }),
+    [rows.length, total, limit]
+  );
 
   function handleToggle(a) {
     setBusyId(a._id);
@@ -176,6 +193,9 @@ export function ArticlesAdminClient({ articles: initial }) {
         return;
       }
       setRows((cur) => cur.filter((r) => r._id !== a._id));
+      // Keep the collection count honest — otherwise the banner would report
+      // the deleted article as one of the hidden ones.
+      setTotal((t) => Math.max(0, t - 1));
       setConfirmDelete(null);
     } catch (err) {
       setDeleteError(err?.message ?? 'ลบไม่สำเร็จ');
@@ -192,7 +212,10 @@ export function ArticlesAdminClient({ articles: initial }) {
             จัดการบทความ
           </h1>
           <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            ทั้งหมด {rows.length} บทความ · แสดง {pageRows.length} จาก {filtered.length} รายการ
+            {/* `total` — the COLLECTION size from countDocuments. This line used
+                to read `rows.length`, i.e. it reported the fetch size as the
+                collection size: authoritative, and wrong by 284. */}
+            ทั้งหมด {total} บทความ · โหลดมา {listWindow.shown} · แสดง {pageRows.length} จาก {filtered.length} รายการ
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -214,6 +237,40 @@ export function ArticlesAdminClient({ articles: initial }) {
           </Link>
         </div>
       </div>
+
+      {/* ── The truncation banner ────────────────────────────────────────────
+          THIS is the fix, not the fetch size. The defect class here is a SILENT
+          DROP: 284 of 484 articles were absent from this list and absent from
+          the search box that filters it, and every surface on the page —
+          including the row count in the header — agreed that nothing was wrong.
+          A larger window would have moved the cliff, not removed it.
+
+          So the banner is loud, it names the exact number of missing rows, and
+          it says outright that the search box cannot reach them, because
+          "ไม่พบบทความ" from a search over a truncated set is what convinced an
+          admin the article had been deleted. It is `role="alert"` rather than
+          decorative styling so it is announced, and it must OUTLIVE the limit:
+          server-side pagination removes this window, but any future window that
+          returns fewer rows than the collection holds gets the same treatment
+          instead of a second silent drop. */}
+      {listWindow.truncated && (
+        <div
+          role="alert"
+          className="mt-3 flex items-start gap-3 rounded-9e-md border-2 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500 dark:bg-amber-950/40"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="text-sm">
+            <p className="font-bold text-amber-900 dark:text-amber-200">
+              รายการนี้ไม่ครบ — ซ่อนอยู่ {listWindow.hidden} บทความ
+            </p>
+            <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+              โหลดมาแสดงเพียง {listWindow.shown} จากทั้งหมด {listWindow.total} บทความ
+              และช่องค้นหาด้านบนกรองเฉพาะ {listWindow.shown} รายการที่โหลดมาแล้วเท่านั้น
+              — บทความอีก {listWindow.hidden} รายการจึงค้นหาไม่พบที่นี่ แม้จะยังมีอยู่จริงและแสดงบนหน้าเว็บตามปกติ
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
         <table className="min-w-[900px] w-full text-sm">
