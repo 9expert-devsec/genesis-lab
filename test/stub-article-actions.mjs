@@ -13,17 +13,20 @@
 // test somehow does reach one, an optimistic state update that quietly
 // "succeeded" against a stub would be a false green, whereas a refusal is
 // visible.
-export async function applyArticlePositionPlan() { return { ok: false, error: 'stubbed' }; }
+// This list must MIRROR the real module's exports. A stub that keeps offering a
+// retired action is a fixture that lies: the component under test would import
+// it happily, and the render tier would go on proving that a deleted code path
+// works. test/fs/articlePinOrderWrites.test.mjs pins stub ⊆ real.
 export async function deleteArticle()            { return { ok: false, error: 'stubbed' }; }
 export async function toggleArticleActive()      { return { ok: false, error: 'stubbed' }; }
 export async function toggleArticleFeaturedOnLanding() { return { ok: false, error: 'stubbed' }; }
-export async function updateArticlePinOrder()    { return { ok: false, error: 'stubbed' }; }
 export async function repositionArticle()        { return { ok: false, error: 'stubbed' }; }
+export async function moveArticleToPosition()    { return { ok: false, error: 'stubbed' }; }
+export async function setArticlePinBadge()       { return { ok: false, error: 'stubbed' }; }
 export async function getArticles()              { return { items: [], total: 0, page: 1, limit: 0 }; }
 export async function getArticleById()           { return null; }
 export async function getArticlesByIds()         { return []; }
 export async function searchArticles()           { return []; }
 export async function createArticle()            { return { ok: false, error: 'stubbed' }; }
 export async function updateArticle()            { return { ok: false, error: 'stubbed' }; }
-export async function toggleArticlePinnedOnArticlePage() { return { ok: false, error: 'stubbed' }; }
 export async function getFeaturedArticlesForLanding() { return []; }

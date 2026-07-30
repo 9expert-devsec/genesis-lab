@@ -14,7 +14,12 @@ import Article from '@/models/Article';
 import { articleSchema } from '@/lib/schemas/article';
 import { parseArticleFormData } from '@/lib/articleFormPayload';
 import { toSelectString } from '@/lib/articleListFields';
-import { planDemotion, planPromotion } from '@/lib/articlePositioning';
+import {
+  planBadgeToggle,
+  planDemotion,
+  planMoveToPosition,
+  planPromotion,
+} from '@/lib/articlePositioning';
 import { requireAdmin } from '@/lib/actions/auth';
 
 const ADMIN_PATH  = '/admin/articles';
@@ -256,15 +261,13 @@ export async function toggleArticleActive(id, active) {
   return { ok: true };
 }
 
-export async function toggleArticlePinnedOnArticlePage(id, value) {
-  await requireAdmin('articles');
-  await dbConnect();
-  if (!id) return { ok: false, error: 'Missing id' };
-  await Article.findByIdAndUpdate(id, { $set: { isPinnedOnArticlePage: Boolean(value) } });
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(PUBLIC_PATH);
-  return { ok: true };
-}
+// RETIRED: toggleArticlePinnedOnArticlePage.
+// It wrote `isPinnedOnArticlePage` and left `pinOrder` STALE, which is the only
+// remaining path that could produce b-006 — an unpinned article carrying a
+// non-zero pinOrder, which sinks below every pinOrder:0 row and lands dead last
+// (see the invariant note in src/lib/articlePositioning.js). It had no callers.
+// Promotion and demotion go through repositionArticle(), which maintains both
+// fields together.
 
 export async function toggleArticleFeaturedOnLanding(id, value) {
   await requireAdmin('articles');
@@ -276,22 +279,63 @@ export async function toggleArticleFeaturedOnLanding(id, value) {
   return { ok: true };
 }
 
+// ── positioning ──────────────────────────────────────────────────
+//
+// ── THE INVARIANT: EXACTLY ONE THING DECIDES A pinOrder ─────────────────────
+// That thing is a planner in src/lib/articlePositioning.js, and it is called
+// HERE, on the server, from a FRESH read of the block. Nothing below accepts a
+// pinOrder — or a plan — from the browser.
+//
+// This used to work the other way. `applyArticlePositionPlan` was an exported
+// server action taking `{writes:[{_id, pinOrder}]}` straight from the client,
+// and the admin list computed its own plans and POSTed them. Two problems, and
+// the second is the one that mattered:
+//
+//   1. It is a free `pinOrder` write with extra steps. If the browser can send
+//      the numbers, the browser decides them, and the planner is a convention
+//      rather than a guarantee — which is exactly the state that produced
+//      b-005's `1,1,2,3,4,5,6,7,9,10`.
+//   2. The client's list is a PAGE-LOAD SNAPSHOT. A move renumbers the entire
+//      block, so a plan computed in a tab left open since this morning writes a
+//      block-wide renumbering derived from data that has since changed. That is
+//      the lost-update hazard src/lib/articleFormPayload.js already refuses to
+//      accept for a single field — and here it spans every row in the block.
+//
+// So `applyPlan` is no longer exported: in a `'use server'` module an export IS
+// a POST endpoint, and un-exporting it is what makes the guarantee structural
+// rather than a matter of who calls what. Each exported action below re-reads
+// the block, runs a planner, applies it, and RETURNS the plan so the client can
+// replay it locally for an optimistic update — one piece of arithmetic, computed
+// once, on the authoritative data.
+//
+// Cost: one extra read per click of ~483 documents projected to five positioning
+// fields. That is nothing next to a corrupted block.
+
+/** The fields every planner needs, and nothing else. */
+const POSITION_FIELDS = '_id isPinnedOnArticlePage pinOrder showPinBadge publishedAt createdAt active';
+
+/** The whole collection, projected for planning. */
+async function readBlockContext() {
+  const docs = await Article.find({}, POSITION_FIELDS).lean();
+  return serialize(docs);
+}
+
 /**
- * Apply a positioning plan produced by src/lib/articlePositioning.js
- * (`planPromotion` / `planDemotion` / `planBadgeToggle`).
+ * Apply a positioning plan. NOT EXPORTED — see the note above.
  *
- * ONE bulkWrite rather than a call per document: demoting an article renumbers
- * every survivor, and a per-document loop that fails halfway leaves the block
- * with a hole — exactly the state the renumbering exists to prevent.
+ * ONE bulkWrite rather than a call per document: a move or a demotion renumbers
+ * several rows, and a per-document loop that fails halfway leaves the block with
+ * a hole or a duplicate — exactly the state the renumbering exists to prevent.
  *
- * Only the three positioning fields are writable through here; anything else in
- * the payload is dropped rather than trusted, since the plan is computed on the
- * client from the list it was handed.
+ * Only the three positioning fields are writable through here. `pinOrder` is
+ * gated on `Number.isFinite`, so a planned `0` writes and an ABSENT key leaves
+ * the stored value alone — which is why a planner that drops a row it meant to
+ * renumber fails silently rather than loudly, and why
+ * test/pure/articlePositioning.test.mjs checks that no row goes missing.
  */
-export async function applyArticlePositionPlan(plan) {
-  await requireAdmin('articles');
+async function applyPlan(plan) {
   const writes = Array.isArray(plan?.writes) ? plan.writes : [];
-  if (writes.length === 0) return { ok: true, modified: 0 };
+  if (writes.length === 0) return { ok: true, modified: 0, plan };
   await dbConnect();
 
   const ops = [];
@@ -304,27 +348,21 @@ export async function applyArticlePositionPlan(plan) {
     if (Object.keys($set).length === 0) continue;
     ops.push({ updateOne: { filter: { _id: w._id }, update: { $set } } });
   }
-  if (ops.length === 0) return { ok: true, modified: 0 };
+  if (ops.length === 0) return { ok: true, modified: 0, plan };
 
   const res = await Article.bulkWrite(ops);
   revalidatePath(ADMIN_PATH);
   revalidatePath(PUBLIC_PATH);
-  return { ok: true, modified: res?.modifiedCount ?? ops.length };
+  return { ok: true, modified: res?.modifiedCount ?? ops.length, plan };
 }
 
 /**
- * Promote / demote an article from a surface that does NOT hold the whole list.
+ * Promote / demote an article.
  *
- * The admin list computes its plan client-side because it already has every
- * article in state. The edit form has ONE document, and `planPromotion` needs
- * the whole block to answer "what is the highest pinOrder?" — so rather than
- * invent a second numbering rule for the form, this re-reads the block and runs
- * the SAME planners the list uses. There is still exactly one place that knows
- * how the block is numbered.
- *
- * Only the positioning fields are projected: the plan needs the cascade keys and
- * nothing else, and pulling full documents to compute one integer would be a
- * pointless read of every article body.
+ * Both surfaces use this — the admin list and the edit form — even though the
+ * list now holds every article and could compute the plan itself. It does not,
+ * for the reason in the block comment above: a plan the browser computes is a
+ * plan the browser can get wrong, from a snapshot that may be hours old.
  */
 export async function repositionArticle(id, direction) {
   await requireAdmin('articles');
@@ -333,31 +371,61 @@ export async function repositionArticle(id, direction) {
     return { ok: false, error: `Unknown direction: ${direction}` };
   }
   await dbConnect();
-
-  const docs = await Article.find(
-    {},
-    '_id isPinnedOnArticlePage pinOrder publishedAt createdAt active'
-  ).lean();
-  const articles = serialize(docs);
+  const articles = await readBlockContext();
 
   const plan =
     direction === 'promote'
       ? planPromotion(articles, id)
       : planDemotion(articles, id);
 
-  return applyArticlePositionPlan(plan);
+  return applyPlan(plan);
 }
 
-export async function updateArticlePinOrder(id, pinOrder) {
+/**
+ * Move an article to position `target` within the positioned block.
+ *
+ * Replaces `updateArticlePinOrder`, which took an integer from a free number
+ * input and wrote it to ONE row while knowing nothing about the others — so
+ * duplicates and gaps were a normal thing to type. `planMoveToPosition` re-emits
+ * the whole block as contiguous 1..M, which makes both unrepresentable.
+ *
+ * `target` is bounded by the UI to 1..M and clamped by the planner anyway. An id
+ * outside the block throws `NotInBlockError`; that is a programmer error rather
+ * than user input, so it is reported rather than swallowed into a no-op that
+ * would look like success.
+ */
+export async function moveArticleToPosition(id, target) {
   await requireAdmin('articles');
-  await dbConnect();
   if (!id) return { ok: false, error: 'Missing id' };
-  const numeric = Number.isFinite(Number(pinOrder)) ? Number(pinOrder) : 0;
-  await Article.findByIdAndUpdate(id, { $set: { pinOrder: numeric } });
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(PUBLIC_PATH);
-  return { ok: true };
+  await dbConnect();
+  const articles = await readBlockContext();
+
+  try {
+    return await applyPlan(planMoveToPosition(articles, id, target));
+  } catch (err) {
+    if (err?.name === 'NotInBlockError') {
+      return { ok: false, error: 'บทความนี้ไม่ได้อยู่ในบล็อกที่จัดตำแหน่งไว้' };
+    }
+    throw err;
+  }
 }
+
+/**
+ * Turn the pin BADGE on or off. Positioning is untouched — see the note on
+ * shouldShowPinBadge in src/lib/articlePositioning.js for why these are two
+ * different concerns wearing one name historically.
+ */
+export async function setArticlePinBadge(id, show) {
+  await requireAdmin('articles');
+  if (!id) return { ok: false, error: 'Missing id' };
+  await dbConnect();
+  return applyPlan(planBadgeToggle(id, Boolean(show)));
+}
+
+// RETIRED: updateArticlePinOrder.
+// It wrote a free integer to a single row with no view of the block, so
+// duplicates and gaps (b-005: production held 1,1,2,3,4,5,6,7,9,10) were a
+// normal thing to type. Use moveArticleToPosition().
 
 /**
  * Featured articles for the Landing page BlogSection.
