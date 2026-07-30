@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   ArrowUpToLine,
+  ChevronDown,
+  ChevronUp,
   Pencil,
   Pin,
   Plus,
@@ -14,20 +16,19 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
-  applyArticlePositionPlan,
   deleteArticle,
+  moveArticleToPosition,
+  repositionArticle,
+  setArticlePinBadge,
   toggleArticleActive,
   toggleArticleFeaturedOnLanding,
-  updateArticlePinOrder,
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
 import { describeListWindow } from '@/lib/adminListWindow';
 import {
   applyPositionPlan,
-  planBadgeToggle,
-  planDemotion,
-  planPromotion,
+  isPositioned,
   shouldShowPinBadge,
 } from '@/lib/articlePositioning';
 
@@ -135,6 +136,12 @@ export function ArticlesAdminClient({
     [reachable, total]
   );
 
+  // M — the live size of the positioned block, and the upper bound of every
+  // move control. DERIVED from the rows, never a constant: the only positions
+  // that exist are 1..M, and a control offering more than that would be offering
+  // what the model cannot store.
+  const blockSize = useMemo(() => rows.filter(isPositioned).length, [rows]);
+
   function handleToggle(a) {
     setBusyId(a._id);
     startTransition(async () => {
@@ -149,25 +156,35 @@ export function ArticlesAdminClient({
   }
 
   /**
-   * Promote / demote / badge all go through the same path: a pure planner
-   * computes the writes from the CURRENT full list, one action applies them in
-   * a single bulkWrite, and the same plan is replayed locally so the optimistic
-   * state and the persisted state come out of one piece of logic rather than
-   * two that have to be kept in step.
+   * Every positioning change goes through the same path: the SERVER re-reads the
+   * block, runs a planner, applies it in one bulkWrite, and hands the plan back.
+   * The plan is then replayed locally so the optimistic state and the persisted
+   * state come out of one piece of arithmetic rather than two kept in step.
+   *
+   * This client used to compute the plan itself and POST it. It does not any
+   * more: `rows` is a page-load snapshot, and a move renumbers the WHOLE block,
+   * so a plan computed in a tab left open since this morning would write a
+   * block-wide renumbering derived from stale data. See the block comment in
+   * src/lib/actions/articles.js.
+   *
+   * `applyPositionPlan` handles MULTI-ROW plans — a move renumbers every row it
+   * passes — so this cannot be simplified into "patch the clicked row".
    */
-  function runPlan(a, plan) {
+  function runAction(a, call) {
     setBusyId(a._id);
     startTransition(async () => {
-      const res = await applyArticlePositionPlan(plan);
-      if (res?.ok) setRows((cur) => applyPositionPlan(cur, plan));
+      const res = await call();
+      if (res?.ok && res.plan) setRows((cur) => applyPositionPlan(cur, res.plan));
       setBusyId(null);
     });
   }
 
-  const handlePromote = (a) => runPlan(a, planPromotion(rows, a._id));
-  const handleDemote = (a) => runPlan(a, planDemotion(rows, a._id));
+  const handlePromote = (a) => runAction(a, () => repositionArticle(a._id, 'promote'));
+  const handleDemote = (a) => runAction(a, () => repositionArticle(a._id, 'demote'));
+  const handleMoveTo = (a, target) => runAction(a, () => moveArticleToPosition(a._id, target));
   const handleBadgeToggle = (a) =>
-    runPlan(a, planBadgeToggle(a._id, !shouldShowPinBadge({ ...a, isPinnedOnArticlePage: true })));
+    runAction(a, () =>
+      setArticlePinBadge(a._id, !shouldShowPinBadge({ ...a, isPinnedOnArticlePage: true })));
 
   function handleToggleFeatured(a) {
     const next = !a.featuredOnLanding;
@@ -180,17 +197,6 @@ export function ArticlesAdminClient({
         );
       }
       setBusyId(null);
-    });
-  }
-
-  function handlePinOrderChange(a, value) {
-    const numeric = Number.isFinite(Number(value)) ? Number(value) : 0;
-    // Optimistic — the field is editable mid-typing, no busy state.
-    setRows((cur) =>
-      cur.map((r) => (r._id === a._id ? { ...r, pinOrder: numeric } : r))
-    );
-    startTransition(async () => {
-      await updateArticlePinOrder(a._id, numeric);
     });
   }
 
@@ -452,9 +458,10 @@ export function ArticlesAdminClient({
                   <PositionCell
                     article={a}
                     busy={busyId === a._id}
+                    blockSize={blockSize}
                     onPromote={() => handlePromote(a)}
                     onDemote={() => handleDemote(a)}
-                    onOrderChange={(v) => handlePinOrderChange(a, v)}
+                    onMoveTo={(target) => handleMoveTo(a, target)}
                     onBadgeToggle={() => handleBadgeToggle(a)}
                   />
                 </td>
@@ -581,16 +588,41 @@ export function ArticlesAdminClient({
  * Different shape, different icon family, different verb. A reader scanning the
  * column sees "button with an arrow" versus "switch with a pin".
  *
- * ── THE MODEL'S LIMIT IS RESPECTED HERE ─────────────────────────────────────
- * A date-ordered row gets a PROMOTE BUTTON and no number field. The list is two
- * contiguous blocks, so the only ranks that can be stored are 1..(block + 1);
- * offering a free rank box on a date-ordered row would invite "put this at 12"
- * and silently do something else. The number field appears only once the
- * article is in the block, where it genuinely applies.
+ * ── THE MODEL'S LIMIT IS RESPECTED HERE (b-005) ─────────────────────────────
+ * A date-ordered row gets a PROMOTE BUTTON and nothing else. The list is two
+ * contiguous blocks, so the only positions that EXIST are 1..M where M is the
+ * live block size. "Position 12" is not a thing when the block holds 10 —
+ * ranks 11+ belong to the date-ordered mass and cannot be assigned, because
+ * expressing them would need empty slots between the blocks, i.e. a
+ * fixed-slot model the schema does not have.
+ *
+ * That is why the free `<input type="number">` is GONE. It let an admin type
+ * any integer into one row while the action wrote it without looking at the
+ * others, so duplicates and gaps were a normal thing to type — production ended
+ * up holding 1,1,2,3,4,5,6,7,9,10. A duplicate is not cosmetic: the cascade
+ * falls through to publishedAt, so the number the admin typed stops deciding the
+ * position, and because the tie eats two slots the box and the ลำดับ column
+ * legitimately disagree.
+ *
+ * Its replacement is two BOUNDED controls, both routed through
+ * planMoveToPosition, which re-emits the whole block as contiguous 1..M:
+ *
+ *   ↑ / ↓        one step, disabled at the ends
+ *   ย้ายไปลำดับ   a select of exactly 1..M — the answer to "move this from 10
+ *                to 5" in one action instead of five clicks
+ *
+ * M is passed in from the live row set, never hardcoded. Do NOT reintroduce a
+ * free text field alongside these: the point is not that typing is inconvenient,
+ * it is that duplicates and gaps become unrepresentable.
  */
-function PositionCell({ article, busy, onPromote, onDemote, onOrderChange, onBadgeToggle }) {
+function PositionCell({ article, busy, blockSize, onPromote, onDemote, onMoveTo, onBadgeToggle }) {
   const positioned = article.isPinnedOnArticlePage === true;
   const badgeOn = article.showPinBadge !== false;
+
+  const M = Math.max(0, Number(blockSize) || 0);
+  const at = Number(article.pinOrder) || 0;
+  const atTop = at <= 1;
+  const atBottom = at >= M;
 
   return (
     <div className="flex flex-col gap-2">
@@ -600,28 +632,55 @@ function PositionCell({ article, busy, onPromote, onDemote, onOrderChange, onBad
           ตำแหน่ง
         </p>
         {positioned ? (
-          <div className="flex items-center gap-1">
-            <input
-              type="number"
-              min="0"
-              value={article.pinOrder ?? 0}
-              onChange={(e) => onOrderChange(e.target.value)}
-              title="ลำดับในบล็อกบนสุด (น้อย = ขึ้นก่อน)"
-              aria-label="ลำดับในบล็อกบนสุด"
-              className="w-12 rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-center text-xs text-9e-navy dark:bg-[#0D1B2A] dark:text-white"
-            />
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              {/* ±1. Disabled at the ends rather than hidden, so the control
+                  does not reflow as an article moves through the block. */}
+              <button
+                type="button"
+                onClick={() => onMoveTo(at - 1)}
+                disabled={busy || atTop}
+                aria-label={`เลื่อนขึ้นหนึ่งลำดับ (ปัจจุบันลำดับ ${at})`}
+                title="เลื่อนขึ้นหนึ่งลำดับ"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                <ChevronUp className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onMoveTo(at + 1)}
+                disabled={busy || atBottom}
+                aria-label={`เลื่อนลงหนึ่งลำดับ (ปัจจุบันลำดับ ${at})`}
+                title="เลื่อนลงหนึ่งลำดับ"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              {/* Exactly 1..M. Not a text field — see the note above. */}
+              <select
+                value={at}
+                onChange={(e) => onMoveTo(Number(e.target.value))}
+                disabled={busy || M <= 1}
+                aria-label="ย้ายไปลำดับ"
+                title={`ย้ายไปลำดับ (1–${M})`}
+                className="rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-xs text-9e-navy disabled:opacity-50 dark:bg-[#0D1B2A] dark:text-white"
+              >
+                {Array.from({ length: M }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               onClick={onDemote}
               disabled={busy}
-              className="inline-flex items-center gap-1 whitespace-nowrap rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+              className="inline-flex items-center gap-1 self-start whitespace-nowrap rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
             >
               <ArrowDownToLine className="h-3 w-3" />
               {/* Not a bare `ปลด` — with position and badge now spelled
                   differently everywhere else, an unqualified verb here is the
                   one control left that does not say WHICH of the two it
-                  releases. `whitespace-nowrap` keeps the longer label on one
-                  line beside the w-12 order input. */}
+                  releases. */}
               ปลดตำแหน่ง
             </button>
           </div>
@@ -749,9 +808,17 @@ function RankCell({ info, pinOrder }) {
             (tie ? 'font-medium text-amber-600' : 'text-9e-action')
           }
         >
-          {/* `ลำดับซ้ำ` is a tripwire branch: b-005 makes duplicate order numbers
-              unrepresentable, after which this is unreachable. Renamed, not
-              invested in, and deliberately not deleted. */}
+          {/* `ลำดับซ้ำ` IS NOW A CORRUPTION TRIPWIRE, NOT A NORMAL STATE.
+              The free number input that made ties reachable is gone; every
+              position now goes through planMoveToPosition, which re-emits the
+              block as contiguous 1..M, so no sequence of admin actions can
+              produce a duplicate. If this pill ever appears, something wrote
+              pinOrder outside the planner — a stray script, a restored backup,
+              a hand edit in Compass — and the number in the control has stopped
+              deciding the position it claims to.
+              Kept deliberately: an unreachable branch that fires is a signal,
+              and deleting it would trade a visible symptom for a silent one.
+              Do not invest further in it; test/render keeps it honest. */}
           {tie ? 'ลำดับซ้ำ' : 'กำหนดเอง'}
         </span>
       </div>

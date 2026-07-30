@@ -83,12 +83,18 @@ test('among unpinned articles the newer publishedAt ranks first', () => {
   assert.deepEqual(orderOf(input), ['newest', 'mid', 'oldest']);
 });
 
-// ── 4. duplicate pinOrder — reachable in production TODAY ─────────────────
-// Nothing in the schema or in updateArticlePinOrder prevents two pinned
-// articles from holding the same pinOrder; the admin UI is a free number input.
-// When it happens the pin silently stops deciding the order and publishedAt
-// takes over — which is why the UI flags this case in amber rather than showing
-// the same confident pill it shows for a pin that IS being honoured.
+// ── 4. duplicate pinOrder — no longer reachable through the UI ────────────
+// Nothing in the SCHEMA prevents two pinned articles from holding the same
+// pinOrder, so this comparator still has to answer for the case. What has
+// changed is how it can arise: the free number input and the single-row write
+// behind it (`updateArticlePinOrder`) are gone, and every position now goes
+// through planMoveToPosition, which re-emits the block as contiguous 1..M — so
+// no sequence of admin actions can produce a duplicate. A tie now means
+// something wrote pinOrder outside the planner: a restored backup, a hand edit,
+// a script. When it happens the pin silently stops deciding the order and
+// publishedAt takes over — which is why the UI flags this case in amber rather
+// than showing the same confident pill it shows for a pin that IS honoured, and
+// why that branch was kept as a corruption tripwire instead of deleted.
 
 test('two pinned articles sharing a pinOrder fall through to publishedAt', () => {
   const input = [
