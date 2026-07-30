@@ -16,6 +16,7 @@ import {
   Tag,
 } from 'lucide-react';
 import { courseHref, careerPathHref } from '@/lib/utils';
+import { siteDateParts } from '@/lib/articlePublishTime';
 
 // ── Local re-implementations from ScheduleClient (not exported) ────
 const MONTH_TH = [
@@ -54,11 +55,13 @@ function formatDateLabel(scheduleItem) {
   return `${first.getDate()} ${firstM} - ${last.getDate()} ${lastM} ${last.getFullYear() + 543}`;
 }
 
+// Buddhist-era label built from the SITE timezone's calendar fields, not the
+// runtime's. `siteDateParts` returns a 1-12 month, so MONTH_TH is indexed with
+// `month - 1` rather than a JS 0-11 getMonth().
 function formatArticleDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${MONTH_TH[d.getMonth()]} ${d.getFullYear() + 543}`;
+  const p = siteDateParts(iso);
+  if (!p) return '';
+  return `${p.day} ${MONTH_TH[p.month - 1]} ${p.year + 543}`;
 }
 
 // Compact Thai-locale date for promo range labels — 2-digit BE year.

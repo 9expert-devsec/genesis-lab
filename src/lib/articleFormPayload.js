@@ -23,6 +23,8 @@
  * Dependency-free (no next/*, no db, no models) so the `pure` tier can run it.
  */
 
+import { fromLocalInput } from '@/lib/articlePublishTime';
+
 /**
  * @param {FormData} formData
  * @returns {object} the pre-validation payload; every key here must also be
@@ -38,12 +40,16 @@ export function parseArticleFormData(formData) {
     }
   }
 
-  // datetime-local emits `YYYY-MM-DDTHH:mm`, which is NOT a valid
-  // ISO-8601 string for Zod's `.datetime()` check. Normalize.
+  // datetime-local emits `YYYY-MM-DDTHH:mm`, which is NOT a valid ISO-8601
+  // string for Zod's `.datetime()` check, and — worse — is a WALL-CLOCK time
+  // with no offset, which ECMAScript reads in the RUNTIME's zone. This module
+  // is `'use server'`: on Vercel that runtime is UTC, so 18:00 picked in
+  // Bangkok used to be stored as 18:00Z, +7h off, with the calendar date
+  // rolling forward for anything picked at 17:00 or later. `fromLocalInput`
+  // pins the reading to the site timezone. `.toISOString()` stays because
+  // `z.string().datetime()` rejects a value carrying an offset.
   const publishedAtRaw = String(formData.get('publishedAt') ?? '').trim();
-  const publishedAt = publishedAtRaw
-    ? new Date(publishedAtRaw).toISOString()
-    : '';
+  const publishedAt = fromLocalInput(publishedAtRaw);
 
   // jsonLd ships as a JSON blob — let Zod sanitize it on the way in.
   let jsonLd = {};

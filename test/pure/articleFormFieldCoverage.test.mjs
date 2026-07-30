@@ -151,6 +151,22 @@ test('2b — key absent from FormData → false (an unchecked native checkbox po
   );
 });
 
+test('2c — the fixture\'s wall-clock publishedAt lands on the Bangkok instant', () => {
+  // This fixture sets `publishedAt: '2025-01-01T09:00'` — a datetime-local
+  // wall-clock string — and used to assert nothing about the result, so it
+  // passed in ANY timezone while the parser was silently reading it in the
+  // runtime's zone (b-001). Pin the instant so the fixture cannot go blind
+  // again. 09:00 in Bangkok is 02:00Z.
+  //
+  // NECESSARY BUT NOT SUFFICIENT: this test still reads the AMBIENT zone, so on
+  // a Bangkok dev box it passes even with the bug restored. The assertion that
+  // actually catches b-001 forces process.env.TZ and lives in
+  // test/pure/articlePublishTime.test.mjs ('the REAL parser … even when the
+  // server runs in UTC'). Do not treat this one as the guard.
+  const p = payloadFor(formData({ badge: true }));
+  assert.equal(p.publishedAt, '2025-01-01T02:00:00.000Z');
+});
+
 test('3 — saving the form does NOT write pinOrder or isPinnedOnArticlePage', () => {
   for (const badge of [true, false]) {
     const p = payloadFor(formData({ badge }));
