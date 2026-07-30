@@ -13,6 +13,7 @@ import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
 import { articleSchema } from '@/lib/schemas/article';
 import { parseArticleFormData } from '@/lib/articleFormPayload';
+import { toSelectString } from '@/lib/articleListFields';
 import { planDemotion, planPromotion } from '@/lib/articlePositioning';
 import { requireAdmin } from '@/lib/actions/auth';
 
@@ -40,6 +41,15 @@ function firstZodMessage(error) {
 
 // ── reads ────────────────────────────────────────────────────────
 
+/**
+ * @param {object} [opts]
+ * @param {string|string[]} [opts.select] Optional Mongo projection. OMITTED BY
+ *   DEFAULT so every existing caller keeps the whole-document behaviour it was
+ *   written against — this reader is shared by /admin/articles and /articles,
+ *   and the two need different field sets (see src/lib/articleListFields.js).
+ *   Hardcoding one here would silently starve the other of a field it renders,
+ *   which fails as a blank cell rather than as an error.
+ */
 export async function getArticles({
   page = 1,
   limit = 20,
@@ -48,6 +58,7 @@ export async function getArticles({
   program = '',
   articleType = '', // 'article' | 'video' | '' (all)
   active,
+  select = '',
 } = {}) {
   await dbConnect();
 
@@ -64,12 +75,21 @@ export async function getArticles({
   }
 
   const skip = (Math.max(1, page) - 1) * limit;
+
+  // Projection is applied to the DOCUMENT read only. `countDocuments` runs
+  // against the same `filter` and is deliberately untouched: `total` must
+  // describe the whole matching set, which is the number the admin banner
+  // compares its row count against.
+  const query = Article.find(filter)
+    .sort({ isPinnedOnArticlePage: -1, pinOrder: 1, publishedAt: -1, createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+
+  const projection = toSelectString(select);
+  if (projection) query.select(projection);
+
   const [docs, total] = await Promise.all([
-    Article.find(filter)
-      .sort({ isPinnedOnArticlePage: -1, pinOrder: 1, publishedAt: -1, createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
+    query.lean(),
     Article.countDocuments(filter),
   ]);
 

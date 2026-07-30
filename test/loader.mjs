@@ -46,6 +46,10 @@ const STUBS = {
   // throws at module load with no MONGODB_URI. They are never called during a
   // server render — see the stub for the full note.
   '@/lib/actions/nav-course-preview': path.join(ROOT, 'test', 'stub-nav-course-preview.mjs'),
+  // ArticlesAdminClient imports the article server actions for its click
+  // handlers; that chain reaches next-auth → next/headers, which does not
+  // resolve outside a Next runtime. Same reasoning as the line above.
+  '@/lib/actions/articles': path.join(ROOT, 'test', 'stub-article-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);
