@@ -23,6 +23,12 @@ function formatDate(iso) {
 export function ArticlesPageClient({
   articles,
   programs,
+  programNames = {},
+  skillNames = {},
+  // `{ skill_id, skill_name }`, already narrowed to the skills ARTICLES CARRY
+  // and already name-resolved and sorted by page.jsx. This component renders
+  // them; it does not decide which are offerable — see the note there.
+  skillOptions = [],
   page,
   totalPages,
   total,
@@ -36,7 +42,12 @@ export function ArticlesPageClient({
   // (the server re-renders with the correct page on every change), so
   // `initialFilters` is always the live source of truth for them.
   const program = initialFilters.program ?? '';
-  const type = initialFilters.type ?? 'all';
+  // NO `'all'` SENTINEL, unlike the ประเภท filter this replaced. That one used
+  // `'all'` for "no filter" and `pushWith` had to know to delete it, which is a
+  // second spelling of empty and a second thing to keep in step. `''` is what
+  // `pushWith` already drops, and it is what page.jsx already reads back out of
+  // searchParams, so the value round-trips through the URL unchanged.
+  const skill = initialFilters.skill ?? '';
   const tag = initialFilters.tag ?? '';
 
   // Search is debounced, so it gets its own local input state.
@@ -99,14 +110,28 @@ export function ArticlesPageClient({
           ))}
         </select>
 
+        {/* Was the ประเภท (article / video) filter. Replaced rather than added
+            beside: the type distinction stopped being visible anywhere on this
+            page when the card's type badge was removed, so a control that
+            SPLITS the list by it was sorting by something the reader could no
+            longer see. Skill is what the rest of the site navigates by, and it
+            is already on every card as a chip.
+
+            `?type=` still works if it is in the URL — page.jsx keeps reading it
+            and getArticles keeps filtering on it — it simply has no control any
+            more. That is stated there rather than here, because the decision
+            lives with the read. */}
         <select
-          value={type}
-          onChange={(e) => pushWith({ type: e.target.value })}
+          value={skill}
+          onChange={(e) => pushWith({ skill: e.target.value })}
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
-          <option value="all">ประเภททั้งหมด</option>
-          <option value="article">บทความ</option>
-          <option value="video">บทความวิดีโอ</option>
+          <option value="">ทุก Skill</option>
+          {skillOptions.map((s) => (
+            <option key={s.skill_id} value={s.skill_id}>
+              {s.skill_name}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -135,7 +160,12 @@ export function ArticlesPageClient({
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {articles.map((a) => (
-              <ArticleCard key={a._id} article={a} />
+              <ArticleCard
+                key={a._id}
+                article={a}
+                programNames={programNames}
+                skillNames={skillNames}
+              />
             ))}
           </div>
           <Pager page={page} totalPages={totalPages} onGo={goToPage} />
@@ -202,9 +232,62 @@ function Pager({ page, totalPages, onGo }) {
   );
 }
 
-function ArticleCard({ article }) {
+/**
+ * One card on /articles.
+ *
+ * ── THE TOP-LEFT OVERLAY: TYPE OUT, PROGRAM IN ──────────────────────────────
+ * That slot used to say บทความ or บทความวิดีโอ on every card, so on a page where
+ * the overwhelming majority are plain articles it was a label that read "this is
+ * a thing on the articles page". The type is still a real distinction and still
+ * filterable — the toolbar's ประเภท select, the `?type=` param and BlogSection
+ * are all untouched — it just does not need to be stamped on every cover image
+ * to be available.
+ *
+ * The slot now carries the article's PROGRAM, which is the thing a reader
+ * scanning a grid of covers actually wants: which part of the catalogue this
+ * belongs to. Same treatment as the badge it replaces — that was a deliberate
+ * reuse rather than a coincidence, because the slot's job (one short,
+ * high-contrast label over artwork) has not changed.
+ *
+ * THE CHIPS ARE NON-INTERACTIVE, AND THAT IS NOT AN OVERSIGHT. They sit inside
+ * the cover `<Link>`, so making them link to `?program=` would nest an anchor
+ * inside an anchor — invalid HTML that React will render anyway and that
+ * browsers resolve by silently splitting the outer link, which breaks the card's
+ * own click target. The filter for programs already exists in the toolbar.
+ *
+ * CAPPED AT 2, WITH NO "+N" COUNTER, unlike the skills row below. This slot
+ * overlays the artwork rather than sitting in the text column: a third chip
+ * starts covering the image, and a `+1` in that position reads as part of the
+ * picture. The body's skill row keeps its own cap of 3 because it has the width.
+ *
+ * ── SKILLS REPLACE TAGS ON THE CARD, AND ONLY ON THE CARD ───────────────────
+ * `tags` is a free-text field an author types; `skills` is a chosen reference to
+ * the upstream taxonomy the rest of the site navigates by. The chip row now
+ * shows the second. NOTHING ELSE MOVES: the `tags` field, the `?tag=` filter,
+ * the toolbar's tag chip and the search box (which searches tags) are all
+ * unchanged, so every existing tag link still works and this is a display
+ * change rather than a data one.
+ *
+ * AN ID WITH NO NAME IS DROPPED, NEVER PRINTED — for BOTH rows, resolved the
+ * same way so the two cannot drift. An article stores `skill_id` / `program_id`
+ * strings and the names come from a separate service; when that service is
+ * unreachable the map is empty (page.jsx catches to `{items: []}`), and when an
+ * entry is retired upstream its id survives in old articles forever. Printing
+ * the raw id would put `SK-014` on a public card, which is worse than showing
+ * nothing — so an unresolved id is skipped, and a card with nothing left to show
+ * renders NO WRAPPER AT ALL rather than an empty element: in the body that would
+ * be a strip of padding, and in the overlay it would be a transparent box
+ * floating on the artwork.
+ */
+function ArticleCard({ article, programNames = {}, skillNames = {} }) {
   const href = `/articles/${article.slug}`;
-  const isVideo = article.articleType === 'video';
+  // One resolver, two rows. Only the map, the field and the cap differ; if these
+  // two ever stop looking identical, one of them has grown a rule the other
+  // does not have.
+  const resolve = (ids, names, cap) =>
+    (ids ?? []).map((id) => names[String(id)]).filter(Boolean).slice(0, cap);
+  const programTags = resolve(article.programs, programNames, 2);
+  const skills = resolve(article.skills, skillNames, 3);
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-9e-lg dark:bg-[#0D1B2A]">
       <Link href={href} className="relative block aspect-video overflow-hidden bg-9e-ice dark:bg-[#111d2c]">
@@ -221,14 +304,22 @@ function ArticleCard({ article }) {
             {article.title?.slice(0, 1) ?? '?'}
           </div>
         )}
-        <span
-          className={
-            'absolute left-3 top-3 rounded-full px-2 py-0.5 text-[11px] font-medium text-white ' +
-            (isVideo ? 'bg-purple-600' : 'bg-9e-action')
-          }
-        >
-          {isVideo ? 'บทความวิดีโอ' : 'บทความ'}
-        </span>
+        {/* The overlay slot the type badge vacated. Rendered only when there is
+            something to say — no wrapper, so a card with no resolvable program
+            has a clean cover image. A <span> rather than a <div> because this
+            subtree is inside the cover <a>. */}
+        {programTags.length > 0 && (
+          <span className="absolute left-3 top-3 flex flex-wrap gap-1">
+            {programTags.map((name) => (
+              <span
+                key={name}
+                className="rounded-full bg-9e-action px-2 py-0.5 text-[11px] font-medium text-white"
+              >
+                {name}
+              </span>
+            ))}
+          </span>
+        )}
         {/* Badge only — NOT the ordering. `isPinnedOnArticlePage` still decides
             where this card sits in the list (the cascade in
             src/lib/actions/articles.js is unchanged); shouldShowPinBadge decides
@@ -255,14 +346,14 @@ function ArticleCard({ article }) {
           </p>
         )}
 
-        {(article.tags?.length ?? 0) > 0 && (
+        {skills.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {article.tags.slice(0, 3).map((t) => (
+            {skills.map((name) => (
               <span
-                key={t}
+                key={name}
                 className="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action dark:bg-[#111d2c]"
               >
-                #{t}
+                {name}
               </span>
             ))}
           </div>

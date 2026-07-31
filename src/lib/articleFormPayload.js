@@ -94,7 +94,8 @@ export function parseArticleFormData(formData) {
     // src/lib/articlePositioning.js, which need the WHOLE block to decide a
     // value. Putting them in this payload would let a stale form tab overwrite
     // a position set from the admin list: the classic lost update. Position
-    // changes go through repositionArticle() instead, which re-reads the block
+    // changes go through setArticlePinned() / moveArticleOneStep() instead,
+    // which re-read the block
     // and reuses the same planners. Do not add them here.
   };
 }

@@ -50,6 +50,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/actions/auth';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { aiFetch, unwrap } from '@/lib/api/client';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -57,6 +59,90 @@ import {
 } from '@/lib/api/resolveIds';
 
 const ADMIN_PATH = '/admin/courses';
+
+/**
+ * ── AUDIT NOTES FOR THIS FILE — THE MSDB HALF ───────────────────────────────
+ *
+ * Nothing here writes Mongo. Every mutation is an HTTP call to MSDB, which is
+ * exactly why the coverage guard could not see these three exports until its
+ * classifier learned the `msdb*` names (§8.9). Two consequences for the audit
+ * call that do not apply anywhere else in the sweep:
+ *
+ *   recordId is an MSDB ObjectId, and it identifies NOTHING to a human. That
+ *   is what makes `recordLabel` load-bearing here rather than decorative — see
+ *   the comment in deleteCourse.
+ *
+ *   `before` costs a network round-trip, not a Mongo read. It is taken only
+ *   where the value cannot be recovered another way: on DELETE, where the
+ *   record is about to stop existing. On update it is deliberately skipped —
+ *   see courseFields().
+ */
+
+/**
+ * The compact course summary logged as `before`/`after`.
+ *
+ * NOT the shaped MSDB payload. That object carries `training_topics`,
+ * `bullets`, four arrays of URLs and a long rich-text `title`; a single edit
+ * would blow past the writer's 2 KB per-field cap and land in the trail as a
+ * truncation marker — 200 characters of arbitrary prefix, which is worse than
+ * a chosen summary because it looks like data.
+ *
+ * So: the scalar fields an admin would actually dispute, verbatim, plus counts
+ * for the long-form arrays. "the objectives list went from 6 items to 4" is the
+ * useful claim; the objectives themselves are on the page.
+ */
+function courseFields(body) {
+  return {
+    course_id:            body.course_id ?? '',
+    course_name:          body.course_name ?? '',
+    course_levels:        body.course_levels ?? '',
+    course_price:         body.course_price ?? null,
+    course_netprice:      body.course_netprice ?? null,
+    sort_order:           body.sort_order ?? null,
+    course_type_public:   Boolean(body.course_type_public),
+    course_type_inhouse:  Boolean(body.course_type_inhouse),
+    course_promote_status: Boolean(body.course_promote_status),
+    program:              body.program ?? '',
+    counts: {
+      skills:          Array.isArray(body.skills) ? body.skills.length : 0,
+      related_courses: Array.isArray(body.related_courses) ? body.related_courses.length : 0,
+      objectives:      Array.isArray(body.course_objectives) ? body.course_objectives.length : 0,
+      training_topics: Array.isArray(body.training_topics) ? body.training_topics.length : 0,
+    },
+  };
+}
+
+/**
+ * Read one course fresh, bypassing every cache.
+ *
+ * `revalidate: 0` is client.js's documented "admin-page always fresh" signal —
+ * it becomes `cache: 'no-store'`. This must NOT go through
+ * `getPublicCourse()` (tagged, 1 h ISR) or `resolveCourseObjectId()`
+ * (resolveIds.js:26, 300 s and untagged): a label read through a cached path
+ * logs the course's name from BEFORE a rename, and the audit row would then
+ * assert the wrong thing about the record that was just deleted.
+ *
+ * Filters on `course`, never `_id`. Upstream silently ignores `_id` and
+ * returns the whole list — verified again 2026-07-31: `?_id=<oid>` gives 77
+ * rows, `?course=<oid>` gives exactly the one.
+ *
+ * Never throws: a label is worth a round-trip, not a failed delete.
+ */
+async function readCourseUncached(id) {
+  try {
+    const raw = await aiFetch('/public-course', { params: { course: id }, revalidate: 0 });
+    const { items } = unwrap(raw);
+    return items?.[0] ?? null;
+  } catch (err) {
+    console.warn('[courses] uncached label read failed:', err?.message ?? err);
+    return null;
+  }
+}
+
+/** "COPILOT-STU — AI Agents with Microsoft Copilot Studio" */
+function courseLabel(courseId, courseName) {
+  return [courseId, courseName].map((s) => String(s ?? '').trim()).filter(Boolean).join(' — ');
+}
 
 // ── coercion helpers ────────────────────────────────────────────────
 
@@ -217,7 +303,7 @@ async function resolveCourseRefs(body) {
 }
 
 export async function createCourse(formData) {
-  await requireAdmin('courses');
+  const session = await requireAdmin('courses');
   const body = shapePayload(formData);
   if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
   if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
@@ -226,6 +312,18 @@ export async function createCourse(formData) {
     const payload = await resolveCourseRefs(body);
     const { item } = await msdbCreate('public-course', payload);
     revalidatePath(ADMIN_PATH);
+
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'create',
+      entity:      'course',
+      // The MSDB-assigned _id, which only exists after the write.
+      recordId:    String(item?._id ?? ''),
+      recordLabel: courseLabel(body.course_id, body.course_name),
+      after:       courseFields(body),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true, item, id: item?._id };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'สร้างหลักสูตรไม่สำเร็จ' };
@@ -233,7 +331,7 @@ export async function createCourse(formData) {
 }
 
 export async function updateCourse(id, formData) {
-  await requireAdmin('courses');
+  const session = await requireAdmin('courses');
   if (!id) return { ok: false, error: 'Missing course id' };
 
   const body = shapePayload(formData);
@@ -242,6 +340,24 @@ export async function updateCourse(id, formData) {
     const { item } = await msdbUpdate('public-course', id, payload);
     revalidatePath(ADMIN_PATH);
     revalidatePath(`${ADMIN_PATH}/${id}/edit`);
+
+    // NO `before`, deliberately. Capturing it would mean an extra uncached MSDB
+    // round-trip on every course edit — a 10 s-timeout network call, paid every
+    // save, to record something the trail already holds: once every update logs
+    // its `after`, the previous row's `after` for the same recordId IS this
+    // row's before. The reading surface reconstructs it by walking the record's
+    // history, which it already fetches. Deletes are the exception (see below),
+    // because there is no next row to reconstruct from.
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'update',
+      entity:      'course',
+      recordId:    String(id),
+      recordLabel: courseLabel(body.course_id, body.course_name),
+      after:       courseFields(body),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true, item };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'อัปเดตหลักสูตรไม่สำเร็จ' };
@@ -249,12 +365,44 @@ export async function updateCourse(id, formData) {
 }
 
 export async function deleteCourse(id) {
-  await requireAdmin('courses');
+  const session = await requireAdmin('courses');
   if (!id) return { ok: false, error: 'Missing course id' };
+
+  // READ BEFORE DELETING, and this is the one place in the sweep so far where
+  // the extra round-trip is unambiguously worth it.
+  //
+  // `recordId` here is an MSDB ObjectId — `692d39b52ee07293c9131fd8`. It
+  // identifies nothing to a human, and the moment msdbDelete returns, there is
+  // nothing left anywhere to resolve it against. "Who deleted this, and what
+  // was it called" is the question the central page exists to answer, and after
+  // the delete the snapshotted label is the ONLY thing that can answer it.
+  //
+  // This looks like the opposite of round 2, where every delete logs
+  // `recordLabel: ''`. It is the same principle reaching a different answer:
+  // there `recordId` IS the human-readable reference (the admin's เลขอ้างอิง is
+  // literally String(_id).slice(-8).toUpperCase()) and the PII policy forbids
+  // anything more. Here the id is opaque and a course name is not personal data.
+  //
+  // The read is UNCACHED on purpose — see readCourseUncached().
+  const existing = await readCourseUncached(id);
 
   try {
     await msdbDelete('public-course', id);
     revalidatePath(ADMIN_PATH);
+
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      'delete',
+      entity:      'course',
+      recordId:    String(id),
+      recordLabel: courseLabel(existing?.course_id, existing?.course_name),
+      before:      existing ? courseFields(existing) : null,
+      // A failed label read must not be invisible: without this, a row with an
+      // empty label reads identically to a course that never had a name.
+      ...(existing ? {} : { meta: { labelReadFailed: true } }),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ลบหลักสูตรไม่สำเร็จ' };

@@ -189,7 +189,52 @@ test('3 — saving the form does NOT write pinOrder or isPinnedOnArticlePage', (
   assert.equal(SCHEMA_KEYS.has('isPinnedOnArticlePage'), false, 'articleSchema must not declare isPinnedOnArticlePage');
 });
 
+test('R3-a — saving the form does NOT write sortKey, in EITHER of the two layers that could let it', () => {
+  // Same rule as pinOrder, one field along: `sortKey` is an invariant of the
+  // WHOLE collection — it is picked from max+GAP or from the midpoint of two
+  // neighbours (src/lib/articleSortKey.js) — so a form holding ONE document
+  // cannot own it. createArticle assigns it server-side from a fresh read;
+  // updateArticle must leave it alone entirely.
+  //
+  // BOTH halves are asserted because either one alone is a false green. A
+  // control wired into the parser but not the schema is dropped SILENTLY by
+  // zod's strip mode: the save reports ok, the database never changes, and the
+  // old value reappears on refresh with no error anywhere. And a field declared
+  // in the schema but absent from the parser would take its zod default on every
+  // save — which for sortKey would mean overwriting a planned key with nothing.
+  for (const badge of [true, false]) {
+    const p = payloadFor(formData({ badge }));
+    assert.equal(
+      'sortKey' in p, false,
+      'the save button must never write sortKey — it is chosen against the whole ' +
+      'collection, and a stale form tab would overwrite a position set from the list',
+    );
+  }
+  assert.equal(
+    SCHEMA_KEYS.has('sortKey'), false,
+    'articleSchema must not declare sortKey either, or a later parser change would be ' +
+    'enough on its own to hand the form ownership of cross-row state',
+  );
+  assert.equal(
+    parserSrc.includes('sortKey'), false,
+    'and parseArticleFormData must not read it — declaring it in only one of the two ' +
+    'places is the silent-strip failure this file exists for',
+  );
+});
+
 // ── controls ──────────────────────────────────────────────────────────────
+
+test('R3-b — CONTROL: "absent from both layers" is not true of every field', () => {
+  // The three assertions above are all NEGATIVE. If the scanner, the schema
+  // shape or the payload were empty, every one of them would pass while proving
+  // nothing. showPinBadge is the field that IS owned by the form, so it must be
+  // present in all three places sortKey is absent from.
+  const p = payloadFor(formData({ badge: true }));
+  assert.equal('showPinBadge' in p, true, 'the payload really does carry fields');
+  assert.equal(SCHEMA_KEYS.has('showPinBadge'), true, 'the schema shape really is populated');
+  assert.equal(parserSrc.includes('showPinBadge'), true, 'the parser source really was read');
+  assert.ok(SCHEMA_KEYS.size > 10, `articleSchema exposed only ${SCHEMA_KEYS.size} keys`);
+});
 
 test('CONTROL: the strip is real — an undeclared key IS dropped by articleSchema', () => {
   const parsed = articleSchema.safeParse({

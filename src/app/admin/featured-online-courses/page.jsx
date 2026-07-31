@@ -3,6 +3,7 @@ import { getFeaturedOnlineCourses } from '@/lib/actions/featured-online-courses'
 import { getOnlineCourses } from '@/lib/api/online-courses';
 import { AddFeaturedOnlineCourseForm } from './_components/AddFeaturedOnlineCourseForm';
 import { FeaturedOnlineCourseList } from './_components/FeaturedOnlineCourseList';
+import { AddedRowChannel } from '@/app/admin/_components/AddedRowChannel';
 
 export const metadata = { title: 'คอร์สออนไลน์แนะนำ' };
 export const dynamic = 'force-dynamic';
@@ -47,12 +48,15 @@ export default async function Page() {
         </p>
       </div>
 
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
-        <AddFeaturedOnlineCourseForm courses={searchable} />
-      </div>
+      {/* Sibling form + list under a server component: see AddedRowChannel. */}
+      <AddedRowChannel>
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
+          <AddFeaturedOnlineCourseForm courses={searchable} />
+        </div>
 
-      <FeaturedOnlineCourseList courses={featured} />
+        <FeaturedOnlineCourseList courses={featured} />
+      </AddedRowChannel>
     </div>
   );
 }

@@ -28,6 +28,7 @@
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
 import { listCareerPaths } from '@/lib/api/career-paths';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 
 function toString(value) {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -156,6 +157,13 @@ export async function syncCareerPaths() {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  // BEFORE the read. This tag WAS already busted — but by bustCaches() in
+  // actions/career-paths.js, which runs AFTER syncCareerPaths() returns. That
+  // ordering only ever helped the NEXT sync; this run still read the stale
+  // snapshot. bustCaches() is deliberately left alone: on the CRUD actions it
+  // guards, busting after the write is correct.
+  bustUpstream(UPSTREAM_TAGS.CAREER_PATHS);
 
   let items = [];
   try {

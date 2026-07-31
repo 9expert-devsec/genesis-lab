@@ -18,6 +18,7 @@
 import { dbConnect } from '@/lib/db/connect';
 import Faq from '@/models/Faq';
 import { listFaqs } from '@/lib/api/faqs';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 
 function toString(value) {
   return typeof value === 'string' ? value : value == null ? '' : String(value);
@@ -62,6 +63,12 @@ export async function syncFaqs() {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  // BEFORE the read, not after the write: listFaqs() is cached for an hour
+  // under this tag and nothing else ever busts it, so without this the sync
+  // writes an up-to-an-hour-old snapshot into Mongo and a FAQ created upstream
+  // minutes ago is simply absent from the database afterwards.
+  bustUpstream(UPSTREAM_TAGS.FAQS);
 
   let items = [];
   try {

@@ -30,7 +30,6 @@ function row(i) {
     slug: `article-${i}`,
     title: `บทความ ${i}`,
     author: 'ผู้เขียน',
-    coverUrl: '',
     tags: [],
     articleType: 'article',
     active: true,

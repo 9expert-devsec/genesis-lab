@@ -10,6 +10,7 @@ import {
   deleteInhouseRegistration,
 } from '@/lib/actions/inhouse-registrations';
 import { Button } from '@/components/ui/button';
+import { refNo } from '@/lib/refNo';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ function fmtDate(iso) {
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} น.`;
 }
 
-function refNo(id) { return String(id).slice(-8).toUpperCase(); }
+
 
 function scheduleSummary(doc) {
   if (doc.scheduleMode === 'month') return `เดือน: ${doc.preferredMonth || '—'}`;

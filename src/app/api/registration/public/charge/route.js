@@ -6,6 +6,7 @@ import { createPaidRegistration, getClientIp } from '@/lib/registration/create-p
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 import RegisterPublic from '@/models/RegisterPublic';
+import { refNo } from '@/lib/refNo';
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -40,7 +41,7 @@ export async function POST(req) {
   const method = data.paymentMethod;
 
   const doc = await createPaidRegistration({ data, pricing, method, consent: data.consent, ipAddress });
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
   const amountSatang = toSatang(pricing.total);
   const metadata = { registrationId: String(doc._id), referenceNumber };
 

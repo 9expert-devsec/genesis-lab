@@ -2,6 +2,8 @@ import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
 import { formatTHB } from "@/lib/pricing";
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
+// Aliased: this module already uses `refNo` as a local const name.
+import { refNo as makeRefNo } from "@/lib/refNo";
 
 // ── Helpers (copied inline from src/lib/masterclass/send-receipt.js) ──────────
 
@@ -77,7 +79,7 @@ export async function sendMasterclassPaidReceipt(doc) {
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
-  const refNo = String(doc._id).slice(-8).toUpperCase();
+  const refNo = makeRefNo(doc._id);
   const methodLabel =
     doc.payment?.method === "credit_card" ? "บัตรเครดิต/เดบิต" : "QR PromptPay";
 
@@ -218,7 +220,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
-  const refNo = referenceNumber ?? String(doc._id).slice(-8).toUpperCase();
+  const refNo = referenceNumber ?? makeRefNo(doc._id);
 
   const billingAddressQ = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);

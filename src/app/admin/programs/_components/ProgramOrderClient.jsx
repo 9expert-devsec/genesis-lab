@@ -14,11 +14,19 @@ function programIdOf(p) {
   return String(p.program_id ?? p._id ?? '');
 }
 
-export default function ProgramOrderClient({ initialPrograms, orderData }) {
-  const merged = (initialPrograms ?? [])
+/**
+ * Join upstream programs with the locally stored order/visibility.
+ *
+ * Extracted so the SYNC can replay it on freshly-read data. It used to be
+ * inline, which is why the only way to show a sync's result was
+ * `window.location.reload()`.
+ */
+function mergeProgramRows(programs, orderData) {
+  const orders = orderData ?? [];
+  return (programs ?? [])
     .map((p) => {
       const id = programIdOf(p);
-      const stored = orderData.find((o) => o.programId === id);
+      const stored = orders.find((o) => o.programId === id);
       return {
         ...p,
         id,
@@ -27,12 +35,17 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
       };
     })
     .sort((a, b) => a.order - b.order);
+}
+
+export default function ProgramOrderClient({ initialPrograms, orderData }) {
+  const merged = mergeProgramRows(initialPrograms, orderData);
 
   // Internal state lives inside the hook. We save explicitly via the
   // "บันทึกลำดับ" button, so onReorder is null here.
   const {
     items,
     setItems,
+    resetItems,
     draggingIndex,
     dragOverIndex,
     getDragProps,
@@ -68,8 +81,15 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await syncProgramsFromAPI(initialPrograms);
-      window.location.reload();
+      const res = await syncProgramsFromAPI(initialPrograms);
+      // Replace the rows in place. This replaces `window.location.reload()`,
+      // which existed only because the list is seeded once and could not see
+      // the sync's result — at the cost of a full page flash and the admin's
+      // scroll position. The active tab lives in the URL (?tab=...) and is
+      // untouched either way.
+      if (res?.data) {
+        resetItems(mergeProgramRows(res.data.programs, res.data.orderData));
+      }
     } finally {
       setSyncing(false);
     }

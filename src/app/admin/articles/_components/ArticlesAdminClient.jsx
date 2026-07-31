@@ -4,12 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowDownToLine,
   ArrowUpToLine,
   ChevronDown,
   ChevronUp,
   Pencil,
-  Pin,
   Plus,
   Search,
   Star,
@@ -17,20 +15,24 @@ import {
 } from 'lucide-react';
 import {
   deleteArticle,
-  moveArticleToPosition,
-  repositionArticle,
-  setArticlePinBadge,
+  moveArticleOneStep,
+  moveArticleToBlockTop,
+  moveArticleToRank,
   toggleArticleActive,
   toggleArticleFeaturedOnLanding,
 } from '@/lib/actions/articles';
 import { assignArticleRanks } from '@/lib/articleRank';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
 import { describeListWindow } from '@/lib/adminListWindow';
-import {
-  applyPositionPlan,
-  isPositioned,
-  shouldShowPinBadge,
-} from '@/lib/articlePositioning';
+// `describeRankTarget` is a DESCRIBER, not a plan builder. The client renders
+// its warning; the server refuses with the same sentence. No plan builder is
+// imported here and none may be — see test/fs/articlePinOrderWrites and
+// test/fs/adminRankVocabulary.
+import { STEP_REFUSALS, describeAllOrderControls, describeRankTarget } from '@/lib/articleOrdering';
+// `Pin` and `shouldShowPinBadge` left with the ป้าย switch. The badge is now
+// set in ONE place — the article edit screen — and this list neither reads nor
+// writes it. `applyPositionPlan` stays: it replays the plan the server returns.
+import { applyPositionPlan } from '@/lib/articlePositioning';
 
 // Split into two parts so the "เผยแพร่" column can stack date over time and
 // stay inside a w-32 budget instead of forcing a single wide line.
@@ -98,6 +100,17 @@ export function ArticlesAdminClient({
     return m;
   }, [rows]);
 
+  // The highest rank in the COLLECTION — the upper bound of every rank input on
+  // the page. Derived from the ranks the ranker just produced, never a constant
+  // and never `rows.length`: an inactive article holds no rank, so the row count
+  // would offer numbers no article can hold and the input would promise targets
+  // the server refuses.
+  const maxRank = useMemo(() => {
+    let m = 0;
+    for (const v of rankById.values()) if (v.rank != null && v.rank > m) m = v.rank;
+    return m;
+  }, [rankById]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
@@ -136,11 +149,22 @@ export function ArticlesAdminClient({
     [reachable, total]
   );
 
-  // M — the live size of the positioned block, and the upper bound of every
-  // move control. DERIVED from the rows, never a constant: the only positions
-  // that exist are 1..M, and a control offering more than that would be offering
-  // what the model cannot store.
-  const blockSize = useMemo(() => rows.filter(isPositioned).length, [rows]);
+  // What each row's three ordering controls should look like.
+  //
+  // DERIVED FROM THE PLANNERS, over the COMPLETE row set — never over `filtered`
+  // or `pageRows`. The neighbour that decides whether an arrow is live is the
+  // neighbour in the COLLECTION, and this list is paged twelve at a time and
+  // filtered by a search box, so the row above another on screen is routinely
+  // not the row above it in the ordering. Deriving from the visible rows would
+  // grey out the arrows on the first and last row of every page.
+  //
+  // This is DISPLAY ONLY. The server re-reads and re-plans on every click, and
+  // its refusal — not this disabled attribute — is what actually enforces
+  // anything. They agree because both come out of describeOrderControls.
+  // ONE sort for the whole list, not one per row per control: the single-row
+  // form measured 244 ms over 486 articles here, in a memo that reruns after
+  // every click.
+  const controlsById = useMemo(() => describeAllOrderControls(rows), [rows]);
 
   function handleToggle(a) {
     setBusyId(a._id);
@@ -179,12 +203,9 @@ export function ArticlesAdminClient({
     });
   }
 
-  const handlePromote = (a) => runAction(a, () => repositionArticle(a._id, 'promote'));
-  const handleDemote = (a) => runAction(a, () => repositionArticle(a._id, 'demote'));
-  const handleMoveTo = (a, target) => runAction(a, () => moveArticleToPosition(a._id, target));
-  const handleBadgeToggle = (a) =>
-    runAction(a, () =>
-      setArticlePinBadge(a._id, !shouldShowPinBadge({ ...a, isPinnedOnArticlePage: true })));
+  const handleStep = (a, direction) => runAction(a, () => moveArticleOneStep(a._id, direction));
+  const handleToTop = (a) => runAction(a, () => moveArticleToBlockTop(a._id));
+  const handleRank = (a, rank) => runAction(a, () => moveArticleToRank(a._id, rank));
 
   function handleToggleFeatured(a) {
     const next = !a.featuredOnLanding;
@@ -305,9 +326,8 @@ export function ArticlesAdminClient({
                 className="w-24 px-3 py-3 text-left font-bold text-9e-navy dark:text-white"
                 title="ลำดับจริงบนหน้า /articles — นับจากบทความทั้งหมด ไม่ใช่เฉพาะหน้านี้"
               >
-                ลำดับบน /articles
+                ลำดับ
               </th>
-              <th className="w-16 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ภาพ</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">หัวข้อ / Slug</th>
               <th className="hidden w-28 px-3 py-3 text-left font-bold text-9e-navy dark:text-white xl:table-cell">ประเภท</th>
               <th className="w-40 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Tags</th>
@@ -318,27 +338,35 @@ export function ArticlesAdminClient({
                   position and badge were two different things. It existed only
                   to talk the reader out of a conclusion the UI itself was
                   inviting — the rank column was drawing the badge's pin and
-                  saying the badge's noun. With the vocabularies now disjoint
-                  that clause defends against nothing, so it is gone; the
-                  description of what each zone does stays, because that is
-                  useful either way. A tooltip whose job is to explain why the
-                  UI is confusing is the signal to change the UI. */}
+                  saying the badge's noun. A tooltip whose job is to explain why
+                  the UI is confusing is the signal to change the UI.
+
+                  It then described TWO zones, ลำดับ and ป้าย, because the cell
+                  held both. The ป้าย switch has moved to the article edit
+                  screen, so the second half described a control that is not
+                  here — the same defect one step further on, since a tooltip
+                  naming a switch nobody can find is worse than no tooltip. What
+                  is left says what this column does, and where the badge went,
+                  so the answer to "where is the ป้าย toggle" is on the screen
+                  that used to have it. */}
               <th
                 className="w-48 px-3 py-3 text-left font-bold text-9e-navy dark:text-white"
-                title="ตำแหน่ง = ย้ายบทความขึ้นบล็อกบนสุด · ป้าย = แสดงหมุดบนการ์ด"
+                title="เลื่อนบทความขึ้นหรือลงทีละหนึ่ง หรือย้ายขึ้นบนสุดของกลุ่ม · การปักหมุดและป้ายหมุดตั้งค่าที่หน้าแก้ไขบทความ"
               >
-                ตำแหน่ง / ป้าย
+                จัดลำดับ
               </th>
-              <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Landing</th>
+              <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Home</th>
               <th className="w-20 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                {/* Stays 11: ประเภท/ผู้เขียน are hidden with `hidden xl:table-cell`,
-                    never unmounted, so the header always has 11 <th> to span. */}
-                <td colSpan={11} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                {/* 10, counted from the header row, not from what is visible:
+                    ประเภท/ผู้เขียน are hidden with `hidden xl:table-cell` and are
+                    never unmounted, so the header always has 10 <th> to span.
+                    Was 11 until the cover-image column was removed. */}
+                <td colSpan={10} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   {rows.length === 0 ? (
                     <>ยังไม่มีบทความ — กด <strong>สร้างบทความ</strong> เพื่อเริ่มต้น</>
                   ) : (
@@ -358,22 +386,7 @@ export function ArticlesAdminClient({
                 }
               >
                 <td className="px-3 py-3">
-                  <RankCell info={rankById.get(String(a._id))} pinOrder={a.pinOrder} />
-                </td>
-                <td className="px-3 py-3">
-                  {a.coverUrl ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={a.coverUrl}
-                      alt={a.title}
-                      className="h-10 w-10 rounded-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-9e-ice text-xs font-bold text-9e-action dark:bg-[#0D1B2A]">
-                      {a.title?.slice(0, 1) ?? '?'}
-                    </div>
-                  )}
+                  <RankCell info={rankById.get(String(a._id))} />
                 </td>
                 <td className="px-3 py-3">
                   <p className="line-clamp-1 font-semibold text-9e-navy dark:text-white">
@@ -455,14 +468,19 @@ export function ArticlesAdminClient({
                   </button>
                 </td>
                 <td className="px-3 py-3">
-                  <PositionCell
-                    article={a}
+                  <OrderCell
                     busy={busyId === a._id}
-                    blockSize={blockSize}
-                    onPromote={() => handlePromote(a)}
-                    onDemote={() => handleDemote(a)}
-                    onMoveTo={(target) => handleMoveTo(a, target)}
-                    onBadgeToggle={() => handleBadgeToggle(a)}
+                    controls={controlsById.get(String(a._id))}
+                    tie={rankById.get(String(a._id))?.pinTie === true}
+                    rank={rankById.get(String(a._id))?.rank ?? null}
+                    maxRank={maxRank}
+                    // Bound to `rows` — the COMPLETE set — not to `pageRows`.
+                    // Same reason the arrows are: the collection decides, not
+                    // the twelve rows on screen.
+                    describeRank={(target) => describeRankTarget(rows, a._id, target)}
+                    onStep={(direction) => handleStep(a, direction)}
+                    onToTop={() => handleToTop(a)}
+                    onRank={(rank) => handleRank(a, rank)}
                   />
                 </td>
                 <td className="px-3 py-3 text-center">
@@ -470,8 +488,8 @@ export function ArticlesAdminClient({
                     type="button"
                     onClick={() => handleToggleFeatured(a)}
                     disabled={busyId === a._id}
-                    aria-label={a.featuredOnLanding ? 'ยกเลิกการแสดงบน Landing' : 'แสดงบน Landing'}
-                    title={a.featuredOnLanding ? 'แสดงบน Landing แล้ว' : 'แสดงบน Landing'}
+                    aria-label={a.featuredOnLanding ? 'ยกเลิกการแสดงบนหน้าแรก (Home)' : 'แสดงบนหน้าแรก (Home)'}
+                    title={a.featuredOnLanding ? 'แสดงบนหน้าแรก (Home) แล้ว' : 'แสดงบนหน้าแรก (Home)'}
                     className="inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:bg-9e-ice disabled:opacity-50 dark:hover:bg-[#0D1B2A]"
                   >
                     <Star
@@ -568,212 +586,304 @@ export function ArticlesAdminClient({
 }
 
 /**
- * Position and badge — two concerns that used to be one checkbox.
+ * Why an ordering control is dead, in the admin's language.
  *
- * ── LAYOUT ──────────────────────────────────────────────────────────────────
- * Three controls do not fit as three peer icons in a narrow column: they would
- * read as three settings of one thing, which is exactly the confusion this
- * commit exists to remove. So the cell is split into TWO LABELLED ZONES with a
- * hairline between them — ตำแหน่ง (what moves the article) above, ป้าย (what
- * decorates it) below — and the column is widened from w-24 to w-48 to hold
- * them. Two zones, not three, because the order number is not a third concern:
- * it only exists once an article is positioned, so it lives inside the position
- * zone and is absent otherwise.
- *
- * ── TELLING THE TWO TOGGLES APART WITHOUT A TOOLTIP ──────────────────────────
- * They are deliberately not the same kind of control:
- *   position → a BUTTON with a DIRECTIONAL ARROW and a text label
- *              (↑ จัดตำแหน่ง / ↓ ปลดตำแหน่ง). Arrows mean movement.
- *   badge    → a SWITCH carrying the PIN GLYPH, no direction, no movement.
- * Different shape, different icon family, different verb. A reader scanning the
- * column sees "button with an arrow" versus "switch with a pin".
- *
- * ── THE MODEL'S LIMIT IS RESPECTED HERE (b-005) ─────────────────────────────
- * A date-ordered row gets a PROMOTE BUTTON and nothing else. The list is two
- * contiguous blocks, so the only positions that EXIST are 1..M where M is the
- * live block size. "Position 12" is not a thing when the block holds 10 —
- * ranks 11+ belong to the date-ordered mass and cannot be assigned, because
- * expressing them would need empty slots between the blocks, i.e. a
- * fixed-slot model the schema does not have.
- *
- * That is why the free `<input type="number">` is GONE. It let an admin type
- * any integer into one row while the action wrote it without looking at the
- * others, so duplicates and gaps were a normal thing to type — production ended
- * up holding 1,1,2,3,4,5,6,7,9,10. A duplicate is not cosmetic: the cascade
- * falls through to publishedAt, so the number the admin typed stops deciding the
- * position, and because the tie eats two slots the box and the ลำดับ column
- * legitimately disagree.
- *
- * Its replacement is two BOUNDED controls, both routed through
- * planMoveToPosition, which re-emits the whole block as contiguous 1..M:
- *
- *   ↑ / ↓        one step, disabled at the ends
- *   ย้ายไปลำดับ   a select of exactly 1..M — the answer to "move this from 10
- *                to 5" in one action instead of five clicks
- *
- * M is passed in from the live row set, never hardcoded. Do NOT reintroduce a
- * free text field alongside these: the point is not that typing is inconvenient,
- * it is that duplicates and gaps become unrepresentable.
+ * A disabled control with no explanation is indistinguishable from a broken one,
+ * and two of these three reasons are things nobody would guess: "the row above
+ * you is in the pinned group" and "this row is carrying corrupt data". The
+ * reason CODES come from src/lib/articleOrdering.js — the same values the server
+ * action refuses with — so the sentence on screen and the sentence in the error
+ * response cannot describe different situations.
  */
-function PositionCell({ article, busy, blockSize, onPromote, onDemote, onMoveTo, onBadgeToggle }) {
-  const positioned = article.isPinnedOnArticlePage === true;
-  const badgeOn = article.showPinBadge !== false;
+function refusalText(reason, direction) {
+  if (reason === STEP_REFUSALS.PIN_BOUNDARY) {
+    return direction === 'up'
+      ? 'เหนือขึ้นไปเป็นบทความที่ปักหมุดไว้ — ถ้าต้องการขึ้นไปอยู่กลุ่มนั้น ให้ปักหมุดที่หน้าแก้ไขบทความ'
+      : 'ถัดลงไปเป็นบทความที่ไม่ได้ปักหมุด — ถ้าต้องการออกจากกลุ่มปักหมุด ให้เลิกปักหมุดที่หน้าแก้ไขบทความ';
+  }
+  if (reason === STEP_REFUSALS.STRAY_PIN_ORDER) {
+    return 'บทความนี้มีลำดับปักหมุดค้างอยู่ทั้งที่ไม่ได้ปักหมุด จึงเลื่อนไม่ได้ — รัน normalize:positions เพื่อซ่อม';
+  }
+  if (reason === STEP_REFUSALS.ALREADY_TOP) return 'อยู่บนสุดของกลุ่มนี้แล้ว';
+  return direction === 'up' ? 'อยู่บนสุดของรายการแล้ว' : 'อยู่ล่างสุดของรายการแล้ว';
+}
 
-  const M = Math.max(0, Number(blockSize) || 0);
-  const at = Number(article.pinOrder) || 0;
-  const atTop = at <= 1;
-  const atBottom = at >= M;
+/**
+ * What "to the top" actually delivers, said out loud.
+ *
+ * For a pinned row it is position 1 and the label is honest as written. For an
+ * unpinned row it is the top of the NORMAL ordering, which is NOT position 1 —
+ * the pinned group sits above it, so with five pinned articles the row lands at
+ * position 6. The old copy promised the top of the page and the model never
+ * delivered it; b-004 was exactly this, the data changing while the words did
+ * not, so the number is derived from the live pinned count rather than written
+ * into a string.
+ */
+function toTopTitle({ pinned, pinnedCount }) {
+  if (pinned) return 'ย้ายขึ้นบนสุดของกลุ่มปักหมุด (ลำดับที่ 1)';
+  if (pinnedCount === 0) return 'ย้ายขึ้นบนสุดของรายการ (ลำดับที่ 1)';
+  return `ย้ายขึ้นบนสุดของลำดับปกติ — จะอยู่ลำดับที่ ${pinnedCount + 1} เพราะมีบทความปักหมุดอยู่ ${pinnedCount} รายการเหนือขึ้นไป`;
+}
+
+/**
+ * Ordering and badge — two concerns that used to be one checkbox.
+ *
+ * ── EVERY ROW GETS THE CONTROLS. THAT IS THE ENTIRE POINT ───────────────────
+ * There is no จัดตำแหน่ง button any more and nothing to switch on first. Every
+ * article carries its own `sortKey`, so every article can be moved. What used to
+ * be a two-step affordance — promote it into a block, then order it inside that
+ * block — is now one step, on all 486 rows.
+ *
+ * ── THE ป้าย ZONE IS GONE, AND WITH IT THE LABELS ───────────────────────────
+ * This cell used to hold TWO labelled zones with a hairline between them: ลำดับ
+ * (what moves the article) above, ป้าย (what decorates it) below. The labels
+ * existed for exactly one reason — to stop three peer icons in a narrow column
+ * reading as three settings of one thing — so when the badge switch left, the
+ * thing the labels were disambiguating left with it and they went too. One
+ * concept, one group of controls, no header inside a cell whose column header
+ * already says จัดลำดับ.
+ *
+ * The badge now has ONE control, on the article edit screen, beside the pin
+ * toggle it depends on (`shouldShowPinBadge` gates the badge on the pinned
+ * state, so the two belong together and were a scroll apart). Having it here as
+ * well was the residue of the era when position and badge were one field: it
+ * put a per-document decoration switch twelve to a page, next to arrows that
+ * exist to be clicked repeatedly, which is how a misclick on the wrong control
+ * gets cheap and frequent.
+ *
+ * WHAT STAYED, and neither is the badge: the อยู่กลุ่มปักหมุด pill, which is
+ * why the boundary arrow is dead and is about ORDERING; and the ลำดับซ้ำ
+ * tripwire. See their own notes below.
+ *
+ * ── THERE IS A NUMBER INPUT AGAIN, AND WHAT MAKES THIS ONE SAFE ─────────────
+ * This block used to be headed "WHY THERE IS NO NUMBER INPUT" and to end with
+ * "fixed-slot targeting is not coming back". It came back. Rewriting the note
+ * rather than leaving it is the point: an authoritative comment that contradicts
+ * the component it sits on is worse than no comment, and this file's own history
+ * (b-004, and the tooltip that existed to argue the UI was not confusing) is
+ * what that costs.
+ *
+ * The objection was never "a number is a bad way to say where something goes".
+ * It was three specific things, and each has an answer now:
+ *
+ *   1. THE OLD FREE FIELD WROTE WHAT IT WAS GIVEN. `updateArticlePinOrder` took
+ *      an integer and stored it, with no view of the other rows, so duplicates
+ *      and gaps were a normal thing to type — production held
+ *      1,1,2,3,4,5,6,7,9,10. HERE THE NUMBER NEVER REACHES THE DATABASE. It is
+ *      posted to `moveArticleToRank`, which RE-READS the collection, resolves
+ *      the rank to the row currently holding it, and hands that row's position
+ *      to a planner. The client cannot supply a value that is persisted; the
+ *      structural guard is test/fs/articlePinOrderWrites.
+ *   2. THE REPLACEMENT WAS A SELECT OF 1..M. Coherent while M was the pinned
+ *      block of five; not a control at 486 options. An input does not grow.
+ *   3. A SLOT IS NOT A RANK. The retired action took a position; this takes the
+ *      NUMBER THE COLUMN IS SHOWING, which counts active articles only. One
+ *      inactive row above and the two differ — see the block comment on
+ *      planMoveToRank.
+ *
+ * And the behaviour that makes it safe rather than merely convenient: a target
+ * across the pinned boundary is REFUSED, not half-applied, and an out-of-range
+ * number is REFUSED RATHER THAN CLAMPED. The warning under the input comes from
+ * `describeRankTarget`, which is the same function the server refuses with — so
+ * there is no second condition here that could drift from the action and leave a
+ * live-looking input that silently does nothing.
+ *
+ * The arrows stay. They are still the right control for nudging, and they are
+ * the only one that needs no arithmetic from the person using it.
+ *
+ * ── THE INPUT TARGETS TRUE RANKS, NOT THE VISIBLE PAGE ──────────────────────
+ * With the search box filled or on page 2, committing a rank can make the row
+ * appear to jump somewhere unexpected or vanish from view entirely — because
+ * the number means its position in the WHOLE collection, and the visible list is
+ * a filtered, paginated window onto that. This is stated rather than fixed: it
+ * was already true and already accepted for the arrows (which plan against true
+ * neighbours for the same reason), and the alternative — ranking within the
+ * filtered view — would mean a number that changes meaning as you type in the
+ * search box.
+ *
+ * ── THE DISABLED STATES ARE DERIVED, NOT RE-DERIVED ─────────────────────────
+ * `controls` comes from describeOrderControls, which computes each button's
+ * state by RUNNING THE PLANNER the server action will run. A second set of
+ * conditions written here would eventually disagree with it, and the symptom
+ * would be a live-looking button that silently does nothing — the exact class of
+ * defect this round closes.
+ */
+function OrderCell({ busy, controls, tie, rank, maxRank, describeRank, onStep, onToTop, onRank }) {
+  // `null` means "not being edited": the box shows the row's live rank and
+  // follows it as the list changes. A string means the admin is typing, and
+  // from then until Enter / blur / Escape the box shows exactly what they typed
+  // — including something the server would refuse, because hiding it would be
+  // the input silently correcting a claim.
+  const [draft, setDraft] = useState(null);
+  const editing = draft !== null;
+  const seen = editing ? describeRank(draft) : null;
+  const warning = seen?.message ?? null;
+
+  function commit() {
+    if (!editing) return;
+    // Refuse HERE with the sentence already on screen. Not a second condition —
+    // `seen` came out of describeRankTarget, which is what the action refuses
+    // with, so this cannot reject something the server would allow or submit
+    // something it would not.
+    if (warning) return;
+    if (seen?.noop) { setDraft(null); return; }
+    const value = draft;
+    setDraft(null);
+    onRank(value);
+  }
+
+  const c = controls ?? {
+    position: null, pinned: false, pinnedCount: 0,
+    up: { enabled: false, reason: null },
+    down: { enabled: false, reason: null },
+    top: { enabled: false, reason: null },
+  };
+
+  const arrow = (direction, spec, Glyph) => (
+    <button
+      type="button"
+      onClick={() => onStep(direction)}
+      disabled={busy || !spec.enabled}
+      aria-label={
+        direction === 'up'
+          ? `เลื่อนขึ้นหนึ่งลำดับ (ปัจจุบันลำดับ ${c.position ?? '—'})`
+          : `เลื่อนลงหนึ่งลำดับ (ปัจจุบันลำดับ ${c.position ?? '—'})`
+      }
+      title={spec.enabled
+        ? (direction === 'up' ? 'เลื่อนขึ้นหนึ่งลำดับ' : 'เลื่อนลงหนึ่งลำดับ')
+        : refusalText(spec.reason, direction)}
+      className="inline-flex h-6 w-6 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
+    >
+      <Glyph className="h-3 w-3" />
+    </button>
+  );
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* ── zone 1: position ── */}
-      <div>
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          ตำแหน่ง
-        </p>
-        {positioned ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              {/* ±1. Disabled at the ends rather than hidden, so the control
-                  does not reflow as an article moves through the block. */}
-              <button
-                type="button"
-                onClick={() => onMoveTo(at - 1)}
-                disabled={busy || atTop}
-                aria-label={`เลื่อนขึ้นหนึ่งลำดับ (ปัจจุบันลำดับ ${at})`}
-                title="เลื่อนขึ้นหนึ่งลำดับ"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
-              >
-                <ChevronUp className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onMoveTo(at + 1)}
-                disabled={busy || atBottom}
-                aria-label={`เลื่อนลงหนึ่งลำดับ (ปัจจุบันลำดับ ${at})`}
-                title="เลื่อนลงหนึ่งลำดับ"
-                className="inline-flex h-6 w-6 items-center justify-center rounded-9e-sm border border-[var(--surface-border)] text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
-              >
-                <ChevronDown className="h-3 w-3" />
-              </button>
-              {/* Exactly 1..M. Not a text field — see the note above. */}
-              <select
-                value={at}
-                onChange={(e) => onMoveTo(Number(e.target.value))}
-                disabled={busy || M <= 1}
-                aria-label="ย้ายไปลำดับ"
-                title={`ย้ายไปลำดับ (1–${M})`}
-                className="rounded border border-[var(--surface-border)] bg-white px-1 py-0.5 text-xs text-9e-navy disabled:opacity-50 dark:bg-[#0D1B2A] dark:text-white"
-              >
-                {Array.from({ length: M }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={n}>{n}</option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={onDemote}
-              disabled={busy}
-              className="inline-flex items-center gap-1 self-start whitespace-nowrap rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
-            >
-              <ArrowDownToLine className="h-3 w-3" />
-              {/* Not a bare `ปลด` — with position and badge now spelled
-                  differently everywhere else, an unqualified verb here is the
-                  one control left that does not say WHICH of the two it
-                  releases. */}
-              ปลดตำแหน่ง
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onPromote}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded-9e-sm border border-9e-action px-2 py-1 text-[11px] font-medium text-9e-action hover:bg-9e-action/10 disabled:opacity-50"
-          >
-            <ArrowUpToLine className="h-3 w-3" />
-            จัดตำแหน่ง
-          </button>
-        )}
+    /* ── the ordering controls ──
+       ONE group now. This used to be `zone 1` of two; the guards in
+       test/fs/adminRankVocabulary.test.mjs slice on this marker, so if it moves,
+       re-point them — they throw naming the anchor rather than passing on an
+       empty slice. */
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        {/* Disabled at the ends rather than hidden, so the cell does not
+            reflow as an article moves through the list. */}
+        {arrow('up', c.up, ChevronUp)}
+        {arrow('down', c.down, ChevronDown)}
+        <button
+          type="button"
+          onClick={onToTop}
+          disabled={busy || !c.top.enabled}
+          aria-label="ย้ายขึ้นบนสุด"
+          title={c.top.enabled ? toTopTitle(c) : refusalText(c.top.reason, 'up')}
+          className="inline-flex items-center gap-1 whitespace-nowrap rounded-9e-sm border border-[var(--surface-border)] px-1.5 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice disabled:opacity-30 dark:text-white dark:hover:bg-[#0D1B2A]"
+        >
+          <ArrowUpToLine className="h-3 w-3" />
+          ขึ้นบนสุด
+        </button>
+        {/* min and max are DERIVED from the live collection — `maxRank` is the
+            highest rank the ranker just produced. Hardcoding either would let
+            the box offer a number the server refuses, which is the same
+            live-looking-control defect the disabled arrows exist to avoid.
+            An inactive row has no rank at all, so the box is disabled and says
+            why rather than accepting a number that cannot mean anything. */}
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={maxRank}
+          value={editing ? draft : (rank ?? '')}
+          disabled={busy || rank == null}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); e.currentTarget.blur(); }
+            // Escape ABANDONS: back to the row's real rank, nothing sent. A
+            // half-typed number left in the box after the admin gave up would
+            // be committed by the next blur.
+            if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur(); }
+          }}
+          onBlur={commit}
+          aria-label={rank == null ? 'ระบุลำดับไม่ได้' : `ระบุลำดับ (ปัจจุบันลำดับ ${rank} จาก ${maxRank})`}
+          title={rank == null
+            ? 'บทความนี้ยังไม่เผยแพร่ จึงไม่มีลำดับบนหน้า /articles'
+            : `พิมพ์ลำดับที่ต้องการ (1–${maxRank}) แล้วกด Enter · กด Esc เพื่อยกเลิก`}
+          className="h-6 w-14 rounded-9e-sm border border-[var(--surface-border)] bg-white px-1 text-center text-[11px] tabular-nums text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action disabled:opacity-30 dark:bg-[#0D1B2A] dark:text-white"
+        />
       </div>
-
-      {/* ── zone 2: badge ── */}
-      <div className="border-t border-[var(--surface-border)] pt-2">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          ป้าย
-        </p>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={badgeOn}
-            onClick={onBadgeToggle}
-            disabled={busy}
-            aria-label={badgeOn ? 'ซ่อนป้ายหมุด' : 'แสดงป้ายหมุด'}
-            className={`relative h-4 w-8 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-              badgeOn ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-white shadow transition-all ${
-                badgeOn ? 'left-4' : 'left-0.5'
-              }`}
-            >
-              <Pin className="h-2 w-2 text-9e-action" strokeWidth={3} />
-            </span>
-          </button>
-          {/* Badge-without-position is ALLOWED and stored, but has no public
-              effect — shouldShowPinBadge gates on positioning too. Say so here
-              rather than disabling the switch: demoting must not silently erase
-              a badge preference the admin set, and they may reasonably set it
-              before promoting. */}
-          {!positioned && badgeOn && (
-            <span className="text-[10px] leading-tight text-amber-600">
-              จะแสดงเมื่อจัดตำแหน่งแล้ว
-            </span>
-          )}
-        </div>
-      </div>
+      {/* THE WARNING IS THE SERVER'S OWN SENTENCE, rendered as the admin types.
+          There is deliberately no second condition in this component: whatever
+          describeRankTarget says here is what moveArticleToRank will say back,
+          so the input cannot offer a number the action rejects. Amber rather
+          than red because nothing has failed yet — the admin is mid-thought. */}
+      {warning && (
+        <span className="w-40 text-[10px] leading-tight text-amber-600" role="status">
+          {warning}
+        </span>
+      )}
+      {/* WHY the boundary arrow is dead. Without this the disabled ↑ on the
+          first unpinned row looks like a bug, and the pinned group is
+          otherwise invisible in this column now that the rank cell is a
+          plain number. Says กลุ่มปักหมุด rather than a bare ปักหมุด so it
+          reads as "which group this row is in" — a statement about ORDERING,
+          which is why it stayed when the badge switch did not. */}
+      {c.pinned && (
+        <span className="inline-flex w-fit items-center rounded-full bg-9e-action/10 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-9e-action">
+          อยู่กลุ่มปักหมุด
+        </span>
+      )}
+      {/* `ลำดับซ้ำ` IS A CORRUPTION TRIPWIRE, NOT A NORMAL STATE, and it
+          moved here from the rank column when that column became a plain
+          number. Duplicate pinOrder values are unreachable through this UI —
+          every pinned move goes through planMoveToPosition, which re-emits
+          the block as contiguous 1..M — so if this pill ever appears,
+          something wrote pinOrder outside the planner: a restored backup, a
+          hand edit in Compass, a stray script. Kept deliberately: an
+          unreachable branch that fires is a signal, and deleting it trades a
+          visible symptom for a silent one. Do not invest further in it. */}
+      {tie && (
+        <span
+          className="inline-flex w-fit items-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-tight text-white"
+          title="มีบทความอื่นใช้ลำดับปักหมุดเดียวกัน ตำแหน่งจริงจึงตัดสินด้วยลำดับปกติแทน"
+        >
+          ลำดับซ้ำ
+        </span>
+      )}
     </div>
   );
 }
 
 /**
- * The article's position on /articles.
+ * The article's position on /articles. A number, and nothing else.
  *
- * A bare number would read identically for two different claims: "someone put
- * this here" and "this is simply the Nth most recent article". The three states
- * are given three different SHAPES, not three shades of the same one — a solid
- * pill with an arrow, plain muted text, or no number at all — so the difference
- * survives a glance down the column:
+ * ── WHY THE กำหนดเอง / ตามวันที่ PAIR IS GONE ───────────────────────────────
+ * That pair answered a real question while it had two possible answers: did
+ * someone CHOOSE this spot, or did the publish date decide it? Both states
+ * existed because only articles in the pinned block had a chosen position and
+ * everything else fell back to `publishedAt`.
  *
- *   manual            solid brand pill + ↑ glyph — a chosen position
- *   manual, tied      solid AMBER pill + ↑ glyph — a chosen position that is
- *                     not actually being honoured: another positioned article
- *                     holds the same pinOrder, so `publishedAt` broke the tie
- *                     and the number the admin typed did not decide this spot
- *   by date           plain muted number, no pill, labelled ตามวันที่
- *   not published     no number at all — an inactive article is absent from
- *                     /articles, so it HAS no position, and inventing one would
- *                     also shift every real rank
+ * Every article now carries its own `sortKey` and every article can be moved, so
+ * the question has exactly one answer for all 486 rows and a label reporting it
+ * is noise that reads as information. Worse, it would be WRONG for the common
+ * case: a row nobody has ever touched still has a chosen position in the sense
+ * the label meant — the backfill chose it. The labels went with the distinction
+ * they described.
  *
- * ── THIS COLUMN DOES NOT SPEAK THE BADGE'S VOCABULARY (b-004) ───────────────
- * `isPinnedOnArticlePage` (has a manual POSITION) and `showPinBadge` (draws the
- * pin BADGE on the public card) were split into two independent fields, and the
- * ป้าย switch in PositionCell owns the badge. This cell keys off `rankBasis`,
- * i.e. POSITION — so when it drew a Pin glyph and the word ปักหมุด it was using
- * the badge's icon and the badge's noun to report something else entirely. An
- * admin who switched ป้าย off saw a pin still sitting in this column and read
- * it as "I removed the pin and it is still there".
+ * The pinned group has not disappeared, it moved to where it is actionable: the
+ * ลำดับ zone in OrderCell, beside the arrow it explains being disabled.
  *
- * So: the pin glyph and the word หมุด belong to the badge and nowhere else. The
- * arrow here is deliberately the SAME glyph as the จัดตำแหน่ง button that
- * creates this state, so the pill reads as the result of that button. The
- * labels are a matched pair — กำหนดเอง / ตามวันที่ — which is the actual
- * question this column answers: did someone choose this spot, or did the date?
+ * ── THIS COLUMN STILL DOES NOT SPEAK THE BADGE'S VOCABULARY (b-004) ─────────
+ * The original defect was this column drawing a `<Pin>` glyph and the word
+ * ปักหมุด to report POSITION, while the ป้าย switch owned the badge — so an
+ * admin who turned the badge off saw a pin still sitting here and read it as "I
+ * removed the pin and it is still there". A plain number cannot reproduce that,
+ * and it must not acquire the vocabulary back: `isPinnedOnArticlePage` now
+ * genuinely means pinned, which makes หมุด MORE tempting here, not less.
  * test/fs/adminRankVocabulary.test.mjs holds the boundary.
+ *
+ * `rank: null` — an inactive article is absent from /articles, so it HAS no
+ * position. Inventing one would also shift every real rank.
  */
-function RankCell({ info, pinOrder }) {
+function RankCell({ info }) {
   if (!info || info.rank == null) {
     return (
       <div className="text-9e-slate-dp-50 dark:text-[#94a3b8]">
@@ -783,55 +893,13 @@ function RankCell({ info, pinOrder }) {
     );
   }
 
-  if (info.rankBasis === 'pinned') {
-    const tie = info.pinTie;
-    return (
-      <div>
-        <span
-          className={
-            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold text-white ' +
-            (tie ? 'bg-amber-500 ring-2 ring-amber-200' : 'bg-9e-action')
-          }
-          title={
-            tie
-              ? `กำหนดตำแหน่งไว้ที่ลำดับ ${pinOrder ?? 0} — แต่มีบทความอื่นใช้ลำดับเดียวกัน ตำแหน่งจริงจึงตัดสินด้วยวันที่เผยแพร่`
-              : `ตำแหน่งที่กำหนดเอง — กำหนดตำแหน่งไว้ที่ลำดับ ${pinOrder ?? 0}`
-          }
-        >
-          {/* The glyph from the จัดตำแหน่ง button, not the badge's pin. */}
-          <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
-          {info.rank}
-        </span>
-        <span
-          className={
-            'block text-[10px] leading-tight ' +
-            (tie ? 'font-medium text-amber-600' : 'text-9e-action')
-          }
-        >
-          {/* `ลำดับซ้ำ` IS NOW A CORRUPTION TRIPWIRE, NOT A NORMAL STATE.
-              The free number input that made ties reachable is gone; every
-              position now goes through planMoveToPosition, which re-emits the
-              block as contiguous 1..M, so no sequence of admin actions can
-              produce a duplicate. If this pill ever appears, something wrote
-              pinOrder outside the planner — a stray script, a restored backup,
-              a hand edit in Compass — and the number in the control has stopped
-              deciding the position it claims to.
-              Kept deliberately: an unreachable branch that fires is a signal,
-              and deleting it would trade a visible symptom for a silent one.
-              Do not invest further in it; test/render keeps it honest. */}
-          {tie ? 'ลำดับซ้ำ' : 'กำหนดเอง'}
-        </span>
-      </div>
-    );
-  }
-
   return (
-    <div className="text-9e-slate-dp-50 dark:text-[#94a3b8]">
-      <span className="text-sm tabular-nums" title="ตำแหน่งนี้มาจากวันที่เผยแพร่ ไม่ได้กำหนดเอง">
-        {info.rank}
-      </span>
-      <span className="block text-[10px] leading-tight">ตามวันที่</span>
-    </div>
+    <span
+      className="text-sm font-semibold tabular-nums text-9e-navy dark:text-white"
+      title="ลำดับจริงบนหน้า /articles นับจากบทความทั้งหมด"
+    >
+      {info.rank}
+    </span>
   );
 }
 

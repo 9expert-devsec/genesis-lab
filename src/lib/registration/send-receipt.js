@@ -1,6 +1,7 @@
 import { sendEmail } from '@/lib/email/postmark';
 import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
 import { buildInvoiceDisplay } from '@/lib/registration/create-public';
+import { refNo as makeRefNo } from '@/lib/refNo';
 
 /**
  * Idempotently send the paid-receipt emails (customer + admin) for a
@@ -15,7 +16,7 @@ export async function sendPaidReceipt(doc) {
     invoice: doc.invoice,
   });
 
-  const refNo = String(doc._id).slice(-8).toUpperCase();
+  const refNo = makeRefNo(doc._id);
 
   const msg = paidReceiptEmail({
     referenceNumber: refNo,

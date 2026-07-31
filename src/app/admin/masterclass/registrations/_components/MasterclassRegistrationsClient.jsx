@@ -5,6 +5,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search, Loader2, Download, Trash2, MoreVertical, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { refNo } from '@/lib/refNo';
 import {
   getMasterclassBatchOptions,
   updateMasterclassRegistrationStatus,
@@ -90,7 +91,6 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
-function refNo(id) { return String(id).slice(-8).toUpperCase(); }
 
 // ── Main Component ─────────────────────────────────────────────────
 

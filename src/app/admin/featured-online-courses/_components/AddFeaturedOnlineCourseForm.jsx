@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAddedRow } from '@/app/admin/_components/AddedRowChannel';
 import Image from 'next/image';
 import { Loader2, Plus, Search, X } from 'lucide-react';
 import { addFeaturedOnlineCourse } from '@/lib/actions/featured-online-courses';
 
 export function AddFeaturedOnlineCourseForm({ courses = [] }) {
   const router = useRouter();
+  const { add } = useAddedRow();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -68,7 +70,11 @@ export function AddFeaturedOnlineCourseForm({ courses = [] }) {
         });
         setSelected(null);
         setQuery('');
-        setTimeout(() => router.refresh(), 300);
+        // Hand the created row to the sibling list (see AddedRowChannel).
+        // The 300ms setTimeout that used to wrap the refresh is gone: it was a
+        // fossil, and no delay makes useState accept new props.
+        if (result.data) add(result.data);
+        router.refresh();
       } else {
         setMessage({
           type: 'error',

@@ -75,7 +75,7 @@ export async function addNavFeaturedOnlineCourse(formData) {
   }
 
   const count = await NavFeaturedOnlineCourse.countDocuments();
-  await NavFeaturedOnlineCourse.create({
+  const created = await NavFeaturedOnlineCourse.create({
     course_id,
     course_name,
     course_cover_url,
@@ -85,7 +85,10 @@ export async function addNavFeaturedOnlineCourse(formData) {
   });
 
   revalidate();
-  return { ok: true };
+  // { ok, data } — see the note in actions/featured-courses.js. The client
+  // splices this row into a sibling list whose comparator is
+  // { sort_order: 1, createdAt: -1 }, and only the database knows createdAt.
+  return { ok: true, data: JSON.parse(JSON.stringify(created.toObject())) };
 }
 
 export async function updateNavFeaturedOnlineCourse(id, formData) {

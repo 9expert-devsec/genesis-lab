@@ -2,13 +2,27 @@
 
 /**
  * CourseFaqManager — per-course LocalFaq CRUD (add / edit / delete / toggle /
- * drag-reorder). Shared by every course type's admin editor:
+ * drag-reorder). Shared by FIVE admin surfaces:
  *   • public course      → FaqTab (inside the extension editor)
  *   • career path        → CareerPathFaqClient
  *   • masterclass course → MasterclassFaqClient
+ *   • program            → ProgramFaqClient
+ *   • skill              → SkillFaqClient
+ * (this list said three until 2026-07; the program and skill hosts were
+ * already live. test/fs/courseFaqManagerHosts.test.mjs now pins the count, so
+ * a sixth host cannot be added without this comment being updated.)
  *
  * `courseType` + `refId` scope every write. There is no category switcher —
  * this component always manages exactly one course's FAQs.
+ *
+ * LIST STATE. `rows` lives in useDragReorder, which seeds `useState` ONCE and
+ * never resyncs from props. So every mutation must splice `rows` itself —
+ * `router.refresh()` alone delivers fresh props that this component throws
+ * away. Delete and toggle always did splice; create and edit did not, which is
+ * why an added FAQ did not appear until a hard reload (measured:
+ * docs/admin-staleness-audit.md §7.3c). All four splice now, through the one
+ * comparator in @/lib/localFaqList so an inserted row lands where the next
+ * server read will put it.
  */
 
 import { useState, useTransition } from 'react';
@@ -16,6 +30,12 @@ import { useRouter } from 'next/navigation';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
+import {
+  sortLocalFaqs,
+  insertLocalFaq,
+  replaceLocalFaq,
+  removeLocalFaq,
+} from '@/lib/localFaqList';
 import {
   createLocalFaq,
   updateLocalFaq,
@@ -60,9 +80,8 @@ export function CourseFaqManager({ courseType, refId, initialFaqs = [] }) {
   const [busyId, setBusyId] = useState(null);
   const [, startTransition] = useTransition();
 
-  const sorted = [...initialFaqs].sort(
-    (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
-  );
+  // The same comparator the splices use — one ordering rule, not two.
+  const sorted = sortLocalFaqs(initialFaqs);
 
   const {
     items: rows,
@@ -139,8 +158,23 @@ export function CourseFaqManager({ courseType, refId, initialFaqs = [] }) {
           setError(res.error || 'บันทึกไม่สำเร็จ');
           return;
         }
+        // Splice the returned document in, the way handleDelete/handleToggleActive
+        // already do. Without this the row is in the database and in the next RSC
+        // payload but never on screen, because useDragReorder ignores new props.
+        // `res.data` is serialised by the action exactly as the read path
+        // serialises, so the spliced row matches what the next load will send.
+        if (res?.data) {
+          setRows((cur) =>
+            editingFaq ? replaceLocalFaq(cur, res.data) : insertLocalFaq(cur, res.data)
+          );
+        }
         setShowForm(false);
         setEditingFaq(null);
+        // KEPT, for one reason outside this list: ExtensionEditor.jsx:138 renders
+        // the tab label `FAQ (${initialFaqs.length})` straight from the server
+        // prop, so the count beside the tab is stale until the route re-renders.
+        // Only the public-course host has that label; the other four would be
+        // fine without this call.
         router.refresh();
       } catch (err) {
         setError(err?.message ?? 'บันทึกไม่สำเร็จ');
@@ -153,7 +187,7 @@ export function CourseFaqManager({ courseType, refId, initialFaqs = [] }) {
     startTransition(async () => {
       try {
         await deleteLocalFaq(faq._id);
-        setRows((cur) => cur.filter((r) => r._id !== faq._id));
+        setRows((cur) => removeLocalFaq(cur, faq._id));
         setConfirmDelete(null);
       } finally {
         setBusyId(null);
