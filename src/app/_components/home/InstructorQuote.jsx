@@ -44,7 +44,7 @@ export function InstructorQuote() {
           </filter>
         </defs>
 
-        <rect width="680" height="320" fill="url(#instructor-bg)" />
+        <rect width="680" height="320" fill="#0D1B2A" />
 
         {/* Dot grid top-right */}
         <g opacity="0.20">
@@ -125,27 +125,27 @@ export function InstructorQuote() {
       <div className="relative z-[2] mx-auto grid min-h-[400px] max-w-[1200px] grid-cols-1 lg:grid-cols-2  max-md:px-4">
         <div className="flex flex-col justify-center gap-6 py-12 lg:py-16">
           <span
-            className="select-none font-serif text-7xl leading-none text-9e-action"
+            className="select-none font-serif text-7xl leading-none text-9e-lime"
             aria-hidden
           >
             &ldquo;
           </span>
 
-          <p className="max-w-2xl text-lg font-bold tracking-wide text-center text-9e-navy sm:text-xl lg:text-2xl lg:leading-[1.5]">
+          <p className="max-w-2xl text-lg font-bold tracking-wide text-center text-9e-ice sm:text-xl lg:text-2xl lg:leading-[1.5]">
             เราเป็นส่วนหนึ่งของการสนับสนุนบุคคลและองค์กร<br className="hidden lg:inline" />
             ในการปรับตัวตามความเปลี่ยนแปลงของเทคโนโลยี<br className="hidden lg:inline" />
             เพื่อนำมาใช้เพิ่มประสิทธิภาพการทำงาน สร้างความได้เปรียบ{' '}
-            <span className="text-9e-action">ให้เหนือคู่แข่ง</span>
+            <span className="text-9e-lime">ให้เหนือคู่แข่ง</span>
           </p>
 
           <div className="hidden lg:inline text-center">
-            <p className="text-base font-bold text-9e-navy ">
+            <p className="text-base font-bold text-9e-ice ">
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
-            <p className="text-sm text-9e-action">
+            <p className="text-sm text-9e-lime">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
-            <p className="text-sm text-9e-slate-dp-50">
+            <p className="text-sm text-9e-slate-dp-600">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI
             </p>
           </div>
@@ -163,13 +163,13 @@ export function InstructorQuote() {
           />
 
           <div className="text-center lg:hidden py-6">
-            <p className="text-base font-bold text-9e-navy ">
+            <p className="text-base font-bold text-9e-ice ">
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
-            <p className="text-sm text-9e-action">
+            <p className="text-sm text-9e-lime">
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
-            <p className="text-sm text-9e-slate-dp-50">
+            <p className="text-sm text-9e-slate-dp-600">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI
             </p>
           </div>
