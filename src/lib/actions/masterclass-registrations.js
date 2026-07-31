@@ -7,7 +7,6 @@ import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
 import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
-import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
@@ -179,7 +178,7 @@ export async function getMasterclassBatchOptions(courseId) {
 // `rows` is [{ firstName, lastName, email, phone, license? }] where
 // license = { choice, level, detail } | null, index-aligned with attendees.
 export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}) {
-  await requireAdmin('mc_registrations');
+  await requireAdmin();
   await dbConnect();
   if (!id) return { ok: false, error: 'missing_id' };
   if (!Array.isArray(rows)) return { ok: false, error: 'invalid_payload' };
@@ -228,7 +227,6 @@ export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}
     { new: true }
   ).lean();
   if (!doc) return { ok: false, error: 'not_found' };
-  await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
   return { ok: true };

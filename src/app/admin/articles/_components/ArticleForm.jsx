@@ -70,8 +70,14 @@ import {
   updateArticle,
   searchArticles,
   getArticlesByIds,
+  repositionArticle,
 } from '@/lib/actions/articles';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
+import {
+  formatSiteDateTime,
+  fromLocalInput,
+  toLocalInput,
+} from '@/lib/articlePublishTime';
 
 const MAX_TAGS = 20;
 
@@ -80,13 +86,13 @@ const inputCls =
 
 // ── small utilities ──────────────────────────────────────────────
 
-function toLocalDateTimeInputValue(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+// The local `toLocalDateTimeInputValue` that used to live here read the
+// BROWSER's timezone via getFullYear/getHours. This is a client component that
+// is server-rendered first, so the initial paint used the server's zone (UTC on
+// Vercel) and hydration silently rewrote the field to the visitor's — a change
+// React does not warn about for a controlled input's initial state. Both halves
+// of the round trip now go through @/lib/articlePublishTime, which is pinned to
+// the site timezone and therefore renders the same on both sides.
 
 function slugify(input) {
   // Preserve Thai characters and the admin's original casing — slugs
@@ -190,6 +196,26 @@ export function ArticleForm({
   const [author,      setAuthor]      = useState(article?.author ?? '');
   const [articleType, setArticleType] = useState(article?.articleType ?? 'article');
   const [active,      setActive]      = useState(article?.active !== false);
+  // Badge only — the form owns this one. `!== false` not `?? true`: under
+  // `.lean()` an article written before showPinBadge existed reads back with
+  // the key ABSENT, and absent means ON (see shouldShowPinBadge). A `??` would
+  // agree here by luck; `!== false` says why.
+  const [showPinBadge, setShowPinBadge] = useState(article?.showPinBadge !== false);
+  // Positioning is NOT form state — it is not part of the save payload. These
+  // mirror the document so the panel can show the current position, and are
+  // refreshed from the server after a promote/demote.
+  const [positioned, setPositioned] = useState(article?.isPinnedOnArticlePage === true);
+  const [pinOrder, setPinOrder]     = useState(article?.pinOrder ?? 0);
+  const [posBusy, setPosBusy]       = useState(false);
+  const [posError, setPosError]     = useState(null);
+  // repositionArticle computes the new pinOrder on the SERVER (it needs the
+  // whole block), so after router.refresh() the fresh document is the only
+  // place that knows the number. useState would keep its initial value forever;
+  // this re-syncs the mirror instead of duplicating the numbering client-side.
+  useEffect(() => {
+    setPositioned(article?.isPinnedOnArticlePage === true);
+    setPinOrder(article?.pinOrder ?? 0);
+  }, [article?.isPinnedOnArticlePage, article?.pinOrder]);
 
   // Sidebar — Tags (textarea, live-preview chips)
   const [tagsText, setTagsText] = useState(
@@ -242,7 +268,7 @@ export function ArticleForm({
 
   // Sidebar — Schedule
   const [publishedAt, setPublishedAt] = useState(
-    toLocalDateTimeInputValue(article?.publishedAt)
+    toLocalInput(article?.publishedAt)
   );
 
   // Sidebar — SEO
@@ -377,7 +403,7 @@ export function ArticleForm({
     if (asDraft) {
       finalActive = false;
     } else if (finalActive && !finalPublishedAt) {
-      finalPublishedAt = toLocalDateTimeInputValue(new Date().toISOString());
+      finalPublishedAt = toLocalInput(new Date().toISOString());
     }
 
     const fd = new FormData();
@@ -399,6 +425,14 @@ export function ArticleForm({
     fd.set('author',         author);
     fd.set('publishedAt',    finalPublishedAt);
     fd.set('active',         String(finalActive));
+    // Badge rides with the payload. Positioning does NOT — `pinOrder` and
+    // `isPinnedOnArticlePage` are deliberately absent from this FormData and
+    // from articleSchema, so the save button cannot overwrite a position set
+    // from the admin list in another tab. Position changes go through
+    // repositionArticle() on click. Adding either key here reintroduces the
+    // lost update; test/pure/articleFormFieldCoverage.test.mjs asserts their
+    // absence from the payload.
+    fd.set('showPinBadge',   String(showPinBadge));
     fd.set('jsonLd', JSON.stringify({
       enabled:    jsonLdEnabled,
       schemaType,
@@ -438,7 +472,7 @@ export function ArticleForm({
     parsedTags, selectedPrograms, selectedSkills,
     relatedArticles, relatedCourses, articleType,
     seoTitle, seoDescription, focusKeyword,
-    author, publishedAt, active,
+    author, publishedAt, active, showPinBadge,
     jsonLdEnabled, schemaType, jsonLdOverrides,
     rawOverride, rawOverrideEnabled, isSuperAdmin,
     isEdit, article, router,
@@ -459,7 +493,11 @@ export function ArticleForm({
       excerpt,
       coverUrl,
       author,
-      publishedAt: publishedAt || new Date().toISOString(),
+      // `publishedAt` is the form's WALL-CLOCK state, not an instant.
+      // buildJsonLd feeds it straight into `new Date(...).toISOString()`, so
+      // handing it over unconverted would put the browser's zone into the
+      // structured data the admin is about to copy out.
+      publishedAt: fromLocalInput(publishedAt) || new Date().toISOString(),
       updatedAt:   new Date().toISOString(),
       active: true,
       jsonLd: {
@@ -480,7 +518,7 @@ export function ArticleForm({
   const isPublished = Boolean(
     active &&
     publishedAt &&
-    new Date(publishedAt).getTime() <= Date.now()
+    new Date(fromLocalInput(publishedAt)).getTime() <= Date.now()
   );
   const statusBadge = isPublished
     ? { label: 'Published', cls: 'bg-green-50 text-green-700 border-green-100' }
@@ -807,6 +845,88 @@ export function ArticleForm({
             </p>
           </Section>
 
+          {/* 8b. Position + badge — TWO DIFFERENT WRITE PATHS, on purpose.
+              The badge is a per-document property and rides with ปุ่มบันทึก.
+              The position is cross-row state (the block's numbering), so it is
+              read-only here and any change fires repositionArticle immediately
+              — the same planners the admin list uses. If the save button owned
+              it, a stale tab could undo a position set elsewhere. */}
+          <Section title="ตำแหน่ง / ป้าย">
+            <div className="rounded-9e-md border border-[var(--surface-border)] p-2">
+              <p className="text-[11px] font-semibold text-9e-navy dark:text-white">
+                ตำแหน่งบน /articles
+              </p>
+              <p className="mt-0.5 text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                {positioned
+                  ? `จัดตำแหน่งเอง · ลำดับ ${pinOrder}`
+                  : 'เรียงตามวันที่เผยแพร่'}
+              </p>
+
+              {isEdit ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={posBusy}
+                    onClick={() => {
+                      setPosError(null);
+                      setPosBusy(true);
+                      startTransition(async () => {
+                        const res = await repositionArticle(
+                          article._id,
+                          positioned ? 'demote' : 'promote'
+                        );
+                        if (res?.ok) {
+                          // The server re-read the block to compute the plan, so
+                          // rather than mirror its arithmetic here, take the
+                          // refreshed document as the source of truth.
+                          setPositioned(!positioned);
+                          router.refresh();
+                        } else {
+                          setPosError(res?.error ?? 'เปลี่ยนตำแหน่งไม่สำเร็จ');
+                        }
+                        setPosBusy(false);
+                      });
+                    }}
+                    className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-9e-sm border border-9e-action px-2 py-1 text-[11px] font-medium text-9e-action hover:bg-9e-action/10 disabled:opacity-50"
+                  >
+                    {posBusy
+                      ? 'กำลังบันทึก…'
+                      : positioned
+                        ? 'ปลดตำแหน่ง (กลับไปเรียงตามวันที่)'
+                        : 'จัดตำแหน่ง (ต่อท้ายบล็อกบนสุด)'}
+                  </button>
+                  <p className="mt-1 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                    บันทึกทันที ไม่ต้องกดปุ่มบันทึก · แก้ลำดับได้ที่หน้ารายการบทความ
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-[10px] leading-tight text-amber-600">
+                  บันทึกบทความก่อนจึงจะจัดตำแหน่งได้
+                </p>
+              )}
+              {posError && (
+                <p className="mt-1 text-[10px] text-red-600">{posError}</p>
+              )}
+            </div>
+
+            <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-9e-md border border-[var(--surface-border)] p-2">
+              <input
+                type="checkbox"
+                checked={showPinBadge}
+                onChange={(e) => setShowPinBadge(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5"
+              />
+              <span>
+                <span className="block text-[11px] font-semibold text-9e-navy dark:text-white">
+                  แสดงป้ายหมุดบนการ์ด
+                </span>
+                <span className="block text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                  บันทึกพร้อมฟอร์ม · ป้ายจะแสดงเมื่อจัดตำแหน่งแล้วเท่านั้น
+                </span>
+              </span>
+            </label>
+          </Section>
+
           {/* 9. SEO */}
           <Section title="SEO">
             <Label text={`SEO Title (${seoTitle.length}/60)`}>
@@ -988,7 +1108,9 @@ export function ArticleForm({
             coverUrl,
             author,
             tags: parsedTags,
-            publishedAt: publishedAt || new Date().toISOString(),
+            // Wall clock → instant, so the overlay formats the same value the
+            // public page will once this is saved.
+            publishedAt: fromLocalInput(publishedAt) || new Date().toISOString(),
           }}
           onClose={() => setShowPreview(false)}
         />
@@ -1074,7 +1196,7 @@ function ArticlePreviewOverlay({ previewData, onClose }) {
             </span>
           )}
           <span>
-            {new Date(previewData.publishedAt).toLocaleDateString('th-TH', {
+            {formatSiteDateTime(previewData.publishedAt, {
               year: 'numeric', month: 'long', day: 'numeric',
             })}
           </span>

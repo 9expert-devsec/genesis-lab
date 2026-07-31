@@ -6,6 +6,7 @@ import {
 } from '@/lib/actions/articles';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
+import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -109,7 +110,10 @@ export default async function ArticleDetailPage({ params }) {
         />
       )}
       <ArticleDetailClient
-        article={article}
+        // Authored inline colours are classified here, on the server, and only
+        // for the render path — `minutes` and the JSON-LD above are computed
+        // from the untouched body, and nothing is written back to Mongo.
+        article={{ ...article, content: normalizeAuthoredColors(article.content) }}
         related={related}
         relatedCoursesData={relatedCoursesData}
         minutes={minutes}

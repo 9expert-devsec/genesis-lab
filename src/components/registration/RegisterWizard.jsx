@@ -315,7 +315,7 @@ export function RegisterWizard({
 function Stepper({ currentStep, omisePaymentEnabled = false }) {
   const steps = [
     { n: 1, label: 'กรอกข้อมูล' },
-    { n: 2, label: omisePaymentEnabled ? 'ชำระเงิน' : 'ตรวจสอบ' },
+    { n: 2, label: omisePaymentEnabled ? 'ตรวจสอบและดำเนินการ' : 'ตรวจสอบ' },
     { n: 3, label: 'สำเร็จ' },
   ];
   return (
@@ -520,9 +520,9 @@ function StepForm({ course, schedules, initialClassId, initialValues, onSubmit, 
         <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
           เลือกรอบการอบรม
         </h2>
-        <p className="mb-4 text-xs text-[var(--text-secondary)]">
+        {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
           {course.course_name}
-        </p>
+        </p> */}
 
         <ScheduleCarousel
           schedules={schedules}
@@ -700,11 +700,11 @@ function AttendanceModeSelector({ value, onChange, error }) {
                 <ModeIcon className="h-5 w-5" />
               </span>
               <span className="min-w-0">
-                <span className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                <span className="flex items-center gap-2 text-base font-semibold text-[var(--text-primary)]">
                   {title}
                   {active && <CheckCircle2 className="h-4 w-4 text-9e-brand" />}
                 </span>
-                <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">
+                <span className="mt-1 block text-sm leading-5 text-[var(--text-secondary)]">
                   {description}
                 </span>
               </span>
@@ -766,7 +766,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 
       {data.notes && (
         <Section title="หมายเหตุ">
-          <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">
+          <p className="whitespace-pre-wrap text-base text-[var(--text-primary)]">
             {data.notes}
           </p>
         </Section>
@@ -807,7 +807,7 @@ function StepPreview({ data, onBack, onConfirm, submitting, error }) {
             <h3 className="text-lg font-bold text-[var(--text-primary)]">
               ยืนยันการส่งข้อมูล
             </h3>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            <p className="mt-2 text-base text-[var(--text-secondary)]">
               คุณต้องการส่งข้อมูลนี้ใช่หรือไม่?
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
@@ -943,10 +943,10 @@ function Section({ title, children }) {
 function ReadOnlyRow({ label, value }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-      <div className="text-xs font-medium uppercase tracking-wide text-[var(--text-muted)] sm:w-40 sm:flex-none">
+      <div className="text-base font-medium uppercase tracking-wide text-[var(--text-muted)] sm:w-40 sm:flex-none">
         {label}
       </div>
-      <div className="text-sm text-[var(--text-primary)]">{value || '—'}</div>
+      <div className="text-base text-[var(--text-primary)]">{value || '—'}</div>
     </div>
   );
 }
@@ -976,7 +976,7 @@ function AttendeeListView({ data }) {
   const attendees = data.attendees ?? [];
   if (!data.attendeesListProvided) {
     return (
-      <p className="text-sm text-[var(--text-secondary)]">
+      <p className="text-base text-[var(--text-secondary)]">
         ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
       </p>
     );

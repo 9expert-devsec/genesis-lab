@@ -3,8 +3,11 @@ import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
+import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { CareerPathDetail } from './_components/CareerPathDetail';
+import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { CourseCard } from '@/components/course/CourseCard';
 import { CourseHero } from './_components/CourseHero';
 import { SkillBreadcrumb } from './_components/SkillBreadcrumb';
@@ -20,6 +23,7 @@ import { SidebarNav } from './_components/SidebarNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
+import { CourseStickyCTA } from './_components/CourseStickyCTA';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
 import {
@@ -30,7 +34,12 @@ import {
 import { dbConnect } from '@/lib/db/connect';
 import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
-import { resolveProgramBySlug, resolveSkillBySlug } from '@/lib/resolvePageSlug';
+import {
+  getPageLinkability,
+  resolveProgramBySlug,
+  resolveSkillBySlug,
+} from '@/lib/resolvePageSlug';
+import { chipHref, programHref, skillHref } from '@/lib/utils';
 import { listSkills } from '@/lib/api/skills';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
@@ -43,7 +52,14 @@ import {
   findCustomPageByHistoricalSlug,
 } from '@/lib/actions/customPages';
 import { buildPageJsonLd } from '@/lib/customPages/buildPageJsonLd';
+import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
+import { isPromotionPage } from '@/lib/pageBuilder/promotionMode';
 import { CustomPageView } from './_components/CustomPageView';
+import {
+  getPageBuilderPageBySlugAny,
+  findPageBuilderPageByHistoricalSlug,
+} from '@/lib/actions/pageBuilder';
+import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -60,6 +76,19 @@ import { CustomPageView } from './_components/CustomPageView';
  */
 
 export const revalidate = 3600;
+
+/**
+ * Stable FAQ refs for program/skill — prefer the upstream business code
+ * (`program_id` / `skill_id`), fall back to `_id`. Same precedence as the
+ * admin order clients and resolvePageSlug, so FAQs key on a durable code
+ * rather than a re-issuable ObjectId.
+ */
+function programRefId(program) {
+  return String(program?.program_id ?? program?._id ?? '');
+}
+function skillRefId(skill) {
+  return String(skill?.skill_id ?? skill?._id ?? '');
+}
 
 function segmentFromSlug(slug) {
   const segment = Array.isArray(slug) ? slug.join('/') : String(slug ?? '');
@@ -82,6 +111,22 @@ async function resolveCustomPageForRequest(segment, searchParams) {
   const published = await getCustomPageBySlug(segment);
   if (published) return { page: published, isPreview: false };
   return null;
+}
+
+// The publish-window rules moved to lib/pageBuilder/visibility.js — ONE
+// definition, because the 2B editor's publish dialog must give the author the
+// SAME answer this route gives the visitor. A second copy would drift into
+// telling an author a page is live while this route 404s it. The ISR caveat
+// (revalidate = 3600, so a scheduled page goes live within the hour, not on the
+// second) is documented there.
+
+// Resolve a PUBLIC builder page. Reads any-status (the published-only action
+// can't express the date window) and gates in JS. Preview lives on its own
+// /preview/[slug] route and never resolves here.
+async function resolveBuilderPageForRequest(segment) {
+  const page = await getPageBuilderPageBySlugAny(segment);
+  if (!page) return null;
+  return isPubliclyVisible(page) ? page : null;
 }
 
 // ── Program / skill pretty-URL pages ────────────────────────────────
@@ -112,7 +157,8 @@ async function loadProgram(slug) {
     (c) => String(c?.program?._id ?? '') === programKey
   );
   const courses = await enrichCoursesWithDetails(programCourses);
-  return { program, config, courses, earlyBirdMap };
+  const faqs = await getLocalFaqsForCourse('program', programRefId(program)).catch(() => []);
+  return { program, config, courses, earlyBirdMap, faqs };
 }
 
 function courseInSkill(course, skillId) {
@@ -154,7 +200,8 @@ async function loadSkill(slug) {
     }))
     .filter((g) => g.courses.length > 0);
 
-  return { skill, config, coursesByProgram, totalCourses: skillCourses.length };
+  const faqs = await getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []);
+  return { skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs };
 }
 
 export async function generateMetadata({ params, searchParams }) {
@@ -285,6 +332,49 @@ export async function generateMetadata({ params, searchParams }) {
     };
   }
 
+  // Builder page metadata — same precedence tier as custom pages, after every
+  // built-in resolver. Builder is probed first purely for determinism: Phase 1
+  // guarantees a slug can exist in only ONE of the two collections (the shared
+  // guard rejects a slug that is live OR historical in the other), so the two
+  // can never both match and the order is arbitrary. Builder wins the coin
+  // toss as the go-forward primitive.
+  const bp = await resolveBuilderPageForRequest(segment);
+  if (bp) {
+    const seo = bp.seo ?? {};
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    // Promotion mode (Phase 2): a promotion page's one home is /promotions/<slug>,
+    // so its canonical points there even when a crawler hits the bare slug before
+    // the component's 308 fires. Non-promotion pages keep seo.canonicalUrl ‖ bare.
+    const canonical = isPromotionPage(bp)
+      ? `${base}/promotions/${segment}`
+      : (seo.canonicalUrl || `${base}/${segment}`);
+    const title = seo.metaTitle || bp.title;
+    const description = seo.metaDescription || '';
+    const ogTitle = seo.ogTitle || title;
+    const ogDesc = seo.ogDescription || description;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      robots: seo.noIndex ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title: ogTitle,
+        description: ogDesc,
+        url: canonical,
+        type: seo.ogType || 'website',
+        images: seo.ogImage ? [{ url: seo.ogImage }] : [],
+        siteName: '9Expert Training',
+        locale: 'th_TH',
+      },
+      twitter: {
+        card: seo.twitterCard || 'summary_large_image',
+        title: ogTitle,
+        description: ogDesc,
+        images: seo.ogImage ? [seo.ogImage] : [],
+      },
+    };
+  }
+
   // Custom page metadata — lowest priority, after every built-in resolver.
   const cp = await resolveCustomPageForRequest(segment, searchParams);
   if (cp) {
@@ -345,6 +435,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           config={programData.config}
           courses={programData.courses}
           earlyBirdMap={programData.earlyBirdMap}
+          faqs={programData.faqs}
         />
       );
     }
@@ -356,6 +447,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           skill={skillData.skill}
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
+          faqs={skillData.faqs}
         />
       );
     }
@@ -368,7 +460,11 @@ export default async function CatchAllPage({ params, searchParams }) {
   if (segment.endsWith('-career-path')) {
     const careerPath = await getCareerPathBySlug(segment);
     if (!careerPath || careerPath.is_active === false) notFound();
-    return <CareerPathDetail careerPath={careerPath} />;
+    const faqs = await getLocalFaqsForCourse(
+      'career_path',
+      careerPath.career_path_id
+    );
+    return <CareerPathDetail careerPath={careerPath} faqs={faqs} />;
   }
 
   // All-courses catalog — public listing filtered by skill or program.
@@ -386,7 +482,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           <p className="text-sm font-medium uppercase tracking-wider text-9e-action">
             หลักสูตรทั้งหมด
           </p>
-          <h1 className="mt-1 text-2xl font-bold text-9e-navy md:text-3xl">
+          <h1 className="mt-1 text-2xl font-bold text-[var(--text-primary)] md:text-3xl">
             {catalogSlug.replace(/-/g, ' ')}
           </h1>
         </header>
@@ -408,12 +504,21 @@ export default async function CatchAllPage({ params, searchParams }) {
     // which the hero gradient uses; the course detail response doesn't
     // include it. If the programs fetch fails we fall through to the
     // skillcolor fallback in CourseDetail.
-    const [scheduleRes, programsRes, earlyBirdRes, coursePromosRes] =
+    const [
+      scheduleRes, programsRes, earlyBirdRes, coursePromosRes, faqsRes,
+      skillsRes, linkabilityRes,
+    ] =
       await Promise.allSettled([
         listSchedulesByCourse(course._id, { limit: 10 }),
         listPrograms(),
         getEarlyBirdByCourse(course.course_id),
         getActiveCoursePromos(course.course_id),
+        getLocalFaqsForCourse('public', course.course_id),
+        // Both feed the SkillBreadcrumb chips only. listSkills is already
+        // warm on this route (the program/skill branches above call it) and
+        // both run inside the existing allSettled, so neither adds latency.
+        listSkills(),
+        getPageLinkability(),
       ]);
     const schedules =
       scheduleRes.status === 'fulfilled' ? scheduleRes.value.items : [];
@@ -423,6 +528,40 @@ export default async function CatchAllPage({ params, searchParams }) {
       earlyBirdRes.status === 'fulfilled' ? earlyBirdRes.value : null;
     const coursePromos =
       coursePromosRes.status === 'fulfilled' ? coursePromosRes.value : [];
+    const faqs =
+      faqsRes.status === 'fulfilled' ? faqsRes.value : [];
+    const liveSkills =
+      skillsRes.status === 'fulfilled' ? skillsRes.value.items ?? [] : [];
+    const linkability =
+      linkabilityRes.status === 'fulfilled'
+        ? linkabilityRes.value
+        : {
+            programSlugs: {}, skillSlugs: {},
+            programBlocked: new Set(), skillBlocked: new Set(),
+          };
+
+    // Chip hrefs, resolved ONCE here — not per chip, and never on the client.
+    // A skill missing from the live /skills list stays unlinked: its
+    // /skill/<slug> destination would not resolve.
+    const liveSkillIds = new Set(
+      liveSkills.flatMap((s) =>
+        [s?._id, s?.skill_id].filter(Boolean).map((v) => String(v).toLowerCase())
+      )
+    );
+    const skillHrefs = {};
+    for (const s of Array.isArray(course.skills) ? course.skills : []) {
+      const key = s?._id ?? s?.skill_id;
+      if (!key) continue;
+      const known = [s._id, s.skill_id]
+        .filter(Boolean)
+        .some((v) => liveSkillIds.has(String(v).toLowerCase()));
+      if (!known) continue;
+      const href = chipHref(s, 'skill', linkability, skillHref);
+      if (href) skillHrefs[String(key)] = href;
+    }
+    const courseProgramHref = chipHref(
+      course.program, 'program', linkability, programHref
+    );
 
     // Course + BreadcrumbList JSON-LD (separate <script> tags, as Google
     // recommends). courseUrl mirrors the slug logic in buildCourseJsonLd.
@@ -474,14 +613,38 @@ export default async function CatchAllPage({ params, searchParams }) {
         />
         <CourseDetail
           course={course}
+          skillHrefs={skillHrefs}
+          courseProgramHref={courseProgramHref}
           extension={extension}
           schedules={schedules}
           programs={programs}
           earlyBird={earlyBird}
           coursePromos={coursePromos}
+          faqs={faqs}
         />
       </>
     );
+  }
+
+  // ── Builder page — same tier as custom pages (see generateMetadata for why
+  //    the order between the two is arbitrary but deterministic). ──
+  const builderPage = await resolveBuilderPageForRequest(segment);
+  if (builderPage) {
+    // Promotion mode (Phase 2): a promotion-type builder page lives ONLY at
+    // /promotions/<slug> — one public home, no duplicate content. Divert the
+    // bare-slug URL there with a 308 (permanentRedirect throws, so this is the
+    // last thing this branch does; the function body has no enclosing try/catch,
+    // like the historical-slug redirects at the bottom). ONE rule for BOTH kinds
+    // (standalone AND MSDB-linked) — no per-discriminator branching.
+    if (isPromotionPage(builderPage)) {
+      permanentRedirect(`/promotions/${builderPage.slug}`);
+    }
+    // JSON-LD HOOK POINT — generation is 2C, deliberately not built here.
+    // When it lands, derive the document from builderPage.jsonLd (+ seo) and
+    // emit it as a <script type="application/ld+json"> right here, exactly as
+    // the course and custom-page branches above do. Never emit Review or
+    // AggregateRating.
+    return <PageBuilderView page={builderPage} />;
   }
 
   // ── Custom page — lowest-priority resolver (after course resolution). ──
@@ -498,7 +661,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           />
         )}
         {cp.isPreview && (
-          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-9e-navy">
+          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
             ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
           </div>
         )}
@@ -507,10 +670,20 @@ export default async function CatchAllPage({ params, searchParams }) {
     );
   }
 
-  // 301 redirect for renamed custom-page slugs — only reached when nothing
-  // else (course/program/skill/career-path/published custom page) matched.
-  // permanentRedirect emits 308 (permanent), which throws internally, so it
+  // 301 redirect for renamed slugs — only reached when nothing else matched.
+  // permanentRedirect emits 308 (permanent), which throws internally, so these
   // must sit outside any try/catch and be the last thing before notFound().
+  //
+  // Both page types are checked. They CANNOT both hit: the shared slug guard
+  // rejects any slug that already exists as a live OR historical slug in the
+  // other collection, so a slug string lives in at most one collection. The
+  // order below is therefore determinism (e.g. for a hand-seeded doc that
+  // bypassed the guard), not a tiebreak.
+  const historicalBuilder = await findPageBuilderPageByHistoricalSlug(segment);
+  if (historicalBuilder?.slug && historicalBuilder.slug !== segment) {
+    permanentRedirect(`/${historicalBuilder.slug}`);
+  }
+
   const historical = await findCustomPageByHistoricalSlug(segment);
   if (historical?.slug && historical.slug !== segment) {
     permanentRedirect(`/${historical.slug}`);
@@ -521,14 +694,24 @@ export default async function CatchAllPage({ params, searchParams }) {
 
 function CourseDetail({
   course,
+  skillHrefs = {},
+  courseProgramHref = null,
   extension,
   schedules,
   programs,
   earlyBird,
   coursePromos,
+  faqs = [],
 }) {
   const hasSchedules = Boolean(schedules?.length);
   const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+  // Sticky-bar navigation target — only an inhouse-only course navigates (to
+  // the in-house quote). A public course with no open sessions instead
+  // scrolls to the top so the hero's Public/Inhouse buttons let the user pick;
+  // null signals that in-page-scroll behaviour to the bar.
+  const stickyInhouseHref = isInhouseOnly
+    ? inhouseRegistrationHref(course.course_id)
+    : null;
   const relatedCourses = Array.isArray(course.related_courses)
     ? course.related_courses
     : [];
@@ -548,12 +731,28 @@ function CourseDetail({
     '#005CFF';
 
   return (
-    <article className="bg-white">
+    <article className="bg-[var(--page-bg)]">
       <CourseHero course={course} heroColor={heroColor} gallery={gallery} />
-      <SkillBreadcrumb course={course} />
+      <SkillBreadcrumb
+        course={course}
+        skillHrefs={skillHrefs}
+        programHref={courseProgramHref}
+      />
 
-      <div className="mx-auto max-w-[1200px] py-8 ">
-        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]">
+      {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
+          reflowed sidebar (Course Outline downloads) can scroll clear of it on
+          small screens; this is content-length-independent (works when a short
+          course has no RelatedCourses below). lg keeps the original pb-8 — the
+          large-screen bar is centered and its presentation is unchanged. */}
+      <div className="mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8 ">
+        {/* id="course-content" marks the content zone (main column + sidebar).
+            CourseStickyCTA hides once this element's bottom scrolls above the
+            viewport — i.e. before the related-courses section / footer — and
+            reappears on scrolling back up. */}
+        <div
+          id="course-content"
+          className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]"
+        >
           <div className="min-w-0 space-y-10">
             {earlyBird && (
               <EarlyBirdBanner
@@ -580,13 +779,26 @@ function CourseDetail({
             <CourseRequirements course={course} />
             <CourseOutline course={course} />
             <CourseRoadmap course={course} />
+            <FaqAccordionSection
+              faqs={faqs}
+              id="faq"
+              className="scroll-mt-24"
+              headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
+            />
           </div>
 
-          <aside className="space-y-4 lg:sticky lg:top-24">
+          {/* relative z-50 raises the sidebar above the fixed CourseStickyCTA
+              bar (z-40) so the Course Outline downloads stay clickable where the
+              centered bar's box passes behind this column at lg+. `relative`
+              (overridden by lg:sticky at lg) makes the z-index apply at every
+              breakpoint; no ancestor creates a stacking context that would trap
+              it. z-50 matches the app's elevated-UI tier (header, back-to-top). */}
+          <aside className="relative z-50 space-y-4 lg:sticky lg:top-24">
             <SidebarNav
               course={course}
               hasSchedules={hasSchedules}
               hasRelated={hasRelated}
+              hasFaqs={Boolean(faqs?.length)}
             />
             {/* <InhouseCTA courseId={course.course_id} /> */}
             <PDFDownload course={course} />
@@ -595,6 +807,13 @@ function CourseDetail({
       </div>
 
       <RelatedCourses courses={relatedCourses} />
+
+      <CourseStickyCTA
+        title={course.course_name}
+        coverUrl={course.course_cover_url}
+        hasSchedules={hasSchedules}
+        inhouseHref={stickyInhouseHref}
+      />
     </article>
   );
 }

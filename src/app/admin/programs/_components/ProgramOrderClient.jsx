@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import {
   saveProgramOrder,
   syncProgramsFromAPI,
@@ -152,6 +153,13 @@ export default function ProgramOrderClient({ initialPrograms, orderData }) {
                 {name}
               </span>
               <div className="flex items-center gap-1">
+                <Link
+                  href={`/admin/local-faqs/program/${prog.id}`}
+                  title="จัดการ FAQ"
+                  className="rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-slate-dp-50 transition-colors hover:text-9e-action"
+                >
+                  FAQ
+                </Link>
                 <button
                   type="button"
                   onClick={() => handleToggleHidden(prog.id, prog.isHidden)}

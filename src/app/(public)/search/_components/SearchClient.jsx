@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { resolveScheduleBadge } from '@/lib/scheduleStatus';
 import {
   Search,
   X,
@@ -15,18 +16,13 @@ import {
   Tag,
 } from 'lucide-react';
 import { courseHref, careerPathHref } from '@/lib/utils';
+import { siteDateParts } from '@/lib/articlePublishTime';
 
 // ── Local re-implementations from ScheduleClient (not exported) ────
 const MONTH_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
-
-const STATUS_STYLE = {
-  open:        { dot: 'bg-[#39b980]', text: 'text-[#39b980]', label: 'รับสมัคร' },
-  nearly_full: { dot: 'bg-[#ffc94a]', text: 'text-[#d4a017]', label: 'ใกล้เต็ม' },
-  full:        { dot: 'bg-[#ff4b55]', text: 'text-[#ff4b55]', label: 'เต็ม' },
-};
 
 const TYPE_COLOR = {
   classroom: '#00CCFF',
@@ -59,11 +55,13 @@ function formatDateLabel(scheduleItem) {
   return `${first.getDate()} ${firstM} - ${last.getDate()} ${lastM} ${last.getFullYear() + 543}`;
 }
 
+// Buddhist-era label built from the SITE timezone's calendar fields, not the
+// runtime's. `siteDateParts` returns a 1-12 month, so MONTH_TH is indexed with
+// `month - 1` rather than a JS 0-11 getMonth().
 function formatArticleDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${MONTH_TH[d.getMonth()]} ${d.getFullYear() + 543}`;
+  const p = siteDateParts(iso);
+  if (!p) return '';
+  return `${p.day} ${MONTH_TH[p.month - 1]} ${p.year + 543}`;
 }
 
 // Compact Thai-locale date for promo range labels — 2-digit BE year.
@@ -162,7 +160,7 @@ function CourseResultCard({ course, term }) {
 function ScheduleResultRow({ schedule, course, term }) {
   const courseName = course?.course_name ?? schedule.course_name ?? '(ไม่ทราบชื่อหลักสูตร)';
   const type = schedule.type ?? 'classroom';
-  const status = STATUS_STYLE[schedule.status] ?? STATUS_STYLE.open;
+  const status = resolveScheduleBadge(schedule.status);
   const typeColor = TYPE_COLOR[type] ?? TYPE_COLOR.classroom;
   const typeLabel = TYPE_LABEL[type] ?? type;
   const price = course?.course_price;
@@ -201,12 +199,15 @@ function ScheduleResultRow({ schedule, course, term }) {
         <p className="mt-0.5 text-xs text-gray-500">{formatDateLabel(schedule)}</p>
       </div>
 
-      <span
-        className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
-      >
-        <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
-        {status.label}
-      </span>
+      {/* Omitted entirely when the status is missing/blank. */}
+      {status && (
+        <span
+          className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
+        >
+          <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
+          {status.label}
+        </span>
+      )}
 
       <span className="shrink-0 text-sm font-bold text-[#0D1B2A]">
         {!price || Number(price) === 0
@@ -349,15 +350,15 @@ function ArticleResultCard({ article, term }) {
   return (
     <Link
       href={`/articles/${article.slug}`}
-      className="group flex gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
+      className="group grid min-h-36 grid-cols-[auto_1fr] overflow-hidden  rounded-xl border border-gray-100 bg-white  shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+      <div className="relative aspect-video h-full shrink-0 overflow-hidden bg-gray-100">
         {article.coverUrl ? (
           <Image
             src={article.coverUrl}
             alt={article.title ?? ''}
             fill
-            sizes="80px"
+            sizes="240px"
             className="object-cover"
           />
         ) : (
@@ -367,7 +368,7 @@ function ArticleResultCard({ article, term }) {
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 p-4">
         <h3 className="line-clamp-2 text-sm font-semibold text-[#0D1B2A] group-hover:text-[#005CFF]">
           {highlightText(article.title, term)}
         </h3>
@@ -546,7 +547,7 @@ export function SearchClient({
   const visibleCareerPaths   = isAll ? matchedCareerPaths.slice(0, 4)  : matchedCareerPaths;
   const visibleSchedules     = isAll ? matchedSchedules.slice(0, 4)    : matchedSchedules;
   const visiblePromotions    = isAll ? matchedPromotions.slice(0, 3)   : matchedPromotions;
-  const visibleArticles      = isAll ? matchedArticles.slice(0, 3)     : matchedArticles;
+  const visibleArticles      = isAll ? matchedArticles.slice(0, 6)     : matchedArticles;
 
   return (
     <div className="min-h-screen bg-[#F8FAFD]">
@@ -570,7 +571,7 @@ export function SearchClient({
               aria-label="ค้นหา"
               className="h-full w-full bg-transparent text-lg text-[#0D1B2A] placeholder:text-gray-400 focus:outline-none"
             />
-            {q.length > 0 && (
+            {/* {q.length > 0 && (
               <button
                 type="button"
                 onClick={clearQuery}
@@ -579,7 +580,7 @@ export function SearchClient({
               >
                 <X className="h-5 w-5" />
               </button>
-            )}
+            )} */}
           </div>
         </div>
       </section>
@@ -825,7 +826,7 @@ export function SearchClient({
                       />
                     ) : (
                       <>
-                        <div className="space-y-3">
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {visibleArticles.map((a) => (
                             <ArticleResultCard
                               key={a.slug ?? a._id}

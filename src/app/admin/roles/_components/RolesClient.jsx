@@ -5,8 +5,18 @@ import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Trash2, X, ShieldCheck } from 'lucide-react';
 import { createRole, updateRole, deleteRole } from '@/lib/actions/roles';
 import { roleBadgeStyle, normalizeHex } from '@/lib/rbac/roleColor';
+import { ROLE_TIERS, DEFAULT_TIER } from '@/lib/rbac/access';
 
 const DEFAULT_COLOR = '#6b7280';
+
+// UI labels for the capability tiers (values come from ROLE_TIERS so the
+// two never drift). Tier gates what a role may DO inside a page it can
+// already access — orthogonal to the page checkboxes below.
+const TIER_LABELS = {
+  editor:    'Editor — เขียน/แก้เนื้อหา (ไม่เผยแพร่, ไม่แก้โค้ด)',
+  marketing: 'Marketing — Editor + เผยแพร่/ตั้งเวลา + จัดการลิงก์พรีวิว',
+  developer: 'Developer — Marketing + แก้ HTML/CSS/JSON-LD ได้',
+};
 
 /** Small badge showing a role's name in its own DB color (readable ink). */
 function RoleBadge({ name, color }) {
@@ -197,6 +207,7 @@ function RoleModal({ role, pageGroups, existingSuperKey, onClose, onSuccess, onE
   const [keyVal, setKeyVal] = useState(role?.key ?? '');
   const [description, setDescription] = useState(role?.description ?? '');
   const [color, setColor] = useState(role?.color ?? DEFAULT_COLOR);
+  const [tier, setTier] = useState(role?.tier ?? DEFAULT_TIER);
   const [pages, setPages] = useState(() => new Set(role?.pages ?? []));
   const [isSuper, setIsSuper] = useState(Boolean(role?.isSuperadmin));
   const [error, setError] = useState('');
@@ -245,6 +256,7 @@ function RoleModal({ role, pageGroups, existingSuperKey, onClose, onSuccess, onE
       name,
       description,
       color,
+      tier,
       pages: [...pages],
       isSuperadmin: isSuper,
     };
@@ -330,6 +342,25 @@ function RoleModal({ role, pageGroups, existingSuperKey, onClose, onSuccess, onE
               {name || 'ตัวอย่าง'}
             </span>
           </div>
+        </Field>
+
+        {/* Capability tier — orthogonal to page access below. */}
+        <Field label="ระดับสิทธิ์ (Tier)">
+          <select
+            value={tier}
+            onChange={(e) => setTier(e.target.value)}
+            className="input"
+          >
+            {ROLE_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {TIER_LABELS[t] ?? t}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-[var(--text-muted)]">
+            กำหนดสิ่งที่ทำได้ภายในหน้าที่เข้าถึงได้ (เขียน / เผยแพร่ / แก้โค้ด)
+            {isSuper && ' — superadmin ถือเป็น developer โดยอัตโนมัติ'}
+          </span>
         </Field>
 
         {/* isSuperadmin toggle */}

@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { ExternalLink, Eye, EyeOff, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ExternalLink, Eye, EyeOff, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import {
   deleteCustomPage,
   toggleCustomPageStatus,
 } from '@/lib/actions/customPages';
+import {
+  deletePageBuilderPage,
+  updatePageStatus,
+} from '@/lib/actions/pageBuilder';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -21,36 +25,49 @@ function formatDate(iso) {
   });
 }
 
-export function CustomPagesAdminClient({ pages: initial }) {
+// Status → badge colour + Thai label. Builder pages carry the richer status
+// set (scheduled/closed/archived); advanced-HTML only draft/published.
+function statusBadge(status) {
+  if (status === 'published') return { cls: 'border-green-100 bg-green-50 text-green-700', label: 'เผยแพร่แล้ว' };
+  if (status === 'draft')     return { cls: 'border-amber-100 bg-amber-50 text-amber-700', label: 'ฉบับร่าง' };
+  const labels = { scheduled: 'ตั้งเวลา', closed: 'ปิดแล้ว', archived: 'เก็บถาวร' };
+  return { cls: 'border-gray-200 bg-gray-50 text-gray-600', label: labels[status] ?? status };
+}
+
+const rowKey = (p) => `${p._type}:${p._id}`;
+
+export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = false }) {
   const [rows, setRows] = useState(initial);
   const [busyId, setBusyId] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all | draft | published
+  const [typeFilter, setTypeFilter] = useState('all');      // all | builder | advanced_html
   const [, startTransition] = useTransition();
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((p) => {
       if (statusFilter !== 'all' && p.status !== statusFilter) return false;
+      if (typeFilter !== 'all' && p._type !== typeFilter) return false;
       if (!q) return true;
       return [p.title, p.slug]
         .filter(Boolean)
         .some((s) => String(s).toLowerCase().includes(q));
     });
-  }, [rows, query, statusFilter]);
+  }, [rows, query, statusFilter, typeFilter]);
 
   // ── Client-side pagination over the filtered rows ──────────────
   const PAGE_SIZE = 12;
   const [page, setPage] = useState(1);
 
-  // Reset to page 1 whenever the search/filter changes.
-  useEffect(() => { setPage(1); }, [query, statusFilter]);
+  useEffect(() => { setPage(1); }, [query, statusFilter, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
 
-  // Clamp page if the filtered set shrank (e.g. after delete or search).
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
@@ -63,12 +80,15 @@ export function CustomPagesAdminClient({ pages: initial }) {
   function handleToggleStatus(p) {
     const next = p.status === 'published' ? 'draft' : 'published';
     setBusyId(p._id);
+    setActionError(null);
     startTransition(async () => {
-      const res = await toggleCustomPageStatus(p._id, next);
+      const res = p._type === 'builder'
+        ? await updatePageStatus(p._id, next)
+        : await toggleCustomPageStatus(p._id, next);
       if (res?.ok) {
-        setRows((cur) =>
-          cur.map((r) => (r._id === p._id ? { ...r, status: next } : r))
-        );
+        setRows((cur) => cur.map((r) => (rowKey(r) === rowKey(p) ? { ...r, status: next } : r)));
+      } else {
+        setActionError(res?.error ?? 'อัปเดตสถานะไม่สำเร็จ');
       }
       setBusyId(null);
     });
@@ -78,12 +98,14 @@ export function CustomPagesAdminClient({ pages: initial }) {
     setBusyId(p._id);
     setDeleteError(null);
     try {
-      const res = await deleteCustomPage(p._id);
+      const res = p._type === 'builder'
+        ? await deletePageBuilderPage(p._id)
+        : await deleteCustomPage(p._id);
       if (res?.ok === false) {
         setDeleteError(res.error || 'ลบไม่สำเร็จ');
         return;
       }
-      setRows((cur) => cur.filter((r) => r._id !== p._id));
+      setRows((cur) => cur.filter((r) => rowKey(r) !== rowKey(p)));
       setConfirmDelete(null);
     } catch (err) {
       setDeleteError(err?.message ?? 'ลบไม่สำเร็จ');
@@ -93,6 +115,12 @@ export function CustomPagesAdminClient({ pages: initial }) {
   }
 
   const publishedCount = rows.filter((r) => r.status === 'published').length;
+
+  function editHref(p) {
+    return p._type === 'builder'
+      ? `/admin/pages/builder/${p._id}/edit`
+      : `/admin/pages/${p._id}/edit`;
+  }
 
   return (
     <div>
@@ -117,6 +145,15 @@ export function CustomPagesAdminClient({ pages: initial }) {
             />
           </div>
           <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="rounded-9e-md border border-[var(--surface-border)] bg-white py-2 px-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          >
+            <option value="all">ทุกประเภท</option>
+            <option value="builder">Builder</option>
+            <option value="advanced_html">Advanced HTML</option>
+          </select>
+          <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-9e-md border border-[var(--surface-border)] bg-white py-2 px-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
@@ -125,20 +162,28 @@ export function CustomPagesAdminClient({ pages: initial }) {
             <option value="published">เผยแพร่แล้ว</option>
             <option value="draft">ฉบับร่าง</option>
           </select>
-          <Link
-            href="/admin/pages/new"
+          <button
+            type="button"
+            onClick={() => setShowPicker(true)}
             className="inline-flex items-center gap-1 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
           >
             <Plus className="h-4 w-4" /> สร้างหน้าใหม่
-          </Link>
+          </button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="mt-2 rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {actionError}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c] mt-2">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
               <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
+              <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ประเภท</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">หัวข้อ / Slug</th>
               <th className="w-32 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">สถานะ</th>
               <th className="w-44 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">แก้ไขล่าสุด</th>
@@ -148,7 +193,7 @@ export function CustomPagesAdminClient({ pages: initial }) {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                <td colSpan={6} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                   {rows.length === 0 ? (
                     <>ยังไม่มีหน้าเพจ — กด <strong>สร้างหน้าใหม่</strong> เพื่อเริ่มต้น</>
                   ) : (
@@ -159,9 +204,11 @@ export function CustomPagesAdminClient({ pages: initial }) {
             )}
             {pageRows.map((p, i) => {
               const published = p.status === 'published';
+              const isBuilder = p._type === 'builder';
+              const badge = statusBadge(p.status);
               return (
                 <tr
-                  key={p._id}
+                  key={rowKey(p)}
                   className={
                     'border-b border-[var(--surface-border)] transition-colors last:border-0 ' +
                     (published
@@ -173,6 +220,18 @@ export function CustomPagesAdminClient({ pages: initial }) {
                     {(page - 1) * PAGE_SIZE + i + 1}
                   </td>
                   <td className="px-3 py-3">
+                    <span
+                      className={
+                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
+                        (isBuilder
+                          ? 'border-9e-action/30 bg-9e-action/10 text-9e-action'
+                          : 'border-gray-200 bg-gray-50 text-gray-600')
+                      }
+                    >
+                      {isBuilder ? 'Builder' : 'Advanced HTML'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3">
                     <p className="line-clamp-1 font-semibold text-9e-navy dark:text-white">
                       {p.title || '(ไม่มีชื่อ)'}
                     </p>
@@ -181,15 +240,8 @@ export function CustomPagesAdminClient({ pages: initial }) {
                     </p>
                   </td>
                   <td className="px-3 py-3">
-                    <span
-                      className={
-                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
-                        (published
-                          ? 'border-green-100 bg-green-50 text-green-700'
-                          : 'border-amber-100 bg-amber-50 text-amber-700')
-                      }
-                    >
-                      {published ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}
+                    <span className={'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' + badge.cls}>
+                      {badge.label}
                     </span>
                   </td>
                   <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
@@ -197,7 +249,8 @@ export function CustomPagesAdminClient({ pages: initial }) {
                   </td>
                   <td className="px-3 py-3 text-right">
                     <div className="inline-flex items-center gap-1.5">
-                      {published && (
+                      {/* Public view — advanced-HTML only; the builder renderer is Phase 2. */}
+                      {published && !isBuilder && (
                         <a
                           href={`/${p.slug}`}
                           target="_blank"
@@ -222,7 +275,7 @@ export function CustomPagesAdminClient({ pages: initial }) {
                         )}
                       </button>
                       <Link
-                        href={`/admin/pages/${p._id}/edit`}
+                        href={editHref(p)}
                         className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                         aria-label="แก้ไข"
                       >
@@ -250,6 +303,13 @@ export function CustomPagesAdminClient({ pages: initial }) {
       </div>
 
       <Pager page={page} totalPages={totalPages} onGo={setPage} />
+
+      {showPicker && (
+        <NewPagePicker
+          canCreateAdvanced={canCreateAdvanced}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
 
       {confirmDelete && (
         <div
@@ -297,6 +357,69 @@ export function CustomPagesAdminClient({ pages: initial }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Two-option "new page" picker. Advanced HTML is legacy raw-HTML and is hidden
+// below developer tier (not merely disabled) — an editor never sees the option.
+function NewPagePicker({ canCreateAdvanced, onClose }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="new-page-title"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-9e-lg bg-white p-6 shadow-9e-lg dark:bg-[#111d2c]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 id="new-page-title" className="text-base font-bold text-9e-navy dark:text-white">
+            สร้างหน้าใหม่
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]"
+            aria-label="ปิด"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-3">
+          <Link
+            href="/admin/pages/builder/new"
+            className="block rounded-9e-md border border-9e-action bg-9e-action/5 p-4 hover:bg-9e-action/10"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-9e-navy dark:text-white">Page Builder</span>
+              <span className="rounded-full bg-9e-action px-2 py-0.5 text-[10px] font-bold text-white">แนะนำ</span>
+            </div>
+            <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              สร้างหน้าแบบ section-based พร้อม preset ตามแบรนด์ (ค่าเริ่มต้น)
+            </p>
+          </Link>
+
+          {canCreateAdvanced && (
+            <Link
+              href="/admin/pages/new"
+              className="block rounded-9e-md border border-[var(--surface-border)] p-4 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-9e-navy dark:text-white">Advanced HTML</span>
+                <span className="rounded-full border border-gray-300 px-2 py-0.5 text-[10px] font-medium text-gray-500">legacy</span>
+              </div>
+              <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                หน้าแบบ raw HTML (สำหรับ developer เท่านั้น)
+              </p>
+            </Link>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -159,6 +159,15 @@ Admin UIs for these live on the upstream MSDB system, not here.
 The boundary is strict. We never try to write to external domains. We never
 try to re-host read-only data in our Mongo.
 
+**Promotions are strictly read-only from MSDB** *(clarified 2026-07-15)*. An
+earlier build let admins create/edit promotions in Genesis and dual-wrote them
+back to MSDB, with a loop-back webhook to avoid echo. That violated the boundary
+above and has been removed: `source`, `msdb_id`, the MSDB write-back, and the
+anti-loop webhook branch are all gone. The flow is now one-directional — a promo
+is created in MSDB, synced down as a catalogue row (title, cover, short text,
+date range), and its detail page is authored here in the Page Builder and linked
+by `promotion_id`. MSDB never learns Genesis exists.
+
 ---
 
 ## 7. Design system anchors
@@ -194,7 +203,21 @@ preview URL. We do not start the next phase until the previous one is green.
 
 ## 9. Non-goals (for this project, intentionally)
 
-- We will **not** build a CMS. Admin panel is purposeful and narrow.
+- We build a **narrow, brand-locked page builder** — not a general-purpose CMS.
+  *(Amended 2026-07-15.)* The original non-goal read "we will **not** build a
+  CMS." That is no longer true, and here is why it stopped being true: the
+  marketing team needs to author promotion and landing pages **without a
+  developer in the loop**, and the one primitive we gave them for it — a raw
+  HTML box on `CustomPage` — proved to be the wrong tool. Raw HTML is unsafe to
+  hand to non-developers, impossible to keep on-brand, and produces pages no one
+  can restyle when the design system moves. So we are replacing it with a
+  section-based **Page Builder**: a fixed catalogue of preset-driven,
+  CI-token-locked section components the team composes on a canvas. The
+  constraint that actually mattered still holds — this is **not** a
+  general-purpose, multi-tenant, plugin-extensible CMS. It is a page builder for
+  **one brand, one site**, with a curated section set and no user-authored code
+  paths (raw HTML/CSS stays gated to the `developer` tier). Legacy `advanced_html`
+  pages remain for the exceptions; new pages default to the builder.
 - We will **not** support multi-tenant. One brand, one site.
 - We will **not** build a certificate generator. That concern moved out.
 - We will **not** handle payments on-site. FlowAccount handles invoicing
@@ -211,4 +234,4 @@ decision no longer holds. Then — and only then — change the code.
 
 ---
 
-*Last ratified: 2026-04-22 (Phase 1.6 — added §4.8 cache principle, restored portfolio to MEDIUM priority)*
+*Last ratified: 2026-07-15 (Page Builder — amended §9 to allow a narrow brand-locked page builder; clarified §6 that promotions are strictly read-only from MSDB, dual-write removed)*

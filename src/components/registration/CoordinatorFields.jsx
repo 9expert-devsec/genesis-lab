@@ -18,9 +18,9 @@ export function CoordinatorFields({ register, errors }) {
       <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
         ข้อมูลผู้ประสานงาน
       </h2>
-      <p className="mb-4 text-xs text-[var(--text-secondary)]">
+      {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
         ผู้ติดต่อที่ 9Expert จะใช้ในการสื่อสารเรื่องการอบรมและใบแจ้งหนี้
-      </p>
+      </p> */}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <FieldGroup label="ชื่อ" error={err.firstName?.message} required>

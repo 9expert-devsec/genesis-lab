@@ -9,6 +9,8 @@
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
+import PageBuilder from '@/models/PageBuilder';
+import { selectVisiblePromotionPages } from '@/lib/pageBuilder/promotionMode';
 
 function serialize(value) {
   if (value == null) return value;
@@ -26,6 +28,26 @@ export async function getActivePromotions() {
     .sort({ display_order: 1, start_date: -1 })
     .lean();
   return serialize(docs);
+}
+
+/**
+ * Genesis builder promotions for the public /promotions grid (promotion mode,
+ * Phase 3). Read-only — NEVER touches the `promotions` collection (§6); the grid
+ * unions this with getActivePromotions() at read time.
+ *
+ * Reads any promotion-type page in a potentially-visible status, then JS-gates
+ * with the shared `isPubliclyVisible` (the date-window part can't be expressed in
+ * the Mongo query alone — same pattern as resolveBuilderPageForRequest) and sorts
+ * by promotionOrder. Returns raw pages; the grid maps them via
+ * builderPromotionToCard.
+ */
+export async function getActiveBuilderPromotions() {
+  await dbConnect();
+  const docs = await PageBuilder.find({
+    pageType: 'promotion',
+    status: { $in: ['published', 'scheduled'] },
+  }).lean();
+  return serialize(selectVisiblePromotionPages(docs));
 }
 
 /**

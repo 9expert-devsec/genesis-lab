@@ -5,6 +5,30 @@ import MasterclassRegistration from '@/models/MasterclassRegistration';
 import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 import { retrieveCharge } from '@/lib/omise';
 
+/** Fire-and-forget forward to legacy webhook endpoint. Never throws. */
+async function forwardToLegacy(rawBody, originalHeaders) {
+  const forwardUrl = process.env.OMISE_WEBHOOK_FORWARD_URL;
+  if (!forwardUrl) return;
+  try {
+    // Forward all x-opn-* headers from Omise so the legacy endpoint
+    // can verify the webhook signature (x-opn-signature).
+    const headersToForward = { 'Content-Type': 'application/json' };
+    for (const [key, value] of originalHeaders.entries()) {
+      if (key.toLowerCase().startsWith('x-opn-')) {
+        headersToForward[key] = value;
+      }
+    }
+    const res = await fetch(forwardUrl, {
+      method: 'POST',
+      headers: headersToForward,
+      body: rawBody,
+    });
+    console.log('[webhook] forwarded to legacy | status:', res.status, '| url:', forwardUrl);
+  } catch (err) {
+    console.error('[webhook] forward to legacy failed:', err?.message);
+  }
+}
+
 export async function POST(req) {
   // URL-token check (Omise has no built-in HMAC; we gate via a secret query param).
   const url = new URL(req.url);
@@ -13,7 +37,11 @@ export async function POST(req) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const event = await req.json().catch(() => null);
+  // Capture raw text once so we can forward the original payload to the legacy webhook.
+  const rawBody = await req.text().catch(() => '');
+  const omiseHeaders = req.headers;
+  let event;
+  try { event = JSON.parse(rawBody); } catch { event = null; }
   if (!event || !event.data) {
     return NextResponse.json({ error: 'bad_payload' }, { status: 400 });
   }
@@ -38,12 +66,14 @@ export async function POST(req) {
     isMasterclass = Boolean(doc);
   }
   if (!doc) {
-    // Unknown charge — ack so Omise stops retrying.
+    // Unknown charge — likely belongs to Academy. Forward and ack.
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, unknown: true });
   }
 
-  // Idempotency — already settled.
+  // Idempotency — already settled. Still forward so Academy receives retried events.
   if (doc.status === 'paid' && doc.payment?.omiseStatus === 'successful') {
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, alreadyPaid: true });
   }
 
@@ -63,6 +93,7 @@ export async function POST(req) {
       const { sendPaidReceipt } = await import('@/lib/registration/send-receipt');
       await sendPaidReceipt(doc);
     }
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, paid: true });
   }
 
@@ -71,6 +102,7 @@ export async function POST(req) {
     doc.payment.failureCode = charge.failure_code || null;
     doc.payment.failureMessage = charge.failure_message || null;
     await doc.save();
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, failed: true });
   }
 
@@ -78,8 +110,12 @@ export async function POST(req) {
     doc.payment.omiseStatus = 'expired';
     doc.status = 'cancelled';
     await doc.save();
+    await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, expired: true });
   }
+
+  // Forward raw event to legacy webhook (never blocks Omise ACK on failure).
+  await forwardToLegacy(rawBody, omiseHeaders);
 
   return NextResponse.json({ ok: true, status: charge.status });
 }

@@ -43,10 +43,23 @@ const ArticleSchema = new mongoose.Schema(
     publishedAt:     { type: Date },
     active:          { type: Boolean, default: true },
 
-    // Pin this article to the top of /articles page (always shows first)
+    // POSITIONING ONLY — despite the name, this no longer means "shows the pin
+    // badge". It means "has a manually chosen position": it sorts the article
+    // into the top block of /articles via the cascade in
+    // src/lib/actions/articles.js. The badge is `showPinBadge` below.
+    // The name now contradicts the behaviour and should be renamed to something
+    // like `hasManualPosition` — deliberately NOT done here, because a rename is
+    // a data migration coupled to a deploy and is its own decision.
     isPinnedOnArticlePage: { type: Boolean, default: false },
-    // Display order when multiple articles are pinned (lower = first)
+    // Display order within the positioned block (lower = first)
     pinOrder:              { type: Number,  default: 0 },
+    // BADGE ONLY — draws the pin glyph on the /articles card. Split out from
+    // isPinnedOnArticlePage so an article can be positioned without being
+    // branded as pinned. Read it through shouldShowPinBadge() in
+    // src/lib/articlePositioning.js, NEVER as a bare truthiness check: existing
+    // documents predate this field and read back `undefined` under `.lean()`,
+    // which must mean ON. The default below applies to NEW documents only.
+    showPinBadge:          { type: Boolean, default: true },
 
     // Show this article in the Landing page BlogSection
     featuredOnLanding:     { type: Boolean, default: false },

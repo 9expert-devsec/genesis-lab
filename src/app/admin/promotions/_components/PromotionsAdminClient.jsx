@@ -3,15 +3,13 @@
 import { useMemo, useState, useTransition } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 import {
   togglePromotionActive,
   updatePromotionOrder,
-  deletePromotion,
+  setPromotionPageLink,
 } from '@/lib/actions/promotions';
-import { PromotionModal } from './PromotionModal';
 
 function formatRange(startISO, endISO) {
   const fmt = (v) => {
@@ -43,12 +41,17 @@ function formatSyncedAt(iso) {
   });
 }
 
-export function PromotionsAdminClient({ promotions: initial, configMap, courses = [], lastSyncedAt }) {
-  const router = useRouter();
+/**
+ * Promotions admin. Promotions themselves are read-only from MSDB — the admin
+ * can only curate (`is_active`, `display_order`), configure SEO (PromotionConfig,
+ * frozen), and LINK a Page Builder detail page. The link writes the builder
+ * page's `promotionId`; the promotion doc is never mutated here.
+ */
+export function PromotionsAdminClient({ promotions: initial, configMap, builderPages = [], lastSyncedAt }) {
   const [busyId, setBusyId] = useState(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState(null);
-  const [editing, setEditing] = useState(null); // null | 'new' | <promotion>
+  const [pages, setPages] = useState(builderPages); // builder promotion-pages + their current link
   const [, startTransition] = useTransition();
 
   const {
@@ -67,10 +70,11 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
     }
   });
 
-  // Map for quick lookup of config.url_slug per row.
-  const slugFor = useMemo(
-    () => (id) => configMap?.[id]?.url_slug ?? null,
-    [configMap]
+  // Quick lookups: config url_slug + the builder page linked to each promo.
+  const slugFor = useMemo(() => (id) => configMap?.[id]?.url_slug ?? null, [configMap]);
+  const linkedPageFor = useMemo(
+    () => (promotionId) => pages.find((bp) => bp.promotionId === promotionId) ?? null,
+    [pages]
   );
 
   async function handleToggle(p) {
@@ -86,17 +90,23 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
     });
   }
 
-  async function handleDelete(p) {
-    if (!window.confirm(`ลบโปรโมชั่น "${p.title || p.promotion_id}" ?`)) return;
+  async function handleLink(p, pageId) {
     setBusyId(p.promotion_id);
     setSyncMsg(null);
     try {
-      const res = await deletePromotion(p._id ?? p.promotion_id);
+      const res = await setPromotionPageLink(p.promotion_id, pageId || '');
       if (res?.ok) {
-        setSyncMsg({ type: 'ok', text: 'ลบสำเร็จ' });
-        router.refresh();
+        // Mirror the one-to-one rule locally: clear this promo from every
+        // page, then set it on the chosen one.
+        setPages((cur) =>
+          cur.map((bp) => {
+            let next = bp.promotionId === p.promotion_id ? { ...bp, promotionId: '' } : bp;
+            if (next._id === pageId) next = { ...next, promotionId: p.promotion_id };
+            return next;
+          })
+        );
       } else {
-        setSyncMsg({ type: 'err', text: res?.error ?? 'ลบไม่สำเร็จ' });
+        setSyncMsg({ type: 'err', text: res?.error ?? 'ลิงก์ไม่สำเร็จ' });
       }
     } finally {
       setBusyId(null);
@@ -112,11 +122,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
       if (!res.ok) {
         setSyncMsg({ type: 'err', text: data?.message ?? 'Sync failed' });
       } else {
-        setSyncMsg({
-          type: 'ok',
-          text: `Sync สำเร็จ: ${data.synced ?? 0} รายการ`,
-        });
-        // Reload — we want fresh data from the sync that just ran.
+        setSyncMsg({ type: 'ok', text: `Sync สำเร็จ: ${data.synced ?? 0} รายการ` });
         setTimeout(() => window.location.reload(), 800);
       }
     } catch (err) {
@@ -132,27 +138,15 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
         <div>
           <h1 className="text-2xl font-bold text-9e-navy dark:text-white">โปรโมชั่น</h1>
           <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            Sync ล่าสุด: {formatSyncedAt(lastSyncedAt)}
+            ข้อมูลโปรโมชั่นดึงจาก MSDB (อ่านอย่างเดียว) · จัดการได้เฉพาะการเปิด/ปิด, ลำดับ และการลิงก์หน้าเพจ · Sync ล่าสุด: {formatSyncedAt(lastSyncedAt)}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {syncMsg && (
-            <span
-              className={
-                'text-xs ' +
-                (syncMsg.type === 'ok' ? 'text-green-600' : 'text-red-600')
-              }
-            >
+            <span className={'text-xs ' + (syncMsg.type === 'ok' ? 'text-green-600' : 'text-red-600')}>
               {syncMsg.text}
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => setEditing('new')}
-            className="rounded-9e-md border border-9e-action px-4 py-2 text-sm font-bold text-9e-action hover:bg-9e-action hover:text-white"
-          >
-            + สร้างโปรโมชั่น
-          </button>
           <button
             type="button"
             onClick={handleSync}
@@ -172,10 +166,10 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
               <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
               <th className="w-[100px] px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ภาพ</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ชื่อ</th>
-              <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Slug</th>
+              <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">หน้าเพจ (Page Builder)</th>
               <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ช่วงเวลา</th>
               <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">Active</th>
-              <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
+              <th className="w-24 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">SEO</th>
             </tr>
           </thead>
           <tbody>
@@ -191,7 +185,9 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
               const isDropTarget =
                 dragOverIndex === i && draggingIndex !== null && draggingIndex !== i;
               const slug = slugFor(p.promotion_id);
-              const editHref = `/admin/promotions/${encodeURIComponent(p.promotion_id)}/config`;
+              const linkedPage = linkedPageFor(p.promotion_id);
+              const configHref = `/admin/promotions/${encodeURIComponent(p.promotion_id)}/config`;
+              const busy = busyId === p.promotion_id;
               return (
                 <tr
                   key={p.promotion_id}
@@ -234,12 +230,27 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
                     </p>
                   </td>
                   <td className="px-3 py-3">
-                    <Link
-                      href={editHref}
-                      className="text-xs text-9e-action hover:underline dark:text-9e-air"
+                    <select
+                      value={linkedPage?._id ?? ''}
+                      onChange={(e) => handleLink(p, e.target.value)}
+                      disabled={busy}
+                      className="w-full max-w-[200px] rounded-9e-md border border-[var(--surface-border)] bg-white px-2 py-1.5 text-xs text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action disabled:opacity-50 dark:bg-[#0D1B2A] dark:text-white"
                     >
-                      {slug || '—'}
-                    </Link>
+                      <option value="">— ไม่ลิงก์ —</option>
+                      {pages.map((bp) => (
+                        <option key={bp._id} value={bp._id}>
+                          {(bp.title || bp.slug || '(ไม่มีชื่อ)') + (bp.status === 'published' ? '' : ` [${bp.status}]`)}
+                        </option>
+                      ))}
+                    </select>
+                    {linkedPage && (
+                      <Link
+                        href={`/admin/pages/builder/${linkedPage._id}/edit`}
+                        className="mt-1 inline-block text-xs text-9e-action hover:underline dark:text-9e-air"
+                      >
+                        แก้ไขหน้าเพจ →
+                      </Link>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {formatRange(p.start_date, p.end_date)}
@@ -248,7 +259,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
                     <button
                       type="button"
                       onClick={() => handleToggle(p)}
-                      disabled={busyId === p.promotion_id}
+                      disabled={busy}
                       aria-label={p.is_active ? 'ปิดการใช้งาน' : 'เปิดการใช้งาน'}
                       className={`relative h-4 w-8 rounded-full transition-colors disabled:opacity-50 ${
                         p.is_active ? 'bg-9e-action' : 'bg-gray-300 dark:bg-[#1e3a5f]'
@@ -262,29 +273,12 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
                     </button>
                   </td>
                   <td className="px-3 py-3 text-right">
-                    <div className="inline-flex flex-wrap justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditing(p)}
-                        className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                      >
-                        แก้ไข
-                      </button>
-                      <Link
-                        href={editHref}
-                        className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-action hover:bg-9e-ice"
-                      >
-                        ตั้งค่า
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(p)}
-                        disabled={busyId === p.promotion_id}
-                        className="rounded bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                      >
-                        ลบ
-                      </button>
-                    </div>
+                    <Link
+                      href={configHref}
+                      className="inline-block rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-action hover:bg-9e-ice"
+                    >
+                      {slug ? 'SEO ✓' : 'ตั้งค่า SEO'}
+                    </Link>
                   </td>
                 </tr>
               );
@@ -292,18 +286,6 @@ export function PromotionsAdminClient({ promotions: initial, configMap, courses 
           </tbody>
         </table>
       </div>
-
-      {editing && (
-        <PromotionModal
-          promotion={editing === 'new' ? null : editing}
-          courses={courses}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            router.refresh();
-          }}
-        />
-      )}
     </div>
   );
 }

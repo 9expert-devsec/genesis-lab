@@ -73,9 +73,9 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
       <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
         ข้อมูลผู้เข้าอบรม
       </h2>
-      <p className="mb-4 text-xs text-[var(--text-secondary)]">
+      {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
         ระบุจำนวนและข้อมูลของผู้เข้าอบรม หากยังไม่ทราบรายชื่อสามารถข้ามได้
-      </p>
+      </p> */}
 
       <div className="grid gap-4 sm:grid-cols-[160px_1fr] sm:items-end">
         <div>
@@ -114,7 +114,7 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
 
       {!listProvided && (
         <p className="mt-4 rounded-9e-md border border-dashed border-[var(--surface-border)] p-3 text-sm text-[var(--text-secondary)]">
-          จะแจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมขายจะติดต่อเพื่อเก็บข้อมูลเพิ่มเติม
+          แจ้งรายชื่อผู้เข้าอบรมภายหลัง — ทีมงานจะติดต่อขอข้อมูลเพิ่มเติมทางอีเมลที่ท่านระบุไว้
         </p>
       )}
 

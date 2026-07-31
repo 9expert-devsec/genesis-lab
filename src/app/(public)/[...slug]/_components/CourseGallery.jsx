@@ -35,7 +35,7 @@ function YouTubeSlide({ videoId, isActive }) {
 
 function ImageSlide({ url, alt, isActive }) {
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-9e-ice">
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-muted)]">
       <Image
         src={url}
         alt={alt || 'รูปภาพหลักสูตร'}

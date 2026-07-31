@@ -32,3 +32,49 @@ export function canAccessPath(user, pathname) {
   if (!key) return false;
   return canAccess(user, key);
 }
+
+// ── Tier predicates (Page Builder) ───────────────────────────────
+//
+// `tier` is ORTHOGONAL to the `pages` permission above: `pages` controls
+// whether a user can open a page (e.g. /admin/pages at all), while `tier`
+// controls what they may DO inside it. Three tiers, escalating:
+//   editor     → author/edit content, no publishing, no raw code.
+//   marketing  → editor + publish/schedule + manage preview links.
+//   developer  → marketing + raw HTML/CSS/JSON-LD overrides.
+//
+// Kept here (not in guard.js) so these stay pure and client-usable — no
+// `auth` import, same as canAccess.
+
+/** The three role tiers, least→most privileged. Shared by model/action/UI. */
+export const ROLE_TIERS = ['editor', 'marketing', 'developer'];
+export const DEFAULT_TIER = 'editor';
+
+/**
+ * Resolve a user's effective tier. Superadmin is always `developer`
+ * regardless of the stored value — the override lives HERE (in the
+ * predicate) rather than in the session, so the session can carry the raw
+ * stored tier and this stays the single source of truth. Unknown/missing
+ * tiers fall back to `editor` (least privilege).
+ */
+export function getTier(user) {
+  if (!user) return DEFAULT_TIER;
+  if (user.isSuperadmin) return 'developer';
+  return ROLE_TIERS.includes(user.tier) ? user.tier : DEFAULT_TIER;
+}
+
+/** Developer only — may write raw HTML/CSS/JSON-LD overrides. */
+export function canUseAdvanced(user) {
+  return getTier(user) === 'developer';
+}
+
+/** Marketing or developer — may publish / schedule a page. */
+export function canPublish(user) {
+  const tier = getTier(user);
+  return tier === 'marketing' || tier === 'developer';
+}
+
+/** Marketing or developer — may enable/manage preview links. */
+export function canManagePreview(user) {
+  const tier = getTier(user);
+  return tier === 'marketing' || tier === 'developer';
+}

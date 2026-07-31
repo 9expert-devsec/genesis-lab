@@ -15,16 +15,9 @@ import { customPageSchema } from '@/lib/schemas/customPage';
 import { requireAdmin } from '@/lib/actions/auth';
 import { auth } from '@/lib/auth/options';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { checkSlugAvailable } from '@/lib/pages/slugGuard';
 
 const ADMIN_PATH = '/admin/pages';
-
-// Block these at create/update so admins can't shadow a real route.
-const RESERVED_SLUGS = [
-  'masterclass', 'career-path', 'career-path-register', 'career-path-project',
-  'admin', 'api', 'articles', 'promotions', 'about-us', 'contact-us', 'portfolio',
-  'join-us', 'training-course', 'schedule', 'faq', 'social', 'p', 'lp',
-  'sitemap.xml', 'robots.txt', '_next', 'favicon.ico',
-];
 
 function serialize(value) {
   if (value == null) return value;
@@ -203,9 +196,10 @@ export async function createCustomPage(formData) {
     return { ok: false, error: firstZodMessage(parsed.error) };
   }
 
-  if (RESERVED_SLUGS.includes(parsed.data.slug)) {
-    return { ok: false, error: 'slug นี้เป็นเส้นทางระบบ ใช้ไม่ได้' };
-  }
+  // Reserved slugs + cross-collection uniqueness (a custom page and a
+  // builder page must never share a slug — see lib/pages/slugGuard.js).
+  const slugCheck = await checkSlugAvailable(parsed.data.slug);
+  if (!slugCheck.ok) return slugCheck;
 
   const stamp = await currentUserStamp();
 
@@ -240,9 +234,8 @@ export async function updateCustomPage(id, formData) {
     return { ok: false, error: firstZodMessage(parsed.error) };
   }
 
-  if (RESERVED_SLUGS.includes(parsed.data.slug)) {
-    return { ok: false, error: 'slug นี้เป็นเส้นทางระบบ ใช้ไม่ได้' };
-  }
+  const slugCheck = await checkSlugAvailable(parsed.data.slug, { excludeCustomId: id });
+  if (!slugCheck.ok) return slugCheck;
 
   const update = { ...parsed.data };
 

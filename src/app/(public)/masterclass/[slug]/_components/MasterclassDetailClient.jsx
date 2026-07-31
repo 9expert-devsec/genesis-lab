@@ -11,13 +11,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Plus,
   Wrench,
   X,
 } from "lucide-react";
 import { CountdownTimer } from "../../_components/CountdownTimer";
 import { OutlineDownloadButton } from "./OutlineDownloadButton";
 import { LandingConversion } from "./LandingConversion";
+import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -38,42 +38,8 @@ function formatBatchDate(dateStr) {
     day: "numeric", // "20"
     month: "short", // "Jun"
     year: "numeric", // "2026"
-  });
-}
-
-// ── Shared FAQ accordion (same as listing page) ───────────────────────────────
-function FaqAccordionItem({ faq }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div
-      className={`border rounded-2xl dark:border-gray-700 ${open ? "border-9e-action-scale-600 shadow-lg shadow-9e-action-scale-600/20" : "border-gray-200"}`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between gap-2 p-4 text-left text-base md:text-[17px] font-bold text-9e-navy dark:text-white"
-      >
-        <span>{faq.question_th}</span>
-        <div
-          className="p-2
-         rounded-full bg-9e-signature-900"
-        >
-          <Plus
-            size={16}
-            className={`shrink-0 transition-transform duration-200 text-9e-action ${open ? "rotate-45" : ""}`}
-          />
-        </div>
-      </button>
-      <div
-        className={`overflow-hidden transition-all duration-300 ${open ? "max-h-96" : "max-h-0"}`}
-      >
-        <div
-          className="prose prose-base dark:prose-invert px-4 pb-4 text-gray-600 dark:text-gray-300"
-          dangerouslySetInnerHTML={{ __html: faq.answer_html }}
-        />
-      </div>
-    </div>
-  );
+  })
+  .replace("Sept", "Sep") // fix "Sept" to "Sep";
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -112,6 +78,15 @@ export function MasterclassDetailClient({
 
   const visibleBatches =
     course.batches?.filter((b) => b.status !== "cancelled") ?? [];
+
+  const openBatches = visibleBatches.filter((b) => b.status === "open");
+  const earliestOpenBatch =
+    openBatches.length > 0
+      ? [...openBatches].sort(
+          (a, b) =>
+            new Date(a.dates?.[0]?.date ?? 0) - new Date(b.dates?.[0]?.date ?? 0)
+        )[0]
+      : null;
 
   // [A] Hero cover slider — ordered slide list (same rule as the course detail page):
   //   1. YouTube items (by order)
@@ -221,17 +196,22 @@ export function MasterclassDetailClient({
                     ))}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    document
-                      .getElementById("batch-section")
-                      ?.scrollIntoView({ behavior: "smooth" })
-                  }
-                  className="mt-2 rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
-                >
-                  ลงทะเบียน
-                </button>
+                {earliestOpenBatch ? (
+                  <Link
+                    href={`/masterclass/${course.slug}/register?batch=${earliestOpenBatch._id}`}
+                    className="mt-2 inline-block rounded-full bg-9e-action px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-9e-brand"
+                  >
+                    ลงทะเบียน
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="mt-2 cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 text-sm font-semibold text-gray-400 dark:bg-gray-700"
+                  >
+                    เร็วๆ นี้
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -343,7 +323,7 @@ export function MasterclassDetailClient({
                           : "text-9e-navy dark:text-white"
                       }`}
                     >
-                      {batch.batch_label || `รุ่นที่ ${batch.batch_no}`}
+                      {batch.batch_label || `รุ่นที่ ${batch.batch_no}`} 
                     </p>
                     {batch.dates?.[0]?.date && (
                       <p
@@ -356,6 +336,9 @@ export function MasterclassDetailClient({
                         {formatBatchDate(batch.dates[0].date)}
                       </p>
                     )}
+                    <p className={`text-sm font-bold md:text-[18px] ${batch.is_early_bird ? "text-9e-air" : "text-9e-slate-dp-50 dark:text-white"}`}>
+                      [Weekend Only]
+                    </p>
                     <p
                       className={`text-sm md:text-[18px] ${
                         batch.is_early_bird
@@ -552,7 +535,7 @@ export function MasterclassDetailClient({
             หลักสูตรนี้เหมาะสำหรับ
           </h2>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="flex flex-wrap justify-center gap-3">
             {course.suitable_for.map((item, i) => {
               const label = typeof item === "string" ? item : item.label;
               const image_url = typeof item === "string" ? "" : item.image_url;
@@ -560,7 +543,7 @@ export function MasterclassDetailClient({
               return (
                 <div
                   key={i}
-                  className="group relative flex aspect-[4/3] overflow-hidden rounded-xl bg-9e-navy"
+                  className="group relative flex aspect-[4/3] grow-0 shrink-0 basis-[calc((100%_-_0.75rem)/2)] sm:basis-[calc((100%_-_1.5rem)/3)] lg:basis-[calc((100%_-_2.25rem)/4)] overflow-hidden rounded-xl bg-9e-navy"
                 >
                   {image_url && (
                     <Image
@@ -824,18 +807,7 @@ export function MasterclassDetailClient({
       )}
 
       {/* [L] FAQ */}
-      {faqs.length > 0 && (
-        <section id="mc-faq" className="max-w-3xl mx-auto px-4 py-10 md:py-16">
-          <h2 className="mb-8 text-center text-xl md:text-2xl font-bold text-9e-navy dark:text-white">
-            คำถามที่พบบ่อย
-          </h2>
-          <div className="flex flex-col gap-4">
-            {faqs.map((f) => (
-              <FaqAccordionItem key={f._id} faq={f} />
-            ))}
-          </div>
-        </section>
-      )}
+      <FaqAccordionSection faqs={faqs} id="mc-faq" />
 
       {/* Sticky bottom CTA bar */}
       {visibleBatches.length > 0 && !barDismissed && (

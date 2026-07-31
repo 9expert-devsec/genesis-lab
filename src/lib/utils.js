@@ -1,5 +1,6 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { toKebab } from '@/lib/slug';
 
 /**
  * Merge Tailwind class names, resolving conflicts (later wins).
@@ -61,6 +62,81 @@ export function courseHref(slug) {
 }
 
 /**
+ * Build the public URL for a program.
+ *
+ * An admin-set custom `urlSlug` (from ProgramPageConfig, passed in as
+ * `slugMap` keyed by the lower-cased id) renders at the bare slug — no
+ * /program prefix. Programs without one fall back to the legacy
+ * /program/<kebab-of-name> path, which resolvePageSlug still resolves.
+ *
+ * Consolidated from three near-identical copies (public header mega-menu,
+ * home ProgramSelector, and a third route since removed). Verified against
+ * live data at consolidation time: all 27 programs produced byte-identical
+ * URLs at all three copies; two call sites remain.
+ *
+ * @param {object} program  needs `program_id` / `_id` / `program_name`
+ * @param {Record<string,string>} slugMap  lower-cased id → urlSlug
+ */
+export function programHref(program, slugMap = {}) {
+  if (!program) return '/training-course';
+  for (const id of [program.program_id, program._id]) {
+    if (!id) continue;
+    const custom = slugMap[String(id).toLowerCase()];
+    if (custom) return `/${custom}`;
+  }
+  return `/program/${toKebab(program.program_name)}`;
+}
+
+/**
+ * Build the public URL for a skill. Same contract as programHref.
+ *
+ * THE ID IS NOT ONE FIELD, AND THE MAP IS KEYED BY THE CODE.
+ * `SkillPageConfig.skillId` holds the upstream skill CODE ("AI",
+ * "POWERPLATFORM", "DEV") — the admin page-config editor writes
+ * `String(skill.skill_id ?? skill._id)`, and every live skill has a
+ * `skill_id`, so in practice the key is always the code. Verified against
+ * the live collection: 0 of 6 skill keys and 0 of 27 program keys are
+ * ObjectId-shaped.
+ *
+ * Callers hand us three different shapes, and none of them carries every
+ * id, which is why all four are tried:
+ *   - config/site.js entries: `upstreamId` (ObjectId), `upstreamCode`, `slug`
+ *   - /skills API items:      `_id`, `skill_id`, `skill_name`
+ *   - course.skills subdocs:  `_id`, `skill_id`, `skill_name`
+ *
+ * PRECEDENCE is first-match-wins in the order below, and it is unambiguous
+ * because the two key spaces are disjoint: a 24-hex ObjectId can never
+ * equal a short upstream code. For `upstreamId` and `upstreamCode` to
+ * select DIFFERENT configs you would need two config rows for one skill —
+ * one keyed by its ObjectId, one by its code — and the editor writes
+ * exactly one id per skill, preferring the code. Measured today: 0 such
+ * collisions.
+ *
+ * `upstreamCode` is in the list because without it every caller passing a
+ * config/site.js entry — the header mega-menu among them — emitted
+ * `/skill/<slug>`, which 308-redirects at best and 404s at worst
+ * (`/skill/programming` resolved to nothing at all).
+ *
+ * The fallback prefers an explicit `slug` — config/site.js entries have
+ * one and it does NOT always equal the kebab-cased name ("Development"
+ * is configured as "programming") — before deriving one from the name.
+ *
+ * @param {object} skill  any of `upstreamId` / `_id` / `skill_id` /
+ *                        `upstreamCode`, plus `slug` or `skill_name` /
+ *                        `label` for the fallback
+ * @param {Record<string,string>} slugMap  lower-cased id → urlSlug
+ */
+export function skillHref(skill, slugMap = {}) {
+  if (!skill) return '/training-course';
+  for (const id of [skill.upstreamId, skill._id, skill.skill_id, skill.upstreamCode]) {
+    if (!id) continue;
+    const custom = slugMap[String(id).toLowerCase()];
+    if (custom) return `/${custom}`;
+  }
+  return `/skill/${skill.slug || toKebab(skill.skill_name ?? skill.label)}`;
+}
+
+/**
  * Build a career path URL. Legacy pattern: /<slug>-career-path.
  *
  * Upstream's `slug` field already contains the '-career-path' suffix
@@ -106,4 +182,28 @@ export function formatDuration(input) {
   const days = Number(input);
   if (!days || days < 1) return '';
   return `${days} วัน (${days * 6} ชม.)`;
+}
+
+/** Lower-cased ids a program/skill could be keyed by in a linkability map. */
+function candidateIds(entity) {
+  return [
+    entity?.upstreamId, entity?.program_id, entity?.skill_id,
+    entity?.upstreamCode, entity?._id,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).toLowerCase());
+}
+
+/**
+ * Href for a chip, or null when it must stay a plain <span>.
+ *
+ * `kind` selects which half of the linkability result to consult; `hrefFor`
+ * is the shared programHref/skillHref so the URL shape stays in one place.
+ */
+export function chipHref(entity, kind, linkability, hrefFor) {
+  if (!entity) return null;
+  const blocked = kind === 'program' ? linkability.programBlocked : linkability.skillBlocked;
+  if (candidateIds(entity).some((id) => blocked.has(id))) return null;
+  const slugMap = kind === 'program' ? linkability.programSlugs : linkability.skillSlugs;
+  return hrefFor(entity, slugMap) ?? null;
 }

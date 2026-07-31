@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import Admin from '@/models/Admin';
 import Role from '@/models/Role';
 import { adminLoginSchema } from '@/lib/schemas/admin';
+import { DEFAULT_TIER } from '@/lib/rbac/access';
 import { verifyTotp } from '@/lib/totp';
 import { authConfig } from './config';
 
@@ -108,6 +109,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roleColor: role?.color ?? null,  // free hex from the Role doc
           isSuperadmin,
           pages,                           // array, or null = all (superadmin)
+          // Raw stored tier — the superadmin→developer override is applied
+          // downstream in getTier() (access.js), not here, so the session
+          // carries exactly what the Role doc holds.
+          tier: role?.tier ?? DEFAULT_TIER,
         };
       },
     }),

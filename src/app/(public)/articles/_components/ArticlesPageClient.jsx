@@ -4,12 +4,16 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ArrowRight, Pin, Search } from 'lucide-react';
+import { shouldShowPinBadge } from '@/lib/articlePositioning';
+import { formatSiteDateTime } from '@/lib/articlePublishTime';
 
+// Pinned to the site timezone rather than the viewer's. A bare
+// toLocaleDateString in a server-rendered client component formats in the
+// server's zone (UTC on Vercel) on the first paint and the visitor's zone after
+// hydration, so an article published at 18:00 Bangkok showed tomorrow's date
+// until React swapped it out.
 function formatDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('th-TH', {
+  return formatSiteDateTime(iso, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -225,7 +229,13 @@ function ArticleCard({ article }) {
         >
           {isVideo ? 'บทความวิดีโอ' : 'บทความ'}
         </span>
-        {article.isPinnedOnArticlePage && (
+        {/* Badge only — NOT the ordering. `isPinnedOnArticlePage` still decides
+            where this card sits in the list (the cascade in
+            src/lib/actions/articles.js is unchanged); shouldShowPinBadge decides
+            whether it wears the glyph. The helper treats an ABSENT
+            `showPinBadge` as ON, which is why this is not an inline field check
+            — see the note on the helper. */}
+        {shouldShowPinBadge(article) && (
           <span className="absolute right-3 top-3 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 shadow-sm dark:bg-[#0D1B2A]/90">
             <Pin className="h-3.5 w-3.5 text-9e-action" strokeWidth={2.5} />
           </span>

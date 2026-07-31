@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EarlyBirdRibbon } from '@/components/ui/EarlyBirdRibbon';
+import { NEUTRAL_STATUS, resolveScheduleBadge } from '@/lib/scheduleStatus';
 
 /**
  * Horizontal scrollable list of schedule cards.
@@ -98,18 +99,6 @@ const MONTHS_EN = [
   'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
 ];
 
-const STATUS_LABEL = {
-  open: 'ยืนยัน',
-  nearly_full: 'ใกล้เต็ม',
-  closed: 'เต็ม',
-};
-
-const STATUS_CLASS = {
-  open: 'bg-9e-brand/10 text-9e-action',
-  nearly_full: 'bg-amber-100 text-amber-700',
-  closed: 'bg-slate-100 text-slate-500',
-};
-
 const TYPE_LABEL = {
   hybrid:    'Hybrid',
   online:    'Online',
@@ -139,8 +128,11 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
   }
 
   const isClosed = schedule.status === 'closed';
-  const statusLabel = STATUS_LABEL[schedule.status] ?? schedule.status;
-  const statusClass = STATUS_CLASS[schedule.status] ?? 'bg-slate-100 text-slate-600';
+  // Unrecognised statuses keep the previous neutral-grey treatment and echo the
+  // raw value rather than being advertised as green "เปิดรับ".
+  const statusStyle = resolveScheduleBadge(schedule.status);
+  const statusLabel = statusStyle?.label ?? schedule.status;
+  const statusClass = statusStyle?.soft ?? NEUTRAL_STATUS.soft;
 
   return (
     <button

@@ -24,8 +24,7 @@ import {
 import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
-import { cn, courseHref } from '@/lib/utils';
-import { toKebab } from '@/lib/slug';
+import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
 import {
   getCoursesByProgram,
   getCoursesBySkill,
@@ -95,7 +94,7 @@ export function PublicHeaderClient({
 
   return (
     <>
-    <header className="sticky top-0 left-0 right-0 z-50 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
+    <header className="sticky top-0 left-0 right-0 z-60 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
       <div className="mx-auto flex h-20 max-w-[1200px] items-center gap-4 max-md:px-4">
         {/* ── Logo ─────────────────────────────────────────────── */}
         <div className="flex-none">
@@ -163,10 +162,10 @@ export function PublicHeaderClient({
     {/* ── Mobile drawer ──────────────────────────────────────────
         Rendered through a portal into <body> so the fixed-positioned
         backdrop and panel escape any stacking context created by the
-        sticky header (z:50) or by transformed/will-changed page
+        sticky header (z:60) or by transformed/will-changed page
         sections (carousels, etc.). The drawer's own z-[9999] then
         only competes with body-level siblings, not with nested
-        contexts that would otherwise cap us at z:50. */}
+        contexts that would otherwise cap us at z:60. */}
     {mounted &&
       createPortal(
         <MobileDrawer
@@ -237,7 +236,7 @@ function DesktopDropdown({ item }) {
 
       <div
         className={cn(
-          'absolute left-0 top-full z-50 pt-2',
+          'absolute left-0 top-full z-60 pt-2',
           'transition-opacity duration-9e-micro ease-9e',
           isOpen
             ? 'pointer-events-auto opacity-100'
@@ -278,33 +277,6 @@ function DesktopDropdown({ item }) {
       </div>
     </div>
   );
-}
-
-/**
- * Build the public URL for a program mega-menu entry. An admin-set custom
- * `urlSlug` (from ProgramPageConfig, passed in as `slugMap` keyed by
- * lower-cased program_id/_id) now renders at the bare slug — no /program
- * prefix. Programs without a custom slug fall back to the legacy
- * /program/<kebab> path. `slugMap` defaults to {} for backward-compat.
- */
-function programHref(program, slugMap = {}) {
-  for (const id of [program.program_id, program._id]) {
-    if (!id) continue;
-    const custom = slugMap[String(id).toLowerCase()];
-    if (custom) return `/${custom}`;
-  }
-  return `/program/${toKebab(program.program_name)}`;
-}
-
-/**
- * Build the public URL for a skill mega-menu entry. An admin-set custom
- * `urlSlug` (keyed by the skill's lower-cased upstreamId) renders at the
- * bare slug — no /skill prefix. Skills without one fall back to the
- * legacy /skill/<slug> path from the static config.
- */
-function skillHref(skill, slugMap = {}) {
-  const custom = slugMap[skill.upstreamId?.toLowerCase?.()];
-  return custom ? `/${custom}` : `/skill/${skill.slug}`;
 }
 
 function ProgramIcon({ src, size, alt }) {
@@ -618,7 +590,7 @@ function DesktopMega({
 
       <div
         className={cn(
-          'absolute left-0 right-0 top-full z-50',
+          'absolute left-0 right-0 top-full z-60',
           'transition-opacity duration-9e-micro ease-9e',
           isOpen
             ? 'pointer-events-auto opacity-100'

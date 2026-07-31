@@ -42,7 +42,7 @@ export function CourseOutline({ course }) {
         <button
           type="button"
           onClick={toggleAll}
-          className="text-xs font-medium text-9e-action hover:underline"
+          className="text-sm font-medium text-9e-action hover:underline"
         >
           {allOpen ? 'ซ่อนทั้งหมด' : 'แสดงทั้งหมด'}
         </button>
@@ -58,25 +58,25 @@ export function CourseOutline({ course }) {
           return (
             <div
               key={i}
-              className="overflow-hidden rounded-xl border border-gray-200"
+              className="overflow-hidden rounded-xl border border-[var(--surface-border)]"
             >
               <button
                 type="button"
                 onClick={() => toggle(i)}
                 aria-expanded={open}
-                className="flex w-full items-center justify-between gap-3 bg-white px-5 py-3 text-left transition-colors duration-9e-micro ease-9e hover:bg-9e-ice"
+                className="flex w-full items-center justify-between gap-3 bg-[var(--surface-raised)] px-5 py-3 text-left transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-hover)]"
               >
-                <span className="text-sm font-semibold text-9e-navy">
+                <span className="text-base font-semibold text-[var(--text-primary)]">
                   {i + 1}. {title}
                 </span>
                 {open ? (
                   <ChevronUp
-                    className="h-4 w-4 shrink-0 text-9e-slate-dp-50"
+                    className="h-4 w-4 shrink-0 text-[var(--text-secondary)]"
                     strokeWidth={2}
                   />
                 ) : (
                   <ChevronDown
-                    className="h-4 w-4 shrink-0 text-9e-slate-dp-50"
+                    className="h-4 w-4 shrink-0 text-[var(--text-secondary)]"
                     strokeWidth={2}
                   />
                 )}
@@ -89,13 +89,13 @@ export function CourseOutline({ course }) {
                 )}
               >
                 {bullets.length > 0 && (
-                  <ul className="space-y-1.5 border-t border-gray-100 bg-9e-ice/40 px-5 py-3">
+                  <ul className="space-y-1.5 border-t border-[var(--surface-divider)] bg-[color-mix(in_srgb,var(--surface-muted)_40%,transparent)] px-5 py-3">
                     {bullets.map((bullet, j) => (
                       <li
                         key={j}
-                        className="flex items-start gap-2 text-sm text-9e-slate-dp-50"
+                        className="flex items-start gap-2 text-base text-[var(--text-secondary)]"
                       >
-                        <span className="mt-1 shrink-0 text-9e-air">•</span>
+                        <span className="mt-0.25 shrink-0 text-9e-air">•</span>
                         <span>{bullet}</span>
                       </li>
                     ))}

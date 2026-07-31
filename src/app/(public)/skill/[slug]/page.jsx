@@ -5,9 +5,19 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { resolveSkillBySlug } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
+import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { SkillPageClient } from './_components/SkillPageClient';
 
 export const revalidate = 3600;
+
+/**
+ * Stable FAQ ref for a skill — prefer the upstream business code (`skill_id`),
+ * fall back to `_id`. Matches the precedence used across the admin order
+ * clients and resolvePageSlug so FAQs key on a durable code.
+ */
+function skillRefId(skill) {
+  return String(skill?.skill_id ?? skill?._id ?? '');
+}
 
 function courseInSkill(course, skillId) {
   const arr = Array.isArray(course?.skills) ? course.skills : [];
@@ -38,9 +48,10 @@ export default async function SkillPage({ params }) {
   // No custom slug — render inline under /skill/<slug>.
   const { skill } = resolved;
   const skillId = String(skill._id);
-  const [programsRes, coursesRes] = await Promise.all([
+  const [programsRes, coursesRes, faqs] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
+    getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
   ]);
 
   const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
@@ -63,6 +74,7 @@ export default async function SkillPage({ params }) {
       skill={skill}
       coursesByProgram={coursesByProgram}
       totalCourses={skillCourses.length}
+      faqs={faqs}
     />
   );
 }

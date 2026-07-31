@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import MasterclassCourse   from '@/models/MasterclassCourse';
 import MasterclassBatch    from '@/models/MasterclassBatch';
-import LocalFaq            from '@/models/LocalFaq';
 import { requireAdmin }    from '@/lib/actions/auth';
 
 function serialize(v) {
@@ -109,31 +108,4 @@ export async function deleteMasterclassBatch(batchId) {
   return { ok: true };
 }
 
-// ── LocalFaq ──────────────────────────────────────────────────────────────────
-
-export async function createLocalFaq(data) {
-  await requireAdmin('local_faqs');
-  await dbConnect();
-  const doc = await LocalFaq.create(data);
-  revalidatePath('/admin/local-faqs');
-  revalidatePath(PUBLIC_LISTING);
-  revalidatePath('/masterclass/[slug]', 'page');
-  return { ok: true, id: String(doc._id) };
-}
-
-export async function updateLocalFaq(id, data) {
-  await requireAdmin('local_faqs');
-  await dbConnect();
-  await LocalFaq.findByIdAndUpdate(id, { $set: data });
-  revalidatePath('/admin/local-faqs');
-  revalidatePath(PUBLIC_LISTING);
-  return { ok: true };
-}
-
-export async function deleteLocalFaq(id) {
-  await requireAdmin('local_faqs');
-  await dbConnect();
-  await LocalFaq.findByIdAndDelete(id);
-  revalidatePath('/admin/local-faqs');
-  return { ok: true };
-}
+// LocalFaq actions moved to src/lib/actions/local-faqs.js (per-course scoping).

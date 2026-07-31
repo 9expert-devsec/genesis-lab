@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { BookOpen, ExternalLink, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, ExternalLink, HelpCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 import {
@@ -284,6 +284,13 @@ export function CareerPathsAdminClient({ careerPaths: initial, lastSyncedAt }) {
                         aria-label="จัดการคอร์ส"
                       >
                         <BookOpen className="h-3 w-3" /> จัดการคอร์ส
+                      </Link>
+                      <Link
+                        href={`/admin/career-paths/${p.career_path_id}/faqs`}
+                        className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                        aria-label="จัดการ FAQ"
+                      >
+                        <HelpCircle className="h-3 w-3" /> FAQ
                       </Link>
                       <Link
                         href={`/admin/career-paths/${p.career_path_id}/edit`}

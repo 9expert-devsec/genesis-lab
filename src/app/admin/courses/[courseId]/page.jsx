@@ -18,6 +18,7 @@ import {
   getEarlyBirdAdminByCourse,
 } from '@/lib/actions/course-promos';
 import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
+import { getAllLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { ExtensionEditor } from './_components/ExtensionEditor';
 
 export const runtime = 'nodejs';
@@ -40,13 +41,14 @@ export default async function AdminCourseExtensionPage({ params }) {
   // Don't 404 if the upstream call fails — let the editor still work
   // so admins can fix data even when the API is down. We just won't
   // show the friendly course name.
-  const [courseResult, extension, promoLinks, earlyBirdAdmin, activePromos] =
+  const [courseResult, extension, promoLinks, earlyBirdAdmin, activePromos, faqs] =
     await Promise.allSettled([
       getCourseByCode(courseId),
       getCourseExtension(courseId),
       getAllCoursePromoLinks(courseId),
       getEarlyBirdAdminByCourse(courseId),
       getActivePromotionsForAdmin(),
+      getAllLocalFaqsForCourse('public', courseId),
     ]).then((results) =>
       results.map((r) => (r.status === 'fulfilled' ? r.value : null))
     );
@@ -83,6 +85,7 @@ export default async function AdminCourseExtensionPage({ params }) {
         initialPromoLinks={promoLinks ?? []}
         initialEarlyBird={earlyBirdAdmin ?? null}
         initialPromos={activePromos ?? []}
+        initialFaqs={faqs ?? []}
       />
     </div>
   );

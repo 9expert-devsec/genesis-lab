@@ -1,6 +1,6 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { getAllPromotions, getAllConfigs } from '@/lib/promotions/getPromotions';
-import { listPublicCourses } from '@/lib/api/public-courses';
+import { getLinkablePromotionPages } from '@/lib/actions/promotions';
 import { PromotionsAdminClient } from './_components/PromotionsAdminClient';
 
 export const metadata = { title: 'จัดการโปรโมชั่น' };
@@ -9,12 +9,11 @@ export const dynamic = 'force-dynamic';
 export default async function PromotionsAdminPage() {
   await requirePage('promotions');
 
-  const [promotions, configMap, coursesRes] = await Promise.all([
+  const [promotions, configMap, builderPages] = await Promise.all([
     getAllPromotions(),
     getAllConfigs(),
-    listPublicCourses().catch(() => ({ items: [] })),
+    getLinkablePromotionPages(),
   ]);
-  const courses = coursesRes?.items ?? [];
 
   // Latest synced_at across all rows — admin-visible "last sync" indicator.
   const lastSyncedAt = promotions.reduce((acc, p) => {
@@ -27,7 +26,7 @@ export default async function PromotionsAdminPage() {
     <PromotionsAdminClient
       promotions={promotions}
       configMap={configMap}
-      courses={courses}
+      builderPages={builderPages}
       lastSyncedAt={lastSyncedAt > 0 ? new Date(lastSyncedAt).toISOString() : null}
     />
   );

@@ -42,6 +42,7 @@ export const authConfig = {
         token.roleColor    = user.roleColor;
         token.isSuperadmin = user.isSuperadmin;
         token.pages        = user.pages;   // array | null
+        token.tier         = user.tier;    // 'editor' | 'marketing' | 'developer'
       }
       return token;
     },
@@ -54,6 +55,7 @@ export const authConfig = {
         session.user.roleColor    = token.roleColor;
         session.user.isSuperadmin = token.isSuperadmin;
         session.user.pages        = token.pages; // array | null
+        session.user.tier         = token.tier;  // 'editor' | 'marketing' | 'developer'
       }
       return session;
     },

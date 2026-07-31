@@ -11,6 +11,7 @@ import {
   HelpCircle, Plus, Minus,
 } from 'lucide-react';
 import { inhouseRegistrationSchema, inhouseRegistrationDefaults } from '@/lib/schemas/register-inhouse';
+import { resolveInitialCourseId, buildInhouseInitialValues } from '@/lib/registration/resolveInitialCourse';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,9 @@ import { cn } from '@/lib/utils';
 const STORAGE_KEY  = 'registration-inhouse-v1';
 const FORMDATA_KEY = 'registration-inhouse-formdata-v1';
 const RESULT_KEY   = 'registration-inhouse-result-v1';
+// The resolved course id the current draft was started from — lets a fresh
+// ?course= override a stale draft without clobbering an in-session change.
+const SOURCE_COURSE_KEY = 'registration-inhouse-source-course-v1';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -204,6 +208,7 @@ export function InhouseWizard({
       // step-3 route can render it.
       try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
       try { sessionStorage.removeItem(FORMDATA_KEY); } catch {}
+      try { sessionStorage.removeItem(SOURCE_COURSE_KEY); } catch {}
       try {
         sessionStorage.setItem(RESULT_KEY, JSON.stringify({ result: body, formData }));
       } catch {}
@@ -313,13 +318,34 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
     return acc;
   }, {});
 
-  // Resolve the initial course id: a restored selection wins, otherwise the
-  // ?course= preselect (case-insensitive).
-  const restoredCourseId = initialValues?.coursesInterested?.[0];
+  // Resolve the initial course id. An explicit, resolvable ?course= wins over a
+  // STALE draft (a leftover from a different course) but must not clobber an
+  // in-progress choice while moving between wizard steps for the SAME course.
+  // The "source course" marker distinguishes the two — see resolveInitialCourseId.
+  const restoredCourseId = initialValues?.coursesInterested?.[0] ?? '';
   const preselectedId = preselectedCourse
-    ? (courses.find((c) => c.id.toUpperCase() === preselectedCourse.toUpperCase())?.id ?? '')
-    : '';
-  const initialCourseId = restoredCourseId || preselectedId || '';
+    ? (courses.find((c) => c.id.toUpperCase() === preselectedCourse.toUpperCase())?.id ?? null)
+    : null;
+
+  const [initialCourseId] = useState(() => {
+    let sourceCourse = null;
+    try { sourceCourse = sessionStorage.getItem(SOURCE_COURSE_KEY); } catch {}
+    return resolveInitialCourseId({ preselectedId, restoredCourseId, sourceCourse });
+  });
+
+  // Mark this draft as belonging to the URL's course, so a later remount (moving
+  // between steps) recognises the session and won't re-override the user's
+  // selection. Writes only on a genuine change (a fresh arrival at a new course).
+  useEffect(() => {
+    if (!preselectedId) return;
+    try {
+      if (sessionStorage.getItem(SOURCE_COURSE_KEY) !== preselectedId) {
+        sessionStorage.setItem(SOURCE_COURSE_KEY, preselectedId);
+      }
+    } catch {
+      // storage disabled — the fallback (draft wins) is still safe
+    }
+  }, [preselectedId]);
 
   const {
     register, handleSubmit, watch, setValue,
@@ -328,11 +354,11 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
     resolver: zodResolver(inhouseRegistrationSchema),
     mode: 'onChange',
     reValidateMode: 'onChange',
-    defaultValues: {
-      ...inhouseRegistrationDefaults,
-      coursesInterested: initialCourseId ? [initialCourseId] : [],
-      ...(initialValues ?? {}),
-    },
+    defaultValues: buildInhouseInitialValues({
+      defaults: inhouseRegistrationDefaults,
+      restored: initialValues,
+      initialCourseId,
+    }),
   });
 
   const watched = watch();
@@ -410,7 +436,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                 </optgroup>
               ))}
           </select>
-          <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">
+          <p className="mt-1.5 text-[12px] text-[var(--text-muted)]">
             หากต้องการหลักสูตร custom หรือหลายหลักสูตร กรุณาระบุในหมายเหตุด้านล่าง
           </p>
         </FieldGroup>
@@ -471,8 +497,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -506,8 +532,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -564,8 +590,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
                     <Icon className="h-4 w-4" />
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">{desc}</span>
+                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
+                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
                   </span>
                 </button>
               );
@@ -574,8 +600,8 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
         </div>
 
         {isOnsite && (
-          <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 space-y-4">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">รายละเอียดสถานที่จัดอบรม</p>
+          <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 space-y-5">
+            <p className="text-base font-semibold text-[var(--text-primary)]">รายละเอียดสถานที่จัดอบรม</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <FieldGroup label="ที่อยู่สถานที่" required error={errors.onsiteAddress?.message} className="sm:col-span-2">
                 <Input {...register('onsiteAddress')} placeholder="อาคาร / ชั้น / ห้อง / ถนน" aria-invalid={!!errors.onsiteAddress} />
@@ -588,7 +614,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
               </FieldGroup>
             </div>
             <div>
-              <Label className="mb-2 block text-xs">อุปกรณ์ที่มีให้</Label>
+              <Label className="mb-2 block text-sm">อุปกรณ์ที่มีให้</Label>
               <div className="grid gap-2 sm:grid-cols-2">
                 {ONSITE_EQUIPMENT.map((item) => {
                   const active = (watch('onsiteEquipment') ?? []).includes(item);
@@ -650,9 +676,9 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
 
       {/* ── Section 4: Quotation (Corporate only) ── */}
       <FormSection icon={<Building2 className="h-5 w-5" />} title="ข้อมูลสำหรับออกใบเสนอราคา">
-        <p className="text-xs text-[var(--text-muted)]">
+        {/* <p className="text-xs text-[var(--text-muted)]">
           ข้อมูลนี้ใช้สำหรับออกใบเสนอราคา — ไม่บังคับ ทีมขายจะติดต่อขอเพิ่มเติมหากจำเป็น
-        </p>
+        </p> */}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <FieldGroup label="ประเทศ / Country" required>

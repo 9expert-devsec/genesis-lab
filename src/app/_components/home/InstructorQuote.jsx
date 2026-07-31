@@ -56,13 +56,13 @@ export function InstructorQuote() {
         </g>
 
         {/* Dot column right */}
-        <g opacity="0.18">
+        {/* <g opacity="0.18">
           {[70, 84, 98, 112, 126, 140].flatMap((y) =>
             [600, 616].map((x) => (
               <circle key={`rc-${x}-${y}`} cx={x} cy={y} r="1.5" fill="#2486FF" />
             ))
           )}
-        </g>
+        </g> */}
 
         {/* Background traces — dim */}
         <g fill="none" opacity="0.10">
@@ -146,7 +146,7 @@ export function InstructorQuote() {
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate-dp-50">
-              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
+              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI
             </p>
           </div>
         </div>
@@ -170,7 +170,7 @@ export function InstructorQuote() {
               ผู้อำนวยการฝ่ายฝึกอบรม
             </p>
             <p className="text-sm text-9e-slate-dp-50">
-              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP Power BI
+              บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI
             </p>
           </div>
         </div>
