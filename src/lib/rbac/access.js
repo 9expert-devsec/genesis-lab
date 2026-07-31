@@ -11,7 +11,7 @@
  * (see options.js authorize()).
  */
 
-import { resolvePageKey } from '@/lib/rbac/pages';
+import { resolvePageKey, ALL_PAGE_KEYS } from '@/lib/rbac/pages';
 
 /**
  * Pure predicate: may `user` access the page identified by `pageKey`?
@@ -21,6 +21,43 @@ export function canAccess(user, pageKey) {
   if (!user) return false;
   if (user.isSuperadmin || user.pages == null) return true;
   return Array.isArray(user.pages) && user.pages.includes(pageKey);
+}
+
+/**
+ * The menu keys a user may READ audit rows for — the server-side clamp.
+ *
+ * Returns `null` for superadmin (and for the `pages == null` sentinel), meaning
+ * NO CLAMP: the caller must omit the `menu` filter entirely rather than build
+ * one from this. Anything else returns an array, possibly empty.
+ *
+ * ── WHY THE NARROWING TO ALL_PAGE_KEYS IS THE POINT ─────────────────────────
+ * It is not tidying. `user.pages` is whatever was stored on the role, and two
+ * kinds of value must never reach a query:
+ *
+ *   · a STALE key — a page that was renamed or removed since the role was
+ *     saved. Harmless in a `$in`, but it makes the clamp lie about what it
+ *     covers.
+ *   · `UNKNOWN_MENU` — the bucket `recordAdminAction` files a row under when a
+ *     caller passes a menu key the registry does not know. Those rows are
+ *     visible to SUPERADMIN ONLY, and the mechanism that enforces it is
+ *     precisely that 'unknown' is not in ALL_PAGE_KEYS and so can never survive
+ *     this filter. A non-superadmin cannot be granted it, because there is no
+ *     page key to grant.
+ *
+ * That is the fail-closed behaviour, and it is a NAMED, TESTED property rather
+ * than a consequence — do not "simplify" this to `user.pages ?? []`.
+ *
+ * Pure and client-safe, like the rest of this file.
+ *
+ * @param {{isSuperadmin?: boolean, pages?: string[]|null}|null|undefined} user
+ * @returns {string[]|null} null = no clamp (see all menus)
+ */
+export function menusForUser(user) {
+  if (!user) return [];
+  if (user.isSuperadmin || user.pages == null) return null;
+  if (!Array.isArray(user.pages)) return [];
+  const registry = new Set(ALL_PAGE_KEYS);
+  return user.pages.filter((key) => registry.has(key));
 }
 
 /**

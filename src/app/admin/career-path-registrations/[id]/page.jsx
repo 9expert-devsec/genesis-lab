@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { requirePage } from '@/lib/rbac/guard';
 import { getCareerPathRegistrationById } from '@/lib/actions/career-path-registrations';
 import { RegistrationStatusSelect } from '../_components/RegistrationStatusSelect';
+import { RecordHistory } from '@/components/audit/RecordHistory';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'รายละเอียดการลงทะเบียน' };
@@ -151,6 +152,8 @@ export default async function RegistrationDetailPage({ params }) {
           </p>
         </Section>
       )}
+
+      <RecordHistory menu="career_path_registrations" entity="registration" recordId={String(reg._id)} />
     </div>
   );
 }

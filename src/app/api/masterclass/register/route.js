@@ -6,6 +6,7 @@ import MasterclassCourse   from '@/models/MasterclassCourse';
 import { resolveBatchPrice } from '@/lib/masterclass/getMasterclass';
 import { computePricing }    from '@/lib/pricing';
 import { headers }           from 'next/headers';
+import { refNo } from '@/lib/refNo';
 
 export const dynamic = 'force-dynamic';
 
@@ -110,7 +111,7 @@ export async function POST(req) {
       ipAddress,
     });
 
-    const referenceNumber = String(reg._id).slice(-8).toUpperCase();
+    const referenceNumber = refNo(reg._id);
 
     // Quote path: send confirmation email now (no charge needed)
     if (paymentMethod === 'quote') {

@@ -70,8 +70,9 @@ import {
   updateArticle,
   searchArticles,
   getArticlesByIds,
-  repositionArticle,
+  setArticlePinned,
 } from '@/lib/actions/articles';
+import { pinCapacityMessage } from '@/lib/articlePositioning';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
 import {
   formatSiteDateTime,
@@ -180,6 +181,11 @@ export function ArticleForm({
   skills = [],
   courses = [],
   isSuperAdmin = false,
+  // How full the pinned block is, read SERVER-SIDE by the edit page — this
+  // component holds one document and cannot count a collection. The default is
+  // the shape describePinCapacity returns for an empty list, so the /new screen
+  // (which has no article to pin yet) renders without a special case.
+  pinCapacity = null,
 }) {
   const router = useRouter();
   const isEdit = Boolean(article?._id);
@@ -208,7 +214,7 @@ export function ArticleForm({
   const [pinOrder, setPinOrder]     = useState(article?.pinOrder ?? 0);
   const [posBusy, setPosBusy]       = useState(false);
   const [posError, setPosError]     = useState(null);
-  // repositionArticle computes the new pinOrder on the SERVER (it needs the
+  // setArticlePinned computes the new pinOrder on the SERVER (it needs the
   // whole block), so after router.refresh() the fresh document is the only
   // place that knows the number. useState would keep its initial value forever;
   // this re-syncs the mirror instead of duplicating the numbering client-side.
@@ -216,6 +222,20 @@ export function ArticleForm({
     setPositioned(article?.isPinnedOnArticlePage === true);
     setPinOrder(article?.pinOrder ?? 0);
   }, [article?.isPinnedOnArticlePage, article?.pinOrder]);
+
+  // ── the pinned-block cap ──────────────────────────────────────────
+  // DISPLAY ONLY. `setArticlePinned` re-reads the block and refuses on its own
+  // (see the note in src/lib/actions/articles.js): this disabled attribute is a
+  // hint, not the enforcement, and the two agree because both are
+  // describePinCapacity's answer rather than two conditions written separately.
+  //
+  // Gated on `!positioned` so UNPINNING IS NEVER BLOCKED — including, and
+  // especially, when the block is over cap, since unpinning is the only way it
+  // drains. `positioned` is the local mirror rather than pinCapacity's
+  // `alreadyPinned` so the control settles immediately after a toggle instead of
+  // waiting for router.refresh(); the two say the same thing on a fresh render.
+  const pinBlocked = !positioned && pinCapacity?.canPin === false;
+  const pinBlockedWhy = pinBlocked ? pinCapacityMessage(pinCapacity) : null;
 
   // Sidebar — Tags (textarea, live-preview chips)
   const [tagsText, setTagsText] = useState(
@@ -429,7 +449,7 @@ export function ArticleForm({
     // `isPinnedOnArticlePage` are deliberately absent from this FormData and
     // from articleSchema, so the save button cannot overwrite a position set
     // from the admin list in another tab. Position changes go through
-    // repositionArticle() on click. Adding either key here reintroduces the
+    // setArticlePinned() on click. Adding either key here reintroduces the
     // lost update; test/pure/articleFormFieldCoverage.test.mjs asserts their
     // absence from the payload.
     fd.set('showPinBadge',   String(showPinBadge));
@@ -845,36 +865,58 @@ export function ArticleForm({
             </p>
           </Section>
 
-          {/* 8b. Position + badge — TWO DIFFERENT WRITE PATHS, on purpose.
+          {/* 8b. Pinning + badge — TWO DIFFERENT WRITE PATHS, on purpose.
               The badge is a per-document property and rides with ปุ่มบันทึก.
-              The position is cross-row state (the block's numbering), so it is
-              read-only here and any change fires repositionArticle immediately
-              — the same planners the admin list uses. If the save button owned
-              it, a stale tab could undo a position set elsewhere. */}
-          <Section title="ตำแหน่ง / ป้าย">
+              The pinned state is cross-row state — pinning appends to the block
+              and unpinning renumbers what is left — so it is read-only here and
+              the toggle fires setArticlePinned immediately, against a plan the
+              SERVER computes from a fresh read. If the save button owned it, a
+              stale tab could undo a change made elsewhere; and it could not own
+              it anyway, since articleSchema does not declare the field and zod
+              strips what it does not declare.
+
+              ── WHY THE TOGGLE LIVES HERE AND NOT NEXT TO THE ARROWS ─────────
+              Pinning is the one ordering act that is destructive in a small way:
+              it moves the row across the boundary between the two orderings and
+              renumbers the block behind it. The ↑/↓ arrows in the list are made
+              to be clicked repeatedly and sit twelve to a page, so a misclick
+              there is cheap and frequent — which is exactly why this is not
+              there. It is one deliberate navigation away, on the screen that
+              already owns the rest of this article's settings. */}
+          <Section title="ปักหมุด / ป้าย">
             <div className="rounded-9e-md border border-[var(--surface-border)] p-2">
               <p className="text-[11px] font-semibold text-9e-navy dark:text-white">
                 ตำแหน่งบน /articles
               </p>
               <p className="mt-0.5 text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
                 {positioned
-                  ? `จัดตำแหน่งเอง · ลำดับ ${pinOrder}`
-                  : 'เรียงตามวันที่เผยแพร่'}
+                  ? `อยู่กลุ่มปักหมุด · ลำดับ ${pinOrder}`
+                  : 'เรียงตามลำดับปกติ'}
               </p>
+              {/* The live count, on every render rather than only when the cap
+                  bites — an admin about to pin the last slot should be able to
+                  see that it is the last slot. Both numbers come off the
+                  descriptor, so neither can drift from MAX_PINNED_ARTICLES. */}
+              {pinCapacity && (
+                <p className="mt-0.5 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                  ปักหมุดอยู่ {pinCapacity.count} จาก {pinCapacity.max} รายการ
+                </p>
+              )}
 
               {isEdit ? (
                 <>
                   <button
                     type="button"
-                    disabled={posBusy}
+                    /* Unpinning is NEVER disabled by the cap: `pinBlocked` is
+                       gated on !positioned. An over-cap block drains through
+                       this button, so blocking it would be a trap. */
+                    disabled={posBusy || pinBlocked}
+                    title={pinBlockedWhy ?? undefined}
                     onClick={() => {
                       setPosError(null);
                       setPosBusy(true);
                       startTransition(async () => {
-                        const res = await repositionArticle(
-                          article._id,
-                          positioned ? 'demote' : 'promote'
-                        );
+                        const res = await setArticlePinned(article._id, !positioned);
                         if (res?.ok) {
                           // The server re-read the block to compute the plan, so
                           // rather than mirror its arithmetic here, take the
@@ -882,7 +924,7 @@ export function ArticleForm({
                           setPositioned(!positioned);
                           router.refresh();
                         } else {
-                          setPosError(res?.error ?? 'เปลี่ยนตำแหน่งไม่สำเร็จ');
+                          setPosError(res?.error ?? 'เปลี่ยนการปักหมุดไม่สำเร็จ');
                         }
                         setPosBusy(false);
                       });
@@ -892,16 +934,29 @@ export function ArticleForm({
                     {posBusy
                       ? 'กำลังบันทึก…'
                       : positioned
-                        ? 'ปลดตำแหน่ง (กลับไปเรียงตามวันที่)'
-                        : 'จัดตำแหน่ง (ต่อท้ายบล็อกบนสุด)'}
+                        ? 'เลิกปักหมุด (กลับไปเรียงตามลำดับปกติ)'
+                        : 'ปักหมุดไว้บนสุด (ต่อท้ายกลุ่มปักหมุด)'}
                   </button>
+                  {/* THE REASON IS ON THE PAGE, not only in a title attribute.
+                      A disabled control with its explanation hidden behind a
+                      hover is indistinguishable from a broken one — the same
+                      rule the list's dead arrows follow — and this one is
+                      unguessable: nothing else on this screen mentions that the
+                      block has a size limit. The sentence is the SERVER'S OWN,
+                      via pinCapacityMessage, so what is refused and what is
+                      explained cannot diverge. */}
+                  {pinBlockedWhy && (
+                    <p className="mt-1 text-[10px] leading-tight text-amber-600">
+                      {pinBlockedWhy}
+                    </p>
+                  )}
                   <p className="mt-1 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                    บันทึกทันที ไม่ต้องกดปุ่มบันทึก · แก้ลำดับได้ที่หน้ารายการบทความ
+                    บันทึกทันที ไม่ต้องกดปุ่มบันทึก · เลื่อนลำดับได้ที่หน้ารายการบทความ
                   </p>
                 </>
               ) : (
                 <p className="mt-2 text-[10px] leading-tight text-amber-600">
-                  บันทึกบทความก่อนจึงจะจัดตำแหน่งได้
+                  บันทึกบทความก่อนจึงจะปักหมุดได้
                 </p>
               )}
               {posError && (
@@ -921,10 +976,20 @@ export function ArticleForm({
                   แสดงป้ายหมุดบนการ์ด
                 </span>
                 <span className="block text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  บันทึกพร้อมฟอร์ม · ป้ายจะแสดงเมื่อจัดตำแหน่งแล้วเท่านั้น
+                  บันทึกพร้อมฟอร์ม · ป้ายจะแสดงเมื่อปักหมุดแล้วเท่านั้น
                 </span>
               </span>
             </label>
+
+            {/* THE ป้าย SWITCH USED TO BE ON THE LIST TOO, and this line is what
+                replaces it. A control that exists in two places is a control an
+                admin looks for in the wrong one; now that this screen is the
+                ONLY one, it has to say so, or "where did the toggle go" is a
+                question the UI cannot answer. It names the list explicitly
+                because that is where the admin was when the switch disappeared. */}
+            <p className="mt-2 text-[10px] leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              การปักหมุดและป้ายหมุดตั้งค่าได้ที่นี่ที่เดียว — หน้ารายการบทความมีเฉพาะการจัดลำดับ
+            </p>
           </Section>
 
           {/* 9. SEO */}

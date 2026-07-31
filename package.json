@@ -12,7 +12,9 @@
     "test:smoke": "node --env-file=.env.local test/smoke.mjs",
     "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs",
     "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs",
-    "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs"
+    "audit:storage": "node --env-file=.env.local scripts/audit-storage-footprint.mjs",
+    "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
+    "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",

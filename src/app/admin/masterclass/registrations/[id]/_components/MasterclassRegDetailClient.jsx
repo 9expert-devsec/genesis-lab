@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Trash2, Check, Plus, Save, X, Pencil } from 'lucide
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { refNo } from '@/lib/refNo';
 import {
   updateMasterclassRegistrationStatus,
   deleteMasterclassRegistration,
@@ -44,7 +45,6 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} น.`;
 }
-function refNo(id) { return String(id).slice(-8).toUpperCase(); }
 
 // ── Main Component ─────────────────────────────────────────────────
 

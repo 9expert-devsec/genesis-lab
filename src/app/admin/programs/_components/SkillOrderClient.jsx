@@ -18,11 +18,17 @@ function programIdOf(p) {
   return String(p.program_id ?? p._id ?? '');
 }
 
-export default function SkillOrderClient({ initialSkills, orderData }) {
-  const merged = (initialSkills ?? [])
+/**
+ * Join upstream skills with the stored order/visibility and per-skill program
+ * order. Extracted so the SYNC can replay it on freshly-read data — inline, the
+ * only way to show a sync's result was `window.location.reload()`.
+ */
+function mergeSkillRows(skillsIn, orderData) {
+  const orders = orderData ?? [];
+  return (skillsIn ?? [])
     .map((s) => {
       const id = skillIdOf(s);
-      const stored = orderData.find((o) => o.skillId === id);
+      const stored = orders.find((o) => o.skillId === id);
       const nestedPrograms = Array.isArray(s.programs) ? s.programs : [];
       const storedProgramOrder = stored?.programOrder ?? [];
       const orderedPrograms = storedProgramOrder.length
@@ -44,10 +50,15 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
       };
     })
     .sort((a, b) => a.order - b.order);
+}
+
+export default function SkillOrderClient({ initialSkills, orderData }) {
+  const merged = mergeSkillRows(initialSkills, orderData);
 
   const {
     items: skills,
     setItems: setSkills,
+    resetItems: resetSkills,
     draggingIndex,
     dragOverIndex,
     getDragProps,
@@ -91,8 +102,14 @@ export default function SkillOrderClient({ initialSkills, orderData }) {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await syncSkillsFromAPI(skills);
-      window.location.reload();
+      const res = await syncSkillsFromAPI(skills);
+      // Replaces `window.location.reload()` — same reasoning as
+      // ProgramOrderClient: the reload existed only to get the sync's result
+      // into a list seeded once, at the cost of a page flash and scroll
+      // position. The ?tab= parameter is in the URL and survives either way.
+      if (res?.data) {
+        resetSkills(mergeSkillRows(res.data.skills, res.data.orderData));
+      }
     } finally {
       setSyncing(false);
     }

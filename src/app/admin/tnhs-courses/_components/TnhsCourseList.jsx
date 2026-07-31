@@ -7,9 +7,16 @@ import {
   deleteTnhsCourse,
   updateTnhsCourse,
 } from '@/lib/actions/tnhs-courses';
+import { useAddedRowSink } from '@/app/admin/_components/AddedRowChannel';
+import { insertFeaturedRow } from '@/lib/featuredListOrder';
 
 export function TnhsCourseList({ courses: initial }) {
   const [courses, setCourses] = useState(initial);
+  // This list OWNS the rows; the add form is a SIBLING under the server page.
+  // The created row arrives through AddedRowChannel and is placed by the same
+  // comparator the server reads with: { sort_order: 1, createdAt: -1 }.
+  useAddedRowSink((doc) => setCourses((cur) => insertFeaturedRow(cur, doc)));
+
   const [busyId, setBusyId] = useState(null);
   const [, startTransition] = useTransition();
 

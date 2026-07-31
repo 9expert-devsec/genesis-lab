@@ -2,9 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  ARTICLE_SORT,
   assignArticleRanks,
   compareArticlesForPublicOrder,
   isPubliclyOrdered,
+  sortKeyOf,
 } from '@/lib/articleRank';
 
 // The admin list shows `pinOrder`, which is meaningful only for pinned rows —
@@ -235,4 +237,113 @@ test('CONTROL: the comparator is live — it can return all three answers', () =
   assert.ok(compareArticlesForPublicOrder(a, b) < 0, 'newer first');
   assert.ok(compareArticlesForPublicOrder(b, a) > 0, 'and the reverse');
   assert.equal(compareArticlesForPublicOrder(a, { ...a }), 0, 'identical inputs tie');
+});
+
+// ── ROUND 2 · sortKey is the third tier ───────────────────────────────────
+//
+// Every fixture ABOVE this line carries no `sortKey` at all, which is why none
+// of them changed when the cascade did: with both keys absent the comparator
+// falls through to the date tiers it always used. That is not luck, it is the
+// missing-key rule — and it is also why those tests can no longer tell you
+// anything about the tier that now decides the real list. These can.
+
+test('C2-b — among UNPINNED articles sortKey decides, overriding publishedAt', () => {
+  // Dates are set to CONTRADICT the keys, so a comparator that ignored sortKey
+  // would produce exactly the reverse rather than passing on a lucky agreement.
+  const input = [
+    art({ _id: 'key-low',  sortKey: 1000, publishedAt: '2026-12-31T00:00:00.000Z' }),
+    art({ _id: 'key-high', sortKey: 3000, publishedAt: '2020-01-01T00:00:00.000Z' }),
+    art({ _id: 'key-mid',  sortKey: 2000, publishedAt: '2023-01-01T00:00:00.000Z' }),
+  ];
+  assert.deepEqual(
+    orderOf(input), ['key-high', 'key-mid', 'key-low'],
+    'higher sortKey sits higher on the page; publishedAt order would be the reverse',
+  );
+});
+
+test('C2-c — among PINNED articles pinOrder still decides, overriding sortKey', () => {
+  // Ruling: pinOrder stays the SECOND cascade key. Pin ordering is controlled
+  // separately from normal ordering, so a pinned block must not inherit sortKey.
+  const input = [
+    art({ _id: 'pin-2', isPinnedOnArticlePage: true, pinOrder: 2, sortKey: 9000 }),
+    art({ _id: 'pin-1', isPinnedOnArticlePage: true, pinOrder: 1, sortKey: 1000 }),
+    art({ _id: 'plain', sortKey: 500000 }),
+  ];
+  assert.deepEqual(
+    orderOf(input), ['pin-1', 'pin-2', 'plain'],
+    'pinOrder must win inside the block — sortKey order would give pin-2 first, and ' +
+    'the unpinned row holds the highest key of all and still sorts last',
+  );
+});
+
+test('C2-d — CONTROL: the sortKey order and the date order genuinely disagree', () => {
+  // If they agreed on these fixtures, C2-b would pass against a comparator that
+  // never looked at sortKey.
+  const byKey = [
+    art({ _id: 'key-low',  sortKey: 1000, publishedAt: '2026-12-31T00:00:00.000Z' }),
+    art({ _id: 'key-high', sortKey: 3000, publishedAt: '2020-01-01T00:00:00.000Z' }),
+  ];
+  const stripped = byKey.map(({ sortKey, ...rest }) => rest);
+  assert.deepEqual(orderOf(byKey), ['key-high', 'key-low'], 'with keys');
+  assert.deepEqual(
+    orderOf(stripped), ['key-low', 'key-high'],
+    'without keys the SAME two rows come out the other way round — so the tier is ' +
+    'doing the deciding, not the dates agreeing by accident',
+  );
+});
+
+test('C2-e — a missing sortKey SINKS, matching Mongo { sortKey: -1 }', () => {
+  // Under a descending sort an absent field sorts below every number. Reachable
+  // between a deploy and a backfill; the failure to avoid is "absent" reading as
+  // "first", which would put every un-backfilled row at the top of the list.
+  const input = [
+    art({ _id: 'no-key',  publishedAt: '2026-12-31T00:00:00.000Z' }),
+    art({ _id: 'has-key', sortKey: 1, publishedAt: '2001-01-01T00:00:00.000Z' }),
+  ];
+  assert.deepEqual(
+    orderOf(input), ['has-key', 'no-key'],
+    'even the LOWEST possible key outranks no key at all, and even against a far ' +
+    'newer publishedAt',
+  );
+  assert.equal(sortKeyOf(input[0]), null, 'absent reads as null, never 0');
+  assert.equal(sortKeyOf({ sortKey: 0 }), 0, 'and 0 is a real key, not absence');
+});
+
+test('C2-f — the JS comparator REFINES the Mongo cascade where Mongo is silent', () => {
+  // Mongo stops at sortKey. Two rows with the SAME key leave its order
+  // unspecified, so this helper continues into publishedAt/createdAt/_id to keep
+  // a rank from shuffling between two renders of the same data.
+  const input = [
+    art({ _id: 'tie-older', sortKey: 4000, publishedAt: '2020-01-01T00:00:00.000Z' }),
+    art({ _id: 'tie-newer', sortKey: 4000, publishedAt: '2026-01-01T00:00:00.000Z' }),
+  ];
+  assert.deepEqual(orderOf(input), ['tie-newer', 'tie-older']);
+  assert.deepEqual(orderOf([...input].reverse()), ['tie-newer', 'tie-older'], 'stable either way round');
+
+  assert.deepEqual(
+    Object.keys(ARTICLE_SORT), ['isPinnedOnArticlePage', 'pinOrder', 'sortKey'],
+    'the Mongo cascade stops at sortKey — the extra tiers are this helper\'s alone, ' +
+    'and are a refinement of that order rather than a contradiction of it',
+  );
+});
+
+test('C2-g — CONTROL: the pin tiers still fire (the cascade was not flattened to sortKey)', () => {
+  // A comparator rewritten as "just sortKey" would pass C2-b and C2-e.
+  const pinnedLowKey = art({ _id: 'p', isPinnedOnArticlePage: true, pinOrder: 1, sortKey: 1 });
+  const plainHighKey = art({ _id: 'q', sortKey: 999999 });
+  assert.ok(
+    compareArticlesForPublicOrder(pinnedLowKey, plainHighKey) < 0,
+    'a pinned article with the lowest key in the collection still outranks an ' +
+    'unpinned one with the highest',
+  );
+
+  // and the stray-pinOrder hazard (b-006) is still reachable, which is why
+  // planBlockNormalization and the pinTie tripwire both stay
+  const stray = art({ _id: 'stray', pinOrder: 7, sortKey: 999999 });
+  const clean = art({ _id: 'clean', pinOrder: 0, sortKey: 1 });
+  assert.ok(
+    compareArticlesForPublicOrder(stray, clean) > 0,
+    'an UNPINNED row carrying a non-zero pinOrder still sinks below every ' +
+    'pinOrder:0 row, whatever its sortKey — pinOrder is still the second key',
+  );
 });

@@ -80,6 +80,13 @@ export const ADMIN_PAGES = [
       { key: 'accounts',      label: 'บัญชีผู้ดูแล',  href: '/admin/accounts',      match: 'prefix' },
       // NEW in phase 5 — the role-management page itself.
       { key: 'roles',         label: 'บทบาทและสิทธิ์', href: '/admin/roles',        match: 'prefix' },
+      // Phase 3a — the admin action history. Adding it here has two INTENDED
+      // consequences, neither of them a side effect: it enters MENU_ENUM
+      // automatically (MENU_ENUM = [...ALL_PAGE_KEYS, UNKNOWN_MENU]), so the
+      // audit log becomes auditable by the same machinery; and it appears in
+      // both the sidebar and the roles checkbox UI, because both render from
+      // ADMIN_PAGES. Granting it is therefore a normal role edit.
+      { key: 'audit_log',     label: 'ประวัติการดำเนินการ', href: '/admin/audit-log', match: 'prefix' },
     ],
   },
 ];

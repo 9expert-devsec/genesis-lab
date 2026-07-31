@@ -8,6 +8,8 @@ import {
 } from '@/lib/actions/featured-courses';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
+import { useAddedRowSink } from '@/app/admin/_components/AddedRowChannel';
+import { insertFeaturedRow } from '@/lib/featuredListOrder';
 
 export function FeaturedCourseList({ courses: initial }) {
   // After drop, persist any row whose position changed by writing
@@ -43,6 +45,13 @@ export function FeaturedCourseList({ courses: initial }) {
       setBusyId(null);
     }
   });
+
+  // This list OWNS the rows (useDragReorder seeds useState once and never
+  // resyncs). The add form is a SIBLING under the server page, so it has no way
+  // to reach this state on its own — it hands the created row through the
+  // channel and this is where it lands, ordered by the same comparator the
+  // server reads with: { sort_order: 1, createdAt: -1 }.
+  useAddedRowSink((doc) => setCourses((cur) => insertFeaturedRow(cur, doc)));
 
   const [busyId, setBusyId] = useState(null);
   const [, startTransition] = useTransition();

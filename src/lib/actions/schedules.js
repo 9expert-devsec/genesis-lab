@@ -17,12 +17,46 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { requireAdmin } from '@/lib/actions/auth';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { resolveCourseObjectId } from '@/lib/api/resolveIds';
 import ScheduleLocal from '@/models/ScheduleLocal';
 
 const ADMIN_PATH = '/admin/schedules';
+
+/**
+ * The schedule summary logged as `before`/`after`.
+ *
+ * `course_id` rather than the resolved ObjectId, because that is the value a
+ * human recognises; the ObjectId is already the ref MSDB stores. Dates are a
+ * short array of date strings and are kept verbatim — they are the whole point
+ * of a schedule and the field most likely to be disputed.
+ */
+function scheduleFields(courseIdString, body, formData) {
+  return {
+    course_id:  courseIdString,
+    dates:      body.dates,
+    status:     body.status,
+    type:       body.type,
+    signup_url: body.signup_url,
+    // Local-only sidecar fields; MSDB never sees these, so without them the
+    // trail would be silent about half of what the form actually changed.
+    max_seats:      toNullableNum(formData.get('max_seats')),
+    price_override: toNullableNum(formData.get('price_override')),
+    instructor_ids: toStrArr(formData.getAll('instructor_ids')),
+  };
+}
+
+/** "POWER-BI-PQ — 2026-08-03 (+2 more)" — a schedule has no name of its own. */
+function scheduleLabel(courseIdString, dates = []) {
+  const list = Array.isArray(dates) ? dates : [];
+  const first = list[0] ?? '';
+  const extra = list.length > 1 ? ` (+${list.length - 1} more)` : '';
+  return [courseIdString, first ? `${first}${extra}` : '']
+    .filter(Boolean)
+    .join(' — ');
+}
 
 /**
  * Bust the ISR caches that read schedules. Called after every write.
@@ -131,7 +165,7 @@ function buildAutoSignupUrl(courseIdString, scheduleId) {
 }
 
 export async function createSchedule(formData) {
-  await requireAdmin('schedules');
+  const session = await requireAdmin('schedules');
 
   const courseIdString = toStr(formData.get('course_id'));
   if (!courseIdString) return { ok: false, error: 'กรุณาเลือกหลักสูตร' };
@@ -179,6 +213,19 @@ export async function createSchedule(formData) {
       formData,
     });
     bustScheduleCaches(courseObjectId);
+
+    recordAdminActionAfter({
+      menu:        'schedules',
+      action:      'create',
+      entity:      'schedule',
+      // MSDB-assigned; only exists after the write. Already the value this
+      // action returns as `id`, so nothing new had to be surfaced for the log.
+      recordId:    String(newId ?? ''),
+      recordLabel: scheduleLabel(courseIdString, body.dates),
+      after:       scheduleFields(courseIdString, body, formData),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true, item: finalItem, id: newId };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'สร้างตารางไม่สำเร็จ' };
@@ -192,9 +239,13 @@ export async function createSchedule(formData) {
  * call without juggling two args).
  */
 export async function updateSchedule(idOrFormData, maybeFormData) {
-  await requireAdmin('schedules');
+  const session = await requireAdmin('schedules');
 
-  // Resolve which arg is which.
+  // Resolve which arg is which. THE AUDIT CALL REUSES THE `id` THIS PRODUCES —
+  // it does not re-read the overload. Two parsers of the same overloaded
+  // signature can disagree, and when they do the log points at the wrong
+  // schedule with no symptom anywhere: the write succeeds, the row is written,
+  // and it names a record nobody touched. Log the value the action USED.
   let id, formData;
   if (idOrFormData instanceof FormData) {
     formData = idOrFormData;
@@ -227,6 +278,18 @@ export async function updateSchedule(idOrFormData, maybeFormData) {
       formData,
     });
     bustScheduleCaches(courseObjectId);
+
+    recordAdminActionAfter({
+      menu:        'schedules',
+      action:      'update',
+      entity:      'schedule',
+      // `id` is the local resolved above — NOT a second reading of the overload.
+      recordId:    String(id),
+      recordLabel: scheduleLabel(courseIdString, body.dates),
+      after:       scheduleFields(courseIdString, body, formData),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true, item };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'อัปเดตตารางไม่สำเร็จ' };
@@ -234,19 +297,24 @@ export async function updateSchedule(idOrFormData, maybeFormData) {
 }
 
 export async function deleteSchedule(id) {
-  await requireAdmin('schedules');
+  const session = await requireAdmin('schedules');
   if (!id) return { ok: false, error: 'Missing schedule id' };
 
   // Sidecar lookup — if present, we can also bust the per-course
   // cache tag. Resolving via the local row avoids an extra MSDB call
   // just to learn which course the deleted schedule pointed at.
+  //
+  // It doubles as the audit label source: the sidecar holds `course_id`, the
+  // only human-readable thing about a schedule, and this read already happens.
   let courseObjectId = '';
+  let sidecarCourseId = '';
   try {
     await dbConnect();
     const sidecar = await ScheduleLocal.findOne({
       msdb_schedule_id: String(id),
     }).lean();
     if (sidecar?.course_id) {
+      sidecarCourseId = String(sidecar.course_id);
       courseObjectId = (await resolveCourseObjectId(sidecar.course_id)) ?? '';
     }
   } catch {
@@ -255,10 +323,36 @@ export async function deleteSchedule(id) {
 
   try {
     await msdbDelete('schedules', id);
+
     // Best-effort sidecar cleanup. If MSDB delete already succeeded,
     // a leftover sidecar is harmless but worth tidying up.
-    await ScheduleLocal.deleteOne({ msdb_schedule_id: String(id) }).catch(() => {});
+    //
+    // THIS ACTION WRITES TWICE — MSDB then Mongo — AND CAN RETURN OK WITH THE
+    // SECOND HALF FAILED. The `.catch()` below is pre-existing and deliberate
+    // (a stranded sidecar must not fail a delete that already happened
+    // upstream), but it means "ok" does not mean "both halves succeeded". The
+    // audit row is still ONE row, because one thing happened as far as the
+    // human is concerned — and `meta.sidecarDeleted` records which halves
+    // actually landed, so a future orphaned-sidecar hunt has somewhere to look.
+    // Flagged as a pre-existing correctness question, not fixed here.
+    let sidecarDeleted = true;
+    await ScheduleLocal.deleteOne({ msdb_schedule_id: String(id) })
+      .catch(() => { sidecarDeleted = false; });
+
     bustScheduleCaches(courseObjectId);
+
+    recordAdminActionAfter({
+      menu:        'schedules',
+      action:      'delete',
+      entity:      'schedule',
+      recordId:    String(id),
+      // From the sidecar read above; '' when no sidecar existed, which is
+      // itself worth seeing in the trail.
+      recordLabel: sidecarCourseId,
+      meta:        { sidecarDeleted },
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
+
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ลบตารางไม่สำเร็จ' };

@@ -5,6 +5,8 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { refNo } from '@/lib/refNo';
+import { LastEditedHint } from '@/components/audit/auditRowParts';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -50,7 +52,7 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
-function refNo(id) { return String(id).slice(-8).toUpperCase(); }
+
 
 // ── Main Component ─────────────────────────────────────────────────
 
@@ -61,6 +63,7 @@ export function RegistrationsClient({
   initialSource = 'public',
   initialRange  = 'all',
   counts,
+  lastEdited = {},
 }) {
   const router     = useRouter();
   const pathname   = usePathname();
@@ -275,6 +278,7 @@ export function RegistrationsClient({
                 >
                   <td className="px-4 py-3 font-mono text-xs font-bold text-9e-action">
                     {refNo(row._id)}
+                    <LastEditedHint entry={lastEdited[String(row._id)]} />
                   </td>
                   <td className="max-w-[180px] px-4 py-3">
                     <p className="truncate font-medium text-[var(--text-primary)]">{row.courseName}</p>

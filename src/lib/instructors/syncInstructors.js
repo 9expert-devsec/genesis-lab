@@ -9,6 +9,7 @@
 import { dbConnect } from '@/lib/db/connect';
 import Instructor from '@/models/Instructor';
 import { listInstructors } from '@/lib/api/instructors';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 
 function toStr(v) {
   return typeof v === 'string' ? v : v == null ? '' : String(v);
@@ -46,6 +47,9 @@ export async function syncInstructors() {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  // BEFORE the read — see the note in syncFaqs.js. Nothing else busts this tag.
+  bustUpstream(UPSTREAM_TAGS.INSTRUCTORS);
 
   let items = [];
   try {

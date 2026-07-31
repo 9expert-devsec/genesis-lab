@@ -3,6 +3,7 @@ import { getFeaturedReviews } from '@/lib/actions/featured-reviews';
 import { getAllReviews } from '@/lib/api/reviews';
 import { ReviewSelector } from './_components/ReviewSelector';
 import { FeaturedReviewList } from './_components/FeaturedReviewList';
+import { AddedRowChannel } from '@/app/admin/_components/AddedRowChannel';
 
 export const metadata = { title: 'รีวิวแนะนำ' };
 export const dynamic = 'force-dynamic';
@@ -46,12 +47,15 @@ export default async function Page() {
         </p>
       </div>
 
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มรีวิว</h2>
-        <ReviewSelector reviews={selectable} />
-      </div>
+      {/* Sibling form + list under a server component: see AddedRowChannel. */}
+      <AddedRowChannel>
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มรีวิว</h2>
+          <ReviewSelector reviews={selectable} />
+        </div>
 
-      <FeaturedReviewList items={hydratedFeatured} />
+        <FeaturedReviewList items={hydratedFeatured} />
+      </AddedRowChannel>
     </div>
   );
 }

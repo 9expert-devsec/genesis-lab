@@ -24,6 +24,17 @@ import CareerPath from '@/models/CareerPath';
 import MasterclassCourse from '@/models/MasterclassCourse';
 import { requireAdmin } from '@/lib/actions/auth';
 
+/**
+ * Same serialisation the READ path uses (getLocalFaqs.js): lean/plain object
+ * through a JSON round-trip, which drops ObjectId/Date class identity and any
+ * `undefined` key. Returning a document shaped any other way would let a
+ * spliced row differ from the one the next server render sends.
+ */
+function serialize(value) {
+  if (value == null) return value;
+  return JSON.parse(JSON.stringify(value));
+}
+
 const COURSE_TYPES = ['public', 'career_path', 'masterclass', 'program', 'skill'];
 
 /** RBAC page key that owns each course type's admin area. */
@@ -146,7 +157,12 @@ export async function createLocalFaq({
   } catch {
     /* best-effort cache busting */
   }
-  return { ok: true, id: String(doc._id) };
+  // `data` matches the { ok, data } convention in portfolio.js / nearby-places.js
+  // and is serialised the way the READ path serialises (lean + JSON round-trip
+  // in getLocalFaqs.js), so the caller can splice it straight into its list and
+  // get byte-identical shapes to what the next server render will send.
+  // `id` is kept for callers that already read it.
+  return { ok: true, id: String(doc._id), data: serialize(doc.toObject()) };
 }
 
 export async function updateLocalFaq(id, data = {}) {
@@ -163,14 +179,16 @@ export async function updateLocalFaq(id, data = {}) {
     return { ok: false, error: 'ไม่มีข้อมูลที่จะอัปเดต' };
   }
 
-  await LocalFaq.findByIdAndUpdate(id, { $set: patch });
+  // `new: true` so the returned document is the POST-update one — returning the
+  // pre-update doc would let a caller splice the value it just replaced.
+  const updated = await LocalFaq.findByIdAndUpdate(id, { $set: patch }, { new: true }).lean();
 
   try {
     await revalidateForFaq(existing.course_type, existing.ref_id);
   } catch {
     /* best-effort cache busting */
   }
-  return { ok: true };
+  return { ok: true, data: serialize(updated) };
 }
 
 export async function deleteLocalFaq(id) {

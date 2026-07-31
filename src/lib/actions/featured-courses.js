@@ -48,39 +48,91 @@ export async function addFeaturedCourse(formData) {
   const exists = await FeaturedCourse.findOne({ course_id });
   if (exists) return { ok: false, error: `${course_id} มีอยู่แล้ว` };
 
+  // Resolve the cover BEFORE creating, and AWAIT it.
+  //
+  // The list endpoint does not carry `course_cover_url` — only the detail
+  // endpoint does (docs/api-domains.md:117, and see enrich-courses.js) — and
+  // the admin page strips the field out of the autocomplete payload anyway, so
+  // `course_cover_url` arriving from the form is empty in practice.
+  //
+  // This used to be a FIRE-AND-FORGET backfill after the create: an un-awaited
+  // getCourseByCode(...).then(() => findOneAndUpdate(...)). Two problems with
+  // that, and the second is the serious one.
+  //
+  //   1. The document this action RETURNS is the one the client splices into
+  //      its list, so it rendered with no image while the server's very next
+  //      render had one. The splice's whole premise is that the client shows
+  //      what the server would show.
+  //   2. A floating promise in a serverless function has no guarantee of
+  //      running. Vercel may freeze or terminate the invocation once the
+  //      response is sent, so the backfill could simply never happen — and on
+  //      localhost the process lives, so it always completes and the hazard is
+  //      invisible in development. (Audited 2026-07-31: all 6 production rows
+  //      DO have a cover, so it has landed every time so far. The risk is
+  //      latent, not realised — which is exactly when it is cheap to remove.)
+  //
+  // Cost of awaiting: one upstream call, tag-cached for an hour under
+  // `course:<id>`, so it is usually a Data Cache hit. `after()` from
+  // next/server was the alternative, but it fixes only problem 2 — the row
+  // would still be returned coverless — so the await would be needed anyway
+  // and running both would be redundant.
+  let cover = course_cover_url;
+  if (!cover) {
+    try {
+      const detail = await getCourseByCode(course_id);
+      cover = detail?.course_cover_url ?? '';
+    } catch (err) {
+      // A cover is not worth failing the add over. The row is created without
+      // one, exactly as a failed backfill used to leave it.
+      console.warn('[featured-courses] cover lookup failed:', course_id, err?.message ?? err);
+    }
+  }
+
   const count = await FeaturedCourse.countDocuments();
-  await FeaturedCourse.create({
+  const created = await FeaturedCourse.create({
     course_id,
     course_name,
-    course_cover_url,
+    course_cover_url: cover,
     sort_order: count,
     active: true,
   });
 
-  // Background backfill: the list endpoint doesn't include course_cover_url,
-  // so the formData value is usually empty. Fetch detail and update the
-  // stored record in the background — not awaited so the user's request
-  // returns immediately.
-  if (!course_cover_url) {
-    getCourseByCode(course_id)
-      .then((detail) => {
-        if (detail?.course_cover_url) {
-          return FeaturedCourse.findOneAndUpdate(
-            { course_id },
-            { course_cover_url: detail.course_cover_url }
-          ).exec();
-        }
-        return null;
-      })
-      .catch((err) => {
-        console.warn('[featured-courses] cover backfill failed:', course_id, err);
-      });
-  }
-
   revalidatePath('/');
   revalidatePath('/admin/featured-courses');
+
+  // AWAIT vs after() — the rule, written here because this action contains one
+  // of each and the two look identical at the call site.
+  //
+  //   AWAIT when the CLIENT needs the value back. The cover fetch above is
+  //     awaited because the document this action RETURNS is spliced into the
+  //     list; a value that arrives later arrives too late to be rendered.
+  //
+  //   after() when nobody is waiting on the value but it must actually RUN.
+  //     `triggerLandingSync()` below LOOKS fire-and-forget and is not: it is a
+  //     synchronous wrapper that schedules its work inside `after()` from
+  //     next/server (see src/lib/landing/triggerLandingSync.js). Do NOT "fix"
+  //     it to `await` — the sync fans out to ~10 upstream calls and takes
+  //     5-15s, which would be added to every admin save for a cache warm
+  //     nobody is waiting on.
+  //
+  // The third shape — a bare floating promise — is the one that is never
+  // acceptable, and is what this file used to do with the cover. A serverless
+  // invocation may be frozen or terminated once the response is sent, so the
+  // work may never run; on localhost the process lives and it always
+  // completes, which is why the hazard is invisible in development.
   triggerLandingSync();
-  return { ok: true };
+
+  // { ok, data } as in portfolio.js / nearby-places.js, serialised the way
+  // getFeaturedCourses() serialises (lean + JSON round-trip) so the row the
+  // client splices is shaped like the one the next server render sends.
+  //
+  // `createdAt` is what makes this worth returning rather than reconstructing
+  // client-side: the list's comparator is { sort_order: 1, createdAt: -1 }, and
+  // only the database knows the timestamp.
+  //
+  // The cover is resolved above, so `data` is complete: the row the client
+  // splices renders identically to the row the next server read returns.
+  return { ok: true, data: JSON.parse(JSON.stringify(created.toObject())) };
 }
 
 export async function updateFeaturedCourse(id, formData) {

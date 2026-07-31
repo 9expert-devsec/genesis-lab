@@ -2,6 +2,7 @@ import { requirePage } from '@/lib/rbac/guard';
 import { getAllTnhsCourses } from '@/lib/actions/tnhs-courses';
 import { TnhsCourseForm } from './_components/TnhsCourseForm';
 import { TnhsCourseList } from './_components/TnhsCourseList';
+import { AddedRowChannel } from '@/app/admin/_components/AddedRowChannel';
 
 export const metadata = { title: 'TNHS Courses' };
 export const dynamic = 'force-dynamic';
@@ -21,12 +22,15 @@ export default async function Page() {
         </p>
       </div>
 
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่ม Course</h2>
-        <TnhsCourseForm />
-      </div>
+      {/* Sibling form + list under a server component: see AddedRowChannel. */}
+      <AddedRowChannel>
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่ม Course</h2>
+          <TnhsCourseForm />
+        </div>
 
-      <TnhsCourseList courses={courses} />
+        <TnhsCourseList courses={courses} />
+      </AddedRowChannel>
     </div>
   );
 }

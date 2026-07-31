@@ -56,7 +56,7 @@ export async function createTnhsCourse(formData) {
   const sort_order = Number(formData.get('sort_order') ?? 0) || 0;
   const is_active = formData.get('is_active') === 'true';
 
-  await TnhsCourse.create({
+  const created = await TnhsCourse.create({
     course_name,
     cover_url,
     external_url,
@@ -65,7 +65,10 @@ export async function createTnhsCourse(formData) {
   });
 
   revalidate();
-  return { ok: true };
+  // { ok, data } — see the note in actions/featured-courses.js. The client
+  // splices this row into a sibling list whose comparator is
+  // { sort_order: 1, createdAt: -1 }, and only the database knows createdAt.
+  return { ok: true, data: JSON.parse(JSON.stringify(created.toObject())) };
 }
 
 export async function updateTnhsCourse(id, formData) {

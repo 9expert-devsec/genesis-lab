@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { scrubSource } from '../sourceScan.mjs';
 
 /**
  * THE INVARIANT: exactly one thing decides a `pinOrder` value, and it is a
@@ -45,10 +46,16 @@ function walk(dir, out = []) {
   return out;
 }
 
-/** Comments stripped: a doc block explaining the rule quotes what it forbids. */
-function stripComments(text) {
-  return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^[ \t]*\/\/.*$/gm, ' ');
-}
+/**
+ * Comments stripped: a doc block explaining the rule quotes what it forbids.
+ *
+ * Delegated to test/sourceScan.mjs. The hand-rolled version this replaces swept
+ * only WHOLE-LINE `//` comments, deliberately, because a bare `//` sweep eats
+ * the tail of any URL. The shared scanner is string-aware, so it also removes
+ * TRAILING `//` comments — which the old one missed — without that risk.
+ * Imports are kept: this guard is not about imports.
+ */
+const stripComments = (text) => scrubSource(text, { stripImports: false });
 
 const FILES = walk(SRC).map((full) => ({
   rel: path.relative(ROOT, full).split(path.sep).join('/'),
@@ -293,6 +300,10 @@ test('the retired actions are GONE from the server-action surface', () => {
     ['updateArticlePinOrder', 'wrote a free integer to one row with no view of the block (b-005)'],
     ['toggleArticlePinnedOnArticlePage', 'wrote isPinnedOnArticlePage and left pinOrder stale (b-006)'],
     ['applyArticlePositionPlan', 'accepted a plan from the browser, i.e. a free pinOrder write with extra steps'],
+    ['moveArticleToPosition', 'took a 1..M target bounded by the pinned block; the equivalent for the ' +
+      'normal ordering would be a 486-entry dropdown, and fixed-slot targeting was rejected here before'],
+    ['repositionArticle', 'bundled pinning and unpinning behind one `direction` argument under a name ' +
+      'that said neither — pinning has its own verb now (setArticlePinned)'],
   ]) {
     assert.equal(exported.has(name), false, `${name} is exported again — ${why}`);
   }
@@ -300,16 +311,23 @@ test('the retired actions are GONE from the server-action surface', () => {
 
 test('the replacements ARE exported (the retirement did not just remove capability)', () => {
   const exported = exportedActions();
-  for (const name of ['repositionArticle', 'moveArticleToPosition', 'setArticlePinBadge']) {
+  for (const name of [
+    'moveArticleOneStep',      // ↑ / ↓, one place, either tier
+    'moveArticleToBlockTop',   // to the top of this row's own block
+    'setArticlePinned',        // the pin toggle, its own verb
+    'setArticlePinBadge',      // unchanged — the badge, nothing to do with ordering
+  ]) {
     assert.ok(exported.has(name), `${name} must be an exported server action`);
   }
 });
 
-test('every positioning action computes its plan from a FRESH read, not from an argument', () => {
+test('every ordering action computes its plan from a FRESH read, not from an argument', () => {
   // The whole point of the retirement: the block context comes from the
   // database at call time, never from the caller. If a planner is ever handed
-  // something that arrived as a parameter, the stale-tab hazard is back.
-  for (const fn of ['repositionArticle', 'moveArticleToPosition']) {
+  // something that arrived as a parameter, the stale-tab hazard is back — and
+  // for a STEP it is worse than stale, because the admin list is paged and
+  // filtered, so the row above another on screen is often not its neighbour.
+  for (const fn of ['moveArticleOneStep', 'moveArticleToBlockTop', 'setArticlePinned']) {
     const start = actions.code.indexOf(`export async function ${fn}(`);
     assert.notEqual(start, -1, `could not find ${fn}`);
     const end = actions.code.indexOf('\nexport async function', start + 10);
@@ -320,6 +338,35 @@ test('every positioning action computes its plan from a FRESH read, not from an 
       'page-load snapshot renumbers the whole block from stale data',
     );
   }
+});
+
+test('T-b/c — the pin toggle APPENDS on pin and RENUMBERS on unpin', () => {
+  // Two planners, and swapping them is silent in the worst way. planPromotion
+  // appends at max+1 and touches one document; planDemotion writes pinOrder 0 on
+  // the released row AND re-emits the survivors as contiguous 1..M.
+  //
+  // Getting the unpin half wrong recreates b-006 exactly — an unpinned row left
+  // holding a non-zero pinOrder sinks below every pinOrder:0 row and lands dead
+  // last regardless of its date or its sortKey. That was found in production and
+  // repaired earlier today; this action is the only path that could put it back.
+  // Leaving a HOLE in the survivors is b-005's other half: the next pin computes
+  // max+1 from an inflated maximum and the numbers drift upward forever.
+  const start = actions.code.indexOf('export async function setArticlePinned(');
+  assert.notEqual(start, -1, 'setArticlePinned is gone — the pinned block would have no control at all');
+  const end = actions.code.indexOf('\nexport async function', start + 10);
+  const body = actions.code.slice(start, end === -1 ? undefined : end);
+
+  assert.match(body, /planPromotion\(/, 'pinning must append via planPromotion');
+  assert.match(body, /planDemotion\(/, 'unpinning must renumber via planDemotion');
+  assert.match(
+    body, /pinned\s*\?\s*planPromotion/,
+    'and in that order — planPromotion on unpin would leave the released row IN the ' +
+    'block, while planDemotion on pin would strip a row that was never in it',
+  );
+  assert.equal(
+    /pinOrder\s*:\s*\d/.test(body), false,
+    'no literal pinOrder here — the planners decide the numbers, from a fresh read',
+  );
 });
 
 test('the render-tier stub offers no action the real module does not', () => {

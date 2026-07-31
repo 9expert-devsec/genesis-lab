@@ -1,12 +1,13 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
+import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
 export const metadata = { title: 'การลงทะเบียน' };
 export const dynamic = 'force-dynamic';
 
 export default async function Page({ searchParams }) {
-  await requirePage('registrations');
+  const session = await requirePage('registrations');
 
   const sp     = (await searchParams) ?? {};
   const page   = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
@@ -19,6 +20,19 @@ export default async function Page({ searchParams }) {
     listRegistrations({ page, status, q, source }),
     getRegistrationStatusCounts({ range, source }),
   ]);
+
+  // ONE audit query for the whole page, never one per row. It has to follow the
+  // list because it needs the ids the list actually returned — a page of 20 is
+  // one $in of 20, served by {recordId:1, createdAt:-1} with no sort stage.
+  //
+  // `entity` mirrors `source`, which is why this page adds exactly ONE query
+  // and not two: it renders one entity at a time.
+  const lastEdited = await readLastEditedMap({
+    user: session?.user ?? null,
+    menu: 'registrations',
+    entity: source === 'inhouse' ? 'inhouse' : 'public',
+    recordIds: data.items.map((r) => String(r._id)),
+  });
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -38,6 +52,7 @@ export default async function Page({ searchParams }) {
         initialSource={source}
         initialRange={range}
         counts={counts}
+        lastEdited={lastEdited}
       />
     </div>
   );

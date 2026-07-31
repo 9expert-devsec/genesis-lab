@@ -4,6 +4,7 @@ import { dbConnect } from '@/lib/db/connect';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { inhouseRegistrationSchema } from '@/lib/schemas/register-inhouse';
 import { sendInhouseRegistrationEmails } from '@/lib/email/template-senders/inhouse-registration';
+import { refNo } from '@/lib/refNo';
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -32,7 +33,7 @@ export async function POST(req) {
     ipAddress,
   });
 
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
 
   const host = headersList.get('host');
   const proto = headersList.get('x-forwarded-proto') || 'https';
