@@ -14,7 +14,8 @@
     "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs",
     "audit:storage": "node --env-file=.env.local scripts/audit-storage-footprint.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
-    "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs"
+    "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs",
+    "migrate:skill-code": "node --env-file=.env.local scripts/migrate-skill-code.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",

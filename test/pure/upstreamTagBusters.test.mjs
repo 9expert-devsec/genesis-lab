@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -34,10 +34,15 @@ import { scrubSource } from '../sourceScan.mjs';
 //    as a non-buster and send someone to "fix" working code. So this guard
 //    deliberately checks only that a BUSTER EXISTS in the vocabulary, never
 //    which call site uses it.
-// 4. It cannot see whether a buster is called at the right TIME. Busting after
-//    a sync has already read is the defect this whole effort started from, and
-//    it is invisible here — ordering is asserted by reading the sync libs, not
-//    by this test.
+// 4. It USED to be unable to see whether a buster is called at the right TIME.
+//    Busting after a sync has already read is the defect this whole effort
+//    started from, and it went unguarded long enough for syncNavMenuData to
+//    ship without a bust at all. The second half of this file now covers it —
+//    see "── sync jobs must bust BEFORE they read ──" below — with the same
+//    honest limit as everything else here: it compares POSITIONS IN THE SOURCE
+//    TEXT, so it sees a bust written above a read, not a bust that actually
+//    executes first. A bust inside a conditional, or behind an early return,
+//    reads as correct to this scan.
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const API_DIR = path.join(HERE, '..', '..', 'src', 'lib', 'api');
@@ -203,6 +208,199 @@ test('CONTROL: it reports nothing when given nothing', () => {
   _calls.length = 0;
   assert.deepEqual(bustUpstream(), []);
   assert.deepEqual(_calls, []);
+});
+
+// ── sync jobs must bust BEFORE they read ───────────────────────────
+//
+// A sync job reads upstream IN ORDER TO WRITE LOCALLY. Every one of those
+// reads is cached for an hour. If the job does not bust first, it re-reads the
+// same cached response the previous run saw and writes it into Mongo with a
+// fresh timestamp and a success status — so the row created upstream ten
+// minutes ago is still missing afterwards, and the job reports 'ok'. The admin
+// presses the button again and gets the same answer.
+//
+// That is not hypothetical: syncNavMenuData shipped with no bust at all while
+// five sibling jobs had one, and nothing anywhere could tell you.
+
+const LIB_DIR = path.join(HERE, '..', '..', 'src', 'lib');
+
+/** Every `sync*.js` under src/lib, recursively. */
+function syncJobFiles(dir = LIB_DIR, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) syncJobFiles(full, out);
+    else if (/^sync[A-Z].*\.js$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+/**
+ * The body of every `export async function sync*()` in a source string.
+ *
+ * SCOPED TO THE EXPORTED FUNCTION, and the first draft of this check was not —
+ * which made it wrong in a way worth recording. syncNavMenuData defines a
+ * `buildEntry` helper ABOVE its entry point, and that helper calls
+ * listPublicCourses. A whole-file position compare therefore saw a read above
+ * the bust and reported a correctly-busted job as an offender. The bust only
+ * has to precede the reads the sync itself triggers; a helper defined earlier
+ * and CALLED later is fine.
+ *
+ * Brace matching, not a regex — a regex cannot balance braces. It can still be
+ * fooled by a `{` inside a string literal, which none of these files has.
+ */
+function exportedSyncBodies(code) {
+  const bodies = [];
+  for (const m of code.matchAll(/export\s+async\s+function\s+(sync\w*)\s*\([^)]*\)\s*\{/g)) {
+    const start = m.index + m[0].length - 1;
+    let depth = 0;
+    let i = start;
+    for (; i < code.length; i += 1) {
+      if (code[i] === '{') depth += 1;
+      else if (code[i] === '}') {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    bodies.push(code.slice(start, i + 1));
+  }
+  return bodies;
+}
+
+/**
+ * THE CHECK. Returns the basenames of sync jobs whose exported entry point
+ * reads an upstream adapter without a `bustUpstream(` call earlier in that
+ * same function body.
+ *
+ * Adapter names are taken from the file's OWN `@/lib/api/*` imports rather
+ * than a hardcoded list, so a job that starts reading a new domain is covered
+ * the day it does.
+ */
+function syncJobsReadingUnbusted(files) {
+  const offenders = [];
+  for (const file of files) {
+    const raw = readFileSync(file, 'utf8');
+    const withImports = scrubSource(raw, { stripImports: false });
+
+    // Which adapter functions does this file pull in?
+    const adapters = [];
+    for (const m of withImports.matchAll(
+      /import\s*\{([^}]*)\}\s*from\s*'@\/lib\/api\/(?!bustUpstream)[^']+'/g
+    )) {
+      for (const name of m[1].split(',').map((s) => s.trim()).filter(Boolean)) {
+        adapters.push(name.split(/\s+as\s+/).pop());
+      }
+    }
+    if (adapters.length === 0) continue; // reads nothing upstream
+
+    for (const body of exportedSyncBodies(scrubSource(raw))) {
+      const readIdxs = adapters
+        .map((n) => body.search(new RegExp(`\\b${n}\\s*\\(`)))
+        .filter((i) => i >= 0);
+      if (readIdxs.length === 0) continue; // this entry point reads nothing
+
+      const firstRead = Math.min(...readIdxs);
+      const bustIdx = body.search(/\bbustUpstream\s*\(/);
+      if (bustIdx === -1 || bustIdx > firstRead) {
+        offenders.push(path.basename(file));
+        break;
+      }
+    }
+  }
+  return offenders.sort();
+}
+
+const SYNC_FILES = syncJobFiles();
+
+test('the sync-job scan finds the jobs at all', () => {
+  // Guards the whole section against a discovery walk that silently returns
+  // nothing — which would make every assertion below pass vacuously.
+  const names = SYNC_FILES.map((f) => path.basename(f)).sort();
+  assert.deepEqual(names, [
+    'syncCareerPaths.js',
+    'syncFaqs.js',
+    'syncInstructors.js',
+    'syncLandingData.js',
+    'syncNavMenuData.js',
+    'syncPromotions.js',
+  ]);
+});
+
+test('EXACTLY these sync jobs read upstream without busting first', () => {
+  // An exact list, not "none" — because one offender is REAL and is knowingly
+  // left alone in this commit:
+  //
+  //   syncLandingData.js  reads listPublicCourses, getOnlineCourses,
+  //                       listPrograms, listSkills, listSchedulesByCourse and
+  //                       getReviewsById, and busts none of them. It has the
+  //                       identical defect syncNavMenuData just had, over six
+  //                       domains instead of two. Reported, not fixed here.
+  //
+  // Written as an exact set so that BOTH directions redden: a new unbusted job
+  // appears, and fixing syncLandingData forces this line to be updated in the
+  // same commit rather than leaving a lie behind.
+  assert.deepEqual(syncJobsReadingUnbusted(SYNC_FILES), ['syncLandingData.js']);
+});
+
+test('syncNavMenuData busts before its first read', () => {
+  // The concrete repair, pinned by name so a revert is loud.
+  assert.ok(!syncJobsReadingUnbusted(SYNC_FILES).includes('syncNavMenuData.js'));
+});
+
+test('CONTROL: moving the bust BELOW the first read reddens', () => {
+  // The assertion that proves the check reads ORDER and not mere presence.
+  // Both fixtures contain a bust and a read; only the order differs.
+  const good = [
+    "import { listPrograms } from '@/lib/api/programs';",
+    "import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';",
+    'export async function syncX() {',
+    '  bustUpstream(UPSTREAM_TAGS.PROGRAMS);',
+    '  const r = await listPrograms();',
+    '}',
+  ].join('\n');
+  const bad = good
+    .replace('  bustUpstream(UPSTREAM_TAGS.PROGRAMS);\n', '')
+    .replace('  const r = await listPrograms();', '  const r = await listPrograms();\n  bustUpstream(UPSTREAM_TAGS.PROGRAMS);');
+
+  const tmp = path.join(HERE, '..', '..', 'node_modules', '.cache-synccheck');
+  mkdirSync(tmp, { recursive: true });
+  const goodFile = path.join(tmp, 'syncGood.js');
+  const badFile = path.join(tmp, 'syncBad.js');
+  writeFileSync(goodFile, good, 'utf8');
+  writeFileSync(badFile, bad, 'utf8');
+
+  assert.deepEqual(syncJobsReadingUnbusted([goodFile]), []);
+  assert.deepEqual(syncJobsReadingUnbusted([badFile]), ['syncBad.js']);
+});
+
+test('CONTROL: a job with NO bust at all is reported', () => {
+  // The state syncNavMenuData was actually in.
+  const none = [
+    "import { listPrograms } from '@/lib/api/programs';",
+    'export async function syncY() { return listPrograms(); }',
+  ].join('\n');
+  const tmp = path.join(HERE, '..', '..', 'node_modules', '.cache-synccheck');
+  mkdirSync(tmp, { recursive: true });
+  const f = path.join(tmp, 'syncNone.js');
+  writeFileSync(f, none, 'utf8');
+  assert.deepEqual(syncJobsReadingUnbusted([f]), ['syncNone.js']);
+});
+
+test('CONTROL: a bust written only in a COMMENT does not count', () => {
+  // scrubSource runs first for exactly this reason — syncNavMenuData's fix is
+  // a bust surrounded by fifteen lines of prose ABOUT busting, and a scan that
+  // matched the prose would call every documented gap fixed.
+  const commented = [
+    "import { listPrograms } from '@/lib/api/programs';",
+    'export async function syncZ() {',
+    '  // bustUpstream(UPSTREAM_TAGS.PROGRAMS); ← should not count',
+    '  return listPrograms();',
+    '}',
+  ].join('\n');
+  const tmp = path.join(HERE, '..', '..', 'node_modules', '.cache-synccheck');
+  mkdirSync(tmp, { recursive: true });
+  const f = path.join(tmp, 'syncCommented.js');
+  writeFileSync(f, commented, 'utf8');
+  assert.deepEqual(syncJobsReadingUnbusted([f]), ['syncCommented.js']);
 });
 
 test('per-record builders produce the shapes the reads use', () => {
