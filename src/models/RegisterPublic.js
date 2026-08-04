@@ -79,7 +79,26 @@ const InvoiceSchema = new mongoose.Schema(
     firstName:   { type: String, trim: true },
     lastName:    { type: String, trim: true },
     companyName: { type: String, trim: true },
-    branch:      { type: String, trim: true },
+    /**
+     * `branch` is LEGACY READ-ONLY — the free-text field the structured pair
+     * below replaced. Nothing writes it: zod strips it, and the admin action's
+     * allowlist does not name it. A derived string alongside the pair is how
+     * one value under two names ends up disagreeing with itself (this repo
+     * already paid for that as quotation_address / billing_address).
+     *
+     * `branchType` / `branchCode` are the Thai Revenue-Department concepts and
+     * apply to country 'TH'. `branchFree` is the 'Other country' counterpart,
+     * where a 5-digit branch number is meaningless. The label for any of the
+     * three is computed by src/lib/registration/branchLabel.js.
+     */
+    branch:      { type: String, trim: true }, // legacy — never written by the current form
+    branchType: {
+      type: String,
+      enum: ['head_office', 'branch'],
+      default: 'head_office',
+    },
+    branchCode:  { type: String, trim: true, default: '' },
+    branchFree:  { type: String, trim: true },
     taxId:       { type: String, trim: true },
     // Only one address sub-document will be populated
     thaiAddress:          { type: ThaiAddressSchema, default: null },
@@ -182,6 +201,27 @@ const RegisterPublicSchema = new mongoose.Schema(
     pricing: { type: PricingSnapshotSchema, default: null },
     payment: { type: PaymentSchema,         default: null },
     consent: { type: ConsentSchema,         default: null },
+
+    /**
+     * AUDIT ANNOTATION ONLY — the registration this one replaced.
+     *
+     * The charge endpoint is one-shot: it creates a document and a charge in a
+     * single POST with no dedup key, so pressing "สร้าง QR ใหม่" produces a
+     * SECOND document for the same person and round. Before this field, that
+     * was indistinguishable in the data from a retried card, a genuine second
+     * booking, or one coordinator booking twice — which is what the orphan
+     * audit actually found.
+     *
+     * Set only by the regenerate path, and only when the value the client sent
+     * looks like an ObjectId (see asRegistrationPointer). It is NOT a foreign
+     * key: nothing resolves it, nothing populates it, no behaviour branches on
+     * it, and a null here means "not known", never "not superseded" — every
+     * document written before this field existed has null.
+     *
+     * String, not ObjectId, on purpose: the type makes `.populate()` impossible
+     * so the annotation cannot quietly become a lookup.
+     */
+    supersedesRegistrationId: { type: String, default: null },
 
     // Meta
     notes:  { type: String, trim: true, maxlength: 500 },

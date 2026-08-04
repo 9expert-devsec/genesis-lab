@@ -176,15 +176,32 @@ export async function updateRegistration(id, data, source = 'public') {
   const update = {};
 
   if (source === 'inhouse') {
-    // Inhouse editable fields
+    /**
+     * Inhouse editable fields — AN ALLOWLIST, so a field that is not named here
+     * reaches Mongo from nowhere. That cuts both ways and the omissions are
+     * deliberate:
+     *
+     *   · `skillLevel`, `objective`, `scheduleMode`, `preferredDateFrom`,
+     *     `preferredDateTo`, `onsiteEquipment`, `onsiteAddress`,
+     *     `onsiteProvince`, `onsiteDistrict` — removed from the form; the paths
+     *     survive on the Mongoose schema so old enquiries still read back, and
+     *     leaving them writable would let the admin surface create data in a
+     *     shape nothing else produces any more.
+     *   · `branch` — LEGACY READ-ONLY. `branchType` / `branchCode` replaced it.
+     *     Keeping it writable is precisely how the two representations drift
+     *     apart, one of them wins in a template, and nobody can say which was
+     *     meant. An fs guard pins its absence from both allowlists.
+     *   · `companyName` — a derived mirror of `quotationCompany`, written by
+     *     one line in the API route and nowhere else.
+     */
     const inhouseFields = [
-      'coursesInterested','participantsCount','skillLevel','objective','contentMode','contentDetails',
-      'scheduleMode','preferredMonth','preferredDateFrom','preferredDateTo','scheduleNote',
-      'trainingFormat','onsiteAddress','onsiteProvince','onsiteDistrict','onsiteEquipment',
+      'coursesInterested','participantsCount','contentMode','contentDetails',
+      'preferredMonth','scheduleNote',
+      'trainingFormat','onsiteVenue',
       'onlineRegion','onlineTimezone',
-      'contactFirstName','contactLastName','contactRole','contactDepartment','companyName',
+      'contactFirstName','contactLastName','contactRole','contactDepartment',
       'contactEmail','contactPhone','contactLine',
-      'quotationCountry','quotationCompany','taxId','branch',
+      'quotationCountry','quotationCompany','taxId','branchType','branchCode',
       'thaiAddress','internationalAddress','message','adminNotes',
     ];
     for (const f of inhouseFields) {
@@ -234,7 +251,18 @@ export async function updateRegistration(id, data, source = 'public') {
         if (inv.firstName   !== undefined) update['invoice.firstName']   = String(inv.firstName ?? '').trim();
         if (inv.lastName    !== undefined) update['invoice.lastName']    = String(inv.lastName ?? '').trim();
         if (inv.companyName !== undefined) update['invoice.companyName'] = String(inv.companyName ?? '').trim();
-        if (inv.branch      !== undefined) update['invoice.branch']      = String(inv.branch ?? '').trim();
+        /**
+         * `invoice.branch` IS DELIBERATELY NOT COPIED — it is legacy read-only.
+         *
+         * This one-key-at-a-time copy is the third layer of a three-layer save
+         * (JSX control → lazily-created skeleton → this allowlist) and the only
+         * one with no visible symptom when it is wrong: an unnamed key is
+         * dropped here, the action returns ok, and the admin sees the old value
+         * after a refresh. Same class of trap as articleSchema's strip mode.
+         */
+        if (inv.branchType  !== undefined) update['invoice.branchType']  = inv.branchType;
+        if (inv.branchCode  !== undefined) update['invoice.branchCode']  = String(inv.branchCode ?? '').trim();
+        if (inv.branchFree  !== undefined) update['invoice.branchFree']  = String(inv.branchFree ?? '').trim();
         if (inv.taxId       !== undefined) update['invoice.taxId']       = String(inv.taxId ?? '').trim();
         if (inv.thaiAddress !== undefined) {
           update['invoice.thaiAddress'] = inv.thaiAddress;

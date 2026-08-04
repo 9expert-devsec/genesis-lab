@@ -1,4 +1,6 @@
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { formatTHB } from '@/lib/pricing';
+import { formatSiteDateTime } from '@/lib/articlePublishTime';
 
 /**
  * Paid-receipt email — sent once a card / PromptPay charge succeeds.
@@ -11,18 +13,34 @@ import { formatTHB } from '@/lib/pricing';
  * Returns { html, text } — the caller decides which to send.
  */
 
-const THAI_MONTHS_FULL = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
-];
-
+/**
+ * `31 กรกฎาคม 2569 เวลา 03:15 น.` — pinned to Asia/Bangkok.
+ *
+ * ── THE BUG THIS REPLACES ───────────────────────────────────────────────────
+ * This function used to read `d.getHours()`, `d.getMonth()`, `d.getDate()` and
+ * `d.getFullYear()`, i.e. the RUNTIME's timezone. Nothing in this repo sets TZ,
+ * so on Vercel that is UTC and every receipt has told Thai customers a time
+ * SEVEN HOURS EARLY — a 09:00 payment printed as 02:00, and anything paid
+ * before 07:00 local printed the PREVIOUS DAY's date on a receipt for money
+ * that had already been taken.
+ *
+ * Same defect, same shape and the same fix as the article `publishedAt`
+ * incident: stop asking the runtime. `formatSiteDateTime` pins `timeZone` to
+ * Asia/Bangkok and cannot be talked out of it by a caller — see
+ * src/lib/articlePublishTime.js.
+ *
+ * The Buddhist-era year is not manual arithmetic any more either: the `th-TH`
+ * locale uses the Buddhist calendar natively, so `2026` renders as `2569`
+ * without a `+ 543` that would double-count if the locale ever changed.
+ *
+ * Two calls rather than one because the shape is `<date> เวลา <time> น.` and
+ * there is no single Intl pattern that emits the Thai word between them.
+ */
 function fmtPaidAt(value) {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getDate()} ${THAI_MONTHS_FULL[d.getMonth()]} ${d.getFullYear() + 543} เวลา ${hh}:${mm} น.`;
+  const date = formatSiteDateTime(value, { day: 'numeric', month: 'long', year: 'numeric' });
+  if (!date) return '—';
+  const time = formatSiteDateTime(value, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return `${date} เวลา ${time} น.`;
 }
 
 export function paidReceiptEmail({
@@ -99,6 +117,11 @@ export function paidReceiptEmail({
               <p style="margin: 0 0 24px; font-size: 13px; color: #6b7280; font-style: italic;">
                 * รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง ทีมงานจะติดต่อเพื่อเก็บข้อมูล
               </p>` : '';
+
+  // Derived, never stored: `invoice.branch` is a legacy read-only path that a
+  // registration written by the current form leaves empty. Same formatter as the
+  // Postmark model, so the two spellings of this row cannot drift.
+  const invoiceBranchLabel = formatInvoiceBranchLabel(invoice);
 
   const invoiceNameLine =
     invoice?.type === 'corporate'
@@ -195,7 +218,7 @@ export function paidReceiptEmail({
                     <p style="margin: 0 0 10px; font-size: 14px;">${invoiceTypeThai} · ${invoiceCountryLabel}</p>
                     <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}</p>
                     <p style="margin: 0 0 10px; font-size: 14px;">${invoiceNameLine}</p>
-                    ${invoice?.branch ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">สาขา</p><p style="margin: 0 0 10px; font-size: 14px;">${invoice.branch}</p>` : ''}
+                    ${invoiceBranchLabel ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">สาขา</p><p style="margin: 0 0 10px; font-size: 14px;">${invoiceBranchLabel}</p>` : ''}
                     ${invoice?.taxId ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">เลขประจำตัวผู้เสียภาษี</p><p style="margin: 0 0 10px; font-size: 14px;">${invoice.taxId}</p>` : ''}
                     ${invoiceAddress ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">ที่อยู่</p><p style="margin: 0; font-size: 14px; line-height: 1.6;">${invoiceAddress}</p>` : ''}
                   </td>
@@ -246,7 +269,7 @@ export function paidReceiptEmail({
 ${showInvoice ? `
 ข้อมูลออกใบกำกับภาษี:
   ประเภท: ${invoiceTypeThai} · ${invoiceCountryLabel}
-  ${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${invoice?.branch ? `\n  สาขา: ${invoice.branch}` : ''}${invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${invoice.taxId}` : ''}${invoiceAddress ? `\n  ที่อยู่: ${invoiceAddress}` : ''}
+  ${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${invoiceBranchLabel ? `\n  สาขา: ${invoiceBranchLabel}` : ''}${invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${invoice.taxId}` : ''}${invoiceAddress ? `\n  ที่อยู่: ${invoiceAddress}` : ''}
   * อีเมลฉบับนี้เป็นใบเสร็จอย่างย่อ ใบกำกับภาษีฉบับเต็มจะจัดส่งภายหลัง
 ` : ''}${showAttendees ? `
 รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน):

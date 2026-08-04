@@ -144,3 +144,81 @@ function removeImports(text) {
 export function readSourceForScanning(filePath, opts) {
   return scrubSource(readFileSync(filePath, 'utf8'), opts);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADDITIONS (feature branch). Everything ABOVE this line is byte-identical to
+// `git show refactor:test/sourceScan.mjs` and must stay that way, so the two
+// branches merge without a conflict and without two scrubbers to reason about.
+//
+// These four are not a second reader — they are a directory walk, a counter and
+// two existence checks that the reader above does not attempt, all built ON TOP
+// of readSourceForScanning rather than beside it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { readdirSync, statSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * One repo-relative file in the three forms a guard needs.
+ *
+ * `code` strips imports and `withImports` does not, and CHOOSING WRONG IS A
+ * SILENT FAILURE IN BOTH DIRECTIONS:
+ *   · a "nothing imports X" guard read from `code` sees no import statements at
+ *     all and passes vacuously — the deleted-admin-template guard is exactly
+ *     this shape and would have been worthless
+ *   · a "this file does not CALL X" guard read from `withImports` is satisfied
+ *     by the import line alone, which is defect 5 in the header above
+ * So both are handed over and each assertion states which it uses.
+ */
+export function readSource(rel) {
+  const full = path.join(ROOT, rel);
+  return {
+    rel,
+    raw: readFileSync(full, 'utf8').replace(/\r\n?/g, '\n'),
+    code: readSourceForScanning(full),
+    withImports: readSourceForScanning(full, { stripImports: false }),
+  };
+}
+
+/** Does the repo-relative path exist? For "this file is gone" guards. */
+export function sourceExists(rel) {
+  try {
+    statSync(path.join(ROOT, rel));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Every .js/.jsx/.mjs under a repo-relative dir, read as above. */
+export function walkSources(relDir = 'src') {
+  const out = [];
+  (function walk(dir) {
+    for (const name of readdirSync(dir)) {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.(js|jsx|mjs)$/.test(name)) {
+        out.push(readSource(path.relative(ROOT, full).split(path.sep).join('/')));
+      }
+    }
+  })(path.join(ROOT, relDir));
+  return out;
+}
+
+/**
+ * How many times `name` is CALLED in already-scrubbed text.
+ *
+ * COUNTS, rather than detects. A "this path sends exactly one email" claim
+ * tested as ">= 1" is the weak-lower-bound failure this repo already shipped as
+ * `writes.length >= 2` in planDemotion — satisfied by a plan that writes every
+ * row, so breaking the guarded thing produced zero failures.
+ *
+ * The lookbehind excludes property calls (`obj.sendEmail(`), so this counts the
+ * imported binding, and excludes longer identifiers ending the same way.
+ */
+export function countCallSites(code, name) {
+  return (code.match(new RegExp(String.raw`(?<![.\w$])${name}\s*\(`, 'g')) ?? []).length;
+}

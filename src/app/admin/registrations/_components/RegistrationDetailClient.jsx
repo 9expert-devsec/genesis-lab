@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Pencil, Trash2, Check, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+import { onlyDigits } from '@/lib/registration/digitsOnly';
 import {
   updateRegistrationStatus,
   updateRegistration,
@@ -453,7 +456,10 @@ function AttendeeRow({ n, name, email, phone, isCoord }) {
 const EMPTY_THAI_ADDR = { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' };
 const EMPTY_INTL_ADDR = { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' };
 
-function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, setInvoice }) {
+// EXPORTED for the render tier only — the edit form is gated behind
+// `editSection === 'invoice'`, which a click sets and renderToStaticMarkup
+// cannot reach. Same reason InhouseForm exports InhouseStepForm.
+export function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, setInvoice }) {
   const isThai = invoice?.country === 'TH' || !invoice?.country;
 
   const set = (field, val) => setInvoice((prev) => ({ ...prev, [field]: val }));
@@ -480,7 +486,11 @@ function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, setInvoic
           onChange={(e) => {
             setRequestInvoice(e.target.checked);
             if (e.target.checked && !invoice) {
-              setInvoice({ type: 'individual', country: 'TH', firstName: '', lastName: '', companyName: '', branch: '', taxId: '', thaiAddress: { ...EMPTY_THAI_ADDR }, internationalAddress: null });
+              // branchType/branchCode, NOT `branch` — seeding the legacy key
+              // here would put the skeleton out of step with the control below
+              // and with the action's allowlist, and the save would look fine
+              // and store nothing.
+              setInvoice({ type: 'individual', country: 'TH', firstName: '', lastName: '', companyName: '', branchType: 'head_office', branchCode: '', branchFree: '', taxId: '', thaiAddress: { ...EMPTY_THAI_ADDR }, internationalAddress: null });
             }
           }}
           className="h-4 w-4 rounded accent-9e-brand"
@@ -518,7 +528,50 @@ function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, setInvoic
           ) : (
             <div className="grid gap-3">
               <EditField label={isThai ? 'ชื่อบริษัท' : 'Company name'} required value={invoice.companyName ?? ''} onChange={(v) => set('companyName', v)} />
-              <EditField label={isThai ? 'สาขา (ถ้ามี)' : 'Branch / Division (optional)'} value={invoice.branch ?? ''} onChange={(v) => set('branch', v)} />
+              {/* THE SAME CONTROL AS THE PUBLIC FORM, deliberately. This path
+                  does not run the zod schema, so a free-text box here is a way
+                  for an admin to write a branch value the customer-facing form
+                  would have rejected — and then the two representations differ
+                  with nothing to say which is right. Digits-only + a dropdown
+                  makes the invalid state unrepresentable instead of merely
+                  discouraged. */}
+              {isThai ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+                      สาขา<span className="ml-0.5 text-red-500">*</span>
+                    </label>
+                    <select
+                      value={invoice.branchType ?? 'head_office'}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        // Clear the code on the way back to head office: its
+                        // input is hidden in that state, so a leftover value
+                        // would be unreachable AND still saved.
+                        setInvoice((prev) => ({
+                          ...prev,
+                          branchType: next,
+                          branchCode: next === 'branch' ? (prev.branchCode ?? '') : '',
+                        }));
+                      }}
+                      className={selectCls()}
+                    >
+                      <option value="head_office">สำนักงานใหญ่</option>
+                      <option value="branch">สาขาย่อย</option>
+                    </select>
+                  </div>
+                  {invoice.branchType === 'branch' && (
+                    <EditField
+                      label="เลขที่สาขา"
+                      required
+                      value={invoice.branchCode ?? ''}
+                      onChange={(v) => set('branchCode', onlyDigits(v, 5))}
+                    />
+                  )}
+                </div>
+              ) : (
+                <EditField label="Branch / Division (optional)" value={invoice.branchFree ?? ''} onChange={(v) => set('branchFree', v)} />
+              )}
             </div>
           )}
 
@@ -526,7 +579,7 @@ function InvoiceEditForm({ requestInvoice, setRequestInvoice, invoice, setInvoic
           <EditField
             label={isThai ? 'เลขประจำตัวผู้เสียภาษี' : 'Tax ID / VAT ID (optional)'}
             value={invoice.taxId ?? ''}
-            onChange={(v) => set('taxId', v)}
+            onChange={(v) => set('taxId', isThai ? onlyDigits(v, 13) : v)}
             required={isThai}
           />
 
@@ -578,14 +631,20 @@ function InvoiceReadView({ requestInvoice, invoice }) {
       ) : (
         <>
           <Row label="ชื่อบริษัท" value={invoice.companyName} />
-          {invoice.branch && <Row label="สาขา" value={invoice.branch} />}
+          {/* Derived at read time — the label is never stored. Covers the
+              structured pair, the foreign free-text field, and the legacy
+              `branch` string on pre-split documents. */}
+          {formatInvoiceBranchLabel(invoice) && (
+            <Row label="สาขา" value={formatInvoiceBranchLabel(invoice)} />
+          )}
         </>
       )}
       {invoice.taxId && <Row label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId} />}
       {invoice.country === 'TH' && invoice.thaiAddress && (
-        <Row label="ที่อยู่"
-          value={[invoice.thaiAddress.addressLine, invoice.thaiAddress.subDistrict, invoice.thaiAddress.district, invoice.thaiAddress.province, invoice.thaiAddress.postalCode].filter(Boolean).join(' ')}
-        />
+        // The whole invoice, not invoice.thaiAddress — the formatter reads
+        // invoice.country to choose its branch, so passing the sub-object alone
+        // would silently take the Thai path for a foreign address.
+        <Row label="ที่อยู่" value={formatBillingAddress(invoice)} />
       )}
       {invoice.country === 'OTHER' && invoice.internationalAddress && (
         <Row label="ที่อยู่"
