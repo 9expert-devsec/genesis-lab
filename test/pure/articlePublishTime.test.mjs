@@ -14,6 +14,7 @@ import {
 } from '@/lib/articlePublishTime';
 import { parseArticleFormData } from '@/lib/articleFormPayload';
 import { articleSchema } from '@/lib/schemas/article';
+import { AMBIENT_PROBE, AMBIENT_TZ, withTZ, zoneProbe } from '../withTZ.mjs';
 
 /**
  * THE INCIDENT (b-001): an admin in Bangkok picks 18:00 in the article form's
@@ -46,39 +47,17 @@ import { articleSchema } from '@/lib/schemas/article';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
- * The zone this process was ACTUALLY running in before anything here touched
- * it, resolved rather than read off the environment.
+ * AMBIENT_TZ / zoneProbe / AMBIENT_PROBE / withTZ MOVED to test/withTZ.mjs and
+ * are imported above. The mechanism and its rationale are unchanged — including
+ * why the restore assigns the resolved ambient zone back rather than deleting
+ * the variable — and the three CONTROLS at the bottom of this file still
+ * exercise them, which is the point: the helper moved, its proof did not.
  *
- * `process.env.TZ` is normally UNSET — the runtime falls back to the OS zone —
- * and `delete process.env.TZ` does NOT put that fallback back. Verified on Node
- * 22/Windows: set TZ=America/Los_Angeles, delete it, and Date parsing stays on
- * Los Angeles. So the naive `if (prev === undefined) delete …` restore leaks the
- * LAST zone used here into every test that runs afterwards, in every tier, and
- * the failure lands in an unrelated file. (It did: the first draft of this file
- * reddened a page-builder schedule render test 300 lines away.)
- *
- * Capturing the resolved zone at module load and ASSIGNING it back makes the
- * restore an actual restore.
+ * It moved because a SECOND consumer appeared (test/pure/emailTemplateModels
+ * .test.mjs, over the paid-receipt timestamp). Copying a restore that took an
+ * incident to get right is how that incident comes back in a file nobody is
+ * watching.
  */
-const AMBIENT_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
-/** The observable consequence of the current zone — used to prove restoration. */
-const zoneProbe = () => new Date('2026-07-30T18:00').toISOString();
-const AMBIENT_PROBE = zoneProbe();
-
-/**
- * Run `fn` with process.env.TZ forced. SYNCHRONOUS ONLY — see the note above.
- * Passing an async fn is a bug this cannot detect, so do not.
- */
-function withTZ(tz, fn) {
-  const prev = process.env.TZ ?? AMBIENT_TZ;
-  process.env.TZ = tz;
-  try {
-    return fn();
-  } finally {
-    process.env.TZ = prev;
-  }
-}
 
 const ZONES = ['UTC', 'Asia/Bangkok', 'America/Los_Angeles'];
 

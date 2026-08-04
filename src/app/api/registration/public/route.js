@@ -5,6 +5,30 @@ import RegisterPublic from '@/models/RegisterPublic';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/public-registration';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
+import { getCourseByCode } from '@/lib/api/public-courses';
+
+/**
+ * The course cover for the confirmation email, or '' — NEVER a throw.
+ *
+ * The email model is pure, so the I/O happens here. This is on the critical
+ * path of a request that has ALREADY WRITTEN THE REGISTRATION, so an upstream
+ * hiccup must cost the customer a picture and nothing else: a decorative image
+ * is not worth a failed confirmation, and it is certainly not worth a 500 on a
+ * registration that is already in Mongo.
+ *
+ * `getCourseByCode` filters on `course_id`, and both `courseCode` and
+ * `courseId` hold that short code here (RegisterWizard sets both from
+ * `course.course_id`), so either spelling resolves correctly.
+ */
+async function courseCoverUrl(code) {
+  try {
+    const course = await getCourseByCode(code);
+    return course?.course_cover_url ?? '';
+  } catch (err) {
+    console.warn('[reg-route] course cover lookup failed — sending without it.', err?.message);
+    return '';
+  }
+}
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -75,12 +99,6 @@ export async function POST(req) {
 
   const referenceNumber = String(doc._id).slice(-8).toUpperCase();
 
-  const host = headersList.get('host');
-  const proto = headersList.get('x-forwarded-proto') || 'https';
-  const baseUrl = process.env.AUTH_URL || `${proto}://${host}`;
-  const adminDashboardUrl = `${baseUrl}/admin/registrations/${doc._id}`;
-  const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
-
   // Pre-compute flat invoice display strings for email templates.
   // These are derived from the nested invoice sub-document so the
   // templates stay logic-free.
@@ -107,14 +125,20 @@ export async function POST(req) {
           .filter(Boolean)
           .join(' ');
 
+  // AWAITED, deliberately: the model is built synchronously inside the sender,
+  // so a pending promise here would reach the template as `undefined` and the
+  // <img> would silently vanish. The cost is one upstream call before the
+  // response — bounded by fetchWithTimeout inside aiFetch, and ISR-cached for
+  // an hour per course, so the common case is a cache read.
+  const courseImage = await courseCoverUrl(data.courseCode || data.courseId);
+
   await sendPublicRegistrationEmails({
     data,
     referenceNumber,
     attendees,
     invoiceCountry,
     invoiceAddress,
-    adminDashboardUrl,
-    adminEmail,
+    courseImage,
   });
 
   return NextResponse.json({
