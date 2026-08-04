@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -25,6 +25,8 @@ import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
 import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
+import { sortSkillsByAdminOrder } from '@/lib/navmenu/skillOrder';
+import { DesktopSkillRows, MobileSkillRows } from '@/components/layout/SkillMenuRows';
 import {
   getCoursesByProgram,
   getCoursesBySkill,
@@ -69,10 +71,22 @@ export function PublicHeaderClient({
   dynamicCareerPaths = [],
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // THE SKILL LIST IS SORTED ONCE, HERE, and handed to both menus as a prop.
+  //
+  // Not inside DesktopMega and MobileMegaAccordion separately: two call sites
+  // applying "the same" sort is how the desktop and mobile menus end up in
+  // different orders, and nobody tests both on the same commit. Label, icon
+  // and slug still come from the config entry — only ORDER and VISIBILITY come
+  // from the database. See lib/navmenu/skillOrder.js.
+  const orderedSkills = useMemo(
+    () => sortSkillsByAdminOrder(skills, navMenuData?.skillOrder ?? {}),
+    [navMenuData?.skillOrder]
+  );
   // Gate the portal until after first client render — `document.body`
   // doesn't exist on the server, and the SSR markup must match.
   const [mounted, setMounted] = useState(false);
@@ -113,6 +127,7 @@ export function PublicHeaderClient({
                   key={item.label}
                   item={item}
                   programs={programs}
+                  orderedSkills={orderedSkills}
                   dynamicCareerPaths={dynamicCareerPaths}
                   tnhsCourses={tnhsCourses}
                   navOnlineCourses={navOnlineCourses}
@@ -171,6 +186,7 @@ export function PublicHeaderClient({
         <MobileDrawer
           open={drawerOpen}
           programs={programs}
+          orderedSkills={orderedSkills}
           dynamicCareerPaths={dynamicCareerPaths}
           tnhsCourses={tnhsCourses}
           navOnlineCourses={navOnlineCourses}
@@ -331,10 +347,11 @@ const MEGA_ROW =
 function DesktopMega({
   item,
   programs,
+  orderedSkills = [],
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
 }) {
   const cpRows = careerPathRows(dynamicCareerPaths);
@@ -420,7 +437,11 @@ function DesktopMega({
       return;
     }
     if (col1Active === 'skills') {
-      if (skills.length > 0) handleSkillHover(skills[0]);
+      // `orderedSkills[0]`, not `skills[0]`: the auto-loaded row must be the
+      // one that renders FIRST, and after the SkillOrder join those are no
+      // longer the same skill. Seeding from the config array would highlight
+      // a row further down the column and show its courses in Col 3.
+      if (orderedSkills.length > 0) handleSkillHover(orderedSkills[0]);
       return;
     }
     // Career Path / TNHS / Online don't use the Col 3/4 drill-down.
@@ -723,48 +744,19 @@ function DesktopMega({
                     <div className="px-3 pb-1 pt-1">
                       <span className={MEGA_COL_HEADER}>SKILLS</span>
                     </div>
-                    <ul>
-                      {skills.map((s) => {
-                        const count =
-                          coursesCache.current.get(`skill:${s.upstreamId}`)?.items?.length ??
-                          navMenuData.skills?.[s.upstreamId]?.items?.length;
-                        const isActiveRow = col2HoveredKey === s.upstreamId;
-                        return (
-                          <li key={s.slug}>
-                            <Link
-                              href={skillHref(s, navMenuData?.skillSlugs ?? {})}
-                              onMouseEnter={() => handleSkillHover(s)}
-                              onClick={closeMegaMenu}
-                              className={cn(
-                                MEGA_ROW,
-                                isActiveRow && 'bg-[var(--surface-muted)] font-medium text-9e-action dark:text-9e-brand'
-                              )}
-                            >
-                              <Image
-                                src={s.iconUrl}
-                                alt={`ไอคอน ${s.label}`}
-                                width={20}
-                                height={20}
-                                className="h-5 w-5 flex-none object-contain"
-                                unoptimized
-                              />
-                              <span
-                                className={cn(
-                                  'flex-1',
-                                  isActiveRow ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-primary)]'
-                                )}
-                              >
-                                {s.label}
-                              </span>
-                              {count > 0 && (
-                                <span className="flex-none text-[10px] text-[var(--text-muted)]">({count})</span>
-                              )}
-                              <ChevronRight className="h-3.5 w-3.5 flex-none opacity-30" strokeWidth={2} />
-                            </Link>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    {/* Already ordered and hidden-filtered by the parent. */}
+                    <DesktopSkillRows
+                      skills={orderedSkills}
+                      slugMap={navMenuData?.skillSlugs ?? {}}
+                      rowClass={MEGA_ROW}
+                      countFor={(s) =>
+                        coursesCache.current.get(`skill:${s.upstreamId}`)?.items?.length ??
+                        navMenuData.skills?.[s.upstreamId]?.items?.length
+                      }
+                      activeKey={col2HoveredKey}
+                      onHover={handleSkillHover}
+                      onNavigate={closeMegaMenu}
+                    />
                   </>
                 )}
 
@@ -1111,10 +1103,11 @@ function Col4Skeleton() {
 function MobileDrawer({
   open,
   programs,
+  orderedSkills = [],
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
   onClose,
 }) {
@@ -1165,6 +1158,7 @@ function MobileDrawer({
                   key={item.label}
                   item={item}
                   programs={programs}
+                  orderedSkills={orderedSkills}
                   dynamicCareerPaths={dynamicCareerPaths}
                   tnhsCourses={tnhsCourses}
                   navOnlineCourses={navOnlineCourses}
@@ -1290,10 +1284,11 @@ function MobileSub({ label, icon: Icon, children, defaultOpen = false }) {
 function MobileMegaAccordion({
   item,
   programs,
+  orderedSkills = [],
   dynamicCareerPaths,
   tnhsCourses = [],
   navOnlineCourses = [],
-  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {} },
+  navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
   onNavigate,
 }) {
@@ -1347,27 +1342,14 @@ function MobileMegaAccordion({
             ))}
           </MobileSub>
 
-          {/* Skills */}
+          {/* Skills — admin order + visibility, sorted once by the parent. */}
           <MobileSub label="Skills" icon={Sparkles}>
-            {skills.map((s) => (
-              <Link
-                key={s.slug}
-                href={skillHref(s, navMenuData?.skillSlugs ?? {})}
-                onClick={onNavigate}
-                className={rowClass}
-              >
-                <Image
-                  src={s.iconUrl}
-                  alt=""
-                  aria-hidden="true"
-                  width={20}
-                  height={20}
-                  className="h-5 w-5 flex-none object-contain"
-                  unoptimized
-                />
-                <span>{s.label}</span>
-              </Link>
-            ))}
+            <MobileSkillRows
+              skills={orderedSkills}
+              slugMap={navMenuData?.skillSlugs ?? {}}
+              rowClass={rowClass}
+              onNavigate={onNavigate}
+            />
           </MobileSub>
 
           {/* Career Path */}

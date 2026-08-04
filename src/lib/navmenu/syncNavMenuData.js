@@ -21,6 +21,7 @@ import CourseExtension from '@/models/CourseExtension';
 import { listPublicCourses, getCourseByCode } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 import { skills as SKILLS_CONFIG } from '@/config/site';
 
 const CACHE_KEY = 'navmenu_v1';
@@ -75,6 +76,26 @@ async function buildEntry(filter) {
 export async function syncNavMenuData() {
   await dbConnect();
   const errors = [];
+
+  // BEFORE the first read, not after the write — the same rule syncFaqs,
+  // syncPromotions, syncCareerPaths, syncInstructors and program-order already
+  // follow, and this job was the one that did not.
+  //
+  // Every read below is cached for an hour under one of these tags. Without
+  // the bust, a manual resync (the admin button, POST /api/admin/navmenu/sync)
+  // re-reads the SAME cached response the last run saw and writes it into
+  // NavMenuCache with a fresh `syncedAt` and status 'ok' — so a course
+  // published upstream ten minutes ago is still missing from the mega menu
+  // afterwards, and the sync reports success. The admin's only recourse is to
+  // press the button again in an hour, which looks like the button not
+  // working.
+  //
+  // The per-course `course:<id>` tags set by getCourseByCode are NOT busted:
+  // they are per-record and this job does not know the id set until after the
+  // list read. Those only feed the cover image, so a stale one shows an old
+  // thumbnail rather than a missing menu entry. Named here so the gap is a
+  // decision rather than an oversight.
+  bustUpstream(UPSTREAM_TAGS.PROGRAMS, UPSTREAM_TAGS.PUBLIC_COURSES);
 
   // ── Programs ──────────────────────────────────────────────────────
   const programsData = {};

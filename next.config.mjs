@@ -43,6 +43,24 @@ const nextConfig = {
   // Redirect "Online" menu to external academy subdomain.
   // Also redirect the legacy singular /promotion path to /promotions —
   // the placeholder used to live at /promotion, the real list is plural.
+  //
+  // ── SKILL CATALOG SLUGS RENAMED UPSTREAM ──────────────────────────────────
+  // A skill renamed upstream leaves its OLD catalog URL behind with real SEO
+  // history, and the catch-all does NOT 404 it. Measured 2026-08-04 for
+  // /rpa-all-courses: upstream renamed the skill RPA → Automation and changed
+  // `skill_id` RPA → AUT (the `_id` did not change), so
+  // resolveSkillBySlug('rpa-all-courses') can no longer match the still-present
+  // SkillPageConfig row to any upstream skill. loadSkill() returns null, the
+  // request falls through to the generic `-all-courses` branch in
+  // src/app/(public)/[...slug]/page.jsx, and that branch calls
+  // listPublicCourses() with NO filter — so the URL returns 200 with the
+  // ENTIRE catalog under an H1 of the raw slug. A soft-404: indexable, and
+  // indistinguishable from a working page to anything that isn't reading it.
+  //
+  // The redirect is here rather than in the database because a permanent
+  // redirect is a promise to search engines that outlives the row that
+  // prompted it, and this file is where such a promise can be reviewed in a
+  // diff. Renaming a skill again means adding a line here, deliberately.
   async redirects() {
     return [
       {
@@ -58,6 +76,11 @@ const nextConfig = {
       {
         source: '/promotion',
         destination: '/promotions',
+        permanent: true,
+      },
+      {
+        source: '/rpa-all-courses',
+        destination: '/automation-all-courses',
         permanent: true,
       },
     ];
