@@ -1,0 +1,122 @@
+/**
+ * Read-only row + list renderers shared by the two step-2 screens:
+ * `StepPreview` (toggle OFF, quote-only) and `ReviewAndPayStep`
+ * (toggle ON, review + payment).
+ *
+ * Moved out of RegisterWizard.jsx unchanged so ReviewAndPayStep can use
+ * them without importing back into the wizard (which would be circular).
+ */
+
+export function ReadOnlyRow({ label, value }) {
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+      <div className="text-base font-medium uppercase tracking-wide text-[var(--text-muted)] sm:w-40 sm:flex-none">
+        {label}
+      </div>
+      <div className="text-base text-[var(--text-primary)]">{value || "—"}</div>
+    </div>
+  );
+}
+
+export function AttendeeListView({ data }) {
+  const coord = data.coordinator ?? {};
+  const attendees = data.attendees ?? [];
+  if (!data.attendeesListProvided) {
+    return (
+      <p className="text-base text-[var(--text-secondary)]">
+        ยังไม่ระบุรายชื่อผู้เข้าอบรม — ทีมขายจะติดต่อภายหลัง
+      </p>
+    );
+  }
+  return (
+    <ol className="space-y-2">
+      {coord.isAttending && (
+        <li className="rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+          <div className="font-semibold">
+            ท่านที่ 1 · {coord.firstName} {coord.lastName}
+          </div>
+          <div className="text-xs text-[var(--text-secondary)]">
+            {coord.email} · {coord.phone}
+          </div>
+        </li>
+      )}
+      {attendees.map((a, i) => (
+        <li
+          key={i}
+          className="rounded-9e-md border border-[var(--surface-border)] p-3 text-sm"
+        >
+          <div className="font-semibold">
+            ท่านที่ {coord.isAttending ? i + 2 : i + 1} · {a.firstName}{" "}
+            {a.lastName}
+          </div>
+          <div className="text-xs text-[var(--text-secondary)]">
+            {a.email} · {a.phone}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+export function InvoiceView({ invoice }) {
+  if (!invoice) return null;
+  return (
+    <>
+      <ReadOnlyRow
+        label="ประเภทลูกค้า"
+        value={
+          invoice.type === "corporate" ? "นิติบุคคล / บริษัท" : "บุคคลทั่วไป"
+        }
+      />
+      <ReadOnlyRow
+        label="ประเทศ"
+        value={invoice.country === "TH" ? "Thailand" : "Other country"}
+      />
+      {invoice.type === "individual" ? (
+        <ReadOnlyRow
+          label="ชื่อ-นามสกุล"
+          value={`${invoice.firstName ?? ""} ${invoice.lastName ?? ""}`.trim()}
+        />
+      ) : (
+        <>
+          <ReadOnlyRow label="ชื่อบริษัท" value={invoice.companyName} />
+          {invoice.branch && (
+            <ReadOnlyRow label="สาขา" value={invoice.branch} />
+          )}
+        </>
+      )}
+      {invoice.taxId && (
+        <ReadOnlyRow label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId} />
+      )}
+      {invoice.country === "TH" && invoice.thaiAddress && (
+        <ReadOnlyRow
+          label="ที่อยู่"
+          value={[
+            invoice.thaiAddress.addressLine,
+            invoice.thaiAddress.subDistrict,
+            invoice.thaiAddress.district,
+            invoice.thaiAddress.province,
+            invoice.thaiAddress.postalCode,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        />
+      )}
+      {invoice.country === "OTHER" && invoice.internationalAddress && (
+        <ReadOnlyRow
+          label="ที่อยู่"
+          value={[
+            invoice.internationalAddress.line1,
+            invoice.internationalAddress.line2,
+            invoice.internationalAddress.city,
+            invoice.internationalAddress.state,
+            invoice.internationalAddress.postalCode,
+            invoice.internationalAddress.country,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+        />
+      )}
+    </>
+  );
+}

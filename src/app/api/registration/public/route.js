@@ -6,6 +6,7 @@ import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/public-registration';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { getCourseByCode } from '@/lib/api/public-courses';
+import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
 
 /**
  * The course cover for the confirmation email, or '' — NEVER a throw.
@@ -62,40 +63,14 @@ export async function POST(req) {
   // When the coordinator is also an attendee, they fill the first
   // attendee slot server-side so the attendees[] array always matches
   // the attendeesCount count the user selected.
-  const attendees = !data.attendeesListProvided
-    ? []
-    : data.coordinator.isAttending
-      ? [
-          {
-            firstName: data.coordinator.firstName,
-            lastName: data.coordinator.lastName,
-            email: data.coordinator.email,
-            phone: data.coordinator.phone,
-          },
-          ...data.attendees,
-        ]
-      : data.attendees;
+  const attendees = buildAttendees(data);
 
   await dbConnect();
-  const doc = await RegisterPublic.create({
-    courseId: data.courseId,
-    courseCode: data.courseCode,
-    courseName: data.courseName,
-    classId: data.classId,
-    classDate: data.classDate,
-    scheduleType: data.scheduleType ?? 'classroom',
-    attendanceMode: data.attendanceMode ?? 'classroom',
-    coordinator: data.coordinator,
-    attendeesCount: data.attendeesCount,
-    attendeesListProvided: data.attendeesListProvided,
-    attendees,
-    requestInvoice: Boolean(data.requestInvoice),
-    invoice: data.invoice ?? null,
-    notes: data.notes || undefined,
-    status: 'pending',
-    source: 'web',
-    ipAddress,
-  });
+  // Step 2 shows a consent checkbox on the quote path too, so the acceptance
+  // is recorded here rather than being displayed and thrown away.
+  const doc = await RegisterPublic.create(
+    buildQuoteRegistration({ data, attendees, ipAddress })
+  );
 
   const referenceNumber = String(doc._id).slice(-8).toUpperCase();
 
