@@ -85,6 +85,25 @@ export function buildConsentRecord(consent, ipAddress = null) {
   };
 }
 
+/**
+ * Shape-check for an audit pointer at another RegisterPublic document.
+ *
+ * SHAPE ONLY — 24 hex characters, which is what a Mongo ObjectId looks like.
+ * This deliberately does NOT check that the document exists, and callers must
+ * not make it: the pointer is an annotation for a human reading the audit, not
+ * a key anything resolves. See the write site in the charge route.
+ *
+ * Anything else — wrong length, non-hex, a number, an object (which is how a
+ * query-operator injection would arrive as JSON) — becomes null. A bad pointer
+ * is dropped, never an error: it is metadata about a payment, and no customer
+ * should fail to pay because an annotation was malformed.
+ */
+export function asRegistrationPointer(value) {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  return /^[0-9a-fA-F]{24}$/.test(v) ? v : null;
+}
+
 /** Fields common to both registration shapes (quote and paid). */
 export function baseRegistration({ data, attendees, ipAddress = null }) {
   return {
@@ -119,5 +138,32 @@ export function buildQuoteRegistration({ data, attendees, ipAddress = null }) {
   return {
     ...baseRegistration({ data, attendees, ipAddress }),
     consent: buildConsentRecord(data.consent, ipAddress),
+  };
+}
+
+/**
+ * The document the charge route hands to RegisterPublic.create().
+ *
+ * `supersedesRegistrationId` passes through asRegistrationPointer here as well
+ * as at the route, so the shape check cannot be skipped by a future caller that
+ * forgets it. Anything that is not ObjectId-shaped lands as null and the rest of
+ * the document is unaffected — a malformed annotation must never cost the
+ * customer their registration.
+ */
+export function buildPaidRegistration({
+  data,
+  attendees,
+  pricing,
+  method,
+  consent,
+  ipAddress = null,
+  supersedesRegistrationId = null,
+}) {
+  return {
+    ...baseRegistration({ data, attendees, ipAddress }),
+    pricing,
+    payment: { method, omiseStatus: 'pending' },
+    consent: buildConsentRecord(consent, ipAddress),
+    supersedesRegistrationId: asRegistrationPointer(supersedesRegistrationId),
   };
 }

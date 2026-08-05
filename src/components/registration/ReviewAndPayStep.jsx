@@ -189,11 +189,21 @@ export function ReviewAndPayStep({
     return { ok: res.ok && body.ok, body };
   }
 
-  async function createQr() {
+  /**
+   * Create a PromptPay charge. This POST always creates a NEW registration —
+   * the endpoint is one-shot and has no dedup key — so when the user regenerates
+   * an expired QR, `supersedes` carries the id of the registration being
+   * replaced. Purely an audit annotation: the server writes it down and nothing
+   * reads it back. The first charge of a session passes nothing.
+   */
+  async function createQr(supersedes = null) {
     setPayError(null);
     setBusy(true);
     try {
-      const { ok, body } = await postCharge({ paymentMethod: "promptpay" });
+      const { ok, body } = await postCharge({
+        paymentMethod: "promptpay",
+        ...(supersedes ? { supersedesRegistrationId: supersedes } : {}),
+      });
       if (!ok) {
         setBusy(false);
         setPayError(body?.message || "สร้าง QR ไม่สำเร็จ กรุณาลองใหม่");
@@ -429,7 +439,10 @@ export function ReviewAndPayStep({
                 pricing={pricing}
                 expired={qrExpired}
                 secondsLeft={qrSecondsLeft}
-                onRegenerate={createQr}
+                // Wrapped, not passed bare: QrPanelFull wires this straight to
+                // onClick, so `createQr` would receive a MouseEvent as its
+                // `supersedes` argument.
+                onRegenerate={() => createQr(pendingTarget?.id ?? null)}
               />
             )}
             {paymentStarted && channel === "credit_card" && (

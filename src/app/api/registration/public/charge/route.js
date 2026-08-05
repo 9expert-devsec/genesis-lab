@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { resolveCheckoutPricing } from '@/lib/registration/resolve-price';
-import { createPaidRegistration, getClientIp } from '@/lib/registration/create-public';
+import { asRegistrationPointer, createPaidRegistration, getClientIp } from '@/lib/registration/create-public';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 import RegisterPublic from '@/models/RegisterPublic';
@@ -39,7 +39,34 @@ export async function POST(req) {
   const ipAddress = await getClientIp();
   const method = data.paymentMethod;
 
-  const doc = await createPaidRegistration({ data, pricing, method, consent: data.consent, ipAddress });
+  // ── Audit annotation: which registration this one replaced ────────────────
+  //
+  // Sent ONLY by the "สร้าง QR ใหม่" path in ReviewAndPayStep. Read off the raw
+  // body rather than `data` because publicRegistrationSchema does not declare
+  // it and zod strips unknown keys — which is the behaviour we want: a
+  // malformed pointer must never turn a payment into a 400. asRegistrationPointer
+  // checks the SHAPE and nothing else, so garbage silently becomes null.
+  //
+  // THIS IS NOT A FOREIGN KEY, AND THE NEXT EDIT HERE MUST NOT MAKE IT ONE.
+  // Nothing verifies the named document exists, belongs to this customer, or is
+  // still pending — the value arrives from the browser and is written down
+  // exactly as received. So:
+  //   • do not findById() it, populate it, or join on it
+  //   • do not cancel, expire, refund or otherwise modify the document it names
+  //   • do not branch any behaviour on whether it is set
+  // It exists so a human reading the audit can tell a QR regenerate apart from
+  // a genuine second booking. Treating it as trustworthy turns a client-supplied
+  // string into a write target on someone else's registration.
+  const supersedesRegistrationId = asRegistrationPointer(body?.supersedesRegistrationId);
+
+  const doc = await createPaidRegistration({
+    data,
+    pricing,
+    method,
+    consent: data.consent,
+    ipAddress,
+    supersedesRegistrationId,
+  });
   const referenceNumber = String(doc._id).slice(-8).toUpperCase();
   const amountSatang = toSatang(pricing.total);
   const metadata = { registrationId: String(doc._id), referenceNumber };

@@ -1,21 +1,19 @@
 import { headers } from 'next/headers';
 import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic from '@/models/RegisterPublic';
-import {
-  baseRegistration,
-  buildConsentRecord,
-  buildAttendees,
-} from '@/lib/registration/build-public';
+import { buildAttendees, buildPaidRegistration } from '@/lib/registration/build-public';
 
 // The pure document builders live in build-public.js — importing this module
 // costs you next/headers and a MONGODB_URI, which nothing that merely wants to
 // SHAPE a document should have to pay. Re-exported here so existing callers
 // keep their import path.
 export {
+  asRegistrationPointer,
   buildAttendees,
   buildInvoiceDisplay,
   buildConsentRecord,
   buildQuoteRegistration,
+  buildPaidRegistration,
 } from '@/lib/registration/build-public';
 
 /** Resolve client IP from forwarded headers (async — Next 15 headers()). */
@@ -33,14 +31,28 @@ export async function getClientIp() {
  * status starts 'pending'; payment.method/pricing/consent are stored.
  * Returns the saved mongoose doc.
  */
-export async function createPaidRegistration({ data, pricing, method, consent, ipAddress }) {
+export async function createPaidRegistration({
+  data,
+  pricing,
+  method,
+  consent,
+  ipAddress,
+  supersedesRegistrationId = null,
+}) {
   await dbConnect();
-  const attendees = buildAttendees(data);
-  const doc = await RegisterPublic.create({
-    ...baseRegistration({ data, attendees, ipAddress }),
-    pricing,
-    payment: { method, omiseStatus: 'pending' },
-    consent: buildConsentRecord(consent, ipAddress),
-  });
+  const doc = await RegisterPublic.create(
+    // Audit annotation on supersedesRegistrationId — see the field's note on
+    // the model and the write site in the charge route. null is the normal
+    // case and means "not known", not "not superseded".
+    buildPaidRegistration({
+      data,
+      attendees: buildAttendees(data),
+      pricing,
+      method,
+      consent,
+      ipAddress,
+      supersedesRegistrationId,
+    })
+  );
   return doc;
 }
