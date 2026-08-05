@@ -46,7 +46,11 @@ export async function POST(req) {
 
   let result;
   if (method === 'credit_card') {
-    result = await createCardCharge({ amountSatang, token: data.omiseToken, metadata });
+    // Without a return_uri Omise cannot run 3DS: the charge comes back pending
+    // with authorize_uri null and the client polls to timeout. Send the customer
+    // back to a page that polls the status endpoint until the bank settles.
+    const returnUri = `${process.env.NEXT_PUBLIC_BASE_URL}/registration/payment/complete?registrationId=${String(doc._id)}`;
+    result = await createCardCharge({ amountSatang, token: data.omiseToken, metadata, returnUri });
   } else {
     result = await createPromptPayCharge({ amountSatang, metadata });
   }
@@ -111,5 +115,8 @@ export async function POST(req) {
     amount: pricing.total,
     paid,
     pending: !paid,
+    // Present when the card needs 3DS / bank authorization. The client must
+    // redirect the user here; Omise sends them back to our return_uri after.
+    authorizeUrl: charge.authorize_uri ?? null,
   });
 }
