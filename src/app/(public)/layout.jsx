@@ -2,7 +2,6 @@ import { PublicHeader } from '@/components/layout/PublicHeader';
 import { PublicFooter } from '@/components/layout/PublicFooter';
 import { TopNotificationBar } from '@/components/notifications/TopNotificationBar';
 import { SitePopup } from '@/components/notifications/SitePopup';
-import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { getActiveTopBars } from '@/lib/actions/site-notifications';
 
 export default async function PublicLayout({ children }) {
@@ -17,7 +16,8 @@ export default async function PublicLayout({ children }) {
       <main id="main" className="flex-1">{children}</main>
       <PublicFooter />
       <SitePopup />
-      <ScrollToTopButton />
+      {/* The floating dock (back-to-top + chat launcher) is NOT mounted here.
+          It is mounted once from src/app/layout.jsx — see the note there. */}
     </div>
   );
 }

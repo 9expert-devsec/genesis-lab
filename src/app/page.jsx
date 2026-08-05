@@ -3,7 +3,6 @@ import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { TopNotificationBar } from "@/components/notifications/TopNotificationBar";
 import { SitePopup } from "@/components/notifications/SitePopup";
-import { ScrollToTopButton } from "@/components/ui/ScrollToTopButton";
 import { getActiveTopBars } from "@/lib/actions/site-notifications";
 import { getFeaturedArticlesForLanding } from "@/lib/actions/articles";
 import { getActiveClientLogos } from "@/lib/actions/portfolio";
@@ -173,7 +172,10 @@ export default async function HomePage() {
 
       <PublicFooter />
       <SitePopup />
-      <ScrollToTopButton />
+      {/* The floating dock (back-to-top + chat launcher) is NOT mounted here.
+          It is mounted once from src/app/layout.jsx — see the note there. This
+          page sits outside the (public) group, so it used to carry its own
+          copy; a second copy is a second React tree and a second chat state. */}
     </>
   );
 }

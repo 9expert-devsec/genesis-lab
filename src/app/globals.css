@@ -453,7 +453,29 @@ html.dark   { color-scheme: dark; }
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+
+    /* The chat typing indicator's three bouncing dots.
+       The `*` rule above already shortens the animation to 0.01ms, so this is
+       NOT a second copy of it: `animation: none` removes the animation
+       outright, which is categorically different. A 0.01ms bounce still runs —
+       it just runs instantly — and with three dots on staggered negative delays
+       that lands as a visible flicker on every render of the indicator, which
+       for a motion-sensitive reader is the exact thing being asked about.
+       Scoped by data attribute, set in ChatCards.jsx. */
+    [data-chat-typing] {
+      animation: none !important;
+    }
   }
+
+  /* NOTE for anyone adding motion to the chat launcher or panel: the block
+     above ALREADY covers them. The launcher's max-width/opacity expansion is a
+     `transition`, so `transition-duration: 0.01ms !important` collapses it to
+     an instant reveal — which is the correct behaviour, since suppressing the
+     expansion entirely would leave the label unreachable by keyboard. Do not
+     add a per-component rule that repeats what `*` already does.
+     What CSS genuinely CANNOT reach is `scrollBy({ behavior: 'smooth' })`: the
+     JS argument overrides `scroll-behavior`, so the carousels check
+     matchMedia() themselves. See prefersReducedMotion() in ChatCards.jsx. */
 
   ::selection {
     @apply bg-9e-brand/30;

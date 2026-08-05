@@ -154,9 +154,21 @@ export function CourseStickyCTA({
           small screens. At lg+ this box passes UNDER the two-column sidebar
           track — that's intentional and acceptable: the sidebar is raised above
           this bar in the stacking order (aside `relative z-50`, this bar `z-40`;
-          see page.jsx), so the Course Outline buttons and the back-to-top button
-          (z-50) stay clickable where the bar's box sits behind them. The bar
-          still paints above ordinary flow content, which is un-positioned. */}
+          see page.jsx), so the Course Outline buttons stay clickable where the
+          bar's box sits behind them. The bar still paints above ordinary flow
+          content, which is un-positioned.
+
+          The same holds for the bottom-right floating dock, which carries z-50
+          for both of its slots. NOTE the property is the DOCK's now, not the
+          back-to-top button's: that button no longer positions itself and no
+          longer carries a z-index at all (see FloatingActionDock.jsx). The dock
+          is also TALLER than the single button this comment used to describe —
+          it stacks back-to-top above a chat launcher — so it covers more of
+          this bar's right-hand end than it once did. That overlap is accepted,
+          not compensated for: this bar deliberately has no lift rule, and
+          inventing one here would put an offset in this file that has to agree
+          with an offset in the dock, which is the exact coupling the dock was
+          created to remove. */}
       <div className="mx-auto flex max-w-[1200px] justify-start min-[1920px]:justify-center">
         <div className="max-w-[860px] px-4 w-full min-[1920px]:max-w-[900px]">
           <div className="relative flex min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
