@@ -13,6 +13,7 @@
     "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs",
     "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs",
     "audit:banner-links": "node --env-file=.env.local scripts/audit-banner-link-urls.mjs",
+    "audit:orphan-registrations": "node --env-file=.env.local scripts/audit-orphan-registrations.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs"
   },
   "dependencies": {
