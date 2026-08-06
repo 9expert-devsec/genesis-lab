@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { XCircle, Loader2 } from 'lucide-react';
+import { SuccessPulseIcon } from '@/components/ui/SuccessPulseIcon';
 
 /**
  * Return page after the Omise 3DS / bank redirect for a PUBLIC registration.
@@ -71,7 +72,7 @@ function PaymentCompleteInner() {
   if (status === 'paid') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-4">
-        <CheckCircle2 className="h-16 w-16 text-green-500" strokeWidth={1.5} />
+        <SuccessPulseIcon />
         <h1 className="text-2xl font-bold">ชำระเงินสำเร็จ!</h1>
         <p className="text-gray-500">ระบบได้รับการชำระเงินของท่านเรียบร้อยแล้ว</p>
         <p className="text-gray-400 text-sm">ระบบได้จัดส่งใบเสร็จและอีเมลยืนยันไปยังอีเมลของท่านแล้ว</p>
