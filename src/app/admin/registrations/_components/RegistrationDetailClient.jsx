@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2, Pencil, Trash2, Check, X, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import {
   updateRegistrationStatus,
   updateRegistration,
@@ -582,9 +583,10 @@ function InvoiceReadView({ requestInvoice, invoice }) {
       )}
       {invoice.taxId && <Row label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId} />}
       {invoice.country === 'TH' && invoice.thaiAddress && (
-        <Row label="ที่อยู่"
-          value={[invoice.thaiAddress.addressLine, invoice.thaiAddress.subDistrict, invoice.thaiAddress.district, invoice.thaiAddress.province, invoice.thaiAddress.postalCode].filter(Boolean).join(' ')}
-        />
+        // The whole invoice, not invoice.thaiAddress — the formatter reads
+        // invoice.country to choose its branch, so passing the sub-object alone
+        // would silently take the Thai path for a foreign address.
+        <Row label="ที่อยู่" value={formatBillingAddress(invoice)} />
       )}
       {invoice.country === 'OTHER' && invoice.internationalAddress && (
         <Row label="ที่อยู่"

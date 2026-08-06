@@ -12,6 +12,8 @@
  * unaffected.
  */
 
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+
 /**
  * Build the merged attendees array (coordinator-as-attendee folded in).
  * When coordinator.isAttending is true they occupy the first slot, so
@@ -36,23 +38,11 @@ export function buildAttendees(data) {
 /** Flat invoice country + address strings for email templates. */
 export function buildInvoiceDisplay(data) {
   const invoiceCountry = data.invoice?.country ?? 'TH';
-  const invoiceAddress =
-    invoiceCountry === 'OTHER'
-      ? [
-          data.invoice?.internationalAddress?.line1,
-          data.invoice?.internationalAddress?.line2,
-          data.invoice?.internationalAddress?.city,
-          data.invoice?.internationalAddress?.state,
-          data.invoice?.internationalAddress?.postalCode,
-          data.invoice?.internationalAddress?.country,
-        ].filter(Boolean).join(', ')
-      : [
-          data.invoice?.thaiAddress?.addressLine,
-          data.invoice?.thaiAddress?.subDistrict,
-          data.invoice?.thaiAddress?.district,
-          data.invoice?.thaiAddress?.province,
-          data.invoice?.thaiAddress?.postalCode,
-        ].filter(Boolean).join(' ');
+  // The shared formatter, not a local join: it takes the WHOLE invoice because
+  // it reads invoice.country to pick the Thai vs international branch, and it
+  // is the only thing that applies the แขวง/เขต vs ตำบล/อำเภอ/จังหวัด prefixes.
+  // Hand-rolling this here is what put a prefix-less address on customer mail.
+  const invoiceAddress = formatBillingAddress(data.invoice);
   return { invoiceCountry, invoiceAddress };
 }
 

@@ -7,6 +7,8 @@
  * them without importing back into the wizard (which would be circular).
  */
 
+import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
+
 export function ReadOnlyRow({ label, value }) {
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
@@ -91,15 +93,10 @@ export function InvoiceView({ invoice }) {
       {invoice.country === "TH" && invoice.thaiAddress && (
         <ReadOnlyRow
           label="ที่อยู่"
-          value={[
-            invoice.thaiAddress.addressLine,
-            invoice.thaiAddress.subDistrict,
-            invoice.thaiAddress.district,
-            invoice.thaiAddress.province,
-            invoice.thaiAddress.postalCode,
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          // The whole invoice, not invoice.thaiAddress — the formatter reads
+          // invoice.country to choose its branch, so passing the sub-object
+          // alone would silently take the Thai path for a foreign address.
+          value={formatBillingAddress(invoice)}
         />
       )}
       {invoice.country === "OTHER" && invoice.internationalAddress && (

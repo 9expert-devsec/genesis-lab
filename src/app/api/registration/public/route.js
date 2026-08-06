@@ -7,6 +7,7 @@ import { sendPublicRegistrationEmails } from '@/lib/email/template-senders/publi
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 
 /**
  * The course cover for the confirmation email, or '' — NEVER a throw.
@@ -78,27 +79,11 @@ export async function POST(req) {
   // These are derived from the nested invoice sub-document so the
   // templates stay logic-free.
   const invoiceCountry = data.invoice?.country ?? 'TH';
-  const invoiceAddress =
-    invoiceCountry === 'OTHER'
-      ? [
-          data.invoice?.internationalAddress?.line1,
-          data.invoice?.internationalAddress?.line2,
-          data.invoice?.internationalAddress?.city,
-          data.invoice?.internationalAddress?.state,
-          data.invoice?.internationalAddress?.postalCode,
-          data.invoice?.internationalAddress?.country,
-        ]
-          .filter(Boolean)
-          .join(', ')
-      : [
-          data.invoice?.thaiAddress?.addressLine,
-          data.invoice?.thaiAddress?.subDistrict,
-          data.invoice?.thaiAddress?.district,
-          data.invoice?.thaiAddress?.province,
-          data.invoice?.thaiAddress?.postalCode,
-        ]
-          .filter(Boolean)
-          .join(' ');
+  // The shared formatter, not a local join: it takes the WHOLE invoice because
+  // it reads invoice.country to pick the Thai vs international branch, and it
+  // is the only thing that applies the แขวง/เขต vs ตำบล/อำเภอ/จังหวัด prefixes.
+  // Hand-rolling this here is what put a prefix-less address on customer mail.
+  const invoiceAddress = formatBillingAddress(data.invoice);
 
   // AWAITED, deliberately: the model is built synchronously inside the sender,
   // so a pending promise here would reach the template as `undefined` and the
