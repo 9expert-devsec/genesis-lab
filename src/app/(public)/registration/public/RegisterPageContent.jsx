@@ -7,6 +7,7 @@ import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
+import { courseHref } from '@/lib/utils';
 
 /**
  * Base path for the public registration wizard. The wizard pushes
@@ -53,6 +54,22 @@ export async function RegisterPageContent({ searchParams, step }) {
   const earlyBirdScheduleId =
     earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
 
+  // Back-link target for step 1 — the detail page of the course being
+  // registered for, not the catalog.
+  //
+  // Legacy "<course_id lowercased>-training-course" slug, matching CourseCard.
+  // Deliberately NOT `ext.urlAlias`: aliases are stored WITH a leading slash
+  // (normalizeAlias in course-extensions.js) and are not required to carry the
+  // '-training-course' suffix, so courseHref would turn `/foo` into
+  // `//foo-training-course` — a URL resolveCourse cannot match by either of its
+  // two paths. The legacy slug always resolves via resolveCourse's path 2.
+  //
+  // courseHref('') already returns '/training-course', so a course with no id
+  // falls back to the catalog without a second guard here.
+  const courseDetailHref = courseHref(
+    course.course_id ? String(course.course_id).toLowerCase() : ''
+  );
+
   // ── Omise online-payment inputs ────────────────────────────────
   // The toggle lives on the CourseExtension sidecar; per-round price
   // overrides live on ScheduleLocal. Resolve both here so the wizard
@@ -91,6 +108,7 @@ export async function RegisterPageContent({ searchParams, step }) {
           earlyBirdScheduleId={earlyBirdScheduleId}
           step={step}
           basePath={REGISTRATION_BASE_PATH}
+          courseDetailHref={courseDetailHref}
           omisePaymentEnabled={omisePaymentEnabled}
           coursePrice={course.course_price ?? null}
           priceByScheduleId={priceByScheduleId}
