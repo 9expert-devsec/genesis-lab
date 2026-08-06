@@ -27,7 +27,15 @@ import { dockLiftsForBottomBar, shouldRenderFloatingDock } from '@/lib/floatingD
  *
  * ── POINTER EVENTS ──────────────────────────────────────────────────────────
  * The container is `pointer-events-none` and re-enables them on its direct
- * children. With `items-end` the box is only as wide as its widest child, so
+ * children — EXCEPT any child carrying `data-dock-passthrough`, which stays
+ * click-through.
+ *
+ * That opt-out wins by SPECIFICITY, not by luck: `.dock > [data-…]` is (0,2,0)
+ * and `.dock > *` is (0,1,0). Putting `pointer-events-none` on the child
+ * itself instead would be a (0,1,0) vs (0,1,0) tie decided by Tailwind's emit
+ * order — which is not a rule, and would flip silently. A decorative slot
+ * occupant (the reading-progress ring) must not become a dead zone in the
+ * corner of every article page. With `items-end` the box is only as wide as its widest child, so
  * once the launcher expands into a capsule (Phase 3) the container is capsule-
  * wide while the back-to-top button is a small circle — leaving dead space
  * beside the button, plus the gap between the two, that would otherwise
@@ -49,7 +57,7 @@ import { dockLiftsForBottomBar, shouldRenderFloatingDock } from '@/lib/floatingD
  * without a router — the same reason CourseStickyCTA exports its own resolvers.
  * `FloatingActionDock` below is the one-line seam that reads the real router.
  */
-export function FloatingActionDockView({ pathname, bottomSlot = null }) {
+export function FloatingActionDockView({ pathname, topSlot = null, bottomSlot = null }) {
   if (!shouldRenderFloatingDock(pathname)) return null;
 
   return (
@@ -61,22 +69,27 @@ export function FloatingActionDockView({ pathname, bottomSlot = null }) {
     // Do not delete it as unused.
     <div
       data-floating-dock=""
-      className={`fixed right-4 z-50 flex flex-col items-end gap-3 pointer-events-none [&>*]:pointer-events-auto lg:bottom-8 lg:right-8 ${
+      className={`fixed right-4 z-50 flex flex-col items-end gap-3 pointer-events-none [&>*]:pointer-events-auto [&>[data-dock-passthrough]]:pointer-events-none lg:bottom-8 lg:right-8 ${
         dockLiftsForBottomBar(pathname) ? 'bottom-24' : 'bottom-8'
       }`}
     >
-      {/* SLOT 1 — upper. Hides itself near the top of the page. */}
+      {/* SLOT 1 — top. Empty on most pages; an absent slot renders no flex
+          item, so `gap-3` adds nothing and the slots below do not move. */}
+      {topSlot}
+      {/* SLOT 2 — middle. Hides itself near the top of the page. */}
       <ScrollToTopButton />
-      {/* SLOT 2 — bottom, and it stays bottom-most whether or not slot 1 is
-          rendered. The dock names the POSITION and nothing else: what goes in
-          here is the caller's business, so this file never learns that a chat
-          feature exists. */}
+      {/* SLOT 3 — bottom, and it stays bottom-most whether or not the slots
+          above it render. The dock names POSITIONS and nothing else: what goes
+          in them is the caller's business, so this file never learns that a
+          chat feature or an article exists. */}
       {bottomSlot}
     </div>
   );
 }
 
-export function FloatingActionDock({ bottomSlot = null }) {
+export function FloatingActionDock({ topSlot = null, bottomSlot = null }) {
   const pathname = usePathname();
-  return <FloatingActionDockView pathname={pathname} bottomSlot={bottomSlot} />;
+  return (
+    <FloatingActionDockView pathname={pathname} topSlot={topSlot} bottomSlot={bottomSlot} />
+  );
 }

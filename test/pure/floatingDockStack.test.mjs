@@ -62,28 +62,48 @@ test('the dock ships a z token that Tailwind really emits under this config', ()
 
 // ── Slot order ──────────────────────────────────────────────────────────────
 
-test('slot order puts back-to-top ABOVE the bottom slot', () => {
-  const upper = DOCK.indexOf('<ScrollToTopButton');
-  const lower = DOCK.indexOf('{bottomSlot}');
-  assert.ok(upper !== -1, 'the back-to-top slot is present in the dock');
-  assert.ok(lower !== -1, 'the bottom slot is present in the dock');
-  assert.ok(
-    upper < lower,
-    'back-to-top must come FIRST in source so it renders above the bottom slot. ' +
-    'Whatever occupies that slot is bottom-most; reversing these swaps which ' +
-    'control sits under the user’s thumb.',
+// The three slots, top to bottom. Written as data so the assertion below is a
+// full SEQUENCE rather than a pair of compares — with three slots, "first is
+// before last" stays true when the middle two are swapped.
+const SLOTS = [
+  ['top slot',    '{topSlot}'],
+  ['back-to-top', '<ScrollToTopButton'],
+  ['bottom slot', '{bottomSlot}'],
+];
+
+test('slot order in source is top → back-to-top → bottom', () => {
+  const positions = SLOTS.map(([label, token]) => {
+    const at = DOCK.indexOf(token);
+    assert.ok(at !== -1, `the ${label} is present in the dock`);
+    return { label, at };
+  });
+  assert.deepEqual(
+    [...positions].sort((a, b) => a.at - b.at).map((p) => p.label),
+    SLOTS.map(([label]) => label),
+    'the dock renders its slots in this order and the order is what decides which ' +
+    'control sits under the user’s thumb. Sorting by source position and ' +
+    'comparing the whole sequence is what makes ANY adjacent swap fail — a ' +
+    'first-before-last compare would survive swapping the middle two.',
   );
 });
 
-test('CONTROL: the ordering assertion is a real comparison, not a presence check', () => {
-  // Reversing the two children in the source must flip this and nothing else.
-  // Demonstrated on the predicate, because the assertion above is an index
-  // compare and a "both are present" check would pass in EITHER order.
-  const order = (a, b) => a < b;
-  assert.equal(order(10, 20), true, 'correct order passes');
-  assert.equal(order(20, 10), false, 'reversed order fails — the compare is live');
-  // and presence alone genuinely does not decide it
-  assert.ok(DOCK.includes('<ScrollToTopButton') && DOCK.includes('{bottomSlot}'));
+test('CONTROL: the ordering assertion fails on EITHER adjacent swap', () => {
+  // The reason the assertion is a sequence and not two compares. Replicated on
+  // the predicate so both failure modes are demonstrable, not just the one that
+  // happens to be easy to produce by editing the source.
+  const seq = (order) => [...order].sort((a, b) => a.at - b.at).map((p) => p.label);
+  const correct = [{ label: 'A', at: 1 }, { label: 'B', at: 2 }, { label: 'C', at: 3 }];
+  assert.deepEqual(seq(correct), ['A', 'B', 'C'], 'the correct order passes');
+
+  const swapTopTwo = [{ label: 'A', at: 2 }, { label: 'B', at: 1 }, { label: 'C', at: 3 }];
+  assert.notDeepEqual(seq(swapTopTwo), ['A', 'B', 'C'], 'swapping the FIRST pair fails');
+
+  const swapBottomTwo = [{ label: 'A', at: 1 }, { label: 'B', at: 3 }, { label: 'C', at: 2 }];
+  assert.notDeepEqual(seq(swapBottomTwo), ['A', 'B', 'C'], 'and so does swapping the SECOND pair');
+
+  // …and the weaker check this replaces would have missed the middle swap.
+  const firstBeforeLast = (o) => o[0].at < o[2].at;
+  assert.equal(firstBeforeLast(swapBottomTwo), true, 'which a first-before-last compare does NOT catch');
 });
 
 // ── The dock is anchored at the BOTTOM ──────────────────────────────────────
@@ -113,6 +133,31 @@ test('the container is click-through and re-enables its direct children', () => 
     'children must get pointer events back — stated ON THE CONTAINER so a new slot ' +
     'cannot forget it, which is the failure a per-child class invites',
   );
+  assert.ok(
+    /\[&>\[data-dock-passthrough\]\]:pointer-events-none/.test(DOCK_CLASS),
+    'and a slot must be able to OPT OUT. A decorative occupant (the reading-progress ' +
+    'ring) would otherwise become a dead zone in the corner of every article page.',
+  );
+});
+
+test('the pass-through opt-out wins by SPECIFICITY, not by emit order', () => {
+  // The whole reason the opt-out is an attribute selector on the CONTAINER
+  // rather than `pointer-events-none` on the child itself:
+  //
+  //   .dock > *                    (0,1,0)
+  //   .dock > [data-...]           (0,2,0)  <- wins outright
+  //   .pointer-events-none         (0,1,0)  <- would TIE with the first, and the
+  //                                            winner would be whichever Tailwind
+  //                                            emitted last. That is not a rule.
+  //
+  // Encoded as the counts a specificity calculator would produce, so the claim
+  // is checkable rather than a comment nobody can verify.
+  const spec = (classes, attrs) => classes + attrs;   // both are the (0,x,0) column
+  assert.ok(spec(1, 1) > spec(1, 0), 'the attribute selector outranks the universal child');
+  assert.equal(spec(1, 0), spec(1, 0), 'while a plain child class would merely tie');
+  // …and the ring really does carry the attribute the rule keys on.
+  const RING = src('src/components/ui/ReadingProgressRing.jsx');
+  assert.match(RING, /data-dock-passthrough=""/, 'the decorative slot opts out');
 });
 
 // ── ScrollToTopButton gave up positioning ───────────────────────────────────

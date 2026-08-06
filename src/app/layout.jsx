@@ -7,6 +7,7 @@ import { Analytics } from '@/components/analytics/Analytics';
 import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
 import { ChatLauncher } from '@/components/chat/ChatLauncher';
+import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -152,7 +153,10 @@ export default function RootLayout({ children }) {
               and knows nothing about chat. Whether the launcher is appropriate
               on THIS path is a third question, answered inside ChatLauncher
               itself via shouldRenderChatLauncher. */}
-          <FloatingActionDock bottomSlot={chatEnabled ? <ChatLauncher /> : null} />
+          <FloatingActionDock
+            topSlot={<ReadingProgressRing />}
+            bottomSlot={chatEnabled ? <ChatLauncher /> : null}
+          />
         </ThemeProvider>
       </body>
     </html>

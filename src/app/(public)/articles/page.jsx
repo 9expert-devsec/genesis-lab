@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { getArticles, listUsedArticleSkillIds } from '@/lib/actions/articles';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
+import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
 
 export const metadata = {
@@ -66,45 +67,18 @@ export default async function ArticlesIndexPage({ searchParams }) {
     program_name: p.program_name,
   }));
 
-  // program_id → program_name, for the card's overlay tag.
-  //
-  // DERIVED FROM `programs` ABOVE, not from a second `listPrograms()` call. The
-  // filter <select> and the card need the same two fields off the same fetch,
-  // and two calls would be two answers on a slow upstream — a card tagged with a
-  // program the dropdown does not offer, from one page render.
-  //
-  // KEYED ON `program_id`, NOT `_id`, for the same reason skillNames is: that is
-  // what an article stores. src/models/Article.js:26 declares
-  // `programs: [String]` and comments it "program_id values", articleSchema and
-  // parseArticleFormData both carry it as a string array, and ArticleForm's
-  // ProgramPicker checks and stores `p.program_id`. Keyed on `_id` this map
-  // would resolve nothing and every overlay would silently disappear — which,
-  // since an unresolved id is DROPPED rather than printed, produces no error and
-  // no visible symptom beyond "the tags stopped appearing".
-  const programNames = Object.fromEntries(
-    programs
-      .filter((p) => p.program_id && p.program_name)
-      .map((p) => [String(p.program_id), String(p.program_name)])
-  );
-
-  // skill_id → skill_name, for the card's chips.
-  //
-  // KEYED ON `skill_id`, NOT `_id`: that is what an article stores. The form's
-  // picker is built from `s.skill_id` (ArticleForm.jsx), the parser and
-  // `articleSchema` both declare `skills` as a string array, and the model
-  // comments the field as "skill_id values". Keying this on `_id` would resolve
-  // nothing and every chip would silently disappear — which is exactly the
-  // failure mode the card's "drop what you cannot resolve" rule turns into
-  // silence, so the key is the part worth being sure about.
+  // program_id → program_name and skill_id → skill_name, for the card's overlay
+  // and chips. Both built by the SHARED builders in src/lib/articleTaxonomy.js —
+  // the landing page needs the same two maps, and the reasoning (which key, what
+  // to drop, what a wrong key looks like) travels with them rather than being
+  // copied. Still derived from THIS page's single fetch of each list, so the
+  // filter <select> and the cards cannot disagree.
   //
   // The list read for this page applies NO projection (getArticles takes
   // `select` opt-in and this call omits it), so `skills` is already on every
   // item — nothing new is fetched from Mongo for this.
-  const skillNames = Object.fromEntries(
-    (skillsRes.items ?? [])
-      .filter((s) => s?.skill_id && s?.skill_name)
-      .map((s) => [String(s.skill_id), String(s.skill_name)])
-  );
+  const programNames = buildProgramNames(programsRes.items);
+  const skillNames = buildSkillNames(skillsRes.items);
 
   // The toolbar's skill options — built from the ids ARTICLES ACTUALLY CARRY
   // (listUsedArticleSkillIds), not from the full upstream list in `skillsRes`.
