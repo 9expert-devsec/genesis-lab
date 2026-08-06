@@ -10,6 +10,7 @@ import {
   CheckCircle2, ArrowRight, Loader2, Monitor,
   HelpCircle, Plus, Minus,
 } from 'lucide-react';
+import { SuccessPulseIcon } from "@/components/ui/SuccessPulseIcon";
 import { inhouseRegistrationSchema, inhouseRegistrationDefaults } from '@/lib/schemas/register-inhouse';
 import { resolveInitialCourseId, buildInhouseInitialValues } from '@/lib/registration/resolveInitialCourse';
 import { Button } from '@/components/ui/button';
@@ -950,25 +951,27 @@ function InhouseStepPreview({
 function InhouseStepComplete({ referenceNumber, email }) {
   return (
     <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
-      <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} />
+      {/* <CheckCircle2 className="mx-auto h-16 w-16 text-9e-brand" strokeWidth={1.5} /> */}
+      <SuccessPulseIcon className="mx-auto" />
       <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
         ส่งคำขอเรียบร้อยแล้ว
       </h2>
-      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+      {/* <p className="mt-3 text-sm text-[var(--text-secondary)]">
         เลขอ้างอิง:{' '}
         <span className="font-mono text-base font-bold text-9e-action">
           {referenceNumber}
         </span>
-      </p>
+      </p> */}
       {email && (
         <p className="mt-4 text-sm text-[var(--text-secondary)]">
-          เราได้ส่งอีเมลยืนยันไปที่{' '}
+          ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่{' '}
           <span className="font-semibold text-[var(--text-primary)]">{email}</span>{' '}
-          แล้ว
+          เรียบร้อย
         </p>
       )}
       <p className="mt-2 text-sm text-[var(--text-secondary)]">
-        ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการ
+        ทั้งนี้ ทางบริษัทจะดำเนินการจัดส่งใบเสนอราคาเป็นเอกสาร PDF ให้ท่านทางอีเมลภายใน 3 วันทำการ <br />
+หากไม่พบกรุณาตรวจสอบใน Junk Mail, Spam Mail อีกครั้ง
       </p>
       <div className="mt-8">
         <Button asChild variant="outline">
