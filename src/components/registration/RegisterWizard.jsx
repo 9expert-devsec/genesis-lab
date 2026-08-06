@@ -12,6 +12,7 @@ import {
   MapPin,
   Monitor,
 } from "lucide-react";
+import { SuccessPulseIcon } from "@/components/ui/SuccessPulseIcon";
 import {
   publicRegistrationSchema,
   publicRegistrationDefaults,
@@ -73,6 +74,10 @@ export function RegisterWizard({
   earlyBirdScheduleId = null,
   step = 1,
   basePath = "/registration/public",
+  // Where "← กลับไปดูหลักสูตร" returns to. Resolved by RegisterPageContent,
+  // which holds the course object. Defaults to the catalog so a caller that
+  // omits it degrades to the old behaviour rather than rendering href={undefined}.
+  courseDetailHref = "/training-course",
   omisePaymentEnabled = false,
   coursePrice = null,
   priceByScheduleId = {},
@@ -317,6 +322,7 @@ export function RegisterWizard({
           initialValues={formData ?? restoredFromStorage}
           onSubmit={handleFormSubmit}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          courseDetailHref={courseDetailHref}
         />
       )}
 
@@ -397,20 +403,35 @@ function Stepper({ currentStep, omisePaymentEnabled = false }) {
 
 // ── Step 1: Form ─────────────────────────────────────────────────
 
-function StepForm({
+export function StepForm({
   course,
   schedules,
   initialClassId,
   initialValues,
   onSubmit,
   earlyBirdScheduleId = null,
+  courseDetailHref = "/training-course",
 }) {
   const restoredClassId = initialValues?.classId;
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // URL FIRST, draft second. `initialClassId` is the ?class= param — the round
+  // the user just clicked — so it must win over whatever round the stored draft
+  // remembers. The other way round, picking a new round on a course you already
+  // started snapped the form back to the old one.
+  //
+  // The draft fallback is NOT dead code: the hero CTA on the course detail page
+  // links to /registration/public?course=<id> with NO &class= (CourseHero.jsx),
+  // so a returning user with a draft arrives here with initialClassId null and
+  // the draft is the only record of the round they had chosen. Round-specific
+  // entry points (ScheduleSection, EarlyBirdBanner, the schedule/search pages)
+  // all append &class=, and those are exactly the ones that must override.
+  //
+  // Only the round follows the URL — every typed field still comes from the
+  // draft via `initialValues`, so changing rounds never clears the form.
   const [selectedScheduleId, setSelectedScheduleId] = useState(
-    restoredClassId || initialClassId || "",
+    initialClassId || restoredClassId || "",
   );
 
   // Sync URL when the user picks a different round so the link is shareable
@@ -425,9 +446,25 @@ function StepForm({
     },
     [router, searchParams],
   );
-  // If the user arrives with draft data, the form was already revealed
-  // previously — auto-open it. Otherwise require an explicit confirm.
-  const [formRevealed, setFormRevealed] = useState(Boolean(initialValues));
+  // Open the form immediately when the user has already committed to a round;
+  // otherwise make them confirm one first.
+  //
+  //   initialValues  — a sessionStorage draft: they filled this in before, so
+  //                    the form was already revealed once. Re-open it.
+  //   initialClassId — the ?class= URL param. EVERY round-specific entry point
+  //                    appends it (the detail-page "ลงทะเบียนรอบที่เลือก" button,
+  //                    the /schedule rows, the catalog + search cards, the
+  //                    early-bird banner, the page-builder schedule section), so
+  //                    its presence means the user picked a round on the way in
+  //                    and re-confirming it here is a dead click.
+  //
+  // The one entry point that omits it is CourseHero's "ขอใบเสนอราคา Public",
+  // which links to /registration/public?course=<id> with no round at all — that
+  // is the path the confirm step still exists for. handleReveal and the button
+  // below stay for it; nothing here auto-selects a round.
+  const [formRevealed, setFormRevealed] = useState(
+    Boolean(initialValues) || Boolean(initialClassId),
+  );
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't
   // overwrite a restored attendanceMode (e.g. after clicking "แก้ไข" back
@@ -687,7 +724,7 @@ function StepForm({
 
           <div className="flex items-center justify-between gap-4 pt-2">
             <Link
-              href="/training-course"
+              href={courseDetailHref}
               className="text-sm font-medium text-[var(--text-secondary)] hover:text-9e-action"
             >
               ← กลับไปดูหลักสูตร
@@ -921,7 +958,7 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
 
 // ── Step 3: Thank-you ────────────────────────────────────────────
 
-function StepComplete({ result, email }) {
+export function StepComplete({ result, email }) {
   const referenceNumber = result?.referenceNumber;
 
   // ── Paid variant (card / PromptPay) ──────────────────────────────
@@ -930,19 +967,16 @@ function StepComplete({ result, email }) {
       result.method === "promptpay" ? "QR PromptPay" : "บัตรเครดิต/เดบิต";
     return (
       <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
-        <CheckCircle2
-          className="mx-auto h-16 w-16 text-9e-brand"
-          strokeWidth={1.5}
-        />
+        <SuccessPulseIcon className="mx-auto" />
         <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
           ชำระเงินสำเร็จ
         </h2>
-        <p className="mt-3 text-sm text-[var(--text-secondary)]">
+        {/* <p className="mt-3 text-sm text-[var(--text-secondary)]">
           เลขอ้างอิง:{" "}
           <span className="font-mono text-base font-bold text-9e-action">
             {referenceNumber}
           </span>
-        </p>
+        </p> */}
         {result.amount != null && (
           <p className="mt-4 text-sm text-[var(--text-secondary)]">
             ยอดชำระ:{" "}
@@ -978,30 +1012,28 @@ function StepComplete({ result, email }) {
   // ── Quote variant (unchanged) ────────────────────────────────────
   return (
     <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-10 text-center shadow-9e-md">
-      <CheckCircle2
-        className="mx-auto h-16 w-16 text-9e-brand"
-        strokeWidth={1.5}
-      />
+      <SuccessPulseIcon className="mx-auto" />
       <h2 className="mt-6 text-2xl font-bold text-[var(--text-primary)]">
         ขอบคุณสำหรับการลงทะเบียน
       </h2>
-      <p className="mt-3 text-sm text-[var(--text-secondary)]">
+      {/* <p className="mt-3 text-sm text-[var(--text-secondary)]">
         เลขอ้างอิง:{" "}
         <span className="font-mono text-base font-bold text-9e-action">
           {referenceNumber}
         </span>
-      </p>
+      </p> */}
       {email && (
         <p className="mt-4 text-sm text-[var(--text-secondary)]">
-          เราได้ส่งอีเมลยืนยันไปที่{" "}
+          ทาง 9Expert ได้ส่งอีเมลยืนยันไปที่{" "}
           <span className="font-semibold text-[var(--text-primary)]">
             {email}
           </span>{" "}
-          แล้ว
+          เรียบร้อย
         </p>
       )}
       <p className="mt-2 text-sm text-[var(--text-secondary)]">
-        ทีมขายจะติดต่อกลับภายใน 1-2 วันทำการ
+        ทั้งนี้ ทางบริษัทจะดำเนินการจัดส่งใบเสนอราคาเป็นเอกสาร PDF ให้ท่านทางอีเมลภายใน 3 วันทำการ <br />
+หากไม่พบกรุณาตรวจสอบใน Junk Mail, Spam Mail อีกครั้ง
       </p>
       <div className="mt-8">
         <Button asChild variant="outline">
