@@ -148,17 +148,17 @@ export function WelcomeScreen({ onPick }) {
   return (
     <div className="grid h-full place-items-center px-5">
       <div className="w-full max-w-md text-center">
-        <div className="mx-auto grid h-20 w-20 place-items-center overflow-hidden rounded-full bg-[var(--surface-muted)] ring-1 ring-[var(--surface-border)]">
+        <div className="mx-auto grid h-24 w-24 place-items-center overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={CHAT_MARK_SRC} alt={CHAT_MARK_ALT} className="h-14 w-14 object-contain" />
+          <img src={CHAT_MARK_SRC} alt={CHAT_MARK_ALT} className="h-20 w-20 object-contain" />
         </div>
 
-        <div className="mt-4 text-2xl font-extrabold text-[var(--text-primary)]">สวัสดีครับ!</div>
+        <div className="mt-2 text-2xl font-extrabold text-[var(--text-primary)]">สวัสดีครับ!</div>
         <div className="mt-2 text-sm text-[var(--text-secondary)]">
           ผมคือ AI Agent พร้อมช่วยตอบคำถามเกี่ยวกับ
         </div>
 
-        <div className="mx-auto mt-8 max-w-sm space-y-4 text-center">
+        <div className="mx-auto mt-4 max-w-sm space-y-4 text-center">
           {WELCOME_POINTS.map((item) => (
             <div key={item.label} className="flex items-center justify-center gap-3">
               <span className="text-xl leading-none">{item.icon}</span>

@@ -34,6 +34,9 @@ import { readSourceForScanning } from '../sourceScan.mjs';
  */
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+// The id→name builders moved out of page.jsx into a module the landing page
+// shares. The keying claims below follow them there.
+const TAXONOMY = readSourceForScanning(path.join(ROOT, 'src/lib/articleTaxonomy.js'), { stripImports: false });
 
 const SKILL_NAMES = {
   'SK-001': 'Power BI',
@@ -424,8 +427,13 @@ test('S5-h — the page fetches skills the same way it fetches programs, and pro
   assert.match(page, /import \{ listSkills \} from '@\/lib\/api\/skills'/, 'imported');
   assert.match(page, /listSkills\(\)\.catch\(\(\) => \(\{ items: \[\] \}\)\)/, 'and it cannot fail the page');
   assert.match(page, /skillNames=\{skillNames\}/, 'and the map reaches the client');
+  // THE KEYING CLAIM MOVED, IT WAS NOT DROPPED. buildSkillNames now lives in
+  // src/lib/articleTaxonomy.js so the landing page can use the same map with
+  // the same reasoning instead of a second copy. The claim is identical; the
+  // file that has to satisfy it changed, so the assertion follows it there.
+  assert.match(page, /buildSkillNames\(skillsRes\.items\)/, 'the page builds the map from its own fetch');
   assert.match(
-    page, /\[String\(s\.skill_id\), String\(s\.skill_name\)\]/,
+    TAXONOMY, /\[String\(s\.skill_id\), String\(s\.skill_name\)\]/,
     'keyed on skill_id — what an article actually stores. Keyed on _id it would ' +
     'resolve nothing and every chip would vanish silently.',
   );
@@ -447,8 +455,9 @@ test('S5-m — programNames is keyed on program_id, and derived from the EXISTIN
     path.join(ROOT, 'src/app/(public)/articles/page.jsx'),
     { stripImports: false },
   );
+  assert.match(page, /buildProgramNames\(programsRes\.items\)/, 'the page builds the map from its own fetch');
   assert.match(
-    page, /\[String\(p\.program_id\), String\(p\.program_name\)\]/,
+    TAXONOMY, /\[String\(p\.program_id\), String\(p\.program_name\)\]/,
     'keyed on program_id — src/models/Article.js declares `programs: [String]` and ' +
     'comments it "program_id values", and ArticleForm\'s ProgramPicker stores ' +
     '`p.program_id`. Keyed on _id this map resolves nothing, silently.',
@@ -462,11 +471,14 @@ test('S5-m — programNames is keyed on program_id, and derived from the EXISTIN
     (page.match(/listPrograms\(/g) ?? []).length, 1,
     'listPrograms is called exactly once — the map is derived from that result',
   );
-  assert.match(
-    page, /Object\.fromEntries\(\s*programs\b/,
-    'and derived from the already-mapped `programs` array specifically, so there is ' +
-    'one source rather than two readings of one response',
-  );
+  // SAME CLAIM, NEW SHAPE. This used to read `Object.fromEntries(programs` —
+  // the map was built from the already-mapped array. That construction moved
+  // into buildProgramNames so the landing page could share it, so what has to
+  // be pinned now is that BOTH consumers name the same response: the dropdown's
+  // `programs` array and the card's name map are two derivations of one
+  // `programsRes`, not two readings of one call.
+  assert.match(page, /const programs = \(programsRes\.items/, 'the dropdown derives from programsRes');
+  assert.match(page, /buildProgramNames\(programsRes\.items\)/, 'and so does the name map');
 });
 
 test('S5-m2 — CONTROL: the program seam matchers can fail, and the field is real', () => {
@@ -515,4 +527,37 @@ test('S5-h2 — CONTROL: the source guard reads real source and its matchers can
   // so an article can genuinely carry these ids.
   const model = readFileSync(path.join(ROOT, 'src/models/Article.js'), 'utf8');
   assert.match(model, /skills:\s+\[\{ type: String/, 'the model stores skills as strings');
+});
+
+test('the skill chip is readable in DARK mode, not only in light', () => {
+  // Measured, not judged by eye. The chip is 11px, so WCAG AA wants 4.5:1:
+  //
+  //   light  #005CFF on #F8FAFD (bg-9e-ice)      5.05:1  pass — unchanged
+  //   dark   #005CFF on #111d2c   BEFORE THIS FIX 3.22:1  FAIL
+  //   dark   #48B0FF on #111d2c   after           7.22:1  pass
+  //
+  // The chip already overrode its BACKGROUND for dark mode and not its text,
+  // which is the shape of the defect: half a dark-mode treatment reads as a
+  // deliberate one, so nothing looks unfinished.
+  const c = card(render([article()]));
+  assert.match(c, /dark:bg-\[#111d2c\]/, 'the dark background override is still there');
+  assert.match(
+    c, /dark:text-9e-air/,
+    'and the text override that has to accompany it. 9e-air is the pairing this ' +
+    'codebase already uses for text-9e-action on dark — not a new token.',
+  );
+});
+
+test('CONTROL: the contrast assertion is about THIS chip and can fail', () => {
+  // Without this, `dark:text-9e-air` could be matched anywhere in the card —
+  // and the light-mode colour must still be present, or "fixed dark mode" would
+  // pass for a chip that simply stopped being blue at all.
+  const chip = card(render([article()]))
+    .match(/<span[^>]*rounded-full bg-9e-ice[^>]*>/)?.[0];
+  assert.ok(chip, 'the skill chip was found by its own class, not by position');
+  assert.ok(chip.includes('dark:text-9e-air'), 'the override is ON the chip');
+  assert.ok(chip.includes('text-9e-action'), 'and light mode keeps its colour');
+  // …and a chip WITHOUT the override would not satisfy it.
+  const before = 'rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action dark:bg-[#111d2c]';
+  assert.ok(!before.includes('dark:text-9e-air'), 'the pre-fix class string fails this check');
 });

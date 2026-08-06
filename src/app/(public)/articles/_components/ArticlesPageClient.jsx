@@ -5,21 +5,13 @@ import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ArrowRight, Pin, Search } from 'lucide-react';
 import { shouldShowPinBadge } from '@/lib/articlePositioning';
-import { formatSiteDateTime } from '@/lib/articlePublishTime';
+import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
 
 // Pinned to the site timezone rather than the viewer's. A bare
 // toLocaleDateString in a server-rendered client component formats in the
 // server's zone (UTC on Vercel) on the first paint and the visitor's zone after
 // hydration, so an article published at 18:00 Bangkok showed tomorrow's date
 // until React swapped it out.
-function formatDate(iso) {
-  return formatSiteDateTime(iso, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export function ArticlesPageClient({
   articles,
   programs,
@@ -239,9 +231,18 @@ function Pager({ page, totalPages, onGo }) {
  * That slot used to say บทความ or บทความวิดีโอ on every card, so on a page where
  * the overwhelming majority are plain articles it was a label that read "this is
  * a thing on the articles page". The type is still a real distinction and still
- * filterable — the toolbar's ประเภท select, the `?type=` param and BlogSection
- * are all untouched — it just does not need to be stamped on every cover image
- * to be available.
+ * filterable — the `?type=` param still works — it just does not need to be
+ * stamped on every cover image to be available.
+ *
+ * BLOGSECTION IS NO LONGER AN EXCEPTION. This block used to say the landing
+ * card was untouched, and that is no longer true: it has been brought onto the
+ * same presentation — program overlay, skill chips, no type badge, no free-text
+ * tags — rendered by the SHARED components in
+ * src/components/articles/ArticleTaxonomyChips.jsx rather than by a second copy
+ * of this markup. The two cards now differ in exactly one thing, the skill cap,
+ * and it is passed at each call site with its own measurement because the
+ * columns really are different widths: 384px here (3 cols, gap-6) against 288px
+ * there (4 cols, gap-4), 25% narrower.
  *
  * The slot now carries the article's PROGRAM, which is the thing a reader
  * scanning a grid of covers actually wants: which part of the catalogue this
@@ -281,13 +282,6 @@ function Pager({ page, totalPages, onGo }) {
  */
 function ArticleCard({ article, programNames = {}, skillNames = {} }) {
   const href = `/articles/${article.slug}`;
-  // One resolver, two rows. Only the map, the field and the cap differ; if these
-  // two ever stop looking identical, one of them has grown a rule the other
-  // does not have.
-  const resolve = (ids, names, cap) =>
-    (ids ?? []).map((id) => names[String(id)]).filter(Boolean).slice(0, cap);
-  const programTags = resolve(article.programs, programNames, 2);
-  const skills = resolve(article.skills, skillNames, 3);
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--surface-border)] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-9e-lg dark:bg-[#0D1B2A]">
       <Link href={href} className="relative block aspect-video overflow-hidden bg-9e-ice dark:bg-[#111d2c]">
@@ -306,20 +300,14 @@ function ArticleCard({ article, programNames = {}, skillNames = {} }) {
         )}
         {/* The overlay slot the type badge vacated. Rendered only when there is
             something to say — no wrapper, so a card with no resolvable program
-            has a clean cover image. A <span> rather than a <div> because this
-            subtree is inside the cover <a>. */}
-        {programTags.length > 0 && (
-          <span className="absolute left-3 top-3 flex flex-wrap gap-1">
-            {programTags.map((name) => (
-              <span
-                key={name}
-                className="rounded-full bg-9e-action px-2 py-0.5 text-[11px] font-medium text-white"
-              >
-                {name}
-              </span>
-            ))}
-          </span>
-        )}
+            has a clean cover image.
+
+            CAP 2, passed rather than defaulted: this row is absolutely
+            positioned on the artwork, so its budget is the card width (384px
+            here) minus the pin badge's corner. The widest real pair measures
+            185.8px against 336px usable — comfortable. The landing passes 2 for
+            a tighter budget; see the note there. */}
+        <ProgramOverlay ids={article.programs} names={programNames} cap={2} />
         {/* Badge only — NOT the ordering. `isPinnedOnArticlePage` still decides
             where this card sits in the list (the cascade in
             src/lib/actions/articles.js is unchanged); shouldShowPinBadge decides
@@ -346,21 +334,18 @@ function ArticleCard({ article, programNames = {}, skillNames = {} }) {
           </p>
         )}
 
-        {skills.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {skills.map((name) => (
-              <span
-                key={name}
-                className="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-action dark:bg-[#111d2c]"
-              >
-                {name}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* CAP 3, and the cap is passed rather than defaulted because the
+            landing card passes 2. This grid is lg:grid-cols-3 at gap-6 inside
+            max-w-[1200px] → (1200 - 48) / 3 = 384px per card, which is the
+            width three chips need. */}
+        <SkillChips ids={article.skills} names={skillNames} cap={3} />
 
+        {/* The publish date used to sit on the left of this row. Removed by
+            the owner's decision — see the note in ArticleDetailClient. The row
+            keeps `justify-between` so the link stays hard right rather than
+            sliding to the left edge when its only sibling disappeared. */}
         <div className="mt-auto flex items-center justify-between pt-4 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          <span>{formatDate(article.publishedAt) || '—'}</span>
+          <span />
           <Link
             href={href}
             className="inline-flex items-center gap-1 font-semibold text-9e-action hover:underline"

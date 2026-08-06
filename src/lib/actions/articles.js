@@ -1027,7 +1027,12 @@ export async function getFeaturedArticlesForLanding(limit = 6) {
   const docs = await Article.find({ active: true, featuredOnLanding: true })
     .sort({ publishedAt: -1, createdAt: -1 })
     .limit(limit)
-    .select('slug title excerpt coverUrl tags articleType publishedAt')
+    // `programs` and `skills` are the ids the landing card's overlay and chips
+    // resolve through the shared name maps — without them the card silently
+    // renders no taxonomy at all, which is indistinguishable from an article
+    // that simply has none. `tags` stays: the field is untouched and still
+    // searched, it is just no longer what the card displays.
+    .select('slug title excerpt coverUrl tags articleType publishedAt programs skills')
     .lean();
   return serialize(docs);
 }

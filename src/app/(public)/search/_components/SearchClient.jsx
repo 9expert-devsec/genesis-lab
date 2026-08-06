@@ -16,7 +16,6 @@ import {
   Tag,
 } from 'lucide-react';
 import { courseHref, careerPathHref } from '@/lib/utils';
-import { siteDateParts } from '@/lib/articlePublishTime';
 
 // ── Local re-implementations from ScheduleClient (not exported) ────
 const MONTH_TH = [
@@ -53,15 +52,6 @@ function formatDateLabel(scheduleItem) {
   }
   const lastM = MONTH_TH[last.getMonth()];
   return `${first.getDate()} ${firstM} - ${last.getDate()} ${lastM} ${last.getFullYear() + 543}`;
-}
-
-// Buddhist-era label built from the SITE timezone's calendar fields, not the
-// runtime's. `siteDateParts` returns a 1-12 month, so MONTH_TH is indexed with
-// `month - 1` rather than a JS 0-11 getMonth().
-function formatArticleDate(iso) {
-  const p = siteDateParts(iso);
-  if (!p) return '';
-  return `${p.day} ${MONTH_TH[p.month - 1]} ${p.year + 543}`;
 }
 
 // Compact Thai-locale date for promo range labels — 2-digit BE year.
@@ -377,11 +367,9 @@ function ArticleResultCard({ article, term }) {
             {article.excerpt}
           </p>
         )}
-        {article.publishedAt && (
-          <p className="mt-2 text-xs text-gray-400">
-            {formatArticleDate(article.publishedAt)}
-          </p>
-        )}
+        {/* No publish date — same decision as the article pages. NOTE the
+            schedule results below still show dates: a course date is the thing
+            the user is searching FOR, not metadata about the page. */}
       </div>
     </Link>
   );
