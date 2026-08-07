@@ -13,6 +13,8 @@
     "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs",
     "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs",
     "audit:storage": "node --env-file=.env.local scripts/audit-storage-footprint.mjs",
+    "audit:legacy-urls": "node --env-file=.env.local scripts/audit-legacy-file-urls.mjs",
+    "report:cloudinary": "node --env-file=.env.local scripts/report-cloudinary-usage.mjs",
     "migrate:legacy-files": "node --env-file=.env.local scripts/migrate-legacy-files.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
     "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs",

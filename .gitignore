@@ -43,3 +43,9 @@ Thumbs.db
 
 # Tooling
 .claude/
+
+# Audit reports — contain document _ids
+/reports/
+
+.vercel
+.env*
