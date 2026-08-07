@@ -6,6 +6,7 @@ import {
   invoiceTypeLabel,
   textBlock,
 } from './labels';
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 
 /**
  * TemplateModel for POSTMARK_TEMPLATE_ALIAS_REG_USER — the confirmation a
@@ -178,7 +179,11 @@ function buildFlatBillingBlocks({ requestInvoice, invoice, invoiceCountry, invoi
   const isCorporate = invoice.type === 'corporate';
   const shared = {
     billing_tax_id: textBlock(invoice.taxId),
-    billing_branch: textBlock(invoice.branch),
+    // DERIVED, never stored. `invoice.branch` is a legacy read-only path; the
+    // form writes branchType + branchCode for TH and branchFree for elsewhere,
+    // and the country split lives in the formatter so this call site cannot get
+    // it wrong. See src/lib/registration/branchLabel.js.
+    billing_branch: textBlock(formatInvoiceBranchLabel(invoice)),
     billing_address: textBlock(invoiceAddress),
   };
 

@@ -1,4 +1,5 @@
 import { textBlock } from './labels';
+import { formatBranchLabel } from '@/lib/registration/branchLabel';
 
 /**
  * TemplateModel for POSTMARK_TEMPLATE_ALIAS_INHOUSE_USER — the acknowledgement
@@ -51,14 +52,34 @@ import { textBlock } from './labels';
  * HERE rather than in the route so it is guaranteed for every caller and
  * testable without a network.
  *
+ * ── `company_name` AND `billing_company_name` ARE NOW ONE FIELD ─────────────
+ * The form asked for the company twice — once in ผู้ประสานงาน as `companyName`
+ * and once in the quotation block as `quotationCompany` — and people filled the
+ * two in differently, which is how an acknowledgement ended up greeting one
+ * legal entity and billing another. There is one input now, and BOTH keys are
+ * still emitted from it: the Postmark template uses `company_name` in the
+ * opening sentence and `billing_company_name` in the quotation table, and
+ * deleting either would leave a hole in a template nobody has re-approved.
+ * Same value under two keys is safe HERE, where both are read-only renderings
+ * of one source; what is unsafe is two SOURCES, which is what was removed.
+ *
+ * `companyName` itself survives as a Mongoose path, written by exactly one line
+ * in the API route as a legacy-compat mirror for the admin list's $regex.
+ *
  * ── NOT MAPPED, AND WHY ─────────────────────────────────────────────────────
- * `objective`, `skillLevel`, `contentMode`, `contentDetails`, `onlineRegion`,
- * `onlineTimezone`, `onsiteEquipment`, `preferredContact*`, `scheduleNote`.
- * Every one was rendered by registration-inhouse-admin.js and by NOTHING else.
- * That template is deleted and this is the customer's mail, so they are not
- * here — a real loss of detail for the team, since the BCC copy of this mail is
- * now the only notification anyone internal receives. The enquiry itself is in
- * the admin dashboard, where whoever answers it has to be anyway.
+ * `contentMode`, `contentDetails`, `onlineRegion`, `onlineTimezone`,
+ * `preferredContact*`, `scheduleNote`. Every one was rendered by
+ * registration-inhouse-admin.js and by NOTHING else. That template is deleted
+ * and this is the customer's mail, so they are not here — a real loss of detail
+ * for the team, since the BCC copy of this mail is now the only notification
+ * anyone internal receives. The enquiry itself is in the admin dashboard, where
+ * whoever answers it has to be anyway.
+ *
+ * `objective`, `skillLevel` and `onsiteEquipment` USED TO BE ON THAT LIST and
+ * are no longer, for a different reason: the form stopped asking. They are not
+ * "carried elsewhere" and they are not "dropped from the mail" — they do not
+ * exist on a current submission at all. The paths remain on the Mongoose schema
+ * so historical enquiries still read back in the admin dashboard.
  *
  * license_* is DEFERRED by the user: deliberately not added, and nothing was
  * removed on its account either.
@@ -96,7 +117,9 @@ export function buildInhouseRegistrationModel({
     contact_position: d.contactRole ?? '',
     contact_department: d.contactDepartment ?? '',
 
-    company_name: d.companyName ?? '',
+    // One source, two keys — see the docstring. `companyName` is not on the
+    // schema any more, so reading it here would emit '' on every submission.
+    company_name: d.quotationCompany ?? '',
     total_participants: d.participantsCount ?? 0,
 
     /**
@@ -118,13 +141,26 @@ export function buildInhouseRegistrationModel({
 
     billing_company_name: d.quotationCompany ?? '',
     billing_tax_id: textBlock(d.taxId),
-    billing_branch: textBlock(d.branch),
+    // Derived, never stored. `branch` is a legacy read-only path; the current
+    // form writes branchType + branchCode. See branchLabel.js.
+    billing_branch: textBlock(
+      formatBranchLabel({ branchType: d.branchType, branchCode: d.branchCode, legacyBranch: d.branch })
+    ),
     billing_address: textBlock(quotationAddress),
     billing_notes: textBlock(d.message),
   };
 }
 
-/** 'flexible' (and anything unset) means the customer wants advice. */
+/**
+ * Onsite or Online — THOSE ARE NOW THE ONLY TWO.
+ *
+ * The 'flexible' card is gone from the form and the schema requires an explicit
+ * choice, so the fallback below CANNOT FIRE for a new submission. It is kept
+ * anyway, deliberately: this function is also reachable from a re-send of a
+ * historical enquiry, where `trainingFormat` really is 'flexible'. Deleting the
+ * default would make that case render the literal string 'undefined' in the
+ * customer's mail. It is a fail-safe for old data, not a live branch.
+ */
 function trainingFormatLabel(trainingFormat) {
   if (trainingFormat === 'onsite') return 'Onsite';
   if (trainingFormat === 'online') return 'Online';
@@ -132,33 +168,38 @@ function trainingFormatLabel(trainingFormat) {
 }
 
 /**
- * One sentence describing when they want it. Mirrors the template it replaces,
- * including the open-ended range (`preferredDateTo` empty → no dash, no
- * trailing blank) and the per-branch fallbacks.
+ * One sentence describing when they want it.
+ *
+ * A MONTH, AND NOTHING ELSE. The three-way scheduleMode selector (month /
+ * dateRange / notSure) is gone and `preferredMonth` is unconditionally
+ * required, so there is no mode to branch on any more. The `|| 'ตามที่ทีมขาย
+ * แนะนำ'` survives for the same reason as the format fallback above: a
+ * historical enquiry saved under 'dateRange' or 'notSure' has no month at all,
+ * and 'เดือนที่สนใจ: ' with nothing after the colon reads as a bug.
  */
 function scheduleLabel(d) {
-  if (d.scheduleMode === 'month') {
-    return `เดือนที่สนใจ: ${d.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`;
-  }
-  if (d.scheduleMode === 'dateRange') {
-    const from = d.preferredDateFrom || '';
-    const to = d.preferredDateTo ? ` – ${d.preferredDateTo}` : '';
-    return `ช่วงวันที่: ${from}${to}`;
-  }
-  return 'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ';
+  return `เดือนที่สนใจ: ${d.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`;
 }
 
 /**
  * Where the training happens — ONSITE ONLY.
  *
- * `false` for 'online' and 'flexible', because there is no venue to state: an
- * online course has none, and a flexible enquiry has not decided. Gating on the
- * format rather than on "is onsiteAddress non-empty" matters, since the schema
- * lets an online enquiry carry a stale `onsiteAddress` from a customer who
- * changed their mind mid-form — and printing that back as the venue is the same
- * class of error as showing the billing address here.
+ * `false` for 'online', because there is no venue to state. Gating on the
+ * FORMAT rather than on "is the venue non-empty" matters, since the schema lets
+ * an online enquiry carry a stale `onsiteVenue` from a customer who changed
+ * their mind mid-form — and printing that back as the venue is the same class
+ * of error as showing the billing address here.
+ *
+ * Flattened with a plain join, matching the billing address the route hands in
+ * as `quotationAddress`. It is deliberately NOT run through
+ * formatBillingAddress: that formatter is scoped to the public-registration
+ * flow (three tests pin the in-house sites out of it), and a venue is not a
+ * billing address.
  */
 function trainingVenue(d) {
   if (d.trainingFormat !== 'onsite') return false;
-  return textBlock([d.onsiteAddress, d.onsiteDistrict, d.onsiteProvince].filter(Boolean).join(' '));
+  const v = d.onsiteVenue ?? {};
+  return textBlock(
+    [v.addressLine, v.subDistrict, v.district, v.province, v.postalCode].filter(Boolean).join(' ')
+  );
 }

@@ -1,3 +1,4 @@
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { formatTHB } from '@/lib/pricing';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
 
@@ -117,6 +118,11 @@ export function paidReceiptEmail({
                 * รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง ทีมงานจะติดต่อเพื่อเก็บข้อมูล
               </p>` : '';
 
+  // Derived, never stored: `invoice.branch` is a legacy read-only path that a
+  // registration written by the current form leaves empty. Same formatter as the
+  // Postmark model, so the two spellings of this row cannot drift.
+  const invoiceBranchLabel = formatInvoiceBranchLabel(invoice);
+
   const invoiceNameLine =
     invoice?.type === 'corporate'
       ? invoice.companyName || ''
@@ -212,7 +218,7 @@ export function paidReceiptEmail({
                     <p style="margin: 0 0 10px; font-size: 14px;">${invoiceTypeThai} · ${invoiceCountryLabel}</p>
                     <p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}</p>
                     <p style="margin: 0 0 10px; font-size: 14px;">${invoiceNameLine}</p>
-                    ${invoice?.branch ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">สาขา</p><p style="margin: 0 0 10px; font-size: 14px;">${invoice.branch}</p>` : ''}
+                    ${invoiceBranchLabel ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">สาขา</p><p style="margin: 0 0 10px; font-size: 14px;">${invoiceBranchLabel}</p>` : ''}
                     ${invoice?.taxId ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">เลขประจำตัวผู้เสียภาษี</p><p style="margin: 0 0 10px; font-size: 14px;">${invoice.taxId}</p>` : ''}
                     ${invoiceAddress ? `<p style="margin: 0 0 4px; font-size: 13px; color: #6b7280;">ที่อยู่</p><p style="margin: 0; font-size: 14px; line-height: 1.6;">${invoiceAddress}</p>` : ''}
                   </td>
@@ -263,7 +269,7 @@ export function paidReceiptEmail({
 ${showInvoice ? `
 ข้อมูลออกใบกำกับภาษี:
   ประเภท: ${invoiceTypeThai} · ${invoiceCountryLabel}
-  ${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${invoice?.branch ? `\n  สาขา: ${invoice.branch}` : ''}${invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${invoice.taxId}` : ''}${invoiceAddress ? `\n  ที่อยู่: ${invoiceAddress}` : ''}
+  ${invoice?.type === 'corporate' ? 'ชื่อบริษัท' : 'ชื่อ-นามสกุล'}: ${invoiceNameLine}${invoiceBranchLabel ? `\n  สาขา: ${invoiceBranchLabel}` : ''}${invoice?.taxId ? `\n  เลขผู้เสียภาษี: ${invoice.taxId}` : ''}${invoiceAddress ? `\n  ที่อยู่: ${invoiceAddress}` : ''}
   * อีเมลฉบับนี้เป็นใบเสร็จอย่างย่อ ใบกำกับภาษีฉบับเต็มจะจัดส่งภายหลัง
 ` : ''}${showAttendees ? `
 รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน):

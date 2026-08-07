@@ -9,6 +9,21 @@ import {
   SCHEDULE_STATUS_OPTIONS,
   resolveScheduleBadge,
 } from "@/lib/scheduleStatus";
+import {
+  PUBLIC_SCHEDULE_DEFAULT_MONTHS,
+  PUBLIC_SCHEDULE_FILTER_HORIZON,
+  monthColumns,
+  monthKey,
+  monthLabelWithYear,
+  rollingWindow,
+  scheduleMonthKey,
+  windowBetween,
+} from "@/lib/schedule/monthWindow";
+import {
+  frozenLayout,
+  scrollTrackInset,
+  tableMinWidth,
+} from "@/lib/schedule/scheduleTableLayout";
 
 const MONTH_TH = [
   "ม.ค.",
@@ -31,13 +46,6 @@ const TYPE_COLOR = {
   online: "#22C55E",
 };
 
-function getMonthIndex(scheduleItem) {
-  const first = scheduleItem?.dates?.[0];
-  if (!first) return null;
-  const d = new Date(first);
-  return Number.isNaN(d.getTime()) ? null : d.getMonth();
-}
-
 function formatDateLabel(scheduleItem) {
   const dates = (scheduleItem?.dates ?? [])
     .map((d) => new Date(d))
@@ -59,34 +67,60 @@ export function ScheduleClient({
   schedulePDF,
   earlyBirdMap = {},
 }) {
-  const currentMonth = new Date().getMonth();
+  /**
+   * The month state is a `YYYY-MM` KEY, not a 0-11 index.
+   *
+   * The index could not express a window that crosses December — 0 is not
+   * greater than 11 — so the default silently meant "the rest of this calendar
+   * year" and a December visitor got one column with every new-year session
+   * dropped from the table. See src/lib/schedule/monthWindow.js.
+   *
+   * Lazy initialisers so `new Date()` is read once per mount rather than on
+   * every render, and so the default window and the filter options are derived
+   * from the same instant.
+   */
+  const [monthFrom, setMonthFrom] = useState(() => monthKey(new Date()));
+  const [monthTo, setMonthTo] = useState(() => {
+    const w = rollingWindow(new Date(), PUBLIC_SCHEDULE_DEFAULT_MONTHS);
+    return w[w.length - 1];
+  });
 
   const [selectedProgram, setSelectedProgram] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
-  const [monthFrom, setMonthFrom] = useState(currentMonth);
-  const [monthTo, setMonthTo] = useState(11);
   const [showTooltip, setShowTooltip] = useState(false);
 
-  // Make sure monthTo never falls below monthFrom after a change.
+  // What the two dropdowns offer. A rolling horizon from today, so it never
+  // shrinks as the year goes on — the defect this replaced.
+  const monthOptions = useMemo(
+    () => rollingWindow(new Date(), PUBLIC_SCHEDULE_FILTER_HORIZON),
+    [],
+  );
+
+  // Keep `to` from falling below `from` after a change. A plain string
+  // comparison: `YYYY-MM` is fixed-width and zero-padded, so lexicographic
+  // order is chronological order — '2026-12' < '2027-01'.
   const safeMonthTo = monthTo < monthFrom ? monthFrom : monthTo;
 
-  const visibleMonths = useMemo(() => {
-    const arr = [];
-    for (let m = monthFrom; m <= safeMonthTo; m++) arr.push(m);
-    return arr;
-  }, [monthFrom, safeMonthTo]);
+  const visibleMonths = useMemo(
+    () => windowBetween(monthFrom, safeMonthTo),
+    [monthFrom, safeMonthTo],
+  );
 
-  // course._id → { monthIndex → schedules[] }
+  // Header cells: the bare month, with a Buddhist-era year added only where a
+  // bare label would be ambiguous. See monthColumns' docstring for the rule.
+  const monthHeaders = useMemo(() => monthColumns(visibleMonths), [visibleMonths]);
+
+  // course._id → { 'YYYY-MM' → schedules[] }
   const scheduleMap = useMemo(() => {
     const map = {};
     for (const c of courses) {
       const buckets = {};
       for (const s of c.schedules ?? []) {
-        const m = getMonthIndex(s);
-        if (m === null) continue;
-        if (!buckets[m]) buckets[m] = [];
-        buckets[m].push(s);
+        const key = scheduleMonthKey(s);
+        if (key === null) continue;
+        if (!buckets[key]) buckets[key] = [];
+        buckets[key].push(s);
       }
       map[c._id] = buckets;
     }
@@ -221,15 +255,18 @@ export function ScheduleClient({
             <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
               เดือน:
             </span>
+            {/* Both dropdowns carry the year on EVERY option, unconditionally
+                — unlike the table header, a dropdown row has no neighbouring
+                column to disambiguate against. */}
             <FilterSelect
-              value={String(monthFrom)}
-              onChange={(v) => setMonthFrom(Number(v))}
+              value={monthFrom}
+              onChange={setMonthFrom}
               ariaLabel="เดือนเริ่มต้น"
               compact
             >
-              {MONTH_TH.map((m, i) => (
-                <option key={m} value={i}>
-                  {m}
+              {monthOptions.map((key) => (
+                <option key={key} value={key}>
+                  {monthLabelWithYear(key)}
                 </option>
               ))}
             </FilterSelect>
@@ -237,14 +274,18 @@ export function ScheduleClient({
               ถึง
             </span>
             <FilterSelect
-              value={String(safeMonthTo)}
-              onChange={(v) => setMonthTo(Number(v))}
+              value={safeMonthTo}
+              onChange={setMonthTo}
               ariaLabel="เดือนสุดท้าย"
               compact
             >
-              {MONTH_TH.map((m, i) => (
-                <option key={m} value={i} disabled={i < monthFrom}>
-                  {m}
+              {/* A KEY comparison, not a numeric one. `i < monthFrom` on bare
+                  indices disabled every option below the current month, which
+                  in December left exactly one enabled and made the new year
+                  unreachable. */}
+              {monthOptions.map((key) => (
+                <option key={key} value={key} disabled={key < monthFrom}>
+                  {monthLabelWithYear(key)}
                 </option>
               ))}
             </FilterSelect>
@@ -340,7 +381,7 @@ export function ScheduleClient({
             key={program?._id ?? program?.program_name ?? "other"}
             program={program}
             courses={groupCourses}
-            visibleMonths={visibleMonths}
+            monthHeaders={monthHeaders}
             scheduleMap={scheduleMap}
             sessionMatches={sessionMatches}
             earlyBirdMap={earlyBirdMap}
@@ -350,6 +391,48 @@ export function ScheduleClient({
     </div>
   );
 }
+
+/**
+ * Per-column presentation for the frozen block, keyed to FROZEN_COLUMNS.
+ *
+ * Deliberately NOT in the lib module: that file owns the geometry (widths and
+ * the cumulative offsets derived from them) and is imported by the pure tier,
+ * which has no business knowing Tailwind classes. Alignment, padding and the
+ * cell body are render concerns and live here.
+ */
+const FROZEN_CELLS = {
+  code: {
+    thClass: "px-3 text-center",
+    tdClass:
+      "px-3 py-2 text-center align-middle text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]",
+    cell: (c) => c.course_id ?? "-",
+  },
+  name: {
+    thClass: "px-4 text-left",
+    tdClass: "px-4 py-2 align-middle",
+    cell: (c) => (
+      <Link
+        href={courseHref(c.course_id ? String(c.course_id).toLowerCase() : "")}
+        className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+      >
+        {c.course_name}
+      </Link>
+    ),
+  },
+  days: {
+    thClass: "px-3 text-center",
+    tdClass:
+      "px-3 py-2 text-center align-middle text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]",
+    cell: (c) => c.course_trainingdays ?? "-",
+  },
+  price: {
+    thClass: "px-3 text-center",
+    tdClass:
+      "px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:text-white",
+    cell: (c) =>
+      c.course_price ? Number(c.course_price).toLocaleString("th-TH") : "Call",
+  },
+};
 
 function FilterSelect({ value, onChange, ariaLabel, compact, children }) {
   return (
@@ -367,10 +450,25 @@ function FilterSelect({ value, onChange, ariaLabel, compact, children }) {
   );
 }
 
+/**
+ * The four frozen columns, rendered from ONE ordered array.
+ *
+ * `width` and `left` come from src/lib/schedule/scheduleTableLayout.js, where
+ * the widths are declared exactly once and the sticky offsets are the
+ * cumulative sums of them. `cell` is the only per-column difference that could
+ * not be a data field. Previously each width appeared roughly a dozen times
+ * across the colgroup, the `<th>` row and the `<td>` row, with nothing making
+ * them agree — a one-column edit sheared the frozen block silently.
+ */
+const FROZEN = frozenLayout().map((col) => ({
+  ...col,
+  ...FROZEN_CELLS[col.key],
+}));
+
 function ProgramTable({
   program,
   courses,
-  visibleMonths,
+  monthHeaders,
   scheduleMap,
   sessionMatches,
   earlyBirdMap = {},
@@ -379,6 +477,10 @@ function ProgramTable({
   const barRef = useRef(null); // custom scrollbar track
   const [thumb, setThumb] = useState({ width: 0, left: 0 });
   const [needsScroll, setNeedsScroll] = useState(false);
+  // How far the track starts in from the container's left edge — see
+  // scrollTrackInset. Held in state because it depends on the container's
+  // measured width, which only measure() knows.
+  const [trackInset, setTrackInset] = useState(0);
 
   // Measure the scroll container and size/position the custom thumb.
   // Because the frozen columns are sticky inside the same scroll
@@ -390,8 +492,13 @@ function ProgramTable({
     const overflow = scrollWidth - clientWidth;
     const need = overflow > 1;
     setNeedsScroll(need);
+    setTrackInset(scrollTrackInset(clientWidth));
     const bar = barRef.current;
     if (!need || !bar) return;
+    // LIVE, not captured: `bar.clientWidth` already reflects the inset applied
+    // below, so the proportional thumb maths needs no adjustment at all — the
+    // track element simply became the month area. Same for the pointer handler,
+    // which re-reads getBoundingClientRect() on every press.
     const trackW = bar.clientWidth;
     const thumbW = Math.max(40, (clientWidth / scrollWidth) * trackW);
     const maxThumbLeft = trackW - thumbW;
@@ -413,7 +520,10 @@ function ProgramTable({
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [measure, visibleMonths.length, courses.length]);
+    // The month count is a dep because it changes the table's own width, which
+    // changes whether there is overflow at all — and a ResizeObserver on the
+    // container does not fire for a child that grew inside it.
+  }, [measure, monthHeaders.length, courses.length]);
 
   // Re-measure once the bar actually mounts (it only renders when
   // needsScroll flips true), so the thumb gets sized on first overflow.
@@ -473,36 +583,66 @@ function ProgramTable({
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
         <div ref={scrollRef} className="no-native-scrollbar overflow-x-auto">
-          <table className="min-w-[900px] table-fixed border-collapse text-sm">
+          {/*
+            `width: 100%` + a COMPUTED `minWidth`, replacing the old fixed
+            `min-w-[900px]` — a constant that stopped describing anything once
+            the month count became variable. One rule, both behaviours: below
+            the floor the table overflows and every month sits at exactly
+            MONTH_MIN_WIDTH with the scrollbar active; above it `width: 100%`
+            wins and the month <col>s — which carry NO width — divide the slack
+            equally under `table-fixed`, while the frozen <col>s keep their
+            specified widths so the sticky offsets stay true.
+          */}
+          <table
+            className="w-full table-fixed border-collapse text-sm"
+            style={{ minWidth: tableMinWidth(monthHeaders.length) }}
+          >
             <colgroup>
-              <col style={{ width: 120 }} />{/* รหัสหลักสูตร */}
-              <col style={{ width: 360 }} />{/* ชื่อหลักสูตร */}
-              <col style={{ width: 60 }} />{/* วัน */}
-              <col style={{ width: 100 }} />{/* ราคา */}
-              {visibleMonths.map((m) => (
-                <col key={m} style={{ width: 90 }} />
+              {FROZEN.map((col) => (
+                <col key={col.key} style={{ width: col.width }} />
+              ))}
+              {/* NO width: this is what lets them absorb the slack. */}
+              {monthHeaders.map((m) => (
+                <col key={m.key} />
               ))}
             </colgroup>
             <thead>
               <tr className="border-b border-gray-100 bg-9e-ice dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
-                <th className="sticky left-0 z-10 w-[120px] min-w-[120px] max-w-[120px] bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
-                  รหัสหลักสูตร
-                </th>
-                <th className="sticky left-[120px] z-10 w-[360px] min-w-[360px] max-w-[360px] bg-9e-ice px-4 py-3 text-left font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
-                  ชื่อหลักสูตร
-                </th>
-                <th className="sticky left-[480px] z-10 w-[60px] min-w-[60px] max-w-[60px] bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white">
-                  วัน
-                </th>
-                <th className="sticky left-[540px] z-10 w-[100px] min-w-[100px] max-w-[100px] border-r border-gray-100 bg-9e-ice px-3 py-3 text-center font-bold text-9e-navy dark:border-[#1e3a5f] dark:bg-[#0f1e30] dark:text-white">
-                  ราคา
-                </th>
-                {visibleMonths.map((m) => (
+                {FROZEN.map((col) => (
                   <th
-                    key={m}
-                    className="min-w-[90px] px-2 py-3 text-center font-bold text-9e-navy dark:text-white"
+                    key={col.key}
+                    // Inline, NOT `left-[${col.left}px]` — Tailwind scans source
+                    // text and never evaluates it, so a template-literal
+                    // arbitrary value compiles to no class at all and fails
+                    // silently as an unstyled (unstuck) column.
+                    style={{ left: col.left }}
+                    className={
+                      "sticky z-10 bg-9e-ice py-3 font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white " +
+                      col.thClass +
+                      (col.isLast
+                        ? " border-r border-gray-100 dark:border-[#1e3a5f]"
+                        : "")
+                    }
                   >
-                    {MONTH_TH[m]}
+                    {col.label}
+                  </th>
+                ))}
+                {/* The dead `min-w-[90px]` is gone: the colgroup wins under
+                    `table-fixed`, so it never applied, and it would actively
+                    mislead now that the width is dynamic. */}
+                {/* TWO LINES, and the year is on EVERY column — not just the
+                    first of a new year. The table scrolls horizontally, so a
+                    label that explains its neighbours stops explaining anything
+                    the moment it leaves the viewport. See monthColumns. */}
+                {monthHeaders.map((m) => (
+                  <th
+                    key={m.key}
+                    className="px-2 py-3 text-center font-bold text-9e-navy dark:text-white"
+                  >
+                    <span className="block leading-tight">{m.label}</span>
+                    <span className="block text-[11px] font-medium leading-tight text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                      {m.yearLabel}
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -513,6 +653,8 @@ function ProgramTable({
                 const stickyBg = stripe
                   ? "bg-white dark:bg-[#111d2c]"
                   : "bg-[#FAFBFC] dark:bg-[#0a1424]/40";
+                const ebScheduleId =
+                  earlyBirdMap?.[String(c.course_id).toUpperCase()] ?? null;
                 return (
                   <tr
                     key={c._id ?? c.course_id}
@@ -521,58 +663,31 @@ function ProgramTable({
                       stickyBg
                     }
                   >
-                    <td
-                      className={
-                        "sticky left-0 z-10 w-[120px] min-w-[120px] max-w-[120px] px-3 py-2 text-center align-middle text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8] " +
-                        stickyBg
-                      }
-                    >
-                      {c.course_id ?? "-"}
-                    </td>
-                    <td
-                      className={
-                        "sticky left-[120px] z-10 w-[360px] min-w-[360px] max-w-[360px] px-4 py-2 align-middle " +
-                        stickyBg
-                      }
-                    >
-                      <Link
-                        href={courseHref(
-                          c.course_id ? String(c.course_id).toLowerCase() : "",
-                        )}
-                        className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
+                    {FROZEN.map((col) => (
+                      <td
+                        key={col.key}
+                        style={{ left: col.left }}
+                        className={
+                          "sticky z-10 " +
+                          col.tdClass +
+                          (col.isLast
+                            ? " border-r border-gray-100 dark:border-[#1e3a5f]"
+                            : "") +
+                          " " +
+                          stickyBg
+                        }
                       >
-                        {c.course_name}
-                      </Link>
-                    </td>
-                    <td
-                      className={
-                        "sticky left-[480px] z-10 w-[60px] min-w-[60px] max-w-[60px] px-3 py-2 text-center align-middle text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] " +
-                        stickyBg
-                      }
-                    >
-                      {c.course_trainingdays ?? "-"}
-                    </td>
-                    <td
-                      className={
-                        "sticky left-[540px] z-10 w-[100px] min-w-[100px] max-w-[100px] border-r border-gray-100 px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:border-[#1e3a5f] dark:text-white " +
-                        stickyBg
-                      }
-                    >
-                      {c.course_price
-                        ? Number(c.course_price).toLocaleString("th-TH")
-                        : "Call"}
-                    </td>
-                    {visibleMonths.map((m) => {
+                        {col.cell(c)}
+                      </td>
+                    ))}
+                    {monthHeaders.map((m) => {
                       const cellSchedules = (
-                        scheduleMap[c._id]?.[m] ?? []
+                        scheduleMap[c._id]?.[m.key] ?? []
                       ).filter(sessionMatches);
-                      const ebScheduleId =
-                        earlyBirdMap?.[String(c.course_id).toUpperCase()] ??
-                        null;
                       return (
                         <td
-                          key={m}
-                          className="min-w-[90px] px-2 py-2 text-center align-middle"
+                          key={m.key}
+                          className="px-2 py-2 text-center align-middle"
                         >
                           {cellSchedules.length === 0 ? (
                             <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
@@ -602,13 +717,18 @@ function ProgramTable({
           </table>
         </div>
 
-        {/* Custom horizontal scrollbar — full-width track, calibrated 1:1
-            to the scroll container so it reaches the last month. */}
+        {/* Custom horizontal scrollbar, calibrated 1:1 to the scroll container
+            so it reaches the last month — and INSET to the start of the month
+            area, because the four frozen columns are sticky and never move.
+            A track beginning under รหัสหลักสูตร points at something that
+            cannot scroll. The inset yields to a minimum track width on narrow
+            viewports; see scrollTrackInset. */}
         {needsScroll && (
           <div className="pb-2">
             <div
               ref={barRef}
               onMouseDown={onTrackPointer}
+              style={{ marginLeft: trackInset }}
               className="relative h-2.5 cursor-pointer rounded-full bg-gray-200 dark:bg-[#1e3a5f]"
             >
               <div

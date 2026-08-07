@@ -574,7 +574,13 @@ export function StepForm({
         firstName: "",
         lastName: "",
         companyName: "",
-        branch: "",
+        // branchType/branchCode/branchFree, NOT `branch` — that path is legacy
+        // read-only. Seeding the old key here would put the skeleton out of
+        // step with BranchFields and with the admin action's allowlist, and
+        // nothing would report the mismatch.
+        branchType: "head_office",
+        branchCode: "",
+        branchFree: "",
         taxId: "",
         thaiAddress: {
           addressLine: "",

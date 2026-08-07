@@ -165,17 +165,30 @@ const INHOUSE_DATA = {
   contactPhone: '0812345678',
   contactRole: 'ผู้จัดการฝ่ายบุคคล',
   contactDepartment: 'ฝ่ายทรัพยากรบุคคล',
-  companyName: 'ACME (Thailand)',
+  // NO `companyName`. The form stopped asking for the company twice; the field
+  // is off the zod schema, so a fixture carrying it would test a key that can
+  // no longer reach this builder. `quotationCompany` is now the single source
+  // for BOTH company_name and billing_company_name.
   participantsCount: 15,
   trainingFormat: 'onsite',
-  onsiteAddress: '123 อาคารเอ',
-  onsiteDistrict: 'คลองเตย',
-  onsiteProvince: 'กรุงเทพฯ',
-  scheduleMode: 'month',
+  // The structured venue, in the quotation-address shape. NOT `onsiteAddress` —
+  // that path is a legacy String on RegisterInhouse and nothing writes it.
+  onsiteVenue: {
+    addressLine: '123 อาคารเอ',
+    subDistrict: 'คลองตัน',
+    district: 'คลองเตย',
+    province: 'กรุงเทพฯ',
+    postalCode: '10110',
+  },
+  // No `scheduleMode`: the 3-card selector is gone and a month is the whole of
+  // the schedule now.
   preferredMonth: 'กันยายน 2569',
   quotationCompany: 'ACME (Thailand) Co., Ltd.',
   taxId: '0105556012345',
-  branch: 'สำนักงานใหญ่',
+  // Structured, replacing the free-text `branch`. The legacy path still reads
+  // back — pinned by its own test below rather than baked into the fixture.
+  branchType: 'head_office',
+  branchCode: '',
   message: 'ต้องการอบรมช่วงเช้า',
 };
 
@@ -216,8 +229,12 @@ const ALL_MODELS = () => [
   ['publicPaidReceipt/full', paidModel()],
   ['publicPaidReceipt/minimal', paidModel({ attendeesListProvided: false, attendees: [], requestInvoice: false, invoice: null, scheduleType: 'classroom', payment: {} })],
   ['inhouse/full', inhouseModel()],
-  ['inhouse/minimal', inhouseModel({ trainingFormat: 'flexible', scheduleMode: 'notSure', taxId: '', branch: '', message: '', quotationCompany: '', contactRole: '', contactDepartment: '', coursesInterested: [] }, '')],
-  ['inhouse/onsite', inhouseModel({ trainingFormat: 'onsite', onsiteAddress: '99 ถนนสุขุมวิท', onsiteDistrict: 'วัฒนา', onsiteProvince: 'กรุงเทพฯ' })],
+  // 'minimal' is now an ONLINE enquiry with nothing optional filled in.
+  // 'flexible' / 'notSure' are no longer reachable through the form, so a
+  // fixture built on them would be pinning a state the app cannot produce —
+  // their fail-safe handling is asserted explicitly, further down.
+  ['inhouse/minimal', inhouseModel({ trainingFormat: 'online', onsiteVenue: null, preferredMonth: '', taxId: '', branchType: undefined, branchCode: '', message: '', quotationCompany: '', contactRole: '', contactDepartment: '', coursesInterested: [] }, '')],
+  ['inhouse/onsite', inhouseModel({ trainingFormat: 'onsite', onsiteVenue: { addressLine: '99 ถนนสุขุมวิท', subDistrict: 'คลองตัน', district: 'วัฒนา', province: 'กรุงเทพฯ', postalCode: '10110' } })],
 ];
 
 // ── The object-or-false convention ──────────────────────────────────────────
@@ -582,45 +599,43 @@ test('in-house maps the contact into the coordinator vocabulary', () => {
   assert.equal(m.coordinator_first_name, 'สมชาย');
   assert.equal(m.coordinator_email, 'somchai@acme.co.th');
   assert.equal(m.coordinator_phone, '0812345678');
-  assert.equal(m.company_name, 'ACME (Thailand)');
+  // ONE SOURCE, TWO KEYS. `company_name` used to read `d.companyName`, a second
+  // company field the contact section asked for separately — people filled the
+  // two in differently and the mail greeted one legal entity while billing
+  // another. Both keys now derive from `quotationCompany`; both are KEPT
+  // because the Postmark template interpolates each in a different place.
+  assert.equal(m.company_name, 'ACME (Thailand) Co., Ltd.');
+  assert.equal(m.company_name, m.billing_company_name, 'both keys, one source');
   assert.equal(m.total_participants, 15);
 });
 
-test('training format labels cover all three enum values', () => {
+test('training format labels: the two live values, plus the legacy fail-safe', () => {
+  // CHANGED with the form: 'flexible' was removed as an option and the schema
+  // now requires an explicit choice, so the third case is UNREACHABLE for a new
+  // submission. It is still asserted because a re-send of a historical enquiry
+  // reaches this builder with 'flexible' on it, and without the fallback the
+  // customer's mail would say the literal string 'undefined'.
   assert.equal(inhouseModel({ trainingFormat: 'onsite' }).training_format_label, 'Onsite');
   assert.equal(inhouseModel({ trainingFormat: 'online' }).training_format_label, 'Online');
   assert.equal(inhouseModel({ trainingFormat: 'flexible' }).training_format_label, 'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ');
 });
 
-test('schedule label: month mode', () => {
+test('schedule label is the month, unconditionally', () => {
+  // NARROWED with the form: the scheduleMode selector (month / dateRange /
+  // notSure) is gone and `preferredMonth` is unconditionally required, so there
+  // is no mode to branch on. The three former branch tests were REPLACED by
+  // this one plus the legacy case below — deleted claims, not deleted coverage.
   assert.equal(inhouseModel().schedule_label, 'เดือนที่สนใจ: กันยายน 2569');
 });
 
-test('schedule label: month mode with no month picked', () => {
-  assert.equal(
-    inhouseModel({ preferredMonth: '' }).schedule_label,
-    'เดือนที่สนใจ: ตามที่ทีมขายแนะนำ'
-  );
-});
-
-test('schedule label: a CLOSED date range', () => {
-  assert.equal(
-    inhouseModel({ scheduleMode: 'dateRange', preferredDateFrom: '2026-09-01', preferredDateTo: '2026-09-03' }).schedule_label,
-    'ช่วงวันที่: 2026-09-01 – 2026-09-03'
-  );
-});
-
-test('schedule label: an OPEN date range has no dangling dash', () => {
-  // Mustachio cannot assemble "A – B" with the dash present only when B is,
-  // which is the whole reason this sentence is built here.
-  assert.equal(
-    inhouseModel({ scheduleMode: 'dateRange', preferredDateFrom: '2026-09-01', preferredDateTo: '' }).schedule_label,
-    'ช่วงวันที่: 2026-09-01'
-  );
-});
-
-test('schedule label: notSure mode', () => {
-  assert.equal(inhouseModel({ scheduleMode: 'notSure' }).schedule_label, 'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ');
+test('schedule label falls back for a document that never had a month', () => {
+  // The 'dateRange' and 'notSure' enquiries in the collection carry no
+  // preferredMonth at all. 'เดือนที่สนใจ: ' with nothing after the colon reads
+  // as a bug, so the fallback stays — and a stale preferredDateFrom must NOT
+  // resurrect the removed branch.
+  const m = inhouseModel({ preferredMonth: '', preferredDateFrom: '2026-09-01', preferredDateTo: '2026-09-03' });
+  assert.equal(m.schedule_label, 'เดือนที่สนใจ: ตามที่ทีมขายแนะนำ');
+  assert.equal(JSON.stringify(m).includes('2026-09-01'), false, 'the dead date-range branch is really gone');
 });
 
 test('billing_address is a block when present and false when not', () => {
@@ -638,23 +653,45 @@ test('billing_address is a block when present and false when not', () => {
 });
 
 test('in-house still carries NO admin-only enquiry detail', () => {
-  // NARROWED, deliberately. `coursesInterested` and `message` USED to be on this
-  // list and are now carried on purpose — as `course_name` and `billing_notes`,
-  // both part of the approved design. What is still absent was rendered by the
-  // DELETED admin template and by nothing else, so the BCC copy of the customer
-  // mail — now the only notification anyone internal gets — does not show it.
-  // Pinned so the loss stays a decision on record, not a bug report.
+  /**
+   * NARROWED A SECOND TIME, and the claim has changed meaning — recorded here
+   * because that is the sort of thing a green test otherwise hides.
+   *
+   * ROUND 1 dropped `coursesInterested` and `message`: they became
+   * `course_name` and `billing_notes`, part of the approved design.
+   *
+   * ROUND 2 (this change) drops `objective`, `skillLevel` and `onsiteEquipment`
+   * from the list — NOT because the model started carrying them, but because
+   * THE FORM STOPPED ASKING. Asserting their absence from the model would be
+   * vacuous now: they are absent from the submission too, so the assertion
+   * would pass no matter what this builder did with them. The paths survive on
+   * the Mongoose schema for historical documents and nothing more.
+   *
+   * What is left is the original claim, still live: these fields ARE collected
+   * by the current form, were rendered by the DELETED admin template and by
+   * nothing else, and so do not appear in the BCC copy of the customer's mail —
+   * now the only notification anyone internal receives. A loss on record.
+   */
   const m = inhouseModel({
-    objective: 'ยกระดับทักษะ Excel ของทีมบัญชี',
-    skillLevel: 'mixed',
     contentMode: 'custom',
     contentDetails: 'เน้น Pivot Table',
     onlineRegion: 'APAC',
+    onlineTimezone: 'ICT 09:00-16:00',
     scheduleNote: 'หลีกเลี่ยงวันศุกร์',
   });
   const serialised = JSON.stringify(m);
-  for (const leaked of ['ยกระดับทักษะ', 'mixed', 'custom', 'เน้น Pivot Table', 'APAC', 'หลีกเลี่ยงวันศุกร์']) {
+  for (const leaked of ['custom', 'เน้น Pivot Table', 'APAC', 'ICT 09:00-16:00', 'หลีกเลี่ยงวันศุกร์']) {
     assert.equal(serialised.includes(leaked), false, `${leaked} leaked into the in-house model`);
+  }
+});
+
+test('CONTROL: the exclusion sweep above CAN fire', () => {
+  // Without this, a builder that stopped emitting anything at all would pass
+  // the sweep — and so would a sweep whose probes no longer match the fixture.
+  // Fired on values the model IS supposed to carry.
+  const serialised = JSON.stringify(inhouseModel());
+  for (const carried of ['ACME (Thailand) Co., Ltd.', '0105556012345', 'กันยายน 2569', 'ต้องการอบรมช่วงเช้า']) {
+    assert.ok(serialised.includes(carried), `${carried} should be in the model`);
   }
 });
 
@@ -818,14 +855,18 @@ test('contact_position and contact_department map from the schema field names', 
 });
 
 test('training_venue is the TRAINING location for an onsite enquiry', () => {
+  // Reads the STRUCTURED `onsiteVenue`, in the five-field order the form's
+  // address autocomplete fills. It is deliberately not the legacy trio of
+  // strings: re-typing `onsiteAddress` as a subdocument would be a cast failure
+  // on every historical document.
   assert.deepEqual(inhouseModel({ trainingFormat: 'onsite' }).training_venue, {
-    text: '123 อาคารเอ คลองเตย กรุงเทพฯ',
+    text: '123 อาคารเอ คลองตัน คลองเตย กรุงเทพฯ 10110',
   });
 });
 
-test('training_venue is FALSE for online and flexible', () => {
-  // Gated on the FORMAT, not on "is onsiteAddress non-empty": the schema lets an
-  // online enquiry keep a stale onsiteAddress from a customer who changed their
+test('training_venue is FALSE for online, and for a legacy flexible enquiry', () => {
+  // Gated on the FORMAT, not on "is the venue non-empty": the schema lets an
+  // online enquiry keep a stale onsiteVenue from a customer who changed their
   // mind mid-form, and printing that back as the venue is the same class of
   // error as showing them the billing address.
   assert.equal(inhouseModel({ trainingFormat: 'online' }).training_venue, false);
@@ -833,9 +874,22 @@ test('training_venue is FALSE for online and flexible', () => {
   assert.equal(inhouseModel({ trainingFormat: undefined }).training_venue, false);
 });
 
-test('training_venue is FALSE when onsite but no address was given', () => {
+test('training_venue is FALSE when onsite but no venue was given', () => {
+  // Both spellings of "no venue": absent, and present-but-blank.
+  assert.equal(inhouseModel({ trainingFormat: 'onsite', onsiteVenue: null }).training_venue, false);
   assert.equal(
-    inhouseModel({ trainingFormat: 'onsite', onsiteAddress: '', onsiteDistrict: '', onsiteProvince: '' }).training_venue,
+    inhouseModel({ trainingFormat: 'onsite', onsiteVenue: { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' } }).training_venue,
+    false
+  );
+});
+
+test('a LEGACY onsite document, whose venue is the three old strings, yields nothing', () => {
+  // Stated rather than discovered. The email model reads `onsiteVenue` only, and
+  // a re-send of a pre-change enquiry therefore has no venue block — the mail is
+  // one row shorter, not wrong. The admin detail view DOES fall back to the
+  // legacy strings, which is where anyone chasing an old enquiry is looking.
+  assert.equal(
+    inhouseModel({ trainingFormat: 'onsite', onsiteVenue: null, onsiteAddress: '123 อาคารเอ', onsiteDistrict: 'คลองเตย', onsiteProvince: 'กรุงเทพฯ' }).training_venue,
     false
   );
 });
@@ -845,7 +899,7 @@ test('THE CONFLATION THIS EXISTS TO STOP: venue and billing address are differen
   // heading — telling the customer their course is held at their accounts
   // department. Distinct fields, distinct sources, asserted distinct.
   const m = inhouseModel(
-    { trainingFormat: 'onsite', onsiteAddress: '123 อาคารเอ', onsiteDistrict: '', onsiteProvince: '' },
+    { trainingFormat: 'onsite', onsiteVenue: { addressLine: '123 อาคารเอ', subDistrict: '', district: '', province: '', postalCode: '' } },
     '99 ถนนสุขุมวิท กรุงเทพฯ 10110'
   );
   assert.deepEqual(m.training_venue, { text: '123 อาคารเอ' });
@@ -861,8 +915,23 @@ test('in-house billing fields map from the quotation section', () => {
   assert.deepEqual(m.billing_notes, { text: 'ต้องการอบรมช่วงเช้า' });
 });
 
+test('billing_branch reads a LEGACY free-text branch when there is no structured pair', () => {
+  // Pre-split documents hold a free-text `branch` and no branchType. Verbatim,
+  // because we cannot know which of the two structured shapes it meant and
+  // guessing would invent data.
+  assert.deepEqual(
+    inhouseModel({ branchType: undefined, branchCode: '', branch: 'สาขาบางนา' }).billing_branch,
+    { text: 'สาขาบางนา' }
+  );
+  // And the structured pair WINS when both are present — an edited document.
+  assert.deepEqual(
+    inhouseModel({ branchType: 'branch', branchCode: '00007', branch: 'สาขาบางนา' }).billing_branch,
+    { text: 'สาขาที่ 00007' }
+  );
+});
+
 test('in-house billing blocks are false when the quotation section is empty', () => {
-  const m = inhouseModel({ quotationCompany: '', taxId: '', branch: '', message: '' }, '');
+  const m = inhouseModel({ quotationCompany: '', taxId: '', branchType: undefined, branchCode: '', message: '' }, '');
   assert.equal(m.billing_company_name, '');
   assert.equal(m.billing_tax_id, false);
   assert.equal(m.billing_branch, false);

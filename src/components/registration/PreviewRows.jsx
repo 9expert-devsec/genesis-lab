@@ -8,6 +8,7 @@
  */
 
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
+import { formatInvoiceBranchLabel } from "@/lib/registration/branchLabel";
 
 export function ReadOnlyRow({ label, value }) {
   return (
@@ -62,6 +63,9 @@ export function AttendeeListView({ data }) {
 
 export function InvoiceView({ invoice }) {
   if (!invoice) return null;
+  // Derived at READ time from branchType/branchCode (or branchFree abroad, or
+  // the legacy free-text `branch` on old documents). Nothing stores a label.
+  const branchLabel = formatInvoiceBranchLabel(invoice);
   return (
     <>
       <ReadOnlyRow
@@ -82,8 +86,8 @@ export function InvoiceView({ invoice }) {
       ) : (
         <>
           <ReadOnlyRow label="ชื่อบริษัท" value={invoice.companyName} />
-          {invoice.branch && (
-            <ReadOnlyRow label="สาขา" value={invoice.branch} />
+          {branchLabel && (
+            <ReadOnlyRow label="สาขา" value={branchLabel} />
           )}
         </>
       )}

@@ -42,8 +42,35 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
   });
 
   const count = watch('attendeesCount') ?? 1;
-  const listProvided = watch('attendeesListProvided') ?? true;
+  const storedListProvided = watch('attendeesListProvided') ?? true;
   const coordinatorIsAttending = watch('coordinator.isAttending') ?? false;
+
+  /**
+   * ONE attendee, and it is the coordinator → there is nothing left to opt out
+   * of. The mirror card below IS the complete list, so offering
+   * "ยังไม่ประสงค์แจ้งรายชื่อผู้เข้าอบรม" asks the user to decline naming
+   * someone they have already named.
+   */
+  const soleAttendeeIsCoordinator = coordinatorIsAttending && count === 1;
+
+  /**
+   * THE TRANSITION THIS GUARDS. The checkbox is the ONLY control for
+   * `attendeesListProvided`. Set the count to 2, tick the opt-out, then drop
+   * back to 1: the checkbox disappears and the flag stays false. Step 2 then
+   * tells a user whose sole attendee is fully identified that they
+   * "ยังไม่ระบุรายชื่อผู้เข้าอบรม", and the confirmation email says the same.
+   *
+   * Read-side default AND a write, both: the derived value keeps this render
+   * correct (effects do not run in a server render), and the effect below puts
+   * the form state back so what is submitted matches what is on screen.
+   */
+  const listProvided = soleAttendeeIsCoordinator ? true : storedListProvided;
+
+  useEffect(() => {
+    if (soleAttendeeIsCoordinator && !storedListProvided) {
+      setValue('attendeesListProvided', true, { shouldDirty: true });
+    }
+  }, [soleAttendeeIsCoordinator, storedListProvided, setValue]);
 
   // Required attendee entries = count minus 1 if coordinator fills a slot.
   const required = Math.max(
@@ -97,19 +124,21 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
           </select>
         </div>
 
-        <label className="flex cursor-pointer items-center gap-2 pt-1">
-          <Checkbox
-            checked={!listProvided}
-            onChange={(e) =>
-              setValue('attendeesListProvided', !e.target.checked, {
-                shouldDirty: true,
-              })
-            }
-          />
-          <span className="text-sm text-[var(--text-primary)]">
-            ยังไม่ประสงค์แจ้งรายชื่อผู้เข้าอบรม
-          </span>
-        </label>
+        {!soleAttendeeIsCoordinator && (
+          <label className="flex cursor-pointer items-center gap-2 pt-1">
+            <Checkbox
+              checked={!listProvided}
+              onChange={(e) =>
+                setValue('attendeesListProvided', !e.target.checked, {
+                  shouldDirty: true,
+                })
+              }
+            />
+            <span className="text-sm text-[var(--text-primary)]">
+              ยังไม่ประสงค์แจ้งรายชื่อผู้เข้าอบรม
+            </span>
+          </label>
+        )}
       </div>
 
       {!listProvided && (

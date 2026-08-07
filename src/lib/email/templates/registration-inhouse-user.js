@@ -9,17 +9,17 @@ export function inhouseUserConfirmationEmail({
   data,
   quotationAddress = '',
 }) {
+  // Same two labels as the Postmark model, and same reasoning: 'flexible' and
+  // the scheduleMode branches cannot occur on a new submission, but a re-send
+  // of a historical enquiry still reaches here, so the fallbacks stay as
+  // fail-safes for old data rather than as live branches.
+  // See src/lib/email/models/inhouseRegistrationModel.js.
   const trainingFormatLabel =
     data.trainingFormat === 'onsite'   ? 'Onsite' :
     data.trainingFormat === 'online'   ? 'Online' :
     'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ';
 
-  const scheduleLabel =
-    data.scheduleMode === 'month'
-      ? `เดือนที่สนใจ: ${data.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`
-      : data.scheduleMode === 'dateRange'
-        ? `ช่วงวันที่: ${data.preferredDateFrom || ''}${data.preferredDateTo ? ` – ${data.preferredDateTo}` : ''}`
-        : 'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ';
+  const scheduleLabel = `เดือนที่สนใจ: ${data.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`;
 
   const html = `<!DOCTYPE html>
 <html lang="th">

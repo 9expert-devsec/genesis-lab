@@ -50,6 +50,10 @@ const STUBS = {
   // handlers; that chain reaches next-auth → next/headers, which does not
   // resolve outside a Next runtime. Same reasoning as the line above.
   '@/lib/actions/articles': path.join(ROOT, 'test', 'stub-article-actions.mjs'),
+  // RegistrationDetailClient imports the registration server actions for its
+  // save/delete handlers; that chain reaches next-auth → next/headers. Same
+  // reasoning as the two lines above.
+  '@/lib/actions/registrations': path.join(ROOT, 'test', 'stub-registration-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);

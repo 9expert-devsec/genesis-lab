@@ -9,6 +9,7 @@ import {
   updateInhouseAdminNotes,
   deleteInhouseRegistration,
 } from '@/lib/actions/inhouse-registrations';
+import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { Button } from '@/components/ui/button';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -53,13 +54,9 @@ const ACTION_VARIANT = {
   new:           'outline',
 };
 
-const SKILL_LEVEL_LABEL = {
-  beginner:     'Beginner — เริ่มต้น',
-  intermediate: 'Intermediate — ปานกลาง',
-  advanced:     'Advanced — ขั้นสูง',
-  mixed:        'Mixed — มีหลายระดับ',
-};
-
+// 'consult' and 'flexible' are LEGACY VALUES — both cards were removed from the
+// form, but this view reads historical enquiries that still carry them and a
+// missing label would render the raw enum instead.
 const CONTENT_MODE_LABEL = {
   standard: 'Outline มาตรฐาน',
   custom:   'ปรับเนื้อหา',
@@ -94,10 +91,34 @@ function fmtDate(iso) {
 
 function refNo(id) { return String(id).slice(-8).toUpperCase(); }
 
+/**
+ * NO `scheduleMode` BRANCH — the selector is gone and `preferredMonth` is the
+ * only thing a current enquiry carries.
+ *
+ * The date-range fallback stays for one reason and it is not the removed
+ * branch: this view is the ONLY place a pre-change enquiry can still be read,
+ * and those documents really do hold a range and no month. Reading the fields
+ * rather than the mode is what lets the dead selector go without blinding the
+ * sales team to their own back catalogue.
+ */
 function scheduleSummary(doc) {
-  if (doc.scheduleMode === 'month') return `เดือน: ${doc.preferredMonth || '—'}`;
-  if (doc.scheduleMode === 'dateRange') return `${doc.preferredDateFrom || '—'} ถึง ${doc.preferredDateTo || '—'}`;
-  return 'ยังไม่แน่ใจ';
+  if (doc.preferredMonth) return `เดือน: ${doc.preferredMonth}`;
+  const legacyRange = [doc.preferredDateFrom, doc.preferredDateTo].filter(Boolean).join(' ถึง ');
+  return legacyRange || '—';
+}
+
+/**
+ * The venue, from the structured `onsiteVenue` — falling back to the three
+ * legacy string paths, which is the whole reason they were kept rather than
+ * re-typed. An enquiry submitted before the change has strings and no
+ * subdocument; one submitted after has the subdocument and no strings.
+ */
+function onsiteVenueSummary(doc) {
+  const v = doc.onsiteVenue;
+  if (v && (v.addressLine || v.province)) {
+    return [v.addressLine, v.subDistrict, v.district, v.province, v.postalCode].filter(Boolean).join(' ');
+  }
+  return [doc.onsiteAddress, doc.onsiteDistrict, doc.onsiteProvince].filter(Boolean).join(', ');
 }
 
 function quotationAddress(doc) {
@@ -175,6 +196,11 @@ export function InhouseDetailClient({ doc }) {
 
   const address = quotationAddress(doc);
   const countryLabel = doc.quotationCountry === 'OTHER' ? 'ต่างประเทศ' : 'ไทย';
+  // A foreign quotation has no Thai branch concept at all, so the row is
+  // suppressed rather than defaulted to สำนักงานใหญ่.
+  const branchLabel = doc.quotationCountry === 'OTHER'
+    ? ''
+    : formatBranchLabel({ branchType: doc.branchType, branchCode: doc.branchCode, legacyBranch: doc.branch });
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -233,8 +259,6 @@ export function InhouseDetailClient({ doc }) {
         <Row label="หลักสูตรที่สนใจ"
           value={(doc.coursesInterested ?? []).length > 0 ? doc.coursesInterested.join(', ') : '—'} />
         <Row label="จำนวนผู้เข้าอบรม" value={`${doc.participantsCount} ท่าน`} />
-        <Row label="ระดับพื้นฐาน" value={SKILL_LEVEL_LABEL[doc.skillLevel] ?? doc.skillLevel} />
-        <Row label="วัตถุประสงค์" value={doc.objective || '—'} />
         <Row label="เนื้อหา" value={CONTENT_MODE_LABEL[doc.contentMode] ?? doc.contentMode} />
         {doc.contentDetails && <Row label="รายละเอียดเนื้อหา" value={doc.contentDetails} />}
       </Card>
@@ -245,13 +269,7 @@ export function InhouseDetailClient({ doc }) {
         {doc.scheduleNote && <Row label="หมายเหตุเวลา" value={doc.scheduleNote} />}
         <Row label="รูปแบบ" value={TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat} />
         {doc.trainingFormat === 'onsite' && (
-          <>
-            <Row label="สถานที่จัดอบรม"
-              value={[doc.onsiteAddress, doc.onsiteDistrict, doc.onsiteProvince].filter(Boolean).join(', ') || '—'} />
-            {(doc.onsiteEquipment ?? []).length > 0 && (
-              <Row label="อุปกรณ์ที่มีให้" value={doc.onsiteEquipment.join(', ')} />
-            )}
-          </>
+          <Row label="สถานที่จัดอบรม" value={onsiteVenueSummary(doc) || '—'} />
         )}
         {doc.trainingFormat === 'online' && (doc.onlineRegion || doc.onlineTimezone) && (
           <Row label="Online detail"
@@ -264,7 +282,9 @@ export function InhouseDetailClient({ doc }) {
         <Row label="ประเทศ" value={countryLabel} />
         {doc.quotationCompany && <Row label="ชื่อบริษัท" value={doc.quotationCompany} />}
         {doc.taxId  && <Row label="เลขผู้เสียภาษี" value={doc.taxId} />}
-        {doc.branch && <Row label="สาขา"           value={doc.branch} />}
+        {/* Derived at read time. `branch` is legacy read-only and is the
+            fallback for pre-split enquiries — see branchLabel.js. */}
+        {branchLabel && <Row label="สาขา" value={branchLabel} />}
         {address    && <Row label="ที่อยู่"         value={address} />}
       </Card>
 

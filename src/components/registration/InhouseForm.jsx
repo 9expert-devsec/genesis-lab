@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   FileText, Calendar, Phone, Building2, StickyNote,
   CheckCircle2, ArrowRight, Loader2, Monitor,
-  HelpCircle, Plus, Minus,
+  Plus, Minus,
 } from 'lucide-react';
 import { SuccessPulseIcon } from "@/components/ui/SuccessPulseIcon";
 import { inhouseRegistrationSchema, inhouseRegistrationDefaults } from '@/lib/schemas/register-inhouse';
@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ThaiAddressFields } from '@/components/registration/ThaiAddressFields';
+import { BranchFields, TaxIdField } from '@/components/registration/BranchFields';
+import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { cn } from '@/lib/utils';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
@@ -30,32 +32,37 @@ const SOURCE_COURSE_KEY = 'registration-inhouse-source-course-v1';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const SKILL_LEVELS = [
-  { value: 'beginner',     label: 'Beginner — เริ่มต้น' },
-  { value: 'intermediate', label: 'Intermediate — ปานกลาง' },
-  { value: 'advanced',     label: 'Advanced — ขั้นสูง' },
-  { value: 'mixed',        label: 'Mixed — มีหลายระดับ' },
-];
-
+// Both selectors KEEP their section and lose exactly one card: the
+// "ยังไม่แน่ใจ / ให้ช่วยแนะนำ" escape hatch, on both. An enquiry that declines
+// to say what it wants costs the sales team a phone call before they can quote,
+// and the customer is better served by picking the closest option and using the
+// free-text note than by a card that means "ask me later".
 const CONTENT_MODES = [
-  { value: 'standard', label: 'ใช้ Outline มาตรฐาน',  desc: 'อบรมตามหลักสูตรของ 9Expert',                   icon: FileText },
-  { value: 'custom',   label: 'ปรับเนื้อหาบางส่วน',   desc: 'เพิ่ม/ลดหัวข้อให้ตรงกับงานจริง',               icon: StickyNote },
-  { value: 'consult',  label: 'ให้ช่วยแนะนำ',          desc: 'ยังไม่แน่ใจว่าควรเลือก outline แบบใด',         icon: HelpCircle },
-];
-
-const SCHEDULE_MODES = [
-  { value: 'month',     label: 'เลือกเดือน',      desc: 'ยังไม่ล็อกวันที่แน่นอน',           icon: Calendar },
-  { value: 'dateRange', label: 'ระบุช่วงวันที่',   desc: 'มีช่วงวันที่สะดวกแล้ว',            icon: Calendar },
-  { value: 'notSure',   label: 'ยังไม่แน่ใจ',      desc: 'ให้เจ้าหน้าที่ช่วยแนะนำ',          icon: HelpCircle },
+  { value: 'standard', label: 'ใช้ Outline มาตรฐาน',  desc: 'อบรมตามหลักสูตรของ 9Expert',      icon: FileText },
+  { value: 'custom',   label: 'ปรับเนื้อหาบางส่วน',   desc: 'เพิ่ม/ลดหัวข้อให้ตรงกับงานจริง',  icon: StickyNote },
 ];
 
 const TRAINING_FORMATS = [
   { value: 'onsite',   label: 'Onsite',       desc: 'อบรมที่บริษัทหรือสถานที่ของลูกค้า',      icon: Building2 },
   { value: 'online',   label: 'Online',       desc: 'อบรมสดผ่าน Microsoft Teams',             icon: Monitor },
-  { value: 'flexible', label: 'ยังไม่แน่ใจ', desc: 'ให้เจ้าหน้าที่ช่วยแนะนำรูปแบบ',          icon: HelpCircle },
 ];
 
-const ONSITE_EQUIPMENT = ['Computer / Notebook', 'Projector / Display', 'Internet', 'Microphone / Speaker'];
+const EMPTY_THAI_ADDRESS = { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' };
+
+/**
+ * In-house training is sold in rounds of 15, so 15 is a FLOOR and not a
+ * suggestion. The same number is declared in three other places and all four
+ * have to agree or the form looks fixed while something still writes 3:
+ *   · src/lib/schemas/register-inhouse.js — the zod rule AND the default
+ *   · src/models/RegisterInhouse.js       — the Mongoose min
+ * A seam guard (test/fs/inhouseParticipantFloor.test.mjs) reads the number out
+ * of all four files and asserts they are the same integer.
+ */
+const MIN_PARTICIPANTS = 15;
+const MAX_PARTICIPANTS = 999;
+
+/** Keep the stepper inside [MIN, MAX] from EITHER direction — see the note below. */
+const clampParticipants = (n) => Math.min(MAX_PARTICIPANTS, Math.max(MIN_PARTICIPANTS, n));
 
 const THAI_MONTHS = Array.from({ length: 12 }, (_, i) => {
   const now = new Date();
@@ -310,7 +317,11 @@ function InhouseStepper({ currentStep }) {
 
 // ── Step 1: Form ───────────────────────────────────────────────────
 
-function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues, onSubmit }) {
+// EXPORTED for the render tier only — InhouseWizard gates step 1 behind a
+// `hydrated` flag set in an effect, and renderToStaticMarkup never runs
+// effects, so the wizard renders nothing at all. Same reason RegisterWizard
+// exports StepForm.
+export function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues, onSubmit }) {
   // Group courses by program for optgroup
   const coursesByProgram = courses.reduce((acc, c) => {
     const prog = c.program || 'อื่นๆ';
@@ -382,7 +393,6 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
 
   const selectedCourseId   = watch('coursesInterested')?.[0] ?? '';
   const contentMode        = watch('contentMode');
-  const scheduleMode       = watch('scheduleMode');
   const trainingFormat     = watch('trainingFormat');
   const quotationCountry   = watch('quotationCountry');
   const participantsCount  = watch('participantsCount') ?? 15;
@@ -390,14 +400,9 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
   const isOnsite           = trainingFormat === 'onsite';
   const isOnline           = trainingFormat === 'online';
 
-  const toggleEquipment = (item) => {
-    const cur = watch('onsiteEquipment') ?? [];
-    setValue('onsiteEquipment', cur.includes(item) ? cur.filter((e) => e !== item) : [...cur, item]);
-  };
-
   const handleCountryChange = (val) => {
     setValue('quotationCountry', val);
-    setValue('thaiAddress',          val === 'TH'    ? { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' } : null);
+    setValue('thaiAddress',          val === 'TH'    ? { ...EMPTY_THAI_ADDRESS } : null);
     setValue('internationalAddress', val === 'OTHER' ? { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' } : null);
   };
 
@@ -442,7 +447,7 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
           </p>
         </FieldGroup>
 
-        {/* Participant count + skill level */}
+        {/* Participant count */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label className="mb-2 block">
@@ -450,43 +455,45 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
             </Label>
             <div className="flex items-center overflow-hidden rounded-9e-md border border-[var(--surface-border)] w-fit">
               <button type="button"
-                onClick={() => setValue('participantsCount', Math.max(1, participantsCount - 1))}
-                className="flex h-10 w-10 items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] transition-colors">
+                onClick={() => setValue('participantsCount', clampParticipants(participantsCount - 1))}
+                /**
+                 * DISABLED at the floor rather than left to no-op. A button that
+                 * accepts the click and changes nothing reads as a broken
+                 * control, and the user's next move is to click it harder rather
+                 * than to notice that 15 is the minimum.
+                 */
+                disabled={participantsCount <= MIN_PARTICIPANTS}
+                aria-label="ลดจำนวนผู้เข้าอบรม"
+                className="flex h-10 w-10 items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] transition-colors disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent">
                 <Minus className="h-4 w-4" />
               </button>
               <div className="flex h-10 min-w-[52px] items-center justify-center border-x border-[var(--surface-border)] px-3 text-sm font-bold tabular-nums text-[var(--text-primary)]">
                 {participantsCount}
               </div>
               <button type="button"
-                onClick={() => setValue('participantsCount', Math.min(999, participantsCount + 1))}
+                /**
+                 * clamp, not `Math.min(MAX, n + 1)`. A sessionStorage draft
+                 * written before the floor existed can hold 3: the display stays
+                 * honest (it really is 3, and the schema will say so), minus is
+                 * dead, and ONE press of plus lands on 15 instead of walking
+                 * 3→4→5 through values the schema rejects.
+                 */
+                onClick={() => setValue('participantsCount', clampParticipants(participantsCount + 1))}
+                aria-label="เพิ่มจำนวนผู้เข้าอบรม"
                 className="flex h-10 w-10 items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] transition-colors">
                 <Plus className="h-4 w-4" />
               </button>
             </div>
-            <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">In-house เริ่มต้น 15 ท่านต่อรุ่น</p>
+            {/* REWORDED: "เริ่มต้น 15" reads as a starting point — a default you
+                may move away from. It is a minimum, so it says so. */}
+            <p className="mt-1.5 text-[11px] text-[var(--text-muted)]">In-house ขั้นต่ำ 15 ท่านต่อรุ่น</p>
           </div>
-
-          <FieldGroup label="ระดับพื้นฐานของผู้เข้าอบรม" error={errors.skillLevel?.message}>
-            <select {...register('skillLevel')} className={selectCls()}>
-              {SKILL_LEVELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </FieldGroup>
         </div>
-
-        {/* Objective */}
-        <FieldGroup label="วัตถุประสงค์ในการอบรม" required error={errors.objective?.message}>
-          <Textarea
-            {...register('objective')}
-            rows={3}
-            placeholder="เช่น ต้องการให้ทีมใช้ Power BI ทำ Dashboard ภายในองค์กร หรือยกระดับการใช้ Excel ร่วมกับ AI"
-            aria-invalid={!!errors.objective}
-          />
-        </FieldGroup>
 
         {/* Content mode */}
         <div>
           <Label className="mb-2 block">รูปแบบเนื้อหาที่ต้องการ</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             {CONTENT_MODES.map(({ value, label, desc, icon: Icon }) => {
               const active = contentMode === value;
               return (
@@ -518,68 +525,26 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
       {/* ── Section 2: Schedule & Format ── */}
       <FormSection icon={<Calendar className="h-5 w-5" />} title="ตารางเวลา & รูปแบบการอบรม">
 
-        {/* Schedule mode */}
-        <div>
-          <Label className="mb-2 block">ช่วงเวลาที่สะดวก</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {SCHEDULE_MODES.map(({ value, label, desc, icon: Icon }) => {
-              const active = scheduleMode === value;
-              return (
-                <button key={value} type="button" onClick={() => setValue('scheduleMode', value)}
-                  className={cn('flex flex-col gap-2 rounded-9e-lg border p-4 text-left transition-all',
-                    active ? 'border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/20' : 'border-[var(--surface-border)] bg-[var(--surface)] hover:bg-[var(--surface-muted)]')}>
-                  <span className={cn('flex h-8 w-8 items-center justify-center rounded-9e-md',
-                    active ? 'bg-9e-brand text-9e-ice' : 'bg-[var(--surface-muted)] text-[var(--text-secondary)]')}>
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-base font-semibold text-[var(--text-primary)]">{label}</span>
-                    <span className="mt-0.5 block text-sm text-[var(--text-secondary)]">{desc}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        {/* Schedule — always visible, no mode selector and no branching. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FieldGroup label="เดือนที่สนใจ" required error={errors.preferredMonth?.message}>
+            <select {...register('preferredMonth')} className={selectCls()} aria-invalid={!!errors.preferredMonth}>
+              <option value="">— เลือกเดือน —</option>
+              {THAI_MONTHS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </FieldGroup>
+          <FieldGroup label="หมายเหตุเรื่องวันอบรม" error={errors.scheduleNote?.message}>
+            <Input {...register('scheduleNote')} placeholder="เช่น ขอเป็นวันศุกร์ หรือ 2 วันติดกัน" />
+          </FieldGroup>
         </div>
 
-        {scheduleMode === 'month' && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FieldGroup label="เดือนที่สนใจ" required error={errors.preferredMonth?.message}>
-              <select {...register('preferredMonth')} className={selectCls()} aria-invalid={!!errors.preferredMonth}>
-                <option value="">— เลือกเดือน —</option>
-                {THAI_MONTHS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </FieldGroup>
-            <FieldGroup label="หมายเหตุเรื่องวันอบรม" error={errors.scheduleNote?.message}>
-              <Input {...register('scheduleNote')} placeholder="เช่น ขอเป็นวันศุกร์ หรือ 2 วันติดกัน" />
-            </FieldGroup>
-          </div>
-        )}
-
-        {scheduleMode === 'dateRange' && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <FieldGroup label="วันที่เริ่มต้น" required error={errors.preferredDateFrom?.message}>
-              <Input {...register('preferredDateFrom')} placeholder="เช่น 15/07/2026" aria-invalid={!!errors.preferredDateFrom} />
-            </FieldGroup>
-            <FieldGroup label="วันที่สิ้นสุด" error={errors.preferredDateTo?.message}>
-              <Input {...register('preferredDateTo')} placeholder="เช่น 16/07/2026" />
-            </FieldGroup>
-            <FieldGroup label="หมายเหตุ">
-              <Input {...register('scheduleNote')} placeholder="เช่น 2 วันติดกัน" />
-            </FieldGroup>
-          </div>
-        )}
-
-        {scheduleMode === 'notSure' && (
-          <div className="rounded-9e-md border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-800">
-            สามารถส่งคำขอโดยยังไม่ระบุวันได้ เจ้าหน้าที่จะติดต่อกลับเพื่อช่วยประเมินช่วงเวลา
-          </div>
-        )}
-
-        {/* Training format */}
+        {/* Training format — NOTHING is preselected, so both the venue block
+            and the online block below stay hidden until the customer chooses. */}
         <div>
-          <Label className="mb-2 block">รูปแบบการอบรม</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <Label className="mb-2 block">
+            รูปแบบการอบรม<span className="ml-0.5 text-red-500">*</span>
+          </Label>
+          <div className="grid gap-3 sm:grid-cols-2">
             {TRAINING_FORMATS.map(({ value, label, desc, icon: Icon }) => {
               const active = trainingFormat === value;
               return (
@@ -598,39 +563,24 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
               );
             })}
           </div>
+          {errors.trainingFormat && (
+            <p className="mt-1.5 text-xs text-red-500">{errors.trainingFormat.message}</p>
+          )}
         </div>
 
         {isOnsite && (
           <div className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface-muted)] p-4 space-y-5">
             <p className="text-base font-semibold text-[var(--text-primary)]">รายละเอียดสถานที่จัดอบรม</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <FieldGroup label="ที่อยู่สถานที่" required error={errors.onsiteAddress?.message} className="sm:col-span-2">
-                <Input {...register('onsiteAddress')} placeholder="อาคาร / ชั้น / ห้อง / ถนน" aria-invalid={!!errors.onsiteAddress} />
-              </FieldGroup>
-              <FieldGroup label="จังหวัด" error={errors.onsiteProvince?.message}>
-                <Input {...register('onsiteProvince')} placeholder="เช่น กรุงเทพมหานคร" />
-              </FieldGroup>
-              <FieldGroup label="เขต / อำเภอ" error={errors.onsiteDistrict?.message}>
-                <Input {...register('onsiteDistrict')} placeholder="เช่น พญาไท" />
-              </FieldGroup>
-            </div>
-            <div>
-              <Label className="mb-2 block text-sm">อุปกรณ์ที่มีให้</Label>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {ONSITE_EQUIPMENT.map((item) => {
-                  const active = (watch('onsiteEquipment') ?? []).includes(item);
-                  return (
-                    <label key={item} className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-9e-md border px-3 py-2 text-sm transition-colors',
-                      active ? 'border-9e-brand bg-9e-brand/5 text-[var(--text-primary)]' : 'border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-secondary)]'
-                    )}>
-                      <input type="checkbox" checked={active} onChange={() => toggleEquipment(item)} className="h-4 w-4 rounded accent-9e-brand" />
-                      {item}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
+            {/* The same postal-code-first autocomplete as the quotation block.
+                Written to `onsiteVenue`, NOT to the legacy `onsiteAddress`
+                string path — see the schema for why reusing it would be a cast
+                failure on every historical document. */}
+            <ThaiAddressFields
+              value={watch('onsiteVenue') ?? { ...EMPTY_THAI_ADDRESS }}
+              onChange={(next) => setValue('onsiteVenue', next, { shouldValidate: true })}
+              errors={errors}
+              prefix="onsiteVenue"
+            />
           </div>
         )}
 
@@ -663,9 +613,6 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
           <FieldGroup label="แผนก" error={errors.contactDepartment?.message}>
             <Input {...register('contactDepartment')} placeholder="เช่น Human Resources" />
           </FieldGroup>
-          <FieldGroup label="บริษัท / องค์กร" required error={errors.companyName?.message} className="sm:col-span-2">
-            <Input {...register('companyName')} placeholder="เช่น บริษัท ตัวอย่าง จำกัด" aria-invalid={!!errors.companyName} />
-          </FieldGroup>
           <FieldGroup label="อีเมล" required error={errors.contactEmail?.message}>
             <Input type="email" {...register('contactEmail')} placeholder="name@company.com" aria-invalid={!!errors.contactEmail} />
           </FieldGroup>
@@ -692,50 +639,54 @@ function InhouseStepForm({ courses = [], preselectedCourse = null, initialValues
               <option value="OTHER">Other country</option>
             </select>
           </FieldGroup>
-          <FieldGroup label={isTH ? 'ชื่อบริษัทสำหรับออกใบเสนอราคา' : 'Company name for quotation'} error={errors.quotationCompany?.message}>
-            <Input {...register('quotationCompany')} placeholder={isTH ? 'บริษัท ตัวอย่าง จำกัด' : 'Company Inc.'} />
+          <FieldGroup label={isTH ? 'ชื่อบริษัทสำหรับออกใบเสนอราคา' : 'Company name for quotation'} required error={errors.quotationCompany?.message}>
+            <Input {...register('quotationCompany')} placeholder={isTH ? 'บริษัท ตัวอย่าง จำกัด' : 'Company Inc.'} aria-invalid={!!errors.quotationCompany} />
           </FieldGroup>
         </div>
 
         {isTH ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FieldGroup label="เลขประจำตัวผู้เสียภาษี 13 หลัก" error={errors.taxId?.message}>
-              <Input {...register('taxId')} placeholder="13 หลัก" inputMode="numeric" maxLength={13} />
-            </FieldGroup>
-            <FieldGroup label="สาขา" error={errors.branch?.message}>
-              <Input {...register('branch')} placeholder="สำนักงานใหญ่ / สาขาเลขที่" />
-            </FieldGroup>
-            <div className="sm:col-span-2">
-              <ThaiAddressFields
-                value={watch('thaiAddress') ?? { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' }}
-                onChange={(next) => setValue('thaiAddress', next, { shouldValidate: true })}
-                errors={errors}
-                prefix="thaiAddress"
-              />
+          /* Thailand — every field is required, and the two tax controls are
+             the SAME components the public wizard uses (BranchFields.jsx) so
+             the two flows cannot drift apart. */
+          <div className="grid gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TaxIdField register={register} errors={errors} />
             </div>
+            <BranchFields register={register} watch={watch} setValue={setValue} errors={errors} />
+            <ThaiAddressFields
+              value={watch('thaiAddress') ?? { ...EMPTY_THAI_ADDRESS }}
+              onChange={(next) => setValue('thaiAddress', next, { shouldValidate: true })}
+              errors={errors}
+              prefix="thaiAddress"
+            />
           </div>
         ) : (
+          /* Other country — the public flow's corporate field set, and English
+             only: a foreign quotation is typeset by someone who cannot read
+             Thai, so Thai characters here reach the customer as boxes. No
+             branch control: สำนักงานใหญ่ / สาขาที่ NNNNN are Thai Revenue
+             Department concepts and mean nothing on a foreign invoice. */
           <div className="grid gap-4 sm:grid-cols-2">
-            <FieldGroup label="Tax ID / VAT ID (optional)" error={errors.taxId?.message}>
-              <Input {...register('taxId')} placeholder="Optional for international" />
-            </FieldGroup>
-            <FieldGroup label="Country" required error={errors.internationalAddress?.country?.message}>
-              <Input {...register('internationalAddress.country')} placeholder="e.g. Singapore" />
+            <FieldGroup label="Tax ID / VAT ID (optional)" error={errors.taxId?.message} className="sm:col-span-2">
+              <Input {...register('taxId')} placeholder="Optional for international" aria-invalid={!!errors.taxId} />
             </FieldGroup>
             <FieldGroup label="Address line 1" required error={errors.internationalAddress?.line1?.message} className="sm:col-span-2">
-              <Input {...register('internationalAddress.line1')} placeholder="Street address" />
+              <Input {...register('internationalAddress.line1')} placeholder="Street address" aria-invalid={!!errors.internationalAddress?.line1} />
             </FieldGroup>
             <FieldGroup label="Address line 2 (optional)" error={errors.internationalAddress?.line2?.message} className="sm:col-span-2">
-              <Input {...register('internationalAddress.line2')} placeholder="Apt, suite, building" />
+              <Input {...register('internationalAddress.line2')} placeholder="Apartment, suite, building, floor, etc." />
             </FieldGroup>
             <FieldGroup label="City" required error={errors.internationalAddress?.city?.message}>
-              <Input {...register('internationalAddress.city')} placeholder="City" />
+              <Input {...register('internationalAddress.city')} placeholder="City" aria-invalid={!!errors.internationalAddress?.city} />
             </FieldGroup>
-            <FieldGroup label="State / Province (optional)" error={errors.internationalAddress?.state?.message}>
+            <FieldGroup label="State / Province / Region (optional)" error={errors.internationalAddress?.state?.message}>
               <Input {...register('internationalAddress.state')} placeholder="State or region" />
             </FieldGroup>
             <FieldGroup label="Postal code (optional)" error={errors.internationalAddress?.postalCode?.message}>
               <Input {...register('internationalAddress.postalCode')} placeholder="Postal code" />
+            </FieldGroup>
+            <FieldGroup label="Country" required error={errors.internationalAddress?.country?.message}>
+              <Input {...register('internationalAddress.country')} placeholder="e.g. Singapore" aria-invalid={!!errors.internationalAddress?.country} />
             </FieldGroup>
           </div>
         )}
@@ -823,7 +774,24 @@ function InhouseStepPreview({
       ].filter(Boolean).join(', ')
     : '';
 
-  const dateRange = [data.preferredDateFrom, data.preferredDateTo].filter(Boolean).join(' - ');
+  // The VENUE, which is a different address from the billing one above and is
+  // flattened with the same plain join for the same reason — see the note on
+  // training_venue in src/lib/email/models/inhouseRegistrationModel.js.
+  const venueAddr = data.onsiteVenue
+    ? [
+        data.onsiteVenue.addressLine,
+        data.onsiteVenue.subDistrict,
+        data.onsiteVenue.district,
+        data.onsiteVenue.province,
+        data.onsiteVenue.postalCode,
+      ].filter(Boolean).join(' ')
+    : '';
+
+  const branchLabel = formatBranchLabel({
+    branchType:   data.branchType,
+    branchCode:   data.branchCode,
+    legacyBranch: data.branch,
+  });
 
   return (
     <>
@@ -831,8 +799,6 @@ function InhouseStepPreview({
         <Section title="หลักสูตร & Requirement">
           <ReadOnlyRow label="หลักสูตรที่สนใจ" value={courseName} />
           <ReadOnlyRow label="จำนวนผู้เข้าอบรม" value={data.participantsCount ? `${data.participantsCount} ท่าน` : ''} />
-          <ReadOnlyRow label="ระดับพื้นฐาน" value={labelOf(SKILL_LEVELS, data.skillLevel)} />
-          <ReadOnlyRow label="วัตถุประสงค์" value={data.objective} />
           <ReadOnlyRow label="รูปแบบเนื้อหา" value={labelOf(CONTENT_MODES, data.contentMode)} />
           {data.contentMode !== 'standard' && (
             <ReadOnlyRow label="รายละเอียดเนื้อหา" value={data.contentDetails} />
@@ -840,22 +806,11 @@ function InhouseStepPreview({
         </Section>
 
         <Section title="ตารางเวลา & รูปแบบการอบรม">
-          <ReadOnlyRow label="ช่วงเวลาที่สะดวก" value={labelOf(SCHEDULE_MODES, data.scheduleMode)} />
-          {data.scheduleMode === 'month' && (
-            <ReadOnlyRow label="เดือนที่สนใจ" value={labelOf(THAI_MONTHS, data.preferredMonth)} />
-          )}
-          {data.scheduleMode === 'dateRange' && (
-            <ReadOnlyRow label="ช่วงวันที่" value={dateRange} />
-          )}
+          <ReadOnlyRow label="เดือนที่สนใจ" value={labelOf(THAI_MONTHS, data.preferredMonth)} />
           <ReadOnlyRow label="หมายเหตุเรื่องวัน" value={data.scheduleNote} />
           <ReadOnlyRow label="รูปแบบการอบรม" value={labelOf(TRAINING_FORMATS, data.trainingFormat)} />
           {data.trainingFormat === 'onsite' && (
-            <>
-              <ReadOnlyRow label="ที่อยู่สถานที่" value={data.onsiteAddress} />
-              <ReadOnlyRow label="จังหวัด" value={data.onsiteProvince} />
-              <ReadOnlyRow label="เขต / อำเภอ" value={data.onsiteDistrict} />
-              <ReadOnlyRow label="อุปกรณ์ที่มีให้" value={(data.onsiteEquipment ?? []).join(', ')} />
-            </>
+            <ReadOnlyRow label="สถานที่จัดอบรม" value={venueAddr} />
           )}
           {data.trainingFormat === 'online' && (
             <>
@@ -869,7 +824,6 @@ function InhouseStepPreview({
           <ReadOnlyRow label="ชื่อ-นามสกุล" value={contactName} />
           <ReadOnlyRow label="ตำแหน่ง" value={data.contactRole} />
           <ReadOnlyRow label="แผนก" value={data.contactDepartment} />
-          <ReadOnlyRow label="บริษัท / องค์กร" value={data.companyName} />
           <ReadOnlyRow label="อีเมล" value={data.contactEmail} />
           <ReadOnlyRow label="เบอร์โทรศัพท์" value={data.contactPhone} />
         </Section>
@@ -878,7 +832,9 @@ function InhouseStepPreview({
           <ReadOnlyRow label="ประเทศ" value={data.quotationCountry === 'TH' ? 'Thailand' : 'Other country'} />
           <ReadOnlyRow label="ชื่อบริษัท (ใบเสนอราคา)" value={data.quotationCompany} />
           <ReadOnlyRow label="เลขผู้เสียภาษี" value={data.taxId} />
-          <ReadOnlyRow label="สาขา" value={data.branch} />
+          {data.quotationCountry === 'TH' && (
+            <ReadOnlyRow label="สาขา" value={branchLabel} />
+          )}
           <ReadOnlyRow label="ที่อยู่" value={data.quotationCountry === 'TH' ? thaiAddr : intlAddr} />
         </Section>
 

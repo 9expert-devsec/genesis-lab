@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ThaiAddressFields } from './ThaiAddressFields';
+import { BranchFields, TaxIdField } from './BranchFields';
 import { cn } from '@/lib/utils';
 
 const EMPTY_THAI_ADDRESS = {
@@ -154,34 +155,49 @@ export function InvoiceFields({ register, watch, setValue, errors, docType = 'qu
               aria-invalid={!!invErr.companyName}
             />
           </FieldGroup>
-          <FieldGroup label={isThai ? 'สาขา (ถ้ามี)' : 'Branch / Division (optional)'}>
-            <Input
-              {...register('invoice.branch')}
-              placeholder={isThai ? 'สำนักงานใหญ่' : 'Head office'}
+          {/* The dropdown is a THAI TAX concept — สำนักงานใหญ่ / สาขาที่ NNNNN
+              are Revenue Department wording and a foreign customer has neither,
+              so 'Other country' keeps a free-text division field. Different
+              field, not a re-purposed one: `branchCode` is validated as five
+              digits and would reject 'Asia Pacific HQ'. */}
+          {isThai ? (
+            <BranchFields
+              register={register}
+              watch={watch}
+              setValue={setValue}
+              errors={invErr}
+              namePrefix="invoice."
             />
-          </FieldGroup>
+          ) : (
+            <FieldGroup label="Branch / Division (optional)" error={invErr.branchFree?.message}>
+              <Input
+                {...register('invoice.branchFree')}
+                placeholder="Head office"
+                aria-invalid={!!invErr.branchFree}
+              />
+            </FieldGroup>
+          )}
         </div>
       )}
 
       {/* ── Tax ID ──────────────────────────────────────────── */}
-      <FieldGroup
-        label={
-          isThai
-            ? 'เลขประจำตัวผู้เสียภาษี'
-            : 'Tax ID / VAT ID / Business registration no.'
-        }
-        error={invErr.taxId?.message}
-        required={isThai}
-        hint={!isThai ? 'Optional for international customers' : undefined}
-      >
-        <Input
-          {...register('invoice.taxId')}
-          placeholder={isThai ? '0000000000000' : 'Optional'}
-          inputMode={isThai ? 'numeric' : 'text'}
-          maxLength={isThai ? 13 : undefined}
-          aria-invalid={!!invErr.taxId}
-        />
-      </FieldGroup>
+      {isThai ? (
+        // 13 digits, filtered at the keystroke — shared with the in-house
+        // quotation block so the two flows cannot drift.
+        <TaxIdField register={register} errors={invErr} namePrefix="invoice." />
+      ) : (
+        <FieldGroup
+          label="Tax ID / VAT ID / Business registration no."
+          error={invErr.taxId?.message}
+          hint="Optional for international customers"
+        >
+          <Input
+            {...register('invoice.taxId')}
+            placeholder="Optional"
+            aria-invalid={!!invErr.taxId}
+          />
+        </FieldGroup>
+      )}
 
       {/* ── Address — conditional on country ───────────────── */}
       {isThai ? (

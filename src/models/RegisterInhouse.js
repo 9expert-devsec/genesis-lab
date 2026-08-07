@@ -27,41 +27,70 @@ const RegisterInhouseSchema = new mongoose.Schema(
   {
     // ── Training requirement ───────────────────────────────────
     coursesInterested: [{ type: String }],
-    participantsCount: { type: Number, min: 1, default: 15 },
+    /**
+     * min: 15 — the floor, matching the zod rule and the form's stepper.
+     *
+     * SAFE FOR HISTORICAL DOCUMENTS BELOW 15, and that was checked rather than
+     * assumed. Mongoose `min` is a VALIDATOR: it runs on create/save/validate
+     * and on updates only when `runValidators: true`. Reads never validate. The
+     * only writer that validates is `RegisterInhouse.create` in the API route,
+     * which receives zod-parsed data and therefore cannot be below 15 anyway;
+     * every admin write goes through `findByIdAndUpdate(..., { runValidators:
+     * false })` in src/lib/actions/registrations.js and
+     * src/lib/actions/inhouse-registrations.js. There is no `.save()` on this
+     * model anywhere. So an old 3-person enquiry still reads, still edits, and
+     * still saves.
+     */
+    participantsCount: { type: Number, min: 15, default: 15 },
     skillLevel: {
+      // legacy — never written by the current form
       type: String,
       enum: ['beginner', 'intermediate', 'advanced', 'mixed'],
-      default: 'mixed',
     },
-    objective:      { type: String, trim: true },
+    objective:      { type: String, trim: true }, // legacy — never written by the current form
     contentMode: {
       type: String,
+      // 'consult' is a legacy VALUE: the card was removed from the form, but
+      // documents written before that hold it and must still read back.
       enum: ['standard', 'custom', 'consult'],
       default: 'standard',
     },
     contentDetails: { type: String, trim: true },
 
     // ── Schedule ───────────────────────────────────────────────
+    // The 3-card mode selector is gone; a month plus a note is the whole of it.
     scheduleMode: {
+      // legacy — never written by the current form
       type: String,
       enum: ['month', 'dateRange', 'notSure'],
-      default: 'notSure',
     },
     preferredMonth:    { type: String, trim: true },
-    preferredDateFrom: { type: String, trim: true },
-    preferredDateTo:   { type: String, trim: true },
+    preferredDateFrom: { type: String, trim: true }, // legacy — never written by the current form
+    preferredDateTo:   { type: String, trim: true }, // legacy — never written by the current form
     scheduleNote:      { type: String, trim: true },
 
     // ── Training format ────────────────────────────────────────
     trainingFormat: {
       type: String,
+      // 'flexible' is a legacy VALUE, kept so old enquiries still read back.
+      // No default: the form now requires an explicit choice.
       enum: ['onsite', 'online', 'flexible'],
-      default: 'flexible',
     },
-    onsiteAddress:   { type: String, trim: true },
-    onsiteProvince:  { type: String, trim: true },
-    onsiteDistrict:  { type: String, trim: true },
-    onsiteEquipment: [{ type: String }],
+    /**
+     * THE VENUE, AND WHY IT IS NOT `onsiteAddress`.
+     *
+     * `onsiteAddress` is a String path and existing documents hold strings in
+     * it. Re-typing the same path as a subdocument is a cast failure on READ —
+     * every historical enquiry throws when the admin opens it, with no
+     * migration and no warning until it happens. So the structured venue is a
+     * NEW path and the three legacy strings stay exactly as they are, written
+     * by nothing.
+     */
+    onsiteVenue:     { type: ThaiAddressSchema, default: null },
+    onsiteAddress:   { type: String, trim: true },  // legacy — never written by the current form
+    onsiteProvince:  { type: String, trim: true },  // legacy — never written by the current form
+    onsiteDistrict:  { type: String, trim: true },  // legacy — never written by the current form
+    onsiteEquipment: [{ type: String }],            // legacy — never written by the current form
     onlineRegion:    { type: String, trim: true },
     onlineTimezone:  { type: String, trim: true },
 
@@ -70,6 +99,16 @@ const RegisterInhouseSchema = new mongoose.Schema(
     contactLastName:     { type: String, required: true, trim: true },
     contactRole:         { type: String, trim: true },
     contactDepartment:   { type: String, trim: true },
+    /**
+     * NOT A FORM FIELD ANY MORE — a legacy-compat MIRROR of `quotationCompany`.
+     *
+     * Three live readers still need it: the admin list projection and its
+     * $regex search (src/lib/actions/inhouse-registrations.js), the admin
+     * detail row บริษัท / องค์กร, and the confirmation email. Dropping the path
+     * would blank all three for every historical document, so it stays
+     * required — and it is written in EXACTLY ONE PLACE, the API route. See
+     * src/app/api/registration/inhouse/route.js.
+     */
     companyName:         { type: String, required: true, trim: true },
     contactEmail:        { type: String, required: true, lowercase: true, trim: true },
     contactPhone:        { type: String, required: true, trim: true },
@@ -93,7 +132,19 @@ const RegisterInhouseSchema = new mongoose.Schema(
     },
     quotationCompany:      { type: String, trim: true },
     taxId:                 { type: String, trim: true },
-    branch:                { type: String, trim: true },
+    /**
+     * `branch` is LEGACY READ-ONLY. The structured pair below replaced it, and
+     * nothing writes a derived string alongside them — see
+     * src/lib/registration/branchLabel.js, which is the only place either shape
+     * is turned into a label.
+     */
+    branch:                { type: String, trim: true }, // legacy — never written by the current form
+    branchType: {
+      type: String,
+      enum: ['head_office', 'branch'],
+      default: 'head_office',
+    },
+    branchCode:            { type: String, trim: true, default: '' },
     thaiAddress:           { type: ThaiAddressSchema, default: null },
     internationalAddress:  { type: InternationalAddressSchema, default: null },
 

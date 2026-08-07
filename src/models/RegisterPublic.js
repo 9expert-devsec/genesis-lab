@@ -79,7 +79,26 @@ const InvoiceSchema = new mongoose.Schema(
     firstName:   { type: String, trim: true },
     lastName:    { type: String, trim: true },
     companyName: { type: String, trim: true },
-    branch:      { type: String, trim: true },
+    /**
+     * `branch` is LEGACY READ-ONLY — the free-text field the structured pair
+     * below replaced. Nothing writes it: zod strips it, and the admin action's
+     * allowlist does not name it. A derived string alongside the pair is how
+     * one value under two names ends up disagreeing with itself (this repo
+     * already paid for that as quotation_address / billing_address).
+     *
+     * `branchType` / `branchCode` are the Thai Revenue-Department concepts and
+     * apply to country 'TH'. `branchFree` is the 'Other country' counterpart,
+     * where a 5-digit branch number is meaningless. The label for any of the
+     * three is computed by src/lib/registration/branchLabel.js.
+     */
+    branch:      { type: String, trim: true }, // legacy — never written by the current form
+    branchType: {
+      type: String,
+      enum: ['head_office', 'branch'],
+      default: 'head_office',
+    },
+    branchCode:  { type: String, trim: true, default: '' },
+    branchFree:  { type: String, trim: true },
     taxId:       { type: String, trim: true },
     // Only one address sub-document will be populated
     thaiAddress:          { type: ThaiAddressSchema, default: null },

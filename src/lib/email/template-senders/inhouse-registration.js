@@ -85,17 +85,22 @@ export async function sendInhouseRegistrationEmails({
       );
     }
 
+    // `quotationCompany`, NOT `companyName`. The form stopped asking for the
+    // company twice; `companyName` is no longer on the zod schema, so reading
+    // it here would put the literal 'undefined' in the subject line of every
+    // fallback send. The Mongoose path still exists — the API route mirrors
+    // this same value onto it — but `data` is the PARSED form payload.
     const userMsg = inhouseUserConfirmationEmail({
       referenceNumber,
       contactFirstName: data.contactFirstName,
-      companyName: data.companyName,
+      companyName: data.quotationCompany,
       data,
       quotationAddress,
     });
 
     await sendEmail({
       to,
-      subject: `ได้รับคำขอใบเสนอราคา In-house ${data.companyName} - ${referenceNumber}`,
+      subject: `ได้รับคำขอใบเสนอราคา In-house ${data.quotationCompany} - ${referenceNumber}`,
       html: userMsg.html,
       text: userMsg.text,
     });

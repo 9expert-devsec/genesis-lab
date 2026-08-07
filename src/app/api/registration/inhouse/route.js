@@ -62,6 +62,21 @@ export async function POST(req) {
   await dbConnect();
   const doc = await RegisterInhouse.create({
     ...data,
+    /**
+     * THE ONE PLACE `companyName` IS EVER WRITTEN.
+     *
+     * The form stopped asking for a company twice — the ผู้ประสานงาน section's
+     * บริษัท / องค์กร field is gone and `companyName` is no longer on the zod
+     * schema, so it is absent from `data` above. But the path has three live
+     * readers that would go blank without it: the admin list projection AND its
+     * $regex search (src/lib/actions/inhouse-registrations.js), the admin
+     * detail row, and the confirmation email.
+     *
+     * So it is a MIRROR of `quotationCompany`, derived here and nowhere else.
+     * A second writer is how the two representations start disagreeing; an fs
+     * guard pins that this is the only one.
+     */
+    companyName: data.quotationCompany,
     status: 'new',
     source: 'inhouse',
     ipAddress,

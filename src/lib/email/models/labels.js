@@ -23,6 +23,8 @@
  * Pure: no env, no db, no `new Date()`. Every value derives from arguments.
  */
 
+import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+
 export const ATTENDANCE_TEAMS = 'Online via Microsoft Teams';
 export const ATTENDANCE_CLASSROOM = 'Classroom';
 
@@ -143,7 +145,11 @@ export function buildDocumentRequestedBlock({
   const isCorporate = invoice.type === 'corporate';
   const shared = {
     billing_tax_id: textBlock(invoice.taxId),
-    billing_branch: textBlock(invoice.branch),
+    // DERIVED, never stored — `invoice.branch` is a legacy read-only path and a
+    // registration written by the current form leaves it empty. Reading it here
+    // would blank the สาขา row on every new paid receipt. See
+    // src/lib/registration/branchLabel.js.
+    billing_branch: textBlock(formatInvoiceBranchLabel(invoice)),
     billing_address: textBlock(invoiceAddress),
   };
 
