@@ -243,7 +243,38 @@ const nextConfig = {
       ]),
     ];
 
+    // ── THE THREE WEBROOT DOCUMENTS ───────────────────────────────────────
+    //
+    // Not part of the Cloudinary migration: they are not in the database, were
+    // never migrated, and two of them exceed Cloudinary's per-asset ceiling on
+    // any plan we would consider (raw limit 10 MB; the catalog is 42.6 MiB).
+    // They live on Vercel Blob instead — see scripts/upload-webroot-documents.mjs.
+    //
+    // ⚠ THREE EXPLICIT RULES. NEVER A CATCH-ALL. ⚠
+    //
+    // These URLs sit at the SITE ROOT, which is where every application page
+    // also lives. A rule like `/:file(.*\.pdf)` reads as equivalent and is one
+    // bad regex away from swallowing `/promotions`, `/schedule` or the whole
+    // `[...slug]` route. Each filename is named literally. A fourth document
+    // means a fourth line here, written deliberately, in a diff someone reads.
+    //
+    // Inert until BLOB_PUBLIC_BASE is set: with no store provisioned there is
+    // nothing to point at, and emitting rules to an undefined origin would
+    // turn three working legacy URLs into three broken ones.
+    const blobBase = process.env.BLOB_PUBLIC_BASE;
+    const webrootDocuments = blobBase
+      ? [
+        'how-to-create-chatgpt-account.pdf',
+        '9expert-company-profile.pdf',
+        '9expert-training-course-catalog.pdf',
+      ].map((file) => ({
+        source: `/${file}`,
+        destination: `${blobBase}/webroot-documents/${file}`,
+      }))
+      : [];
+
     return [
+      ...webrootDocuments,
       // Named variants first: `/_img/w800/sites/…` must not be eaten by the
       // default rules, which would treat `_img` as an unknown root and miss.
       ...Object.entries(DELIVERY_VARIANTS)
