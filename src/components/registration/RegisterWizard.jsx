@@ -462,8 +462,26 @@ export function StepForm({
   // which links to /registration/public?course=<id> with no round at all — that
   // is the path the confirm step still exists for. handleReveal and the button
   // below stay for it; nothing here auto-selects a round.
+  //
+  // Both signals are checked for MEMBERSHIP in `schedules`, not mere presence.
+  // A round can vanish between visits — unpublished, finished, or simply outside
+  // the registration page's own limit-20 fetch window while still linked from
+  // the detail page. Revealing on a round that does not resolve opens the whole
+  // form with nothing selected and no explanation, and the user only learns at
+  // submit that they never picked one. Failing closed puts them back on the
+  // carousel, which is the screen that can actually fix it.
+  //
+  // NOTE, deliberately: this REPLACES a bare `Boolean(initialValues)`, so it
+  // also narrows pre-existing behaviour — a draft whose round has vanished no
+  // longer opens the form either. That is intended, not a regression to
+  // "restore". The draft itself is untouched: every typed field still restores
+  // the moment the user picks a live round.
+  //
+  // Inline rather than via `scheduleById` — that useMemo is declared below.
+  const roundExists = (id) =>
+    Boolean(id) && (schedules ?? []).some((s) => s._id === id);
   const [formRevealed, setFormRevealed] = useState(
-    Boolean(initialValues) || Boolean(initialClassId),
+    roundExists(initialClassId) || roundExists(initialValues?.classId),
   );
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't

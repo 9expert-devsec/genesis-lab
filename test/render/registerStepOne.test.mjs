@@ -215,10 +215,12 @@ test('CONTROL: the summary strip DOES appear once a round is selected', () => {
 // ── A draft round that no longer exists ────────────────────────────────────
 
 test('a draft round missing from schedules degrades, it does not crash', () => {
-  // Current behaviour, recorded not changed: the round was unpublished or
-  // finished between visits. activeSchedule is null → no summary strip, no card
-  // pressed, and classId resolves empty so the zod schema blocks submit with
-  // 'กรุณาเลือกรอบอบรม' rather than posting a dangling id.
+  // The round was unpublished or finished between visits. activeSchedule is
+  // null → no summary strip, no card pressed, and classId resolves empty so the
+  // zod schema would block submit with 'กรุณาเลือกรอบอบรม' rather than posting a
+  // dangling id. The reveal guard now also keeps the form shut in this state —
+  // see the existence-guard section below — so the user is returned to the
+  // carousel instead of being dropped into a form they cannot submit.
   const html = render({
     initialClassId: null,
     initialValues: { ...DRAFT, classId: 'sch-deleted' },
@@ -227,7 +229,6 @@ test('a draft round missing from schedules degrades, it does not crash', () => {
   assert.equal(isPressed(html, '10-11 SEP'), false, 'no card is pressed');
   assert.equal(isPressed(html, '15-16 OCT'), false);
   assert.equal(anyStrip(html), false, 'and no round summary strip');
-  assert.ok(html.includes('somchai@example.com'), 'but the typed fields still restore');
 });
 
 test('CONTROL: the same draft with a LIVE round does show the strip', () => {
@@ -348,6 +349,82 @@ test('CONTROL: the draft alone is what reveals it, not the fixture being non-emp
   // Same call shape, initialValues dropped. If the reveal came from anything
   // else in `render`'s defaults this would still be open.
   assert.equal(anyRevealed(render({ initialClassId: null, initialValues: null })), false);
+});
+
+// ── The existence guard: a round that does not resolve must not reveal ──────
+
+const GHOST = 'sch-unpublished-between-visits';
+
+test('a URL classId naming a round NOT in schedules leaves the form shut', () => {
+  // The round was unpublished, finished, or fell outside the registration
+  // page's own limit-20 fetch window while the detail page still linked it.
+  const html = render({ initialClassId: GHOST, initialValues: null });
+  assert.equal(anyRevealed(html), false, 'the form body stays closed');
+  assert.equal(isPressed(html, '10-11 SEP'), false, 'and nothing is selected for them');
+  assert.equal(isPressed(html, '15-16 OCT'), false);
+  assert.equal(anyStrip(html), false, 'and there is no summary strip');
+});
+
+test('a draft whose classId is NOT in schedules likewise leaves it shut', () => {
+  // Narrows pre-existing behaviour on purpose: `Boolean(initialValues)` used to
+  // open the form here, dropping the user into a dead end they could only
+  // discover at submit.
+  const html = render({ initialClassId: null, initialValues: { ...DRAFT, classId: GHOST } });
+  assert.equal(anyRevealed(html), false, 'the form body stays closed');
+  assert.equal(isPressed(html, '10-11 SEP'), false);
+  assert.equal(anyStrip(html), false);
+});
+
+test('a ghost URL round does not rescue itself via a live draft round, or vice versa', () => {
+  // Either signal resolving is enough; neither being resolvable is not.
+  assert.equal(
+    isRevealed(render({ initialClassId: GHOST, initialValues: DRAFT })), true,
+    'the draft round is live, so the form opens'
+  );
+  assert.equal(
+    isRevealed(render({ initialClassId: OCT._id, initialValues: { ...DRAFT, classId: GHOST } })), true,
+    'the URL round is live, so the form opens'
+  );
+  assert.equal(
+    anyRevealed(render({ initialClassId: GHOST, initialValues: { ...DRAFT, classId: GHOST } })), false,
+    'neither resolves, so it stays shut'
+  );
+});
+
+test('CONTROL: the SAME inputs with a live round DO reveal', () => {
+  // The pair that makes the three tests above mean something: only the round id
+  // changes between these and the ghosts, so a form that never opened under any
+  // input could not pass both.
+  assert.equal(isRevealed(render({ initialClassId: OCT._id, initialValues: null })), true);
+  assert.equal(isRevealed(render({ initialClassId: null, initialValues: DRAFT })), true);
+});
+
+test('CONTROL: the guard tests MEMBERSHIP, not mere presence', () => {
+  // The mutation this exists for: `roundExists = (id) => Boolean(id)`. Under it
+  // the ghost id is truthy and the form opens, so these two must disagree.
+  const ghost = render({ initialClassId: GHOST, initialValues: null });
+  const live = render({ initialClassId: OCT._id, initialValues: null });
+  assert.notEqual(
+    anyRevealed(ghost), anyRevealed(live),
+    'a non-empty id that names no round must behave differently from one that does'
+  );
+  // And the id really is non-empty — a guard that only rejected '' would pass
+  // the notEqual above for the wrong reason.
+  assert.ok(GHOST.length > 0 && !SCHEDULES.some((s) => s._id === GHOST));
+});
+
+test('the draft is untouched — its fields restore once a live round is picked', () => {
+  // Failing closed must not mean discarding what they typed. The draft still
+  // feeds defaultValues; it is only the reveal that waits.
+  const stale = { ...DRAFT, classId: GHOST };
+  assert.equal(anyRevealed(render({ initialClassId: null, initialValues: stale })), false);
+  // Picking a live round is what the user does next; StepForm sees that as a
+  // URL round on the re-render that follows router.replace('?class=…').
+  const afterPick = render({ initialClassId: SEP._id, initialValues: stale });
+  assert.equal(isRevealed(afterPick), true, 'the form opens');
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(afterPick.includes(probe), `${what} survived the stale round`);
+  }
 });
 
 // ── Bug 2: the back link ───────────────────────────────────────────────────

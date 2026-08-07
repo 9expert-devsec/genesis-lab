@@ -67,33 +67,56 @@ test('CONTROL: the matcher finds real links, and tells the two shapes apart', ()
   assert.ok(!without[0].includes('&class='), 'and is distinguishable from the generic one');
 });
 
-test('the reveal gate reads initialClassId, not just the draft', () => {
+test('the reveal gate checks BOTH arrival signals for membership', () => {
   const src = read('src/components/registration/RegisterWizard.jsx');
   assert.match(
     src,
-    /useState\(\s*Boolean\(initialValues\) \|\| Boolean\(initialClassId\),\s*\)/,
-    'both arrival signals open the form'
+    /const roundExists = \(id\) =>\s*Boolean\(id\) && \(schedules \?\? \[\]\)\.some\(\(s\) => s\._id === id\);/,
+    'membership, not mere presence'
+  );
+  assert.match(
+    src,
+    /useState\(\s*roundExists\(initialClassId\) \|\| roundExists\(initialValues\?\.classId\),\s*\)/,
+    'URL round or draft round, either resolving is enough'
   );
 });
 
-// ── Dead code found while enumerating ──────────────────────────────────────
-
-test('publicRegistrationHref is still unused — if that changes, it needs &class=', () => {
-  // src/lib/courseRegistrationHref.js exports a builder that omits `class`. It
-  // has no callers today, so it cannot weaken the invariant above. If someone
-  // wires it into a round-specific CTA this goes red and they have to decide
-  // whether that entry point should carry a round.
-  const files = [
-    'src/app/(public)/[...slug]/_components/CourseStickyCTA.jsx',
-    'src/app/(public)/[...slug]/page.jsx',
-    ...ROUND_SPECIFIC.map(([f]) => f),
-    ...GENERIC.map(([f]) => f),
-  ];
-  for (const f of files) {
-    assert.ok(!read(f).includes('publicRegistrationHref'), `${f} does not use the class-less builder`);
-  }
+test('the class-less publicRegistrationHref builder is gone', () => {
+  // Deleted rather than guarded: a round-specific CTA built on it would have
+  // silently restored the confirm click. The per-file assertions above are what
+  // pin the invariant now.
+  // Comments stripped first: the module's own header explains what was removed
+  // and names both the function and the URL, which a raw scan would match.
+  const code = read('src/lib/courseRegistrationHref.js')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+  assert.ok(!/publicRegistrationHref/.test(code), 'the export is removed');
+  assert.ok(!/\/registration\/public\?course=/.test(code), 'and so is the URL it built');
 });
 
-test('CONTROL: that probe DOES match the module which defines it', () => {
-  assert.ok(read('src/lib/courseRegistrationHref.js').includes('publicRegistrationHref'));
+test('CONTROL: stripping comments did not blank the file', () => {
+  // Without this, the assertions above pass against an empty string — which is
+  // exactly what a slightly-wrong comment regex would produce.
+  const code = read('src/lib/courseRegistrationHref.js')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
+  assert.match(code, /export function inhouseRegistrationHref/, 'real code survived the strip');
+  assert.match(code, /\/registration\/in-house\?course=/, 'including the sibling URL');
 });
+
+test('CONTROL: its live sibling survived the deletion', () => {
+  // Proves the file was pruned, not emptied — inhouseRegistrationHref has a real
+  // caller ([...slug]/page.jsx) and isInhouseOnly is still exported alongside it.
+  const mod = read('src/lib/courseRegistrationHref.js');
+  assert.match(mod, /export function inhouseRegistrationHref/);
+  assert.match(mod, /export function isInhouseOnly/);
+  assert.match(
+    read('src/app/(public)/[...slug]/page.jsx'),
+    /import \{ inhouseRegistrationHref \} from '@\/lib\/courseRegistrationHref'/,
+    'and its caller still imports it'
+  );
+});
+
+// The `publicRegistrationHref is still unused` guard that used to live here is
+// gone with the function it guarded — see src/lib/courseRegistrationHref.js. The
+// per-file &class= assertions above pin the live invariant and stay.
