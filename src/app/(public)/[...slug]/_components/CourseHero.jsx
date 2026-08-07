@@ -80,7 +80,7 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
               Dark-only, so light mode is unchanged. */}
           <div className="min-w-0 flex flex-col justify-center rounded-2xl bg-[var(--surface-raised)] p-6 shadow-9e-sm dark:ring-1 dark:ring-inset dark:ring-white/10 lg:w-[40%] lg:flex-none lg:px-8 lg:py-6 ">
             <div className="w-full">
-              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              <p className="mb-1 text-xs font-bold  tracking-wider text-[var(--text-secondary)]">
                 {course.course_id}
               </p>
 

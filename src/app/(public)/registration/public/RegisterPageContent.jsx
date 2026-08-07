@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCourseByCode } from '@/lib/api/public-courses';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
@@ -37,8 +37,34 @@ export async function RegisterPageContent({ searchParams, step }) {
     redirect('/training-course');
   }
 
-  const course = await getCourseByCode(courseSlug.toUpperCase());
+  // Two separate blocks, deliberately. `redirect()` works by THROWING
+  // NEXT_REDIRECT, so the try must wrap ONLY the upstream call — pull the
+  // `if (!course) redirect(...)` inside it and the catch swallows the redirect
+  // and reports it as an upstream failure. Do not "simplify" these into one
+  // try/catch.
+  //
+  // The two outcomes are logged apart because they mean opposite things: a miss
+  // is a bad or stale link, a throw is upstream being down. Without this the
+  // user is bounced to the catalog with no server-side trace either way.
+  // .toUpperCase() STAYS. It is what makes the 72 already-uppercase courses hit
+  // the direct call inside the helper; passing the raw lowercase slug would miss
+  // it every time and push all 77 onto the list fallback.
+  const attempted = courseSlug.toUpperCase();
+  let course = null;
+  try {
+    course = await getCourseByCodeInsensitive(attempted);
+  } catch (err) {
+    console.warn(
+      `[registration] upstream lookup FAILED for course_id="${attempted}" ` +
+        `(from ?course=${courseSlug}): ${err?.message}`
+    );
+    throw err;
+  }
   if (!course) {
+    console.warn(
+      `[registration] no course for course_id="${attempted}" ` +
+        `(from ?course=${courseSlug}) — redirecting to /training-course`
+    );
     redirect('/training-course');
   }
 
