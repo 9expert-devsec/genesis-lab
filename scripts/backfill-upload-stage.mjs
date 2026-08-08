@@ -95,6 +95,41 @@ const ALLOWED_EXTENSIONS = new Set([
  */
 const MEDIA_EXTENSIONS = new Set(['mp3', 'mp4', 'wav', 'm4a', 'ogg', 'webm', 'mov', 'avi']);
 
+/* ── HUMAN RULINGS ON public_id COLLISIONS ──────────────────────────────────
+ *
+ * Keyed by the colliding public_id; the value names the file that WINS. This is
+ * the only sanctioned way to resolve a collision the automatic rules cannot, and
+ * it follows the SUPERSEDED table in migrate-legacy-files.mjs deliberately: a
+ * ruling is a decision somebody made and signed, sitting in a diff a reviewer
+ * reads, not a heuristic that quietly picks.
+ *
+ * The loser is NOT abandoned. It gets a row with status 'superseded' carrying
+ * the WINNER's publicId and its sourcePath in `supersededBy` — the semantics the
+ * model already defines for exactly this case — so a later reference rewrite can
+ * point both URLs at the surviving asset and nothing 404s.
+ *
+ * WHY THIS ONE NEEDED A HUMAN: /images/9expert-banner exists as a 500x130 PNG
+ * and an 800x209 JPEG. Rule A does not apply (neither is a webp derivative),
+ * Rule B does not (1.55x apart, not 10x), and Rule C's premise fails outright —
+ * it is written for DUPLICATES, and measured pixel dimensions say these are two
+ * different renditions. Ruling: keep the JPEG, because it is the larger
+ * rendition and the delivery layer caps at w_1600 so it serves both URLs at full
+ * quality. The .png URL then serves the JPEG transcoded to PNG, which is the
+ * same artwork at a higher source resolution.
+ */
+const COLLISION_RULINGS = new Map([
+  [
+    '9exp-genesis/legacy/images/9expert-banner',
+    {
+      keep: '/images/9expert-banner.jpg',
+      note: 'Two different renditions of one banner: 500x130 as .png, 800x209 as .jpg. '
+          + 'Not a duplicate (so Rule C does not apply) and not a placeholder (so Rule B '
+          + 'does not). Ruling: keep the 800x209 .jpg as the higher-resolution rendition; '
+          + 'delivery caps at w_1600 so both URLs serve it at full quality.',
+    },
+  ],
+]);
+
 const extOf = (p) => {
   const last = p.slice(p.lastIndexOf('/') + 1);
   const dot = last.lastIndexOf('.');
@@ -289,10 +324,27 @@ for (const c of candidates) {
   groups.get(c.publicId).push(c);
 }
 
-const excluded = { derivativeSibling: [], smallerDuplicate: [], nonCanonical: [], unresolved: [] };
+const excluded = { derivativeSibling: [], smallerDuplicate: [], nonCanonical: [], unresolved: [], ruled: [] };
 
 for (const [publicId, group] of groups) {
   if (group.length < 2) continue;
+
+  // A HUMAN RULING wins over every automatic rule, and is checked first so the
+  // rules cannot quietly disagree with a decision already made.
+  const ruling = COLLISION_RULINGS.get(publicId);
+  if (ruling) {
+    const winner = group.find((f) => f.publicPath === ruling.keep);
+    if (!winner) {
+      die(`ruling for ${publicId} names ${ruling.keep}, which is not in the staged group `
+        + `(${group.map((f) => f.publicPath).join(', ')}). Refusing to guess.`);
+    }
+    for (const f of group) {
+      if (f === winner) continue;
+      f.__excluded = true;
+      excluded.ruled.push({ ...f, publicId, keptPath: winner.publicPath, keptBytes: winner.diskBytes, note: ruling.note });
+    }
+    continue;
+  }
 
   let survivors = [...group];
 
@@ -410,6 +462,8 @@ section('Rule B — smaller duplicate, ≥10x gap (placeholder)',
   excluded.smallerDuplicate, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        kept: ${x.keptPath} (${x.keptBytes} B)`);
 section('Rule C — non-canonical name/extension (LOSER, not uploaded)',
   excluded.nonCanonical, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}  [sniffed ${x.sniffed || '?'}]\n        kept: ${x.keptPath} (${x.keptBytes} B)`);
+section('HUMAN RULING — loser, recorded as superseded (not uploaded)',
+  excluded.ruled, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        kept: ${x.keptPath} (${x.keptBytes} B)\n        ${x.note}`);
 section('UNRESOLVED collision — held back, needs a human',
   excluded.unresolved, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}  [sniffed ${x.sniffed || '?'}, ${x.note ?? ''}]`);
 section('refused by the security allow-list',
@@ -525,6 +579,35 @@ function uploadBuffer(buf, options) {
     stream.end(buf);
   });
 }
+
+/* RULED LOSERS are recorded before anything uploads, using the model's existing
+ * 'superseded' semantics: the row carries the WINNER's publicId and the winner's
+ * path in `supersededBy`, so a later reference rewrite can point both URLs at
+ * the surviving asset. Nothing is renamed or suffixed — the winner keeps
+ * "public_id is the path". */
+for (const loser of excluded.ruled) {
+  await LegacyFileMigration.updateOne(
+    { sourcePath: loser.publicPath },
+    {
+      $set: {
+        publicId: loser.publicId,          // the WINNER's id
+        resourceType: loser.resourceType,
+        pathExtension: loser.ext,
+        sourceBytes: loser.diskBytes,
+        status: 'superseded',
+        supersededBy: loser.keptPath,
+        note: loser.note,
+        refCount: 0,
+        directory: directoryOf(loser.publicPath),
+        attemptedAt: new Date(),
+      },
+      $setOnInsert: { sourcePath: loser.publicPath },
+    },
+    { upsert: true },
+  );
+  console.log(`  ruling recorded: ${loser.publicPath} → superseded by ${loser.keptPath}`);
+}
+if (excluded.ruled.length) console.log('');
 
 const runStartedAt = Date.now();
 const stats = { uploaded: 0, failed: 0, exists: 0, bytes: 0 };
