@@ -59,6 +59,18 @@ import {
 
 const argv = process.argv.slice(2);
 const WRITE_JSON = argv.includes('--json');
+/**
+ * `--emit-delta <file>` writes the STAGE-2 delta as webroot-relative paths, one
+ * per line, ready for `tar cf … -T <file>` on the legacy box.
+ *
+ * Webroot-relative and not absolute because `tar -T` resolves entries against
+ * its own cwd: the operator runs `cd /opt/www` first, so a leading slash would
+ * make tar look at the real filesystem root and find nothing.
+ */
+const emitDeltaAt = (() => {
+  const i = argv.indexOf('--emit-delta');
+  return i === -1 ? null : argv[i + 1];
+})();
 const TREE = path.resolve(process.cwd(), 'optwww-tree.txt');
 const WEBROOT = '/opt/www';
 
@@ -466,6 +478,81 @@ for (const [r, v] of Object.entries(secByReason).sort((a, b) => b[1].n - a[1].n)
   console.log(`  ${String(v.n).padStart(5)}  ${mb(v.b).padStart(9)} MB  ${r}`);
 }
 console.log('');
+
+/* ── STAGE-2 DELTA, FOR THE OPERATOR TO TAR ────────────────────────────────
+ *
+ * The point is to pull only what is MISSING. The full sites/default/files
+ * content tree is ~1.9 GB; the delta after Stage 1 and the reference-driven
+ * migration is a fraction of that, and re-pulling the rest would cost hours of
+ * transfer to upload nothing.
+ *
+ * RULE A IS APPLIED HERE, not deferred to upload time, and that is safe because
+ * Rule A is decidable from NAMES ALONE: a .webp/.avif that shares its public_id
+ * with a .png/.jpg in the same directory is a site-generated derivative. Its URL
+ * already resolves — measured on production, Cloudinary transcodes the stored
+ * source into the requested format — so pulling and uploading it would spend
+ * transfer to change nothing a client can observe, and risks making a lossy webp
+ * canonical if it happened to upload first.
+ *
+ * Rules B and C are NOT applied here: B needs byte sizes that only agree once the
+ * files are local, and C needs the magic bytes. Those run at upload time, when
+ * the evidence exists.
+ */
+const stage2Small = stage2.filter((f) => f.size <= CLOUDINARY_MAX_BYTES);
+const stage2Big = stage2.filter((f) => f.size > CLOUDINARY_MAX_BYTES);
+
+const byIdStage2 = new Map();
+for (const f of stage2Small) {
+  if (!byIdStage2.has(f.publicId)) byIdStage2.set(f.publicId, []);
+  byIdStage2.get(f.publicId).push(f);
+}
+const derivativeSiblings = [];
+for (const group of byIdStage2.values()) {
+  if (group.length < 2) continue;
+  if (!group.some((f) => ['png', 'jpg', 'jpeg'].includes(f.ext))) continue;
+  for (const f of group.filter((x) => ['webp', 'avif'].includes(x.ext))) derivativeSiblings.push(f);
+}
+const siblingSet = new Set(derivativeSiblings);
+const delta = stage2Small.filter((f) => !siblingSet.has(f));
+
+console.log('── STAGE-2 DELTA (what is still missing) ───────────────────────────────');
+console.log('');
+console.log(`  sites/default/files content, deliverable & NOT already uploaded : ${stage2.length}  ${mb(sum(stage2))} MB`);
+console.log(`  Rule A derivative webp/avif siblings, excluded up front         : ${derivativeSiblings.length}  ${mb(sum(derivativeSiblings))} MB`);
+console.log(`  over the ${mb(CLOUDINARY_MAX_BYTES)} MB Cloudinary ceiling (expect 0 in Stage 2)      : ${stage2Big.length}  ${mb(sum(stage2Big))} MB`);
+console.log(`  ${'─'.repeat(70)}`);
+console.log(`  DELTA TO PULL                                                   : ${delta.length}  ${mb(sum(delta))} MB`);
+console.log('');
+if (stage2Big.length) {
+  console.log('  ⚠ Stage 2 was expected to be entirely ≤10 MB. These are NOT:');
+  for (const f of stage2Big) console.log(`     ${mb(f.size).padStart(8)} MB  ${f.publicPath}`);
+  console.log('');
+}
+const deltaByDir = {};
+for (const f of delta) {
+  const d = f.publicPath.slice('/sites/default/files/'.length).split('/')[0];
+  deltaByDir[d] ??= { n: 0, b: 0 };
+  deltaByDir[d].n += 1; deltaByDir[d].b += f.size;
+}
+console.log('  files        MB  subdirectory');
+for (const [d, v] of Object.entries(deltaByDir).sort((a, b) => b[1].b - a[1].b)) {
+  console.log(`  ${String(v.n).padStart(5)}  ${mb(v.b).padStart(9)}  ${d}`);
+}
+console.log('');
+
+if (emitDeltaAt) {
+  const out = path.resolve(emitDeltaAt);
+  // Webroot-relative, no leading slash, LF endings — the operator runs
+  // `cd /opt/www && tar cf … -T <file>` on a Linux box, and a CR would become
+  // part of the filename tar looks for.
+  fs.writeFileSync(out, `${delta.map((f) => f.publicPath.replace(/^\//, '')).join('\n')}\n`, 'utf8');
+  console.log(`  delta list → ${out}`);
+  console.log(`  ${delta.length} path(s), webroot-relative, LF-terminated.`);
+  console.log('');
+  console.log('  On the legacy box:');
+  console.log('     cd /opt/www && tar cf ~/backfill-stage2.tar -T ~/delta-stage2.txt');
+  console.log('');
+}
 
 /* ── OUTPUT FOR PHASE 1 ────────────────────────────────────────────────── */
 if (WRITE_JSON) {
