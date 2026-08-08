@@ -105,7 +105,13 @@ const MAGIC = {
   gif: (b) => b.subarray(0, 3).toString('latin1') === 'GIF',
   svg: (b) => /^\s*(<\?xml|<svg|<!--|<!DOCTYPE svg)/i.test(b.subarray(0, 200).toString('utf8')),
   pdf: (b) => b.subarray(0, 5).toString('latin1') === '%PDF-',
-  zip: (b) => b[0] === 0x50 && b[1] === 0x4b, // xlsx / pptx / docx / pbix are all zip
+  zip: (b) => b[0] === 0x50 && b[1] === 0x4b // xlsx / pptx / docx / pbix are all zip
+    // …EXCEPT when the legacy box named an Excel 97-2003 file `.xlsx`. That is
+    // OLE2/CFB, not a zip, and there are real ones in /files/document. Delivery
+    // returns them byte-equal to source, so the file is fine and only the name
+    // lies — accepting the header here keeps a source-data quirk from being
+    // reported as a delivery failure.
+    || b.subarray(0, 8).toString('hex') === 'd0cf11e0a1b11ae1',
 };
 const magicFor = (ct, ext) => {
   if (/svg/.test(ct)) return MAGIC.svg;
@@ -199,6 +205,33 @@ async function probe(url, { range = null, attempt = 1 } = {}) {
   return out;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Two probes of the same URL, for the MISS→HIT cacheability check.
+ *
+ * A brand-new asset can legitimately MISS twice: the second request races the
+ * edge fill, or lands on a different PoP. Measured during the Stage-1 backfill —
+ * four freshly-uploaded SVGs reported MISS→MISS and then HIT on the very next
+ * request, so the pair was reporting a cold fill as an uncacheable response.
+ *
+ * One retry separates those two. It cannot mask a genuinely uncacheable
+ * response, because `private`/no-store upstreams never reach HIT no matter how
+ * many times they are asked — and the document category asserts the OPPOSITE
+ * (that a HIT never happens), so a retry there would be wrong and is not used.
+ */
+async function probePair(url) {
+  const first = await probe(url);
+  let second = await probe(url);
+  // Up to two patient retries. A first-ever request for a just-uploaded asset
+  // fills the edge asynchronously, and 400 ms was measured too short — an SVG
+  // reported MISS→MISS here and then HIT 6/6 with `Age: 169` moments later.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (/HIT/.test(second.vercelCache ?? '') || second.infra) break;
+    await sleep(1500);
+    second = await probe(url);
+  }
+  return [first, second];
+}
 
 /* ── PROBE SET, DRAWN FROM THE DATABASE ─────────────────────────────────── */
 async function buildProbeSet() {
@@ -334,8 +367,7 @@ console.log('\n── IMAGES (static rewrite; x-legacy-delivery must be ABSENT) 
 for (const { trait, row } of set.images) {
   const path = encodePath(row.sourcePath);
   const url = `${ORIGIN}${path}`;
-  const r1 = await probe(url);
-  const r2 = await probe(url);
+  const [r1, r2] = await probePair(url);
   const j = judgeStatic(r1, r2, row, { expectContentType: /^image\// });
   const dw = webpWidth(Buffer.from(r1.head, 'latin1'));
   if (j.verdict === 'PASS') {
@@ -349,8 +381,7 @@ for (const { trait, row } of set.images) {
   // The variant must actually change the transformation. Asserted on WIDTH,
   // not bytes — see webpWidth() for why bytes gave three false FAILs.
   const vurl = `${ORIGIN}${VARIANT_PREFIX}/w800${path}`;
-  const v1 = await probe(vurl);
-  const v2 = await probe(vurl);
+  const [v1, v2] = await probePair(vurl);
   const vj = judgeStatic(v1, v2, row, { expectContentType: /^image\// });
   const vw = webpWidth(Buffer.from(v1.head, 'latin1'));
   if (vj.verdict === 'PASS') {
@@ -385,8 +416,7 @@ for (const { trait, row } of derivativeSources) {
   for (const [shape, suffix] of [['appended .webp', '.webp'], ['no appended format', '']]) {
     const dpath = encodePath(`/sites/default/files/styles/large_cover/public/${rest}`) + suffix;
     const url = `${ORIGIN}${dpath}?itok=8PbWFEFd`;
-    const d1 = await probe(url);
-    const d2 = await probe(url);
+    const [d1, d2] = await probePair(url);
     const j = judgeStatic(d1, d2, row, { expectContentType: /^image\// });
     if (j.verdict === 'PASS') {
       j.notes.push(d1.bytes === src.bytes
@@ -403,8 +433,7 @@ for (const { trait, row } of derivativeSources) {
 console.log('\n── SVG (must arrive UNTRANSFORMED) ──');
 for (const row of set.svgs) {
   const url = `${ORIGIN}${encodePath(row.sourcePath)}`;
-  const r1 = await probe(url);
-  const r2 = await probe(url);
+  const [r1, r2] = await probePair(url);
   const j = judgeStatic(r1, r2, row, { expectContentType: /svg/, expectBytes: row.sourceBytes });
   if (j.verdict !== 'INFRA' && !MAGIC.svg(Buffer.from(r1.head, 'latin1'))) {
     j.verdict = 'FAIL'; j.notes.push('body does not begin as SVG — rasterised?');
@@ -448,9 +477,13 @@ for (const { trait, row } of set.docs) {
     fail = true;
     notes.push(`Range → ${ranged.status} NOT 206${ranged.contentRange ? ` (content-range ${ranged.contentRange}, ${ranged.bytes} B body — TRUNCATION)` : ''}`);
   } else {
-    const want = `bytes 0-1023/${row.sourceBytes}`;
+    // A range WIDER than the entity is satisfied by the whole entity — correct
+    // HTTP, and the case for any document under 1 KiB (there is a 329-byte .rar
+    // in /files/document). Asserting a flat 1024 reported that as truncation.
+    const span = Math.min(1024, row.sourceBytes);
+    const want = `bytes 0-${span - 1}/${row.sourceBytes}`;
     if (ranged.contentRange !== want) { fail = true; notes.push(`content-range "${ranged.contentRange}" ≠ "${want}"`); }
-    if (ranged.bytes !== 1024) { fail = true; notes.push(`ranged body ${ranged.bytes} B ≠ 1024`); }
+    if (ranged.bytes !== span) { fail = true; notes.push(`ranged body ${ranged.bytes} B ≠ ${span}`); }
   }
   if (a.bytes !== row.sourceBytes) { fail = true; notes.push(`full body ${a.bytes} B ≠ source ${row.sourceBytes} B`); }
   else notes.push(`full ${a.bytes} B == source`);
@@ -496,8 +529,7 @@ for (const row of set.ampersand) {
 console.log("\n── status 'exists' / 'superseded' (real URLs, extra coverage) ──");
 for (const row of set.others) {
   const url = `${ORIGIN}${encodePath(row.sourcePath)}`;
-  const r1 = await probe(url);
-  const r2 = await probe(url);
+  const [r1, r2] = await probePair(url);
   const j = judgeStatic(r1, r2, row, { expectContentType: /^image\// });
   if (j.verdict === 'PASS') {
     const w = webpWidth(Buffer.from(r1.head, 'latin1'));
