@@ -200,25 +200,40 @@ const nextConfig = {
 
       ...LEGACY_ROOTS.flatMap((root) => [
         // ── FALLBACK, and ONLY for what the pattern provably cannot say ────
-        // A path containing `&` goes to the resolver, which looks the file up
-        // by its stored source path. Measured: the derived Cloudinary URL for
-        // these returns HTTP 400, because `&` is refused in a public_id and
-        // the migration substituted it with `and` — a lossy, non-invertible
-        // rule.
+        // A path containing `&` or `#` goes to the resolver, which looks the
+        // file up by its stored source path. Measured: the derived Cloudinary
+        // URL for these returns HTTP 400, because both characters are refused
+        // in a public_id and the migration substituted them (`&`→`and`,
+        // `#`→`sharp`) — lossy, non-invertible rules.
         //
-        // Narrow ON PURPOSE. It matches 6 files. Everything else stays on the
-        // static path below, where no function of ours runs.
+        // Narrow ON PURPOSE. It matches 19 paths: the 6 ampersand files and the
+        // 13 C# ones. Everything else stays on the static path below, where no
+        // function of ours runs.
         //
-        // BOTH SPELLINGS. Next matches on the RAW pathname, so a client that
-        // percent-encodes the ampersand sends `%26` and a literal `&` never
-        // appears. Measured: matching only `&` let every encoded request fall
-        // through to the Cloudinary rule and return HTTP 400 — 0 of 6
+        // OF THOSE 19, ONLY THE 6 ARE UPLOADED TODAY. The 13 C# files are found
+        // but not yet migrated (see scripts/backfill-legacy-tree.mjs), so they
+        // currently reach the resolver and get its explicit 404 `resolver-miss`.
+        // That is deliberately the better failure: routing them here now means
+        // the day they upload they resolve with no config change, and until then
+        // the miss names the file instead of surfacing an opaque Cloudinary 400.
+        //
+        // BOTH SPELLINGS OF EACH. Next matches on the RAW pathname, so a client
+        // that percent-encodes sends `%26`/`%23` and the literal character never
+        // appears. Measured for `&`: matching only `&` let every encoded request
+        // fall through to the Cloudinary rule and return HTTP 400 — 0 of 6
         // resolved, while the same URLs with a literal `&` worked.
         //
-        // The resolver serves the DEFAULT variant regardless of `at`. Six
+        // For `#` the encoded form is the ONLY one that can ever arrive: a
+        // literal `#` is the URL fragment delimiter, so the client strips it and
+        // everything after it before sending. `%23` is therefore load-bearing
+        // here, not defensive — the literal alternative is kept only so the
+        // pattern reads the same as the ampersand case and so a server-side
+        // caller passing an unencoded path still matches.
+        //
+        // The resolver serves the DEFAULT variant regardless of `at`. Nineteen
         // files is not worth threading a variant through a database lookup.
         {
-          source: `${at}/${root}/:rest(.*(?:&|%26).*)`,
+          source: `${at}/${root}/:rest(.*(?:&|%26|#|%23).*)`,
           destination: `/legacy-file/${root}/:rest`,
         },
         // RAW: the extension decides, so this has to win over the image

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   AMPERSAND_REPLACEMENT,
+  HASH,
+  HASH_REPLACEMENT,
+  HASH_RULE,
   LEGACY_PUBLIC_ID_PREFIX,
   SUBSTITUTION_RULE,
   TRIM_RULE,
@@ -10,8 +13,10 @@ import {
   assertNoUnreviewedInvalidChars,
   legacyPathToPublicId,
   needsAmpersandSubstitution,
+  needsHashSubstitution,
   needsTrailingWhitespaceTrim,
   substituteAmpersands,
+  substituteHash,
   trimTrailingWhitespace,
 } from '@/lib/legacyPublicId';
 
@@ -231,6 +236,178 @@ test('CONTROL: the substitution is NOT reversible, so nothing may try', () => {
   // resolver attempting to reverse the rule.
   const original = legacyPathToPublicId('/x/Build and Manage.png', 'image');
   const substitutedForm = legacyPathToPublicId('/x/Build & Manage.png', 'image');
+  assert.equal(original.publicId, substitutedForm.publicId);
+  assert.equal(original.substituted, false);
+  assert.equal(substitutedForm.substituted, true);
+});
+
+// ── THE SECOND CHARACTER SUBSTITUTION: `#` → `sharp` ────────────────────────
+//
+// `#` graduated off UNREVIEWED_INVALID_CHARS the way that list intends: the
+// full-tree backfill hit 13 real deliverable files carrying it, and
+// legacyPathToPublicId THREW rather than inventing a mapping. These are those
+// 13 files, copied exactly — the C# course covers in course/cover and
+// course/images, plus one certificate PDF.
+//
+// Two properties matter beyond "it replaces the character":
+//
+//   1. NO SEPARATOR IS INSERTED. `C#` becomes `Csharp`, not `C sharp`. Adding a
+//      space would be a second decision about somebody's filename that nobody
+//      reviewed, and it would also be a new way to end up with a trailing space.
+//   2. The rule is LOSSY exactly like the ampersand rule, so these files must
+//      be flagged and routed through the resolver rather than the static path.
+
+/** The 13 real files, and the ids the ruling says they must get. */
+const HASH_CASES = [
+  {
+    source: '/sites/default/files/course/cover/-NET MAUI การพัฒนา Native Cross-platform Apps ด้วย C#.png',
+    expected: 'sites/default/files/course/cover/-NET MAUI การพัฒนา Native Cross-platform Apps ด้วย Csharp',
+  },
+  {
+    source: '/sites/default/files/course/cover/-NET MAUI การพัฒนา Native Cross-platform Apps with C#.webp',
+    expected: 'sites/default/files/course/cover/-NET MAUI การพัฒนา Native Cross-platform Apps with Csharp',
+  },
+  {
+    source: '/sites/default/files/course/cover/NET MAUI การพัฒนา Native Cross-platform Apps with C#.webp',
+    expected: 'sites/default/files/course/cover/NET MAUI การพัฒนา Native Cross-platform Apps with Csharp',
+  },
+  {
+    source: '/sites/default/files/course/cover/Programming in C# with Visual Studio.png',
+    expected: 'sites/default/files/course/cover/Programming in Csharp with Visual Studio',
+  },
+  {
+    source: '/sites/default/files/course/cover/Programming in C# with Visual Studio.webp',
+    expected: 'sites/default/files/course/cover/Programming in Csharp with Visual Studio',
+  },
+  {
+    source: '/sites/default/files/course/cover/WEB - Programming C# (Custom).png',
+    expected: 'sites/default/files/course/cover/WEB - Programming Csharp (Custom)',
+  },
+  {
+    source: '/sites/default/files/course/images/-NET MAUI การพัฒนา Native Cross-platform Apps ด้วย C#.png',
+    expected: 'sites/default/files/course/images/-NET MAUI การพัฒนา Native Cross-platform Apps ด้วย Csharp',
+  },
+  {
+    source: '/sites/default/files/course/images/-NET MAUI การพัฒนา Native Cross-platform Apps with C#.webp',
+    expected: 'sites/default/files/course/images/-NET MAUI การพัฒนา Native Cross-platform Apps with Csharp',
+  },
+  {
+    source: '/sites/default/files/course/images/NET MAUI การพัฒนา Native Cross-platform Apps with C#.webp',
+    expected: 'sites/default/files/course/images/NET MAUI การพัฒนา Native Cross-platform Apps with Csharp',
+  },
+  {
+    source: '/sites/default/files/course/images/Programming in C# with Visual Studio.png',
+    expected: 'sites/default/files/course/images/Programming in Csharp with Visual Studio',
+  },
+  {
+    source: '/sites/default/files/course/images/Programming in C# with Visual Studio.webp',
+    expected: 'sites/default/files/course/images/Programming in Csharp with Visual Studio',
+  },
+  {
+    source: '/sites/default/files/course/images/WEB - Programming C# (Custom).png',
+    expected: 'sites/default/files/course/images/WEB - Programming Csharp (Custom)',
+  },
+];
+
+/** The certificate PDF — `raw`, so the id KEEPS its extension. */
+const HASH_RAW_CASE = {
+  source: '/sites/default/files/files/training-course/course-certificate/.Net/Programming-in-C#-with-Visual-Studio-course-certificate.pdf',
+  expected: 'sites/default/files/files/training-course/course-certificate/.Net/Programming-in-Csharp-with-Visual-Studio-course-certificate.pdf',
+};
+
+test('all 12 real C# image filenames map to their substituted public_id', () => {
+  for (const { source, expected } of HASH_CASES) {
+    const got = legacyPathToPublicId(source, 'image');
+    assert.equal(got.publicId, `${LEGACY_PUBLIC_ID_PREFIX}/${expected}`, source);
+    assert.equal(got.substituted, true, `${source} must be flagged as substituted`);
+    assert.deepEqual(got.rules, [HASH_RULE], source);
+    assert.ok(!got.publicId.includes(HASH), `${source} → id must not still contain '#'`);
+  }
+});
+
+test('the C# certificate PDF substitutes as raw, keeping its extension', () => {
+  const got = legacyPathToPublicId(HASH_RAW_CASE.source, 'raw');
+  assert.equal(got.publicId, `${LEGACY_PUBLIC_ID_PREFIX}/${HASH_RAW_CASE.expected}`);
+  assert.equal(got.substituted, true);
+  assert.deepEqual(got.rules, [HASH_RULE]);
+  assert.equal(got.ext, 'pdf');
+  assert.ok(got.publicId.endsWith('.pdf'), 'raw id keeps the extension');
+});
+
+test('C# becomes Csharp — no separator is invented', () => {
+  // The tempting variant is `C sharp`, which is a second decision about
+  // somebody else's filename and a fresh way to produce a trailing space.
+  const got = legacyPathToPublicId('/sites/default/files/x/C# Programming.png', 'image');
+  assert.equal(got.publicId, `${LEGACY_PUBLIC_ID_PREFIX}/sites/default/files/x/Csharp Programming`);
+  assert.ok(!got.publicId.includes('C sharp'), 'no space may be inserted before "sharp"');
+});
+
+test('substituted C# ids collide ONLY where the basename is identical', () => {
+  // An image public_id drops the extension, so `X.png` and `X.webp` in one
+  // directory legitimately map to one id. That is a property of the base rule,
+  // not of this substitution — so the assertion is that the substitution
+  // introduces NO collision beyond it. Two files that differ before the
+  // extension must still differ after.
+  const byId = new Map();
+  for (const { source } of HASH_CASES) {
+    const id = legacyPathToPublicId(source, 'image').publicId;
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push(source);
+  }
+  for (const [id, sources] of byId) {
+    if (sources.length === 1) continue;
+    const basenames = new Set(sources.map((s) => s.replace(/\.[^./]+$/, '')));
+    assert.equal(basenames.size, 1, `${id} merges genuinely different names: ${sources.join(' | ')}`);
+  }
+});
+
+test('substituteHash replaces every occurrence, not just the first', () => {
+  assert.equal(substituteHash('a # b # c'), `a ${HASH_REPLACEMENT} b ${HASH_REPLACEMENT} c`);
+  assert.equal(substituteHash('##'), `${HASH_REPLACEMENT}${HASH_REPLACEMENT}`);
+  assert.equal(substituteHash('no hash here'), 'no hash here');
+});
+
+test('needsHashSubstitution detects only the hash', () => {
+  assert.equal(needsHashSubstitution('Programming in C#'), true);
+  assert.equal(needsHashSubstitution('Programming in Csharp'), false);
+  assert.equal(needsHashSubstitution('Accounting & Finance'), false);
+});
+
+test("CONTROL: '#' no longer throws, and the other five still do", () => {
+  // The graduation, pinned from both sides. If `#` ever returns to the
+  // unreviewed list these files stop uploading; if another character quietly
+  // joins the reviewed set, the second half of this fails.
+  assert.ok(!UNREVIEWED_INVALID_CHARS.includes(HASH), "'#' must NOT be unreviewed any more");
+  assert.doesNotThrow(() => assertNoUnreviewedInvalidChars('folder/Programming in C#'));
+  assert.doesNotThrow(() => legacyPathToPublicId('/x/Programming in C#.png', 'image'));
+
+  assert.deepEqual([...UNREVIEWED_INVALID_CHARS], ['?', '%', '<', '>', '\\']);
+  for (const ch of ['?', '%', '<', '>', '\\']) {
+    assert.throws(
+      () => legacyPathToPublicId(`/sites/default/files/x/name${ch}thing.png`, 'image'),
+      /no reviewed substitution/,
+      `${ch} must still throw`,
+    );
+  }
+});
+
+test('ALL THREE rules compose on one path, in order, and all are recorded', () => {
+  // `&` and `#` both run BEFORE the trim, because either can leave a trailing
+  // space the trim then has to remove. Reversing that order emits an id ending
+  // in whitespace — precisely what Cloudinary rejects.
+  const got = legacyPathToPublicId('/sites/default/files/x/C# & VB .png', 'image');
+  assert.equal(got.publicId, `${LEGACY_PUBLIC_ID_PREFIX}/sites/default/files/x/Csharp and VB`);
+  assert.equal(got.substituted, true);
+  assert.deepEqual(got.rules, [SUBSTITUTION_RULE, HASH_RULE, TRIM_RULE]);
+  assert.ok(!/\s$/.test(got.publicId), 'id must not end in whitespace');
+});
+
+test("CONTROL: '#'→'sharp' is NOT reversible either, so nothing may try", () => {
+  // `Csharp` is an ordinary token somebody could have typed deliberately, so
+  // the substituted and unsubstituted forms are indistinguishable from the id
+  // alone — the same reason the ampersand rule is recorded rather than inverted.
+  const original = legacyPathToPublicId('/x/Programming in Csharp.png', 'image');
+  const substitutedForm = legacyPathToPublicId('/x/Programming in C#.png', 'image');
   assert.equal(original.publicId, substitutedForm.publicId);
   assert.equal(original.substituted, false);
   assert.equal(substitutedForm.substituted, true);
