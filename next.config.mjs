@@ -10,6 +10,7 @@ import {
   DERIVATIVE_SOURCE_PATTERN,
   DERIVATIVE_APPENDED_PATTERN,
 } from './src/lib/legacyTransforms.mjs';
+import { LEGACY_BLOB_FILES } from './src/lib/legacyBlobFiles.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -288,8 +289,41 @@ const nextConfig = {
       }))
       : [];
 
+    // ── FILES SERVED FROM VERCEL BLOB, NOT CLOUDINARY ─────────────────────
+    //
+    // 16 files Cloudinary cannot hold — 11 over its 10 MB raw ceiling, and 5
+    // MP3s that are both over it and unroutable by any Cloudinary rule, since
+    // `mp3` is in neither extension set.
+    //
+    // ONE RULE PER FILE, and unavoidably so: Cloudinary delivery is derived by
+    // PATTERN (public_id IS the path), which is why a handful of rules serve
+    // ~2,900 files. A blob pathname carries no such guarantee, so there is
+    // nothing to pattern-match on.
+    //
+    // The list is GENERATED from the upload run — src/lib/legacyBlobFiles.mjs,
+    // written by scripts/backfill-upload-blob.mjs — because a hand-kept list of
+    // 16 paths and a store holding 16 objects drift, and the drift is a 404 for
+    // a file that uploaded perfectly well.
+    //
+    // ⚠ ORDER IS LOAD-BEARING. These MUST precede the /files/ and /images/
+    // rules below. Those roots are in LEGACY_ROOTS, so their catch-all matches
+    // every one of these paths and would send them to Cloudinary — where the
+    // large files do not exist and the MP3s never could. First match wins, so
+    // being listed first is the entire mechanism.
+    //
+    // Inert until BLOB_PUBLIC_BASE is set, for the same reason as the webroot
+    // documents: pointing a rewrite at an undefined origin would turn a 404
+    // into a broken destination, which is harder to diagnose and no better.
+    const blobFiles = blobBase
+      ? LEGACY_BLOB_FILES.map(({ publicPath, blobPathname }) => ({
+        source: publicPath,
+        destination: `${blobBase}/${blobPathname}`,
+      }))
+      : [];
+
     return [
       ...webrootDocuments,
+      ...blobFiles,
       // Named variants first: `/_img/w800/sites/…` must not be eaten by the
       // default rules, which would treat `_img` as an unknown root and miss.
       ...Object.entries(DELIVERY_VARIANTS)

@@ -120,6 +120,30 @@ const LegacyFileMigrationSchema = new mongoose.Schema(
     // An empty string means the sizes matched exactly — the normal case.
     sizeExceptionReason: { type: String, default: '' },
 
+    // ── WHERE THE BYTES ACTUALLY LIVE ───────────────────────────────────────
+    // 'cloudinary' for everything the pattern-based rewrite can reach, which is
+    // almost all of it. 'blob' for the files Cloudinary CANNOT hold: its raw
+    // ceiling is 10 MB on any plan we would consider, and the training-course
+    // catalog alone is 42.6 MiB. Those live on Vercel Blob.
+    //
+    // This is a queryable field rather than something inferred from `bytes`,
+    // because the two storages are reached by DIFFERENT delivery mechanisms —
+    // Cloudinary by pattern, Blob by one explicit rewrite per file generated
+    // from src/lib/legacyBlobFiles.mjs. Code that needs to know which mechanism
+    // serves a row must be able to ask, not re-derive a size threshold that was
+    // a Cloudinary plan limit rather than a property of the file.
+    //
+    // Default 'cloudinary' so every pre-existing row keeps its meaning without
+    // a backfill.
+    storage: { type: String, enum: ['cloudinary', 'blob'], default: 'cloudinary', index: true },
+
+    // The Blob pathname, set only when storage is 'blob'. It is the key the
+    // rewrite in next.config.mjs points at, so it must match
+    // src/lib/legacyBlobFiles.mjs exactly — stored here so a run can be audited
+    // without reading the manifest, and so a drift between the two is findable
+    // by query instead of by eye.
+    blobPathname: { type: String, default: '' },
+
     // As returned by Cloudinary, and as this migration will construct it from
     // the legacy path. Stored side by side ON PURPOSE: if they ever disagree,
     // the pattern-derivation assumption in the header is broken and delivery
