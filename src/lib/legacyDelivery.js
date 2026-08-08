@@ -71,6 +71,13 @@ const CONTENT_TYPE_BY_EXT = {
   csv: 'text/csv; charset=utf-8',
   rtf: 'application/rtf',
   pbix: 'application/octet-stream',
+  // Audio. In practice the five legacy MP3s are served straight from Vercel Blob
+  // by an explicit rewrite, so their Content-Type comes from the object's own
+  // metadata (set to audio/mpeg at upload) and no function of ours runs. This
+  // entry makes the mapping correct if one ever does pass through here:
+  // `application/octet-stream` would make a browser DOWNLOAD a podcast instead
+  // of playing it, and would stop <audio> seeking altogether.
+  mp3: 'audio/mpeg',
 };
 
 export function extensionOf(p) {

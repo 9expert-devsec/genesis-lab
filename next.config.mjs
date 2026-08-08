@@ -1,7 +1,8 @@
 import {
   DELIVERY_VARIANTS,
   VARIANT_PREFIX,
-  SVG_TRANSFORM,
+  UNTRANSFORMED_TRANSFORM,
+  UNTRANSFORMED_EXTENSIONS,
   LEGACY_PREFIX,
   LEGACY_ROOTS,
   RAW_EXTENSION_LIST,
@@ -244,11 +245,17 @@ const nextConfig = {
           source: `${at}/${root}/:rest(.*\\.(?:${rawExt}))`,
           destination: `${base}/raw/upload/${prefix}/${root}/:rest`,
         },
-        // SVG UNTRANSFORMED — see SVG_TRANSFORM in legacyTransforms.mjs for
-        // the measurement. Transforming an SVG rasterises it.
+        // UNTRANSFORMED EXTENSIONS — svg and gif. See UNTRANSFORMED_EXTENSIONS
+        // in legacyTransforms.mjs for both measurements: transforming an SVG
+        // RASTERISES it, and a large animated GIF cannot be transformed at all
+        // (Cloudinary caps a transform at 50 Mpx summed over frames and returns
+        // 400 past it — two real files were 400ing on the deployed site).
+        //
+        // These MUST precede the image catch-all below, which would otherwise
+        // claim them and re-apply the transformation.
         {
-          source: `${at}/${root}/:rest(.*\\.svg)`,
-          destination: image(SVG_TRANSFORM, `${root}/:rest`),
+          source: `${at}/${root}/:rest(.*\\.(?:${UNTRANSFORMED_EXTENSIONS.join('|')}))`,
+          destination: image(UNTRANSFORMED_TRANSFORM, `${root}/:rest`),
         },
         // IMAGE catch-all. `:rest*` carries the extension through untouched,
         // which is exactly what Cloudinary wants as the format suffix.

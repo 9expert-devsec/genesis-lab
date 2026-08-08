@@ -92,14 +92,64 @@ export const DELIVERY_VARIANTS = {
 export const VARIANT_PREFIX = '/_img';
 
 /**
- * SVG is delivered UNTRANSFORMED, and this is not caution — it is measured.
- * f_auto rasterises an SVG at its intrinsic size: copy.svg (479 B, infinitely
- * scalable) came back a 24×24 PNG of 187 B, Manus-ai.svg 60×60, PEAK.svg
- * 168×45. Any CSS size above the intrinsic one then renders blurred, and on a
- * retina display every one of them does. Untransformed it arrives
- * byte-identical. 9 migrated files are affected.
+ * The empty transformation: deliver the stored asset as it is.
+ *
+ * Not a placeholder and not a missing value — a deliberate, measured choice for
+ * the extensions in UNTRANSFORMED_EXTENSIONS below.
  */
-export const SVG_TRANSFORM = '';
+export const UNTRANSFORMED_TRANSFORM = '';
+
+/**
+ * Extensions delivered UNTRANSFORMED. Both entries are measurements, not
+ * caution, and they fail in opposite directions — which is why the set exists
+ * rather than one special case for SVG.
+ *
+ *   svg  f_auto RASTERISES an SVG at its intrinsic size: copy.svg (479 B,
+ *        infinitely scalable) came back a 24×24 PNG of 187 B, Manus-ai.svg
+ *        60×60, PEAK.svg 168×45. Any CSS size above the intrinsic one then
+ *        renders blurred, and on a retina display every one of them does.
+ *        Untransformed it arrives byte-identical. 16 migrated files.
+ *
+ *   gif  A LARGE ANIMATED GIF CANNOT BE TRANSFORMED AT ALL. Cloudinary caps a
+ *        transformation at 50 megapixels summed over every frame, and refuses
+ *        the whole request past it — measured on the deployed site:
+ *
+ *          /images/line/logoexcel2.gif  1920×1080 × 119 frames = 246.8 Mpx
+ *          /images/line/logoexcel1.gif  1920×1080 ×  54 frames = 112.0 Mpx
+ *            → HTTP 400, x-cld-error "Maximum total number of pixels in all
+ *              frames/pages is 50 Megapixels"
+ *
+ *        The assets are FINE — untransformed delivery returns 200 byte-equal to
+ *        source. It is only the transform that is refused, and our layer applied
+ *        it to every image, so both URLs 400'd. Frame count is not in the path,
+ *        so no rewrite could single these two out; excluding the whole extension
+ *        is the only rule a pattern can express.
+ *
+ *        THE COST, stated plainly: the other 27 migrated GIFs now ship their
+ *        original bytes rather than a smaller webp. Measured on the largest,
+ *        find-my-mouse-in-powertoys.gif — 2.71 MB source against 824,726 B as
+ *        animated webp, so this gives back ~1.9 MB on that one file. That is a
+ *        real bandwidth cost on a plan where bandwidth is 67.8% of spend, and it
+ *        buys two URLs that return 200 instead of 400. A per-file rule keyed on
+ *        frame count would be strictly better and is not expressible here.
+ */
+export const UNTRANSFORMED_EXTENSIONS = Object.freeze(['svg', 'gif']);
+
+/** True when this extension must be delivered without a transformation. */
+export function isUntransformedExtension(ext) {
+  return UNTRANSFORMED_EXTENSIONS.includes(String(ext).toLowerCase());
+}
+
+/**
+ * Resolve the transformation for one legacy path's extension.
+ *
+ * The single place both delivery ends answer "transform or not", so the static
+ * rewrite and the resolver route cannot disagree — which is exactly what
+ * happened when the resolver carried its own copy of `f_auto,q_auto`.
+ */
+export function transformForExtension(ext, variant = 'default') {
+  return isUntransformedExtension(ext) ? UNTRANSFORMED_TRANSFORM : transformFor(variant);
+}
 
 /** Cloudinary folder every migrated legacy file lives under. */
 export const LEGACY_PREFIX = '9exp-genesis/legacy';
@@ -135,6 +185,23 @@ export const RAW_EXTENSION_LIST = [
 export const NO_STORE_DOCUMENT_EXTENSIONS = [
   'pdf', 'xlsx', 'xls', 'doc', 'docx', 'ppt', 'pptx',
   'zip', 'rar', '7z', 'pbix',
+  // ── mp3 IS HERE AND DELIBERATELY NOT IN RAW_EXTENSION_LIST ────────────────
+  // An audio element seeks constantly: it reads the header, then range-requests
+  // whatever the listener scrubs to. That is the same 206-on-Range requirement a
+  // PDF viewer has, and the same reason the cache must not answer 200 with a
+  // partial body — a player that trusts the status treats a 30 MB podcast as
+  // fully buffered and stops.
+  //
+  // It is NOT in RAW_EXTENSION_LIST because that list means "Cloudinary serves
+  // this as a raw asset", and these five MP3s are not on Cloudinary at all —
+  // they exceed its 10 MB raw ceiling and live on Vercel Blob, reached by an
+  // explicit rewrite from src/lib/legacyBlobFiles.mjs. Adding mp3 there would
+  // emit a Cloudinary raw rule that shadows nothing today and would silently
+  // claim these paths the moment rule order changed.
+  //
+  // These headers apply by REQUEST PATH, so they are correct regardless of which
+  // storage answers.
+  'mp3',
 ];
 
 /**

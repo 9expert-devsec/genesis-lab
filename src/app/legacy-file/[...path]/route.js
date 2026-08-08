@@ -12,7 +12,7 @@ import {
 // rewrites read, so the resolver and the static path can never deliver the
 // same image two different ways — which is exactly what happened while this
 // file carried its own copy of `f_auto,q_auto`.
-import { DELIVERY_VARIANTS, SVG_TRANSFORM, deliveryUrl } from '@/lib/legacyTransforms.mjs';
+import { deliveryUrl, transformForExtension } from '@/lib/legacyTransforms.mjs';
 
 /**
  * FALLBACK resolver for legacy files whose Cloudinary public_id is NOT their
@@ -99,9 +99,13 @@ async function handle(request, ctx, method) {
   // For an image the format suffix comes back on the end; for raw the stored
   // id already carries the extension.
   //
-  // SVG is delivered untransformed here for the same reason the rewrite does
-  // it — transforming an SVG rasterises it at its intrinsic size.
-  const transform = ext === 'svg' ? SVG_TRANSFORM : DELIVERY_VARIANTS.default;
+  // svg and gif are delivered untransformed here for the same reasons the
+  // rewrite does it — transforming an SVG rasterises it, and a large animated
+  // GIF exceeds Cloudinary's 50 Mpx frame cap and is refused outright. The
+  // decision comes from the shared helper so this route and the static rewrite
+  // cannot drift, which is exactly what happened when this file carried its own
+  // copy of `f_auto,q_auto`.
+  const transform = transformForExtension(ext);
   const upstream = isRaw
     ? `${CLOUDINARY_BASE(CLOUD)}/raw/upload/${encodePath(row.publicId)}`
     : deliveryUrl(

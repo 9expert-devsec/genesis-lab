@@ -7,7 +7,13 @@ const { pathToRegexp } = pathToRegexpPkg;
 
 import nextConfig from '../../next.config.mjs';
 import { resolveDerivative } from '../../scripts/lib/legacy-source-manifest.mjs';
-import { DELIVERY_VARIANTS, LEGACY_PREFIX, VARIANT_PREFIX } from '../../src/lib/legacyTransforms.mjs';
+import {
+  DELIVERY_VARIANTS,
+  LEGACY_PREFIX,
+  LEGACY_ROOTS,
+  UNTRANSFORMED_EXTENSIONS,
+  VARIANT_PREFIX,
+} from '../../src/lib/legacyTransforms.mjs';
 
 // ── WHAT THIS FILE PINS, AND WHY IT HAS TO EXIST ────────────────────────────
 //
@@ -48,6 +54,17 @@ function matcher(source) {
     return Object.fromEntries(keys.map((k, i) => [k.name, m[i + 1]]));
   };
 }
+
+/**
+ * The exact alternation the untransformed rule is built from.
+ *
+ * Matching on the individual extension names is NOT specific enough: the
+ * derivative rule's pattern embeds the whole IMAGE_EXTENSIONS alternation, so it
+ * contains both `gif` and `svg` too — and it legitimately DOES carry a
+ * transformation. Selecting on the composed alternation picks out only the
+ * untransformed rule.
+ */
+const UNTRANSFORMED_ALT = `(?:${UNTRANSFORMED_EXTENSIONS.join('|')})`;
 
 /** The two derivative rules for the DEFAULT variant, in config order. */
 const derivativeRules = rules.filter((r) => /\/styles\/:style\/public\//.test(r.source));
@@ -205,14 +222,84 @@ test('no delivery rule ever emits a content-negotiated transformation', () => {
   }
 });
 
-test('SVG is delivered untransformed on every variant', () => {
-  const svgRules = rules.filter((r) => r.source.includes('.svg'));
-  assert.ok(svgRules.length >= 4, `expected an svg rule per root, found ${svgRules.length}`);
-  for (const r of svgRules) {
+test('svg AND gif are delivered untransformed on every variant', () => {
+  // Was svg-only. gif joined it for the opposite reason: an SVG breaks because
+  // transforming it RASTERISES, a large animated GIF breaks because Cloudinary
+  // REFUSES the transform past 50 Mpx summed over frames and returns 400.
+  //
+  // The set is pinned LITERALLY and not read from the constant. Deriving the
+  // expectation from the value under test makes a test that cannot see that
+  // value change — measured: dropping 'gif' from UNTRANSFORMED_EXTENSIONS left
+  // three of these assertions green, because they had quietly become
+  // "whatever the constant says, the rules agree with it".
+  assert.deepEqual([...UNTRANSFORMED_EXTENSIONS], ['svg', 'gif']);
+
+  const untransformedRules = rules.filter((r) => r.source.includes(UNTRANSFORMED_ALT));
+  assert.ok(
+    untransformedRules.length >= 4,
+    `expected one untransformed rule per root, found ${untransformedRules.length}`,
+  );
+  for (const r of untransformedRules) {
     assert.match(
       r.destination,
       /\/image\/upload\/9exp-genesis\//,
-      `${r.destination} transforms an SVG, which rasterises it`,
+      `${r.destination} carries a transformation for an untransformed extension`,
+    );
+  }
+});
+
+test('a .gif and a .svg path both resolve to an UNTRANSFORMED delivery URL', () => {
+  // The end-to-end shape, per extension, routed the way Vercel would. LITERAL
+  // extensions on purpose — see the note in the test above.
+  for (const ext of ['svg', 'gif']) {
+    const pathname = `/images/line/logoexcel2.${ext}`;
+    const hit = rules.find((r) => matcher(r.source)(pathname));
+    assert.ok(hit, `nothing matched ${pathname}`);
+    assert.match(hit.destination, /\/image\/upload\/9exp-genesis\//, hit.destination);
+    for (const t of Object.values(DELIVERY_VARIANTS)) {
+      assert.ok(!hit.destination.includes(t), `${ext} destination carries "${t}": ${hit.destination}`);
+    }
+  }
+});
+
+test('the two GIFs that returned 400 now route untransformed', () => {
+  // Measured on the deployed site before this change: both returned HTTP 400
+  // with x-cld-error "Maximum total number of pixels in all frames/pages is 50
+  // Megapixels" — 1920x1080 at 119 and 54 frames. The assets were always fine;
+  // only the transform was refused.
+  for (const p of ['/images/line/logoexcel1.gif', '/images/line/logoexcel2.gif']) {
+    const hit = rules.find((r) => matcher(r.source)(p));
+    assert.ok(hit, `nothing matched ${p}`);
+    // The rule is per-ROOT, so `:rest` carries `line/logoexcel1.gif` — the
+    // destination names the root, not the subdirectory.
+    assert.equal(
+      hit.destination,
+      `https://res.cloudinary.com/ddva7xvdt/image/upload/${LEGACY_PREFIX}/images/:rest`,
+      `${p} must reach untransformed image/upload`,
+    );
+  }
+});
+
+test('CONTROL: a .png still carries the default transformation', () => {
+  // The exclusion has to stay NARROW. If it widened to every image, the whole
+  // bandwidth argument for a fixed transformation would be gone.
+  const hit = rules.find((r) => matcher(r.source)('/images/line/logoexcel2.png'));
+  assert.ok(hit.destination.includes(DELIVERY_VARIANTS.default), hit.destination);
+});
+
+test('the untransformed rule PRECEDES the image catch-all for every root', () => {
+  // The catch-all matches any path under its root, so a later untransformed rule
+  // could never fire and every GIF would go back to 400ing.
+  for (const root of LEGACY_ROOTS) {
+    const untransformedIdx = rules.findIndex(
+      (r) => r.source.startsWith(`/${root}/`) && r.source.includes(UNTRANSFORMED_ALT),
+    );
+    const catchAllIdx = rules.findIndex((r) => r.source === `/${root}/:rest*`);
+    assert.ok(untransformedIdx >= 0, `no untransformed rule for ${root}`);
+    assert.ok(catchAllIdx >= 0, `no image catch-all for ${root}`);
+    assert.ok(
+      untransformedIdx < catchAllIdx,
+      `${root}: untransformed rule at ${untransformedIdx} must precede the catch-all at ${catchAllIdx}`,
     );
   }
 });

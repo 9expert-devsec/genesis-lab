@@ -6,6 +6,8 @@ const { pathToRegexp } = pathToRegexpPkg;
 
 import nextConfig from '../../next.config.mjs';
 import { LEGACY_BLOB_FILES } from '../../src/lib/legacyBlobFiles.mjs';
+import { NO_STORE_DOCUMENT_EXTENSIONS, RAW_EXTENSION_LIST } from '../../src/lib/legacyTransforms.mjs';
+import { documentContentType } from '../../src/lib/legacyDelivery.js';
 
 // ── WHAT THIS FILE PINS ─────────────────────────────────────────────────────
 //
@@ -154,4 +156,40 @@ test('CONTROL: without BLOB_PUBLIC_BASE the blob rules are INERT', () => {
 test('CONTROL: an ordinary /images path is NOT claimed by a blob rule', () => {
   const hit = routeOf(activeRules, '/images/web2024/greensunny.jpg');
   assert.ok(hit.destination.includes('res.cloudinary.com'), hit.destination);
+});
+
+// ── mp3 DELIVERY HEADERS ────────────────────────────────────────────────────
+
+test('mp3 is held out of the edge cache, like every other seekable binary', () => {
+  // An <audio> element seeks constantly: header first, then a range request for
+  // whatever the listener scrubs to. Same 206 requirement as a PDF viewer, and
+  // the same consequence if the cache answers 200 with a partial body — a player
+  // that trusts the status treats a 30 MB podcast as fully buffered.
+  assert.ok(NO_STORE_DOCUMENT_EXTENSIONS.includes('mp3'));
+});
+
+test('mp3 is deliberately NOT in RAW_EXTENSION_LIST', () => {
+  // That list means "Cloudinary serves this as a raw asset", and these five MP3s
+  // are not on Cloudinary at all — they exceed its raw ceiling. Adding mp3 there
+  // would emit a Cloudinary raw rule that silently claims these paths the moment
+  // rule order changed.
+  assert.equal(RAW_EXTENSION_LIST.includes('mp3'), false);
+});
+
+test('the no-store header rule matches an mp3 path', async () => {
+  const headers = await nextConfig.headers();
+  const noStore = headers.find((h) => h.headers.some(
+    (x) => x.key === 'Cache-Control' && /no-store/.test(x.value),
+  ));
+  assert.ok(noStore, 'no no-store header rule found');
+  assert.ok(matcher(noStore.source)('/images/audio/05-Jensen-Huang.mp3'), noStore.source);
+  // CONTROL: an image must NOT pick up no-store — that would defeat the edge
+  // cache for the whole legacy image set.
+  assert.equal(matcher(noStore.source)('/images/web2024/greensunny.jpg'), false);
+});
+
+test('an mp3 is typed audio/mpeg, not octet-stream', () => {
+  // octet-stream makes a browser DOWNLOAD a podcast instead of playing it, and
+  // stops <audio> seeking altogether.
+  assert.equal(documentContentType('mp3'), 'audio/mpeg');
 });
