@@ -144,6 +144,23 @@ const LegacyFileMigrationSchema = new mongoose.Schema(
     // by query instead of by eye.
     blobPathname: { type: String, default: '' },
 
+    // ── THE MIME TYPE THE OBJECT IS ACTUALLY SERVED WITH ────────────────────
+    // Meaningful for 'blob' only, and it exists because the two storages differ
+    // in a way that matters:
+    //
+    //   Cloudinary  SNIFFS the real format on upload and transcodes at delivery,
+    //               so a file misnamed `.png` that is really a JPEG still serves
+    //               correctly — that is what the formatDisagrees rows record.
+    //   Blob        stores the bytes plus WHATEVER contentType it was told, and
+    //               serves that verbatim. Nothing sniffs, nothing corrects.
+    //
+    // So deriving the type from the file extension — which is what the first
+    // upload did — puts a lie on the wire the moment the legacy filename is
+    // wrong, and 7 of 19 were: 4 `.mp3` that are MP4/AAC containers and 3 `.png`
+    // that are JPEGs. Recording the SNIFFED type here makes "what does this URL
+    // claim to be" answerable by query rather than by re-fetching every object.
+    contentType: { type: String, default: '' },
+
     // As returned by Cloudinary, and as this migration will construct it from
     // the legacy path. Stored side by side ON PURPOSE: if they ever disagree,
     // the pattern-derivation assumption in the header is broken and delivery
