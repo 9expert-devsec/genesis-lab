@@ -6,7 +6,8 @@ import ScheduleCard from '@/components/ScheduleCard';
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { CourseScheduleSection } from '@/components/pageBuilder/sections/course_schedule';
 import { ScheduleClient } from '@/app/(public)/schedule/_components/ScheduleClient';
-import { SearchClient } from '@/app/(public)/search/_components/SearchClient';
+import { SearchResults } from '@/app/(public)/search/_components/SearchClient';
+import { emptySearchCounts } from '@/lib/search/matchSearch';
 
 /**
  * All FIVE schedule surfaces, rendered.
@@ -60,21 +61,38 @@ const schedulePage = (statuses) => R(createElement(ScheduleClient, {
 }));
 
 /**
- * FIXTURE TRAP 2 — SearchClient renders nothing until the query is >= 2 chars
- * AND the schedule's course resolves through courseMap to a name matching the
- * term. Miss either and the component renders its empty prompt, which contains
- * no status badge and therefore cannot fail a "not green" assertion.
+ * FIXTURE TRAP 2 — /search's badge now lives in `SearchResults`, not in
+ * `SearchClient`.
+ *
+ * Search moved to the server: `SearchClient` is a shell that fetches, so a
+ * static render of it shows the "type at least 2 characters" prompt and no
+ * results at all — which contains no status badge and therefore cannot fail a
+ * "not green" assertion. The badge is rendered by the presentational half, fed
+ * a ready payload, and that is what this exercises.
+ *
+ * The course of a round now travels with it as `course_ref` (resolved once in
+ * the corpus builder) rather than being looked up through a client-side
+ * courseMap — miss that and the row renders "(ไม่ทราบชื่อหลักสูตร)" with no
+ * price and, again, nothing that can fail.
  */
-const searchPage = (statuses) => R(createElement(SearchClient, {
-  courses: [],
-  schedules: statuses.map((status, i) => ({
-    _id: `s${i}`, course: 'c1', dates: ['2026-10-17'], type: 'classroom', status,
-  })),
-  articles: [],
-  courseMap: { c1: COURSE([]) },
-  careerPaths: [],
-  promotions: [],
-  initialQ: 'AI course',
+const searchPage = (statuses) => R(createElement(SearchResults, {
+  status: 'ready',
+  term: 'AI course',
+  data: {
+    counts: { ...emptySearchCounts(), schedules: statuses.length },
+    total: statuses.length,
+    results: {
+      schedules: statuses.map((status, i) => ({
+        _id: `s${i}`,
+        dates: ['2026-10-17'],
+        type: 'classroom',
+        status,
+        course_ref: {
+          _id: 'c1', course_id: 'MSE-AI', course_name: 'AI course', course_price: 9000,
+        },
+      })),
+    },
+  },
 }));
 
 // Both traps get an explicit guard, so a fixture that silently stops producing

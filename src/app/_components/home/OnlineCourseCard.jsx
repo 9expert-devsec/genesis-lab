@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, BookOpen, Clock, ExternalLink } from "lucide-react";
-import { siteConfig } from "@/config/site";
+import { onlineCourseHref } from "@/lib/onlineCourseHref";
 import { cn } from "@/lib/utils";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
@@ -43,9 +43,8 @@ export function OnlineCourseCard({ course, className }) {
     ? course.skills.filter((s) => s && typeof s === "object" && s.skill_name)
     : [];
 
-  const ctaHref = Array.isArray(course.website_urls) && course.website_urls[0]
-    ? course.website_urls[0]
-    : siteConfig.academyUrl;
+  // ONE definition, shared with the /search result card — see the module.
+  const ctaHref = onlineCourseHref(course);
 
   const duration = formatDuration(hours);
   const isFree = price === 0;

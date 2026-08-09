@@ -1,9 +1,3 @@
-import { listPublicCourses } from '@/lib/api/public-courses';
-import { getAllSchedules } from '@/lib/api/schedules';
-import { dbConnect } from '@/lib/db/connect';
-import Article from '@/models/Article';
-import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
-import { getActivePromotions } from '@/lib/promotions/getPromotions';
 import { SearchClient } from './_components/SearchClient';
 
 export const metadata = {
@@ -13,50 +7,32 @@ export const metadata = {
 
 export const revalidate = 1800;
 
-function serialize(value) {
-  if (value == null) return value;
-  return JSON.parse(JSON.stringify(value));
-}
-
+/**
+ * /search — SHIPS NO CORPUS.
+ *
+ * This page used to fetch every public course, every schedule, every active
+ * article, every career path and every promotion, and hand all of it to the
+ * client as props so the client could `.includes()` over it. Two things were
+ * wrong with that, and only one of them was performance:
+ *
+ *  1. Every visitor downloaded the entire searchable corpus BEFORE typing a
+ *     character — including the visitors who never typed one.
+ *  2. The searchable DEPTH was capped by what was affordable to ship. Course
+ *     teasers, objectives and outlines live only on the upstream DETAIL
+ *     response and article bodies live in Mongo; neither could ever be in a
+ *     payload, so neither could ever be searched. The limit was structural, not
+ *     an oversight.
+ *
+ * Matching now happens on the server (see /api/search and
+ * @/lib/search/matchSearch.js) and the client sends a query and receives only
+ * matches. `initialQ` is all this page has left to pass.
+ *
+ * `revalidate` stays at 1800 so the shell is still statically rendered, and so
+ * the number lines up with the corpus TTL rather than drifting from it.
+ */
 export default async function SearchPage({ searchParams }) {
   const sp = await searchParams;
   const initialQ = String(sp?.q ?? '').trim();
 
-  const [coursesResult, schedulesResult, careerPaths, promotions] = await Promise.all([
-    listPublicCourses().catch(() => ({ items: [] })),
-    getAllSchedules().catch(() => ({ items: [] })),
-    // Career paths come from our synced MongoDB cache (not the upstream
-    // API directly) — the cache normalises field names (e.g.
-    // cardDetail → short_description) and respects admin curation
-    // (is_active). Both are already serialised plain objects.
-    getActiveCareerPaths().catch(() => []),
-    getActivePromotions().catch(() => []),
-  ]);
-
-  await dbConnect();
-  const articlesRaw = await Article.find({ active: true })
-    .sort({ publishedAt: -1 })
-    .select('slug title excerpt coverUrl publishedAt tags')
-    .lean();
-
-  const courses   = coursesResult.items ?? [];
-  const schedules = schedulesResult.items ?? [];
-  const articles  = serialize(articlesRaw);
-
-  // course._id → course, used by the client to enrich schedule rows.
-  const courseMap = Object.fromEntries(
-    courses.map((c) => [String(c._id), c])
-  );
-
-  return (
-    <SearchClient
-      courses={courses}
-      schedules={schedules}
-      articles={articles}
-      courseMap={courseMap}
-      careerPaths={careerPaths}
-      promotions={promotions}
-      initialQ={initialQ}
-    />
-  );
+  return <SearchClient initialQ={initialQ} />;
 }
