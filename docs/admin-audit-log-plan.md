@@ -1638,8 +1638,9 @@ MSDB write, and so nothing could have gone red. It is now run over `courses.js`
 hid — and the swept-file check calls the same `mutatingExports()` the count
 uses, so there is one classifier rather than two.
 
-The number is pinned rather than floored for the same reason `EXPECTED_TESTS`
-is: a number nobody wrote down is one nobody notices drifting.
+The number is pinned rather than floored because a number nobody wrote down is one
+nobody notices drifting. (This used to cite `EXPECTED_TESTS` in `test/run.mjs`;
+that control is a `FLOOR` now, so it is no longer the precedent.)
 
 ---
 

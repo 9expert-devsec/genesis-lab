@@ -512,9 +512,13 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  * exactly that sum. Bumping only the total would have left the delta assertion
  * red and taught the next reader that the sum is decorative.
  *
- * Pinned rather than floored, for the same reason as EXPECTED_TESTS: a number
- * nobody wrote down is one nobody notices drifting. When the sweep adds or
- * removes an action, this moves deliberately in that commit.
+ * Pinned rather than floored: a number nobody wrote down is one nobody notices
+ * drifting. When the sweep adds or removes an action, this moves deliberately in
+ * that commit.
+ *
+ * (This used to cite EXPECTED_TESTS in test/run.mjs as the precedent. That
+ * control is a FLOOR now, so it is no longer an argument for pinning — the
+ * reasoning above stands on its own.)
  */
 const MUTATING_EXPORT_COUNT = 162;
 
