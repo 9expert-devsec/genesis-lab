@@ -30,13 +30,28 @@
  * hits, not a cold fan-out.
  *
  * ── WHY THE ONLINE FEED NEEDS NO ENRICHMENT ─────────────────────────────────
- * READ THIS BEFORE ADDING A FAN-OUT FOR IT. `/public-course`'s LIST response
- * omits `course_teaser`, `course_objectives` and `training_topics` — they exist
- * only on the detail response, which is why public courses cost an
- * enrich-courses pass here. `/online-course`'s list response ALREADY CARRIES
- * `o_course_teaser`, so online courses are searchable to the same depth for
- * one request. There is no second fan-out to add; adding one would buy nothing
- * and cost a request per course.
+ * READ THIS BEFORE ADDING A FAN-OUT FOR IT. `/online-course`'s list response
+ * ALREADY CARRIES `o_course_teaser`, so online courses are searchable to the
+ * same depth for one request. There is no second fan-out to add; adding one
+ * would buy nothing and cost a request per course.
+ *
+ * ── A CORRECTION, MEASURED 2026-08-09 ───────────────────────────────────────
+ * This block used to claim that `/public-course`'s LIST response OMITS
+ * `course_teaser`, `course_objectives` and `training_topics`, and that they
+ * exist only on the detail response. THAT IS NOT TRUE, and it was never
+ * measured — it was reasoning about the API written as if it were an
+ * observation.
+ *
+ * Probed directly against the live API: all three fields are present AND
+ * populated on 77 of 77 LIST rows, and the LIST row is byte-equivalent to the
+ * detail row for the same course — same sorted key set, same values. The two
+ * responses did not differ in any field examined.
+ *
+ * What follows from that is NOT recorded here as fact, because it has not been
+ * measured: whether the enrich-courses pass over public courses is therefore
+ * redundant depends on what else that pass does, and nobody has checked. The
+ * claim above is corrected; the conclusion someone might draw from it is left
+ * open deliberately rather than swapped for a second unverified one.
  */
 
 import { listPublicCourses } from '@/lib/api/public-courses';
