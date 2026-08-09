@@ -5,6 +5,9 @@ import { OG_DEFAULT_IMAGE } from '@/lib/seo/ogImage';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
 import { Analytics } from '@/components/analytics/Analytics';
 import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracker';
+import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
+import { ChatLauncher } from '@/components/chat/ChatLauncher';
+import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -106,6 +109,10 @@ export const viewport = {
 // ── Layout ───────────────────────────────────────────────────────
 
 export default function RootLayout({ children }) {
+  // Server-side. `Boolean(...)` rather than the raw value: nothing downstream
+  // needs the URL, and a boolean cannot leak one into the RSC payload.
+  const chatEnabled = Boolean(process.env.CHATBOT_V2_API_URL);
+
   return (
     <html
       lang="th"
@@ -117,7 +124,40 @@ export default function RootLayout({ children }) {
         <Suspense fallback={null}>
           <AnalyticsPageTracker />
         </Suspense>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          {/* ── THE FLOATING DOCK IS MOUNTED HERE, ONCE ──────────────────
+              Not in (public)/layout.jsx, and not in page.jsx — it used to be
+              in BOTH, because the home page sits outside the (public) group
+              and does not inherit that layout.
+
+              Two mounts are two separate React trees. Walking from the home
+              page to any (public) page unmounts one and mounts the other, so
+              anything the dock holds is destroyed in transit. That is
+              survivable for a scroll listener and fatal for a chat
+              conversation, which is why the mount moved before the chat
+              arrived rather than after.
+
+              The dock returns null on /admin itself (client-side, via
+              usePathname) — see src/lib/floatingDock.js. Doing it there and
+              not here is what keeps the rule in one testable place instead of
+              becoming a condition in a server layout that cannot see the
+              path. */}
+          {/* THE ENV GATE LIVES HERE AND ONLY HERE. This layout is a server
+              component, so CHATBOT_V2_API_URL is read on the server and never
+              reaches the browser — no NEXT_PUBLIC_ variable, and no dead
+              launcher shipped to production ahead of the backend. When the
+              service is unconfigured the element is simply never created.
+
+              The dock is handed an ELEMENT, not a flag: it owns the position
+              and knows nothing about chat. Whether the launcher is appropriate
+              on THIS path is a third question, answered inside ChatLauncher
+              itself via shouldRenderChatLauncher. */}
+          <FloatingActionDock
+            topSlot={<ReadingProgressRing />}
+            bottomSlot={chatEnabled ? <ChatLauncher /> : null}
+          />
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -7,19 +7,78 @@
 // smoke/ (live MSDB, needs a key + network) is NOT enumerated here and is never
 // part of `npm test` — see test/smoke.mjs.
 //
-// META-CONTROL (the runner's own control, per item 1's "every check needs a
-// control proving it CAN fail"): assert the run discovered at least FLOOR tests.
-// This is the one guard against the runner-level false-green — a loader that
-// silently skips files, a tier dir that stops being enumerated, a glob that
-// matches nothing — where zero tests run and the suite reports green. It
-// terminates (a number a human set here vs a number the runner reports) rather
-// than regressing into a check-checking-a-check. Raise FLOOR when you add tests;
-// a drop below it means tests VANISHED, which is exactly what must go red.
+// META-CONTROLS (the runner's own controls, per item 1's "every check needs a
+// control proving it CAN fail"). Three, because the runner-level false-green —
+// where zero or too few tests run and the suite still reports success — has
+// three distinct causes and a single check catches only one of them:
+//
+//   1. EXACT TEST COUNT, not a floor. A minimum catches wholesale disappearance
+//      but cannot catch the tests added this week, because the number that
+//      would catch them is the one a human forgot to write down. That is not
+//      hypothetical: 26 tests landed against a floor of 565 and the suite sat
+//      green at 591-passed, so all 26 could have vanished the next day in
+//      silence. An exact match makes every addition bump the number
+//      deliberately, in the same commit.
+//   2. FILE DISCOVERY. The manifest looks one level deep in three named dirs.
+//      A *.test.mjs anywhere else under test/ is never run and nothing says so.
+//   3. PER-FILE COUNTS. A file that imports cleanly but defines no tests
+//      contributes nothing, and under a total-only check is indistinguishable
+//      from one that was never written.
+//
+// All three terminate (a number a human set here vs numbers the runner reports)
+// rather than regressing into a check-checking-a-check.
 //
 // The CANARY (test/canary.mjs) is the other half and is deliberately NOT run
 // here: it is a manual affordance a human invokes to watch the suite go red
 // before trusting a green. Wiring it into an automated pipeline would just move
 // the unread-badge problem down a level (see the CI row in the status doc).
+//
+// ── READING A CONTROL THAT FIRES NOTHING ────────────────────────────────────
+// General rule, earned rather than assumed. When you break the code a test
+// claims to guard and the suite stays GREEN, there are three explanations and
+// only one of them is the obvious one:
+//
+//   1. the test is weak (the usual reading — it asserts something the break
+//      does not touch, e.g. a `length >= n` floor);
+//   2. the two claims genuinely are not separable, and the honest move is to
+//      SAY SO rather than manufacture independence;
+//   3. THE CODE HAS REDUNDANCY HIDING THE CLAIM — two implementations of one
+//      rule, so breaking either leaves the other covering for it.
+//
+// (3) is the one that gets missed, because it looks exactly like (1) and the
+// tempting fix — adjust the test until it goes red — buries the real finding.
+// It has now happened here: the chat rate limiter released its window in TWO
+// places (a per-key `resetAt <= now` check, and an unconditional expired-bucket
+// sweep running just above it), so breaking the per-key check reddened nothing.
+// The defect was in the module, not the test; expiry was single-sourced and the
+// same break then reddened exactly one test. See src/lib/chat/rateLimit.js.
+//
+// So: a control that fires nothing is a QUESTION about the code, not a verdict
+// on the test. Go and look before touching the assertion.
+//
+// ── WHEN THE SUBJECT UNDER TEST IS ITSELF A COMMENT ─────────────────────────
+// The standing rule in this suite is STRIP COMMENTS BEFORE MATCHING SOURCE, and
+// it has been earned six times over: a doc block that quotes the token under
+// test will otherwise satisfy an assertion about what the code DOES.
+//
+// It has exactly one exception, and it arrives looking like a bug in the code.
+// Some things a guard legitimately cares about ARE comments — an
+// `eslint-disable-next-line`, a pragma, a directive. Asserting one of those
+// against scrubbed source fails on a completely correct file, because the
+// scrubber deleted the subject before the matcher ran. That happened here to
+// the guard on the chat cards' `@next/next/no-img-element` disable, which is
+// load-bearing (next/image THROWS on an unlisted host, so the raw <img> and its
+// disable are the convention, not a shortcut).
+//
+// The tell is the direction of the surprise: the usual defect is a test that
+// PASSES when it should fail; this one FAILS when it should pass. Both are the
+// same question — is the matcher reading the same text the claim is about? — and
+// both are answered by looking rather than by adjusting the assertion until it
+// goes the way you expected.
+//
+// So: strip comments by default; read the RAW file for the one assertion whose
+// subject is a comment, and say so at that assertion. Mixing the two inside one
+// test file is fine and is what test/fs/chatWiring.test.mjs does.
 
 process.env.NODE_ENV = 'production'; // match component runtime branches (fail-closed, no dev blocks)
 
@@ -43,23 +102,93 @@ const files = TIERS.flatMap((tier) => {
   return entries.filter((f) => f.endsWith('.test.mjs')).map((f) => path.join(dir, f));
 });
 
+// ── DISCOVERY GUARD ─────────────────────────────────────────────────────────
+// The manifest above only looks ONE level deep in three named directories. A
+// *.test.mjs written anywhere else under test/ — a new tier, a subfolder, the
+// root — is silently never run, and its author has no way to tell: the suite is
+// green, the count goes up by zero, and nothing says the file was skipped.
+// Walk the whole of test/ and compare against what the manifest enumerated.
+function walkTests(dir, out = []) {
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, name.name);
+    if (name.isDirectory()) walkTests(full, out);
+    else if (name.name.endsWith('.test.mjs')) out.push(full);
+  }
+  return out;
+}
+const onDisk = walkTests(TEST_DIR).sort();
+const enumerated = new Set(files);
+const undiscovered = onDisk.filter((f) => !enumerated.has(f));
+
 // CANARY=1 injects the deliberately-failing case (test/canary.case.mjs). A human
 // runs `CANARY=1 npm test`, expects EXACTLY ONE failure, and if the run is green
 // the runner is not reporting failures. Manual by design — see the case file.
 if (process.env.CANARY) files.push(path.join(TEST_DIR, 'canary.case.mjs'));
 
 let pass = 0, fail = 0;
+// Per-file counts, so "this file ran" can be distinguished from "this file was
+// listed". A file that imports cleanly but defines no test contributes nothing
+// and, under a total-only check, is indistinguishable from one that was never
+// written — which is exactly the shape of a silently-deleted suite.
+const perFile = new Map(files.map((f) => [f, 0]));
+const bump = (e) => {
+  const f = e?.file;
+  if (f && perFile.has(f)) perFile.set(f, perFile.get(f) + 1);
+};
 const stream = run({ files, isolation: 'none', concurrency: true });
-stream.on('test:pass', () => { pass += 1; });
-stream.on('test:fail', () => { fail += 1; });
+stream.on('test:pass', (e) => { pass += 1; bump(e); });
+stream.on('test:fail', (e) => { fail += 1; bump(e); });
 stream.compose(spec).pipe(process.stdout);
 
 stream.on('close', () => {
   const total = pass + fail;
-  const belowFloor = total < FLOOR;
-  console.log(`\n[suite] ${pass} passed, ${fail} failed, ${total} total across ${files.length} files (floor ${FLOOR})`);
-  if (belowFloor) {
-    console.log(`[meta-control] FAIL: only ${total} tests ran, below floor ${FLOOR} — tests may have silently vanished.`);
+  const problems = [];
+
+  // A FLOOR, not an exact count — and the comment says so now, because it used
+  // to argue the opposite while the code did this, which is worse than either
+  // choice on its own.
+  //
+  // WHAT THE FLOOR STILL CATCHES: wholesale disappearance. A tier that stops
+  // being enumerated, a file that throws on import, a manifest that silently
+  // walks nothing — all of those drop the total and are caught here, which is the
+  // failure that actually shipped a green suite before this check existed.
+  //
+  // WHAT IT GIVES UP, stated plainly because it was measured: an exact count also
+  // catches tests added and then LOST inside the same window, because the number
+  // that would catch them is the one a human has to write down. That is not
+  // hypothetical — 26 tests once landed against a floor of 565 and the suite sat
+  // green, so all 26 could have vanished the next day in silence. A floor cannot
+  // see that. The two sibling meta-controls below are what remain against it:
+  // FILE DISCOVERY (a *.test.mjs on disk the manifest never ran) and PER-FILE
+  // COUNTS (an enumerated file contributing zero), and between them they catch
+  // the disappearance of a whole file even when the total still clears the floor.
+  //
+  // Raising the floor is optional under these semantics. Lowering it, or watching
+  // it drift far below the real total, gives the check less and less to do.
+  if (total < FLOOR) {
+    problems.push(
+      `expected AT LEAST ${FLOOR} tests, ran ${total}. `
+      + 'Tests VANISHED — that is what this check is for.'
+    );
   }
-  process.exit(fail > 0 || belowFloor ? 1 : 0);
+  if (undiscovered.length) {
+    problems.push(
+      'these *.test.mjs files exist on disk but the manifest never ran them:\n' +
+      undiscovered.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
+    );
+  }
+  const empty = [...perFile].filter(([, n]) => n === 0).map(([f]) => f);
+  if (empty.length) {
+    problems.push(
+      'these files were enumerated but contributed ZERO tests:\n' +
+      empty.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
+    );
+  }
+
+  console.log(
+    `\n[suite] ${pass} passed, ${fail} failed, ${total} total across ${files.length} files `
+    + `(floor ${FLOOR})`
+  );
+  for (const p of problems) console.log(`[meta-control] FAIL: ${p}`);
+  process.exit(fail > 0 || problems.length ? 1 : 0);
 });

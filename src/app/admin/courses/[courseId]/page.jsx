@@ -20,6 +20,7 @@ import {
 import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
 import { getAllLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { ExtensionEditor } from './_components/ExtensionEditor';
+import { RecordHistory } from '@/components/audit/RecordHistory';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -86,6 +87,21 @@ export default async function AdminCourseExtensionPage({ params }) {
         initialEarlyBird={earlyBirdAdmin ?? null}
         initialPromos={activePromos ?? []}
         initialFaqs={faqs ?? []}
+      />
+
+      {/* THE DUAL KEY SPACE, first real consumer. `courses|course` rows carry
+          the MSDB ObjectId; `courses|extension` and `courses|early_bird` carry
+          the course_id CODE. This screen holds both, so both are passed and the
+          reader builds one $in — served by {recordId:1, createdAt:-1}.
+
+          No `entity` is passed on purpose: this page edits the extension, the
+          promo links and the early-bird price, and the course itself is edited
+          one level up. Narrowing to a single entity here would hide half of
+          what a reader means by "what happened to this course". */}
+      <RecordHistory
+        menu="courses"
+        recordId={[courseResult?._id, courseId].filter(Boolean).map(String)}
+        title="ประวัติการแก้ไขหลักสูตรนี้"
       />
     </div>
   );

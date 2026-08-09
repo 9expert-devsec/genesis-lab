@@ -18,6 +18,7 @@
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import { listPromotions } from '@/lib/api/promotions';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 
 function toDate(value) {
   if (!value) return null;
@@ -103,6 +104,9 @@ export async function syncPromotions() {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  // BEFORE the read — see the note in syncFaqs.js. Nothing else busts this tag.
+  bustUpstream(UPSTREAM_TAGS.PROMOTIONS);
 
   let items = [];
   try {

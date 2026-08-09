@@ -7,6 +7,7 @@ import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
 import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';
 const PAGE_SIZE  = 20;          // fallback / SSR default
@@ -122,32 +123,60 @@ export async function getMasterclassRegistrationById(id) {
 // ── Update status ─────────────────────────────────────────────────
 
 export async function updateMasterclassRegistrationStatus(id, newStatus) {
-  await requireAdmin('mc_registrations');
+  const session = await requireAdmin('mc_registrations');
   if (!['pending', 'confirmed', 'paid', 'cancelled'].includes(newStatus)) {
     return { ok: false, error: 'invalid_status' };
   }
   await dbConnect();
+  // `new: false` returns the PRE-update document — the only place the previous
+  // status exists. The not_found check is unchanged and `doc` never reaches the
+  // caller, so this adds no query and changes no behaviour.
   const doc = await MasterclassRegistration.findByIdAndUpdate(
     id,
     { $set: { status: newStatus } },
-    { new: true }
+    { new: false }
   ).lean();
   if (!doc) return { ok: false, error: 'not_found' };
   await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
+
+  recordAdminActionAfter({
+    menu:        'mc_registrations',
+    action:      'status',
+    entity:      'registration',
+    recordId:    String(id),
+    recordLabel: '',
+    before:      { status: doc.status },
+    after:       { status: newStatus },
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }
 
 // ── Delete ────────────────────────────────────────────────────────
 
 export async function deleteMasterclassRegistration(id) {
-  await requireAdmin('mc_registrations');
+  const session = await requireAdmin('mc_registrations');
   await dbConnect();
   const doc = await MasterclassRegistration.findByIdAndDelete(id).lean();
   if (!doc) return { ok: false, error: 'not_found' };
   // Recompute seats from source of truth (fixes negative-count drift).
   await recomputeBatchSeats(doc.batch_id);
   revalidatePath(ADMIN_PATH);
+
+  // The act and the id. `doc` IS in hand here — it has to be, for the batch
+  // decrement — and it holds every attendee's name, email and phone. It is
+  // deliberately not logged.
+  recordAdminActionAfter({
+    menu:        'mc_registrations',
+    action:      'delete',
+    entity:      'registration',
+    recordId:    String(id),
+    recordLabel: '',
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }
 
@@ -178,7 +207,18 @@ export async function getMasterclassBatchOptions(courseId) {
 // `rows` is [{ firstName, lastName, email, phone, license? }] where
 // license = { choice, level, detail } | null, index-aligned with attendees.
 export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}) {
-  await requireAdmin();
+  // NOTE THE BARE GUARD. `requireAdmin()` with no page key is a login-only
+  // check, so ANY logged-in admin can edit attendee personal data here, while
+  // the two actions either side of it guard on 'mc_registrations'. The plan doc
+  // (§4) flags this as a likely oversight, reported and not fixed — tightening
+  // it could lock out someone who can do this today, and that is a permissions
+  // decision, not a drive-by in an audit commit.
+  //
+  // The consequence for THIS commit: there is no requireAdmin literal for the
+  // coverage guard to compare the menu against, so 'mc_registrations' below is
+  // hardcoded and the action is listed in that guard's MENU_CHECK_EXEMPT with
+  // this reason.
+  const session = await requireAdmin();
   await dbConnect();
   if (!id) return { ok: false, error: 'missing_id' };
   if (!Array.isArray(rows)) return { ok: false, error: 'invalid_payload' };
@@ -229,5 +269,21 @@ export async function updateMasterclassRegistrationAttendees(id, rows, opts = {}
   if (!doc) return { ok: false, error: 'not_found' };
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  // The act plus the COUNT — never the rows. `attendees` above is a list of
+  // names, emails and phone numbers; `meta` carries how many there are, which
+  // is the part that answers "did someone quietly add five people to this
+  // booking". `meta` is outside the diff policy scale by design, which is why
+  // the count survives while before/after stay null.
+  recordAdminActionAfter({
+    menu:        'mc_registrations', // hardcoded — the guard above takes no key
+    action:      'attendees',
+    entity:      'registration',
+    recordId:    String(id),
+    recordLabel: '',
+    meta:        { attendeesCount: attendees.length },
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }

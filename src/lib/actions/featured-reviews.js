@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import { FeaturedReview } from '@/models/FeaturedReview';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 import { requireAdmin } from '@/lib/actions/auth';
+import { getReviewsById } from '@/lib/api/reviews';
 
 const ADMIN_PATH = '/admin/featured-reviews';
 
@@ -36,7 +37,7 @@ export async function addFeaturedReview(formData) {
   if (exists) return { ok: false, error: 'รีวิวนี้อยู่ในรายการแล้ว' };
 
   const count = await FeaturedReview.countDocuments();
-  await FeaturedReview.create({
+  const created = await FeaturedReview.create({
     review_id,
     sort_order: count,
     active: true,
@@ -45,7 +46,36 @@ export async function addFeaturedReview(formData) {
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
   triggerLandingSync();
-  return { ok: true };
+
+  // HYDRATE before returning — the same defect the featured-courses cover had,
+  // in a different shape. The page does NOT hand the list raw FeaturedReview
+  // documents: it attaches the live review payload
+  // (`hydratedFeatured = featured.map(f => ({ ...f, review: allById.get(...) }))`)
+  // and the list renders `c.review.reviewerName / .comment / .avatarUrl /
+  // .rating / .courseName`. Returning the bare document would splice a row with
+  // `review: undefined`, which renders as an empty card until the next read.
+  //
+  // Awaited, not fired-and-forgotten: `getReviewsById` is tag-cached under
+  // `reviews`, so this is normally a Data Cache hit, and a floating promise in
+  // a serverless function may never run at all.
+  let review = null;
+  try {
+    const [found] = await getReviewsById([review_id]);
+    review = found ?? null;
+  } catch (err) {
+    // The row is still worth returning: `review: null` is the same shape the
+    // page produces for an upstream row it cannot find, and the list already
+    // renders a placeholder for it.
+    console.warn('[featured-reviews] review hydration failed:', review_id, err?.message ?? err);
+  }
+
+  // { ok, data } — see the note in actions/featured-courses.js. The client
+  // splices this row into a sibling list whose comparator is
+  // { sort_order: 1, createdAt: -1 }, and only the database knows createdAt.
+  return {
+    ok: true,
+    data: { ...JSON.parse(JSON.stringify(created.toObject())), review },
+  };
 }
 
 export async function updateFeaturedReview(id, formData) {

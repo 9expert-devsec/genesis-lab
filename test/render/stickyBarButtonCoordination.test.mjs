@@ -16,8 +16,16 @@ import { CourseStickyCTA } from '@/app/(public)/[...slug]/_components/CourseStic
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 const PAGE = read('src/app/(public)/[...slug]/page.jsx');
-const BUTTON = read('src/components/ui/ScrollToTopButton.jsx');
 const LAYOUT = read('src/app/(public)/layout.jsx');
+
+// THE DOCK OWNS WHAT THE BUTTON USED TO. Every positioning claim this file made
+// about ScrollToTopButton.jsx — the z tier, lg:bottom-8, the bottom-24/bottom-8
+// register pair, the absence of the old bottom-36 lift and of stickyBottomBar —
+// now belongs to FloatingActionDock, which is the single fixed container for the
+// bottom-right stack. The claims did not change; the file that has to satisfy
+// them did. ScrollToTopButton is a plain button now, and that it STAYS one is
+// asserted in test/pure/floatingDockStack.
+const DOCK = read('src/components/ui/FloatingActionDock.jsx');
 
 const R = (props) => renderToStaticMarkup(createElement(CourseStickyCTA, props));
 const barHtml = () =>
@@ -76,8 +84,15 @@ const BETWEEN_ASIDE_AND_BAR = [
 ];
 
 // GROUP 2 — ancestors AT AND ABOVE <article>. These decide a DIFFERENT pairing:
-// the whole article subtree versus the layout's z-50 UI (header, back-to-top
-// button), which are siblings of <main>, not descendants of <article>.
+// the whole article subtree versus the elevated UI it must not trap itself
+// above — PublicHeader (z-60), a sibling of <main> inside this layout's shell,
+// and FloatingActionDock (z-50).
+//
+// The DOCK is no longer a sibling of <main>: it moved to the ROOT layout, and
+// next-themes renders no DOM wrapper, so it is a direct child of <body> —
+// strictly FEWER ancestors between it and the root than before. That only makes
+// this check more likely to hold, never less, but the model says where things
+// actually are rather than where they used to be.
 // The aside itself. Routed through classOf like everything else so a renamed or
 // deleted <aside> reports WHICH element vanished, instead of the bare
 // "Cannot read properties of null (reading '1')" that a raw .match(...)[1] gives.
@@ -109,15 +124,15 @@ test('sidebar-vs-bar: no ancestor between the aside and <article> traps the side
 });
 
 // ── ISSUE 1a (ii): the article subtree vs. the layout's elevated UI ─────────
-test('article-vs-layout-UI: no ancestor at/above <article> traps its subtree under the header or back-to-top', () => {
+test('article-vs-layout-UI: no ancestor at/above <article> traps its subtree under the header or dock', () => {
   for (const anc of AT_AND_ABOVE_ARTICLE) {
     const cls = classOf(anc);
     assert.equal(
       createsStackingContext(cls),
       false,
       `ancestor "${anc.label}" must NOT create a stacking context — it would seal the whole ` +
-        `article subtree into one layer and change how it interleaves with the layout's ` +
-        `z-50 header / back-to-top button. Shipped classes: "${cls}"`,
+        `article subtree into one layer and change how it interleaves with the ` +
+        `z-60 header / z-50 floating dock. Shipped classes: "${cls}"`,
     );
   }
 });
@@ -170,10 +185,22 @@ test('the aside→article chain has not GROWN: a new wrapper would trap the side
 });
 
 // ── ISSUE 1b: computed paint order from the real z-values ───────────────────
-test('sidebar and button paint above the bar; the bar paints above ordinary content', () => {
+test('sidebar and dock paint above the bar; the bar paints above ordinary content', () => {
   const barZ = Number(barHtml().match(/\bz-(\d+)\b/)[1]);
   const asideClass = classOf(ASIDE);
-  const buttonZ = Number(BUTTON.match(/\bz-(\d+)\b/)[1]);
+  // Routed through classOf like every other anchor, for the reason classOf
+  // exists: the previous version read ScrollToTopButton.jsx with a raw
+  // `.match(...)[1]`, so the moment that file stopped carrying a z-index the
+  // suite died on "Cannot read properties of null" instead of saying which
+  // element had lost its z token.
+  const dockZ = Number(
+    classOf({
+      label: 'FloatingActionDock container',
+      re: /className=\{`fixed[^`]*\bz-(\d+)\b[^`]*`\}/,
+      src: DOCK,
+      file: 'FloatingActionDock.jsx',
+    }),
+  );
   const asideZ = Number(asideClass.match(/\bz-(\d+)\b/)[1]);
 
   // the aside must be positioned at every breakpoint for its z-index to apply
@@ -183,21 +210,25 @@ test('sidebar and button paint above the bar; the bar paints above ordinary cont
   const content = { positioned: false, z: null }; // ordinary flow (accordions, related)
   const bar = { positioned: true, z: barZ };
   const aside = { positioned: true, z: asideZ };
-  const button = { positioned: true, z: buttonZ };
+  const dock = { positioned: true, z: dockZ };
 
   assert.ok(rank(bar) > rank(content), `bar (z-${barZ}) above ordinary content`);
   assert.ok(rank(aside) > rank(bar), `sidebar (z-${asideZ}) above bar (z-${barZ})`);
-  assert.ok(rank(button) > rank(bar), `back-to-top button (z-${buttonZ}) above bar (z-${barZ})`);
+  assert.ok(rank(dock) > rank(bar), `floating dock (z-${dockZ}) above bar (z-${barZ})`);
 });
 
-// ── ISSUE 1c: the button is back at its original position ───────────────────
-test('button reverted to its original position, register case intact, no lift', () => {
-  assert.ok(/\bz-50\b/.test(BUTTON), 'button stays at z-50 (elevated tier, above the bar)');
-  assert.ok(/lg:bottom-8/.test(BUTTON), 'lg position is the original bottom-8');
-  assert.ok(/'bottom-24'/.test(BUTTON), 'register-flow bottom-24 case preserved');
-  assert.ok(/'bottom-8'/.test(BUTTON), 'default resting position bottom-8');
-  assert.ok(!/bottom-36/.test(BUTTON), 'the sticky-bar lift is gone');
-  assert.ok(!/stickyBottomBar/.test(BUTTON), 'no dependency on the removed coordination store');
+// ── ISSUE 1c: the original position survived the move to the dock ───────────
+// Same six claims as before, now made against the file that carries them. The
+// dock inherited the button's exact geometry — this is a relocation, not a
+// redesign, and if any of these tokens changed value in the move that is a
+// regression the user would see rather than a refactor.
+test('dock holds the original position, register case intact, no lift', () => {
+  assert.ok(/\bz-50\b/.test(DOCK), 'dock stays at z-50 (elevated tier, above the bar)');
+  assert.ok(/lg:bottom-8/.test(DOCK), 'lg position is the original bottom-8');
+  assert.ok(/'bottom-24'/.test(DOCK), 'register-flow bottom-24 case preserved');
+  assert.ok(/'bottom-8'/.test(DOCK), 'default resting position bottom-8');
+  assert.ok(!/bottom-36/.test(DOCK), 'the sticky-bar lift is gone');
+  assert.ok(!/stickyBottomBar/.test(DOCK), 'no dependency on the removed coordination store');
 });
 
 // ── ISSUE 2 (current rule, per the CourseStickyCTA edit): content-column ──────

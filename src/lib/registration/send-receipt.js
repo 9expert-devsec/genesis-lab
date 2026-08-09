@@ -1,4 +1,5 @@
 import { sendEmail, sendTemplateEmail } from '@/lib/email/postmark';
+import { refNo as toRefNo } from '@/lib/refNo';
 import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
 import { buildPublicPaidReceiptModel } from '@/lib/email/models/publicPaidReceiptModel';
 import { buildInvoiceDisplay } from '@/lib/registration/create-public';
@@ -63,7 +64,7 @@ export async function sendPaidReceipt(doc) {
     invoice: doc.invoice,
   });
 
-  const refNo = String(doc._id).slice(-8).toUpperCase();
+  const refNo = toRefNo(doc._id);
   const alias = process.env.POSTMARK_TEMPLATE_ALIAS_PAID_USER;
   const to = doc.coordinator.email;
 

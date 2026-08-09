@@ -20,8 +20,10 @@
 export async function deleteArticle()            { return { ok: false, error: 'stubbed' }; }
 export async function toggleArticleActive()      { return { ok: false, error: 'stubbed' }; }
 export async function toggleArticleFeaturedOnLanding() { return { ok: false, error: 'stubbed' }; }
-export async function repositionArticle()        { return { ok: false, error: 'stubbed' }; }
-export async function moveArticleToPosition()    { return { ok: false, error: 'stubbed' }; }
+export async function moveArticleOneStep()       { return { ok: false, error: 'stubbed' }; }
+export async function moveArticleToBlockTop()    { return { ok: false, error: 'stubbed' }; }
+export async function moveArticleToRank()        { return { ok: false, error: 'stubbed' }; }
+export async function setArticlePinned()         { return { ok: false, error: 'stubbed' }; }
 export async function setArticlePinBadge()       { return { ok: false, error: 'stubbed' }; }
 export async function getArticles()              { return { items: [], total: 0, page: 1, limit: 0 }; }
 export async function getArticleById()           { return null; }

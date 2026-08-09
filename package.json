@@ -13,9 +13,15 @@
     "gc:dryrun": "node --env-file=.env.local scripts/cloudinary-gc-dryrun.mjs",
     "audit:published-at": "node --env-file=.env.local scripts/audit-article-published-at.mjs",
     "audit:banner-links": "node --env-file=.env.local scripts/audit-banner-link-urls.mjs",
+    "audit:storage": "node --env-file=.env.local scripts/audit-storage-footprint.mjs",
+    "audit:legacy-urls": "node --env-file=.env.local scripts/audit-legacy-file-urls.mjs",
+    "report:cloudinary": "node --env-file=.env.local scripts/report-cloudinary-usage.mjs",
+    "migrate:legacy-files": "node --env-file=.env.local scripts/migrate-legacy-files.mjs",
     "audit:orphan-registrations": "node --env-file=.env.local scripts/audit-orphan-registrations.mjs",
     "audit:course-id-casing": "node --env-file=.env.local scripts/audit-course-id-casing.mjs",
-    "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs"
+    "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
+    "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs",
+    "migrate:skill-code": "node --env-file=.env.local scripts/migrate-skill-code.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",
@@ -44,6 +50,7 @@
     "@tiptap/pm": "^2.27.2",
     "@tiptap/react": "^2.27.2",
     "@tiptap/starter-kit": "^2.27.2",
+    "@vercel/blob": "^2.7.0",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "cloudinary": "^2.5.1",

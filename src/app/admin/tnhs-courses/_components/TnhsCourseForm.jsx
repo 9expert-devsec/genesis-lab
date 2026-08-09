@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAddedRow } from '@/app/admin/_components/AddedRowChannel';
 import Image from 'next/image';
 import { Loader2, Plus } from 'lucide-react';
 import { createTnhsCourse } from '@/lib/actions/tnhs-courses';
@@ -11,6 +12,7 @@ const inputClass =
 
 export function TnhsCourseForm() {
   const router = useRouter();
+  const { add } = useAddedRow();
   const formRef = useRef(null);
   const [cover, setCover] = useState('');
   const [message, setMessage] = useState(null);
@@ -29,7 +31,11 @@ export function TnhsCourseForm() {
         setMessage({ type: 'ok', text: 'เพิ่ม Course สำเร็จแล้ว' });
         formRef.current?.reset();
         setCover('');
-        setTimeout(() => router.refresh(), 300);
+        // Hand the created row to the sibling list (see AddedRowChannel).
+        // The 300ms setTimeout that used to wrap the refresh is gone: it was a
+        // fossil, and no delay makes useState accept new props.
+        if (result.data) add(result.data);
+        router.refresh();
       } else {
         setMessage({ type: 'error', text: result.error ?? 'เกิดข้อผิดพลาด' });
       }

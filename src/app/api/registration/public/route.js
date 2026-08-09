@@ -73,7 +73,7 @@ export async function POST(req) {
     buildQuoteRegistration({ data, attendees, ipAddress })
   );
 
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
 
   // Pre-compute flat invoice display strings for email templates.
   // These are derived from the nested invoice sub-document so the

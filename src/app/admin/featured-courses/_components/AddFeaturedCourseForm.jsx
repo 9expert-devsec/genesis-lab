@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Loader2, Plus, Search, X } from 'lucide-react';
 import { addFeaturedCourse } from '@/lib/actions/featured-courses';
+import { useAddedRow } from '@/app/admin/_components/AddedRowChannel';
 
 /**
  * Typeahead for picking a course to feature.
@@ -15,6 +16,7 @@ import { addFeaturedCourse } from '@/lib/actions/featured-courses';
  */
 export function AddFeaturedCourseForm({ courses = [] }) {
   const router = useRouter();
+  const { add } = useAddedRow();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -76,9 +78,20 @@ export function AddFeaturedCourseForm({ courses = [] }) {
         });
         setSelected(null);
         setQuery('');
-        // Small delay so revalidatePath finishes propagating before we
-        // ask Next to re-fetch the server component.
-        setTimeout(() => router.refresh(), 300);
+        // Hand the created row to the sibling list, which owns the rows and
+        // seeds its state once. Without this the row is in the database and in
+        // the next RSC payload but never on screen.
+        if (result.data) add(result.data);
+        // The 300ms setTimeout that used to wrap this call is gone. It was a
+        // fossil: someone read the symptom as a race and added a delay, but no
+        // delay makes useState accept new props — the list was discarding the
+        // refresh, not missing it.
+        //
+        // The refresh itself STAYS, for something outside the list: the page
+        // header renders `{activeCount} / {featured.length} active`, computed on
+        // the server. It also backfills the cover image this action fetches in
+        // the background.
+        router.refresh();
       } else {
         setMessage({
           type: 'error',

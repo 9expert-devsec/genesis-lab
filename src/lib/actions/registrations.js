@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
@@ -18,6 +19,45 @@ function serialize(value) {
 function getModel(source) {
   return source === 'inhouse' ? RegisterInhouse : RegisterPublic;
 }
+
+/**
+ * The audit `entity` for a `source` argument.
+ *
+ * `source` picks the collection, so it IS the entity discriminator — but it
+ * arrives from the client and `getModel` treats everything that is not
+ * 'inhouse' as public. Normalising here means an unexpected value cannot become
+ * a phantom entity in the trail: rows would be written under an entity no
+ * screen queries, invisible to the inline history widget forever.
+ *
+ * The writer's fail-closed reduction is the BACKSTOP for that, not the primary
+ * check — it would strip the payload and warn, but the row would still be filed
+ * under the wrong entity. Normalise at the source instead.
+ */
+function entityForSource(source) {
+  return source === 'inhouse' ? 'inhouse' : 'public';
+}
+
+/**
+ * ── PII ENTITIES — §5.1 / §5.2. READ THIS BEFORE ADDING A PAYLOAD ───────────
+ *
+ * `RegisterPublic` and `RegisterInhouse` hold customer names, emails, phones
+ * and company details. The audit trail is append-only and presently forever, so
+ * anything copied into it CANNOT be redacted when a deletion or subject-access
+ * request arrives — the collection's entire premise is that rows are never
+ * modified. A shadow copy of personal data in there is a contradiction you do
+ * not want to design in.
+ *
+ * So these actions record metadata, and exactly one exception:
+ *   · status transitions carry `{status}` before and after — a short enum, no
+ *     personal data, and the field people actually dispute;
+ *   · everything else records the ACT and the id;
+ *   · `recordLabel` is '' — the admin's `เลขอ้างอิง` is
+ *     `String(_id).slice(-8).toUpperCase()`, so `recordId` already carries it.
+ *
+ * The contract enforces this independently (registrations|public and
+ * registrations|inhouse are capped at status_only, and the writer reduces
+ * whatever it is handed). The discipline here is belt; that is braces.
+ */
 
 // ── List (paginated + filtered) ────────────────────────────────────
 
@@ -97,24 +137,40 @@ const PUBLIC_STATUSES  = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
 const INHOUSE_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
 
 export async function updateRegistrationStatus(id, status, source = 'public') {
-  await requireAdmin('registrations');
+  const session = await requireAdmin('registrations');
   const validSet = source === 'inhouse' ? INHOUSE_STATUSES : PUBLIC_STATUSES;
   if (!validSet.has(status)) return { ok: false, error: 'สถานะไม่ถูกต้อง' };
 
   await dbConnect();
   const Model = getModel(source);
-  const doc   = await Model.findByIdAndUpdate(id, { status }, { new: true, runValidators: false });
+  // `new: false` returns the PRE-update document, which is the only place the
+  // previous status exists. The existence check below is unchanged (a missing
+  // id returns null either way) and `doc` is not returned to the caller, so
+  // this costs nothing and adds no query.
+  const doc   = await Model.findByIdAndUpdate(id, { status }, { new: false, runValidators: false });
   if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  recordAdminActionAfter({
+    menu:        'registrations',
+    action:      'status',
+    entity:      entityForSource(source),
+    recordId:    String(id),
+    recordLabel: '', // the reference number IS the id — see the header
+    before:      { status: doc.status },
+    after:       { status },
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }
 
 // ── Update fields ──────────────────────────────────────────────────
 
 export async function updateRegistration(id, data, source = 'public') {
-  await requireAdmin('registrations');
+  const session = await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
 
   const update = {};
@@ -232,13 +288,27 @@ export async function updateRegistration(id, data, source = 'public') {
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  // THE ACT ONLY. This edits the record wholesale — the `update` object above
+  // can carry the customer's name, email, phone, tax id and every attendee's
+  // contact details. None of it goes in the trail. Which FIELDS changed is
+  // answerable from a backup; who edited the registration and when is not.
+  recordAdminActionAfter({
+    menu:        'registrations',
+    action:      'update',
+    entity:      entityForSource(source),
+    recordId:    String(id),
+    recordLabel: '',
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }
 
 // ── Delete ─────────────────────────────────────────────────────────
 
 export async function deleteRegistration(id, source = 'public') {
-  await requireAdmin('registrations');
+  const session = await requireAdmin('registrations');
   if (!id) return { ok: false, error: 'Missing id' };
 
   await dbConnect();
@@ -247,6 +317,21 @@ export async function deleteRegistration(id, source = 'public') {
   if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
 
   revalidatePath(ADMIN_PATH);
+
+  // The act and the id. NO read-before-delete, and that is not an oversight:
+  // every other delete in this sweep captures `before` first because the label
+  // is unrecoverable afterwards, but here there is nothing we are PERMITTED to
+  // capture. If someone needs what was in a deleted registration, the answer is
+  // a database backup — not a shadow copy in an append-only collection.
+  recordAdminActionAfter({
+    menu:        'registrations',
+    action:      'delete',
+    entity:      entityForSource(source),
+    recordId:    String(id),
+    recordLabel: '',
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }
 

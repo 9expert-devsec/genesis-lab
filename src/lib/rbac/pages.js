@@ -65,6 +65,12 @@ export const ADMIN_PAGES = [
       { key: 'faqs',       label: 'FAQ',              href: '/admin/faqs',          match: 'prefix' },
       { key: 'local_faqs', label: 'FAQ (Local)',      href: '/admin/local-faqs',    match: 'prefix' },
       { key: 'schedule_pdf', label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf', match: 'prefix' },
+      // The file manager that replaces FileZilla. Registered here rather than
+      // hand-linked for the same three reasons audit_log was: it enters
+      // MENU_ENUM automatically so its own actions are auditable, it appears in
+      // the sidebar, and it shows up in the roles checkbox UI — so granting a
+      // person upload rights is an ordinary role edit rather than a code change.
+      { key: 'media', label: 'จัดการไฟล์', href: '/admin/media', match: 'prefix' },
     ],
   },
   {
@@ -80,6 +86,13 @@ export const ADMIN_PAGES = [
       { key: 'accounts',      label: 'บัญชีผู้ดูแล',  href: '/admin/accounts',      match: 'prefix' },
       // NEW in phase 5 — the role-management page itself.
       { key: 'roles',         label: 'บทบาทและสิทธิ์', href: '/admin/roles',        match: 'prefix' },
+      // Phase 3a — the admin action history. Adding it here has two INTENDED
+      // consequences, neither of them a side effect: it enters MENU_ENUM
+      // automatically (MENU_ENUM = [...ALL_PAGE_KEYS, UNKNOWN_MENU]), so the
+      // audit log becomes auditable by the same machinery; and it appears in
+      // both the sidebar and the roles checkbox UI, because both render from
+      // ADMIN_PAGES. Granting it is therefore a normal role edit.
+      { key: 'audit_log',     label: 'ประวัติการดำเนินการ', href: '/admin/audit-log', match: 'prefix' },
     ],
   },
 ];

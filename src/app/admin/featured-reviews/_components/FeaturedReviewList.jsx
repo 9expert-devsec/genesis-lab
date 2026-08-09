@@ -9,6 +9,8 @@ import {
 } from '@/lib/actions/featured-reviews';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
+import { useAddedRowSink } from '@/app/admin/_components/AddedRowChannel';
+import { insertFeaturedRow } from '@/lib/featuredListOrder';
 
 export function FeaturedReviewList({ items: initial }) {
   async function persistReorder(newOrder, prevOrder) {
@@ -41,6 +43,11 @@ export function FeaturedReviewList({ items: initial }) {
       setBusyId(null);
     }
   });
+  // This list OWNS the rows; the add form is a SIBLING under the server page.
+  // The created row arrives through AddedRowChannel and is placed by the same
+  // comparator the server reads with: { sort_order: 1, createdAt: -1 }.
+  useAddedRowSink((doc) => setItems((cur) => insertFeaturedRow(cur, doc)));
+
 
   const [busyId, setBusyId] = useState(null);
   const [, startTransition] = useTransition();

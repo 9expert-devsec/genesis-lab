@@ -6,6 +6,7 @@ import { asRegistrationPointer, createPaidRegistration, getClientIp } from '@/li
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 import RegisterPublic from '@/models/RegisterPublic';
+import { refNo } from '@/lib/refNo';
 
 export async function POST(req) {
   const body = await req.json().catch(() => null);
@@ -67,7 +68,7 @@ export async function POST(req) {
     ipAddress,
     supersedesRegistrationId,
   });
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
   const amountSatang = toSatang(pricing.total);
   const metadata = { registrationId: String(doc._id), referenceNumber };
 

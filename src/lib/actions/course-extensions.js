@@ -59,9 +59,33 @@ export async function listCourseExtensions() {
   return serialize(docs);
 }
 
+/**
+ * The extension summary logged as `before`/`after`.
+ *
+ * Scalars verbatim; `gallery` as a count. A gallery is a list of media objects
+ * with URLs and alt text — twenty of them would blow the writer's 2 KB
+ * per-field cap and land as a truncation marker. "the gallery went from 4 items
+ * to 7" is the claim worth keeping; the images themselves are on the page.
+ * `tags` stay verbatim because they are short and are the field people argue
+ * about.
+ */
+function extensionFields(doc) {
+  if (!doc) return null;
+  return {
+    urlAlias:            doc.urlAlias ?? '',
+    metaTitle:           doc.metaTitle ?? '',
+    metaDescription:     doc.metaDescription ?? '',
+    ogImage:             doc.ogImage ?? '',
+    tags:                Array.isArray(doc.tags) ? doc.tags : [],
+    isPublished:         Boolean(doc.isPublished),
+    omisePaymentEnabled: Boolean(doc.omisePaymentEnabled),
+    galleryCount:        Array.isArray(doc.gallery) ? doc.gallery.length : 0,
+  };
+}
+
 /** Admin-only — create or update by `courseId`. */
 export async function saveCourseExtension(courseId, data) {
-  await requireAdmin('courses');
+  const session = await requireAdmin('courses');
   await dbConnect();
 
   if (!courseId || typeof courseId !== 'string') {
@@ -106,6 +130,15 @@ export async function saveCourseExtension(courseId, data) {
   };
 
   try {
+    // `before` from an explicit read rather than `new: false`, because this
+    // action RETURNS the post-update document to its caller — flipping the flag
+    // would silently change what the admin UI receives. One indexed findOne on
+    // a small collection is the cheaper mistake.
+    //
+    // null here is meaningful, not missing: this is an upsert, so a null
+    // `before` is how the trail says "this created the extension".
+    const before = extensionFields(await CourseExtension.findOne({ courseId }).lean());
+
     const doc = await CourseExtension.findOneAndUpdate({ courseId }, update, {
       upsert: true,
       new: true,
@@ -118,6 +151,22 @@ export async function saveCourseExtension(courseId, data) {
     revalidatePath(`${ADMIN_PATH}/${courseId}`);
     if (cleanAlias) revalidatePath(cleanAlias);
     revalidatePath(`/${courseId.toLowerCase()}-training-course`);
+
+    // THE SECOND KEY SPACE. `recordId` is the `course_id` CODE, not an MSDB
+    // ObjectId — CourseExtension keys on it (see the model: "matches course_id
+    // from the upstream API"). Same menu as courses.js, different key space,
+    // unnormalised by decision (§8.7 ruling (e)). That is why the code doubles
+    // as the label: unlike an ObjectId, it already reads as a course.
+    recordAdminActionAfter({
+      menu:        'courses',
+      action:      before ? 'update' : 'create',
+      entity:      'extension',
+      recordId:    courseId,
+      recordLabel: courseId,
+      before,
+      after:       extensionFields(doc),
+      actor:       { id: session.user?.id, name: session.user?.name },
+    });
 
     return { ok: true, data: serialize(doc) };
   } catch (err) {
@@ -133,9 +182,29 @@ export async function saveCourseExtension(courseId, data) {
 /** Admin-only — delete an extension document. The upstream course
  *  itself remains; only the SEO/gallery layer is removed. */
 export async function deleteCourseExtension(courseId) {
-  await requireAdmin('courses');
+  const session = await requireAdmin('courses');
   await dbConnect();
-  await CourseExtension.deleteOne({ courseId });
+
+  // findOneAndDelete rather than deleteOne: same single round-trip, but it
+  // hands back the document being removed so `before` costs nothing extra.
+  // The caller sees no difference — this action returns { ok: true } either
+  // way, exactly as before.
+  //
+  // No label read is needed here, unlike deleteCourse: `courseId` IS the
+  // human-readable code, so the record identifies itself.
+  const removed = await CourseExtension.findOneAndDelete({ courseId }).lean();
+
   revalidatePath(ADMIN_PATH);
+
+  recordAdminActionAfter({
+    menu:        'courses',
+    action:      'delete',
+    entity:      'extension',
+    recordId:    courseId,
+    recordLabel: courseId,
+    before:      extensionFields(removed),
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
   return { ok: true };
 }

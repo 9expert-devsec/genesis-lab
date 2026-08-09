@@ -2,6 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  MAX_PINNED_ARTICLES,
+  PIN_REFUSALS,
+  describePinCapacity,
+  pinCapacityMessage,
   planPromotion,
   planDemotion,
   planMoveToPosition,
@@ -586,4 +590,211 @@ test('CONTROL: a move on the messy block writes MORE than one row', () => {
     plan.writes.length > 1,
     `only ${plan.writes.length} row(s) written — a move renumbers the rows it passes`,
   );
+});
+
+// ── THE PINNED BLOCK IS CAPPED ────────────────────────────────────────────
+//
+// EVERY FIXTURE BELOW IS SIZED FROM `MAX_PINNED_ARTICLES`, never from the digit
+// it currently holds. That is the property the cap's own control depends on:
+// raising the constant must redden EXACTLY ONE test — the one that pins the
+// value — and leave every agreement assertion green. A fixture written as
+// `blockOf(5)` would quietly become a cap-minus-one fixture the day the number
+// moved, and the test would keep passing while measuring the wrong boundary.
+
+/** A pinned block of exactly `n` members, numbered contiguously 1..n. */
+const blockOf = (n) => Array.from({ length: n }, (_, i) => pinned(`p${i + 1}`, i + 1));
+
+/** A pinned member that is switched OFF — in the block, holding no rank. */
+const pinnedInactive = (id, order) =>
+  art({ _id: id, isPinnedOnArticlePage: true, pinOrder: order, active: false });
+
+test('C-a — promotion is REFUSED when the block is exactly at the cap', () => {
+  // The boundary. At MAX the block is FULL: one more would be MAX + 1, so the
+  // check is `>=`, not `>`. An off-by-one here is invisible in every fixture
+  // whose size is not exactly MAX, which is why this and C-b come as a pair.
+  const list = [...blockOf(MAX_PINNED_ARTICLES), art({ _id: 'x' })];
+  const plan = planPromotion(list, 'x');
+
+  assert.deepEqual(plan.writes, [], 'a refused pin writes NOTHING');
+  assert.equal(plan.reason, PIN_REFUSALS.BLOCK_FULL);
+  assert.ok(plan.message, 'and carries the sentence the server returns verbatim');
+
+  const after = applyPositionPlan(list, plan);
+  assert.equal(
+    isPositioned(after.find((a) => a._id === 'x')), false,
+    'and the article is still unpinned afterwards',
+  );
+  assert.equal(
+    after.filter(isPositioned).length, MAX_PINNED_ARTICLES,
+    'the block is unchanged — no demotion, no renumbering, nothing',
+  );
+});
+
+test('C-b — CONTROL: at cap-minus-one the SAME promotion is allowed', () => {
+  // Without this, C-a passes for a planner that refuses every promotion, and
+  // the pinned block would be permanently closed.
+  const list = [...blockOf(MAX_PINNED_ARTICLES - 1), art({ _id: 'x' })];
+  const plan = planPromotion(list, 'x');
+
+  assert.equal(plan.reason, undefined, 'no refusal at cap-1');
+  assert.equal(plan.writes.length, 1, 'and it writes the one document');
+  const after = applyPositionPlan(list, plan);
+  assert.equal(after.filter(isPositioned).length, MAX_PINNED_ARTICLES, 'filling the last slot');
+  assert.equal(rankOf(after, 'x'), MAX_PINNED_ARTICLES, 'at the end of the block, as promotion always does');
+});
+
+test('C-c — an OVER-CAP block (the 11-of-5 shape) refuses too, and says so DIFFERENTLY', () => {
+  // Eleven pinned articles under a cap of five was the state a previous
+  // measurement found in production. (Today's block measures five, so this is a
+  // shape the code must survive rather than one it is currently meeting — and
+  // it is reachable again the moment the cap is lowered, or by a restored
+  // backup, since the cap governs what may be ADDED and never rewrites history.)
+  //
+  // AN OVER-CAP BLOCK IS LEGAL, NOT CORRUPT. It is numbered 1..11 and renders
+  // exactly that; nothing is silently wrong. So the cap refuses the next pin and
+  // touches nothing else.
+  const OVER = MAX_PINNED_ARTICLES + 6;
+  const list = [...blockOf(OVER), art({ _id: 'x' })];
+  const plan = planPromotion(list, 'x');
+
+  assert.deepEqual(plan.writes, [], 'nothing is written…');
+  assert.equal(plan.reason, PIN_REFUSALS.BLOCK_FULL);
+  assert.equal(
+    applyPositionPlan(list, plan).filter(isPositioned).length, OVER,
+    '…and NOTHING IS DEMOTED. Six articles somebody deliberately chose must not ' +
+    'be evicted to satisfy a policy about what may be added.',
+  );
+
+  // The sentence must not claim the block is "full at MAX" while it holds OVER.
+  // An admin who counts the list finds a different number than the one they
+  // were told, which is the defect class this whole area exists to remove.
+  const capacity = describePinCapacity(list, 'x');
+  assert.equal(capacity.count, OVER, 'the descriptor reports the real size');
+  assert.notEqual(
+    pinCapacityMessage(capacity),
+    pinCapacityMessage(describePinCapacity([...blockOf(MAX_PINNED_ARTICLES), art({ _id: 'x' })], 'x')),
+    'the over-cap sentence must differ from the exactly-full one',
+  );
+  assert.ok(
+    pinCapacityMessage(capacity).includes(String(OVER)),
+    'and it must name the real count, not the cap',
+  );
+});
+
+test('C-d — R1: DEMOTION still works when the block is over cap', () => {
+  // Unpinning is the ONLY way an over-cap block drains. A capacity check on
+  // planDemotion would lock the block at whatever size it had reached — a trap
+  // with no way out — so there must never be one.
+  const OVER = MAX_PINNED_ARTICLES + 6;
+  const list = blockOf(OVER);
+  const plan = planDemotion(list, 'p3');
+
+  assert.equal(plan.reason, undefined, 'unpinning is never refused');
+  assert.ok(plan.writes.length > 1, 'and it renumbers the survivors, as always');
+
+  const after = applyPositionPlan(list, plan);
+  assert.equal(after.filter(isPositioned).length, OVER - 1, 'the block drained by one');
+  assert.deepEqual(
+    after.filter(isPositioned).map((a) => a.pinOrder).sort((a, b) => a - b),
+    Array.from({ length: OVER - 1 }, (_, i) => i + 1),
+    'and is still contiguous 1..M — the cap changes nothing about the numbering',
+  );
+});
+
+test('C-e — R1: an ALREADY-pinned article is never refused, at any block size', () => {
+  // The cap is about JOINING the block. An article that is already in it is not
+  // asking to cross the line, so re-saving it, or a stale form re-asserting its
+  // state, must not fail because of a limit it is not crossing.
+  for (const size of [MAX_PINNED_ARTICLES, MAX_PINNED_ARTICLES + 6]) {
+    const list = blockOf(size);
+    const capacity = describePinCapacity(list, 'p2');
+    assert.equal(capacity.alreadyPinned, true, `size ${size}: p2 is in the block`);
+    assert.equal(capacity.canPin, true, `size ${size}: and is therefore never blocked`);
+    assert.equal(capacity.reason, null);
+    assert.equal(planPromotion(list, 'p2').reason, undefined, `size ${size}: the planner agrees`);
+
+    // …while an OUTSIDER at the same block size is refused, or "never refused"
+    // would just mean "the cap is off".
+    const outside = describePinCapacity([...list, art({ _id: 'x' })], 'x');
+    assert.equal(outside.canPin, false, `size ${size}: an outsider IS refused`);
+    assert.equal(outside.alreadyPinned, false);
+  }
+});
+
+test('C-f — R2: an INACTIVE pinned article OCCUPIES A SLOT', () => {
+  // The count is over the WHOLE block because `pinOrder` is contiguous 1..M over
+  // the whole block — planMoveToPosition and planDemotion both re-emit it that
+  // way and neither knows what `active` means. A cap counting only active rows
+  // would be counting a different set from the one being numbered: with one
+  // inactive member you could pin a sixth article into a block already numbered
+  // to 6, and the cap would report five while the model held six.
+  const list = [
+    ...blockOf(MAX_PINNED_ARTICLES - 1),
+    pinnedInactive('off', MAX_PINNED_ARTICLES),
+    art({ _id: 'x' }),
+  ];
+
+  // THE FIXTURE GENUINELY SEPARATES THE TWO COUNTS, or this test would pass for
+  // an active-only cap by coincidence.
+  assert.equal(list.filter(isPositioned).length, MAX_PINNED_ARTICLES, 'whole block: at the cap');
+  assert.equal(
+    list.filter((a) => isPositioned(a) && a.active === true).length, MAX_PINNED_ARTICLES - 1,
+    'active only: one short of it — the two answers differ',
+  );
+  assert.equal(rankOf(list, 'off'), null, 'and the inactive member holds no RANK, which is the tempting part');
+
+  const capacity = describePinCapacity(list, 'x');
+  assert.equal(capacity.count, MAX_PINNED_ARTICLES, 'the cap counts the block, not the visible rows');
+  assert.equal(capacity.canPin, false);
+  assert.deepEqual(planPromotion(list, 'x').writes, [], 'so the promotion is refused');
+});
+
+test('C-g — R1: reordering INSIDE an over-cap block still plans normally', () => {
+  // The cap governs membership, not arrangement. An admin stuck with eleven
+  // pinned articles must still be able to put them in the right order while the
+  // block drains.
+  const OVER = MAX_PINNED_ARTICLES + 6;
+  const list = blockOf(OVER);
+  const plan = planMoveToPosition(list, `p${OVER}`, 1);
+
+  assert.equal(plan.reason, undefined, 'a move is not a pin');
+  assert.ok(plan.writes.length > 1, 'and it renumbers the rows it passes');
+
+  const after = applyPositionPlan(list, plan);
+  assert.equal(rankOf(after, `p${OVER}`), 1, 'the last member moved to the top of the block');
+  assert.deepEqual(
+    after.filter(isPositioned).map((a) => a.pinOrder).sort((a, b) => a - b),
+    Array.from({ length: OVER }, (_, i) => i + 1),
+    'still contiguous 1..M',
+  );
+});
+
+test('C-h — MAX_PINNED_ARTICLES is 5', () => {
+  // THE ONLY TEST IN THIS FILE THAT NAMES THE NUMBER, deliberately kept separate
+  // so that changing the cap reddens exactly one assertion — a decision — rather
+  // than a scatter of fixtures nobody wrote down. Same shape as the
+  // adminScheduleHorizon guard.
+  assert.equal(MAX_PINNED_ARTICLES, 5);
+});
+
+test('C-i — the copy derives BOTH numbers, and null means "no refusal"', () => {
+  // Built from synthetic capacity objects rather than from the constant, so this
+  // keeps measuring the same thing if the cap moves.
+  assert.equal(pinCapacityMessage({ canPin: true }), null, 'nothing to say when the pin is allowed');
+  assert.equal(pinCapacityMessage(null), null, 'and no throw on a missing descriptor');
+
+  const full = pinCapacityMessage({ canPin: false, count: 5, max: 5 });
+  assert.match(full, /5/, 'the full sentence names the cap');
+
+  const over = pinCapacityMessage({ canPin: false, count: 11, max: 5 });
+  assert.match(over, /11/, 'the over-cap sentence names the real count…');
+  assert.match(over, /5/, '…and the cap…');
+  assert.match(over, /4/, '…and how far it has to come down before a pin is possible (max - 1)');
+  assert.notEqual(full, over, 'the two situations read differently');
+
+  // The numbers are INTERPOLATED, not spelled out: a different cap produces a
+  // different sentence from the same code.
+  const raised = pinCapacityMessage({ canPin: false, count: 9, max: 9 });
+  assert.match(raised, /9/, 'a cap of 9 says 9');
+  assert.equal(/ 5 /.test(raised), false, 'and says nothing about 5');
 });

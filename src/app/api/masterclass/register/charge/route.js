@@ -5,6 +5,7 @@ import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 import { createCardCharge, createPromptPayCharge, getPromptPayQrUrl } from '@/lib/omise';
 import { toSatang } from '@/lib/pricing';
 import { sendMasterclassReceipt } from '@/lib/masterclass/send-receipt';
+import { refNo } from '@/lib/refNo';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export async function POST(req) {
     if (doc.status === 'paid') return NextResponse.json({ error: 'already_paid' }, { status: 409 });
 
     const amountSatang = toSatang(doc.pricing.total);
-    const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+    const referenceNumber = refNo(doc._id);
     const metadata = { registrationId: String(doc._id), referenceNumber, source: 'masterclass' };
 
     let result;

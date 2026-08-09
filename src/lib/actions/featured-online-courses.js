@@ -47,7 +47,7 @@ export async function addFeaturedOnlineCourse(formData) {
   if (exists) return { ok: false, error: `${course_id} มีอยู่แล้ว` };
 
   const count = await FeaturedOnlineCourse.countDocuments();
-  await FeaturedOnlineCourse.create({
+  const created = await FeaturedOnlineCourse.create({
     course_id,
     course_name,
     course_cover_url,
@@ -58,7 +58,10 @@ export async function addFeaturedOnlineCourse(formData) {
   revalidatePath('/');
   revalidatePath(ADMIN_PATH);
   triggerLandingSync();
-  return { ok: true };
+  // { ok, data } — see the note in actions/featured-courses.js. The client
+  // splices this row into a sibling list whose comparator is
+  // { sort_order: 1, createdAt: -1 }, and only the database knows createdAt.
+  return { ok: true, data: JSON.parse(JSON.stringify(created.toObject())) };
 }
 
 export async function updateFeaturedOnlineCourse(id, formData) {

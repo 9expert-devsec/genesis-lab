@@ -3,9 +3,11 @@ import { PublicHeader } from "@/components/layout/PublicHeader";
 import { PublicFooter } from "@/components/layout/PublicFooter";
 import { TopNotificationBar } from "@/components/notifications/TopNotificationBar";
 import { SitePopup } from "@/components/notifications/SitePopup";
-import { ScrollToTopButton } from "@/components/ui/ScrollToTopButton";
 import { getActiveTopBars } from "@/lib/actions/site-notifications";
 import { getFeaturedArticlesForLanding } from "@/lib/actions/articles";
+import { listPrograms } from "@/lib/api/programs";
+import { listSkills } from "@/lib/api/skills";
+import { buildProgramNames, buildSkillNames } from "@/lib/articleTaxonomy";
 import { getActiveClientLogos } from "@/lib/actions/portfolio";
 import ClientLogosSection from "@/components/portfolio/ClientLogosSection";
 
@@ -75,13 +77,40 @@ export default async function HomePage() {
     // source the navbar uses — so the Program/Skill selector emits the
     // admin's current custom slug (no reliance on 308 redirects).
     { programSlugs, skillSlugs },
+    programsRes,
+    skillsRes,
   ] = await Promise.all([
     getLandingData(),
     getActiveTopBars().catch(() => []),
     getFeaturedArticlesForLanding().catch(() => []),
     getActiveClientLogos().catch(() => []),
     getNavMenuData().catch(() => ({ programSlugs: {}, skillSlugs: {} })),
+    // Program and skill NAMES for the article cards' overlay and chips.
+    //
+    // FETCHED RATHER THAN TAKEN FROM THE LANDING CACHE, which already holds
+    // both lists. The cache's copies are CURATED FOR A DIFFERENT QUESTION: it
+    // filters programs to those with public courses because it feeds
+    // ProgramSkillSelector, which is about what someone can enrol in. Nothing
+    // about that rule has to do with labelling an article. Borrowing it means
+    // the day an article tagged with a course-less program is featured, its
+    // overlay appears on /articles and silently does not here — same article,
+    // two pages, different chips, no traceable reason.
+    //
+    // The cost is nothing on the critical path: this page is prerendered
+    // (`○ /` with revalidate 1h in the build output), so these run at build and
+    // at most hourly, never on a visitor's request.
+    //
+    // Same `.catch` shape as every other fetch here and for the same reason: an
+    // upstream outage must make chips disappear, never take the home page down.
+    listPrograms().catch(() => ({ items: [] })),
+    listSkills().catch(() => ({ items: [] })),
   ]);
+
+  // Shared with /articles — see src/lib/articleTaxonomy.js for why the keys are
+  // program_id / skill_id rather than _id, and why an id that resolves to no
+  // name is dropped rather than printed.
+  const articleProgramNames = buildProgramNames(programsRes.items);
+  const articleSkillNames = buildSkillNames(skillsRes.items);
 
   return (
     <>
@@ -166,14 +195,21 @@ export default async function HomePage() {
 
         
 
-        <BlogSection articles={featuredArticles} />
+        <BlogSection
+        articles={featuredArticles}
+        programNames={articleProgramNames}
+        skillNames={articleSkillNames}
+      />
 
         <InstructorQuote />
       </main>
 
       <PublicFooter />
       <SitePopup />
-      <ScrollToTopButton />
+      {/* The floating dock (back-to-top + chat launcher) is NOT mounted here.
+          It is mounted once from src/app/layout.jsx — see the note there. This
+          page sits outside the (public) group, so it used to carry its own
+          copy; a second copy is a second React tree and a second chat state. */}
     </>
   );
 }

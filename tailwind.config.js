@@ -155,13 +155,24 @@ module.exports = {
       // we ADD 60/70/80 so the header (60) actually generates — a bare `z-60`
       // is NOT in the default scale and silently falls back to `auto` — and so
       // future chrome has gaps to slot into. Elements, low → high:
-      //   40  CourseStickyCTA sticky bar   (below the sidebar + button)
-      //   50  sidebar <aside>, back-to-top (above the bar)
+      //   40  CourseStickyCTA sticky bar   (below the sidebar + dock)
+      //   50  sidebar <aside>, FloatingActionDock (above the bar)
+      //       — the dock is the ONE fixed box holding back-to-top and the chat
+      //         launcher; neither child carries a z-index of its own.
       //   60  PublicHeader                 (above the hero cover slider)
       //   70, 80  reserved for future chrome
       // Overlay tier — must cover all chrome; kept as arbitrary values so the
-      // ladder above stays readable: SitePopup z-[9000], drawer backdrop
-      // z-[9998], mobile drawer z-[9999] (portalled to <body>).
+      // ladder above stays readable, low → high:
+      //   9000  SitePopup                (promotional image overlay)
+      //   9500  chat panel               (ChatPanel, portalled to <body>)
+      //   9998  mobile drawer backdrop
+      //   9999  mobile drawer            (portalled to <body>)
+      // The chat panel sits ABOVE SitePopup because a promo image must not
+      // cover a conversation the user opened deliberately, and BELOW the drawer
+      // because primary navigation always wins. It is portalled for the same
+      // reason the drawer is: it is rendered from inside the z-50 dock, and a
+      // `fixed` + `z-50` ancestor is a stacking context that would confine
+      // z-[9500] beneath SitePopup's 9000 while the source looked correct.
       zIndex: {
         60: '60',
         70: '70',

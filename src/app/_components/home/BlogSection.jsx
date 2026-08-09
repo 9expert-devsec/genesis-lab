@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
+import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
+import { clampSlideIndex, perPageForWidth } from '@/lib/blogSliderLayout';
 
 /**
  * Real articles only — server fetches via `getFeaturedArticlesForLanding`
@@ -16,18 +18,22 @@ import { useSwipe } from '@/hooks/useSwipe';
  * slider when there are more than 4 cards; mobile is a swipeable,
  * auto-advancing carousel with dot indicators.
  */
-export function BlogSection({ articles = [] }) {
+export function BlogSection({ articles = [], programNames = {}, skillNames = {} }) {
   if (articles.length === 0) return null;
 
   const blogs = articles.map((a) => ({
     id:        a._id ?? a.slug,
-    category:  a.articleType === 'video' ? 'บทความวิดีโอ' : 'บทความ',
+    // TAXONOMY IDS, NOT A PRE-RENDERED LABEL. The card used to carry
+    // `category` (articleType, always บทความ or บทความวิดีโอ) and free-text
+    // `tags`; it now shows the same PROGRAM overlay and SKILL chips as
+    // ArticleCard on /articles, resolved through the shared name maps.
+    programs:  Array.isArray(a.programs) ? a.programs : [],
+    skills:    Array.isArray(a.skills) ? a.skills : [],
     title:     a.title ?? '',
     excerpt:   a.excerpt ?? '',
     thumbnail: a.coverUrl && a.coverUrl.trim() !== ''
                  ? a.coverUrl
                  : '/mock-article/cover-article-claude-cowork-vs-copilot-cowork.png.webp',
-    tags:      Array.isArray(a.tags) ? a.tags : [],
     slug:      `/articles/${a.slug}`,
   }));
 
@@ -57,17 +63,17 @@ export function BlogSection({ articles = [] }) {
           {blogs.length <= 4 ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {blogs.map((blog) => (
-                <BlogCard key={blog.id} blog={blog} />
+                <BlogCard key={blog.id} blog={blog} programNames={programNames} skillNames={skillNames} />
               ))}
             </div>
           ) : (
-            <BlogSlider blogs={blogs} />
+            <BlogSlider blogs={blogs} programNames={programNames} skillNames={skillNames} />
           )}
         </div>
 
         {/* Mobile: swipe + auto-slide carousel */}
         <div className="mt-6 md:hidden">
-          <BlogCarousel blogs={blogs} />
+          <BlogCarousel blogs={blogs} programNames={programNames} skillNames={skillNames} />
         </div>
       </div>
     </section>
@@ -78,9 +84,29 @@ export function BlogSection({ articles = [] }) {
  * Desktop slider: 4 cards visible, advances one card at a time. Arrows
  * disappear at the bounds so the track can't be pushed past the edges.
  */
-function BlogSlider({ blogs }) {
+function BlogSlider({ blogs, programNames, skillNames }) {
   const [index, setIndex] = useState(0);
-  const perPage  = 4;
+
+  // PERPAGE IS FOR THE ARROWS, NOT FOR THE LAYOUT. Card widths are responsive
+  // Tailwind classes below, so the slider is laid out correctly on the first
+  // paint with no JavaScript at all — which is what keeps this hydration-safe:
+  // server and client both render this initial 4, and the effect corrects it
+  // afterwards. Nothing about the geometry depends on the correction.
+  const [perPage, setPerPage] = useState(4);
+
+  useEffect(() => {
+    const apply = () => setPerPage(perPageForWidth(window.innerWidth));
+    apply();
+    window.addEventListener('resize', apply);
+    return () => window.removeEventListener('resize', apply);
+  }, []);
+
+  // Page count moves with perPage, so widening the window shrinks maxIndex and
+  // can leave the reader parked past the end, looking at a blank slide.
+  useEffect(() => {
+    setIndex((i) => clampSlideIndex(i, blogs.length, perPage));
+  }, [perPage, blogs.length]);
+
   const maxIndex = Math.max(0, blogs.length - perPage);
 
   const prev = () => setIndex((i) => Math.max(0, i - 1));
@@ -100,6 +126,20 @@ function BlogSlider({ blogs }) {
       )}
 
       <div className="overflow-hidden pb-4">
+        {/* The STEP still comes from JS because it is multiplied by `index`,
+            which is state. Safe: index is 0 on the server AND on the client's
+            first render, and translateX(0) is the same string whatever perPage
+            says, so there is nothing to mismatch. It only starts to matter
+            after a click, long after hydration.
+
+            The WIDTHS below are CSS, not JS — responsive Tailwind classes
+            matching the grid this slider stands in for (2 at md, 3 at lg, 4 at
+            xl), so the layout is right on the first paint with no JavaScript.
+            The old fixed /4 gave a 172px card at md, too narrow for the title
+            and excerpt it already renders, let alone a chip; and five featured
+            articles rendered at roughly double the density of four in the same
+            section. Underscores are Tailwind's escape for the spaces calc()
+            requires around `-`. */}
         <div
           className="flex gap-4 transition-transform duration-300 ease-in-out"
           style={{ transform: `translateX(calc(-${index} * (100% / ${perPage} + 16px / ${perPage})))` }}
@@ -107,10 +147,9 @@ function BlogSlider({ blogs }) {
           {blogs.map((blog) => (
             <div
               key={blog.id}
-              className="flex-shrink-0"
-              style={{ width: `calc((100% - ${(perPage - 1) * 16}px) / ${perPage})` }}
+              className="w-[calc((100%_-_16px)/2)] flex-shrink-0 lg:w-[calc((100%_-_32px)/3)] xl:w-[calc((100%_-_48px)/4)]"
             >
-              <BlogCard blog={blog} />
+              <BlogCard blog={blog} programNames={programNames} skillNames={skillNames} />
             </div>
           ))}
         </div>
@@ -130,7 +169,7 @@ function BlogSlider({ blogs }) {
   );
 }
 
-function BlogCarousel({ blogs }) {
+function BlogCarousel({ blogs, programNames, skillNames }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const carouselRef = useRef(null);
@@ -171,7 +210,7 @@ function BlogCarousel({ blogs }) {
         >
           {blogs.map((blog) => (
             <div key={blog.id} className="w-full flex-shrink-0 px-1">
-              <BlogCard blog={blog} />
+              <BlogCard blog={blog} programNames={programNames} skillNames={skillNames} />
             </div>
           ))}
         </div>
@@ -197,7 +236,7 @@ function BlogCarousel({ blogs }) {
   );
 }
 
-export function BlogCard({ blog }) {
+export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
   return (
     <Link
       href={blog.slug}
@@ -211,9 +250,15 @@ export function BlogCard({ blog }) {
           sizes="(max-width: 768px) 100vw, 25vw"
           className="object-cover transition-opacity group-hover:opacity-90"
         />
-        <span className="absolute left-3 top-3 rounded-full bg-9e-brand px-3 py-1 text-xs font-bold text-white">
-          {blog.category}
-        </span>
+        {/* CAP 2. This row is absolutely positioned and cannot wrap out of the
+            way like the skill row below, so its budget is the CARD EDGE — not
+            the cover art, whose layout varies (most article covers are legacy
+            files and some carry no logo at all; see the note on ProgramOverlay).
+            The narrowest card this renders on is 288px, at xl in either the
+            grid or the slider, giving 264px usable against a widest-real-pair
+            of 185.8px. It used to be 172px, where 2 overflowed — that was the
+            slider showing 4 per view at every width, fixed alongside this. */}
+        <ProgramOverlay ids={blog.programs} names={programNames} cap={2} />
       </div>
 
       <div className="flex flex-col gap-2 p-4">
@@ -224,23 +269,11 @@ export function BlogCard({ blog }) {
           {blog.excerpt}
         </p>
 
-        {blog.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {blog.tags.slice(0, 2).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-              >
-                {tag}
-              </span>
-            ))}
-            {blog.tags.length > 2 && (
-              <span className="rounded-full border border-[#E2E8F0] px-2 py-[2px] text-xs font-medium text-9e-action dark:border-[#1e3a5f] dark:text-[#48B0FF]">
-                +{blog.tags.length - 2}
-              </span>
-            )}
-          </div>
-        )}
+        {/* CAP 2, passed explicitly because /articles passes 3 and the two
+            differ for a measured reason. This grid is xl:grid-cols-4 at gap-4
+            inside max-w-[1200px] → (1200 - 48) / 4 = 288px per card, against
+            384px there: 25% narrower, and a third chip wraps. */}
+        <SkillChips ids={blog.skills} names={skillNames} cap={2} />
       </div>
     </Link>
   );

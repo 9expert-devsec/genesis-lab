@@ -55,10 +55,18 @@ export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app'
         url:     publisherLogo,
       },
     },
-    datePublished: ov.datePublished
-      || (article.publishedAt ? new Date(article.publishedAt).toISOString() : ''),
-    dateModified:  ov.dateModified
-      || (article.updatedAt ? new Date(article.updatedAt).toISOString() : ''),
+    // NO datePublished / dateModified. The owner wants the publish date
+    // invisible everywhere, not only on our own pages — a date in JSON-LD is
+    // rendered by Google in the search result, so leaving it here would put
+    // back on the SERP exactly what was removed from the article.
+    //
+    // THE PRICE, recorded rather than re-argued: Google's Article structured-
+    // data guidance lists datePublished as recommended, so eligibility for
+    // some rich-result types may narrow. That is the owner's call and it has
+    // been made.
+    //
+    // `publishedAt` itself is untouched — it still orders the sitemap, the
+    // search results and the landing fetch, and it still gates publication.
     url: canonicalUrl,
   };
 }
@@ -78,7 +86,9 @@ export function validateJsonLd(jsonLd) {
   if (!jsonLd.headline)      warnings.push('ไม่มี headline');
   if (!jsonLd.description)   warnings.push('ไม่มี description');
   if (!jsonLd.image)         warnings.push('ไม่มี image');
-  if (!jsonLd.datePublished) warnings.push('ไม่มี datePublished');
+  // datePublished is deliberately not emitted (see above), so it is not
+  // checked here — a completeness warning for a field we removed on purpose
+  // would fire on every article and train admins to ignore this chip.
   if (warnings.length > 2) return { status: 'error',   message: warnings.join(', ') };
   if (warnings.length > 0) return { status: 'warning', message: warnings.join(', ') };
   return { status: 'valid', message: 'JSON-LD ถูกต้องและครบถ้วน' };

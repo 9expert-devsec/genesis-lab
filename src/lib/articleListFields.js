@@ -32,25 +32,48 @@
  *
  * Derived from what ArticlesAdminClient renders plus what its two pure helpers
  * read, NOT from what looks useful:
- *   · the table columns          — slug, title, author, coverUrl, tags,
- *                                  articleType, active, featuredOnLanding,
- *                                  publishedAt
- *   · PositionCell               — isPinnedOnArticlePage, pinOrder, showPinBadge
+ *   · the table columns          — slug, title, author, tags, articleType,
+ *                                  active, featuredOnLanding, publishedAt
+ *   · OrderCell                  — isPinnedOnArticlePage, pinOrder, sortKey,
+ *                                  showPinBadge
  *   · assignArticleRanks         — active, isPinnedOnArticlePage, pinOrder,
- *                                  publishedAt, createdAt, _id
+ *                                  sortKey, publishedAt, createdAt, _id
  *   · every mutation handler     — _id
  *
- * `createdAt` is the one that looks superfluous and is not: it is the last tier
- * of the ordering cascade, so dropping it would make the rank column disagree
- * with /articles for any two rows sharing a publishedAt.
+ * `sortKey` HAD TO LAND IN THE SAME COMMIT AS THE CASCADE, and the coverage
+ * guard is what said so rather than a review: `assignArticleRanks` runs in the
+ * browser over these projected rows, so the moment the comparator started
+ * reading `sortKey`, a projection without it would have computed every rank
+ * against `undefined` — all 486 rows tying on "no key" and falling through to
+ * the date tiers. The admin column would then have disagreed with /articles for
+ * every row someone had reordered, silently, which is the exact failure this
+ * file exists to prevent.
+ *
+ * `createdAt` and `publishedAt` look superfluous now that `sortKey` decides and
+ * are not: they are the comparator's tiebreak below `sortKey`, where the Mongo
+ * cascade stops and leaves the order unspecified. Dropping them would make the
+ * rank column shuffle between renders for any two rows sharing a key.
  *
  * `rank`, `rankBasis` and `pinTie` are absent because they are COMPUTED by
  * assignArticleRanks — they are not stored, and asking Mongo for them would be
  * a silent no-op.
+ *
+ * ── `coverUrl` WAS REMOVED BY HAND, AND NO TEST ASKED FOR IT ────────────────
+ * The list dropped its ภาพ column, so nothing on the page reads `coverUrl` any
+ * more. Note what that does and does not mean for the guards in
+ * test/pure/articleListFields.test.mjs: the coverage guard checks only
+ * READ ⊆ PROJECTED. A field that is projected and no longer read is a SUPERSET,
+ * which that guard passes by construction — it would have stayed green forever
+ * with `coverUrl` still in this string, shipping a cover URL for every row to a
+ * page that renders none. Removing it is therefore a deliberate act, not one a
+ * failing test forced, and the same is true of the next column anybody deletes.
+ * The guard that WOULD have caught it does not exist and is not worth building:
+ * PROJECTED ⊆ READ is false by design for `_id`, and for anything a helper
+ * reaches through an import in a shape the scanner cannot see.
  */
 export const ADMIN_LIST_FIELDS =
-  '_id slug title author coverUrl tags articleType active featuredOnLanding ' +
-  'publishedAt createdAt isPinnedOnArticlePage pinOrder showPinBadge';
+  '_id slug title author tags articleType active featuredOnLanding ' +
+  'publishedAt createdAt isPinnedOnArticlePage pinOrder sortKey showPinBadge';
 
 /**
  * What an article CARD renders — the same set `getArticlesByIds` already

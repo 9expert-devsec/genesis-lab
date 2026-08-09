@@ -95,6 +95,134 @@ export function isPositioned(article) {
 
 const orderOf = (a) => (Number.isFinite(Number(a?.pinOrder)) ? Number(a.pinOrder) : 0);
 
+// ── THE PINNED BLOCK IS CAPPED ──────────────────────────────────────────────
+//
+// ── WHAT THE CAP DOES, AND THE THREE THINGS IT DELIBERATELY DOES NOT DO ─────
+// It REFUSES NEW PINS. That is the whole of it. It never demotes, never
+// renumbers, and never fires on an article that is already in the block.
+//
+// An OVER-CAP BLOCK IS A LEGAL STATE, not corruption, and this is the
+// distinction the rest of this file makes it easy to get wrong. b-005
+// (duplicate pinOrder) and b-006 (a stray non-zero on an unpinned row) are
+// states the MODEL cannot express correctly — the number stops deciding the
+// position, silently — so the planners repair them by construction. A block of
+// eleven under a cap of five expresses itself perfectly: eleven articles are
+// pinned, they are numbered 1..11, and the page renders exactly that. It is a
+// POLICY overshoot, and the policy is about what may be ADDED. Treating it like
+// corruption would mean demoting six articles somebody deliberately chose,
+// which is a far worse outcome than a list that is longer than intended and
+// drains as the admin unpins. Reordering inside an over-cap block therefore
+// stays fully allowed.
+//
+// ── THE COUNT IS OVER THE WHOLE BLOCK, ACTIVE OR NOT ────────────────────────
+// Every document with `isPinnedOnArticlePage: true` counts, including inactive
+// ones. That is not an oversight and it has a visible consequence:
+//
+//     AN INACTIVE PINNED ARTICLE OCCUPIES A SLOT.
+//
+// It has to. `pinOrder` is contiguous 1..M over the BLOCK — planMoveToPosition
+// and planDemotion both re-emit it that way, and neither has any notion of
+// `active` — so a cap counting only active rows would be counting a different
+// set from the one being numbered. With one inactive member you could pin a
+// sixth article into a block whose numbering already ran to 6, and the cap
+// would report five while the model held six. The alternative failure is
+// milder and visible: an admin who cannot pin sees a count they can go and
+// check against the list.
+//
+// ── ENFORCED BY THE PLANNER, NOT BY THE UI ──────────────────────────────────
+// `describePinCapacity` answers the question once; `planPromotion` refuses from
+// it and the form disables from it. A disabled button is a hint —
+// `setArticlePinned` is an exported function in a `'use server'` module, i.e. a
+// POST endpoint, and anything that can be reached without the button has to
+// refuse on its own. Same shape as `resolveStep`, shared by
+// `describeOrderControls` and `planOrderStep`.
+
+/**
+ * How many articles may sit in the pinned block.
+ *
+ * THE ONLY PLACE THIS NUMBER IS WRITTEN. Every other surface derives from it,
+ * including the Thai copy — `pinCapacityMessage` interpolates it rather than
+ * spelling it out, so raising the cap changes one line and not five, and no
+ * sentence can be left claiming a limit that is no longer the limit. That is
+ * the same discipline `adminScheduleHorizon` records: one concept written as a
+ * literal in three places that have to agree, and they did not.
+ */
+export const MAX_PINNED_ARTICLES = 5;
+
+/** Why a pin cannot happen. `null` means it can. */
+export const PIN_REFUSALS = Object.freeze({
+  BLOCK_FULL: 'pin-block-full',
+});
+
+/**
+ * Can `id` be pinned right now, and what would we tell the admin if not?
+ *
+ * ONE ANSWER, TWO READERS: the form disables its toggle from this and
+ * `planPromotion` refuses from it. Written separately they would drift, and the
+ * symptom is the pair this codebase keeps producing — a live-looking control
+ * that silently does nothing, or a disabled one guarding an endpoint that would
+ * happily have said yes.
+ *
+ * `alreadyPinned` is what keeps the cap OFF an article that is already in the
+ * block: `canPin` is true for it at any block size, so re-saving, reordering,
+ * or a stale form cannot be refused because of a limit the article is not
+ * asking to cross. Unpinning does not consult this at all.
+ *
+ * @param {object[]} articles the FULL collection (or at minimum the whole block)
+ * @param {string} id
+ * @returns {{count: number, max: number, full: boolean, alreadyPinned: boolean,
+ *            canPin: boolean, reason: string|null}}
+ */
+export function describePinCapacity(articles, id) {
+  const list = Array.isArray(articles) ? articles : [];
+  const key = String(id);
+  const block = list.filter(isPositioned);
+
+  const count = block.length;
+  const alreadyPinned = block.some((a) => String(a?._id) === key);
+  // `>=`, not `>`. At exactly MAX the block is FULL — one more would be
+  // MAX + 1. An off-by-one here is invisible in every fixture of size other
+  // than MAX, which is why the boundary has a test of its own.
+  const full = count >= MAX_PINNED_ARTICLES;
+  const canPin = alreadyPinned || !full;
+
+  return {
+    count,
+    max: MAX_PINNED_ARTICLES,
+    full,
+    alreadyPinned,
+    canPin,
+    reason: canPin ? null : PIN_REFUSALS.BLOCK_FULL,
+  };
+}
+
+/**
+ * Why the pin was refused, in the admin's language. `null` when it was not.
+ *
+ * SPLIT FROM THE DESCRIPTOR so the descriptor stays pure data that a test can
+ * compare structurally, while the copy still has exactly one author. Both the
+ * server's error string and the sentence beside the form's toggle come from
+ * here, so the two cannot describe different situations.
+ *
+ * THE OVER-CAP CASE GETS ITS OWN SENTENCE, and that is not politeness. "ปักหมุด
+ * ได้สูงสุด 5 รายการ และตอนนี้ครบ 5 แล้ว" is simply FALSE when the block holds
+ * eleven, and an admin who counts the list and finds eleven has been told a
+ * number that does not match what is in front of them — which is the shape of
+ * defect this whole area exists to remove. It also has to say what would
+ * actually help, and "unpin one" does not help at eleven: the block has to come
+ * down to MAX - 1 before a new pin becomes possible.
+ */
+export function pinCapacityMessage(capacity) {
+  if (!capacity || capacity.canPin !== false) return null;
+  const { count, max } = capacity;
+  if (count > max) {
+    return `ตอนนี้มีบทความปักหมุดอยู่ ${count} รายการ ซึ่งเกินขีดจำกัด ${max} รายการอยู่แล้ว ` +
+      `จึงปักหมุดเพิ่มไม่ได้ — ต้องเลิกปักหมุดให้เหลือไม่เกิน ${max - 1} รายการก่อน`;
+  }
+  return `ปักหมุดได้สูงสุด ${max} รายการ และตอนนี้ครบ ${count} แล้ว ` +
+    `จึงปักหมุดเพิ่มไม่ได้ — ต้องเลิกปักหมุดบทความอื่นก่อนจึงจะปักหมุดบทความนี้ได้`;
+}
+
 /**
  * Plan the writes that promote `id` into the positioned block.
  *
@@ -112,11 +240,35 @@ const orderOf = (a) => (Number.isFinite(Number(a?.pinOrder)) ? Number(a.pinOrder
  *
  * NOTHING ELSE IS RENUMBERED. The plan touches exactly one document.
  *
- * @returns {{ kind: 'promote', id: string, writes: {_id: string, isPinnedOnArticlePage?: boolean, pinOrder?: number}[] }}
+ * ── THE CAP REFUSES HERE ────────────────────────────────────────────────────
+ * A full block returns a no-op plan carrying `reason` and `message` — the same
+ * shape `planMoveToRank` uses, so the action returns `plan.message` verbatim
+ * rather than asking a second time and risking a second answer. Refusal is the
+ * PLANNER's job, not the button's: see the block comment on
+ * `describePinCapacity`.
+ *
+ * `planDemotion` has no equivalent and must never grow one. Unpinning is how an
+ * over-cap block drains, so a cap that could block it would be a trap with no
+ * way out.
+ *
+ * @returns {{ kind: 'promote', id: string, reason?: string, message?: string,
+ *             writes: {_id: string, isPinnedOnArticlePage?: boolean, pinOrder?: number}[] }}
  */
 export function planPromotion(articles, id) {
   const list = Array.isArray(articles) ? articles : [];
   const key = String(id);
+
+  const capacity = describePinCapacity(list, key);
+  if (!capacity.canPin) {
+    return {
+      kind: 'promote',
+      id: key,
+      reason: capacity.reason,
+      message: pinCapacityMessage(capacity),
+      writes: [],
+    };
+  }
+
   const block = list.filter(isPositioned).filter((a) => String(a?._id) !== key);
   const nextOrder = block.length === 0 ? 1 : Math.max(...block.map(orderOf)) + 1;
 
@@ -136,6 +288,11 @@ export function planPromotion(articles, id) {
  * upward forever and stop resembling the ranks they produce. The survivors are
  * renumbered 1..M in the order the real cascade already put them, so their
  * relative order — the thing the admin actually chose — is preserved exactly.
+ *
+ * DELIBERATELY UNAFFECTED BY MAX_PINNED_ARTICLES, and it must stay that way.
+ * Unpinning is the ONLY way an over-cap block gets back under the cap, so a
+ * capacity check here would lock the block at whatever size it had reached.
+ * There is no state in which refusing to unpin is the right answer.
  *
  * @returns {{ kind: 'demote', id: string, writes: {...}[] }}
  */

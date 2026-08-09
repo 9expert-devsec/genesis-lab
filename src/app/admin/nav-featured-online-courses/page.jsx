@@ -4,6 +4,7 @@ import { getOnlineCourses } from '@/lib/api/online-courses';
 import { siteConfig } from '@/config/site';
 import { AddNavFeaturedOnlineCourseForm } from './_components/AddNavFeaturedOnlineCourseForm';
 import { NavFeaturedOnlineCourseList } from './_components/NavFeaturedOnlineCourseList';
+import { AddedRowChannel } from '@/app/admin/_components/AddedRowChannel';
 
 export const metadata = { title: 'คอร์สออนไลน์แนะนำ (Navbar)' };
 export const dynamic = 'force-dynamic';
@@ -64,12 +65,15 @@ export default async function Page() {
         </span>
       </div>
 
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
-        <AddNavFeaturedOnlineCourseForm courses={searchable} />
-      </div>
+      {/* Sibling form + list under a server component: see AddedRowChannel. */}
+      <AddedRowChannel>
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
+          <AddNavFeaturedOnlineCourseForm courses={searchable} />
+        </div>
 
-      <NavFeaturedOnlineCourseList courses={featured} />
+        <NavFeaturedOnlineCourseList courses={featured} />
+      </AddedRowChannel>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
-import { formatSiteDateTime } from '@/lib/articlePublishTime';
+import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -34,10 +34,8 @@ export function ArticleDetailClient({
   relatedCoursesData = [],
   minutes,
 }) {
-  const [progress, setProgress]         = useState(0);
   const [barProgress, setBarProgress]   = useState(0);
   const [showProgress, setShowProgress] = useState(false);
-  const [hovering, setHovering]         = useState(false);
   const [tocItems, setTocItems]         = useState([]);
   const [activeTocId, setActiveTocId]   = useState('');
   const [pageUrl, setPageUrl]           = useState(
@@ -50,8 +48,6 @@ export function ArticleDetailClient({
   // identical function references across renders — otherwise React.memo
   // would still re-render the prose div on every scroll-tick state
   // update and dangerouslySetInnerHTML would wipe the injected IDs.
-  const handleContentEnter = useCallback(() => setHovering(true),  []);
-  const handleContentLeave = useCallback(() => setHovering(false), []);
 
   // SSR-safe share URL: seed from the slug so the first render matches
   // the server output, then swap to the real `window.location.href`
@@ -271,7 +267,6 @@ export function ArticleDetailClient({
       const pct = total > 0
         ? Math.min(100, Math.max(0, Math.round((scrolled / total) * 100)))
         : 0;
-      setProgress(pct);
       setBarProgress(pct);
       setShowProgress(window.scrollY > contentTop - 100);
 
@@ -293,9 +288,9 @@ export function ArticleDetailClient({
       setActiveTocId(current);
     }
 
-    // Hover (drives the % badge) is wired declaratively via React
-    // `onMouseEnter`/`onMouseLeave` props on the prose div — no DOM
-    // listeners to attach here. Scroll/resize is window-level.
+    // Hover used to be wired here to fade the progress ring in. The ring now
+    // lives in the floating dock and attaches its own listeners to the same
+    // element, so this component no longer tracks it. Scroll/resize only.
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('resize', handleScroll);
@@ -314,11 +309,6 @@ export function ArticleDetailClient({
     line:     `https://social-plugins.line.me/lineit/share?url=${encodedUrl}`,
     linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
   };
-
-  // Circle math — pre-compute the dashoffset so the JSX stays clean.
-  const RADIUS = 24;
-  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-  const dashOffset = CIRCUMFERENCE * (1 - progress / 100);
 
   return (
     <>
@@ -403,9 +393,11 @@ export function ArticleDetailClient({
                   <User className="h-4 w-4" /> {article.author}
                 </span>
               )}
-              {article.publishedAt && (
-                <span>{formatDate(article.publishedAt)}</span>
-              )}
+              {/* NO PUBLISH DATE. The owner's decision: articles are evergreen
+                  reference material and a visible date makes a still-accurate
+                  2024 piece look stale. `publishedAt` is untouched as DATA — it
+                  still orders this list, the sitemap and search, and it still
+                  gates publication — it simply is not shown. */}
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-4 w-4" /> {minutes} นาที
               </span>
@@ -440,8 +432,6 @@ export function ArticleDetailClient({
             <ArticleContent
               html={article.content}
               contentRef={contentRef}
-              onMouseEnter={handleContentEnter}
-              onMouseLeave={handleContentLeave}
             />
 
             {/* Related courses */}
@@ -529,36 +519,13 @@ export function ArticleDetailClient({
         </div>
       </div>
 
-      {showProgress && (
-        <div
-          className={
-            'fixed bottom-20 right-8 z-50 transition-all duration-300 ' +
-            (hovering
-              ? 'translate-y-0 opacity-100'
-              : 'pointer-events-none translate-y-2 opacity-0')
-          }
-          aria-hidden="true"
-        >
-          <div className="relative h-14 w-14 rounded-full bg-white shadow-lg">
-            <svg className="h-14 w-14 -rotate-90" viewBox="0 0 56 56">
-              <circle cx="28" cy="28" r={RADIUS} fill="none" stroke="rgba(36,134,255,0.15)" strokeWidth="4" />
-              <circle
-                cx="28" cy="28" r={RADIUS}
-                fill="none"
-                stroke="#2486FF"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={CIRCUMFERENCE}
-                strokeDashoffset={dashOffset}
-                className="transition-all duration-150"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xs font-bold text-blue-600">{progress}%</span>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* THE READING-PROGRESS RING USED TO BE HERE, `fixed bottom-20 right-8
+          z-50`, a third independently-positioned element in the same corner as
+          the dock. It now lives in FloatingActionDock's TOP slot — see
+          src/components/ui/ReadingProgressRing.jsx — so all three floating
+          controls are laid out by one flex column instead of by three sets of
+          offsets that had to agree. The ring finds this page's body by the
+          shared anchor id above; it needs nothing else from this component. */}
     </>
   );
 }
@@ -579,7 +546,7 @@ export function ArticleDetailClient({
  * Memoized prose body.
  *
  * ArticleDetailClient updates state on every scroll event (progress %,
- * activeTocId, hovering, …) which would normally re-render this div
+ * activeTocId, …) which would normally re-render this div
  * and let React diff `dangerouslySetInnerHTML` — wiping the IDs the
  * heading-injection effect just stamped onto each H2/H3.
  *
@@ -593,14 +560,16 @@ export function ArticleDetailClient({
 const ArticleContent = memo(function ArticleContent({
   html,
   contentRef,
-  onMouseEnter,
-  onMouseLeave,
 }) {
   return (
     <div
       ref={contentRef}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      // THE READING-PROGRESS RING FINDS THIS ELEMENT BY THIS ID, from the
+      // floating dock in the root layout. The id is a shared constant, not a
+      // literal, because nothing at build time connects the two files — rename
+      // it on either side and the ring silently stops appearing rather than
+      // failing. src/lib/readingProgress.js, and a test pins both ends.
+      id={READING_PROGRESS_ANCHOR_ID}
       className="article-content prose prose-lg max-w-none prose-h2:border-l-4 prose-h2:border-blue-500 prose-h2:pl-4 prose-a:text-blue-600 prose-a:underline prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:px-4 prose-blockquote:py-2 prose-code:rounded prose-code:bg-blue-50 prose-code:px-1 prose-code:text-blue-700 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-ol:list-decimal prose-ol:pl-6 prose-ul:list-disc prose-ul:pl-6 prose-li:my-1 prose-img:rounded-xl prose-img:shadow-md dark:prose-invert"
       dangerouslySetInnerHTML={{ __html: html ?? '' }}
     />
@@ -621,12 +590,11 @@ function slugifyHeading(text) {
   return base || 'heading-' + Math.random().toString(36).slice(2, 7);
 }
 
-// Pinned to the site timezone rather than the viewer's — see the note on
-// formatSiteDateTime. A bare toLocaleDateString here rendered UTC during SSR
-// and the visitor's zone after hydration, so an evening Bangkok publish showed
-// tomorrow's date on the first paint.
 function formatDate(iso) {
-  return formatSiteDateTime(iso, {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('th-TH', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

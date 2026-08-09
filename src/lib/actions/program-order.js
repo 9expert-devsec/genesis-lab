@@ -6,6 +6,9 @@ import ProgramOrder from '@/models/ProgramOrder';
 import SkillOrder from '@/models/SkillOrder';
 import { requireAdmin } from '@/lib/actions/auth';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
+import { listPrograms } from '@/lib/api/programs';
+import { listSkills } from '@/lib/api/skills';
 
 function programIdOf(p) {
   return String(p.program_id ?? p._id ?? '');
@@ -26,6 +29,20 @@ export async function syncProgramsFromAPI(apiPrograms) {
   await requireAdmin('programs');
   await dbConnect();
 
+  // `programs` is read by /admin/programs through the Data Cache (1h) and was
+  // busted by NOTHING — no revalidateTag anywhere, and no
+  // revalidatePath('/admin/programs') either, so the `window.location.reload()`
+  // this action's caller performs re-read the same cached entry and a program
+  // created upstream could not appear for up to an hour. F5 did not help.
+  // Measured in docs/admin-staleness-audit.md §7.3b.
+  //
+  // Note this one is NOT bust-before-read in the syncFaqs sense: this function
+  // performs no upstream read at all — `apiPrograms` is handed in by the client
+  // from the list the page already rendered. So the bust is here to make the
+  // RELOAD fresh. (That the input is the client's own possibly-stale array is a
+  // separate pre-existing flaw; it is reported, not changed here.)
+  bustUpstream(UPSTREAM_TAGS.PROGRAMS);
+
   for (const prog of apiPrograms ?? []) {
     const programId = programIdOf(prog);
     if (!programId) continue;
@@ -44,6 +61,29 @@ export async function syncProgramsFromAPI(apiPrograms) {
       { upsert: true }
     );
   }
+
+  // Re-read AFTER the bust and AFTER the upserts, and return both halves the
+  // client needs to rebuild its rows. This is what lets the caller drop
+  // `window.location.reload()`: the reload existed only to get fresh data into
+  // a list whose state is seeded once, and it cost a full page flash plus the
+  // admin's scroll position.
+  //
+  // It also fixes the input flaw noted when the bust was added: `apiPrograms`
+  // is the list the CLIENT was holding, so a program created upstream after
+  // that page render is invisible to the upsert loop above. The returned data
+  // is read fresh, so the new row reaches the screen even though this run did
+  // not create an order document for it (the next sync does).
+  const [programsResp, orderRows] = await Promise.all([
+    listPrograms().catch(() => ({ items: [] })),
+    ProgramOrder.find({}).lean(),
+  ]);
+  return {
+    ok: true,
+    data: {
+      programs: programsResp?.items ?? [],
+      orderData: JSON.parse(JSON.stringify(orderRows)),
+    },
+  };
 }
 
 /**
@@ -109,6 +149,10 @@ export async function syncSkillsFromAPI(apiSkills) {
   await requireAdmin('programs');
   await dbConnect();
 
+  // Same as syncProgramsFromAPI above — SkillOrderClient.jsx:94-95 is the same
+  // sync-then-window.location.reload() shape.
+  bustUpstream(UPSTREAM_TAGS.SKILLS);
+
   for (const skill of apiSkills ?? []) {
     const skillId = skillIdOf(skill);
     if (!skillId) continue;
@@ -125,6 +169,20 @@ export async function syncSkillsFromAPI(apiSkills) {
       { upsert: true }
     );
   }
+
+  // Same as syncProgramsFromAPI above — fresh read so the caller can replace
+  // its rows without a document reload.
+  const [skillsResp, orderRows] = await Promise.all([
+    listSkills().catch(() => ({ items: [] })),
+    SkillOrder.find({}).lean(),
+  ]);
+  return {
+    ok: true,
+    data: {
+      skills: skillsResp?.items ?? [],
+      orderData: JSON.parse(JSON.stringify(orderRows)),
+    },
+  };
 }
 
 export async function getOrderedSkills(apiSkills) {

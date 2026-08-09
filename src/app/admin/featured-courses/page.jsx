@@ -1,6 +1,7 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { getFeaturedCourses } from '@/lib/actions/featured-courses';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { AddedRowChannel } from '@/app/admin/_components/AddedRowChannel';
 import { AddFeaturedCourseForm } from './_components/AddFeaturedCourseForm';
 import { FeaturedCourseList } from './_components/FeaturedCourseList';
 
@@ -44,12 +45,17 @@ export default async function Page() {
         </p>
       </div>
 
-      <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
-        <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
-        <AddFeaturedCourseForm courses={searchable} />
-      </div>
+      {/* The form and the list are siblings and this is a server component, so
+          they cannot share state directly. AddedRowChannel is the one-verb link
+          that lets the form hand a created row to the list, which owns the rows. */}
+      <AddedRowChannel>
+        <div className="rounded-9e-lg border border-[var(--surface-border)] bg-white p-6">
+          <h2 className="mb-4 text-base font-bold text-9e-navy">เพิ่มคอร์ส</h2>
+          <AddFeaturedCourseForm courses={searchable} />
+        </div>
 
-      <FeaturedCourseList courses={featured} />
+        <FeaturedCourseList courses={featured} />
+      </AddedRowChannel>
     </div>
   );
 }

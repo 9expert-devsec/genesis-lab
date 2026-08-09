@@ -82,7 +82,7 @@ export async function POST(req) {
     ipAddress,
   });
 
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
 
   // Pre-compute address string so templates stay logic-free
   const quotationAddress =
