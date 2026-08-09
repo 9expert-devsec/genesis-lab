@@ -53,6 +53,7 @@ import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { aiFetch, unwrap } from '@/lib/api/client';
 import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
+import { outlineFromFormValue } from '@/lib/courses/courseOutline';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -263,6 +264,20 @@ function shapePayload(formData) {
     website_urls:                linesOf(formData, 'website_urls'),
     exam_links:                  linesOf(formData, 'exam_links'),
     training_topics:             parseTrainingTopics(formData),
+    /* ── OUTLINE PDFs — ALWAYS BOTH KEYS, ALWAYS THE FULL 8-KEY OBJECT ──────
+     *
+     * The form posts a root-relative path per language, or '' to clear. An
+     * empty value becomes the ALL-EMPTY OBJECT, never an omitted key: omitting
+     * asks MSDB to leave the previous value alone, so "clear" would appear to
+     * work in the form and change nothing upstream — the same silent no-op
+     * that hid the training_topics damage.
+     *
+     * The five keys we do not set (file_id, filename, content_type, size,
+     * uploaded_at) are left exactly as upstream leaves them. Measured: they
+     * are empty even on POWER-BI, the row that renders a working button.
+     */
+    course_outline_th:           outlineFromFormValue(toStr(get('course_outline_th_path'))),
+    course_outline_en:           outlineFromFormValue(toStr(get('course_outline_en_path'))),
   };
 }
 
@@ -396,3 +411,4 @@ export async function deleteCourse(id) {
     return { ok: false, error: err?.message ?? 'ลบหลักสูตรไม่สำเร็จ' };
   }
 }
+

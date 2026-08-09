@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { X } from 'lucide-react';
@@ -9,6 +9,8 @@ import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
+import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
+import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -63,6 +65,33 @@ export function CourseForm({
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
+
+  /**
+   * WARN — do not block — when an edit renames a course that already has an
+   * outline PDF.
+   *
+   * The stored path embeds the course_id, so the saved row keeps pointing at a
+   * file named for the OLD id. Nothing breaks immediately: the file is still
+   * there and still resolves. Blocking the rename would be a larger
+   * intervention than the problem, and silently re-deriving the path would
+   * point the row at a file nobody uploaded — so this says exactly what will go
+   * stale, names both values, and leaves the decision with the admin.
+   */
+  useEffect(() => {
+    const stale = outlineWouldGoStale({
+      previousCourseId: initial?.course_id,
+      nextCourseId: courseId,
+      outlines: { th: initial?.course_outline_th, en: initial?.course_outline_en },
+    });
+    if (stale) {
+      console.warn(
+        `[CourseForm] course_id is changing from "${stale.from}" to "${stale.to}" while an `
+        + `outline PDF exists (${stale.langs.join(', ').toUpperCase()}). The stored path still `
+        + `names the OLD id, so it will keep resolving to the old file until the PDF is `
+        + `re-uploaded under the new id.`
+      );
+    }
+  }, [courseId, initial]);
 
   // ── Section 4: program + skills ───────────────────────────────────
   const initialSkillIds = (() => {
@@ -543,6 +572,29 @@ export function CourseForm({
           name="training_topics"
           initialTopics={seedTrainingTopics(initial, { onLegacyShape: warnLegacyTopicShape })}
         />
+      </Section>
+
+      {/* ───────────────────────────────────────────────────────────
+          Section 7b — Course outline PDFs (TH / EN)
+      ─────────────────────────────────────────────────────────── */}
+      <Section
+        title="7b. ไฟล์หลักสูตร (Course Outline PDF)"
+        hint="อัปโหลดแยกภาษา ไทย/อังกฤษ — ชื่อไฟล์สร้างจาก course_id อัตโนมัติ, อัปโหลดซ้ำจะแทนที่ไฟล์เดิมที่ URL เดิม"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <CourseOutlineUpload
+            lang="th"
+            courseId={courseId}
+            label="ภาษาไทย (TH)"
+            initialPath={initial?.course_outline_th?.download_url ?? ''}
+          />
+          <CourseOutlineUpload
+            lang="en"
+            courseId={courseId}
+            label="ภาษาอังกฤษ (EN)"
+            initialPath={initial?.course_outline_en?.download_url ?? ''}
+          />
+        </div>
       </Section>
 
       {/* ───────────────────────────────────────────────────────────

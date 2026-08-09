@@ -532,8 +532,27 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  * DOES record an audit row. See the note at the foot of src/lib/audit/
  * sweptMenus.js for why a file written instrumented from the start is absent
  * from a list that tracks a retrofit.
+ *
+ * ── 163 → 164: course-outlines.js ──────────────────────────────────────────
+ * The new module src/lib/actions/course-outlines.js adds TWO exports, and only
+ * ONE of them moves this number:
+ *
+ *   recordCourseOutlineUpload  writes Mongo directly (CourseOutlineFile
+ *                              .findOneAndUpdate, recording which bytes landed
+ *                              and bumping the version counter), so the
+ *                              FILE-LOCAL classifier sees it → +1 here and +1
+ *                              in W2-b's depth-0 figure, 159 → 160.
+ *   signCourseOutlineUpload    signs a browser-direct Cloudinary upload and
+ *                              writes NOTHING — not Mongo, not MSDB. It is
+ *                              correctly classified read-only and is absent
+ *                              from both counts, even though it does record an
+ *                              audit row (signing a destructive overwrite is an
+ *                              event worth logging whether or not it mutates
+ *                              our own storage).
+ *
+ * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
  */
-const MUTATING_EXPORT_COUNT = 163;
+const MUTATING_EXPORT_COUNT = 164;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -700,11 +719,13 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 159,
+    zero, 160,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
     'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
-    '(which mutates through a file-local helper), and 159 since media.js gained ' +
-    'deleteMediaFile (which writes directly)'
+    '(which mutates through a file-local helper), 159 since media.js gained ' +
+    'deleteMediaFile (which writes directly), and 160 since course-outlines.js gained ' +
+    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate). Its sibling ' +
+    'signCourseOutlineUpload writes nothing and is deliberately NOT in this figure'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
