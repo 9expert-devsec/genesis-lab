@@ -568,8 +568,32 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *   listWebrootReplacements    read-only.
  *
  * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
+ *
+ * ── 165 → 166: prepareWebrootReplacement gains a Mongo write ───────────────
+ * The upload route now refuses to mint a Blob token without a single-use
+ * receipt, and `prepareWebrootReplacement` is what issues one — so the export
+ * that previously touched only the Blob store now writes to Mongo as well.
+ *
+ * IT MOVES THE DEPTH-1 TOTAL AND NOT THE DEPTH-0 FIGURE, which is the whole
+ * reason the walk exists. The write is `WebrootUploadReceipt.create(...)` inside
+ * `issueWebrootReceipt`, in src/lib/webroot/receiptStore.js — an IMPORTED
+ * helper. The file-local classifier sees `issueWebrootReceipt(doc)` and reads it
+ * as an ordinary call, exactly as it read `syncFaqsAction` before the walk. So
+ * depth 0 stays 161 and REACHED_THROUGH_IMPORT grows from four entries to five.
+ *
+ * That the fifth entry is a live one matters: the four before it were all found
+ * during the walk's own construction, so none of them tested whether the walk
+ * still works on code written afterwards. This one was.
+ *
+ * (receiptStore.js is deliberately `.js` and not `.mjs`. resolveSpec below only
+ * follows `.js`/`.jsx`, so a `.mjs` helper would be invisible to the walk and
+ * this export would keep reading as non-mutating while writing to Mongo — a hole
+ * in the guard, dressed as a file-extension preference. The store's own header
+ * says so too.)
+ *
+ * Both numbers still differ by exactly the REACHED_THROUGH_IMPORT exports.
  */
-const MUTATING_EXPORT_COUNT = 165;
+const MUTATING_EXPORT_COUNT = 166;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -577,6 +601,7 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
   'src/lib/actions/previewAccess.js': { submitPreviewPassword: 'src/lib/actions/pageBuilder.js#verifyPreviewPassword' },
+  'src/lib/actions/webroot-documents.js': { prepareWebrootReplacement: 'src/lib/webroot/receiptStore.js#issueWebrootReceipt' },
 });
 
 test('the mutating-export count across every action module is pinned', () => {
@@ -749,7 +774,10 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
     MUTATING_EXPORT_COUNT,
-    'and the delta is exactly the four exports named in REACHED_THROUGH_IMPORT'
+    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT — five of '
+    + 'them since prepareWebrootReplacement started issuing upload receipts through '
+    + 'receiptStore.js. If only one of the two numbers moved, they now disagree by '
+    + 'construction and one of them is wrong'
   );
 });
 

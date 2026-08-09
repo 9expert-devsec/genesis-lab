@@ -52,6 +52,36 @@ test('the happy path archives, verifies, THEN authorises', async () => {
   assert.deepEqual(s.copied, [{ from: `webroot-documents/${FILE}`, to: r.archivePathname }]);
 });
 
+test('authorise is handed the archive key it must bind a receipt to', async () => {
+  // The receipt issued in `authorise` is bound to (filename, archivePathname,
+  // stamp), and it can only be bound to a key it was given. A caller that
+  // rebuilt the key from filename+stamp on its own would be a SECOND derivation
+  // of a value that has to match this one exactly, with nothing forcing it to.
+  let seen = null;
+  const s = spies({
+    authorise: async (t, extra) => { seen = { t, extra }; return { ok: true }; },
+  });
+  const r = await run(s.deps);
+  assert.equal(r.status, REPLACE.AUTHORISED);
+  assert.equal(seen.extra.archivePathname, webrootArchivePathname(FILE, STAMP));
+  assert.equal(seen.extra.archivePathname, r.archivePathname, 'and it is the SAME key the flow reports');
+  assert.equal(seen.extra.previousBytes, LIVE_SIZE);
+});
+
+test('CONTROL: authorise receives that second argument on the happy path ONLY', async () => {
+  // The assertion above reads a value out of a call that only happens on
+  // success. Without this, "the archive key was passed" could not be told apart
+  // from "authorise was never called at all" — which is what every failure path
+  // in this file asserts.
+  let calls = 0;
+  const s = spies({
+    copy: async () => { throw new Error('nope'); },
+    authorise: async () => { calls += 1; return {}; },
+  });
+  await run(s.deps);
+  assert.equal(calls, 0, 'a failed archive must not reach the step that issues a receipt');
+});
+
 // ── THE CLAIM: a failed archive issues no token ─────────────────────────────
 test('archive copy FAILS → no token was issued', async () => {
   const s = spies({ copy: async () => { throw new Error('blob copy exploded'); } });

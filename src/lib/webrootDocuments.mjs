@@ -150,6 +150,36 @@ export const WEBROOT_MAX_BYTES = 64 * 1024 * 1024;
 export const WEBROOT_CONTENT_TYPE = 'application/pdf';
 
 /**
+ * A TRIPWIRE, NOT A CAPACITY CLAIM. Same species as WEBROOT_MAX_BYTES above and
+ * ADMIN_LIST_LIMIT — the number is anchored to something, and the anchor is
+ * written down so the next person can argue with it rather than guess at it.
+ *
+ * ── WHAT WINDOW THIS ACTUALLY HAS TO COVER ──────────────────────────────────
+ * The receipt is issued when `prepareWebrootReplacement` returns and is spent
+ * when the upload route mints a token. Between those two points sits exactly
+ * ONE browser round trip: the action's response reaching the page, and the
+ * page's `upload()` call reaching `onBeforeGenerateToken`.
+ *
+ * It does NOT have to cover the upload of the 42.6 MiB catalog. The token is
+ * minted BEFORE any bytes move — the browser then talks to Blob directly, and
+ * how long that takes is irrelevant to a receipt that was already burned. A
+ * five-minute window sized for "the catalog might upload slowly" would be
+ * reasoning about the wrong interval.
+ *
+ * ── WHY FIVE MINUTES AND NOT FIVE SECONDS ───────────────────────────────────
+ * The round trip is sub-second in any healthy case, so five minutes is roughly
+ * three orders of magnitude of headroom — deliberately, because the cost of
+ * being too tight is an admin who re-picks a 42.6 MiB file, and the cost of
+ * being loose is bounded by the receipt being single-use anyway.
+ *
+ * It is NOT a statement that a five-minute gap is normal. It is the point past
+ * which the request is more likely a REPLAY than a slow client, which is the
+ * only judgement a TTL can encode. Nothing has measured the real distribution
+ * of that gap; when the admin page ships and there is one, re-anchor this.
+ */
+export const WEBROOT_RECEIPT_TTL_MS = 5 * 60 * 1000;
+
+/**
  * Resolve WHICH of the three the client asked for, into everything the server
  * needs. The client sends a NAME from the list — never a path.
  *

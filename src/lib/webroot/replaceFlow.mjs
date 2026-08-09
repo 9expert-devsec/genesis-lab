@@ -53,7 +53,8 @@ export const REPLACE = {
  *   headLive(blobPathname)   → { size, url } | null   the object being replaced
  *   copy(from, to)           → whatever              archive it
  *   headArchive(pathname)    → { size } | null       verification read
- *   authorise(target)        → token/permission      ONLY reached on success
+ *   authorise(target, { archivePathname, previousBytes })
+ *                            → token/permission      ONLY reached on success
  *
  * Returns `{ status, ... }`. `authorised` is the only status carrying a token.
  */
@@ -118,7 +119,13 @@ export async function runReplaceFlow({ filename, bytes, stamp }, deps) {
   }
 
   // ── 5. only now ─────────────────────────────────────────────────────────
-  const token = await authorise(target);
+  //
+  // The archive key is handed to `authorise` rather than left for the caller to
+  // recompute. The receipt it issues is BOUND to this key, and a caller that
+  // rebuilt the key from (filename, stamp) on its own would be a second
+  // derivation of the same value — the shape that has to agree with this one
+  // and has nothing forcing it to.
+  const token = await authorise(target, { archivePathname, previousBytes: Number(live.size) });
   return {
     status: REPLACE.AUTHORISED,
     target,

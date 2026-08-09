@@ -1,10 +1,11 @@
 import { handleUpload } from '@vercel/blob/client';
 
 import { requirePageAction } from '@/lib/rbac/guard';
+import { runMintFlow } from '@/lib/webroot/receiptFlow.mjs';
+import { burnWebrootReceipt, readWebrootReceipt } from '@/lib/webroot/receiptStore';
 import {
   WEBROOT_CONTENT_TYPE,
   WEBROOT_MAX_BYTES,
-  webrootUploadTarget,
 } from '@/lib/webrootDocuments.mjs';
 
 /**
@@ -17,21 +18,35 @@ import {
  * can put it straight into the store instead. So this route never sees the
  * bytes — it issues a scoped token and is told, afterwards, what landed.
  *
- * ══ THE CLIENT SENDS A NAME. IT DOES NOT SEND A PATH. ═══════════════════════
+ * ══ THE CLIENT SENDS A RECEIPT. IT DOES NOT SEND A NAME OR A PATH. ══════════
  *
  * `handleUpload` hands us the pathname the CLIENT asked for, and that is
  * exactly the value that must not be trusted: it decides which object in the
- * store gets overwritten. So the flow is:
+ * store gets overwritten. clientPayload is no better — it is the same request
+ * body. So neither of them names the file.
  *
- *   1. read the intended filename out of clientPayload
- *   2. DERIVE the pathname from it, through webrootUploadTarget(), which
- *      matches against a frozen list of three rather than sanitising a shape
- *   3. REFUSE unless the derived pathname and the requested one are identical
+ * Instead the server action archives the previous bytes, verifies the copy, and
+ * issues a single-use receipt. This route burns that receipt, reads the filename
+ * OUT OF IT, re-derives the pathname through webrootUploadTarget(), and refuses
+ * unless the derived pathname and the requested one are identical.
  *
- * Step 3 is not redundant with step 2. Deriving proves what we intended; the
- * comparison proves the token we are about to sign authorises that and nothing
- * else. A token minted for the wrong pathname is a token that overwrites the
- * wrong document, and it would be signed by us.
+ * The comparison is not redundant with the derivation. Deriving proves what we
+ * intended; comparing proves the token we are about to sign authorises that and
+ * nothing else. Without it a valid receipt for the company profile could be
+ * replayed to authorise an overwrite of the catalog — and the token would be
+ * signed by us.
+ *
+ * ══ WHY THE RECEIPT, AND NOT JUST THE FROZEN LIST ═══════════════════════════
+ *
+ * Deriving from the frozen three bounds the blast radius to those three, which
+ * is not nothing. But R3's rule is that an overwrite cannot happen WITHOUT A
+ * BACKUP, and the archive is taken by the action, not here. A caller who skipped
+ * the action still got a token — an overwrite of a real document with no archive
+ * behind it. Holding a receipt IS the proof the archive was made and verified.
+ *
+ * The decision lives in src/lib/webroot/receiptFlow.mjs with its dependencies
+ * injected, so a test can assert the mint spy was never called. "It refuses" is
+ * a claim about a message; a call count of zero is evidence no token exists.
  *
  * ══ THE CEILING IS DELIBERATE, AND IT IS NOT THE MEDIA ONE ══════════════════
  *
@@ -62,41 +77,45 @@ export async function POST(request) {
       body,
       request,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
-        let intended = null;
-        try {
-          intended = JSON.parse(String(clientPayload ?? '{}'))?.filename ?? null;
-        } catch {
-          throw new Error('clientPayload must be JSON carrying { filename }');
-        }
+        const result = await runMintFlow({ pathname, clientPayload, now: Date.now() }, {
+          burn: burnWebrootReceipt,
+          diagnose: readWebrootReceipt,
 
-        const target = webrootUploadTarget(intended);
-        if (!target.ok) throw new Error(target.reason);
+          // REFUSALS ONLY. A refused mint is either a bug in the admin page or
+          // somebody calling this route by hand, and neither leaves a trace
+          // anywhere else. A SUCCESSFUL mint is already covered twice over — the
+          // prepare wrote an audit row, the completion writes a replacement
+          // record — so logging it here would be a third copy of one fact.
+          log: async (entry) => {
+            console.warn(
+              '[webroot-upload] token refused:', entry.status, '—', entry.detail,
+              `(pathname "${entry.pathname}")`,
+            );
+          },
 
-        // THE COMPARISON. The token is scoped to the pathname the client asked
-        // for, so that pathname must equal the one we derived — not merely
-        // resemble it.
-        if (pathname !== target.blobPathname) {
-          throw new Error(
-            `pathname "${pathname}" does not match the derived target `
-            + `"${target.blobPathname}" for ${target.filename}`,
-          );
-        }
-
-        return {
-          allowedContentTypes: [WEBROOT_CONTENT_TYPE],
-          maximumSizeInBytes: WEBROOT_MAX_BYTES,
-          addRandomSuffix: false,
-          // The public URL is printed on things; a replacement must land at the
-          // same key or every rewrite destination goes stale.
-          allowOverwrite: true,
-          // Re-passed on every put: cacheControlMaxAge is a PER-PUT option, so
-          // an overwrite that omits it silently drops back to the default.
-          cacheControlMaxAge: 60 * 60 * 24 * 30,
-          tokenPayload: JSON.stringify({
-            filename: target.filename,
-            by: session.user?.name || session.user?.id || '',
+          mint: async ({ target }) => ({
+            allowedContentTypes: [WEBROOT_CONTENT_TYPE],
+            maximumSizeInBytes: WEBROOT_MAX_BYTES,
+            addRandomSuffix: false,
+            // The public URL is printed on things; a replacement must land at the
+            // same key or every rewrite destination goes stale.
+            allowOverwrite: true,
+            // Re-passed on every put: cacheControlMaxAge is a PER-PUT option, so
+            // an overwrite that omits it silently drops back to the default.
+            cacheControlMaxAge: 60 * 60 * 24 * 30,
+            tokenPayload: JSON.stringify({
+              filename: target.filename,
+              by: session.user?.name || session.user?.id || '',
+            }),
           }),
-        };
+        });
+
+        // The refusal REASON is logged above, server-side. What goes back to the
+        // caller is the short status and nothing more: the detail names which
+        // receipts exist and when they expired, and a caller who is poking at
+        // this route is precisely who must not be told that.
+        if (!result.minted) throw new Error(`upload token refused: ${result.status}`);
+        return result.token;
       },
 
       // Recording lives in the action, which knows the archive key. This hook
