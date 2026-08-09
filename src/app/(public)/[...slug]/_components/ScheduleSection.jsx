@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { CalendarDays } from 'lucide-react';
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { isEarlyBirdSchedule } from '@/lib/isEarlyBird';
+import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 
 /**
  * Detail-page schedule block.
@@ -37,7 +38,7 @@ export function ScheduleSection({ course, schedules, earlyBird }) {
     : null;
 
   return (
-    <section id="schedule" className="scroll-mt-24">
+    <section id="schedule" className={SECTION_ANCHOR_CLASS}>
       <TrainingTypeLegend />
 
       <div className="flex items-center gap-2 rounded-t-xl bg-9e-action px-5 py-3">
