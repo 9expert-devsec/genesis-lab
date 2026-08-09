@@ -528,11 +528,27 @@ function mixedSlice(all, n) {
   take('parens', (f) => /\(/.test(f.publicPath), 4);
   take('at-sign', (f) => /@/.test(f.publicPath), 2);
   take('spaces', (f) => / /.test(f.publicPath), 4);
-  // Measured on this staging tree: Stage 1 holds ZERO `&`, `#` or trailing-space
-  // names \u2014 every substituted-id case lives under sites/default/files, i.e.
-  // Stage 2. This take stays so the slice front-loads them the moment it runs
-  // against a tree that has them, rather than silently covering nothing.
-  take('substituted (&/#/trim)', (f) => f.publicIdSubstituted, 6);
+  // RESOLVER-ROUTED FIRST, and this ordering is the point of the whole slice.
+  //
+  // `publicIdSubstituted` covers three rules with two very different delivery
+  // consequences: a trailing-space name is trimmed and then served STATICALLY
+  // (Cloudinary trims a trailing space when resolving an id, so the derived URL
+  // already hits the right asset), while `&` and `#` are LOSSY and must travel
+  // through the /legacy-file resolver.
+  //
+  // Taking `publicIdSubstituted` generically filled all six slots with
+  // trailing-space files \u2014 measured on this tree, where they sort first \u2014 so the
+  // pilot exercised the resolver ZERO times while appearing to cover
+  // "substituted". The resolver path carries the newest logic and the only
+  // lossy, non-invertible mapping, so it gets its own take, first.
+  // `#` gets its OWN take ahead of `&`: it is the newest reviewed substitution
+  // (3f3c5f6) and the only one whose reachable spelling is percent-encoded,
+  // because a literal `#` is the URL fragment delimiter and never reaches the
+  // server. Folding it in with `&` filled every slot with ampersand files, which
+  // sort first — so the case with the least evidence behind it got none.
+  take('HASH → sharp (newest rule)', (f) => f.publicPath.includes('#'), 3);
+  take('RESOLVER-routed (&)', (f) => f.publicPath.includes('&'), 4);
+  take('trailing-space (static)', (f) => f.publicIdSubstituted, 3);
   take('pdf', (f) => f.ext === 'pdf', 5);
   take('near-ceiling', (f) => f.diskBytes > 8 * MB, 4);
   take('raw doc', (f) => f.resourceType === 'raw', 4);
