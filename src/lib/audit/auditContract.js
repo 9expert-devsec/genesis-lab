@@ -212,6 +212,14 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
 
   entry('schedule_pdf', 'pdf', 'ไฟล์ตารางอบรม PDF', 'full'),
 
+  // /admin/media. DELETE is the only mutation this menu records, and act_only
+  // is not a carve-out — it is the whole row. `recordId` holds the public_id,
+  // which IS the URL that stopped resolving, so the one fact a reader wants is
+  // already in the identity of the row. A `before` here could only be a
+  // Cloudinary resource description (dimensions, etag, a version number) that
+  // nobody asked for and that says nothing about what was lost.
+  entry('media', 'file', 'ไฟล์ในคลังไฟล์', 'act_only'),
+
   // ── ระบบ ────────────────────────────────────────────────────────
   // PII entities (§5.1/§5.2): status transitions only, never a field diff.
   entry('registrations', 'public',  'ใบสมัครอบรม (Public)', 'status_only'),

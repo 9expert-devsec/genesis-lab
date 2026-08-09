@@ -58,6 +58,34 @@ export const SWEPT = Object.freeze([
   { file: 'src/lib/actions/articles.js', menus: ['articles'] },
 ]);
 
+/**
+ * ── ONE INSTRUMENTED FILE IS DELIBERATELY ABSENT FROM THE LIST ABOVE ────────
+ *
+ * `src/lib/actions/media.js` records an audit row for `deleteMediaFile`
+ * (`media|file`, action `delete`) and is NOT listed. Stated here rather than
+ * left as an omission, because "every instrumented file appears in SWEPT" is
+ * exactly the invariant somebody will check against this file.
+ *
+ * Two reasons, and both are about what listing it would MEAN rather than about
+ * effort:
+ *
+ *   · The definition of done above requires MOUNTING the history widget on that
+ *     menu's screens. /admin/media has no per-record screen to mount it on — a
+ *     row is a Cloudinary asset, not a document with a detail page — so listing
+ *     it would flip `isMenuSwept('media')` to true for a widget that is
+ *     nowhere, which is the "wired up" claim this module exists to make honest.
+ *
+ *   · The sweep is a retrofit of 38 pre-existing action files, all of which
+ *     guard with `requireAdmin('<literal>')`. media.js is new code, written
+ *     instrumented, and guards with `requirePageAction(PAGE_KEY)`. The coverage
+ *     guard reads that literal out of the source text to check it against the
+ *     recorded menu, and would report a false red on a file that is not doing
+ *     anything wrong.
+ *
+ * If /admin/media ever grows a per-file detail view, both reasons expire
+ * together and media.js should join the list.
+ */
+
 /** The file list the coverage guard iterates. Derived — never typed twice. */
 export const SWEPT_FILES = Object.freeze(SWEPT.map((s) => s.file));
 

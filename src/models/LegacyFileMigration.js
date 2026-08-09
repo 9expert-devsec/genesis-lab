@@ -54,6 +54,22 @@ import mongoose from 'mongoose';
  *                be able to see WHY a file was not copied without re-deriving
  *                the decision. Nothing here is ever renamed or suffixed —
  *                every file that IS uploaded keeps "public_id is the path".
+ *   deleted      the asset WAS here and an admin destroyed it from
+ *                /admin/media. Terminal, and the only status that describes
+ *                something done AFTER the migration rather than during it.
+ *
+ *                ── WHY THE ROW IS NOT REMOVED ──────────────────────────────
+ *                Deleting the row would answer "did this file copy across?"
+ *                with silence, and silence already means "we never looked at
+ *                it". A migration record whose failure mode is that successful
+ *                copies vanish from it is a record nobody can reason from —
+ *                and the deletion is exactly the moment somebody will later
+ *                need to. So the row stays, `publicId` keeps pointing at the
+ *                id that no longer resolves, and `note` gains a line saying
+ *                who removed it. The authoritative WHO/WHEN is the admin audit
+ *                trail (AdminAuditLog, `media|file`, action `delete`); this
+ *                status is what makes the fact visible to anyone reading the
+ *                migration collection on its own.
  *
  * `sourcePath` is the unique key — it is what the legacy web refers to and the
  * only identifier that exists on both sides of the move.
@@ -181,7 +197,7 @@ const LegacyFileMigrationSchema = new mongoose.Schema(
 
     status:       {
       type: String,
-      enum: ['pending', 'uploaded', 'failed', 'exists', 'skipped-dead', 'superseded'],
+      enum: ['pending', 'uploaded', 'failed', 'exists', 'skipped-dead', 'superseded', 'deleted'],
       default: 'pending',
       index: true,
     },

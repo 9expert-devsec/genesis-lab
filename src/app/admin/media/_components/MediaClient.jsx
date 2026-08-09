@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check, Copy, ExternalLink, FileText, FolderOpen, Image as ImageIcon,
-  Loader2, RefreshCw, Upload,
+  Check, ChevronDown, Copy, ExternalLink, FileText, FolderOpen, Image as ImageIcon,
+  Loader2, RefreshCw, Trash2, Upload,
 } from 'lucide-react';
 
-import { listMediaCategories, listMediaFiles, signMediaUpload } from '@/lib/actions/media';
+import {
+  deleteMediaFile, listMediaCategories, listMediaFiles, signMediaUpload,
+} from '@/lib/actions/media';
 import { ALLOWED_UPLOAD_EXTENSIONS } from '@/lib/legacyUploadPolicy.mjs';
 
 function formatBytes(bytes) {
@@ -69,13 +71,93 @@ function CopyUrlButton({ url, label = 'คัดลอกลิงก์' }) {
   );
 }
 
-export default function MediaClient({ initialCategories, initialError }) {
+/**
+ * The delete control for one row.
+ *
+ * ── WHY window.confirm AND NOT A CUSTOM MODAL ───────────────────────────────
+ * It is what this admin already does — twenty-odd destructive actions across
+ * the screens use it, several with the same `\n\n` detail line. A bespoke
+ * dialog here would be the only one of its kind, and the thing that matters
+ * about a delete confirmation is that it NAMES the thing and states the
+ * consequence, which this does. The wording is the point, not the chrome.
+ */
+function DeleteFileButton({ file, busy, onDelete }) {
+  const confirmThenDelete = () => {
+    const message =
+      `ลบไฟล์ "${file.filename}"\n\n`
+      + `ลบถาวร — URL ${file.publicPath} จะใช้ไม่ได้อีก\n\n`
+      + 'หน้าเว็บหรือบทความที่ลิงก์ไปยังไฟล์นี้จะเสีย และย้อนกลับไม่ได้';
+    if (!window.confirm(message)) return;
+    onDelete(file);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={confirmThenDelete}
+      disabled={busy}
+      title={`ลบ ${file.publicPath}`}
+      aria-label={`ลบไฟล์ ${file.publicPath}`}
+      className="inline-flex shrink-0 items-center gap-1 rounded-9e-sm border border-red-200 px-2 py-1 text-xs text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50 dark:border-red-500/40 dark:hover:bg-red-500/10"
+    >
+      {busy
+        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        : <Trash2 className="h-3.5 w-3.5" />}
+      {busy ? 'กำลังลบ...' : 'ลบ'}
+    </button>
+  );
+}
+
+export default function MediaClient({ initialCategories, initialCounts, initialError }) {
   const [categories, setCategories] = useState(initialCategories);
+  const [counts, setCounts] = useState(initialCounts ?? {});
   const [active, setActive] = useState(initialCategories[0] ?? '');
   const [files, setFiles] = useState([]);
   const [listing, setListing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [listError, setListError] = useState(initialError);
-  const [truncated, setTruncated] = useState(false);
+  const [cursors, setCursors] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+
+  const [deletingId, setDeletingId] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef(null);
+
+  /**
+   * Files destroyed during this page view, filtered out of every later listing.
+   *
+   * ── WHY THIS IS NEEDED, MEASURED AGAINST THE LIVE ACCOUNT ───────────────────
+   * Cloudinary's delivery endpoint reflects a destroy IMMEDIATELY — the URL
+   * answers 404 "Resource not found" within the same second. Its Admin API
+   * prefix listing does NOT: the destroyed asset kept coming back from
+   * `api.resources` for over five minutes. Measured, with two controls — a
+   * destroy with `invalidate` and one without behaved identically, and the
+   * Search API reported the folder empty while `api.resources` still listed two
+   * assets in it. The asset is gone; that endpoint is stale.
+   *
+   * Without this set the delete looks broken in the most alarming way possible:
+   * the row disappears, the admin presses โหลดใหม่ to confirm, and the file they
+   * just permanently destroyed is back in the list. It is NOT back — the URL is
+   * already dead — but nothing on screen says so.
+   *
+   * A ref rather than state, because filtering must not itself trigger a render,
+   * and it is read inside the load callbacks. It lives for the page view: a
+   * reload clears it, by which time the index has caught up.
+   */
+  const deletedIds = useRef(new Set());
+  const withoutDeleted = useCallback(
+    (list) => list.filter((f) => !deletedIds.current.has(f.publicId)),
+    [],
+  );
+
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
+
+  const showToast = useCallback((message) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 4000);
+  }, []);
 
   const [file, setFile] = useState(null);
   const [targetCategory, setTargetCategory] = useState(initialCategories[0] ?? '');
@@ -92,21 +174,79 @@ export default function MediaClient({ initialCategories, initialError }) {
     [newCategory, targetCategory],
   );
 
+  /**
+   * Load the FIRST page of a category, discarding whatever was on screen.
+   *
+   * Separate from loadMore because the two differ in more than the cursor: this
+   * one resets the list and owns the `listing` spinner, that one appends and
+   * owns `loadingMore`. Folding them into one function with a flag is how a
+   * "load more" click ends up clearing the list it was supposed to extend.
+   */
   const loadFiles = useCallback(async (category) => {
-    if (!category) { setFiles([]); return; }
+    if (!category) { setFiles([]); setCursors(null); setHasMore(false); return; }
     setListing(true);
     setListError('');
+    setDeleteError('');
     try {
       const res = await listMediaFiles(category);
-      if (!res.ok) { setListError(res.error ?? 'โหลดไฟล์ไม่สำเร็จ'); setFiles([]); }
-      else { setFiles(res.files); setTruncated(Boolean(res.truncated)); }
+      if (!res.ok) {
+        setListError(res.error ?? 'โหลดไฟล์ไม่สำเร็จ');
+        setFiles([]); setCursors(null); setHasMore(false);
+      } else {
+        setFiles(withoutDeleted(res.files));
+        setCursors(res.cursors);
+        setHasMore(Boolean(res.hasMore));
+      }
     } catch (err) {
       setListError(err?.message ?? 'โหลดไฟล์ไม่สำเร็จ');
-      setFiles([]);
+      setFiles([]); setCursors(null); setHasMore(false);
     } finally {
       setListing(false);
     }
-  }, []);
+  }, [withoutDeleted]);
+
+  /**
+   * The next page, APPENDED.
+   *
+   * The merge de-duplicates by publicId. A cursor walk is not a snapshot — a
+   * file uploaded between two clicks can shift the page boundary and hand back
+   * a row already on screen — and React would then warn about the duplicate key
+   * and the running count would be wrong.
+   *
+   * Sorting happens here, over everything loaded so far, because the server
+   * cannot sort across pages without holding the whole prefix in memory. A row
+   * from page two can therefore land ABOVE rows from page one, which is the
+   * correct behaviour for an alphabetical list and would look like a bug in a
+   * list that pretended pages were ordered chunks.
+   */
+  const loadMore = useCallback(async () => {
+    if (!active || !hasMore || loadingMore || listing) return;
+    setLoadingMore(true);
+    setListError('');
+    try {
+      const res = await listMediaFiles(active, cursors);
+      if (!res.ok) {
+        setListError(res.error ?? 'โหลดเพิ่มไม่สำเร็จ');
+        // The server hands back the cursors we came in with on failure, so the
+        // next click retries this page instead of restarting the category.
+        if (res.cursors) setCursors(res.cursors);
+        return;
+      }
+      const incoming = withoutDeleted(res.files);
+      setFiles((prev) => {
+        const seen = new Set(prev.map((f) => f.publicId));
+        const merged = [...prev, ...incoming.filter((f) => !seen.has(f.publicId))];
+        merged.sort((a, b) => a.filename.localeCompare(b.filename));
+        return merged;
+      });
+      setCursors(res.cursors);
+      setHasMore(Boolean(res.hasMore));
+    } catch (err) {
+      setListError(err?.message ?? 'โหลดเพิ่มไม่สำเร็จ');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [active, cursors, hasMore, listing, loadingMore, withoutDeleted]);
 
   useEffect(() => { loadFiles(active); }, [active, loadFiles]);
 
@@ -114,9 +254,50 @@ export default function MediaClient({ initialCategories, initialError }) {
     const res = await listMediaCategories();
     if (!res.ok) return;
     setCategories(res.categories);
+    setCounts(res.counts ?? {});
     if (preferred && res.categories.includes(preferred)) setActive(preferred);
     else if (!active && res.categories.length) setActive(res.categories[0]);
   }, [active]);
+
+  /**
+   * Destroy one file.
+   *
+   * The row is dropped from the list only AFTER the server confirms, never
+   * optimistically: an optimistic removal on a destructive action shows the
+   * admin a file that is gone when it is not, and the correction arrives as an
+   * error message they have already scrolled past.
+   *
+   * `alreadyGone` is a success, not a failure — the asset is not there, which
+   * is what was asked for. It is worded differently only so the admin knows
+   * their click was not the one that did it.
+   */
+  const handleDelete = useCallback(async (file) => {
+    setDeletingId(file.publicId);
+    setDeleteError('');
+    try {
+      const res = await deleteMediaFile({
+        publicPath: file.publicPath,
+        resourceType: file.resourceType,
+        // Sent to be COMPARED, never to be used as the delete target — the
+        // server derives its own id and refuses if the two disagree.
+        expectedPublicId: file.publicId,
+      });
+      if (!res.ok) { setDeleteError(res.error ?? 'ลบไฟล์ไม่สำเร็จ'); return; }
+
+      deletedIds.current.add(file.publicId);
+      setFiles((prev) => prev.filter((f) => f.publicId !== file.publicId));
+      setCounts((prev) => (
+        prev[active] > 0 ? { ...prev, [active]: prev[active] - 1 } : prev
+      ));
+      showToast(res.alreadyGone
+        ? `${file.filename} ถูกลบไปแล้วก่อนหน้านี้ — นำออกจากรายการแล้ว`
+        : `ลบ ${file.filename} แล้ว — URL ${file.publicPath} ใช้ไม่ได้อีกต่อไป`);
+    } catch (err) {
+      setDeleteError(err?.message ?? 'ลบไฟล์ไม่สำเร็จ');
+    } finally {
+      setDeletingId('');
+    }
+  }, [active, showToast]);
 
   const handleUpload = async () => {
     setUploadError('');
@@ -298,7 +479,28 @@ export default function MediaClient({ initialCategories, initialError }) {
       ) : null}
 
       {/* ── FILE LIST ────────────────────────────────────────────────── */}
-      <section>
+      {/*
+        aria-busy rather than a disabled region: the tabs and the upload form
+        above stay usable while a page loads, and the only thing that spins is
+        this section. A page fetch is a Cloudinary round trip, and freezing the
+        whole tab for it would make the list feel like the slowest thing on the
+        screen even when the admin wanted to do something else.
+      */}
+      <section aria-busy={listing || loadingMore}>
+        {toast ? (
+          <div
+            role="status"
+            className="mb-3 flex items-start gap-2 rounded-9e-md border border-green-500/40 bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-500/10 dark:text-green-400"
+          >
+            <Check className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="break-all">{toast}</span>
+          </div>
+        ) : null}
+
+        {deleteError ? (
+          <p role="alert" className="mb-3 text-sm text-red-500">{deleteError}</p>
+        ) : null}
+
         {listError ? <p className="text-sm text-red-500">{listError}</p> : null}
 
         {!listError && categories.length === 0 ? (
@@ -327,9 +529,16 @@ export default function MediaClient({ initialCategories, initialError }) {
 
         {!listing && files.length > 0 ? (
           <>
+            {/*
+              The running count, and whether more remain. `counts[active]` comes
+              from the discovery walk, which has already visited every asset —
+              so "50 จาก 81" is a real total rather than a guess, and an admin
+              can tell a short category from a partly-loaded one.
+            */}
             <p className="mb-2 text-xs text-9e-slate-dp-50">
-              {files.length} ไฟล์ในหมวด {active}
-              {truncated ? ' (แสดง 200 รายการแรก)' : ''}
+              แสดง {files.length}
+              {counts[active] > 0 ? ` จาก ${counts[active]}` : ''} ไฟล์ในหมวด {active}
+              {hasMore ? ' · ยังมีอีก' : ' · ครบแล้ว'}
             </p>
             <ul className="flex flex-col gap-2">
               {files.map((f) => (
@@ -374,9 +583,30 @@ export default function MediaClient({ initialCategories, initialError }) {
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
+                  <DeleteFileButton
+                    file={f}
+                    busy={deletingId === f.publicId}
+                    onDelete={handleDelete}
+                  />
                 </li>
               ))}
             </ul>
+
+            {hasMore ? (
+              <div className="mt-3 flex justify-center">
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="inline-flex items-center gap-2 rounded-9e-md border border-9e-action px-4 py-2 text-sm text-9e-action transition-colors hover:bg-9e-action hover:text-white disabled:opacity-50"
+                >
+                  {loadingMore
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <ChevronDown className="h-4 w-4" />}
+                  {loadingMore ? 'กำลังโหลด...' : 'โหลดเพิ่ม'}
+                </button>
+              </div>
+            ) : null}
           </>
         ) : null}
       </section>

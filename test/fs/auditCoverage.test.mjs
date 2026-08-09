@@ -519,8 +519,21 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  * (This used to cite EXPECTED_TESTS in test/run.mjs as the precedent. That
  * control is a FLOOR now, so it is no longer an argument for pinning — the
  * reasoning above stands on its own.)
+ *
+ * ── 162 → 163: deleteMediaFile ──────────────────────────────────────────────
+ * ONE new export in media.js — /admin/media v2's per-file delete. It writes
+ * directly (LegacyFileMigration.updateOne, marking a migration row `deleted`
+ * rather than removing it), so the FILE-LOCAL classifier sees it
+ * and the depth-0 figure in W2-b moves with it, 158 → 159. Both numbers move
+ * together for the same reason the articles.js change did: 163 is 159 plus the
+ * four exports only the import walk can see, and W2-b asserts exactly that sum.
+ *
+ * media.js is NOT in SWEPT_FILES and that is deliberate, not an oversight — it
+ * DOES record an audit row. See the note at the foot of src/lib/audit/
+ * sweptMenus.js for why a file written instrumented from the start is absent
+ * from a list that tracks a retrofit.
  */
-const MUTATING_EXPORT_COUNT = 162;
+const MUTATING_EXPORT_COUNT = 163;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -687,10 +700,11 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 158,
+    zero, 159,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
-    'count before this walk existed, and it is 158 since articles.js gained ' +
-    'moveArticleToRank, which mutates through a file-local helper'
+    'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
+    '(which mutates through a file-local helper), and 159 since media.js gained ' +
+    'deleteMediaFile (which writes directly)'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

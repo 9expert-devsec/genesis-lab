@@ -6,19 +6,22 @@ export const metadata = { title: 'จัดการไฟล์' };
 export const dynamic = 'force-dynamic';
 
 /**
- * /admin/media — v1: browse, upload, copy URL.
+ * /admin/media — v2: browse (paginated), upload, copy URL, delete.
  *
  * Auth is the SAME as every other admin page: middleware, then the NextAuth
- * callback, then requirePage() here. No new mechanism.
+ * callback, then requirePage() here. No new mechanism — and `deleteMediaFile`
+ * guards on the same page key through requirePageAction(), so nothing about the
+ * destructive action is reachable by anyone who could not already see this page.
  *
  * The category list is fetched server-side for the first paint so the tabs are
  * there immediately; the client refetches on upload, when a new category may
- * have appeared.
+ * have appeared. `counts` rides along from the same walk — it is what turns the
+ * paginated list's "แสดง 50" into "แสดง 50 จาก 81".
  */
 export default async function MediaPage() {
   await requirePage('media');
 
-  const { categories, error } = await listMediaCategories();
+  const { categories, counts, error } = await listMediaCategories();
 
   return (
     <div>
@@ -35,7 +38,11 @@ export default async function MediaPage() {
         </p>
       </div>
 
-      <MediaClient initialCategories={categories ?? []} initialError={error ?? ''} />
+      <MediaClient
+        initialCategories={categories ?? []}
+        initialCounts={counts ?? {}}
+        initialError={error ?? ''}
+      />
     </div>
   );
 }
