@@ -550,9 +550,26 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                              event worth logging whether or not it mutates
  *                              our own storage).
  *
+ * ── 164 → 165: webroot-documents.js ────────────────────────────────────────
+ * The site-root PDF replacement module adds THREE exports, and again only ONE
+ * moves the number:
+ *
+ *   recordWebrootReplacement   WebrootDocumentFile.create() — append-only, one
+ *                              row per replacement → +1 here, and +1 in W2-b's
+ *                              depth-0 figure, 160 → 161.
+ *   prepareWebrootReplacement  archives the previous bytes to Blob and returns
+ *                              authorisation. It writes to the BLOB STORE, not
+ *                              to Mongo or MSDB, so the classifier does not see
+ *                              it — correctly, since the classifier is about
+ *                              OUR databases. It records an audit row anyway,
+ *                              because destroying-then-replacing a public
+ *                              document is an event regardless of where the
+ *                              bytes live.
+ *   listWebrootReplacements    read-only.
+ *
  * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
  */
-const MUTATING_EXPORT_COUNT = 164;
+const MUTATING_EXPORT_COUNT = 165;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -719,12 +736,14 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 160,
+    zero, 161,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
     'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
     '(which mutates through a file-local helper), 159 since media.js gained ' +
     'deleteMediaFile (which writes directly), and 160 since course-outlines.js gained ' +
-    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate). Its sibling ' +
+    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate), and 161 since ' +
+    'webroot-documents.js gained recordWebrootReplacement (WebrootDocumentFile.create). ' +
+    'Its sibling ' +
     'signCourseOutlineUpload writes nothing and is deliberately NOT in this figure'
   );
   assert.equal(
