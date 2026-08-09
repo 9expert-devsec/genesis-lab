@@ -122,20 +122,29 @@ export function webrootArchivePathname(file, stamp) {
 }
 
 /**
- * THE CEILING FOR THIS PATH, AND WHY IT IS NOT THE MEDIA ONE.
+ * A TRIPWIRE, NOT A CAPACITY CLAIM.
  *
+ * ── WHY IT IS NOT THE MEDIA CAP ─────────────────────────────────────────────
  * src/lib/legacyUploadPolicy.mjs caps raw uploads at RAW_MAX_BYTES (10 MB)
  * because that is CLOUDINARY's per-asset limit on this plan. These three
- * documents are on Vercel Blob precisely BECAUSE they exceed it — the catalog
- * is 42.6 MiB. Applying the media cap here would refuse the very file this
- * feature exists to replace.
+ * documents are on Vercel Blob precisely BECAUSE they exceed it. Applying the
+ * media cap here would refuse the very file this feature exists to replace.
+ * DO NOT "restore" RAW_MAX_BYTES for consistency — the failure would look like
+ * a policy fix and would break the catalog and the company profile.
  *
- * So this is a separate, deliberate number: generous enough for a catalog that
- * grows, small enough that a mis-picked file is refused before it uploads.
- * DO NOT "restore" RAW_MAX_BYTES here — it would break the catalog and the
- * company profile, and the failure would look like a policy fix.
+ * ── WHAT THE NUMBER MEANS ───────────────────────────────────────────────────
+ * ANCHORED, like ADMIN_LIST_LIMIT: the largest root document today is the
+ * 42.6 MiB catalog, and 64 MiB is roughly 1.5× that. It is NOT a statement
+ * that 64 MiB uploads reliably, and nothing has measured that. It is the point
+ * at which a file is more likely to be the wrong file than a bigger edition —
+ * a mis-picked video or disk image is refused in the browser instead of after
+ * a 60-second upload.
+ *
+ * If a real edition ever approaches it, RAISE IT DELIBERATELY and re-anchor
+ * this comment to the new largest document. Do not treat it as a limit that
+ * was tested.
  */
-export const WEBROOT_MAX_BYTES = 96 * 1024 * 1024;
+export const WEBROOT_MAX_BYTES = 64 * 1024 * 1024;
 
 /** The one content type. These are PDFs and nothing else. */
 export const WEBROOT_CONTENT_TYPE = 'application/pdf';
@@ -163,4 +172,25 @@ export function webrootUploadTarget(filename) {
     blobPathname: webrootBlobPathname(name),
     publicPath: webrootPublicPath(name),
   };
+}
+
+/** Human size for a refusal message. A cap that will not say the numbers is a wall. */
+const mib = (n) => `${(Number(n) / (1024 * 1024)).toFixed(1)} MB`;
+
+/**
+ * Is this upload within the tripwire? Returns null when fine, else a reason
+ * NAMING BOTH NUMBERS — the actual size and the cap.
+ *
+ * "ไฟล์ใหญ่เกินไป" tells an admin nothing: they cannot tell whether they are
+ * 1 MB over or picked a video by mistake, and cannot decide whether to
+ * re-export or to ask for the cap to be raised.
+ */
+export function refuseWebrootSize(bytes) {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return 'ไม่ทราบขนาดไฟล์';
+  if (size > WEBROOT_MAX_BYTES) {
+    return `ไฟล์ขนาด ${mib(size)} เกินเพดาน ${mib(WEBROOT_MAX_BYTES)} `
+      + '— ตรวจสอบว่าเลือกไฟล์ถูกต้องหรือไม่ ถ้าเป็นฉบับจริงให้แจ้งเพื่อปรับเพดาน';
+  }
+  return null;
 }
