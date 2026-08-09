@@ -92,3 +92,75 @@ export function webrootRewrites(blobBase) {
 export function isWebrootDocument(file) {
   return WEBROOT_DOCUMENTS.includes(String(file ?? ''));
 }
+
+/**
+ * Where a replaced object's PREVIOUS bytes are kept.
+ *
+ * ══ DELIBERATELY OUTSIDE webroot-documents/ ═════════════════════════════════
+ *
+ * An archive object under the served prefix would be one rewrite away from
+ * being public, and the whole point of the site-root ruling is that only three
+ * literal paths are reachable there. This prefix has no rewrite pointing at it
+ * and must never get one.
+ */
+export const WEBROOT_ARCHIVE_PREFIX = 'webroot-archive';
+
+/**
+ * `webroot-archive/<name>/<stamp>-<name>.pdf`
+ *
+ * Grouped by document so "every previous edition of the catalog" is one listing
+ * rather than a filter, and stamped so the ordering is readable without reading
+ * metadata. The stamp is passed in rather than taken from the clock here: this
+ * module is pure, and a caller that stamps its own can make the archive key and
+ * the database row agree exactly instead of approximately.
+ */
+export function webrootArchivePathname(file, stamp) {
+  const name = String(file ?? '');
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return `${WEBROOT_ARCHIVE_PREFIX}/${base}/${stamp}-${name}`;
+}
+
+/**
+ * THE CEILING FOR THIS PATH, AND WHY IT IS NOT THE MEDIA ONE.
+ *
+ * src/lib/legacyUploadPolicy.mjs caps raw uploads at RAW_MAX_BYTES (10 MB)
+ * because that is CLOUDINARY's per-asset limit on this plan. These three
+ * documents are on Vercel Blob precisely BECAUSE they exceed it — the catalog
+ * is 42.6 MiB. Applying the media cap here would refuse the very file this
+ * feature exists to replace.
+ *
+ * So this is a separate, deliberate number: generous enough for a catalog that
+ * grows, small enough that a mis-picked file is refused before it uploads.
+ * DO NOT "restore" RAW_MAX_BYTES here — it would break the catalog and the
+ * company profile, and the failure would look like a policy fix.
+ */
+export const WEBROOT_MAX_BYTES = 96 * 1024 * 1024;
+
+/** The one content type. These are PDFs and nothing else. */
+export const WEBROOT_CONTENT_TYPE = 'application/pdf';
+
+/**
+ * Resolve WHICH of the three the client asked for, into everything the server
+ * needs. The client sends a NAME from the list — never a path.
+ *
+ * Returns `{ ok, filename, blobPathname, publicPath }` or `{ ok: false, reason }`.
+ * The refusal names the offending value; a guard that will not say what it
+ * refused sends an admin looking through a UI with three buttons on it.
+ */
+export function webrootUploadTarget(filename) {
+  const name = typeof filename === 'string' ? filename.trim() : '';
+  if (!name) return { ok: false, reason: 'ไม่ได้ระบุไฟล์ที่จะแทนที่' };
+  if (!isWebrootDocument(name)) {
+    return {
+      ok: false,
+      reason: `"${name}" ไม่ใช่เอกสารที่แทนที่ได้ — รองรับเฉพาะ ${WEBROOT_DOCUMENTS.join(', ')}`,
+    };
+  }
+  return {
+    ok: true,
+    filename: name,
+    blobPathname: webrootBlobPathname(name),
+    publicPath: webrootPublicPath(name),
+  };
+}
