@@ -621,6 +621,18 @@ export function CareerPathDetail({ careerPath, faqs = [] }) {
             <FaqAccordionSection
               faqs={faqs}
               id="faq"
+              /* A LITERAL scroll-mt-24 ON PURPOSE — do not "fix" this to
+                 SECTION_ANCHOR_CLASS. Four files on the COURSE branch of this
+                 same catch-all route import that constant, so one holdout looks
+                 like an oversight. It is not. That constant is
+                 `scroll-mt-36 lg:scroll-mt-24`, and the extra 48px below lg
+                 clears CourseSectionTabs — the course page's sticky mobile tab
+                 strip. This page is a different page type and renders no such
+                 strip, so importing the constant here would push every anchor
+                 jump 48px past chrome that does not exist, leaving a gap above
+                 each heading that reads as a broken anchor.
+                 If a career-path page ever grows its own sticky strip, the
+                 answer is a constant of ITS own height, not this one. */
               className="scroll-mt-24"
               headingClassName="mb-6 border-l-4 border-[#005CFF] pl-3 text-2xl font-bold text-[var(--text-primary)]"
             />

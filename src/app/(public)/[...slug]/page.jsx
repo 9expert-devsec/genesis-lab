@@ -20,6 +20,8 @@ import { CourseRequirements } from './_components/CourseRequirements';
 import { CourseOutline } from './_components/CourseOutline';
 import { CourseRoadmap } from './_components/CourseRoadmap';
 import { SidebarNav } from './_components/SidebarNav';
+import { CourseSectionTabs } from './_components/CourseSectionTabs';
+import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
@@ -739,12 +741,27 @@ function CourseDetail({
         programHref={courseProgramHref}
       />
 
+      {/* Mobile-only sticky jump links; the sidebar copy is hidden below lg.
+          Kept as a component rather than inline markup on purpose — see the
+          "WHY A COMPONENT AND NOT INLINE MARKUP" note in CourseSectionTabs.jsx,
+          which is also where the reasoning lives so that this call site carries
+          no element names in prose. That is not tidiness: the depth counter in
+          test/render/stickyBarButtonCoordination scans this span as RAW TEXT,
+          so tag names written here between the article and the aside are
+          counted as if they were markup. */}
+      <CourseSectionTabs
+        course={course}
+        hasSchedules={hasSchedules}
+        hasRelated={hasRelated}
+        hasFaqs={Boolean(faqs?.length)}
+      />
+
       {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
           reflowed sidebar (Course Outline downloads) can scroll clear of it on
           small screens; this is content-length-independent (works when a short
           course has no RelatedCourses below). lg keeps the original pb-8 — the
           large-screen bar is centered and its presentation is unchanged. */}
-      <div className="mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8 ">
+      <div className="mx-auto max-w-[1200px] px-4 pt-8 pb-36 lg:pb-8">
         {/* id="course-content" marks the content zone (main column + sidebar).
             CourseStickyCTA hides once this element's bottom scrolls above the
             viewport — i.e. before the related-courses section / footer — and
@@ -754,6 +771,24 @@ function CourseDetail({
           className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]"
         >
           <div className="min-w-0 space-y-10">
+            {/* MOBILE slot for the course-outline downloads. Below lg the aside
+                reflows to the very bottom of the page, so the sidebar copy is
+                unreachable in practice — the same defect fb03dc1 fixed for the
+                section nav, one component later in the same aside.
+
+                Inside the content wrapper rather than beside the tab strip, so
+                it takes the body's px-4 inset and the column's space-y-10
+                rhythm without inventing a width. The strip is full-bleed with
+                its padding on the scroll track; this is a rounded, bordered
+                card and belongs with the body content, indented from the edge.
+
+                NOT sticky, deliberately. SECTION_ANCHOR_CLASS is currently
+                scroll-mt-36 = 80 header + 48 strip + 16, and a second sticky
+                element would force that number up again in a place nobody
+                remembers to look; and this card is several times the strip's
+                height, so pinning it would permanently spend a third of a
+                phone screen on two download buttons. */}
+            <PDFDownload course={course} className="lg:hidden" layout="row" />
             {earlyBird && (
               <EarlyBirdBanner
                 earlyBird={earlyBird}
@@ -782,7 +817,7 @@ function CourseDetail({
             <FaqAccordionSection
               faqs={faqs}
               id="faq"
-              className="scroll-mt-24"
+              className={SECTION_ANCHOR_CLASS}
               headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
             />
           </div>
@@ -801,7 +836,17 @@ function CourseDetail({
               hasFaqs={Boolean(faqs?.length)}
             />
             {/* <InhouseCTA courseId={course.course_id} /> */}
-            <PDFDownload course={course} />
+            {/* DESKTOP slot. `hidden lg:flex`, not `lg:block` — the card's root
+                is a flex row and block would stack its icon above its text.
+                Without the `hidden` half the card ships TWICE below lg, which
+                looks right in a screenshot of the top of the page and is wrong
+                on every real one.
+
+                `layout="stacked"` puts the buttons under the label, which is
+                what a ~300px column wants. Said here rather than as an `lg:`
+                class on purpose: this slot is the NARROW one despite being the
+                lg one, so a breakpoint would read backwards. */}
+            <PDFDownload course={course} className="hidden lg:flex" layout="stacked" />
           </aside>
         </div>
       </div>

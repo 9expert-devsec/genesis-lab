@@ -705,6 +705,13 @@ export function ReviewAndPayStep({
         onConfirm={handleConfirm}
         onBack={onBack}
         perSeatLabel="ราคาต่อท่าน"
+        /* This wizard lives at /registration/*, which dockLiftsForBottomBar
+           does NOT match — "registration" does not contain "register". So the
+           floating dock has nothing lifting it here and would sit on this
+           bar's controls; publishing is what clears it. The masterclass
+           register caller deliberately does not opt in, because the static
+           lift already serves it and both together would double-count. */
+        publishesOccupancy
       />
     </>
   );

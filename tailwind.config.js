@@ -155,6 +155,27 @@ module.exports = {
       // we ADD 60/70/80 so the header (60) actually generates — a bare `z-60`
       // is NOT in the default scale and silently falls back to `auto` — and so
       // future chrome has gaps to slot into. Elements, low → high:
+      //   30  A SHARED LOW RUNG — four occupants, not one. Everything here only
+      //       has to beat ordinary flow content; the tiers above must all stay
+      //       clickable over it. Verified against the tree, with the routes
+      //       each is reachable from:
+      //         CourseSectionTabs            sticky   /[...slug] (course)
+      //         Step2MobileBar               fixed    /registration/public,
+      //                                               /masterclass/*/register
+      //         MasterclassCourseFormClient  fixed    /admin/masterclass/new,
+      //                                               /admin/masterclass/*/edit
+      //         PromotionBannerCarousel      absolute /promotions
+      //       THE RULE FOR A FIFTH: no two occupants of this rung may render on
+      //       the same page. No two of these do today — the route sets above are
+      //       disjoint, which is what makes one shared rung safe rather than
+      //       lucky. (The carousel's is `absolute` dot indicators scoped inside
+      //       the carousel, not page chrome; the other three are edge-pinned
+      //       bars, and CourseSectionTabs is the only one pinned to the TOP.)
+      //       This entry said "CourseSectionTabs" alone when that component was
+      //       added, while the rung already had three users — prose reading as
+      //       measured fact while being wrong, the same defect as the
+      //       dockLiftsForBottomBar docstring corrected in 1c4b348.
+      //       test/pure/zIndexStack keeps it honest.
       //   40  CourseStickyCTA sticky bar   (below the sidebar + dock)
       //   50  sidebar <aside>, FloatingActionDock (above the bar)
       //       — the dock is the ONE fixed box holding back-to-top and the chat
