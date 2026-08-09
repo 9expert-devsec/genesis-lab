@@ -34,6 +34,8 @@ import {
   Bell,
   Webhook,
   ExternalLink,
+  FolderOpen,
+  History,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
@@ -78,6 +80,10 @@ const ICONS = {
   Bell,
   Webhook,
   ExternalLink,
+  // The file manager holds PDFs, mp3s and documents as well as images, so it
+  // gets a folder rather than a picture — an Image icon would misdescribe it.
+  FolderOpen,
+  History,
 };
 
 // Nav config. Each item declares the `pageKey` it maps to (matching
@@ -121,6 +127,7 @@ const NAV_GROUPS = [
       { label: 'รีวิวแนะนำ',       href: '/admin/featured-reviews', icon: 'MessageSquare',  pageKey: 'featured_reviews' },
       { label: 'บทความ',           href: '/admin/articles',         icon: 'FileText',       pageKey: 'articles' },
       { label: 'จัดการหน้าเพจ',     href: '/admin/pages',            icon: 'LayoutTemplate', pageKey: 'pages' },
+      { label: 'จัดการไฟล์',        href: '/admin/media',            icon: 'FolderOpen',     pageKey: 'media' },
       { label: 'FAQ',              href: '/admin/faqs',             icon: 'HelpCircle',     pageKey: 'faqs' },
       { label: 'FAQ (Local)',      href: '/admin/local-faqs',       icon: 'HelpCircle',     pageKey: 'local_faqs' },
       { label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf',     icon: 'CalendarDays',   pageKey: 'schedule_pdf' },
@@ -138,6 +145,7 @@ const NAV_GROUPS = [
       { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User',      pageKey: 'profile' },
       { label: 'บัญชีผู้ดูแล',   href: '/admin/accounts',       icon: 'Users',     pageKey: 'accounts' },
       { label: 'จัดการ Role',   href: '/admin/roles',          icon: 'ShieldCheck', pageKey: 'roles' },
+      { label: 'ประวัติการดำเนินการ', href: '/admin/audit-log', icon: 'History',   pageKey: 'audit_log' },
     ],
   },
 ];
