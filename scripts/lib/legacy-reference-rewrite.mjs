@@ -379,6 +379,57 @@ export const REWRITING_CLASSES = new Set([
   CLASS.DIRECT, CLASS.DERIVATIVE, CLASS.SUPERSEDED, CLASS.AMPERSAND, CLASS.MANIFEST_RESOLVED,
 ]);
 
+/** What an unencodable superseded replacement earns. */
+export const ENCODING_GATE = {
+  OK: 'ok',
+  WARN: 'warn',
+  DIE: 'die',
+};
+
+/**
+ * THE ENCODING GUARANTEE, SPLIT BY REACHABILITY.
+ *
+ * ══ THE PROBLEM THIS SOLVES ═════════════════════════════════════════════════
+ *
+ * `superseded` is the only class that writes back a DECODED path — it is taken
+ * from the migration record rather than from the reference — so it is the only
+ * class whose replacement has to be plain ASCII. That guarantee used to be a
+ * startup assertion over the WHOLE superseded map, which meant one row that
+ * could never produce a rewrite halted every run. One does: a course cover with
+ * literal spaces in its filename, referenced nowhere except inside
+ * legacy_file_migrations, which the rewrite excludes.
+ *
+ * ══ WHY `phase` IS THE RIGHT AXIS ═══════════════════════════════════════════
+ *
+ * Reachability is not knowable at load: whether a superseded path is referenced
+ * in a rewritable collection is exactly what the scan is about to find out. But
+ * it IS knowable at the write point, where it is knowable trivially — code that
+ * has reached that line is about to write the value, so the row is reachable by
+ * definition. `phase` is therefore not a proxy for reachability; it is where
+ * reachability stops being a question.
+ *
+ *   'load'   → WARN. Name the row, keep going.
+ *   'write'  → DIE.  The guarantee lands exactly where the value is stored.
+ *
+ * ══ WHY THE WARNING IS NOT SUPPRESSED FOR UNREACHABLE ROWS ══════════════════
+ *
+ * Same reasoning as the `pinTie` tripwire in src/lib/articleRank.js: a branch
+ * that should be unreachable is worth reporting when it fires, because "should
+ * be" is a claim about data that can change. If one of these rows ever starts
+ * being referenced in content, the warning is the notice that arrives BEFORE
+ * the die — one run earlier, and in a form somebody can act on.
+ *
+ * NOT DONE, deliberately: encoding the value. This script does not encode
+ * anything, its header says so, and whether it should is a separate correctness
+ * question from where this guarantee belongs.
+ */
+export function encodingGate({ phase, cls, replacement }) {
+  if (cls !== CLASS.SUPERSEDED) return ENCODING_GATE.OK;
+  if (typeof replacement !== 'string') return ENCODING_GATE.OK;
+  if (encodeURI(replacement) === replacement) return ENCODING_GATE.OK;
+  return phase === 'write' ? ENCODING_GATE.DIE : ENCODING_GATE.WARN;
+}
+
 /**
  * The full decision for one reference: pattern first, evidence only where the
  * pattern refused. Callers should use this rather than calling the two in
