@@ -118,6 +118,54 @@ const MEDIA_EXTENSIONS = new Set(['mp3', 'mp4', 'wav', 'm4a', 'ogg', 'webm', 'mo
  * same artwork at a higher source resolution.
  */
 const COLLISION_RULINGS = new Map([
+  /* ── CASE-FOLD GROUPS WHOSE MEMBERS ARE GENUINELY DIFFERENT CONTENT ──────
+   *
+   * Rules A/B/C cannot decide these: neither member is a derivative of the other
+   * and the sizes are not an order of magnitude apart, so the tie-break has to be
+   * WHICH CASE THE CONTENT ACTUALLY LINKS TO. That was measured against the
+   * content collections, not guessed.
+   */
+  [
+    '9exp-genesis/legacy/sites/default/files/articles/images/access',
+    {
+      keep: '/sites/default/files/articles/images/access.gif',
+      note: 'Case-fold collision of two DIFFERENT files: access.gif (343,650 B, animated) '
+          + 'and Access.png (221,595 B). Cloudinary folds public_id case, so one asset can '
+          + 'hold only one of them. Grepped the content collections: access.gif IS referenced '
+          + '(1 article), Access.png is referenced NOWHERE. Ruling: keep the referenced one. '
+          + 'Access.png becomes superseded → access.gif, so a later rewrite can point any '
+          + 'stray reference at the surviving asset.',
+    },
+  ],
+  [
+    '9exp-genesis/legacy/sites/default/files/course/outline/ai-agents-with-microsoft-copilot-studio-course-outline-en.pdf',
+    {
+      keep: '/sites/default/files/course/outline/ai-agents-with-microsoft-copilot-studio-course-outline-en.pdf',
+      note: 'Case-fold collision of two different PDFs: -en.pdf (481,331 B) and -EN.pdf '
+          + '(316,005 B). NEITHER is referenced by any content collection, so there is no '
+          + 'usage signal to follow. Ruling: keep the LARGER, which is also the one that '
+          + 'survived the transfer (NTFS cannot hold both). -EN.pdf becomes superseded.',
+    },
+  ],
+  [
+    '9exp-genesis/legacy/sites/default/files/articles/images/artwork-01_0',
+    {
+      keep: '/sites/default/files/articles/images/artwork-01_0.png',
+      note: 'Case-fold collision: artwork-01_0.png (136,933 B) vs Artwork-01_0.png (3,168 B), '
+          + 'a 43x gap. Neither is referenced. Ruling follows Rule B — the 3 KB file is a '
+          + 'placeholder, keep the real one. Artwork-01_0.png becomes superseded.',
+    },
+  ],
+  [
+    '9exp-genesis/legacy/sites/default/files/articles/images/artwork-02_0',
+    {
+      keep: '/sites/default/files/articles/images/artwork-02_0.png',
+      note: 'Case-fold collision: artwork-02_0.png (33,214 B) vs Artwork-02_0.png (8,507 B). '
+          + 'A 3.9x gap, so this is BELOW Rule B\'s 10x threshold and is a human ruling '
+          + 'rather than an automatic one. Neither is referenced; keep the larger, consistent '
+          + 'with artwork-01_0. Artwork-02_0.png becomes superseded.',
+    },
+  ],
   [
     '9exp-genesis/legacy/images/9expert-banner',
     {
@@ -297,6 +345,29 @@ for (const f of staged) {
   });
 }
 
+/* ── MONGO, READ EARLY — the collision grouping needs it ───────────────────
+ *
+ * Opened here rather than just before the upload loop, because a collision group
+ * is NOT confined to the staged set. Measured on the Stage-2 resume: both
+ * failures were a staged file colliding with an asset uploaded by an EARLIER run,
+ * so grouping over `candidates` alone could not see either one and both reached
+ * Cloudinary, where overwrite:false refused them and the size check recorded
+ * 'failed'. The record protected the data; the grouping did not prevent the
+ * attempt. Recorded rows are group members too.
+ */
+const uri = process.env.MONGODB_URI;
+if (!uri) die('MONGODB_URI not set — pass --env-file=.env.local');
+await mongoose.connect(uri, {
+  dbName: process.env.MONGODB_DB_NAME, maxPoolSize: 5, serverSelectionTimeoutMS: 10_000,
+});
+
+const priorDocs = await LegacyFileMigration
+  .find({}, {
+    sourcePath: 1, status: 1, uploadedBytes: 1, sourceBytes: 1, sizeExceptionReason: 1, publicId: 1,
+  })
+  .lean();
+const prior = new Map(priorDocs.map((d) => [d.sourcePath, d]));
+
 /* ── COLLISION RESOLUTION — the decided policy, applied, not re-asked ───────
  *
  * An IMAGE public_id drops the extension, so `X.png` and `X.webp` in one
@@ -306,56 +377,137 @@ for (const f of staged) {
  * wins — which is why the loser is removed from the set here rather than left to
  * the race.
  *
- *   Rule A  a webp/avif sibling of a png/jpg in the same group is a site-
+ *   Rule A  a webp/avif sibling of a png/jpg/SVG source in the same group is a
  *           generated DERIVATIVE → exclude it. Measured on production: its URL
  *           already 200s with bytes identical to the source's render, because
  *           Cloudinary transcodes the stored id into the requested format. So
  *           excluding it changes nothing a client can observe, while uploading
- *           it risks making a lossy webp the canonical bytes for the PNG's URL.
+ *           it risks making a lossy raster the canonical bytes for the source's
+ *           URL. `svg` counts as a source because a raster beside a vector is
+ *           the same relationship one step further: the vector is the original
+ *           and scales, the raster is an export of it.
  *   Rule B  ≥10× size ratio → keep the LARGER (real), drop the smaller
  *           (placeholder/thumbnail).
  *   Rule C  comparable sizes → keep the CANONICAL name: no trailing space, and
  *           an extension that matches the file's ACTUAL sniffed format. Report
  *           the loser by name and bytes. Never overwrite.
+ *
+ * ── THE KEY IS THE CASE-FOLDED public_id ──────────────────────────────────
+ *
+ * CLOUDINARY FOLDS CASE when resolving a public_id. That is measured, not
+ * assumed: `…/articles/images/Access.gif` and `…/articles/images/access.gif`
+ * return the identical 343,614-byte asset, and requesting `/…/Access.png`
+ * returns the webp transcode of `access.gif`. So `AI.svg` and `ai.webp` are ONE
+ * asset as far as the store is concerned.
+ *
+ * Keying on the exact id therefore under-groups: it treated those as unrelated,
+ * let both into the upload set, and the second one to arrive was refused. Folding
+ * the key makes the grouping agree with the storage it is protecting. 8 groups /
+ * 16 files across the deliverable tree are only visible this way.
  */
+const foldKey = (publicId) => String(publicId).toLowerCase();
+
 const groups = new Map();
 for (const c of candidates) {
-  if (!groups.has(c.publicId)) groups.set(c.publicId, []);
-  groups.get(c.publicId).push(c);
+  const k = foldKey(c.publicId);
+  if (!groups.has(k)) groups.set(k, []);
+  groups.get(k).push(c);
 }
 
-const excluded = { derivativeSibling: [], smallerDuplicate: [], nonCanonical: [], unresolved: [], ruled: [] };
+/* Already-RECORDED files join the group of their case-folded id, marked so they
+ * are never uploaded again — they are present only so a staged file can be
+ * recognised as colliding with them. A recorded row with no publicId (a
+ * skipped-dead placeholder) carries no asset and is not a group member. */
+for (const d of priorDocs) {
+  if (!d.publicId) continue;
+  if (prior.get(d.sourcePath) && candidates.some((c) => c.publicPath === d.sourcePath)) continue;
+  const k = foldKey(d.publicId);
+  if (!groups.has(k)) continue;           // only interested where a staged file collides
+  groups.get(k).push({
+    publicPath: d.sourcePath,
+    publicId: d.publicId,
+    diskBytes: d.uploadedBytes ?? d.sourceBytes ?? 0,
+    ext: extOf(d.sourcePath),
+    __recorded: d.status,
+  });
+}
+
+const excluded = {
+  derivativeSibling: [], smallerDuplicate: [], nonCanonical: [], unresolved: [],
+  ruled: [], ownedByExisting: [],
+};
 
 for (const [publicId, group] of groups) {
   if (group.length < 2) continue;
 
   // A HUMAN RULING wins over every automatic rule, and is checked first so the
-  // rules cannot quietly disagree with a decision already made.
+  // rules cannot quietly disagree with a decision already made. Keyed on the
+  // case-folded id, so a ruling covers every case-variant of the same asset.
   const ruling = COLLISION_RULINGS.get(publicId);
   if (ruling) {
     const winner = group.find((f) => f.publicPath === ruling.keep);
     if (!winner) {
-      die(`ruling for ${publicId} names ${ruling.keep}, which is not in the staged group `
+      die(`ruling for ${publicId} names ${ruling.keep}, which is not in the group `
         + `(${group.map((f) => f.publicPath).join(', ')}). Refusing to guess.`);
     }
     for (const f of group) {
       if (f === winner) continue;
+      // A member that is only here because it is ALREADY RECORDED was never a
+      // candidate, so there is nothing to exclude from the upload set.
+      if (f.__recorded) continue;
       f.__excluded = true;
-      excluded.ruled.push({ ...f, publicId, keptPath: winner.publicPath, keptBytes: winner.diskBytes, note: ruling.note });
+      excluded.ruled.push({
+        ...f, publicId, keptPath: winner.publicPath, keptBytes: winner.diskBytes,
+        keptRecorded: winner.__recorded ?? null, note: ruling.note,
+      });
     }
     continue;
   }
 
   let survivors = [...group];
 
-  // Rule A — derivative siblings.
-  const hasSource = survivors.some((f) => ['png', 'jpg', 'jpeg'].includes(f.ext));
+  // Rule A — derivative siblings. `svg` is a SOURCE here for the same reason
+  // png/jpg are: a raster beside a vector is an export of it, and the vector is
+  // the thing that scales. Measured need: skills/icon holds four AI.svg/ai.webp
+  // style pairs that collide only once the key is case-folded.
+  const hasSource = survivors.some((f) => ['png', 'jpg', 'jpeg', 'svg'].includes(f.ext));
   if (hasSource) {
     for (const f of survivors.filter((x) => ['webp', 'avif'].includes(x.ext))) {
-      excluded.derivativeSibling.push({ ...f, publicId });
+      if (f.__recorded) continue;
+      f.__excluded = true;
+      excluded.derivativeSibling.push({
+        ...f, publicId,
+        keptPath: survivors.find((s) => ['png', 'jpg', 'jpeg', 'svg'].includes(s.ext))?.publicPath,
+      });
     }
     survivors = survivors.filter((f) => !['webp', 'avif'].includes(f.ext));
   }
+
+  /* ── AN ALREADY-STORED ASSET OWNS THE ID ─────────────────────────────────
+   *
+   * If a recorded row still survives Rule A, the store already holds an asset at
+   * this case-folded id. Nothing staged can be uploaded into it: overwrite:false
+   * would refuse and the size check would record 'failed' — which is precisely
+   * the outcome the last run produced twice.
+   *
+   * So the staged members are excluded HERE, with a reason, instead of being
+   * discovered at the API. Rules B and C then only ever see staged files, which
+   * also matters mechanically: they read bytes off disk, and a recorded member
+   * has no local file.
+   */
+  const owner = survivors.find((f) => f.__recorded && ['uploaded', 'exists'].includes(f.__recorded));
+  if (owner) {
+    for (const f of survivors.filter((x) => !x.__recorded)) {
+      f.__excluded = true;
+      excluded.ownedByExisting.push({
+        ...f, publicId, keptPath: owner.publicPath, keptBytes: owner.diskBytes, keptRecorded: owner.__recorded,
+      });
+    }
+    continue;
+  }
+  // Past this point every survivor is a staged file with a local path.
+  survivors = survivors.filter((f) => !f.__recorded);
+  if (survivors.length < 2) continue;
 
   // Rule B — an order-of-magnitude size gap means placeholder vs real.
   if (survivors.length > 1) {
@@ -462,8 +614,10 @@ section('Rule B — smaller duplicate, ≥10x gap (placeholder)',
   excluded.smallerDuplicate, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        kept: ${x.keptPath} (${x.keptBytes} B)`);
 section('Rule C — non-canonical name/extension (LOSER, not uploaded)',
   excluded.nonCanonical, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}  [sniffed ${x.sniffed || '?'}]\n        kept: ${x.keptPath} (${x.keptBytes} B)`);
+section('CASE-FOLD / ID ALREADY OWNED by a stored asset (not uploaded)',
+  excluded.ownedByExisting, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        id owned by: ${x.keptPath} (${x.keptBytes} B, status '${x.keptRecorded}')`);
 section('HUMAN RULING — loser, recorded as superseded (not uploaded)',
-  excluded.ruled, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        kept: ${x.keptPath} (${x.keptBytes} B)\n        ${x.note}`);
+  excluded.ruled, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}\n        kept: ${x.keptPath} (${x.keptBytes} B${x.keptRecorded ? `, already '${x.keptRecorded}'` : ''})\n        ${x.note}`);
 section('UNRESOLVED collision — held back, needs a human',
   excluded.unresolved, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}  [sniffed ${x.sniffed || '?'}, ${x.note ?? ''}]`);
 section('refused by the security allow-list',
@@ -477,17 +631,10 @@ section('⚠ BYTE MISMATCH vs manifest — SKIPPED (truncated pull?)',
 section('not in the manifest — SKIPPED',
   notInManifest, (x) => `${String(x.diskBytes).padStart(9)} B  ${x.publicPath}`);
 
-// ── MONGO: resume state ─────────────────────────────────────────────────────
-const uri = process.env.MONGODB_URI;
-if (!uri) die('MONGODB_URI not set — pass --env-file=.env.local');
-await mongoose.connect(uri, {
-  dbName: process.env.MONGODB_DB_NAME, maxPoolSize: 5, serverSelectionTimeoutMS: 10_000,
-});
-
-const priorDocs = await LegacyFileMigration
-  .find({}, { sourcePath: 1, status: 1, uploadedBytes: 1, sourceBytes: 1, sizeExceptionReason: 1 })
-  .lean();
-const prior = new Map(priorDocs.map((d) => [d.sourcePath, d]));
+// ── RESUME STATE ────────────────────────────────────────────────────────────
+// Mongo was already opened and `prior` already read, further up — the collision
+// grouping needs recorded rows to see a staged file colliding with an asset an
+// earlier run uploaded.
 
 /** Identical definition to the migration's, including the byte check. */
 const isDone = (d) => ['uploaded', 'exists'].includes(d?.status)
@@ -596,6 +743,74 @@ function uploadBuffer(buf, options) {
   });
 }
 
+/* ── RULED LOSERS THAT ARE NOT IN STAGING ──────────────────────────────────
+ *
+ * Three case-fold losers never reached the staging tree at all: NTFS cannot hold
+ * two names differing only by case, so the tar extraction dropped whichever
+ * arrived second. They therefore form no collision group here and no rule can
+ * see them — but the DECISION about them still has to be recorded, for two
+ * reasons. It documents why they were not migrated, and without a row a future
+ * delta would list them again, pull them again, and fail them again at Cloudinary
+ * against the id their case-variant already owns.
+ *
+ * Bytes come from the manifest, since there is no local file to measure.
+ */
+const ABSENT_RULED_LOSERS = [
+  {
+    loser: '/sites/default/files/articles/images/Artwork-01_0.png',
+    winner: '/sites/default/files/articles/images/artwork-01_0.png',
+    note: 'Case-fold collision, 43x size gap (3,168 B vs 136,933 B). Neither referenced. '
+        + 'Rule B logic: the small one is a placeholder. Dropped by NTFS during extraction, '
+        + 'so recorded from the manifest rather than uploaded.',
+  },
+  {
+    loser: '/sites/default/files/articles/images/Artwork-02_0.png',
+    winner: '/sites/default/files/articles/images/artwork-02_0.png',
+    note: 'Case-fold collision, 3.9x gap (8,507 B vs 33,214 B) — BELOW Rule B\'s 10x '
+        + 'threshold, so a human ruling: keep the larger, consistent with artwork-01_0. '
+        + 'Neither referenced. Dropped by NTFS during extraction.',
+  },
+  {
+    loser: '/sites/default/files/course/outline/ai-agents-with-microsoft-copilot-studio-course-outline-EN.pdf',
+    winner: '/sites/default/files/course/outline/ai-agents-with-microsoft-copilot-studio-course-outline-en.pdf',
+    note: 'Case-fold collision of two different PDFs (316,005 B vs 481,331 B). Neither '
+        + 'referenced, so no usage signal; keep the larger. Dropped by NTFS during extraction.',
+  },
+];
+
+if (APPLY) {
+  for (const r of ABSENT_RULED_LOSERS) {
+    const winnerRow = prior.get(r.winner);
+    if (!winnerRow || !['uploaded', 'exists'].includes(winnerRow.status)) {
+      console.log(`  ⚠ skipping absent-loser record for ${r.loser}: winner ${r.winner} is not stored yet`);
+      continue;
+    }
+    const existing = prior.get(r.loser);
+    if (existing?.status === 'superseded') continue;
+    await LegacyFileMigration.updateOne(
+      { sourcePath: r.loser },
+      {
+        $set: {
+          publicId: winnerRow.publicId,      // the WINNER's id
+          resourceType: extOf(r.loser) === 'pdf' ? 'raw' : 'image',
+          pathExtension: extOf(r.loser),
+          sourceBytes: manifestBytes.get(r.loser) ?? null,
+          status: 'superseded',
+          supersededBy: r.winner,
+          note: r.note,
+          refCount: 0,
+          directory: directoryOf(r.loser),
+          attemptedAt: new Date(),
+        },
+        $setOnInsert: { sourcePath: r.loser },
+      },
+      { upsert: true },
+    );
+    console.log(`  case-fold loser recorded: ${r.loser} → superseded by ${r.winner}`);
+  }
+  console.log('');
+}
+
 /* RULED LOSERS are recorded before anything uploads, using the model's existing
  * 'superseded' semantics: the row carries the WINNER's publicId and the winner's
  * path in `supersededBy`, so a later reference rewrite can point both URLs at
@@ -624,6 +839,50 @@ for (const loser of excluded.ruled) {
   console.log(`  ruling recorded: ${loser.publicPath} → superseded by ${loser.keptPath}`);
 }
 if (excluded.ruled.length) console.log('');
+
+/* ── A FILE WE HAVE DECIDED NOT TO UPLOAD MUST NOT STAY 'failed' ────────────
+ *
+ * An earlier run attempted two files that the collision policy now excludes, so
+ * Cloudinary refused them and they were recorded 'failed'. That status means "a
+ * retryable error happened", and re-running would keep retrying them forever
+ * against an id another asset owns.
+ *
+ * Now that a rule has DECIDED about them, the honest status is 'superseded': the
+ * model defines it as "the file is fine, but a human decided another file
+ * replaces it", and it carries the winner's id so a later reference rewrite can
+ * point any stray reference at the surviving asset. Rule A/B/C losers with no
+ * prior row still get none — there is nothing to correct.
+ */
+const decidedLosers = [
+  ...excluded.derivativeSibling.map((x) => ({ ...x, why: 'Rule A: raster/webp sibling of a source asset' })),
+  ...excluded.smallerDuplicate.map((x) => ({ ...x, why: 'Rule B: smaller duplicate (placeholder)' })),
+  ...excluded.nonCanonical.map((x) => ({ ...x, why: 'Rule C: non-canonical name/extension' })),
+  ...excluded.ownedByExisting.map((x) => ({ ...x, why: 'case-fold: id already owned by a stored asset' })),
+];
+let corrected = 0;
+for (const l of decidedLosers) {
+  const row = prior.get(l.publicPath);
+  if (row?.status !== 'failed') continue;
+  const winnerRow = l.keptPath ? prior.get(l.keptPath) : null;
+  await LegacyFileMigration.updateOne(
+    { sourcePath: l.publicPath },
+    {
+      $set: {
+        publicId: winnerRow?.publicId ?? l.publicId,
+        status: 'superseded',
+        supersededBy: l.keptPath ?? '',
+        error: '',
+        note: `${l.why}. Previously recorded 'failed' because an earlier run attempted the `
+            + `upload before the collision policy could see the conflict: Cloudinary folds `
+            + `public_id case and overwrite:false refused it. Not a retryable error — a decision.`,
+        attemptedAt: new Date(),
+      },
+    },
+  );
+  corrected += 1;
+  console.log(`  failed → superseded: ${l.publicPath}  (kept ${l.keptPath ?? '—'})`);
+}
+if (corrected) console.log('');
 
 const runStartedAt = Date.now();
 const stats = { uploaded: 0, failed: 0, exists: 0, bytes: 0 };
