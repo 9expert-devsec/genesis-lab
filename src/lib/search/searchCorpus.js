@@ -1,0 +1,176 @@
+/**
+ * /search — the CORPUS. Everything searchable, assembled once and reused.
+ *
+ * This is the half of the search that touches the world: upstream feeds, Mongo,
+ * and the course-detail fan-out. The matching rules live next door in
+ * matchSearch.js and know nothing about any of it.
+ *
+ * ── WHY A CORPUS AT ALL, RATHER THAN A QUERY PER KEYSTROKE ──────────────────
+ * The page is a 200ms-debounced type-ahead. A visitor typing "power bi" issues
+ * several requests; each one must not become a Mongo scan plus ~N upstream
+ * detail fetches. So the expensive part — assembly — happens once per window
+ * and every request after that is a substring pass over objects already in
+ * memory.
+ *
+ * ── WHY AN IN-PROCESS TTL AND NOT `unstable_cache` ──────────────────────────
+ * The corpus contains every article's BODY as plain text, which is exactly the
+ * thing that must not be re-fetched per request and exactly the thing that
+ * makes the corpus large. Next's data cache has a per-entry size limit and
+ * silently declines to store an entry that exceeds it — so `unstable_cache`
+ * would look correct, pass review, and quietly rebuild the corpus on every
+ * single keystroke in production. A module-level object has no size limit and
+ * fails visibly (memory) rather than invisibly (latency).
+ *
+ * The trade this accepts: the cache is per server instance, so N instances do N
+ * builds. That is the right way round — a rebuild is one cached-upstream sweep
+ * plus two Mongo reads, and the alternative failure mode is unbounded.
+ *
+ * The upstream calls underneath are still `aiFetch`, so they keep their own
+ * tags and Next data-cache entries; a rebuild after the TTL is mostly cache
+ * hits, not a cold fan-out.
+ *
+ * ── WHY THE ONLINE FEED NEEDS NO ENRICHMENT ─────────────────────────────────
+ * READ THIS BEFORE ADDING A FAN-OUT FOR IT. `/public-course`'s LIST response
+ * omits `course_teaser`, `course_objectives` and `training_topics` — they exist
+ * only on the detail response, which is why public courses cost an
+ * enrich-courses pass here. `/online-course`'s list response ALREADY CARRIES
+ * `o_course_teaser`, so online courses are searchable to the same depth for
+ * one request. There is no second fan-out to add; adding one would buy nothing
+ * and cost a request per course.
+ */
+
+import { listPublicCourses } from '@/lib/api/public-courses';
+import { getAllSchedules } from '@/lib/api/schedules';
+import { getOnlineCourses } from '@/lib/api/online-courses';
+import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
+import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
+import { getActivePromotions } from '@/lib/promotions/getPromotions';
+import { dbConnect } from '@/lib/db/connect';
+import Article from '@/models/Article';
+
+/**
+ * How long a built corpus is reused. Matches /search's own `revalidate = 1800`
+ * so the two cadences cannot drift into "the page is 30 minutes stale but the
+ * search is 5 minutes fresh".
+ */
+export const SEARCH_CORPUS_TTL_MS = 1800 * 1000;
+
+const serialize = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
+
+/**
+ * Build the corpus from scratch. Every source is independently `catch`ed to an
+ * empty list: a search that returns five of six types is degraded, a search
+ * that 500s because the promotions collection hiccuped is broken.
+ */
+async function buildSearchCorpus() {
+  const [courseList, schedulesResult, onlineResult, careerPaths, promotions] =
+    await Promise.all([
+      listPublicCourses().catch(() => ({ items: [] })),
+      getAllSchedules().catch(() => ({ items: [] })),
+      getOnlineCourses().catch(() => ({ items: [] })),
+      getActiveCareerPaths().catch(() => []),
+      getActivePromotions().catch(() => []),
+    ]);
+
+  const listItems = courseList.items ?? [];
+
+  /**
+   * The one fan-out. `withSchedules: false` because this corpus already has
+   * EVERY schedule from the single `getAllSchedules()` call above — paying for
+   * one `listSchedulesByCourse` request per course on top of that would be
+   * buying the same rows a second time, N requests at a time.
+   *
+   * NO `includeDetailFields` any more. It carried `course_objectives` and
+   * `training_topics` for the matcher; both left the haystack when matching
+   * narrowed to what a card can show, so pulling them here would put two large
+   * arrays per course into the corpus for the lifetime of the TTL with no
+   * reader. Same rule as the article body: not fetched, not matched, not
+   * serialised.
+   *
+   * `course_teaser` still arrives — it is in enrich-courses' default mapping,
+   * and it is both matched and rendered.
+   */
+  const courses = await enrichCoursesWithDetails(listItems, {
+    withSchedules: false,
+  }).catch(() => listItems);
+
+  // Resolve each round's course ONCE, here, rather than per keystroke in a
+  // courseMap lookup on the client. The card needs the name, the code and the
+  // price; nothing else about the course travels with a schedule row.
+  const courseById = new Map(courses.map((c) => [String(c._id), c]));
+  const schedules = (schedulesResult.items ?? []).map((s) => {
+    const c = courseById.get(String(s.course?._id ?? s.course ?? ''));
+    return {
+      ...s,
+      course_ref: c
+        ? {
+            _id: String(c._id),
+            course_id: c.course_id ?? null,
+            course_name: c.course_name ?? null,
+            course_price: c.course_price ?? null,
+          }
+        : null,
+    };
+  });
+
+  await dbConnect();
+  /**
+   * ── `content` IS NOT SELECTED, AND THAT IS A DELIBERATE REVERSAL ───────────
+   * An earlier version of this builder pulled every article body, stripped it
+   * to `contentText`, and matched on it. It worked, and the results were bad:
+   * long prose is where incidental mentions live, so an article that says
+   * "Power BI" once in passing came back as a result about Power BI.
+   *
+   * The body is removed from the CORPUS rather than merely ignored by the
+   * matcher. A field nobody reads is still memory held for the TTL, still a
+   * thing the next person will wire up "since it is already here", and still
+   * one projection slip away from crossing the wire. Articles match on title,
+   * excerpt and tags — the three fields an editor writes to describe the
+   * article rather than to be the article.
+   */
+  const articleDocs = await Article.find({ active: true })
+    .sort({ publishedAt: -1 })
+    .select('slug title excerpt coverUrl publishedAt tags')
+    .lean();
+
+  const articles = serialize(articleDocs);
+
+  return {
+    courses,
+    onlineCourses: onlineResult.items ?? [],
+    careerPaths,
+    schedules,
+    promotions,
+    articles,
+  };
+}
+
+// Module-level cache. `pending` collapses a burst of concurrent first requests
+// into ONE build — without it, the first three keystrokes after a cold start
+// each kick off a full fan-out.
+let cached = null;
+let cachedAt = 0;
+let pending = null;
+
+/** The corpus, built at most once per TTL per process. */
+export async function getSearchCorpus({ now = Date.now() } = {}) {
+  if (cached && now - cachedAt < SEARCH_CORPUS_TTL_MS) return cached;
+  if (pending) return pending;
+  pending = buildSearchCorpus()
+    .then((corpus) => {
+      cached = corpus;
+      cachedAt = now;
+      return corpus;
+    })
+    .finally(() => {
+      pending = null;
+    });
+  return pending;
+}
+
+/** Test/ops affordance: drop the cache so the next call rebuilds. */
+export function resetSearchCorpusCache() {
+  cached = null;
+  cachedAt = 0;
+  pending = null;
+}
