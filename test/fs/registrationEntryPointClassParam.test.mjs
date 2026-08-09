@@ -23,10 +23,22 @@ const read = (p) => readFileSync(path.join(ROOT, p), 'utf8');
 const ROUND_SPECIFIC = [
   ['src/app/(public)/[...slug]/_components/ScheduleSection.jsx', 'detail-page "ลงทะเบียนรอบที่เลือก"'],
   ['src/app/(public)/[...slug]/_components/EarlyBirdBanner.jsx', 'early-bird banner'],
-  ['src/app/(public)/schedule/_components/ScheduleClient.jsx', '/schedule rows'],
-  ['src/app/(public)/search/_components/SearchClient.jsx', 'search results'],
+  // /schedule's table + round row AND /search's schedule section, which used to
+  // hold two byte-identical copies of this template, now share one builder.
+  ['src/lib/schedule/scheduleRegistrationHref.js', 'the shared round-registration builder'],
   ['src/app/(public)/training-course/_components/CourseCard.jsx', 'catalog card rounds'],
   ['src/components/pageBuilder/sections/course_schedule.jsx', 'page-builder schedule section'],
+];
+
+/**
+ * The two surfaces that gave the template up. Each must now CALL the builder and
+ * hold no copy of the URL — otherwise the entry above is guarding a module that
+ * nothing reaches, and the &class= invariant would rest on nothing for the two
+ * highest-traffic round lists in the app.
+ */
+const DELEGATES = [
+  ['src/app/(public)/schedule/_components/ScheduleClient.jsx', '/schedule rows'],
+  ['src/app/(public)/search/_components/SearchClient.jsx', 'search results'],
 ];
 
 const GENERIC = [
@@ -45,6 +57,40 @@ for (const [file, what] of ROUND_SPECIFIC) {
     }
   });
 }
+
+for (const [file, what] of DELEGATES) {
+  test(`${what} delegates to the shared builder instead of holding a copy`, () => {
+    const src = read(file);
+    assert.equal(
+      [...src.matchAll(LINKS)].length, 0,
+      `${what} must not write the wizard URL itself any more`,
+    );
+    assert.match(
+      src,
+      /import \{ scheduleRegistrationHref \} from ["']@\/lib\/schedule\/scheduleRegistrationHref["']/,
+      `${what} must import the one builder`,
+    );
+    assert.match(
+      src, /scheduleRegistrationHref\(schedule, courseId\)/,
+      `${what} must actually call it`,
+    );
+  });
+}
+
+test('CONTROL: the delegation probes DO fire on a file that still inlines it', () => {
+  /**
+   * Two of the three assertions above are absences, and the third is an import
+   * line — which on its own is satisfied by a file that imports the builder and
+   * then ignores it. Run the matchers against a file that really does inline the
+   * template (the page-builder section, which is not part of this refactor).
+   */
+  const inliner = read('src/components/pageBuilder/sections/course_schedule.jsx');
+  assert.ok([...inliner.matchAll(LINKS)].length > 0, 'the probe sees an inlined template');
+  assert.equal(
+    /import \{ scheduleRegistrationHref \}/.test(inliner), false,
+    'and that file does not import the builder',
+  );
+});
 
 for (const [file, what] of GENERIC) {
   test(`${what} deliberately passes NO class`, () => {
