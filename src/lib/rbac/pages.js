@@ -65,6 +65,12 @@ export const ADMIN_PAGES = [
       { key: 'faqs',       label: 'FAQ',              href: '/admin/faqs',          match: 'prefix' },
       { key: 'local_faqs', label: 'FAQ (Local)',      href: '/admin/local-faqs',    match: 'prefix' },
       { key: 'schedule_pdf', label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf', match: 'prefix' },
+      // The file manager that replaces FileZilla. Registered here rather than
+      // hand-linked for the same three reasons audit_log was: it enters
+      // MENU_ENUM automatically so its own actions are auditable, it appears in
+      // the sidebar, and it shows up in the roles checkbox UI — so granting a
+      // person upload rights is an ordinary role edit rather than a code change.
+      { key: 'media', label: 'จัดการไฟล์', href: '/admin/media', match: 'prefix' },
     ],
   },
   {

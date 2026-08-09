@@ -48,6 +48,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import LegacyFileMigration from '../src/models/LegacyFileMigration.js';
 import { legacyPathToPublicId, LEGACY_PUBLIC_ID_PREFIX } from '../src/lib/legacyPublicId.js';
 import { IMAGE_EXTENSIONS, RAW_EXTENSION_LIST } from '../src/lib/legacyTransforms.mjs';
+import { ALLOWED_UPLOAD_EXTENSIONS } from '../src/lib/legacyUploadPolicy.mjs';
 
 // ── argv ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -78,11 +79,11 @@ const die = (m) => { console.error(`\n✖ ${m}\n`); process.exit(1); };
  * ALLOW-LIST, never deny: a deny-list promises you thought of every dangerous
  * extension; an allow-list only promises you thought of the safe ones.
  */
-const ALLOWED_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff', 'ico', 'avif',
-  'pdf', 'xlsx', 'xls', 'doc', 'docx', 'ppt', 'pptx',
-  'zip', 'rar', '7z', 'txt', 'csv', 'rtf', 'pbix',
-]);
+/* IMPORTED, not restated. /admin/media signs browser uploads against the same
+ * policy, and a browser that accepts an extension this sweep refuses is a hole in
+ * the filter rather than a convenience. Verified identical (25 extensions, no
+ * difference either way) before collapsing the two copies into one. */
+const ALLOWED_EXTENSIONS = new Set(ALLOWED_UPLOAD_EXTENSIONS);
 
 /**
  * Media: legitimate CONTENT, but the delivery layer has no rule for it.

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { refNo } from '@/lib/refNo';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { resolveCheckoutPricing } from '@/lib/registration/resolve-price';
