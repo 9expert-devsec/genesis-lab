@@ -643,8 +643,10 @@ for (const row of set.others) {
 }
 
 /* THE THREE WEBROOT PDFs — EXPECTED TO SERVE.
- * BLOB_PUBLIC_BASE is set, so next.config emits the three hand-written webroot
- * rules and these URLs resolve to the Blob store. A 200 whose body begins
+ * BLOB_PUBLIC_BASE is set, so next.config emits one rewrite per entry in
+ * src/lib/webrootDocuments.mjs — the SAME list iterated below, which is what
+ * stops this harness from checking a document the rewrite no longer serves —
+ * and these URLs resolve to the Blob store. A 200 whose body begins
  * %PDF- is the PASS, and the magic-byte check is the point: a 200 carrying an
  * HTML error page would be the worst of both.
  * A 404 is still ACCEPTED rather than failed — not as the expected answer but
