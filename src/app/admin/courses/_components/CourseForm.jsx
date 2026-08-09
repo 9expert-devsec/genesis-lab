@@ -8,6 +8,7 @@ import { createCourse, updateCourse } from '@/lib/actions/courses';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
+import { findLegacyShapeRows } from '@/lib/courses/trainingTopics';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -20,6 +21,43 @@ import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
  * `shapePayload()` in `src/lib/actions/courses.js` is the source of
  * truth for field names; keep the `name=` attributes here in sync.
  */
+/**
+ * Seed rows for the topics editor, in the upstream `{ title, bullets }` shape.
+ *
+ * ── THE LEGACY BRANCH IS A TRIPWIRE, NOT A RESCUE ───────────────────────────
+ * MEASURED 2026-08-09: zero rows upstream carry `topic`/`subtopics`, so the
+ * warning below must never fire. It exists because this form previously read
+ * those key names, got undefined from good data, rendered blank, and then wrote
+ * the blanks back — and the only visible symptom was on the PUBLIC page, which
+ * reads the correct keys. If the retired shape ever reappears, this names the
+ * course in the console instead of quietly papering over it, so the branch
+ * firing is a signal rather than a silent save.
+ */
+function seedTrainingTopics(initial) {
+  const rows = initial?.training_topics;
+  if (!Array.isArray(rows)) return [];
+
+  const legacy = findLegacyShapeRows(rows);
+  if (legacy.length > 0) {
+    console.warn(
+      `[CourseForm] training_topics arrived in the RETIRED { topic, subtopics } shape `
+      + `for course ${initial?.course_id ?? initial?._id ?? '(unknown)'} at row(s) `
+      + `${legacy.join(', ')}. Upstream stores { title, bullets }; this should be `
+      + `unreachable. The rows are mapped across so the admin is not blocked, but the `
+      + `source of the old shape needs finding.`
+    );
+  }
+
+  return rows.map((t) => ({
+    title: t?.title ?? t?.topic ?? '',
+    bullets: Array.isArray(t?.bullets)
+      ? t.bullets
+      : Array.isArray(t?.subtopics)
+        ? t.subtopics
+        : (t?.bullets ?? ''),
+  }));
+}
+
 const COURSE_LEVELS = [
   { value: '1', label: '1 · Beginner' },
   { value: '2', label: '2 · Intermediate' },
@@ -518,14 +556,7 @@ export function CourseForm({
       >
         <TrainingTopicsEditor
           name="training_topics"
-          initialTopics={Array.isArray(initial?.training_topics)
-            ? initial.training_topics.map((t) => ({
-                topic: t?.topic ?? '',
-                subtopics: Array.isArray(t?.subtopics)
-                  ? t.subtopics
-                  : (t?.subtopics ?? ''),
-              }))
-            : []}
+          initialTopics={seedTrainingTopics(initial)}
         />
       </Section>
 

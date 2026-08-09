@@ -40,7 +40,7 @@
  *   course_prerequisites[]       ← string[]
  *   course_system_requirements[] ← string[]
  *   bullets[]                    ← string[] (highlight bullets)
- *   training_topics              ← [{ topic, subtopics[] }]
+ *   training_topics              ← [{ title, bullets[] }]
  *   course_doc_paths[]           ← URL[]
  *   course_lab_paths[]           ← URL[]
  *   course_case_study_paths[]    ← URL[]
@@ -52,6 +52,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { aiFetch, unwrap } from '@/lib/api/client';
+import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -184,32 +185,19 @@ function linesOf(formData, key) {
 }
 
 /**
- * Parse the JSON-serialized Training Topics. Each row should be
- * `{ topic: string, subtopics: string[] }`. Malformed input falls back
- * to an empty array — better to lose the field than to abort the save.
+ * Pull the JSON-serialized Training Topics out of the form and decode them.
+ *
+ * Each row is `{ title: string, bullets: string[] }` — the shape MSDB actually
+ * stores. It was `{ topic, subtopics }` here, which upstream discards, so a
+ * save replaced real subdocuments with schema defaults. The decode itself lives
+ * in src/lib/courses/trainingTopics.js, which carries the measurement and is
+ * importable by tests; this module is `'use server'` and is not.
  */
 function parseTrainingTopics(formData) {
   const raw = formData instanceof FormData
     ? formData.get('training_topics')
     : formData?.training_topics;
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(String(raw));
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((row) => ({
-        topic: toStr(row?.topic),
-        subtopics: Array.isArray(row?.subtopics)
-          ? row.subtopics.map(toStr).filter(Boolean)
-          : toStr(row?.subtopics)
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean),
-      }))
-      .filter((t) => t.topic || t.subtopics.length > 0);
-  } catch {
-    return [];
-  }
+  return parseTrainingTopicsValue(raw);
 }
 
 /**
