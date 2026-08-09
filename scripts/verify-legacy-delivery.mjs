@@ -171,13 +171,24 @@ async function probe(url, { range = null, attempt = 1 } = {}) {
   const headers = { 'accept-encoding': range ? 'identity' : 'gzip, br' };
   if (range) headers.range = range;
   let res;
+  let body;
   try {
-    res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+    // 180s, not 60s. The largest legacy document is 44.6 MiB and is held OUT of
+    // the edge cache by design, so every probe transfers the whole thing from
+    // Blob — measured at 85s. At 60s it reported INFRA twice on a file that is
+    // provably healthy (200, byte-exact, %PDF-, Range 206), which is a false
+    // inconclusive rather than a finding.
+    res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(180_000) });
+    // THE BODY READ IS INSIDE THE TRY, deliberately. The abort signal covers the
+    // whole exchange, not just the headers, so a large document that stalls
+    // mid-stream rejects HERE — and with this outside the try it escaped as an
+    // uncaught DOMException and killed the run after 60-odd probes had passed.
+    // A timeout is an INFRA outcome to retry, never a crash.
+    body = Buffer.from(await res.arrayBuffer());
   } catch (err) {
     if (attempt < 3) { await sleep(1500 * attempt); return probe(url, { range, attempt: attempt + 1 }); }
     return { url, range, error: String(err?.message ?? err), infra: true };
   }
-  const body = Buffer.from(await res.arrayBuffer());
   const h = (k) => res.headers.get(k);
   const out = {
     url,
@@ -261,8 +272,13 @@ async function buildProbeSet() {
     ['dotted-name',     { resourceType: 'image', sourcePath: /thailand-4\.0\.png$/ }],
     ['dotted-name-2',   { resourceType: 'image', sourcePath: /macro-excel\.001\.png$/ }],
     ['at-sign+spaces',  { resourceType: 'image', sourcePath: /@3x\.png$/, formatDisagrees: false }],
-    ['formatDisagrees', { formatDisagrees: true }, { sourceBytes: 1 }],
-    ['formatDisagrees-large', { formatDisagrees: true }, { sourceBytes: -1 }],
+    // `storage: 'blob'` is EXCLUDED, and that is not incidental. The Blob
+    // content-type correction set formatDisagrees on 7 Blob objects — 4 of them
+    // MP3s — so this trait, which is meant to find a Cloudinary IMAGE whose
+    // extension lies, started returning an audio file and asserting `image/*`
+    // on it. The trait means "Cloudinary image", so it says so.
+    ['formatDisagrees', { formatDisagrees: true, resourceType: 'image', storage: { $ne: 'blob' } }, { sourceBytes: 1 }],
+    ['formatDisagrees-large', { formatDisagrees: true, resourceType: 'image', storage: { $ne: 'blob' } }, { sourceBytes: -1 }],
     ['plain-ascii',     { resourceType: 'image', sourcePath: /inline-images\/logo-power-bi\.png$/ }],
     ['animated-gif',    { resourceType: 'image', sourcePath: /\.gif$/ }, { sourceBytes: -1 }],
   ];
@@ -287,13 +303,25 @@ async function buildProbeSet() {
     { trait: 'xlsx', row: pick(/\.xlsx$/) },
   ].filter((d) => d.row);
 
-  /* THE RESOLVER POPULATION. Flattened because of the [[String]] quirk in the
-   * header; asserted to be exactly 6 because a silently-empty set here is the
-   * single most likely way this whole verification passes while proving nothing. */
+  /* THE RESOLVER POPULATION — every LOSSY substitution, both rules.
+   *
+   * Flattened because of the [[String]] quirk in the header. `&`→`and` and
+   * `#`→`sharp` are the two lossy, non-invertible mappings, so they are the two
+   * that must travel through /legacy-file; the trailing-space rule is also
+   * flagged `publicIdSubstituted` but is served STATICALLY (Cloudinary trims a
+   * trailing space when resolving an id), so including it here would assert the
+   * wrong delivery path for 18 files.
+   *
+   * Capped per rule so a run stays quick — the population is now 20 `&` and 11
+   * `#` after the full-tree backfill, and the point is coverage of both rules,
+   * not exhaustion. */
   const substituted = await col
     .find({ publicIdSubstituted: true }, { projection: P }).toArray();
-  const ampersand = substituted.filter((r) =>
-    (r.substitutionRule ?? []).flat(Infinity).includes('ampersand-to-and'));
+  const hasRule = (r, name) => (r.substitutionRule ?? []).flat(Infinity).includes(name);
+  const ampersand = [
+    ...substituted.filter((r) => hasRule(r, 'ampersand-to-and')).slice(0, 8),
+    ...substituted.filter((r) => hasRule(r, 'hash-to-sharp')).slice(0, 6),
+  ];
 
   /* NOT 'uploaded', but still REAL legacy URLs that the rewrite will point at,
    * so they are delivery surface and are probed too:
@@ -349,10 +377,26 @@ console.log('READ-ONLY: one Mongo read, then HTTP GETs. Nothing is written.\n');
 
 const set = await buildProbeSet();
 console.log(`probe set: ${set.images.length} images · ${set.svgs.length} svg · ${set.docs.length} documents`);
-console.log(`           ${set.ampersand.length} ampersand (of ${set.substitutedCount} substituted)`);
-if (set.ampersand.length !== 6) {
-  die(`expected EXACTLY 6 ampersand-to-and rows, found ${set.ampersand.length}. `
-    + 'A wrong count here means the resolver probes are not probing the resolver — refusing to report a pass.');
+console.log(`           ${set.ampersand.length} resolver-routed (of ${set.substitutedCount} substituted)`);
+
+/* ── THE RESOLVER SET MUST NOT BE SILENTLY EMPTY ───────────────────────────
+ *
+ * This guard used to demand EXACTLY 6, because 6 was the whole ampersand
+ * population when the migration was reference-driven and the danger was the
+ * documented `substitutionRule` query matching zero rows (it is stored
+ * [[String]], so Mongo's one-level descent misses it) and reporting a clean pass
+ * having probed nothing.
+ *
+ * The full-tree backfill changed the population, so a hardcoded 6 now aborts on
+ * correct data: Stage 2 alone brought 20 `&` files and 11 `#` files. The property
+ * worth guarding was never the number — it was NON-EMPTINESS, plus agreement
+ * with what the database actually holds. So the guard is now that, and the count
+ * is reported rather than pinned.
+ */
+if (!set.ampersand.length) {
+  die('the resolver probe set is EMPTY. Either no substituted rows exist, or the '
+    + 'substitutionRule query has stopped matching (it is stored [[String]] — see the header). '
+    + 'Refusing to report a pass having probed no resolver path.');
 }
 
 const rows = [];
@@ -434,12 +478,29 @@ console.log('\n── SVG (must arrive UNTRANSFORMED) ──');
 for (const row of set.svgs) {
   const url = `${ORIGIN}${encodePath(row.sourcePath)}`;
   const [r1, r2] = await probePair(url);
-  const j = judgeStatic(r1, r2, row, { expectContentType: /svg/, expectBytes: row.sourceBytes });
+  /* A SUBSTITUTED SVG GOES THROUGH THE RESOLVER, and must.
+   *
+   * The full-tree backfill brought in four `course/roadmap/…-&-Security*.svg`
+   * files. Their public_id is lossy, so the static rule cannot express it and
+   * they route to /legacy-file by design — where x-legacy-delivery is PRESENT.
+   * judgeStatic treats that header as a bandwidth regression, which is right for
+   * a static path and exactly wrong here, so it reported four correct files as
+   * failures. The category is decided by the path, not assumed. */
+  const viaResolver = /[&#]/.test(row.sourcePath);
+  const j = viaResolver
+    ? { verdict: 'PASS', notes: [], seq: `${r1.vercelCache ?? '-'}→${r2.vercelCache ?? '-'}` }
+    : judgeStatic(r1, r2, row, { expectContentType: /svg/, expectBytes: row.sourceBytes });
+  if (viaResolver && j.verdict === 'PASS') {
+    if (r1.status !== 200) { j.verdict = 'FAIL'; j.notes.push(`status ${r1.status}`); }
+    else if (r1.legacyDelivery !== 'resolver') { j.verdict = 'FAIL'; j.notes.push(`x-legacy-delivery "${r1.legacyDelivery || '(absent)'}" ≠ resolver`); }
+    else if (!/svg/.test(r1.contentType)) { j.verdict = 'FAIL'; j.notes.push(`content-type ${r1.contentType}`); }
+    else j.notes.push(`${r1.bytes} B via resolver (substituted id)`);
+  }
   if (j.verdict !== 'INFRA' && !MAGIC.svg(Buffer.from(r1.head, 'latin1'))) {
     j.verdict = 'FAIL'; j.notes.push('body does not begin as SVG — rasterised?');
   }
-  if (j.verdict === 'PASS') j.notes.push(`${r1.bytes} B == source`);
-  record({ category: 'svg', label: row.sourcePath, url, ...j,
+  if (j.verdict === 'PASS' && !viaResolver) j.notes.push(`${r1.bytes} B == source`);
+  record({ category: viaResolver ? 'svg/resolver' : 'svg', label: row.sourcePath, url, ...j,
     status: r1.status, bytes: r1.bytes, cache: j.seq, legacy: r1.legacyDelivery,
     contentType: r1.contentType, cacheControl: r1.cacheControl, raw: [r1, r2] });
 }
@@ -497,7 +558,14 @@ for (const { trait, row } of set.docs) {
 /* RESOLVER — the 6 ampersand files, BOTH spellings. */
 console.log('\n── RESOLVER (6 ampersand files × literal & and %26) ──');
 for (const row of set.ampersand) {
-  for (const spelling of ['literal', 'encoded']) {
+  /* Both spellings for `&`; ENCODED ONLY for `#`.
+   *
+   * A literal `#` is the URL fragment delimiter — a client strips it and
+   * everything after it before the request is sent, so `…/Programming in C#.png`
+   * would arrive as `…/Programming in C` and match nothing. Probing the literal
+   * form would be asserting that an unreachable URL works. */
+  const spellings = row.sourcePath.includes('#') ? ['encoded'] : ['literal', 'encoded'];
+  for (const spelling of spellings) {
     const url = `${ORIGIN}${encodePath(row.sourcePath, { ampersand: spelling })}`;
     const r = await probe(url);
     const notes = [];
@@ -529,16 +597,45 @@ for (const row of set.ampersand) {
 console.log("\n── status 'exists' / 'superseded' (real URLs, extra coverage) ──");
 for (const row of set.others) {
   const url = `${ORIGIN}${encodePath(row.sourcePath)}`;
-  const [r1, r2] = await probePair(url);
-  const j = judgeStatic(r1, r2, row, { expectContentType: /^image\// });
-  if (j.verdict === 'PASS') {
-    const w = webpWidth(Buffer.from(r1.head, 'latin1'));
-    j.notes.push(`${row.status} · ${w ?? '?'}px · ${r1.bytes} B`
-      + (row.status === 'superseded' ? ' — .jpeg path resolved to the surviving asset' : ''));
+  const ext = extOf(row.sourcePath);
+  /* DISPATCH BY EXTENSION, not by assuming an image.
+   *
+   * This category used to run judgeStatic with expectContentType /^image\//
+   * against whatever was in it. The full-tree backfill put DOCUMENTS in it — the
+   * case-fold PDF rulings and three 'exists' course outlines — so it asserted
+   * `image/*` on a PDF and demanded a cache HIT on a no-store document, where a
+   * HIT is the failure. Four healthy files reported as broken. */
+  const isDoc = NO_STORE_DOCUMENT_EXTENSIONS.includes(ext);
+  const [r1, r2] = isDoc ? [await probe(url), await probe(url)] : await probePair(url);
+  const notes = [];
+  let verdict = 'PASS';
+  const fail = (m) => { verdict = 'FAIL'; notes.push(m); };
+
+  if (r1.infra || r2.infra) {
+    verdict = 'INFRA'; notes.push(`upstream ${r1.status ?? r1.error}`);
+  } else if (isDoc) {
+    if (r1.status !== 200) fail(`status ${r1.status}`);
+    if (!MAGIC.pdf(Buffer.from(r1.head, 'latin1')) && ext === 'pdf') fail('not a PDF');
+    if (!/no-store/.test(r1.cacheControl ?? '')) fail(`cache-control ${r1.cacheControl}`);
+    if (/HIT/.test(r1.vercelCache ?? '') || /HIT/.test(r2.vercelCache ?? '')) fail(`document was CACHED (${r1.vercelCache}/${r2.vercelCache})`);
+    const ranged = await probe(url, { range: 'bytes=0-1023' });
+    if (ranged.status !== 206) fail(`Range → ${ranged.status} NOT 206`);
+    // A superseded document resolves to the WINNER's bytes, so its own recorded
+    // sourceBytes is the wrong yardstick — the assertion is that it is a whole,
+    // valid document, which the 206 total and the %PDF- header establish.
+    if (verdict === 'PASS') notes.push(`${row.status} · ${r1.bytes} B · no-store, Range 206 ${ranged.contentRange}`);
+  } else {
+    const j = judgeStatic(r1, r2, row, { expectContentType: /^image\// });
+    verdict = j.verdict; notes.push(...j.notes);
+    if (verdict === 'PASS') {
+      const w = webpWidth(Buffer.from(r1.head, 'latin1'));
+      notes.push(`${row.status} · ${w ?? '?'}px · ${r1.bytes} B`
+        + (row.status === 'superseded' ? ' — path resolved to the surviving asset' : ''));
+    }
   }
-  record({ category: `status:${row.status}`, label: row.sourcePath, url, ...j,
-    status: r1.status, bytes: r1.bytes, cache: j.seq, legacy: r1.legacyDelivery,
-    contentType: r1.contentType, cacheControl: r1.cacheControl, raw: [r1, r2] });
+  record({ category: `status:${row.status}`, label: row.sourcePath, url, verdict, notes,
+    status: r1.status, bytes: r1.bytes, cache: `${r1.vercelCache}/${r2.vercelCache}`,
+    legacy: r1.legacyDelivery, contentType: r1.contentType, cacheControl: r1.cacheControl, raw: [r1, r2] });
 }
 
 /* THE THREE WEBROOT PDFs — EXPECTED INERT.
@@ -550,10 +647,28 @@ console.log('\n── WEBROOT PDFs (expected inert — BLOB_PUBLIC_BASE unset) �
 for (const file of ['how-to-create-chatgpt-account.pdf', '9expert-company-profile.pdf', '9expert-training-course-catalog.pdf']) {
   const url = `${ORIGIN}/${file}`;
   const r = await probe(url);
-  const inert = r.status === 404;
-  record({ category: 'webroot-pdf', label: `/${file}`, url,
-    verdict: r.infra ? 'INFRA' : inert ? 'EXPECTED-INERT' : 'FAIL',
-    notes: [inert ? '404 — rewrite not emitted, as designed' : `status ${r.status} — expected 404 while BLOB_PUBLIC_BASE is unset`],
+  /* Two legitimate outcomes, decided by whether the deployment has
+   * BLOB_PUBLIC_BASE — which this script cannot see, so it reads the answer off
+   * the response instead of asserting one:
+   *
+   *   404  the rewrite was never emitted → EXPECTED-INERT, as it was before the
+   *        Blob store existed.
+   *   200  the store is live → then it must actually be a PDF, because a 200
+   *        carrying an HTML error page would be the worst of both.
+   *
+   * The old version asserted 404 unconditionally and reported all three as
+   * failures the moment the Blob track went live — a stale expectation, not a
+   * regression. */
+  let verdict; const notes = [];
+  if (r.infra) verdict = 'INFRA';
+  else if (r.status === 404) { verdict = 'EXPECTED-INERT'; notes.push('404 — rewrite not emitted (BLOB_PUBLIC_BASE unset in this deployment)'); }
+  else if (r.status === 200) {
+    const isPdf = MAGIC.pdf(Buffer.from(r.head, 'latin1'));
+    verdict = isPdf ? 'PASS' : 'FAIL';
+    notes.push(isPdf ? `200 from Blob, ${r.bytes} B, %PDF- verified` : `200 but NOT a PDF (${JSON.stringify(r.head.slice(0, 8))})`);
+    if (isPdf && !/no-store/.test(r.cacheControl ?? '')) notes.push(`NB cache-control ${r.cacheControl}`);
+  } else { verdict = 'FAIL'; notes.push(`status ${r.status} — expected 200 (Blob live) or 404 (inert)`); }
+  record({ category: 'webroot-pdf', label: `/${file}`, url, verdict, notes,
     status: r.status, bytes: r.bytes, cache: r.vercelCache, legacy: r.legacyDelivery,
     contentType: r.contentType, cacheControl: r.cacheControl, raw: [r] });
 }
