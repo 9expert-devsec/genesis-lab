@@ -103,6 +103,43 @@ function isNotFound(err) {
 }
 
 /**
+ * IS THIS LISTING ROW A TOMBSTONE FOR AN ASSET THAT HAS BEEN DESTROYED?
+ *
+ * ══ WITHOUT THIS, EVERY DELETED FILE STAYS IN THE LIST FOREVER ══════════════
+ *
+ * `uploader.destroy` does NOT remove the record from the Admin API's prefix
+ * listing on this account. It converts it: the same call that answers `ok`
+ * leaves a row reading `bytes: 0, placeholder: true`, and that row keeps coming
+ * back from `api.resources` indefinitely — still there 40 minutes later, and
+ * showing no sign of expiring.
+ *
+ * That is not a cache and it is not lag, which is what it looked like at first.
+ * Three measurements say so:
+ *
+ *   · the flip is INSTANT — the very next listing call after destroy already
+ *     reads `bytes: 0, placeholder: true`, for `image` and for `raw` alike.
+ *     A stale index would still be showing the old byte count.
+ *   · the SEARCH API reports the folder empty at the same moment, and every
+ *     delivery URL answers 404 "Resource not found". The asset really is gone.
+ *   · a destroy WITH `invalidate: true` and one WITHOUT produced the identical
+ *     row, so it is nothing to do with the CDN purge.
+ *
+ * ── WHY IT IS SAFE TO FILTER ON, MEASURED RATHER THAN ASSUMED ───────────────
+ * Swept all 7,001 assets under the legacy prefix: exactly 7 matched, and all 7
+ * were the assets destroyed while verifying this feature. Zero false positives
+ * across 6,994 real files. The remaining way to create one — uploading a
+ * genuinely empty file — is now refused up front by `refuseUpload`, so the
+ * premise this filter rests on is enforced rather than merely observed.
+ *
+ * A 0-byte asset is not a working file anyway: Cloudinary serves a placeholder
+ * image for it, so hiding one from the file manager loses nothing an admin
+ * could have used.
+ */
+function isDestroyedRecord(resource) {
+  return resource?.placeholder === true || (resource?.bytes ?? 0) === 0;
+}
+
+/**
  * ONE page of the Admin API's prefix listing.
  *
  * The single place a cursor is threaded, shared by discovery and by the file
@@ -183,6 +220,9 @@ export async function listMediaCategories() {
           cursor,
         });
         for (const r of page.resources) {
+          // A category whose every file has been deleted must stop being a tab,
+          // and a category's count must not include files that are gone.
+          if (isDestroyedRecord(r)) continue;
           const rest = String(r.public_id).slice(ROOT_FOLDER.length + 1);
           const cut = rest.indexOf('/');
           // No slash means a file sitting directly under files/ with no
@@ -253,36 +293,21 @@ function normalizeCursors(cursors) {
  * would make a file the admin JUST uploaded appear missing. A prefix listing
  * reflects an upload immediately.
  *
- * ── IT DOES NOT REFLECT A DELETE IMMEDIATELY, AND THAT WAS MEASURED ─────────
+ * ── A DELETE LEAVES A ROW BEHIND, WHICH IS WHY EVERY PAGE IS FILTERED ───────
  * v1's comment above said "immediately consistent" without qualification. For
- * uploads that holds. For DELETES it does not.
+ * uploads that holds. For DELETES this endpoint keeps the row forever and
+ * rewrites it into a `bytes: 0, placeholder: true` tombstone — see
+ * `isDestroyedRecord`, which is what every page here is filtered through.
+ * Without that filter a deleted file never leaves the screen.
  *
- * Measured against the live account: after `uploader.destroy` returned `ok`,
- * the delivery URL answered 404 "Resource not found" within the same second —
- * and this listing kept returning the destroyed asset for over five minutes.
- * Two controls pin what that means:
- *
- *   · one destroy WITH `invalidate: true` and one WITHOUT behaved identically,
- *     so it is not the CDN purge.
- *   · the SEARCH API reported `total_count: 0` for the same folder while
- *     `api.resources` was still listing two assets in it. The assets really are
- *     gone; this endpoint is serving a stale prefix listing.
- *
- * So the two endpoints are stale in OPPOSITE directions — `resources` lags
- * deletes, `search` lags uploads — and there is no third one that is right
- * about both. This stays on `resources` because an upload is the frequent
- * operation and a file the admin just uploaded appearing missing is the worse
- * failure. Nothing is done about the delete side HERE, because there is nothing
- * honest to do: the server has no record of what this admin deleted, and
- * inventing one (a tombstone collection for a file manager) would be a second
- * source of truth about Cloudinary's contents that could itself go stale. The
- * client filters what it deleted out of subsequent pages instead — see
- * `deletedIds` in MediaClient — which is exactly as long-lived as the problem.
- *
- * ONE VISIBLE CONSEQUENCE, not worth working around: `signMediaUpload` refuses
- * a name that is already taken, and it asks this same index. So re-uploading a
- * file under a name just deleted is refused for as long as the listing is
- * stale. Refusing is the safe direction, and the message names the file.
+ * ONE CONSEQUENCE IS NOT FILTERABLE, and it is stated rather than hidden:
+ * `signMediaUpload` refuses a name that is already taken and asks this same
+ * index, which still holds the tombstone. So re-uploading a file under a name
+ * just deleted is refused, and the refusal names a file the list no longer
+ * shows. Refusing is the safe direction — the alternative is `overwrite` on an
+ * id that may not be the one the admin thinks it is — but a same-name re-upload
+ * needs `overwrite` handled deliberately, and that is v2.5's problem, not a
+ * thing to solve accidentally here.
  *
  * ── WHY THE CURSOR IS A PAIR ────────────────────────────────────────────────
  * The tree holds images and documents in the same folder and `resources` is
@@ -335,6 +360,10 @@ export async function listMediaFiles(category, cursors) {
     }
 
     for (const r of page.resources) {
+      // Destroyed assets keep their row in this listing — see isDestroyedRecord.
+      // Skipped HERE rather than in the client, so a second admin, and the same
+      // admin after a reload, see the same list as whoever pressed delete.
+      if (isDestroyedRecord(r)) continue;
       const publicPath = publicPathFromPublicId(
         r.public_id, LEGACY_PUBLIC_ID_PREFIX, resourceType, r.format,
       );

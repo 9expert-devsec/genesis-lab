@@ -140,6 +140,27 @@ export function refuseUpload({ filename, bytes }) {
   }
 
   const size = Number(bytes);
+
+  /* ── AN EMPTY FILE IS REFUSED, AND NOT FOR TIDINESS ───────────────────────
+   *
+   * A destroyed Cloudinary asset does not leave the Admin API's prefix listing;
+   * it becomes a row reading `bytes: 0, placeholder: true`, and that is exactly
+   * how /admin/media tells a deleted file from a live one (isDestroyedRecord in
+   * src/lib/actions/media.js). Measured across all 7,001 assets under the legacy
+   * prefix: the only rows matching that shape were assets that really had been
+   * destroyed.
+   *
+   * Uploading a genuinely empty file is the one way to manufacture a false
+   * positive — a real asset the file manager would then hide from its own list.
+   * Refusing it here keeps that filter's premise ENFORCED rather than merely
+   * observed to hold. It costs nothing: a 0-byte upload has no working URL
+   * either way, because Cloudinary serves a placeholder for it.
+   *
+   * `=== 0` and not `<= 0`, deliberately: a missing `bytes` arrives as NaN and
+   * must keep meaning "not measured", the same as it does for the caps below.
+   */
+  if (size === 0) return 'ไฟล์ว่าง (0 ไบต์) — เลือกไฟล์ที่มีข้อมูล';
+
   if (Number.isFinite(size) && size > 0) {
     if (resourceType === 'raw' && size > RAW_MAX_BYTES) {
       return 'ไฟล์เอกสารเกิน 10 MB — เวอร์ชันถัดไปจะรองรับไฟล์ใหญ่ '

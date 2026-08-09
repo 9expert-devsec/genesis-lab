@@ -232,6 +232,22 @@ test('THE ROUND TRIP: a listed file deletes the id it was listed from', () => {
   }
 });
 
+test('AN EMPTY UPLOAD IS REFUSED, because the delete filter depends on it', () => {
+  // A destroyed Cloudinary asset does not leave the Admin API prefix listing —
+  // it becomes a `bytes: 0, placeholder: true` row — and that shape is how
+  // listMediaFiles tells a deleted file from a live one. A genuinely empty
+  // upload is the only way to manufacture a false positive, so it is refused.
+  assert.ok(refuseUpload({ filename: 'empty.png', bytes: 0 }), '0 bytes is refused');
+  assert.match(refuseUpload({ filename: 'empty.png', bytes: 0 }), /0 ไบต์/);
+
+  // …and the refusal must not spread to "size not measured". `bytes` is absent
+  // at several call sites and NaN must keep meaning "no size to check", exactly
+  // as it does for the upper caps.
+  assert.equal(refuseUpload({ filename: 'fine.png' }), null, 'no bytes at all is not a refusal');
+  assert.equal(refuseUpload({ filename: 'fine.png', bytes: undefined }), null);
+  assert.equal(refuseUpload({ filename: 'fine.png', bytes: 1 }), null, 'one byte is a real file');
+});
+
 test('DELETE IS NOT GATED ON THE UPLOAD ALLOW-LIST — that is deliberate', () => {
   // The tree was filled by a full-disk backfill and the allow-list has since
   // narrowed. Reusing refuseUpload here would make exactly the files an admin

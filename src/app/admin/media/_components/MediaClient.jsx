@@ -124,32 +124,16 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
-  /**
-   * Files destroyed during this page view, filtered out of every later listing.
+  /*
+   * NOTE ON DELETED FILES REAPPEARING — they do not, and the fix is NOT here.
    *
-   * ── WHY THIS IS NEEDED, MEASURED AGAINST THE LIVE ACCOUNT ───────────────────
-   * Cloudinary's delivery endpoint reflects a destroy IMMEDIATELY — the URL
-   * answers 404 "Resource not found" within the same second. Its Admin API
-   * prefix listing does NOT: the destroyed asset kept coming back from
-   * `api.resources` for over five minutes. Measured, with two controls — a
-   * destroy with `invalidate` and one without behaved identically, and the
-   * Search API reported the folder empty while `api.resources` still listed two
-   * assets in it. The asset is gone; that endpoint is stale.
-   *
-   * Without this set the delete looks broken in the most alarming way possible:
-   * the row disappears, the admin presses โหลดใหม่ to confirm, and the file they
-   * just permanently destroyed is back in the list. It is NOT back — the URL is
-   * already dead — but nothing on screen says so.
-   *
-   * A ref rather than state, because filtering must not itself trigger a render,
-   * and it is read inside the load callbacks. It lives for the page view: a
-   * reload clears it, by which time the index has caught up.
+   * Cloudinary keeps a destroyed asset in its Admin API prefix listing, as a
+   * `bytes: 0, placeholder: true` tombstone, apparently forever. A client-side
+   * "recently deleted" set was the first fix and it was the wrong one: it lasts
+   * one page view, so a reload — or a second admin — would still see rows for
+   * files that no longer exist. `listMediaFiles` filters them server-side
+   * instead (see isDestroyedRecord), so every viewer gets the same answer.
    */
-  const deletedIds = useRef(new Set());
-  const withoutDeleted = useCallback(
-    (list) => list.filter((f) => !deletedIds.current.has(f.publicId)),
-    [],
-  );
 
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
@@ -193,7 +177,7 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
         setListError(res.error ?? 'โหลดไฟล์ไม่สำเร็จ');
         setFiles([]); setCursors(null); setHasMore(false);
       } else {
-        setFiles(withoutDeleted(res.files));
+        setFiles(res.files);
         setCursors(res.cursors);
         setHasMore(Boolean(res.hasMore));
       }
@@ -203,7 +187,7 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
     } finally {
       setListing(false);
     }
-  }, [withoutDeleted]);
+  }, []);
 
   /**
    * The next page, APPENDED.
@@ -232,10 +216,9 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
         if (res.cursors) setCursors(res.cursors);
         return;
       }
-      const incoming = withoutDeleted(res.files);
       setFiles((prev) => {
         const seen = new Set(prev.map((f) => f.publicId));
-        const merged = [...prev, ...incoming.filter((f) => !seen.has(f.publicId))];
+        const merged = [...prev, ...res.files.filter((f) => !seen.has(f.publicId))];
         merged.sort((a, b) => a.filename.localeCompare(b.filename));
         return merged;
       });
@@ -246,7 +229,7 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
     } finally {
       setLoadingMore(false);
     }
-  }, [active, cursors, hasMore, listing, loadingMore, withoutDeleted]);
+  }, [active, cursors, hasMore, listing, loadingMore]);
 
   useEffect(() => { loadFiles(active); }, [active, loadFiles]);
 
@@ -284,7 +267,6 @@ export default function MediaClient({ initialCategories, initialCounts, initialE
       });
       if (!res.ok) { setDeleteError(res.error ?? 'ลบไฟล์ไม่สำเร็จ'); return; }
 
-      deletedIds.current.add(file.publicId);
       setFiles((prev) => prev.filter((f) => f.publicId !== file.publicId));
       setCounts((prev) => (
         prev[active] > 0 ? { ...prev, [active]: prev[active] - 1 } : prev
