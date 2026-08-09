@@ -1,4 +1,5 @@
 import { formatTHB } from '@/lib/pricing';
+import { refNo } from '@/lib/refNo';
 import { siteDateParts } from '@/lib/articlePublishTime';
 import {
   attendanceModeBlock,
@@ -68,7 +69,7 @@ export function buildPublicPaidReceiptModel({
   const seats = pricing.seats ?? doc?.attendeesCount ?? 1;
 
   return {
-    ref_no: String(doc?._id ?? '').slice(-8).toUpperCase(),
+    ref_no: refNo(doc?._id),
 
     coordinator_name: `${coordinator.firstName ?? ''} ${coordinator.lastName ?? ''}`.trim(),
     coordinator_first_name: coordinator.firstName ?? '',

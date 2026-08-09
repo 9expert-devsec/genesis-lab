@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { refNo } from '@/lib/refNo';
 import { publicRegistrationSchema } from '@/lib/schemas/register-public';
 import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { resolveCheckoutPricing } from '@/lib/registration/resolve-price';
@@ -68,7 +69,7 @@ export async function POST(req) {
     ipAddress,
     supersedesRegistrationId,
   });
-  const referenceNumber = String(doc._id).slice(-8).toUpperCase();
+  const referenceNumber = refNo(doc._id);
   const amountSatang = toSatang(pricing.total);
   const metadata = { registrationId: String(doc._id), referenceNumber };
 
