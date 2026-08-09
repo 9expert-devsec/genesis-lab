@@ -8,7 +8,7 @@ import { createCourse, updateCourse } from '@/lib/actions/courses';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
-import { findLegacyShapeRows } from '@/lib/courses/trainingTopics';
+import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -22,41 +22,26 @@ import { findLegacyShapeRows } from '@/lib/courses/trainingTopics';
  * truth for field names; keep the `name=` attributes here in sync.
  */
 /**
- * Seed rows for the topics editor, in the upstream `{ title, bullets }` shape.
+ * The topics seed lives in @/lib/courses/trainingTopics, NOT here.
  *
- * ── THE LEGACY BRANCH IS A TRIPWIRE, NOT A RESCUE ───────────────────────────
- * MEASURED 2026-08-09: zero rows upstream carry `topic`/`subtopics`, so the
- * warning below must never fire. It exists because this form previously read
- * those key names, got undefined from good data, rendered blank, and then wrote
- * the blanks back — and the only visible symptom was on the PUBLIC page, which
- * reads the correct keys. If the retired shape ever reappears, this names the
- * course in the console instead of quietly papering over it, so the branch
- * firing is a signal rather than a silent save.
+ * The mapping is where the { topic, subtopics } defect actually was, so it has
+ * to be reachable by a test — and a test that imported this component would
+ * also import @/lib/actions/courses, which is 'use server'. Keeping the pure
+ * mapping out of the component is what lets the round-trip test start at the
+ * MSDB row rather than one step downstream of the bug.
+ *
+ * The tripwire is passed in rather than baked in: this module owns the fact
+ * that the console is the right place to shout, the pure module owns the
+ * detection.
  */
-function seedTrainingTopics(initial) {
-  const rows = initial?.training_topics;
-  if (!Array.isArray(rows)) return [];
-
-  const legacy = findLegacyShapeRows(rows);
-  if (legacy.length > 0) {
-    console.warn(
-      `[CourseForm] training_topics arrived in the RETIRED { topic, subtopics } shape `
-      + `for course ${initial?.course_id ?? initial?._id ?? '(unknown)'} at row(s) `
-      + `${legacy.join(', ')}. Upstream stores { title, bullets }; this should be `
-      + `unreachable. The rows are mapped across so the admin is not blocked, but the `
-      + `source of the old shape needs finding.`
-    );
-  }
-
-  return rows.map((t) => ({
-    title: t?.title ?? t?.topic ?? '',
-    bullets: Array.isArray(t?.bullets)
-      ? t.bullets
-      : Array.isArray(t?.subtopics)
-        ? t.subtopics
-        : (t?.bullets ?? ''),
-  }));
-}
+const warnLegacyTopicShape = ({ rows, course }) => {
+  console.warn(
+    `[CourseForm] training_topics arrived in the RETIRED { topic, subtopics } shape `
+    + `for course ${course} at row(s) ${rows.join(', ')}. Upstream stores `
+    + `{ title, bullets }; this should be unreachable. The rows are mapped across so `
+    + `the admin is not blocked, but the source of the old shape needs finding.`
+  );
+};
 
 const COURSE_LEVELS = [
   { value: '1', label: '1 · Beginner' },
@@ -556,7 +541,7 @@ export function CourseForm({
       >
         <TrainingTopicsEditor
           name="training_topics"
-          initialTopics={seedTrainingTopics(initial)}
+          initialTopics={seedTrainingTopics(initial, { onLegacyShape: warnLegacyTopicShape })}
         />
       </Section>
 

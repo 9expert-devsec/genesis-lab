@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 import {
-  parseTrainingTopicsValue, normaliseTopicRow, rowHasContent,
+  parseTrainingTopicsValue, normaliseTopicRow, rowHasContent, seedTrainingTopics,
 } from '@/lib/courses/trainingTopics';
 
 /**
@@ -120,6 +120,72 @@ test('the serialised payload contains no "topic" and no "subtopics" KEY', () => 
   assert.equal(json.includes('"subtopics":'), false, 'retired key `subtopics` is in the payload');
   assert.equal(json.includes('"title":'), true);
   assert.equal(json.includes('"bullets":'), true);
+});
+
+// ── d. THE LOOP STARTS AT THE MSDB ROW, NOT AT THE EDITOR'S PROPS ───────────
+//
+// Everything above hands `{ title, bullets }` straight to the editor, which is
+// ONE STEP DOWNSTREAM OF WHERE THE DEFECT WAS. The admin form's seed map is
+// what asked upstream rows for `t.topic`; a suite that begins after that
+// mapping stays green for the whole life of that bug. These two start at the
+// row as CourseForm receives it from MSDB.
+
+/** An MSDB course row, exactly as `/public-course` returns it. */
+const MSDB_ROW = {
+  _id: '692519bbfd2c3d20b79f0e7b',
+  course_id: 'CANVA-L1',
+  course_name: 'Canva Pro for Smart Working',
+  training_topics: UPSTREAM,
+};
+
+test('round trip from the MSDB ROW: seed → editor → payload → parse is lossless', () => {
+  const seeded = seedTrainingTopics(MSDB_ROW);
+  const { json } = serialisedPayload(seeded);
+  assert.deepEqual(parseTrainingTopicsValue(json), MSDB_ROW.training_topics);
+});
+
+test('CONTROL: reverting the seed to `t.topic` reddens the round trip above', () => {
+  // The exact defect, re-applied to the same MSDB row: read the retired key
+  // first and fall back to nothing. This is the one-line change that must not
+  // be able to pass.
+  const revertedSeed = (initial) => (initial?.training_topics ?? []).map((t) => ({
+    title: t?.topic ?? '',
+    bullets: Array.isArray(t?.subtopics) ? t.subtopics : '',
+  }));
+
+  const { json } = serialisedPayload(revertedSeed(MSDB_ROW));
+  const back = parseTrainingTopicsValue(json);
+
+  assert.notDeepEqual(back, MSDB_ROW.training_topics,
+    'the reverted seed produced the correct upstream shape, which means the round-trip '
+    + 'assertion above is NOT sensitive to the seed mapping and would survive the bug');
+  assert.deepEqual(back, [],
+    'and it is lossless in the worst way: every row empties, which is exactly how '
+    + 'COPILOT-STU ended up with nine blank headings');
+
+  // NOTE: this control deliberately does NOT also assert that the shipped seed
+  // still works. It did at first, and that made it fail alongside the real test
+  // whenever the seed was broken — two reds for one finding, with the reader
+  // left to work out which was which. A control that fails when its subject
+  // fails is measuring the subject. The shipped behaviour is the test above.
+});
+
+test('the tripwire fires — by name — when a row arrives in the retired shape', () => {
+  const fired = [];
+  const seeded = seedTrainingTopics(
+    { course_id: 'LEGACY-1', training_topics: [{ topic: 'old heading', subtopics: ['a'] }] },
+    { onLegacyShape: (info) => fired.push(info) }
+  );
+  assert.deepEqual(fired, [{ rows: [0], course: 'LEGACY-1' }],
+    'an unreachable branch that fires silently is indistinguishable from one that never fires');
+  // and it still rescues the row rather than blocking the admin
+  assert.deepEqual(seeded, [{ title: 'old heading', bullets: ['a'] }]);
+});
+
+test('CONTROL: the tripwire stays silent on healthy upstream rows', () => {
+  const fired = [];
+  seedTrainingTopics(MSDB_ROW, { onLegacyShape: (info) => fired.push(info) });
+  assert.deepEqual(fired, [], 'a tripwire that fires on good data is noise, not a signal');
 });
 
 test('CONTROL: the key probe reddens when the old key name is put back', () => {
