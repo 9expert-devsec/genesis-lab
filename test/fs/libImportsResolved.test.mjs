@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { walkSources, scrubSource } from '../sourceScan.mjs';
+import { walkSources, scrubSource, blankStringBodies } from '../sourceScan.mjs';
 
 /**
  * A helper from src/lib that a file CALLS but never IMPORTS.
@@ -18,6 +18,14 @@ import { walkSources, scrubSource } from '../sourceScan.mjs';
  *            +import { ArticleImageLightbox } from './ArticleImageLightbox';
  *            …leaving `coursePriceLabel(price, …)` undefined in RelatedCourseCard
  *
+ * A third arrived by OMISSION rather than replacement, which is worth naming
+ * because the fix is the same and the review that catches it is not:
+ *
+ *   19a0f4b   added `recordAdminActionAfter({…})` at two sites in
+ *             src/lib/actions/course-extensions.js and never added its import
+ *             at all — no line was replaced. It broke the extension half of
+ *             every course save, and stayed broken for eleven days.
+ *
  * Neither was caught by anything. That is the interesting part, and it is why a
  * guard rather than a code review note:
  *
@@ -34,8 +42,11 @@ import { walkSources, scrubSource } from '../sourceScan.mjs';
  * ── WHAT THE CHECK IS ───────────────────────────────────────────────────────
  * Every named export of every module under src/lib is a name that MUST be
  * imported where it is used. So: collect those names, then for each file under
- * src/app and src/components, flag any that the file references without
- * importing and without declaring locally.
+ * src/app, src/components AND src/lib, flag any that the file references
+ * without importing and without declaring locally.
+ *
+ * String BODIES are blanked before the reference scan — a log line naming the
+ * function it reports on does not call it. See the control.
  *
  * `.code` (imports stripped) is what a reference is counted in, and
  * `.withImports` is where the import is looked for — the split from
@@ -82,6 +93,9 @@ function namedExports(code) {
  * reads as a call to lib/utils' identically-named export.
  */
 function referencesValue(code, name) {
+  // Callers pass ALREADY-BLANKED code (see `findUnimported`). Blanking here
+  // instead would re-scan every file once per exported name — ~968 passes per
+  // file, which took the guard from under a second to 31.
   return new RegExp(String.raw`(?<![.\w$])${name}(?![\w$])(?!\s*:)`).test(code);
 }
 
@@ -103,10 +117,19 @@ function declaresLocally(code, name) {
 function findUnimported(files, exportOwners) {
   const problems = [];
   for (const f of files) {
+    // Once per FILE, not once per name — see referencesValue.
+    const code = blankStringBodies(f.code);
+    // A lib module obviously "uses" the names it exports without importing
+    // them. Only matters now that src/lib scans itself.
+    const own = namedExports(f.code);
     for (const [name, specs] of exportOwners) {
-      if (!referencesValue(f.code, name)) continue;
+      if (own.has(name)) continue;
+      // Cheap substring reject before the three regexes. Most of the ~968
+      // exported names appear in no given file at all.
+      if (!code.includes(name)) continue;
+      if (!referencesValue(code, name)) continue;
       if (importsName(f.withImports, name)) continue;
-      if (declaresLocally(f.code, name)) continue;
+      if (declaresLocally(code, name)) continue;
       problems.push(`${f.rel} uses \`${name}\` (exported by ${specs.join(' | ')}) without importing it`);
     }
   }
@@ -127,7 +150,31 @@ for (const f of LIBS) {
   }
 }
 
-const CONSUMERS = [...walkSources('src/app'), ...walkSources('src/components')];
+/**
+ * ── src/lib IS A CONSUMER TOO, AND THAT WAS THE HOLE ────────────────────────
+ * This guard shipped scanning src/app and src/components only, with src/lib
+ * read for EXPORT NAMES and never as a consumer of its own. On 2026-08-11 a
+ * fourth instance of the same defect surfaced in
+ * src/lib/actions/course-extensions.js — `recordAdminActionAfter` called at two
+ * sites, exported by src/lib/audit/recordAdminAction, imported nowhere. It
+ * broke the extension half of EVERY course save in production, and this guard
+ * could not see it: the file was never in the scan set.
+ *
+ * The name was a REAL export the whole time. The guard's rule was right and its
+ * REACH was wrong, which is the least interesting way for a check to fail and
+ * the easiest to miss when it is green.
+ *
+ * Widening further was measured, not assumed. Taking the EXPORT universe to all
+ * of src/ produces 89 false positives — route modules export `POST`, models
+ * export `Banner`, ui exports `Card`, and those words appear in JSX prose. So
+ * the export side stays src/lib, whose names are distinctive; only the consumer
+ * side grows.
+ */
+const CONSUMERS = [
+  ...walkSources('src/app'),
+  ...walkSources('src/components'),
+  ...walkSources('src/lib'),
+];
 
 // ── controls ────────────────────────────────────────────────────────────────
 
@@ -163,6 +210,52 @@ test('CONTROL: the detector fires on a call site whose import was replaced', () 
   assert.match(hits[0], /coursePriceLabel/);
 });
 
+test('CONTROL: the detector fires on a src/lib file, not just src/app', () => {
+  // The 2026-08-11 shape, and the hole this guard had: a lib module calling
+  // another lib module's export with no import. Same synthetic treatment as
+  // above, so this proves the REACH rather than just the rule.
+  const raw = [
+    "import { dbConnect } from '@/lib/db/connect';",
+    "import { requireAdmin } from '@/lib/actions/auth';",
+    'export async function saveCourseExtension(courseId, data) {',
+    '  await dbConnect();',
+    '  recordAdminActionAfter({ menu: "courses", recordId: courseId });',
+    '  return { ok: true };',
+    '}',
+  ].join('\n');
+  const broken = {
+    rel: 'synthetic/lib/actions/course-extensions.js',
+    code: scrubSource(raw),
+    withImports: scrubSource(raw, { stripImports: false }),
+  };
+
+  const hits = findUnimported([broken], OWNERS);
+  assert.equal(hits.length, 1, `expected exactly one hit, got: ${JSON.stringify(hits)}`);
+  assert.match(hits[0], /recordAdminActionAfter/);
+});
+
+test('CONTROL: naming a lib function inside a STRING is not calling it', () => {
+  // The two false positives that appeared when the scan reached src/lib, and
+  // the reason string bodies are blanked. Both are real code in the repo:
+  // a console line that names the function it is reporting on, and a constant
+  // whose VALUE is a source location. Neither imports anything, and neither is
+  // a defect — if this control fails, the guard is about to file two bugs that
+  // do not exist.
+  const raw = [
+    "const ARTICLE_SORT_SOURCE = 'src/lib/actions/articles.js → getArticles()';",
+    'function report() {',
+    '  console.log("[mc-receipt] sendMasterclassReceipt complete", ARTICLE_SORT_SOURCE);',
+    '}',
+  ].join('\n');
+  const innocent = {
+    rel: 'synthetic/lib/articleRank.js',
+    code: scrubSource(raw),
+    withImports: scrubSource(raw, { stripImports: false }),
+  };
+
+  assert.deepEqual(findUnimported([innocent], OWNERS), []);
+});
+
 test('CONTROL: the same file with the import restored is clean', () => {
   // The other half — without this, a detector that flagged EVERYTHING would
   // satisfy the control above and make the real assertion unfalsifiable.
@@ -185,7 +278,7 @@ test('CONTROL: the same file with the import restored is clean', () => {
 
 // ── the assertion ───────────────────────────────────────────────────────────
 
-test('no file under src/app or src/components uses a src/lib export it never imported', () => {
+test('no file under src/app, src/components or src/lib uses a src/lib export it never imported', () => {
   const problems = findUnimported(CONSUMERS, OWNERS);
   assert.deepEqual(
     problems,
