@@ -862,44 +862,23 @@ export function CourseForm({
         </div>
       </Section>
 
-      {/* ───────────────────────────────────────────────────────────
-          Section 8 — เว็บไซต์อ้างอิง
+      {/* SECTION 8 IS GONE ENTIRELY. It held five URL arrays; four were retired
+          in 2bdb6e1 and `website_urls` — the last one — is retired here.
 
-          WAS "เอกสาร / ลิงก์ประกอบ" with five URL arrays. Four are gone from
-          the form: course_doc_paths, course_lab_paths, course_case_study_paths
-          and exam_links. Their DATA is untouched upstream — shapePayload no
-          longer emits those keys at all, so MSDB's findByIdAndUpdate never sees
-          them and leaves the stored arrays exactly as they are. Deleting these
-          inputs WITHOUT that change would have sent `[]` for each on every save
-          and silently wiped 74 course_doc_paths rows.
+          THE DATA IS NOT DELETED. shapePayload no longer emits any of the five,
+          so MSDB's unfiltered `findByIdAndUpdate` never sees those keys and
+          leaves the stored arrays exactly as they are. Removing an input while
+          LEAVING its payload line would have been the wipe: `linesOf` returns
+          `[]` for a missing key, and 74 of 77 courses carry a website_urls URL.
 
-          website_urls STAYS, and is the reason this section still exists: it is
-          read on a public surface. The related-course cards on every article
-          detail page link through `website_urls[0]`
-          (articles/[slug]/_components/ArticleDetailClient.jsx:712), and
-          lib/actions/career-paths.js:286 copies it into a curriculum's
-          `publicUrl`. Removing the editor would leave a live public link with
-          no way to maintain it.
+          What is lost is editing it from genesis admin; MSDB's own admin still
+          can. Both public readers keep working off the stored values —
+          ArticleDetailClient.jsx:712 (related-course card hrefs) and
+          career-paths.js:286 (curriculum publicUrl).
 
-          NOT the course outline. The download button reads
-          course_outline_th / course_outline_en, which are a different field
-          with their own uploader in section 7 and are unaffected.
-      ─────────────────────────────────────────────────────────── */}
+          NOT the course outline: course_outline_th / course_outline_en are a
+          different field with their own uploader in section 7, unaffected. */}
     </>
-  );
-
-  /**
-   * `website_urls` — an MSDB form input like any other, but rendered in the
-   * RAIL in shell mode (directly under URL Alias) and in section 8 on the
-   * create page. One element, placed differently; never two.
-   */
-  const websiteUrlsField = (
-    <BulletTextarea
-      name="website_urls"
-      label="เว็บไซต์อ้างอิง (website_urls)"
-      defaultValue={initial?.website_urls}
-      urls
-    />
   );
 
   // ── CREATE PAGE — untouched linear layout ─────────────────────────
@@ -922,8 +901,6 @@ export function CourseForm({
         )}
 
         {bodySections}
-
-        <Section title="8. เว็บไซต์อ้างอิง">{websiteUrlsField}</Section>
 
         <div className="flex gap-2">
           <button
@@ -1157,7 +1134,6 @@ export function CourseForm({
             onTags={markTouched(setTags)}
             isPublished={isPublished}
             onIsPublished={markTouched(setIsPublished)}
-            urlSlot={websiteUrlsField}
           />
         </aside>
       </div>

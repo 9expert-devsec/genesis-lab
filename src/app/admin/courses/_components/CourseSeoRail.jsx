@@ -3,19 +3,17 @@
 /**
  * The course editor's right rail — everything that is NOT the MSDB course body.
  *
- * ── TWO STORES, ONE RAIL, AND THE SEAM IS DELIBERATE ────────────────────────
- * Every field below except one belongs to the genesis-side `course_extensions`
- * collection (model CourseExtension), keyed by the course_id CODE and written
- * by `saveCourseExtension`. They are controlled React state, not form inputs —
+ * ── ONE STORE, WHICH IS NOW THE WHOLE POINT ─────────────────────────────────
+ * Every field below belongs to the genesis-side `course_extensions` collection
+ * (model CourseExtension), keyed by the course_id CODE and written by
+ * `saveCourseExtension`. They are controlled React state, not form inputs —
  * they never enter the FormData that `shapePayload` reads, and they must not.
  *
- * The exception is `urlSlot`, which the parent fills with the `website_urls`
- * input. That IS an MSDB field, collected from the form like every other one.
- * It sits here because the request put it here and the reason is sound — it and
- * URL Alias are both "where does this course live on the web", and having them
- * a screen apart is how they drifted. The seam is a SLOT rather than an import
- * so this component never grows a second opinion about the MSDB payload: it
- * renders whatever it is handed and knows nothing about `shapePayload`.
+ * It briefly held one exception: a `urlSlot` the parent filled with the MSDB
+ * `website_urls` input, so the two "where does this course live on the web"
+ * fields sat together. `website_urls` has since been retired from the admin
+ * entirely, and the slot went with it — leaving this component with a single
+ * store and no opinion at all about the MSDB payload.
  */
 
 export function CourseSeoRail({
@@ -33,8 +31,6 @@ export function CourseSeoRail({
   onTags,
   isPublished,
   onIsPublished,
-  /** The `website_urls` field — an MSDB form input, owned by the parent form. */
-  urlSlot = null,
 }) {
   const input =
     'w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-9e-action focus:ring-2 focus:ring-9e-action/20';
@@ -56,9 +52,6 @@ export function CourseSeoRail({
           ถ้าว่างจะใช้ <code>/{String(courseId ?? '').toLowerCase()}-training-course</code> โดยอัตโนมัติ
         </p>
       </RailField>
-
-      {/* website_urls — directly under URL Alias, per the request. */}
-      {urlSlot}
 
       <RailField label={`Meta Title (${metaTitle.length}/60)`}>
         <input

@@ -84,8 +84,14 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
  * before the change, 74 of the 77 upstream courses carry a course_doc_paths URL
  * and 2 carry exam_links.
  *
- * `website_urls` is NOT on this roster and must not join it: it is still edited
- * and is read on a public surface (article related-course card hrefs).
+ *   now (2)     `website_urls` JOINS IT. Section 8 is gone entirely — it was
+ *               the last field in it. Being publicly read is what made the
+ *               editor worth keeping, not what makes the payload send it: both
+ *               readers work off the STORED value, which omitting preserves.
+ *
+ * So the roster is program plus all five of the old section 8. The section-7
+ * arrays are the control: they must still be sent, or "omit everything" would
+ * satisfy every assertion here.
  */
 const OMITTED = [
   'program',
@@ -93,6 +99,7 @@ const OMITTED = [
   'course_lab_paths',
   'course_case_study_paths',
   'exam_links',
+  'website_urls',
 ];
 
 test('CONTROL: program is still OMITTED when empty', () => {
@@ -107,7 +114,7 @@ test('CONTROL: program is still OMITTED when empty', () => {
   );
 });
 
-test('the four removed section-8 fields are not emitted at all', () => {
+test('the five removed section-8 fields are not emitted at all', () => {
   // Absent, not empty. A `key: linesOf(...)` line puts the field back in the
   // value channel with `[]` as its value, which is a wipe, not a no-op.
   for (const key of OMITTED.slice(1)) {
@@ -119,7 +126,7 @@ test('the four removed section-8 fields are not emitted at all', () => {
   }
 });
 
-test('the four removed fields have no input left in the form', () => {
+test('the five removed fields have no input left in the form', () => {
   // The other half: an input still posting the value while the payload ignores
   // it would look like a working editor that silently saves nothing.
   const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
@@ -132,24 +139,24 @@ test('the four removed fields have no input left in the form', () => {
   }
 });
 
-test('CONTROL: website_urls IS still sent — it is edited and publicly read', () => {
-  // THE control for this pair. A shapePayload that returned {} would satisfy
-  // every doesNotMatch above. website_urls stayed in section 8 precisely
-  // because ArticleDetailClient links related-course cards through
-  // website_urls[0], so it must remain in the value channel AND in the form.
-  assert.match(
+test('website_urls is omitted, NOT sent empty — the 74-course wipe', () => {
+  // `linesOf` returns `[]` for a missing key, never undefined. Removing the
+  // input while leaving `website_urls: linesOf(...)` in place would have sent
+  // an empty array on every save into MSDB's unfiltered findByIdAndUpdate, and
+  // 74 of the 77 courses carry a URL there. The public readers
+  // (ArticleDetailClient.jsx:712, career-paths.js:286) keep working because
+  // they read the STORED value, which omitting is exactly what preserves.
+  assert.doesNotMatch(
     SRC.code,
-    /website_urls:\s*linesOf\(formData,\s*'website_urls'\)/,
-    'website_urls stopped being sent — the article related-course links lose their href'
+    /website_urls:\s*linesOf\(/,
+    'website_urls is being SENT again — an empty array here blanks 74 courses'
   );
-  const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
-  assert.match(FORM.code, /name="website_urls"/, 'website_urls lost its input');
 });
 
 test('CONTROL: the section-7 arrays are untouched and still sent', () => {
-  // A second, independent control from a section this change never went near —
-  // so "the payload still carries the fields it should" is not resting on
-  // website_urls alone.
+  // THE control for this file. A shapePayload that returned {} — or an "omit
+  // everything" edit — would satisfy every doesNotMatch above. These are the
+  // fields that must still travel, from a section this change never went near.
   for (const key of ['course_objectives', 'bullets', 'training_topics']) {
     assert.match(
       SRC.code,

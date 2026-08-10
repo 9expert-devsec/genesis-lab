@@ -41,12 +41,16 @@
  *   course_system_requirements[] ← string[]
  *   bullets[]                    ← string[] (highlight bullets)
  *   training_topics              ← [{ title, bullets[] }]
- *   website_urls[]               ← URL[]
  *
  * NOT SENT, and therefore not listed above: course_doc_paths, course_lab_paths,
- * course_case_study_paths, exam_links. The form no longer edits them and the
- * payload no longer mentions them, so MSDB keeps whatever it already holds.
- * They still exist upstream and are still returned by the read side.
+ * course_case_study_paths, exam_links, website_urls. The form no longer edits
+ * them and the payload no longer mentions them, so MSDB keeps whatever it
+ * already holds. They still exist upstream and are still returned by the read
+ * side — `website_urls` in particular is still READ on public surfaces
+ * (articles/[slug]/_components/ArticleDetailClient.jsx:712 links every related
+ * course card through `website_urls[0]`, and lib/actions/career-paths.js:286
+ * copies it into a curriculum's publicUrl). What was removed is the ability to
+ * EDIT it from genesis admin; MSDB's own admin still can.
  */
 
 import { revalidatePath } from 'next/cache';
@@ -277,7 +281,6 @@ function shapePayload(formData) {
      * puts them in the same leave-alone channel as `program`.
      *
      * Restoring one is one line — plus its input back in section 8. */
-    website_urls:                linesOf(formData, 'website_urls'),
     training_topics:             parseTrainingTopics(formData),
     /* ── OUTLINE PDFs — ALWAYS BOTH KEYS, ALWAYS THE FULL 8-KEY OBJECT ──────
      *

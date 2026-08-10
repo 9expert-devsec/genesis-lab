@@ -118,15 +118,10 @@ test('CONTROL: the publish switch reflects an unpublished course', () => {
 
 // ── the rail ────────────────────────────────────────────────────────────────
 
-test('the rail holds URL Alias and website_urls, adjacent', () => {
+test('the rail holds URL Alias', () => {
   const rail = railOf(renderEdit());
   assert.ok(rail, 'there is no rail');
   assert.match(rail, /URL Alias/);
-  assert.match(rail, /name="website_urls"/, 'website_urls is not in the rail');
-  assert.ok(
-    rail.indexOf('URL Alias') < rail.indexOf('name="website_urls"'),
-    'website_urls should sit directly under URL Alias'
-  );
 });
 
 test('the rail holds the rest of the SEO fields and the alias-resolution checkbox', () => {
@@ -137,11 +132,12 @@ test('the rail holds the rest of the SEO fields and the alias-resolution checkbo
   assert.match(rail, /แสดงผลในเว็บสาธารณะ/, 'the alias-resolution checkbox is not in the rail');
 });
 
-test('website_urls appears exactly once — one input, placed differently', () => {
-  // It is an MSDB form field. Two copies would put two values into FormData and
-  // `linesOf` would read only the first, silently discarding the other.
-  const html = renderEdit();
-  assert.equal((html.match(/name="website_urls"/g) ?? []).length, 1);
+test('website_urls has no input anywhere — section 8 is gone', () => {
+  // Retired from the admin entirely. The DATA survives: shapePayload omits the
+  // key, so MSDB keeps its stored arrays and both public readers still resolve.
+  // What an input here would mean is an editor that silently saves nothing.
+  assert.doesNotMatch(renderEdit(), /name="website_urls"/);
+  assert.doesNotMatch(renderCreate(), /name="website_urls"/, 'the create page still edits it');
 });
 
 // ── the gallery is the only tabbed region ───────────────────────────────────
@@ -208,6 +204,11 @@ test('CONTROL: the create page did NOT acquire a rail or a header', () => {
   assert.doesNotMatch(html, /<aside/, 'the create page grew a rail it cannot save');
   assert.doesNotMatch(html, /h-\[100dvh\]/, 'the create page grew the shell');
   assert.match(html, /สร้างหลักสูตรใหม่/);
-  // It still edits website_urls, in section 8 where it was.
-  assert.match(html, /name="website_urls"/);
+  // Section 8 is gone from BOTH layouts. shapePayload is shared, so leaving the
+  // input here while the payload drops the key would give the create page an
+  // editor that silently saves nothing.
+  assert.doesNotMatch(html, /name="website_urls"/);
+  // The control that this control is not vacuous: the create page still edits
+  // the fields it always did.
+  assert.match(html, /name="course_name"/);
 });
