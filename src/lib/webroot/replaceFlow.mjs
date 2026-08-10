@@ -48,6 +48,92 @@ export const REPLACE = {
 };
 
 /**
+ * THE SHARED STEP: put the CURRENT bytes somewhere safe, and prove they landed.
+ *
+ * ══ WHY THIS IS EXTRACTED ═══════════════════════════════════════════════════
+ *
+ * A RESTORE is itself an overwrite — copying an archive onto the live key
+ * destroys whatever is there now — so restoring has to take the same precaution
+ * in the same order as replacing. That is the ordering this whole phase exists
+ * to guarantee, and it is now needed twice.
+ *
+ * It is extracted rather than copied because two implementations of one
+ * ordering rule is the shape of defect this repo has been bitten by repeatedly.
+ * It is NOT extracted far enough to let a caller reorder it: the caller supplies
+ * I/O and receives a verdict, and cannot interleave anything.
+ *
+ * Returns `{ ok: true, archivePathname, previousBytes }`, or
+ * `{ ok: false, reason, error, archivePathname }` where `reason` is one of
+ * ARCHIVE_STEP. Each caller maps that onto its own status vocabulary rather
+ * than sharing one enum, because "we refused to hand out a token" and "we
+ * refused to restore" are different sentences to the person reading them.
+ */
+export const ARCHIVE_STEP = {
+  LIVE_MISSING: 'live-missing',
+  ARCHIVE_FAILED: 'archive-failed',
+  ARCHIVE_UNVERIFIED: 'archive-unverified',
+};
+
+export async function archiveCurrentObject({ target, stamp }, { headLive, copy, headArchive }) {
+  // ── the object we are about to destroy ──────────────────────────────────
+  let live = null;
+  try {
+    live = await headLive(target.blobPathname);
+  } catch {
+    live = null;
+  }
+  if (!live) {
+    return {
+      ok: false,
+      reason: ARCHIVE_STEP.LIVE_MISSING,
+      error: `ไม่พบไฟล์ปัจจุบันที่ ${target.blobPathname} — `
+        + 'เอกสารนี้อาจไม่ได้ถูกให้บริการอยู่ ตรวจสอบก่อนแทนที่',
+    };
+  }
+
+  // ── archive ─────────────────────────────────────────────────────────────
+  const archivePathname = webrootArchivePathname(target.filename, stamp);
+  try {
+    await copy(target.blobPathname, archivePathname);
+  } catch (err) {
+    return {
+      ok: false,
+      reason: ARCHIVE_STEP.ARCHIVE_FAILED,
+      error: `สำรองไฟล์เดิมไม่สำเร็จ จึงไม่แทนที่ — ${err?.message ?? err}`,
+      archivePathname,
+    };
+  }
+
+  // ── VERIFY. A successful call is not a copy. ─────────────────────────────
+  let archived = null;
+  try {
+    archived = await headArchive(archivePathname);
+  } catch {
+    archived = null;
+  }
+  if (!archived) {
+    return {
+      ok: false,
+      reason: ARCHIVE_STEP.ARCHIVE_UNVERIFIED,
+      error: `สำรองไฟล์แล้วแต่ตรวจสอบไม่พบที่ ${archivePathname} จึงไม่แทนที่`,
+      archivePathname,
+    };
+  }
+  // Size equality is the cheapest evidence the copy is the same object rather
+  // than an empty placeholder at the right key.
+  if (Number(archived.size) !== Number(live.size)) {
+    return {
+      ok: false,
+      reason: ARCHIVE_STEP.ARCHIVE_UNVERIFIED,
+      error: `สำรองไฟล์ได้ขนาด ${archived.size} ไบต์ แต่ไฟล์เดิม ${live.size} ไบต์ จึงไม่แทนที่`,
+      archivePathname,
+    };
+  }
+
+  return { ok: true, archivePathname, previousBytes: Number(live.size) };
+}
+
+/**
  * Run the flow. `deps` are all async:
  *
  *   headLive(blobPathname)   → { size, url } | null   the object being replaced
@@ -67,56 +153,15 @@ export async function runReplaceFlow({ filename, bytes, stamp }, deps) {
   const sizeRefusal = refuseWebrootSize(bytes);
   if (sizeRefusal) return { status: REPLACE.REFUSED_SIZE, error: sizeRefusal };
 
-  // ── the object we are about to destroy ──────────────────────────────────
-  let live = null;
-  try {
-    live = await headLive(target.blobPathname);
-  } catch {
-    live = null;
+  // ── 3 + 4. archive the current bytes, and prove they landed ─────────────
+  const safe = await archiveCurrentObject({ target, stamp }, { headLive, copy, headArchive });
+  if (!safe.ok) {
+    const status = safe.reason === ARCHIVE_STEP.LIVE_MISSING
+      ? REPLACE.LIVE_MISSING
+      : (safe.reason === ARCHIVE_STEP.ARCHIVE_FAILED ? REPLACE.ARCHIVE_FAILED : REPLACE.ARCHIVE_UNVERIFIED);
+    return { status, error: safe.error, ...(safe.archivePathname ? { archivePathname: safe.archivePathname } : {}) };
   }
-  if (!live) {
-    return {
-      status: REPLACE.LIVE_MISSING,
-      error: `ไม่พบไฟล์ปัจจุบันที่ ${target.blobPathname} — `
-        + 'เอกสารนี้อาจไม่ได้ถูกให้บริการอยู่ ตรวจสอบก่อนแทนที่',
-    };
-  }
-
-  // ── 3. archive ──────────────────────────────────────────────────────────
-  const archivePathname = webrootArchivePathname(target.filename, stamp);
-  try {
-    await copy(target.blobPathname, archivePathname);
-  } catch (err) {
-    return {
-      status: REPLACE.ARCHIVE_FAILED,
-      error: `สำรองไฟล์เดิมไม่สำเร็จ จึงไม่แทนที่ — ${err?.message ?? err}`,
-      archivePathname,
-    };
-  }
-
-  // ── 4. VERIFY. A successful call is not a copy. ──────────────────────────
-  let archived = null;
-  try {
-    archived = await headArchive(archivePathname);
-  } catch {
-    archived = null;
-  }
-  if (!archived) {
-    return {
-      status: REPLACE.ARCHIVE_UNVERIFIED,
-      error: `สำรองไฟล์แล้วแต่ตรวจสอบไม่พบที่ ${archivePathname} จึงไม่แทนที่`,
-      archivePathname,
-    };
-  }
-  // Size equality is the cheapest evidence the copy is the same object rather
-  // than an empty placeholder at the right key.
-  if (Number(archived.size) !== Number(live.size)) {
-    return {
-      status: REPLACE.ARCHIVE_UNVERIFIED,
-      error: `สำรองไฟล์ได้ขนาด ${archived.size} ไบต์ แต่ไฟล์เดิม ${live.size} ไบต์ จึงไม่แทนที่`,
-      archivePathname,
-    };
-  }
+  const { archivePathname, previousBytes } = safe;
 
   // ── 5. only now ─────────────────────────────────────────────────────────
   //
@@ -125,12 +170,12 @@ export async function runReplaceFlow({ filename, bytes, stamp }, deps) {
   // rebuilt the key from (filename, stamp) on its own would be a second
   // derivation of the same value — the shape that has to agree with this one
   // and has nothing forcing it to.
-  const token = await authorise(target, { archivePathname, previousBytes: Number(live.size) });
+  const token = await authorise(target, { archivePathname, previousBytes });
   return {
     status: REPLACE.AUTHORISED,
     target,
     archivePathname,
-    previousBytes: Number(live.size),
+    previousBytes,
     token,
   };
 }

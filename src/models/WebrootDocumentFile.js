@@ -48,6 +48,25 @@ const WebrootDocumentFileSchema = new mongoose.Schema(
      */
     archivePathname: { type: String, default: '' },
 
+    /**
+     * Set ONLY on a restore: the archive key these bytes were copied back FROM.
+     *
+     * ══ WHY A NEW FIELD RATHER THAN REUSING archivePathname ═════════════════
+     *
+     * They are different halves of the same event and both are needed. On a
+     * restore, `archivePathname` still means what it always means — where the
+     * bytes that were LIVE went before being overwritten — because a restore is
+     * itself an overwrite and takes its own safety archive. `restoredFrom` is
+     * the other direction: which edition came back.
+     *
+     * Collapsing them would make a restore row indistinguishable from an
+     * ordinary replacement, and the one question anybody asks after a rollback
+     * — "which version is live now, and where did it come from" — would have no
+     * answer in the record. Empty on every non-restore row, which is what makes
+     * the distinction readable without a flag.
+     */
+    restoredFrom: { type: String, default: '' },
+
     bytes: { type: Number, default: 0 },
     contentType: { type: String, default: 'application/pdf' },
 

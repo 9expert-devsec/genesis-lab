@@ -264,6 +264,9 @@ export async function listWebrootReplacements({ filename } = {}) {
       .find(query, {
         filename: 1, publicPath: 1, archivePathname: 1, bytes: 1,
         sha256: 1, uploadedAt: 1, uploadedBy: 1, version: 1,
+        // Empty on an ordinary replacement; the source archive key on a
+        // restore. Projected so the history can say which rows are rollbacks.
+        restoredFrom: 1,
       })
       .sort({ uploadedAt: -1 })
       .limit(200)
