@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
+import { NodeSelection } from '@tiptap/pm/state';
+import { ResizableImage, imageModalAttrs } from '@/lib/editor/resizableImage';
 import TiptapLink from '@tiptap/extension-link';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -32,38 +33,6 @@ import {
   Undo2, Redo2, ChevronLeft, X, Search, Trash2, Eye,
 } from 'lucide-react';
 
-/**
- * Image extension with width/style/alt round-trip support.
- *
- * The bundled @tiptap/extension-image only persists `src` and `alt`, so
- * any width the admin sets in the ImagePropertiesModal would vanish on
- * save / reload. We extend it with `width` (mirrors into both the HTML
- * attribute and inline `style`) and `style` (raw inline style so future
- * editors can keep custom styling intact through a round-trip).
- */
-const ResizableImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: {
-        default: null,
-        renderHTML: (attrs) =>
-          attrs.width ? { width: attrs.width, style: `width:${attrs.width}` } : {},
-        parseHTML: (el) => el.getAttribute('width') || el.style.width || null,
-      },
-      alt: {
-        default: '',
-        renderHTML: (attrs) => (attrs.alt ? { alt: attrs.alt } : {}),
-        parseHTML: (el) => el.getAttribute('alt') || '',
-      },
-      style: {
-        default: null,
-        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
-        parseHTML: (el) => el.getAttribute('style') || null,
-      },
-    };
-  },
-});
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import {
   createArticle,
@@ -351,7 +320,27 @@ export function ArticleForm({
       // openOnClick: false stops the editor from following links on
       // single-click — admins expect clicks to place the cursor.
       TiptapLink.configure({ openOnClick: false, autolink: true }),
-      ResizableImage.configure({ inline: false, allowBase64: false }),
+      ResizableImage.configure({
+        inline: false,
+        allowBase64: false,
+        /**
+         * The node view's edit button, opted into HERE and nowhere else.
+         *
+         * The extension is shared with CustomPageForm, which has no image
+         * modal; supplying no opener there is what keeps the button out of
+         * that editor entirely. Same destination as the double-click below,
+         * and deliberately the same three lines of state — one modal, two
+         * ways in.
+         *
+         * The node view selects the image itself before calling this, so the
+         * modal's `updateAttributes` on confirm lands on the right node.
+         */
+        onEditImage: (attrs) => {
+          setImgAlt(attrs.alt ?? '');
+          setImgWidth(attrs.width ?? '');
+          setImgModal({ url: attrs.src, mode: 'edit' });
+        },
+      }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -364,6 +353,37 @@ export function ArticleForm({
       attributes: {
         class:
           'article-content prose prose-sm dark:prose-invert max-w-none min-h-[400px] focus:outline-none px-4 py-3',
+      },
+      /**
+       * THE WAY BACK INTO THE IMAGE MODAL.
+       *
+       * Until this existed the modal had exactly ONE opener — the toolbar's
+       * upload handler — so an image was editable for the few seconds between
+       * upload and insertion and never again. Its alt text and width could not
+       * be corrected without deleting the image and re-uploading it.
+       *
+       * DOUBLE-CLICK rather than a BubbleMenu: it is a handler on the
+       * editorProps object that already exists, with no new component, no
+       * floating-position logic and no extra z-index to reconcile against the
+       * modal (z-[60]) and the preview overlay this screen already stacks. The
+       * tradeoff is discoverability — a bubble menu advertises itself and this
+       * does not — but double-click-for-properties is the convention every
+       * other editor an admin uses already follows.
+       *
+       * The node is SELECTED explicitly before the modal opens. `chain()
+       * .updateAttributes('image', …)` on confirm applies to the current
+       * selection, so without this a double-click that left the cursor
+       * elsewhere would edit the wrong image, or nothing at all.
+       */
+      handleDoubleClickOn: (view, pos, node, nodePos) => {
+        if (node.type.name !== 'image') return false;
+        view.dispatch(
+          view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)),
+        );
+        setImgAlt(node.attrs.alt ?? '');
+        setImgWidth(node.attrs.width ?? '');
+        setImgModal({ url: node.attrs.src, mode: 'edit' });
+        return true; // handled — do not fall through to the default behaviour
       },
     },
     immediatelyRender: false,
@@ -661,7 +681,7 @@ export function ArticleForm({
               onImageUploaded={(url) => {
                 setImgAlt('');
                 setImgWidth('');
-                setImgModal({ url });
+                setImgModal({ url, mode: 'insert' });
               }}
             />
           </div>
@@ -1145,18 +1165,29 @@ export function ArticleForm({
                 type="button"
                 onClick={() => {
                   if (!editor) return;
-                  editor.chain().focus().setImage({
+                  // INSERT builds a new node, so `undefined` means "use the
+                  // default". EDIT merges over an existing one, and
+                  // `updateAttributes` IGNORES `undefined` — a cleared field
+                  // has to send an explicit value or the old one survives
+                  // silently. See imageModalAttrs.
+                  const attrs = imageModalAttrs({
+                    mode:  imgModal.mode,
                     src:   imgModal.url,
-                    alt:   imgAlt.trim() || undefined,
-                    width: imgWidth.trim() || undefined,
-                  }).run();
+                    alt:   imgAlt,
+                    width: imgWidth,
+                  });
+                  if (imgModal.mode === 'edit') {
+                    editor.chain().focus().updateAttributes('image', attrs).run();
+                  } else {
+                    editor.chain().focus().setImage(attrs).run();
+                  }
                   setImgModal(null);
                   setImgAlt('');
                   setImgWidth('');
                 }}
                 className="rounded-lg bg-9e-action px-4 py-2 text-sm font-semibold text-white hover:bg-9e-brand"
               >
-                แทรกรูปภาพ
+                {imgModal.mode === 'edit' ? 'บันทึกการแก้ไข' : 'แทรกรูปภาพ'}
               </button>
             </div>
           </div>
