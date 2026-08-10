@@ -42,31 +42,83 @@ import Link from "next/link";
  * 332px. That 165px cliff at a single pixel of viewport is the whole argument
  * against reasoning about this row in breakpoints at all.
  *
- * Hence `@container` on the row and `@[480px]:` on the rail. 480 is derived,
- * not picked: 61df291 fixed ~360px as the first card width at which the row is
- * a row, leaving the title ~244px after `p-3`, the 80px thumbnail and the gap.
- * The rail costs ~105px of label and padding plus a 12px gap, so the same title
- * budget survives from ~477px up.
+ * Hence `@container` on the row and `@[376px]:` on the rail.
  *
- * WHERE THAT LANDS, HONESTLY: the rail is off at every md-and-up width, but the
- * binding case is the middle regime at 474.5px, which clears by 5.5px — not by
- * a comfortable margin. That is not a fudge, it is the derivation landing where
- * it lands: a 474.5px card with a rail would leave the title 241px, right on
- * 61df291's floor. The number was not then nudged to buy a prettier margin,
- * because padding a derived threshold to make a test look robust is how the
- * threshold stops meaning anything. What the guard does instead is report the
- * margin and the viewport it occurs at, so if `max-w-[1200px]`, the 300px
- * sidebar or either padding moves and the rail starts appearing at lg, the
- * suite says so instead of the page quietly changing shape.
+ * ── WHERE 376 COMES FROM, AND WHY IT IS NOT 480 ─────────────────────────────
+ * 2412163 first shipped 480, derived from a title that NEVER TRUNCATES: it took
+ * 61df291's ~360px "first width at which the row is a row" — which budgets the
+ * title ~244px — and simply added the rail's cost on top. That budget is wrong,
+ * and the evidence it is wrong is the rail's own history: the pre-61df291 rail
+ * SHIPPED on the 397px desktop card with the title truncating, and that is the
+ * approved appearance. The title is `line-clamp-2`. Truncation is the designed
+ * behaviour of this row, not a failure state to be budgeted away. Budgeting for
+ * a title that never clips demanded 480px of card, which no md-and-up width
+ * reaches, so the rail rendered only in a ~546-767 band and never on desktop —
+ * the exact opposite of what it was brought back for.
+ *
+ * Re-derived from what the row needs to stay READABLE with the rail present:
+ *
+ *      12   row `p-3` left inset (the right one is cancelled by the rail)
+ *      80   thumbnail, `shrink-0`
+ *      12   `gap-3`, thumbnail → text
+ *     160   text column FLOOR — see below
+ *      12   `gap-3`, text → rail
+ *      32   rail `px-4`
+ *      68   rail label "ดูโปรโมชัน" at `text-sm`, 8 advancing glyphs
+ *     ───
+ *     376
+ *
+ * The 160px floor is the DATE LINE, not the title, because the date is the only
+ * thing in that column with no truncation mechanism: "ระยะเวลา: ถึง 5 ก.ย. 2569"
+ * at `text-sm` is ~160px, and below that it wraps to a second line and the
+ * compact row silently grows. The title is allowed to clip and does.
+ *
+ * That derivation is bracketed on both sides by behaviour that was already
+ * approved, which is the check that it is not just arithmetic: 376 < 397, so
+ * the desktop card that shipped the rail still gets it; 376 > 324, so the phone
+ * still gets the inline affordance 61df291 was for. It also predicts the
+ * screenshot — at 397px the text column is 397 − 216 = 181px, which at
+ * `text-base` over two clamped lines is ~44 characters, and the approved
+ * reference reads "9EXPERT Promotion Exclusive สำหรับ Public…" at ~42.
+ *
+ * ── WHERE THE RAIL ACTUALLY SHOWS ───────────────────────────────────────────
+ * Scanned across every width rather than sampled, because sampling is what put
+ * a wrong number in this docstring last time. Rail SHOWN at:
+ *
+ *      vw  442 – 767     regime A, one column, card 376 – 701
+ *      vw  826 – 1023    regime B, grid split, card 376 – 474.5
+ *      vw 1158 – ∞       regime C, sidebar taken, card 376 – 397 (capped)
+ *
+ * and hidden in the three gaps: below 442 (the phone), 768 – 825 where the grid
+ * has just halved the card, and 1024 – 1157 where the sidebar has just taken
+ * 332px. All three regimes reach it, which is the property that matters and the
+ * one 480 failed — under 480 regime C topped out at 397 and could never qualify.
+ *
+ * The 1024 – 1157 gap is real and worth naming: the rail is on at 1023, off at
+ * 1024, on again at 1158. That is not the threshold being unstable, it is the
+ * card losing 165px at one pixel of viewport, and any rule keyed on how much
+ * room the row HAS must follow it. A rule that stayed on across that cliff
+ * would be putting the rail on the 309px card — the narrowest this row is at
+ * any width, narrower than a phone's.
+ *
+ * THE BINDING CASE IS NOW THE DESKTOP CAP, not the 1023 peak that bound 480:
+ * regime C maxes at 397px once `max-w-[1200px]` stops the growth, so the
+ * threshold clears it by 21px and the guard pins that. The lower bound has 52px
+ * of room (324px phone). If the page cap, the 300px sidebar or either padding
+ * moves enough to pull the desktop card under 376, the rail silently leaves
+ * desktop again — which is precisely the regression this file just had — so the
+ * guard asserts reachability in each of the three regimes by name.
  *
  * This is also the codebase's existing vocabulary for "ask the element, not the
  * window": training-course/_components/CourseCard.jsx:209, ScheduleCard.jsx:35.
  *
- * A viewport rule cannot express this at all. The honest translation is
- * `min-[546px]:max-md:`, which is not a breakpoint but this page's entire
- * layout chain — 1200px cap, 300px sidebar, 32px gap, two paddings — copied by
- * hand into a leaf component, where it would go stale the first time any one of
- * those five numbers moved and nobody would know.
+ * A viewport rule cannot express this at all. The honest translation is now
+ * `min-[442px]:max-md:` PLUS `min-[826px]:max-[1023px]:` PLUS `min-[1158px]:` —
+ * three disjoint bands, none of which is a breakpoint, all of them arithmetic
+ * on this page's layout chain (1200px cap, 300px sidebar, 32px gap, two
+ * paddings) copied by hand into a leaf component, where they would go stale the
+ * first time any one of those numbers moved and nobody would know. The card
+ * knows its own width; nothing else here does.
  *
  * NOT A FOURTH DIALECT, which is the argument 61df291 made for dropping the
  * rail everywhere and which is hereby withdrawn. The premise was that a control
@@ -206,12 +258,12 @@ function PromoRow({ promotion }) {
             Two calls to action in one row is worse than either alone: they
             compete for the same glance, and here they would be the same words
             twice, six centimetres apart, both leading to the same href. So the
-            two carry complementary halves of ONE threshold — `@[480px]:hidden`
-            here, `hidden @[480px]:flex` on the rail — and the row has exactly
+            two carry complementary halves of ONE threshold — `@[376px]:hidden`
+            here, `hidden @[376px]:flex` on the rail — and the row has exactly
             one control at every width. `hidden` is display:none, so the one
             that is off is out of the accessibility tree too and the label is
             announced once, not twice. */}
-        <span className="mt-1 inline-flex items-center gap-1 font-en text-sm font-semibold text-9e-action transition-colors group-hover:text-9e-brand @[480px]:hidden">
+        <span className="mt-1 inline-flex items-center gap-1 font-en text-sm font-semibold text-9e-action transition-colors group-hover:text-9e-brand @[376px]:hidden">
           ดูโปรโมชัน
           <span
             aria-hidden="true"
@@ -240,7 +292,7 @@ function PromoRow({ promotion }) {
             row's padding to the card edge. `py-2` went with it: once the block
             stretches, it governed nothing, and a padding class that sets no
             height is a claim about the layout that is not true. */}
-      <div className="-my-3 -mr-3 hidden shrink-0 items-center justify-center self-stretch rounded-r-9e-md bg-9e-action px-4 font-en text-sm font-medium text-9e-ice transition-colors group-hover:bg-9e-brand @[480px]:flex">
+      <div className="-my-3 -mr-3 hidden shrink-0 items-center justify-center self-stretch rounded-r-9e-md bg-9e-action px-4 font-en text-sm font-medium text-9e-ice transition-colors group-hover:bg-9e-brand @[376px]:flex">
         ดูโปรโมชัน
       </div>
     </Link>
