@@ -53,6 +53,25 @@ function fmtDate(iso) {
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
 
+/**
+ * THE DETAIL ROUTE FOR A ROW — and there are two of them, not one.
+ *
+ * This list renders BOTH collections: `source` picks which one, and each has
+ * its own fully-built detail page. `/admin/registrations/[id]` reads
+ * `register_public`; `/admin/registrations/inhouse/[id]` reads
+ * `register_inhouse`. They are separate collections, so an in-house `_id` sent
+ * to the public route finds nothing and the page calls `notFound()` — a 404 on
+ * a record that exists, with a working page sitting one segment away.
+ *
+ * `source` is the same value the list query used to choose the model, so the
+ * link cannot disagree with the row it is attached to.
+ */
+function detailHref(source, id) {
+  return source === 'inhouse'
+    ? `/admin/registrations/inhouse/${id}`
+    : `/admin/registrations/${id}`;
+}
+
 
 // ── Main Component ─────────────────────────────────────────────────
 
@@ -320,7 +339,7 @@ export function RegistrationsClient({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/admin/registrations/${row._id}`}
+                      href={detailHref(source, row._id)}
                       className="text-xs font-semibold text-9e-action hover:underline"
                     >
                       ดูรายละเอียด →
