@@ -412,9 +412,9 @@ export function ScheduleBoard({
       <section className="relative overflow-hidden bg-9e-gradient-hero py-12 dark:bg-gradient-to-b dark:from-[#0a1628] dark:to-[#0d1e36] md:py-16">
         <div className="relative mx-auto max-w-[1200px] px-4 text-center lg:px-6">
           <h1 className="text-3xl font-bold text-white md:text-4xl">
-            ตารางฝึกอบรม (Public Training)
+            ตารางฝึกอบรม <br /> (Public Training)
           </h1>
-          <p className="mx-auto mt-2 max-w-2xl text-sm text-white/85 md:text-base">
+          <p className="mx-auto mt-2 max-w-3xl text-sm text-white/85 md:text-base">
             หลักสูตรรอบที่เปิดตามกำหนดของ 9Expert
             ผู้เรียนเข้าอบรมร่วมกับองค์กรอื่น ๆ ในรอบเดียวกัน
             คิดค่าใช้จ่ายแบบรายท่าน
