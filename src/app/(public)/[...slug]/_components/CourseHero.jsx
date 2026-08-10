@@ -167,21 +167,37 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-2">
-                {course.course_type_public && (
-                  <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
-                    Classroom
-                  </span>
-                )}
-                <span className="rounded-full border border-purple-400 bg-white px-3 py-1 text-xs font-bold text-purple-600">
-                  Hybrid
-                </span>
-                {course.course_type_inhouse && (
-                  <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
-                    Inhouse
-                  </span>
-                )}
-              </div>
+              {/* COURSE TYPE, from the two flags the admin actually edits.
+                  Both may be true — 49 of the 77 upstream courses are, MSE-L1
+                  among them — so this is two independent pills, not a choice.
+
+                  The whole block is conditional rather than just its children:
+                  an empty flex row still renders its `mb-4`, so a course with
+                  neither flag would leave a 16px ghost gap under the duration
+                  line. No such course exists upstream today (0 of 77), but
+                  9fd1a85 made unchecking Public actually save, so it is now
+                  reachable by an admin edit rather than impossible.
+
+                  NOT a delivery format. `Classroom` / `Hybrid` on /schedule and
+                  in search results come from a schedule's `type` and mean where
+                  a ROUND is held; these two mean who a COURSE is sold to. The
+                  old markup blurred them — it labelled `course_type_public` as
+                  "Classroom" and rendered "Hybrid" as an unconditional literal
+                  tied to no field at all. */}
+              {(course.course_type_public || course.course_type_inhouse) && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {course.course_type_public && (
+                    <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
+                      Public
+                    </span>
+                  )}
+                  {course.course_type_inhouse && (
+                    <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
+                      Inhouse
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
