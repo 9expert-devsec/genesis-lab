@@ -597,11 +597,182 @@ html.dark   { color-scheme: dark; }
 }
 .article-content pre code { background: transparent; color: inherit; padding: 0; }
 .article-content hr { border: 0; border-top: 1px solid #e2e8f0; margin: 2rem 0; }
+
+/* ── Embeds ───────────────────────────────────────────────────────────────
+   FIXED AT RENDER TIME, NOT MIGRATED. Every stored body carries a literal
+   width="640" height="360" on the iframe, because the editor configures
+   Youtube.configure({ width: 640, height: 360 }) and the extension writes
+   those into the HTML at insert time. There was no iframe rule here at all,
+   so the attributes governed: a 640px box in a content column that runs
+   288px at vw=320 and 832-900px on desktop. Scanned across 320-2560, the
+   column is `min(min(vw,1200) - 32, 900)` below xl and loses another 336px
+   to the share rail and the sticky TOC at xl, giving:
+
+       vw  320 - 671   column 288 - 639   the iframe OVERFLOWS THE VIEWPORT,
+                                          by 352px at vw=320, where it is
+                                          2.22x the column it sits in
+       vw        672   column 640         exactly fits, one width only
+       vw  673 - up    column 641 - 900   undersized: 260px of the column
+                                          unused at the 900px maximum
+
+   Fixing this in the stored HTML would mean rewriting every article body.
+   The precedent here is the opposite and is deliberate — article bodies are
+   corrected at RENDER time and never migrated; see
+   src/lib/articles/normalizeAuthoredColors.js, which does the same for
+   hardcoded Tiptap colours and explains why in its docstring.
+
+   `[data-youtube-video]` is the wrapper the extension emits: its renderHTML
+   returns ['div', { 'data-youtube-video': '' }, ['iframe', ...]]. Verified
+   in the installed source, node_modules/@tiptap/extension-youtube 2.27.2,
+   rather than assumed from the docs.
+
+   The generic iframe rule caps width only. A non-YouTube embed (a map, a
+   form) is not 16:9, so it gets the overflow fix without having a video
+   ratio imposed on it; only the wrapped case gets aspect-ratio. */
+.article-content iframe { max-width: 100%; }
+.article-content [data-youtube-video] { margin: 1.5rem 0; }
+.article-content [data-youtube-video] iframe {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
+  border: 0; border-radius: 0.5rem;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────
+   There were NO table rules here, while .promotion-html-content above has a
+   full block. This mirrors that vocabulary deliberately rather than opening
+   a second one — same border, same padding, same header fill, same dark
+   overrides — so the two rendered-HTML surfaces stay one design.
+
+   WHAT HAPPENS WHEN A TABLE IS WIDER THAN THE COLUMN: it scrolls, inside a
+   wrapper added on the SERVER by src/lib/articles/wrapArticleTables.js.
+
+   This replaces the "cells compress" answer, which did not survive real
+   column counts. The reason it failed is worth keeping: `overflow-wrap:
+   break-word` (still set below, it is useful for long URLs) does NOT reduce a
+   cell's min-content width — CSS Text 3 §5.5 says the soft wrap opportunities
+   it introduces are not counted when computing min-content intrinsic sizes;
+   only `anywhere` counts. So the cells never actually compressed, the table
+   kept its min-content width, and at 5 and 6 columns that exceeds the content
+   column. It was then CLIPPED and unreachable, because `body { overflow-x:
+   clip }` above creates no scroll container at all — no scrollbar, no
+   touch-drag, not even programmatic scrollLeft.
+
+   The CSS-only substitute is still not available: `table { display: block;
+   overflow-x: auto }` scrolls, but a block `<table>` is no longer a table box
+   — its row-group children force an anonymous table box (CSS 2.1 §17.2.1)
+   that is shrink-to-fit (§17.5.2) and that no selector can reach, so every
+   narrow table would stop stretching to the column. The table has to stay a
+   real table INSIDE a block that scrolls, which is what the wrapper is. */
+.article-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+
+/* ── The scroll wrapper ───────────────────────────────────────────────────
+   THE BOX MODEL, which is the whole trick: the WRAPPER is an ordinary block,
+   so it fills the content column exactly and scrolls; the TABLE inside keeps
+   `display: table` and gets `width: auto` with `min-width: 100%`. A narrow
+   table is therefore stretched to the column edge by the min-width, and a
+   wide one grows past it on its own intrinsic width and scrolls within the
+   wrapper. Neither case can push the page sideways, because the wrapper never
+   exceeds the column.
+
+   Every table is wrapped, not only the wide ones — width is not knowable on
+   the server. A narrow table simply never overflows, so it never scrolls and
+   shows no affordance.
+
+   The wrapper is focusable (`tabindex="0"`, set by the module). A div with
+   `overflow-x: auto` is not focusable by default, so without it a keyboard
+   user could not scroll the region at all and the off-screen columns would
+   stay exactly as unreachable for them as they are for everyone today. That
+   costs a tab stop on tables that do not scroll, which is the honest price of
+   not being able to measure width on the server; the alternative is a
+   client-side pass, and then the first paint is wrong. `:focus-visible` gives
+   that stop a visible ring, since a focusable element with no focus style is
+   its own accessibility defect. */
+.article-content .article-table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1rem 0;
+
+  /* THE AFFORDANCE — a cut edge with no cue reads as a broken layout, which is
+     what the screenshots showed. Four backgrounds: two opaque "covers" pinned
+     to the content with `background-attachment: local`, and two shadows fixed
+     to the box with `scroll`. At rest a cover sits exactly over each shadow
+     and hides it. Scroll right and the left cover travels away with the
+     content, uncovering the left shadow; the right cover arrives at the end
+     and re-covers the right one. A table that does not overflow never moves,
+     so both shadows stay covered and nothing is drawn. No JS, correct in the
+     first paint, and it self-cancels at both ends of the scroll. */
+  background:
+    linear-gradient(to right, var(--page-bg) 30%, transparent) 0 0 / 32px 100% no-repeat local,
+    linear-gradient(to left,  var(--page-bg) 30%, transparent) 100% 0 / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(13, 27, 42, 0.20), transparent) 0 0 / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(13, 27, 42, 0.20), transparent) 100% 0 / 14px 100% no-repeat scroll;
+}
+.article-content .article-table-scroll:focus-visible {
+  outline: 2px solid #005CFF;
+  outline-offset: 2px;
+}
+/* `min-width` rather than `width` — see the box-model note above. The margin
+   moves to the wrapper so a wrapped table keeps the rhythm of an unwrapped one. */
+.article-content .article-table-scroll table { width: auto; min-width: 100%; margin: 0; }
+.article-content td,
+.article-content th {
+  border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; text-align: left;
+  overflow-wrap: break-word;
+}
+.article-content th { background: #f8fafd; font-weight: 600; }
+
+/* A UNIFORM BASE BOX for images in cells. `.article-content img` alone is
+   `max-width: 100%; height: auto`, which preserves each image's natural
+   size — so a table of logos renders every cell a different height and the
+   row heights follow the tallest one. A fixed HEIGHT with `object-fit:
+   contain` is what survives mixed aspect ratios: a wide logo and a square
+   one both occupy 3rem of vertical space and differ only in width, which is
+   what a logo row should do. Fixing the WIDTH instead would do the reverse
+   and reintroduce unequal heights.
+
+   3rem is not arbitrary: at the narrowest column (288px at vw=320) a
+   four-column table leaves each cell ~48px of inner width after the border
+   and the 0.75rem padding, so 3rem is the largest box a square logo can
+   occupy there without `contain` having to shrink it horizontally as well.
+   `max-width: 100%` is what holds that promise in narrower cells still.
+   A screenshot will read small inside a table; a screenshot belongs outside
+   one, and this rule is scoped to cells so it does not touch body images. */
+.article-content td img,
+.article-content th img {
+  height: 3rem; width: auto; max-width: 100%;
+  object-fit: contain; display: inline-block; margin: 0;
+  /* Clickable: opens full size — the delegated handler in
+     ArticleDetailClient. Scoped to cells, matching the handler exactly, so no
+     image advertises a behaviour it does not have. `zoom-in` rather than
+     `pointer` says WHAT the click does, which matters when the reason to click
+     is that the 3rem box above made the image unreadable. */
+  cursor: zoom-in;
+}
+/* A linked image still navigates, so it must not claim to zoom. Currently
+   defensive — 0 of the corpus's 1421 images sit inside an <a> — and it mirrors
+   the handler's `closest('a')` bail so the two cannot disagree. */
+.article-content td a img,
+.article-content th a img { cursor: pointer; }
+
 /* Dark mode */
 .dark .article-content a                  { color: #48B0FF; }
 .dark .article-content blockquote         { background: #0D1B2A; color: #cbd5e1; }
 .dark .article-content code:not(pre code) { background: #0D1B2A; color: #48B0FF; }
 .dark .article-content hr                 { border-color: #1e3a5f; }
+.dark .article-content td,
+.dark .article-content th                 { border-color: #1e3a5f; }
+.dark .article-content th                 { background: #111d2c; }
+/* The scroll shadow is keyed to the surface it is painted on, so both halves
+   have to switch: the covers must match the dark page background or they show
+   as white smears over the table, and a black shadow is invisible against
+   #0D1B2A, so the shadow inverts to a light one. */
+.dark .article-content .article-table-scroll {
+  background:
+    linear-gradient(to right, var(--page-bg) 30%, transparent) 0 0 / 32px 100% no-repeat local,
+    linear-gradient(to left,  var(--page-bg) 30%, transparent) 100% 0 / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(255, 255, 255, 0.22), transparent) 0 0 / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(255, 255, 255, 0.22), transparent) 100% 0 / 14px 100% no-repeat scroll;
+}
+.dark .article-content .article-table-scroll:focus-visible { outline-color: #48B0FF; }
 
 /* ──────────────────────────────────────────────────────────────
    Authored inline colours (see lib/articles/normalizeAuthoredColors.js).

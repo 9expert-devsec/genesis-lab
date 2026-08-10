@@ -186,11 +186,15 @@ module.exports = {
       // ladder above stays readable, low → high:
       //   9000  SitePopup                (promotional image overlay)
       //   9500  chat panel               (ChatPanel, portalled to <body>)
+      //   9600  article image lightbox   (ArticleImageLightbox, portalled)
       //   9998  mobile drawer backdrop
       //   9999  mobile drawer            (portalled to <body>)
       // The chat panel sits ABOVE SitePopup because a promo image must not
       // cover a conversation the user opened deliberately, and BELOW the drawer
-      // because primary navigation always wins. It is portalled for the same
+      // because primary navigation always wins. The image lightbox takes the
+      // next rung up by the same rule: it is modal and the reader opened it on
+      // purpose, so neither a promo nor a chat window may cover it, and it
+      // still yields to navigation. It is portalled for the same
       // reason the drawer is: it is rendered from inside the z-50 dock, and a
       // `fixed` + `z-50` ancestor is a stacking context that would confine
       // z-[9500] beneath SitePopup's 9000 while the source looked correct.

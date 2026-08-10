@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
-import { coursePriceLabel } from '@/lib/coursePriceLabel';
+import { ArticleImageLightbox } from './ArticleImageLightbox';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -302,6 +302,44 @@ export function ArticleDetailClient({
     };
   }, [tocItems.length]); // re-bind once headings are injected
 
+  // ── Table-image lightbox ──────────────────────────────────────────────────
+  // BY DELEGATION, ON PURPOSE. The listener goes on the existing contentRef
+  // node, never on the prose markup, and the open-image state lives HERE in the
+  // parent. ArticleContent's props stay exactly `{ html, contentRef }`: adding
+  // one would re-render the memoized body, let React diff
+  // dangerouslySetInnerHTML, and wipe the heading IDs the injection effect
+  // stamped on — silently breaking the table of contents and every anchor link
+  // while the lightbox itself worked perfectly.
+  //
+  // SCOPED TO TABLE CELLS, which is what was asked: cell images are pinned to a
+  // 3rem box by globals.css and are the ones that cannot be read. Body images
+  // already render at their natural width. Corpus today: 1421 <img> in 352
+  // articles, 22 of them inside a cell.
+  //
+  // The `closest('a')` bail keeps a linked image navigating. That case is
+  // currently hypothetical — 0 of the 1421 images sit inside an <a> — so this
+  // is defensive, not corrective, and it is one line.
+  const [lightboxImage, setLightboxImage] = useState(null);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return undefined;
+
+    const onClick = (e) => {
+      const img = e.target.closest('img');
+      if (!img || !root.contains(img)) return;
+      if (!img.closest('td, th')) return;      // table cells only
+      if (img.closest('a')) return;            // a linked image still navigates
+      e.preventDefault();
+      setLightboxImage({ src: img.currentSrc || img.src, alt: img.alt, trigger: img });
+    };
+
+    root.addEventListener('click', onClick);
+    return () => root.removeEventListener('click', onClick);
+    // contentRef is a stable ref object; the prose node it points at is created
+    // once and kept alive by the memo, so this binds once for the page's life.
+  }, []);
+
   // Share URLs — recomputed on every render so a late pageUrl swap
   // updates the links in place.
   const encodedUrl = encodeURIComponent(pageUrl);
@@ -313,6 +351,10 @@ export function ArticleDetailClient({
 
   return (
     <>
+      {/* Portalled to <body> from inside the component, so it escapes every
+          stacking context on the way down — see the component's docstring. */}
+      <ArticleImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+
       {/* Top thin gradient progress bar — content-relative, hidden
           until the reader has actually started reading the body. */}
       {barProgress > 0 && (

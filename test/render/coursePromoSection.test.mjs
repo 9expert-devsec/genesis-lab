@@ -343,44 +343,161 @@ const widest = (card, lo, hi) => {
   return best;
 };
 
-test('the threshold clears every card the md-and-up layout can produce', () => {
-  // Scanned across the range, not sampled at the breakpoints. Sampling 768 /
-  // 1024 / 1280 reports the md+ maximum as 397px; it is really 474.5px at
-  // vw=1023, in the regime where the grid has split but the sidebar has not.
-  // A five-point sample is exactly how a threshold gets picked that looks safe
-  // and is not, so this walks every width.
+/**
+ * The three regimes the card's width moves through, by name. They are not the
+ * Tailwind breakpoints and there is no class anywhere that spells them:
+ *   A  one page column, one grid column   — the card is the content width
+ *   B  one page column, TWO grid columns  — grid split, sidebar not yet taken
+ *   C  sidebar taken, two grid columns    — and capped by max-w-[1200px]
+ * B has no breakpoint name at all, which is how it got missed the first time.
+ */
+const REGIMES = [
+  { name: 'A below md (one column)', lo: 320, hi: 767 },
+  { name: 'B md → lg (grid split, page not)', lo: 768, hi: 1023 },
+  { name: 'C lg and up (sidebar taken)', lo: 1024, hi: 2560 },
+];
+
+test('the rail is reachable in ALL THREE width regimes, desktop included', () => {
+  // THE CENTRAL RULE, and the one 2412163 got wrong. Its threshold of 480 was
+  // above regime C's maximum of 397px, so the rail could never render on any
+  // desktop width — it survived only in a ~546-767 band. A threshold that
+  // excludes a whole regime is not a narrow rule, it is a broken one.
   const markup = html([promo()]);
   const card = cardWidthModel(markup);
   const threshold = Number(rail(markup).match(/@\[(\d+)px\]:flex\b/)[1]);
 
-  const mdUp = widest(card, 768, 2560);
-  const belowMd = widest(card, 320, 767);
+  for (const r of REGIMES) {
+    const max = widest(card, r.lo, r.hi);
+    assert.ok(
+      threshold <= max.w,
+      `regime ${r.name} can never show the rail: its widest card is ${max.w}px ` +
+        `at vw=${max.vw}, threshold ${threshold}px. This is the 2412163 defect.`
+    );
+  }
+});
+
+test('CONTROL: that reachability probe DOES reject 2412163’s 480', () => {
+  // Without this the loop above could be passing because every regime is wide,
+  // or because the model reports nonsense. 480 is the number that shipped and
+  // was wrong; it must fail in regime C and pass in A, or the probe is not
+  // discriminating between "narrow" and "unreachable".
+  const card = cardWidthModel(html([promo()]));
+  const [a, b, c] = REGIMES.map((r) => widest(card, r.lo, r.hi).w);
+  assert.ok(480 > c, `480 excluded regime C entirely (max ${c}px) — the reported bug`);
+  assert.ok(480 > b, `and regime B too (max ${b}px)`);
+  assert.ok(480 <= a, `while regime A (max ${a}px) kept it, which is why it looked fine on a phone`);
+});
+
+test('the binding case is the DESKTOP CAP, and it clears', () => {
+  // For 480 the binding md+ case was vw=1023. It is not any more: the number is
+  // now bounded ABOVE by the width the rail has to keep reaching, which is the
+  // narrowest desktop card once max-w-[1200px] stops the growth.
+  const markup = html([promo()]);
+  const card = cardWidthModel(markup);
+  const threshold = Number(rail(markup).match(/@\[(\d+)px\]:flex\b/)[1]);
+
+  const capped = widest(card, 1024, 2560);
+  assert.equal(capped.vw, 1200, 'regime C peaks where the page cap bites, not at the widest screen');
   assert.ok(
-    threshold > mdUp.w,
-    `the rail must never reach an md+ card. Widest is ${mdUp.w}px at vw=${mdUp.vw}, ` +
-      `threshold ${threshold}px. If this went red, the page shell / sidebar / paddings moved ` +
-      'and the rail is now appearing on a card the narrow layout gives it.'
+    threshold <= capped.w,
+    `the rail must survive at the desktop cap: card ${capped.w}px, threshold ${threshold}px`
   );
+  // Pinned because the component documents it: 21px of headroom, not 5.5px.
   assert.ok(
-    threshold < belowMd.w,
-    `and must reach the wide one-column card: widest below md is ${belowMd.w}px ` +
-      `at vw=${belowMd.vw}, threshold ${threshold}px`
+    capped.w - threshold >= 20,
+    `and with real headroom: ${capped.w - threshold}px. If the page cap or the 300px ` +
+      'sidebar moved, the rail is about to leave desktop again.'
   );
-  // The margin above is 5.5px and is DOCUMENTED as tight in the component, so
-  // pin the binding case rather than leaving a future reader to rediscover it.
-  assert.equal(mdUp.vw, 1023, 'the binding md+ width is the last pixel before lg, not 1280');
+});
+
+test('CONTROL: the headroom probe is not satisfied by any threshold at all', () => {
+  const card = cardWidthModel(html([promo()]));
+  const capped = widest(card, 1024, 2560).w;
+  assert.equal(capped - 480 >= 20, false, 'the number that shipped had NEGATIVE headroom here');
+  assert.equal(capped - 390 >= 20, false, 'and 390 would clear the card by only 7px');
+});
+
+test('THE MOBILE CASE IS UNCHANGED: the phone resolves to the inline affordance', () => {
+  // 61df291's whole point, approved and not up for renegotiation. Only the
+  // upper regime moved. At a phone width the card is ~324px, which must land
+  // BELOW the threshold so the rail stays hidden and `ดูโปรโมชัน →` shows.
+  const markup = html([promo()]);
+  const card = cardWidthModel(markup);
+  const threshold = Number(rail(markup).match(/@\[(\d+)px\]:flex\b/)[1]);
+  const hidesInline = Number(inlineCta(markup).match(/@\[(\d+)px\]:hidden\b/)[1]);
+
+  const phone = card(390);
+  assert.ok(phone < threshold, `the phone card is ${phone}px and must not reach ${threshold}px`);
+  assert.ok(
+    phone < hidesInline,
+    `and must stay below the inline CTA's hide point (${hidesInline}px), or the row ` +
+      'would render NO call to action at all on a phone'
+  );
+  // The whole of regime A up to the crossing keeps the inline form.
+  assert.ok(widest(card, 320, 441).w < threshold, 'every width up to 441 keeps the inline link');
+});
+
+test('CONTROL: the mobile probe fires on a threshold that would reach the phone', () => {
+  // Otherwise "324 < threshold" could be passing for any number, and a future
+  // threshold low enough to put a rail on a 324px card would sail through.
+  const card = cardWidthModel(html([promo()]));
+  const phone = card(390);
+  assert.equal(phone < 300, false, `a 300px threshold WOULD put the rail on the ${phone}px phone card`);
+  assert.ok(phone < 376, 'while the shipped threshold does not');
+  // ...and the phone width is the one 61df291 was about, not an arbitrary vw.
+  assert.ok(phone < card(700), 'a phone card is narrower than the widest one-column card');
+});
+
+test('the shown and hidden bands are the three the component documents', () => {
+  // Reported as RANGES, scanned, not sampled. The component's docstring lists
+  // these; if the layout or the threshold moves, this is what says so.
+  const markup = html([promo()]);
+  const card = cardWidthModel(markup);
+  const threshold = Number(rail(markup).match(/@\[(\d+)px\]:flex\b/)[1]);
+
+  const bands = [];
+  let cur = null;
+  for (let vw = 320; vw <= 2560; vw++) {
+    const on = card(vw) >= threshold;
+    if (on && !cur) cur = vw;
+    if (!on && cur) { bands.push([cur, vw - 1]); cur = null; }
+  }
+  if (cur) bands.push([cur, 2560]);
+
+  assert.deepEqual(
+    bands,
+    [[442, 767], [826, 1023], [1158, 2560]],
+    'the rail shows in exactly three bands, one per regime — see the docstring table'
+  );
+});
+
+test('CONTROL: the band scan collapses to one band under the old threshold', () => {
+  // Proves the scan is reading the threshold rather than reporting a constant.
+  const card = cardWidthModel(html([promo()]));
+  const bandsFor = (t) => {
+    const out = []; let cur = null;
+    for (let vw = 320; vw <= 2560; vw++) {
+      const on = card(vw) >= t;
+      if (on && !cur) cur = vw;
+      if (!on && cur) { out.push([cur, vw - 1]); cur = null; }
+    }
+    if (cur) out.push([cur, 2560]);
+    return out;
+  };
+  assert.deepEqual(bandsFor(480), [[546, 767]], 'which is the band the bug report described');
+  assert.equal(bandsFor(480).length, 1, 'one band, and nothing at or above lg');
 });
 
 test('CONTROL: the model reproduces the cliff the threshold is reasoning about', () => {
-  // Fired at the numbers themselves, so "threshold > mdUp" above cannot be
-  // passing on a model that reports nonsense. If any of these invert, the rule
-  // in the component is arguing from a layout that no longer exists.
+  // Fired at the numbers themselves, so the reachability loop cannot be passing
+  // on a model that reports nonsense. If any of these invert, the rule in the
+  // component is arguing from a layout that no longer exists.
   const card = cardWidthModel(html([promo()]));
   assert.ok(card(700) > card(768), `700px card ${card(700)} vs 768px card ${card(768)}`);
   assert.ok(card(1023) > card(1024) + 100, `the sidebar cliff: ${card(1023)} -> ${card(1024)}`);
   assert.ok(card(1024) < card(390), `lg card ${card(1024)} is narrower than a phone's ${card(390)}`);
   // ...and the scan does not merely return its upper bound, which would make
-  // the assertion above true for any layout at all.
+  // every assertion above true for any layout at all.
   assert.notEqual(widest(card, 768, 2560).vw, 2560, 'the widest md+ card is not the widest screen');
 });
 
