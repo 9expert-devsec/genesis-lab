@@ -229,7 +229,12 @@ test('the chip comes AFTER the status, last in the cell’s column', () => {
   assert.ok(column, 'the cell’s inner column is gone');
 
   const dotAt = column.indexOf('background-color:#00CCFF');
-  const dateAt = column.indexOf('text-[11px] font-bold');
+  // RE-POINTED with the cell's type scale (date label -> text-sm). This
+  // assertion fails on a MISSING ANCHOR, not on ordering, so a stale or
+  // mistyped string here would make the four ordering checks below vacuously
+  // pass rather than red. Confirmed present in real rendered output at index
+  // 107 of the column before this line was changed.
+  const dateAt = column.indexOf('text-sm font-bold');
   const statusAt = column.indexOf('เปิดรับ');
   const chipAt = column.indexOf('Early Bird');
   for (const [name, at] of [['dot', dotAt], ['date', dateAt], ['status', statusAt], ['chip', chipAt]]) {

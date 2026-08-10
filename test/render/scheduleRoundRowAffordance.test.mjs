@@ -437,14 +437,26 @@ test('…but it is still a link to the same place', () => {
  *    last child at the BOTTOM of the cell's column. Only CELL_EARLY_BIRD_OPEN
  *    moved; CELL_BLANK_STATUS is untouched, because a cell with no early bird
  *    never rendered any of the retired markup.
+ * 3. The cell's type scale was raised for legibility: the date label
+ *    `text-[11px]` -> `text-sm` and the status label `text-[9px]` ->
+ *    `text-[10px]`. The status DOT was not touched, so `h-2 w-2` still stands.
+ *    BOTH constants moved this time — CELL_BLANK_STATUS carries the date label
+ *    too, which is easy to miss because it has no status line.
+ *
+ *    RE-CAPTURED FROM RENDERED OUTPUT, not retyped. The markup was printed from
+ *    a real ScheduleBoard render and compared against these constants; the only
+ *    deltas were the two size tokens, with attribute and class ORDER unchanged.
+ *    That distinction matters: hand-typing a believed-correct string is how a
+ *    byte-identical guard ends up pinning something the component never emits
+ *    and passing while guarding nothing.
  */
 const CELL_EARLY_BIRD_OPEN =
   '<a href="/registration/public?course=power-bi&amp;class=s-cross" class="group relative block cursor-pointer overflow-hidden rounded-sm">'
   + '<span class="flex flex-col items-center gap-0.5">'
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
-  + '<span class="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
+  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
   + `${CROSS_START} ${monthLabel(WINDOW[0])} - 2</span>`
-  + '<span class="text-[9px] font-bold leading-none text-[#39b980]">เปิดรับ</span>'
+  + '<span class="text-[10px] font-bold leading-none text-[#39b980]">เปิดรับ</span>'
   + '<span class="rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">Early Bird</span>'
   + '</span></a>';
 
@@ -452,7 +464,7 @@ const CELL_BLANK_STATUS =
   '<a href="/registration/public?course=power-bi&amp;class=s-blank" class="group relative block cursor-pointer overflow-hidden rounded-sm">'
   + '<span class="flex flex-col items-center gap-0.5">'
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
-  + '<span class="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></span></a>';
+  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></span></a>';
 
 /** Every non-empty schedule cell of the desktop table, in document order. */
 const tableCells = (html) =>
@@ -480,7 +492,7 @@ test('the table cell kept the OLD status treatment, not the card’s pill', () =
   // shared token, and swapping `text` for it in the wrong component would move
   // both surfaces at once.
   const cells = tableCells(render());
-  assert.ok(cells[0].includes(`text-[9px] font-bold leading-none ${SCHEDULE_STATUS.open.text}`));
+  assert.ok(cells[0].includes(`text-[10px] font-bold leading-none ${SCHEDULE_STATUS.open.text}`));
   assert.equal(cells[0].includes(SCHEDULE_STATUS.open.soft), false, 'the table has no pill');
   assert.equal(cells[0].includes('min-h-[44px]'), false, 'nor a tap-target floor');
   assert.equal(cells[0].includes('bg-9e-ice'), false, 'nor a row fill');

@@ -502,6 +502,44 @@ export function ScheduleBoard({
             </FilterSelect>
           </div>
 
+          {/*
+            ล้างตัวกรอง on DESKTOP. The behaviour already existed — `onReset` is
+            the same `resetFilters` the mobile sheet has called all along — and
+            only this row never got a control for it. Reused, not reimplemented:
+            a second reset path is a second thing to drift from `defaults`.
+
+            DISABLED, NOT HIDDEN, when nothing is filtered. Hiding it would
+            reflow this wrapped row every time the first filter changes, sliding
+            the selects and the legend sideways, and would keep the affordance
+            undiscoverable until a user had already worked out how to filter.
+            Disabled says "there is nothing to clear" and holds the geometry.
+
+            THE GATE READS `activeCount`, which is `activeScheduleFilterCount(
+            filters, defaults)` computed once above — the SAME number the "N"
+            badge shows on both surfaces, and it compares against the `defaults`
+            STATE. Recomputing defaults here would reintroduce exactly the bug
+            that comment guards against: a page left open across the 1st of the
+            month would compare to a window it never showed. It also means the
+            badge and this button can never disagree.
+
+            Whole class string per state — twMerge does not merge the custom
+            `9e-*` scales, so a layered override would be decided by emission
+            order rather than by intent.
+          */}
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={activeCount === 0}
+            className={
+              "rounded-xl border px-4 py-2 text-sm font-medium transition-colors duration-9e-micro ease-9e " +
+              (activeCount === 0
+                ? "cursor-not-allowed border-gray-100 text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                : "border-gray-200 text-9e-navy hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white")
+            }
+          >
+            ล้างตัวกรอง
+          </button>
+
           <TypeLegend />
         </div>
 
@@ -1253,8 +1291,23 @@ function ProgramTable({
     window.addEventListener("mouseup", onUp);
   };
 
+  /*
+   * LIGHT-MODE CONTRAST. `border-gray-200` rather than `border-gray-100`:
+   * the card sits on `bg-9e-ice` (#F8FAFD) and its own fill is #FFFFFF, so the
+   * only thing separating the two is this border plus `shadow-sm`. At gray-100
+   * (#F3F4F6) that edge is nearly the same value as the page and the card had
+   * no perceptible boundary. gray-200 (#E5E7EB) is one step up the SAME scale
+   * — already used by this file's selects and buttons — not a new token.
+   *
+   * INTERNAL dividers stay at gray-100: they separate rows from each other
+   * INSIDE the card, where the surrounding value is #FFFFFF and a heavier line
+   * would read as a grid rather than as rows. Only the outer edge moved.
+   *
+   * Dark mode is untouched — `#111d2c` card on `#0D1B2A` page with a `#1e3a5f`
+   * border is already three distinct values and works.
+   */
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
       <div ref={scrollRef} className="no-native-scrollbar overflow-x-auto">
         {/*
             `width: 100%` + a COMPUTED `minWidth`, replacing the old fixed
@@ -1280,7 +1333,25 @@ function ProgramTable({
             ))}
           </colgroup>
           <thead>
-            <tr className="border-b border-gray-100 bg-9e-ice dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
+            {/*
+              THE HEADER WAS THE SAME TOKEN AS THE PAGE. `bg-9e-ice` here is
+              #F8FAFD and so is the page background at the top of this file —
+              literally the same class — so the header row read as a hole in the
+              card rather than as part of it, which is most of why this table
+              looked flat.
+
+              `bg-gray-100` (#F3F4F6) is one step darker than the card's
+              #FFFFFF, giving page / card / header three distinct values in
+              light mode the way dark mode already has them (#0D1B2A / #111d2c /
+              #0f1e30). It also puts the header DARKER than its card, which is
+              the direction dark mode already uses.
+
+              The `<th>` below carries the same fill and must stay in step: the
+              frozen columns are sticky, so it is the TH's own background — not
+              this row's — that covers the month cells scrolling underneath.
+              Two places, one value, deliberately.
+            */}
+            <tr className="border-b border-gray-100 bg-gray-100 dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
               {FROZEN.map((col) => (
                 <th
                   key={col.key}
@@ -1290,7 +1361,10 @@ function ProgramTable({
                   // silently as an unstyled (unstuck) column.
                   style={{ left: col.left }}
                   className={
-                    "sticky z-10 bg-9e-ice py-3 font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white " +
+                    // Same fill as the <tr> above, and it has to be: this cell
+                    // is sticky, so its OWN background is what the month
+                    // columns scroll under.
+                    "sticky z-10 bg-gray-100 py-3 font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white " +
                     col.thClass +
                     (col.isLast
                       ? " border-r border-gray-100 dark:border-[#1e3a5f]"
@@ -1460,8 +1534,18 @@ function CourseCard({ course, rounds, ebScheduleId }) {
   const shown =
     collapsible && !expanded ? rounds.slice(0, ROUND_COLLAPSE_THRESHOLD) : rounds;
 
+  /*
+   * gray-200 for the same reason as the desktop table card: identical
+   * treatment (#FFFFFF fill, shadow-sm) on the identical #F8FAFD page, so
+   * leaving it at gray-100 would make the same card separate from the same
+   * background differently depending on the viewport. The two are never on
+   * screen together — `lg:hidden` against `hidden lg:block` — but a resize
+   * crosses between them.
+   *
+   * The ROW fill inside this card is a separate decision; see MOBILE_ROW.
+   */
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+    <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
       <div className="px-4 pt-4">
         <p className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {course.course_id ?? "-"}
@@ -1546,10 +1630,22 @@ function CourseCard({ course, rounds, ebScheduleId }) {
  * the next round directly beneath it — so a mis-tap did not miss, it registered
  * on the wrong round and took the visitor to the wrong registration page.
  *
- * Tokens are all already in this file: `bg-9e-ice` is the page background and
- * the table header's light fill, `#0f1e30` is the table header's dark fill (the
- * card is `#111d2c`, so the row reads as a step off it in dark too), and
- * `--surface-border` is the one hairline that needs no dark variant.
+ * Tokens are all already in this file: `bg-9e-ice` is the page background,
+ * `#0f1e30` is the table header's dark fill (the card is `#111d2c`, so the row
+ * reads as a step off it in dark too), and `--surface-border` is the one
+ * hairline that needs no dark variant.
+ *
+ * ── THIS ROW KEEPS `bg-9e-ice` WHILE THE TABLE HEADER LEFT IT ───────────────
+ * That sentence used to also say `bg-9e-ice` was "the table header's light
+ * fill". It no longer is: the header moved to `bg-gray-100` because sharing a
+ * token with the PAGE made it read as a hole in the card.
+ *
+ * This row has no such collision and is deliberately left alone. It sits INSIDE
+ * the white card, never adjacent to the page — the card is always between them
+ * — so #F8FAFD against the card's #FFFFFF is exactly the one-step lift it wants,
+ * and three assertions in test/render/scheduleRoundRowAffordance pin it as
+ * "a fill a step off the white card". The header's problem was WHICH surface it
+ * was next to, not the value itself.
  */
 const ROUND_ROW_SURFACE =
   "flex min-h-[44px] w-full items-center gap-3 rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2 dark:bg-[#0f1e30]";
@@ -1696,12 +1792,12 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <span className="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
+      <span className="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
         {dateLabel}
       </span>
       {/* Omitted entirely when the status is missing/blank. */}
       {statusStyle && (
-      <span className={`text-[9px] font-bold leading-none ${statusStyle.text}`}>
+      <span className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
         {statusStyle.label}
       </span>
       )}
