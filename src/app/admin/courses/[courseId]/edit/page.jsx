@@ -4,6 +4,7 @@ import { aiFetch, unwrap } from '@/lib/api/client';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
+import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { CourseForm } from '../../_components/CourseForm';
 
 export const metadata = {
@@ -20,11 +21,14 @@ export const dynamic = 'force-dynamic';
  * but the routes are disjoint (`/edit` suffix vs. bare), so they
  * don't actually collide.
  */
-export default async function EditCoursePage({ params }) {
+export default async function EditCoursePage({ params, searchParams }) {
   await requirePage('courses');
 
   const { courseId } = await params;
   const id = decodeURIComponent(courseId);
+  // The list's filter state, arriving on the URL the list linked to. Passed
+  // down so this page's ← control can put the admin back where they were.
+  const listQuery = courseListQuery(await searchParams);
 
   // Fetch the course by upstream Mongo _id. The dedicated detail path
   // doesn't exist on MSDB so we filter listPublicCourses() and match
@@ -79,6 +83,7 @@ export default async function EditCoursePage({ params }) {
       programs={programs}
       allCourses={allCourses}
       extension={extension}
+      listQuery={listQuery}
     />
   );
 }

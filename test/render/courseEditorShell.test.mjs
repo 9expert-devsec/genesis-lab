@@ -170,6 +170,37 @@ test('the course body stays MOUNTED behind the gallery tab', () => {
   );
 });
 
+// ── the filter rides on both ← controls ─────────────────────────────────────
+
+test('both header links carry the list filter when there is one', () => {
+  const html = renderToStaticMarkup(
+    createElement(CourseForm, {
+      mode: 'edit',
+      initial: COURSE,
+      skills: [],
+      programs: [],
+      allCourses: [COURSE],
+      extension: EXTENSION,
+      listQuery: 'q=excel&type=inhouse',
+    })
+  );
+  assert.match(html, /href="\/admin\/courses\?q=excel&amp;type=inhouse"/, 'the ← list link drops the filter');
+  assert.match(
+    html,
+    /href="\/admin\/courses\/COPILOT-STU\?q=excel&amp;type=inhouse"/,
+    'the promos/FAQ link drops the filter, so ITS back link cannot restore it'
+  );
+});
+
+test('CONTROL: with no filter the links carry no trailing "?"', () => {
+  // The common case. A bare `?` on every back link is the tell that the empty
+  // filter is being appended rather than skipped.
+  const html = renderEdit();
+  assert.match(html, /href="\/admin\/courses"/);
+  assert.match(html, /href="\/admin\/courses\/COPILOT-STU"/);
+  assert.doesNotMatch(html, /href="\/admin\/courses\?"/);
+});
+
 // ── the create page is untouched this round ─────────────────────────────────
 
 test('CONTROL: the create page did NOT acquire a rail or a header', () => {

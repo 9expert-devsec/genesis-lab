@@ -16,6 +16,7 @@ import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
 import { courseEditorSignature, isCourseEditorDirty } from '@/lib/courses/courseFormDirty';
+import { withListQuery } from '@/lib/courses/adminListQuery';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 
 /**
@@ -74,6 +75,13 @@ export function CourseForm({
    * stored under — is still being typed.
    */
   extension = null,
+  /**
+   * The /admin/courses filter state (`q`, `program`, `type`) as a query string,
+   * forwarded by the edit page from its own URL. Both ← controls carry it so
+   * the admin lands back on the list they were actually looking at. '' when the
+   * list was unfiltered or the editor was opened directly.
+   */
+  listQuery = '',
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -122,6 +130,9 @@ export function CourseForm({
   const leavingRef = useRef(false);   // a leave the guard itself authorised
   const [pendingHref, setPendingHref] = useState(null);
   const [dirty, setDirty] = useState(false);
+  // Stamp of the last fully-successful save. Shown in the header, and dropped
+  // the moment the form is edited again so it can never describe stale state.
+  const [savedAt, setSavedAt] = useState(null);
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
@@ -411,13 +422,29 @@ export function CourseForm({
       const outcome = courseSaveOutcome({ courseResult: courseRes, extResult: extRes });
 
       if (outcome.allOk) {
-        // Clean again: both halves landed, so leaving must not prompt. Only
-        // reached on the JOINT condition — see courseSaveOutcome.
+        /* STAYS PUT. The admin keeps editing the course they just saved.
+         *
+         * NO router.refresh(), deliberately. It could not update anything on
+         * screen even if it ran: the course body is UNCONTROLLED, so React
+         * re-rendering with new props leaves the DOM values exactly as they
+         * are, and the rail/gallery are `useState`-seeded, so new props do not
+         * re-seed them either. Both only take fresh values on a REMOUNT.
+         *
+         * So a refresh's guaranteed effects are one MSDB round-trip and one
+         * risk: if anything ever does remount this subtree, every field resets
+         * to whatever upstream returns — and if that read has not caught up
+         * with the write, the admin watches their own save revert. Nothing to
+         * gain, a silent wrong-value to lose. `revalidatePath` inside
+         * updateCourse already invalidates the cache for the NEXT navigation,
+         * which is where fresh data actually matters.
+         *
+         * `leavingRef` is NOT set: it exists to let the guard authorise its own
+         * navigation, and setting it here would disable the click interceptor
+         * for the rest of the page's life.
+         */
         baselineRef.current = snapshot();
-        leavingRef.current = true;
         setDirty(false);
-        router.push('/admin/courses');
-        router.refresh();
+        setSavedAt(Date.now());
         return;
       }
 
@@ -941,7 +968,7 @@ export function CourseForm({
       <header className="flex-shrink-0 border-b border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
         <div className="flex flex-wrap items-center gap-3 px-6 py-3">
           <Link
-            href="/admin/courses"
+            href={withListQuery('/admin/courses', listQuery)}
             className="inline-flex items-center gap-1 text-sm text-9e-action hover:underline"
           >
             <ChevronLeft className="h-4 w-4" /> รายการหลักสูตร
@@ -964,11 +991,30 @@ export function CourseForm({
             {isPublished ? 'เผยแพร่' : 'ซ่อน'}
           </span>
 
+          {/* SUCCESS, IN THE HEADER — the save button is here, so the answer to
+              pressing it must be here too. A banner at the bottom of a scrolling
+              column is a success message the admin never sees.
+
+              Gated on `!dirty` rather than cleared on a timer: the moment the
+              form is edited again this is no longer true, and a "บันทึกสำเร็จ"
+              sitting above unsaved edits is worse than no message at all. */}
+          {savedAt !== null && !dirty && (
+            <span
+              role="status"
+              className="text-sm font-medium text-green-600 dark:text-green-400"
+            >
+              ✓ บันทึกสำเร็จ
+            </span>
+          )}
+
           {/* The four editors that stayed on /admin/courses/[courseId]. The
               list's SEO/Gallery button is gone, so this is now their only way
               in — without it they would be unreachable, not merely moved. */}
           <Link
-            href={`/admin/courses/${encodeURIComponent(courseId)}`}
+            // Keyed by the course_id CODE, unlike this page's own _id route —
+            // and carrying the filter one hop further so that page's ← back to
+            // this editor lands on the right list too.
+            href={withListQuery(`/admin/courses/${encodeURIComponent(courseId)}`, listQuery)}
             className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
           >
             โปรโมชัน / Early Bird / FAQ / ชำระเงิน

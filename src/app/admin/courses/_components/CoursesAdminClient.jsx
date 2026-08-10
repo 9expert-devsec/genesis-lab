@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { deleteCourse } from '@/lib/actions/courses';
+import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
 
 const TYPE_OPTIONS = [
   { value: '',         label: 'ทุกประเภท' },
@@ -22,9 +23,36 @@ export function CoursesAdminClient({
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
 
-  const [search, setSearch]               = useState('');
-  const [filterProgram, setFilterProgram] = useState('');
-  const [filterType, setFilterType]       = useState('');
+  /**
+   * SEEDED FROM THE URL, and mirrored back into it.
+   *
+   * These were plain `useState`, so editing a course and coming back reset the
+   * search and both filters — the admin re-typed them every time. Component
+   * state cannot survive the App Router unmounting this list.
+   */
+  const searchParams = useSearchParams();
+  const [search, setSearch]               = useState(() => searchParams.get('q') ?? '');
+  const [filterProgram, setFilterProgram] = useState(() => searchParams.get('program') ?? '');
+  const [filterType, setFilterType]       = useState(() => searchParams.get('type') ?? '');
+
+  const listQuery = courseListQuery({ q: search, program: filterProgram, type: filterType });
+
+  /**
+   * `history.replaceState`, NOT `router.replace`.
+   *
+   * The URL has to be real so a reload or a browser back reproduces the filter,
+   * but `router.replace` re-runs the server component on every keystroke in the
+   * search box — a round-trip per character for a list that is already filtered
+   * entirely on the client. replaceState updates the address bar and nothing
+   * else, which is exactly the amount of work this needs.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const next = window.location.pathname + (listQuery ? `?${listQuery}` : '');
+    if (next !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', next);
+    }
+  }, [listQuery]);
 
   // Match against program either as a populated object (`program._id`)
   // or as a bare ObjectId string. Genesis sees both depending on the
@@ -188,7 +216,12 @@ export function CoursesAdminClient({
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex gap-1">
                         <Link
-                          href={`/admin/courses/${encodeURIComponent(course._id)}/edit`}
+                          // Carries the filter so the editor's ← can bring it
+                          // back. Miss this link and the filter dies here.
+                          href={withListQuery(
+                            `/admin/courses/${encodeURIComponent(course._id)}/edit`,
+                            listQuery
+                          )}
                           className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                         >
                           แก้ไข
