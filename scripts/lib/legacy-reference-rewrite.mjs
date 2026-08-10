@@ -47,7 +47,7 @@
  */
 
 import { pathOnly, resolveDerivative } from './legacy-source-manifest.mjs';
-import { classifyRoot, decodePath, toPath } from './legacy-url-extract.mjs';
+import { classifyRoot, decodePath, legacyHostPattern, toPath } from './legacy-url-extract.mjs';
 
 /**
  * What happened to one reference. Every reference lands in exactly one of
@@ -86,7 +86,15 @@ const FILE_ROOTS = new Set([
   'sites-default-files', 'download', 'file', 'files', 'images', 'webroot-file',
 ]);
 
-const HOST_PREFIX_RE = /^(?:https?:)?\/\/(?:www\.)?9experttraining\.com(?::\d+)?/i;
+/**
+ * Built from `legacyHostPattern()` rather than written out again.
+ *
+ * This pattern and the extraction one in legacy-url-extract.mjs are the SAME
+ * rule — "is this string on the legacy host" — and they used to be two literals
+ * in two files with nothing forcing them to agree. One place to be wrong is
+ * better than two, and it is the place the frozen match host now names.
+ */
+const HOST_PREFIX_RE = new RegExp(String.raw`^(?:https?:)?//${legacyHostPattern()}`, 'i');
 
 /** Split a raw path-ish string into its path part and its query+fragment tail. */
 function splitQuery(raw) {
