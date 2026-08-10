@@ -2467,6 +2467,13 @@ export function MasterclassRegisterClient({ course, batch }) {
         )}
 
         {/* ── STEP 2 Mobile bottom bar ── */}
+        {/* NOT passing `publishesOccupancy`, and that is deliberate rather than
+            an oversight: this page is /masterclass/[slug]/register, the one
+            path dockLiftsForBottomBar matches, so the dock is ALREADY raised to
+            bottom-24 by that static rule. Publishing as well would make it
+            double-count — static lift plus measured inset — and float roughly
+            200px off the bottom. When the static lift is retired in favour of
+            the measured clearance, this call site opts in and the prop goes. */}
         {step === 2 && !result && (
           <Step2MobileBar
             pricing={pricing}

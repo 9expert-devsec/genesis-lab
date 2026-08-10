@@ -36,7 +36,7 @@ export function SkillBreadcrumb({ course, skillHrefs = {}, programHref: programU
     ' transition-colors hover:border-9e-action/50 hover:bg-9e-air/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--page-bg)] dark:hover:bg-9e-air/30';
 
   return (
-    <div className="mx-auto max-w-[1200px]">
+    <div className="mx-auto max-w-[1200px] px-4">
       <div className="flex flex-wrap gap-2 py-4">
         {skills.map((s) => {
           const key = s._id ?? s.skill_id;

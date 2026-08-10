@@ -1,90 +1,26 @@
-import {
-  BookOpen,
-  CalendarDays,
-  CircleHelp,
-  FileText,
-  GraduationCap,
-  ListChecks,
-  Map,
-  Monitor,
-  Target,
-  Users,
-} from 'lucide-react';
+import { courseSectionLinks } from '@/lib/courseSectionNav';
 
 /**
- * In-page jump links. Each entry is filtered by whether its target
- * section will actually render — no dead anchors.
+ * In-page jump links, as the desktop sidebar's vertical list.
+ *
+ * WHICH links exist is not decided here — it comes from courseSectionLinks, so
+ * this rendering and the mobile tab strip cannot disagree about which sections
+ * a course has. This file owns presentation only.
  */
 export function SidebarNav({ course, hasSchedules, hasRelated, hasFaqs }) {
-  const links = [
-    {
-      id: 'schedule',
-      label: 'ตารางฝึกอบรม',
-      icon: CalendarDays,
-      show: hasSchedules,
-    },
-    {
-      id: 'description',
-      label: 'รายละเอียดหลักสูตร',
-      icon: FileText,
-      show: !!course?.course_teaser,
-    },
-    {
-      id: 'objective',
-      label: 'วัตถุประสงค์',
-      icon: Target,
-      show: !!course?.course_objectives?.length,
-    },
-    {
-      id: 'target',
-      label: 'หลักสูตรนี้เหมาะสำหรับ',
-      icon: Users,
-      show: !!course?.course_target_audience?.length,
-    },
-    {
-      id: 'prerequisite',
-      label: 'พื้นฐานของผู้เข้าอบรม',
-      icon: GraduationCap,
-      show: !!course?.course_prerequisites?.length,
-    },
-    {
-      id: 'requirement',
-      label: 'ความต้องการของระบบ',
-      icon: Monitor,
-      show: !!course?.course_system_requirements?.length,
-    },
-    {
-      id: 'outline',
-      label: 'หัวข้อการฝึกอบรม',
-      icon: ListChecks,
-      show: !!course?.training_topics?.length,
-    },
-    {
-      id: 'roadmap',
-      label: 'Road Map',
-      icon: Map,
-      show: !!(
-        course?.course_roadmap_desktop_url || course?.course_roadmap_mobile_url
-      ),
-    },
-    {
-      id: 'faq',
-      label: 'คำถามที่พบบ่อย',
-      icon: CircleHelp,
-      show: Boolean(hasFaqs),
-    },
-    {
-      id: 'related',
-      label: 'หลักสูตรที่เกี่ยวข้อง',
-      icon: BookOpen,
-      show: hasRelated,
-    },
-  ].filter((l) => l.show);
+  const links = courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs });
 
   if (!links.length) return null;
 
+  // `hidden lg:block` is load-bearing, not cosmetic. Below lg the <aside> that
+  // holds this reflows to the BOTTOM of the page, after every section it links
+  // to, and CourseSectionTabs renders the same links as a sticky strip at the
+  // top instead. Without this the links ship TWICE below lg — usable tabs up
+  // top and a dead copy at the bottom — which looks correct in a screenshot of
+  // the top of the page and is wrong on every real one. The aside itself stays
+  // visible: it also carries PDFDownload, which mobile still needs.
   return (
-    <nav className="rounded-2xl border border-[var(--surface-divider)] bg-[var(--surface-raised)] p-4 shadow-9e-md">
+    <nav className="hidden rounded-2xl border border-[var(--surface-divider)] bg-[var(--surface-raised)] p-4 shadow-9e-md lg:block">
       <ul className="space-y-1">
         {links.map((link) => {
           const Icon = link.icon;

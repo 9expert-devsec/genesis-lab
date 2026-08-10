@@ -18,6 +18,8 @@ import { CountdownTimer } from "../../_components/CountdownTimer";
 import { OutlineDownloadButton } from "./OutlineDownloadButton";
 import { LandingConversion } from "./LandingConversion";
 import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
+import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
+import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -122,6 +124,88 @@ export function MasterclassDetailClient({
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, [visibleBatches.length]);
+
+  // ── Publishing the occupied box ─────────────────────────────────────────
+  // Same contract as the course detail bar, and the SAME rule function — see
+  // src/lib/stickyBarOccupancy. Two copies of "is this bar covering the bottom
+  // edge" is the duplication class this repo keeps paying for.
+  //
+  // The bar here is a conditional JSX block rather than an early return, so
+  // these hooks are not at risk of becoming conditional. They still live at the
+  // top level with the rest, and the refs are simply null whenever the block
+  // does not render — which the measure function checks.
+  const barKey = useId();
+  const shellRef = useRef(null);
+  const cardRef = useRef(null);
+  const [metrics, setMetrics] = useState({
+    cardHeight: 0,
+    bottomOffset: 0,
+    cardLeft: 0,
+    cardRight: 0,
+  });
+
+  // Measure on mount and on resize. Everything read here is responsive:
+  //   - the card's height (min-h-[7rem], but the cover thumbnail is
+  //     `hidden sm:block`, so it grows from sm up);
+  //   - the bar's own bottom offset (bottom-2 md:bottom-6);
+  //   - the card's horizontal extent — and for THIS bar that is the
+  //     interesting one. It is `mx-2 md:mx-auto max-w-[900px]`, so it is
+  //     CENTRED from md up rather than left-aligned like the course bar. The
+  //     two therefore stop overlapping the dock at different viewport widths,
+  //     which is exactly why no threshold is written down anywhere: it is a
+  //     consequence of geometry that the measurement re-derives every time.
+  //
+  // offsetHeight and the computed `bottom` are LAYOUT reads, unaffected by the
+  // translate that hides the bar; a rect would report a position in flight for
+  // the 300ms the slide lasts. The rect IS used for left/right, safe for the
+  // same reason it is unsafe for the height — the transition is translate-y,
+  // purely vertical, so the horizontal edges hold still throughout.
+  useEffect(() => {
+    const measure = () => {
+      const card = cardRef.current;
+      const shell = shellRef.current;
+      if (!card || !shell) return;
+      const cardHeight = card.offsetHeight;
+      const rect = card.getBoundingClientRect();
+      const bottomOffset =
+        Number.parseFloat(window.getComputedStyle(shell).bottom) || 0;
+      setMetrics((prev) =>
+        prev.cardHeight === cardHeight &&
+        prev.bottomOffset === bottomOffset &&
+        prev.cardLeft === rect.left &&
+        prev.cardRight === rect.right
+          ? prev
+          : { cardHeight, bottomOffset, cardLeft: rect.left, cardRight: rect.right },
+      );
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [visibleBatches.length, barDismissed]);
+
+  // `visibleBatches.length === 0` is a third way this bar is absent, on top of
+  // the two the shared rule already folds together — it never renders at all.
+  // Feeding it in as `revealed` keeps that inside the one rule rather than
+  // adding a second branch here.
+  const occupancyHeight = stickyBarOccupancyHeight({
+    dismissed: barDismissed,
+    revealed: showStickyBar && visibleBatches.length > 0,
+    cardHeight: metrics.cardHeight,
+    bottomOffset: metrics.bottomOffset,
+  });
+
+  useEffect(() => {
+    setOccupiedBox(barKey, {
+      height: occupancyHeight,
+      left: metrics.cardLeft,
+      right: metrics.cardRight,
+    });
+  }, [barKey, occupancyHeight, metrics.cardLeft, metrics.cardRight]);
+
+  // Teardown only. Without it the dock stays lifted on every page visited after
+  // navigating away from a masterclass — a bug that appears only after a route
+  // change, which is why it survives casual testing.
+  useEffect(() => () => clearOccupiedBox(barKey), [barKey]);
 
   return (
     <main className="overflow-x-hidden">
@@ -812,12 +896,16 @@ export function MasterclassDetailClient({
       {/* Sticky bottom CTA bar */}
       {visibleBatches.length > 0 && !barDismissed && (
         <div
+          ref={shellRef}
           className={`fixed inset-x-0 bottom-2 md:bottom-6 z-[60]
 
                 transition-transform duration-300 ease-in-out
                 ${showStickyBar ? "translate-y-0" : "translate-y-[calc(100%+2rem)]"}`}
         >
-          <div className="relative mx-2 md:mx-auto flex max-w-[900px] min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
+          <div
+            ref={cardRef}
+            className="relative mx-2 md:mx-auto flex max-w-[900px] min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]"
+          >
             {/* Cover image — flush left, full bar height, 16:9, no padding */}
             {course.cover_image_url ? (
               <div className="hidden sm:block shrink-0 self-stretch p-3 ">
