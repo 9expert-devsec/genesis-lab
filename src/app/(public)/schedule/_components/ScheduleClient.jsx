@@ -21,7 +21,11 @@ import {
   X,
 } from "lucide-react";
 import { courseHref } from "@/lib/utils";
-import { coursePriceLabel } from "@/lib/coursePriceLabel";
+import {
+  INHOUSE_ONLY_LABEL,
+  coursePriceLabel,
+  isInhouseOnlyPrice,
+} from "@/lib/coursePriceLabel";
 import {
   SCHEDULE_STATUS_OPTIONS,
   resolveScheduleBadge,
@@ -1020,7 +1024,48 @@ const FROZEN_CELLS = {
     thClass: "px-3 text-center",
     tdClass:
       "px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:text-white",
-    cell: (c) => formatCoursePrice(c),
+    /**
+     * THE ONE CELL WHERE THE LABEL IS BROKEN ON PURPOSE.
+     *
+     * This column is frozen at 100px (FROZEN_COLUMNS in
+     * lib/schedule/scheduleTableLayout) and spends 24 of them on `px-3`, so the
+     * text box is 76px — and "Inhouse Only" at text-xs measures ~75. Left to
+     * `white-space: normal` the browser is free to fit it on one line or break
+     * it, and which one you get depends on the resolved font metrics: the same
+     * table renders one line on one machine and two on the next, and flips
+     * mid-session when a webfont finishes loading.
+     *
+     * Two block children make the break a fact of the markup instead of an
+     * accident of measurement. Same words, same order, centred by the cell's
+     * own `text-center`, and `leading-tight` keeps the two lines inside the
+     * row's existing rhythm rather than growing it.
+     *
+     * SPLIT FROM THE CONSTANT, NOT RETYPED — the words still live in exactly
+     * one place (lib/coursePriceLabel), which is the property the whole label
+     * refactor exists to hold. Retyping "Inhouse" and "Only" here would put an
+     * eighth copy back three commits after seven were removed.
+     *
+     * NUMBERS ARE UNTOUCHED and stay on one line: the widest realistic price
+     * ("199,000" at 7 glyphs, ~44px) is comfortably inside 76px, and the cell
+     * has no fixed height — only `py-2` — so nothing is clipped either way.
+     *
+     * Geometry is deliberately NOT the fix here. Widening the column to 130
+     * would also work and is a one-number edit by design, but it moves
+     * FROZEN_TOTAL 640 → 670 and the sticky offsets with it, which is a
+     * different change with its own guards.
+     */
+    cell: (c) =>
+      isInhouseOnlyPrice(c?.course_price) ? (
+        <span className="block leading-tight">
+          {INHOUSE_ONLY_LABEL.split(" ").map((word) => (
+            <span key={word} className="block">
+              {word}
+            </span>
+          ))}
+        </span>
+      ) : (
+        formatCoursePrice(c)
+      ),
   },
 };
 
