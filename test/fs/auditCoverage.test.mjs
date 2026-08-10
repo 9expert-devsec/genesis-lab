@@ -47,9 +47,11 @@ const ROOT = path.resolve(HERE, '..', '..');
 const READ_ONLY_EXPORTS = {
   'src/lib/actions/roles.js': ['listRolesFull'],
   'src/lib/actions/registrations.js': ['listRegistrations', 'getRegistrationById', 'getRegistrationStatusCounts'],
-  'src/lib/actions/inhouse-registrations.js': [
-    'listInhouseRegistrations', 'getInhouseRegistrationById', 'getInhouseStatusCounts',
-  ],
+  // listInhouseRegistrations and getInhouseStatusCounts were deleted unused —
+  // /admin/registrations lists both collections through registrations.js. The
+  // CONTROL below asserts every exempted name still EXISTS, so a stale entry
+  // here would go red rather than quietly exempt nothing.
+  'src/lib/actions/inhouse-registrations.js': ['getInhouseRegistrationById'],
   'src/lib/actions/career-path-registrations.js': [
     'getCareerPathRegistrations', 'getCareerPathRegistrationById',
   ],

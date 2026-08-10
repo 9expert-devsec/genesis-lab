@@ -7,6 +7,7 @@ import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 import { LastEditedHint } from '@/components/audit/auditRowParts';
+import { InhouseTable } from './InhouseTable';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -51,6 +52,25 @@ function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
+}
+
+/**
+ * THE DETAIL ROUTE FOR A ROW — and there are two of them, not one.
+ *
+ * This list renders BOTH collections: `source` picks which one, and each has
+ * its own fully-built detail page. `/admin/registrations/[id]` reads
+ * `register_public`; `/admin/registrations/inhouse/[id]` reads
+ * `register_inhouse`. They are separate collections, so an in-house `_id` sent
+ * to the public route finds nothing and the page calls `notFound()` — a 404 on
+ * a record that exists, with a working page sitting one segment away.
+ *
+ * `source` is the same value the list query used to choose the model, so the
+ * link cannot disagree with the row it is attached to.
+ */
+function detailHref(source, id) {
+  return source === 'inhouse'
+    ? `/admin/registrations/inhouse/${id}`
+    : `/admin/registrations/${id}`;
 }
 
 
@@ -227,7 +247,21 @@ export function RegistrationsClient({
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="ค้นหาชื่อ / อีเมล / หลักสูตร"
+              /*
+                THE PLACEHOLDER NAMES THE FIELDS THE FILTER ACTUALLY SEARCHES,
+                and the two filters do not search the same ones.
+
+                Public matches courseName + coordinator name/email, so the
+                original label was correct there and is unchanged. In-house
+                matches companyName + contact name/email and NOT the course —
+                `coursesInterested` holds codes and no $or clause touches it — so
+                'หลักสูตร' was an invitation to type a course and get nothing
+                back, while the one field that does work (บริษัท) went unnamed.
+                See listRegistrations in src/lib/actions/registrations.js.
+              */
+              placeholder={source === 'inhouse'
+                ? 'ค้นหาบริษัท / ชื่อ / อีเมล'
+                : 'ค้นหาชื่อ / อีเมล / หลักสูตร'}
               className={cn(
                 'h-9 w-64 rounded-9e-md border bg-[var(--surface)] pl-9 pr-3 text-sm',
                 'border-[var(--surface-border)] text-[var(--text-primary)]',
@@ -244,7 +278,24 @@ export function RegistrationsClient({
         </form>
       </div>
 
-      {/* ── Table ── */}
+      {/* ── Table ──
+          IN-HOUSE GETS ITS OWN BODY. The columns below are the PUBLIC set and
+          only the public set — an in-house document has no courseName, no
+          coordinator, no attendeesCount, no requestInvoice and no payment — so
+          rendering one through them produced a row of blanks with two cells that
+          stated a confident falsehood instead. See InhouseTable.jsx for why that
+          is a separate component and not a `source ===` test inside each cell.
+
+          THE PUBLIC BLOCK BELOW IS DELIBERATELY NOT RE-INDENTED. Nothing in the
+          suite covers this table, so the only available proof that this commit
+          did not disturb a public cell is the diff itself. Wrapping the block
+          without shifting it keeps all 87 lines BYTE-IDENTICAL to HEAD: `git
+          diff` shows four added lines around an untouched body. Re-indenting
+          would have turned every one of those lines into a diff line and reduced
+          the proof to trusting `git diff -w`. */}
+      {source === 'inhouse' ? (
+        <InhouseTable items={items} lastEdited={lastEdited} />
+      ) : (
       <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -320,7 +371,7 @@ export function RegistrationsClient({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/admin/registrations/${row._id}`}
+                      href={detailHref(source, row._id)}
                       className="text-xs font-semibold text-9e-action hover:underline"
                     >
                       ดูรายละเอียด →
@@ -332,6 +383,7 @@ export function RegistrationsClient({
           </table>
         </div>
       </div>
+      )}
 
       {/* ── Pagination ── */}
       {pageCount > 1 && (
