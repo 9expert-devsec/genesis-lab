@@ -161,11 +161,53 @@ const RESULT_CARD_BASE =
  * A NARROWER TRACK, not a stacked layout. At 360px a 256px cover leaves ~70px
  * of text, which is unusable; a full-width stacked cover is legible but turns
  * each result into a ~250px block, and a search results list is for SCANNING —
- * three stacked results fill a phone screen. 128px (72px tall) keeps the
- * compact row and leaves ~170px of text. Same 2:1 halving for the square track.
+ * three stacked results fill a phone screen. The row stays a row.
+ *
+ * THE MOBILE TRACK IS DERIVED FROM THE TEXT BLOCK, and it has to be, because
+ * the cover's height is the text block's height. `aspect-video` only sets the
+ * row's FLOOR (see RESULT_COVER); above that floor the box takes whatever the
+ * text makes of it, and `object-cover` then crops the width to fit. At the old
+ * 128px track that was catastrophic rather than cosmetic: a course card with a
+ * two-line title ran 154px of text against a 128px track, so a 16:9 source was
+ * shown in a 128x154 box — ratio 0.83 against a source of 1.78, losing 53% of
+ * its width. Course artwork has text baked into it, so what survived was
+ * fragments. Every type was between 32% and 53%.
+ *
+ * The fix makes the declared ratio and the stretched height AGREE instead of
+ * fighting: drop the teaser below `sm` (see RESULT_TEASER), which takes the
+ * tallest non-course text block to 96px, then widen the track until the ratio
+ * floor covers it. 96 x 16/9 = 170.7, so 176px — the next half-rem step, whose
+ * 99px floor also buys the course card margin. Now the floor is TALLER than the
+ * text for four of the five types, the box is exactly 176x99, and the crop is
+ * ZERO. Measured, per type, at 360/390/430 (identical at all three — below `sm`
+ * the track is fixed and the text height does not depend on width):
+ *
+ *   online / article / career path, 1- and 2-line title   176x99   crop 0%
+ *   course, 1-line title                                  176x99   crop 0%
+ *   course, 2-line title                                  176x111  crop 10.8%
+ *
+ * THE COURSE CARD IS THE ONE RESIDUAL, and it is structural: it alone prints a
+ * code line above the title, which puts a two-line-title body at 111px, past
+ * the 99px floor. Zeroing that too needs a 198px track, which leaves 94px of
+ * text at 360px — narrower than a two-line title can use. 10.8% on one variant
+ * of one type is the price of keeping the text column legible, and it is down
+ * from 53.2%.
+ *
+ * THE SQUARE TRACK IS 136px BY THE SAME METHOD. A promotion has no teaser to
+ * drop, so its tallest block stands at 134px (2-line title + dates + snippet +
+ * tag row); a square track equals its own floor, so 136px covers it and every
+ * promotion cover is exactly 136x136 — crop zero in both title cases, down from
+ * 37-46%. The cost is named: a promotion whose title fits on ONE line grows
+ * from 114px to 136px. That case is rare (a promo title at 158px of text runs
+ * to two lines), the two-line case grows by 2px, and it is the only way to give
+ * a square source a square box when the box height comes from the text.
+ *
+ * CARD HEIGHTS FALL almost everywhere: 99px against 106-154px today for the
+ * four 16:9 types. Text narrows to 118px at 360 (was 166), 148 at 390, 188 at
+ * 430 — see RESULT_TITLE for what that does to the title.
  */
-const RESULT_COVER_TRACK = 'grid-cols-[128px_1fr] sm:grid-cols-[256px_1fr]';
-const RESULT_COVER_TRACK_SQUARE = 'grid-cols-[72px_1fr] sm:grid-cols-[144px_1fr]';
+const RESULT_COVER_TRACK = 'grid-cols-[176px_1fr] sm:grid-cols-[256px_1fr]';
+const RESULT_COVER_TRACK_SQUARE = 'grid-cols-[136px_1fr] sm:grid-cols-[144px_1fr]';
 
 const RESULT_CARD = RESULT_CARD_BASE + ' ' + RESULT_COVER_TRACK;
 /** Promotions only — see RESULT_COVER_SQUARE for why the ratio differs. */
@@ -210,8 +252,17 @@ const RESULT_CARD_SQUARE = RESULT_CARD_BASE + ' ' + RESULT_COVER_TRACK_SQUARE;
  * The crop is horizontal only — `object-cover` scales to the limiting dimension,
  * which is height, so the full height of every source is visible and the ends of
  * its width are lost. On desktop that is ~6% for the tallest card type and zero
- * for the other four; on a phone it is about half. Per-type figures are in the
- * report.
+ * for the other four.
+ *
+ * ON A PHONE IT WAS ABOUT HALF, AND IS NOW ZERO for nine of the ten
+ * type/title-length combinations. That was not fixed by taking the stretch back
+ * — `self-start` would hold the ratio but leave a strip of background under
+ * every cover, which is exactly why the `sm:` qualifier was removed above, and
+ * `object-contain` would trade the crop for grey bars. It was fixed by making
+ * the FLOOR taller than the text so the stretch has nothing left to do: drop
+ * the teaser below `sm` and widen the mobile track to 176px / 136px. The full
+ * derivation and the one remaining residual (a course card with a two-line
+ * title, 10.8%) are in RESULT_COVER_TRACK.
  */
 const RESULT_COVER_BASE = 'relative w-full self-stretch overflow-hidden bg-gray-100';
 /** 16:9 — courses, online courses, career paths, articles. */
@@ -233,8 +284,16 @@ const RESULT_COVER_IMG = 'h-full w-full object-cover';
  *
  * `object-cover` scales the source until it COVERS the box, and the limiting
  * dimension is the height — so a 16:9 cover in a 154px-tall card is decoded
- * ~274px WIDE however narrow its track is. The visible box is 128px on a phone
+ * ~274px WIDE however narrow its track is. The visible box is 176px on a phone
  * and 256px on a desktop; the bitmap is ~274px on both.
+ *
+ * RE-DERIVED AFTER THE MOBILE TRACK MOVED, because a too-small value here fails
+ * silently as a soft image with no error anywhere. The worst case is unchanged
+ * and still DESKTOP: a course card with a two-line title is 154px tall there
+ * (the teaser still renders above `sm`), so 154 x 16/9 = 273.8px. Mobile got
+ * BETTER, not worse — its tallest box is now 111px, decoding ~197px, and the
+ * four other types decode 176px exactly. 304px still holds, and still with
+ * room; it is not re-derived downward because the desktop case sets it.
  *
  * This was a media query — 304px below `sm`, 256px above — back when the desktop
  * cover was pinned to its 144px ratio height and 256px really was its rendered
@@ -263,8 +322,44 @@ const COVER_H = 144;
 const COVER_SQUARE = 144;
 /** `flex flex-col` so a card can anchor a row to the BOTTOM with `mt-auto`. */
 const RESULT_BODY = 'flex min-w-0 flex-1 flex-col p-4';
+/**
+ * The title clamps to two lines, and the mobile text column is now 118px at
+ * 360px (was 166) — the cost of the wider cover track, named here rather than
+ * discovered. At `text-sm` that is roughly 16 Latin characters or 13 Thai
+ * glyphs per line, so a long course name reaches the clamp and ends in an
+ * ellipsis at a break opportunity. That is truncation, not clipping: the clamp
+ * breaks between words, and browsers segment Thai (which has no spaces) the
+ * same way. A single unbroken token longer than the line would still overflow,
+ * which is why the course CODE sits on its own line rather than in the title.
+ */
 const RESULT_TITLE = 'line-clamp-2 text-sm font-semibold text-[#0D1B2A] group-hover:text-[#005CFF]';
-const RESULT_TEASER = 'mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500';
+/**
+ * THE TEASER IS HIDDEN BELOW `sm`, and that is a layout fix, not an edit.
+ *
+ * It is what takes the mobile text block down to the height the widened cover
+ * track is derived from — see RESULT_COVER_TRACK. Two lines of `leading-relaxed`
+ * plus its margin is 43px, and removing it is what lets the ratio floor sit
+ * above the text instead of under it.
+ *
+ * `max-sm:hidden` AND NOT `hidden sm:block`, which is the trap here. This
+ * element also carries `line-clamp-2`, which works by setting
+ * `display: -webkit-box`; `sm:block` would win at `sm` and up and silently
+ * replace the clamp with an unclamped block, so the desktop teaser would grow
+ * to full length instead of two lines. `max-sm:` adds a rule only BELOW the
+ * breakpoint and leaves the clamp's own display untouched above it. Verified
+ * against the generated CSS, not assumed: `.line-clamp-2` is emitted first and
+ * `@media not all and (min-width: 640px) { .max-sm\:hidden { display: none } }`
+ * after it, so `none` wins below `sm` and nothing overrides `-webkit-box` above.
+ *
+ * CSS RATHER THAN DROPPING IT FROM THE DOM, because the server cannot know the
+ * viewport: a JS breakpoint would render one tree on the server and another on
+ * the client, i.e. a hydration mismatch and a visible reflow. The consequence
+ * for assistive tech is stated deliberately — `display: none` is removed from
+ * the accessibility tree too, so a screen-reader user on a phone does not hear
+ * the teaser, which matches exactly what a sighted user on a phone sees. It is
+ * still in the HTML for anything reading the markup directly.
+ */
+const RESULT_TEASER = 'mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 max-sm:hidden';
 const RESULT_META = 'mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500';
 /**
  * A metadata row pinned to the bottom of the text block.
@@ -469,8 +564,13 @@ function CareerPathResultCard({ careerPath, term }) {
 
       <div className={RESULT_BODY}>
         <h3 className={RESULT_TITLE}>{highlightText(careerPath.title, term)}</h3>
+        {/* Hidden below `sm` for the same reason as RESULT_TEASER, and with the
+            same `max-sm:` mechanism rather than `hidden sm:block` — this is
+            `line-clamp-2` too. Its own class string rather than RESULT_TEASER
+            because the spacing differs (mt-0.5, no leading-relaxed), and the
+            five cards stay separate on purpose. */}
         {careerPath.short_description && (
-          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+          <p className="mt-0.5 line-clamp-2 text-xs text-gray-500 max-sm:hidden">
             {careerPath.short_description}
           </p>
         )}

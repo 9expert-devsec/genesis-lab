@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SearchResults } from '@/app/(public)/search/_components/SearchClient';
 import { emptySearchCounts } from '@/lib/search/matchSearch';
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * THE COVER SLOT, and the per-card content that depends on it.
@@ -117,25 +118,63 @@ test('the cover track is a FIXED length, never `auto`', () => {
 test('16:9 cards and the square card use the two declared tracks', () => {
   for (const type of ['courses', 'onlineCourses', 'careerPaths', 'articles']) {
     const classes = cardClasses(render(type));
-    assert.ok(classes.includes('grid-cols-[128px_1fr] sm:grid-cols-[256px_1fr]'), `${type}: 16:9 track`);
+    assert.ok(classes.includes('grid-cols-[176px_1fr] sm:grid-cols-[256px_1fr]'), `${type}: 16:9 track`);
   }
   assert.ok(
-    cardClasses(render('promotions')).includes('grid-cols-[72px_1fr] sm:grid-cols-[144px_1fr]'),
+    cardClasses(render('promotions')).includes('grid-cols-[136px_1fr] sm:grid-cols-[144px_1fr]'),
     'promotions: the square track',
   );
 });
 
-test('the two tracks produce the SAME cover height', () => {
+test('CONTROL: the track probe rejects the pre-change mobile widths', () => {
+  // The mobile track moved from 128/72 to 176/136. Without this, the literals
+  // above could go stale and the assertion would be describing a layout the
+  // file no longer has — which is exactly what the arithmetic test below was
+  // doing before it was rewritten.
+  const classes = cardClasses(render('courses'));
+  assert.equal(classes.includes('grid-cols-[128px_1fr]'), false, 'the old 16:9 track is gone');
+  assert.equal(
+    cardClasses(render('promotions')).includes('grid-cols-[72px_1fr]'), false,
+    'and so is the old square track',
+  );
+});
+
+test('the two tracks are level at sm and up, and deliberately are NOT below it', () => {
   /**
-   * The reason the square track is 144 and not a round number: 256 x 9/16 =
-   * 144, and 144 x 1/1 = 144. A promotion card therefore sits at the same
-   * height as its neighbours despite a different cover ratio — the ratio
-   * follows the source image, the height does not vary with it.
+   * ABOVE `sm` the relationship is unchanged and is the reason the square track
+   * is 144 rather than a round number: 256 x 9/16 = 144, and 144 x 1/1 = 144.
+   * Cards can share a grid row there, so a promotion has to sit level with its
+   * neighbours despite a different cover ratio.
+   *
+   * BELOW `sm` that requirement does not exist and the tracks no longer match:
+   * 176 x 9/16 = 99 against 136 x 1/1 = 136. Each track is derived from ITS OWN
+   * tallest text block so the declared ratio and the stretched height agree —
+   * see RESULT_COVER_TRACK. It is safe precisely because the results list is
+   * ONE COLUMN below `md`, so no two cards ever share a row to be level in.
+   *
+   * This test previously asserted `(128 * 9) / 16 === 72` and passed forever:
+   * arithmetic on literals, checking nothing about the file. It is rewritten
+   * to read the SOURCE.
    */
   assert.equal((256 * 9) / 16, 144, '16:9 at the wide track');
-  assert.equal(144 * 1, 144, 'and 1:1 at the square track');
-  assert.equal((128 * 9) / 16, 72, 'the same relationship holds below sm');
-  assert.equal(72 * 1, 72);
+  assert.equal(144 * 1, 144, 'and 1:1 at the square track — level above sm');
+
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  const track16 = Number(/grid-cols-\[(\d+)px_1fr\] sm:grid-cols-\[256px_1fr\]/.exec(src)[1]);
+  const trackSq = Number(/grid-cols-\[(\d+)px_1fr\] sm:grid-cols-\[144px_1fr\]/.exec(src)[1]);
+  assert.notEqual((track16 * 9) / 16, trackSq * 1, 'below sm the two heights differ, by design');
+
+  // ...and the reason that is safe, read from the source rather than asserted.
+  assert.match(src, /grid-cols-1 gap-3 md:grid-cols-2/, 'the list is one column below md');
+  assert.match(src, /'space-y-3'/, 'and the non-grid sections are a plain stack');
+});
+
+test('CONTROL: the one-column claim would fail if the list went multi-column early', () => {
+  // `grid-cols-2` without an md: prefix is the shape that would make two cards
+  // share a row on a phone and make the differing mobile heights visible.
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  assert.equal(/(^|\s)grid-cols-2/.test(src), false, 'no unqualified two-column list');
+  assert.equal(/sm:grid-cols-2/.test(src), false, 'and none arriving at sm either');
 });
 
 test('no cover carries `h-full` — the ratio still floors the row', () => {
@@ -222,6 +261,112 @@ test('CONTROL: the dimension probe distinguishes a bare <img>', () => {
   // always present on every img in the document.
   assert.equal(/\swidth="\d+"/.test('<img src="x" class="y"/>'), false);
   assert.ok(/\swidth="\d+"/.test('<img src="x" width="256" height="144"/>'));
+});
+
+// ── the mobile ratio fix ────────────────────────────────────────────────────
+
+/**
+ * The mobile box, derived the way the component derives it.
+ *
+ * `aspect-video` / `aspect-square` set the row's FLOOR; above that floor the
+ * box takes the text block's height and `object-cover` crops the width. So the
+ * crop is a function of the track and the text height, and it is zero exactly
+ * when the floor is at or above the text.
+ */
+const mobileBox = (track, ratio, textHeight) => {
+  const height = Math.max(track / ratio, textHeight);
+  const decoded = height * ratio;
+  return { height, crop: decoded > track ? (decoded - track) / decoded : 0 };
+};
+
+test('the mobile track is derived so the ratio floor covers the text block', () => {
+  // THE WHOLE FIX. Below sm the cover is `track x textHeight`, and it only
+  // shows the declared ratio when the floor wins. Read the tracks from source
+  // so the arithmetic cannot drift away from what ships.
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  const track16 = Number(/grid-cols-\[(\d+)px_1fr\] sm:grid-cols-\[256px_1fr\]/.exec(src)[1]);
+  const trackSq = Number(/grid-cols-\[(\d+)px_1fr\] sm:grid-cols-\[144px_1fr\]/.exec(src)[1]);
+
+  // Tallest mobile text block per family, with the teaser dropped below sm.
+  // online/article/careerPath top out at 96px; a promotion at 134px.
+  assert.equal(mobileBox(track16, 16 / 9, 96).crop, 0, 'a 96px block shows a full 16:9 cover');
+  assert.equal(mobileBox(trackSq, 1, 134).crop, 0, 'and a 134px promotion block a full square');
+  // The course card alone adds a code line, so its 2-line body is 111px and
+  // keeps a bounded residual rather than zero. Named, not hidden.
+  const course = mobileBox(track16, 16 / 9, 111);
+  assert.ok(course.crop > 0, 'the course 2-line case is the one residual');
+  assert.ok(course.crop < 0.15, `and it stays bounded: ${(course.crop * 100).toFixed(1)}%`);
+});
+
+test('CONTROL: the pre-change geometry is what that probe rejects', () => {
+  // Fired at the numbers that shipped before: a 128px track under a 154px
+  // course block, which is the reported defect. If the model returned ~0 here
+  // the assertions above would mean nothing.
+  const before = mobileBox(128, 16 / 9, 154);
+  assert.ok(before.crop > 0.5, `the old course card lost ${(before.crop * 100).toFixed(1)}% of its width`);
+  assert.ok(mobileBox(72, 1, 134).crop > 0.4, 'and the old promotion track was no better');
+  // ...and the model is not simply always-positive: give the floor room and it
+  // reports zero.
+  assert.equal(mobileBox(176, 16 / 9, 90).crop, 0);
+});
+
+test('the teaser is hidden below sm WITHOUT overriding the line clamp', () => {
+  /**
+   * `max-sm:hidden`, never `hidden sm:block`. Both this element and the career
+   * path's description carry `line-clamp-2`, which works by setting
+   * `display: -webkit-box` — an `sm:block` would replace that above the
+   * breakpoint and silently unclamp the DESKTOP teaser to full length. The
+   * `max-sm:` form only adds a rule below the breakpoint.
+   */
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  const teaser = /const RESULT_TEASER = '([^']+)'/.exec(src)[1];
+  assert.match(teaser, /\bmax-sm:hidden\b/, 'hidden below sm');
+  assert.match(teaser, /\bline-clamp-2\b/, 'and still clamped');
+  assert.equal(/\bsm:block\b/.test(teaser), false, 'sm:block would kill the clamp above sm');
+  assert.equal(/(^|\s)hidden(\s|$)/.test(teaser), false, 'and a bare `hidden` would kill it below');
+});
+
+test('CONTROL: the clamp-safety probe fires on the shape that would break it', () => {
+  // The trap written out, so the assertion above is not just three greps.
+  const trap = 'mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500 hidden sm:block';
+  assert.equal(/\bmax-sm:hidden\b/.test(trap), false, 'the trap has no max-sm form');
+  assert.equal(/\bsm:block\b/.test(trap), true, 'it has the display-overriding one');
+});
+
+test('every card that hides a teaser hides it the same way', () => {
+  // The career path's description is its own class string — the five cards stay
+  // separate on purpose — so it can drift. It must not.
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  const clamped = src.match(/className="[^"]*line-clamp-2[^"]*"/g) ?? [];
+  assert.ok(clamped.length >= 1, 'the career path description is a literal class string');
+  for (const cls of clamped) {
+    assert.match(cls, /\bmax-sm:hidden\b/, `${cls} must use the same mechanism`);
+    assert.equal(/\bsm:block\b/.test(cls), false, `${cls} must not override the clamp`);
+  }
+});
+
+test('CONTROL: that sweep is not vacuous — it finds the real class strings', () => {
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  assert.match(src, /line-clamp-2 text-xs text-gray-500 max-sm:hidden/,
+    'the career path description, verbatim from the shipped file');
+});
+
+test('the download width still covers the worst case, which is DESKTOP', () => {
+  // A too-small `sizes` fails silently as a soft image. The mobile track moved,
+  // so this is re-derived rather than assumed: desktop still governs because
+  // the teaser still renders there.
+  const src = readSource('src/app/(public)/search/_components/SearchClient.jsx').code;
+  const sizes = Number(/const RESULT_COVER_SIZES = '(\d+)px'/.exec(src)[1]);
+  const desktopWorst = 154 * (16 / 9);              // course, 2-line title, teaser shown
+  const mobileWorst = mobileBox(176, 16 / 9, 111).height * (16 / 9);
+  assert.ok(sizes >= desktopWorst, `${sizes}px must cover the ${desktopWorst.toFixed(0)}px desktop decode`);
+  assert.ok(desktopWorst > mobileWorst, 'and desktop is still the worst case, not mobile');
+});
+
+test('CONTROL: the sizes probe would catch a value re-derived down to the track', () => {
+  // The tempting mistake is to set `sizes` to the visible track width.
+  assert.equal(176 >= 154 * (16 / 9), false, 'the mobile track alone would under-request');
+  assert.equal(256 >= 154 * (16 / 9), false, 'and so would the desktop track');
 });
 
 // ── §2 the course teaser ────────────────────────────────────────────────────
