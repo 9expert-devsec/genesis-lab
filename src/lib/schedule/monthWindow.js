@@ -183,6 +183,7 @@ export function windowBetween(fromKey, toKey) {
 const SHORT_MONTH = new Intl.DateTimeFormat('th-TH', { month: 'short' });
 const SHORT_MONTH_YEAR = new Intl.DateTimeFormat('th-TH', { month: 'short', year: '2-digit' });
 const YEAR_ONLY = new Intl.DateTimeFormat('th-TH', { year: '2-digit' });
+const LONG_MONTH_YEAR = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 
 const dateOf = (key) => {
   const p = parseMonthKey(key);
@@ -221,6 +222,54 @@ export function monthYearLabel(key) {
   const d = dateOf(key);
   if (!d) return '';
   return YEAR_ONLY.formatToParts(d).find((p) => p.type === 'year')?.value ?? '';
+}
+
+/**
+ * `'2026-09'` → `'กันยายน 2569'` — the LONG form, for prose rather than a table.
+ *
+ * ── IT IS THE SAME `YYYY-MM`, NOT AN `ADMIN_SCHEDULE_MONTHS`-STYLE FALSE FRIEND
+ * The module docstring warns against borrowing something that merely LOOKS like
+ * a month here, so the check is spelled out: this key is byte-identical to the
+ * one `monthKey` produces — `${getFullYear()}-${String(getMonth()+1).padStart(2,
+ * '0')}` — and the two producers it now serves both emit exactly that. They are
+ * one vocabulary, not two that coincide.
+ *
+ *   · the public /schedule window, via `monthKey` above;
+ *   · the in-house enquiry form's month select, which builds its option VALUES
+ *     with that same expression (src/components/registration/InhouseForm.jsx:67-74)
+ *     and submits them as `preferredMonth`.
+ *
+ * ── WHY LONG, AND WHY HERE ──────────────────────────────────────────────────
+ * The in-house form shows the customer `toLocaleDateString('th-TH', { month:
+ * 'long', year: 'numeric' })` at review time, so this reproduces the string
+ * they approved rather than a shorter one they never saw. The siblings above
+ * are sized for a table column and a dropdown; an email sentence has room.
+ *
+ * It lives in this module and not in the email label file ON PURPOSE. A second
+ * private Intl formatter is a second place for `+ 543` to grow back, and
+ * test/fs/scheduleThaiYearSource only inspects the files it is pointed at —
+ * a formatter written elsewhere is a formatter nobody is guarding.
+ *
+ * ── THE FALLBACK DIFFERS FROM ITS SIBLINGS, DELIBERATELY ────────────────────
+ * `monthLabel` / `monthLabelWithYear` / `monthYearLabel` return `''` for an
+ * unparseable key, which is right for a table: a column head with no month is
+ * blank, and the row beneath still identifies the data. This one returns the
+ * RAW VALUE instead, because its output lands in a sentence in a customer's
+ * email. A customer reading `2026-09` is confused; a customer reading nothing
+ * cannot tell which enquiry the mail is answering. Same reasoning as the
+ * `courseName || code` fallback in inhouseRegistrationModel.js — an ugly but
+ * actionable value beats a hole.
+ *
+ * The only input that yields `''` is one that was already empty.
+ *
+ * @param {string} key
+ * @returns {string} the formatted label, else `key` unchanged
+ */
+export function monthLongLabel(key) {
+  // Through `dateOf`, i.e. through `parseMonthKey` — the module's one place
+  // where the key vocabulary is decoded.
+  const d = dateOf(key);
+  return d ? LONG_MONTH_YEAR.format(d) : String(key ?? '');
 }
 
 /**

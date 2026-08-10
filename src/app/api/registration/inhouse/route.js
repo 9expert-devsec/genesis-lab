@@ -5,6 +5,8 @@ import RegisterInhouse from '@/models/RegisterInhouse';
 import { inhouseRegistrationSchema } from '@/lib/schemas/register-inhouse';
 import { sendInhouseRegistrationEmails } from '@/lib/email/template-senders/inhouse-registration';
 import { getCourseByCode } from '@/lib/api/public-courses';
+import { refNo } from '@/lib/refNo';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
@@ -84,24 +86,24 @@ export async function POST(req) {
 
   const referenceNumber = refNo(doc._id);
 
-  // Pre-compute address string so templates stay logic-free
-  const quotationAddress =
-    data.quotationCountry === 'OTHER'
-      ? [
-          data.internationalAddress?.line1,
-          data.internationalAddress?.line2,
-          data.internationalAddress?.city,
-          data.internationalAddress?.state,
-          data.internationalAddress?.postalCode,
-          data.internationalAddress?.country,
-        ].filter(Boolean).join(', ')
-      : [
-          data.thaiAddress?.addressLine,
-          data.thaiAddress?.subDistrict,
-          data.thaiAddress?.district,
-          data.thaiAddress?.province,
-          data.thaiAddress?.postalCode,
-        ].filter(Boolean).join(' ');
+  // Pre-compute address string so templates stay logic-free.
+  //
+  // THROUGH THE SHARED FORMATTER, adapted at this call site. The hand-rolled
+  // join this replaces emitted no administrative-division prefixes, so a real
+  // submission mailed out as `เชียงยืน เมืองอุดรธานี อุดรธานี 41000` with no
+  // way to tell the ตำบล from the อำเภอ. The public flow has always used the
+  // formatter; the in-house flow was scoped out and is now brought in line.
+  //
+  // The adapter is one key. In-house holds `quotationCountry` where an invoice
+  // holds `country`; `thaiAddress` and `internationalAddress` are identical in
+  // shape. Renaming it HERE rather than teaching the formatter a second country
+  // key keeps that function reading one vocabulary — a `countryKey` option
+  // would push this flow's naming into every other caller's signature.
+  const quotationAddress = formatBillingAddress({
+    country: data.quotationCountry,
+    thaiAddress: data.thaiAddress,
+    internationalAddress: data.internationalAddress,
+  });
 
   // AWAITED for the same reason as the public route: the model is built
   // synchronously, so an unresolved promise would reach the template as

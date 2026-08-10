@@ -65,7 +65,7 @@ test('every Thai date formatter on these surfaces goes through Intl', () => {
   // satisfy the "no 543" sweep above.
   const src = readSource('src/lib/schedule/monthWindow.js');
   const formatters = src.code.match(/new Intl\.DateTimeFormat\('th-TH'/g) ?? [];
-  assert.equal(formatters.length, 3, 'month, month+year, and year-only');
+  assert.equal(formatters.length, 4, 'month, month+year, year-only, and long month+year');
 });
 
 // ── Controls ────────────────────────────────────────────────────────────────

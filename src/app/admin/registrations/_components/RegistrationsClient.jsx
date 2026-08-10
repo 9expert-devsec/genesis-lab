@@ -84,6 +84,9 @@ export function RegistrationsClient({
   initialRange  = 'all',
   counts,
   lastEdited = {},
+  // Built server-side in page.jsx and only for source=inhouse; null on a public
+  // render, where nothing reads it.
+  courseNames = null,
 }) {
   const router     = useRouter();
   const pathname   = usePathname();
@@ -294,7 +297,7 @@ export function RegistrationsClient({
           would have turned every one of those lines into a diff line and reduced
           the proof to trusting `git diff -w`. */}
       {source === 'inhouse' ? (
-        <InhouseTable items={items} lastEdited={lastEdited} />
+        <InhouseTable items={items} lastEdited={lastEdited} courseNames={courseNames} />
       ) : (
       <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <div className="overflow-x-auto">

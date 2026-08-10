@@ -1,5 +1,7 @@
-import { textBlock } from './labels';
+import { contentModeLabel, textBlock } from './labels';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
+import { monthLongLabel } from '@/lib/schedule/monthWindow';
+import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 
 /**
  * TemplateModel for POSTMARK_TEMPLATE_ALIAS_INHOUSE_USER — the acknowledgement
@@ -66,14 +68,25 @@ import { formatBranchLabel } from '@/lib/registration/branchLabel';
  * `companyName` itself survives as a Mongoose path, written by exactly one line
  * in the API route as a legacy-compat mirror for the admin list's $regex.
  *
+ * ── FIVE KEYS THAT USED TO BE "NOT MAPPED" AND NOW ARE ──────────────────────
+ * `contentMode`, `contentDetails`, `scheduleNote`, `onlineRegion` and
+ * `onlineTimezone` were excluded on the reasoning that
+ * registration-inhouse-admin.js was their only renderer, that template is
+ * deleted, and this is the customer's mail. THE APPROVED POSTMARK TEMPLATE
+ * REVERSES THAT: it has rows for all five, so they are emitted here as
+ * content_mode_label, content_details, schedule_note, online_region and
+ * online_timezone.
+ *
+ * The old reasoning was about who READS the mail. It undercounted: the BCC copy
+ * of this same mail is the only notification anyone internal receives, so every
+ * field left out was a detail the sales team had to open the dashboard to find.
+ * Echoing them back also lets the customer check what was recorded, which is
+ * the point of an acknowledgement.
+ *
+ * `preferredContact*` STAYS OFF, and for the original reason: the approved
+ * template has no row for it.
+ *
  * ── NOT MAPPED, AND WHY ─────────────────────────────────────────────────────
- * `contentMode`, `contentDetails`, `onlineRegion`, `onlineTimezone`,
- * `preferredContact*`, `scheduleNote`. Every one was rendered by
- * registration-inhouse-admin.js and by NOTHING else. That template is deleted
- * and this is the customer's mail, so they are not here — a real loss of detail
- * for the team, since the BCC copy of this mail is now the only notification
- * anyone internal receives. The enquiry itself is in the admin dashboard, where
- * whoever answers it has to be anyway.
  *
  * `objective`, `skillLevel` and `onsiteEquipment` USED TO BE ON THAT LIST and
  * are no longer, for a different reason: the form stopped asking. They are not
@@ -135,9 +148,17 @@ export function buildInhouseRegistrationModel({
     // upstream is down.
     course_name: courseName || courses[0] || '',
 
+    // รูปแบบเนื้อหา — a plain string, never a block: the schema defaults
+    // `contentMode`, so there is no absent case and no row to hide.
+    content_mode_label: contentModeLabel(d.contentMode),
+    content_details: contentDetails(d),
+
     training_format_label: trainingFormatLabel(d.trainingFormat),
     schedule_label: scheduleLabel(d),
+    schedule_note: textBlock(d.scheduleNote),
     training_venue: trainingVenue(d),
+    online_region: onlineField(d, d.onlineRegion),
+    online_timezone: onlineField(d, d.onlineTimezone),
 
     billing_company_name: d.quotationCompany ?? '',
     billing_tax_id: textBlock(d.taxId),
@@ -152,14 +173,70 @@ export function buildInhouseRegistrationModel({
 }
 
 /**
+ * The extra content the customer asked for — CUSTOM MODE ONLY.
+ *
+ * Gated on `contentMode !== 'standard'`, which is the SAME PREDICATE the form
+ * uses to show the field (InhouseForm.jsx:517, and again on the review step at
+ * :803). Not on the string being non-empty: `contentDetails` is
+ * `.optional()` on the schema with no cross-field rule clearing it, so a
+ * customer who typed a paragraph, changed their mind and switched back to
+ * 'ใช้ Outline มาตรฐาน' submits a STALE value the form has already stopped
+ * showing them. Echoing that back tells them we recorded a customisation they
+ * cancelled.
+ *
+ * Exactly the class of error `trainingVenue()` below already exists to prevent,
+ * and gated the same way for the same reason: read the MODE, not the leftover.
+ */
+function contentDetails(d) {
+  if (d.contentMode === 'standard') return false;
+  return textBlock(d.contentDetails);
+}
+
+/**
+ * An online-only detail — region, or time-zone constraint.
+ *
+ * `false` for anything but 'online', mirroring `trainingVenue()` below, which
+ * is the same shape for the same reason: both input pairs sit inside a block
+ * the form renders only for their format (`isOnline`, InhouseForm.jsx:587-596),
+ * and the schema keeps them `.optional()` with no rule that clears them when
+ * the customer switches. So an onsite enquiry can carry a stale region typed
+ * before the switch, and printing it back invents a constraint nobody asked
+ * for. Gate on the FORMAT, never on "is the value non-empty".
+ *
+ * Takes the value rather than a key so the two call sites read as one rule
+ * applied twice, not two rules that happen to agree.
+ */
+function onlineField(d, value) {
+  if (d.trainingFormat !== 'online') return false;
+  return textBlock(value);
+}
+
+/**
  * Onsite or Online — THOSE ARE NOW THE ONLY TWO.
  *
- * The 'flexible' card is gone from the form and the schema requires an explicit
- * choice, so the fallback below CANNOT FIRE for a new submission. It is kept
- * anyway, deliberately: this function is also reachable from a re-send of a
- * historical enquiry, where `trainingFormat` really is 'flexible'. Deleting the
- * default would make that case render the literal string 'undefined' in the
- * customer's mail. It is a fail-safe for old data, not a live branch.
+ * ── THE FALLBACK IS UNREACHABLE TODAY ───────────────────────────────────────
+ * `src/lib/schemas/register-inhouse.js:96` is
+ * `trainingFormat: z.enum(['onsite', 'online'], …)` — two values, NO `.default()`
+ * and no `.optional()`, so parsing rejects anything else before this function
+ * is reached. The 'flexible' card is gone from the form.
+ *
+ * The prose here used to justify the fallback as a fail-safe for "a re-send of
+ * a historical enquiry". THERE IS NO SUCH PATH. `buildInhouseRegistrationModel`
+ * has exactly one production caller — `sendInhouseRegistrationEmails`
+ * (src/lib/email/template-senders/inhouse-registration.js:58) — which itself
+ * has exactly one caller: the POST route
+ * (src/app/api/registration/inhouse/route.js:113), with freshly-parsed zod
+ * data. Nothing loads a stored document and re-renders it.
+ *
+ * WHAT WOULD MAKE IT REACHABLE: an admin "re-send this confirmation" action
+ * reading a RegisterInhouse document (the Mongoose path still accepts the old
+ * values), or widening the enum. Either one, and this branch starts firing —
+ * which is why it is KEPT rather than deleted. Deleting it would make that day
+ * render the literal 'undefined' in a customer's mail.
+ *
+ * A docstring asserting a path that does not exist is its own defect: it tells
+ * the next reader the branch is covered by a real scenario, so nobody tests it
+ * and nobody notices when the scenario is imaginary.
  */
 function trainingFormatLabel(trainingFormat) {
   if (trainingFormat === 'onsite') return 'Onsite';
@@ -168,17 +245,49 @@ function trainingFormatLabel(trainingFormat) {
 }
 
 /**
- * One sentence describing when they want it.
+ * When they want it — THE FORMATTED MONTH, BARE.
  *
- * A MONTH, AND NOTHING ELSE. The three-way scheduleMode selector (month /
- * dateRange / notSure) is gone and `preferredMonth` is unconditionally
- * required, so there is no mode to branch on any more. The `|| 'ตามที่ทีมขาย
- * แนะนำ'` survives for the same reason as the format fallback above: a
- * historical enquiry saved under 'dateRange' or 'notSure' has no month at all,
- * and 'เดือนที่สนใจ: ' with nothing after the colon reads as a bug.
+ * ── NO PREFIX ───────────────────────────────────────────────────────────────
+ * This used to return `เดือนที่สนใจ: <value>`. The approved template's row is
+ * already headed "เดือนที่สนใจอบรม", so the mail asked the question twice and
+ * answered it once. The heading belongs to the template; the value belongs
+ * here.
+ *
+ * ── AND THE VALUE IS FORMATTED, BECAUSE IT IS A MACHINE KEY ─────────────────
+ * `preferredMonth` is NOT prose. The form's month `<select>`
+ * (InhouseForm.jsx:531) is built from `THAI_MONTHS` (:67-74), whose options
+ * carry a Thai `label` but submit a `YYYY-MM` `value` — so what arrives here is
+ * the string '2026-09'. The form converts it back for its own review step via
+ * `labelOf(THAI_MONTHS, …)` at :809, and nothing else did, so the customer
+ * approved 'กันยายน 2569' on screen and was then sent '2026-09'.
+ *
+ * `monthLongLabel` is the shared decoder for that vocabulary and lives beside
+ * the other `YYYY-MM` formatters in src/lib/schedule/monthWindow.js, where the
+ * repo-wide `+ 543` ban is actually enforced. It returns the raw key unchanged
+ * if it cannot parse one, so a value from some future producer degrades to
+ * today's output rather than to a blank.
+ *
+ * ── THE `||` FALLBACK IS UNREACHABLE TODAY ──────────────────────────────────
+ * `src/lib/schemas/register-inhouse.js:86` is
+ * `preferredMonth: z.string().trim().min(1, …)` — required, non-empty, no
+ * default. The three-way scheduleMode selector (month / dateRange / notSure)
+ * is gone, so there is no mode that omits a month. Parsing rejects a
+ * submission without one before this function runs.
+ *
+ * As with `trainingFormatLabel` above, the old prose called this a fail-safe
+ * for a re-send of a historical enquiry. NO RE-SEND PATH EXISTS — one caller,
+ * the POST route, always with freshly-parsed data. See that docstring for the
+ * caller chain.
+ *
+ * WHAT WOULD MAKE IT REACHABLE: an admin re-send reading a stored
+ * RegisterInhouse document, where a pre-change enquiry really does hold
+ * `preferredDateFrom`/`preferredDateTo` and no month at all — the admin detail
+ * view still reads exactly that shape. KEPT for that day, because a bare ''
+ * where the month goes reads as a broken template rather than as an absent
+ * answer.
  */
 function scheduleLabel(d) {
-  return `เดือนที่สนใจ: ${d.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`;
+  return d.preferredMonth ? monthLongLabel(d.preferredMonth) : 'ตามที่ทีมขายแนะนำ';
 }
 
 /**
@@ -190,16 +299,24 @@ function scheduleLabel(d) {
  * their mind mid-form — and printing that back as the venue is the same class
  * of error as showing the billing address here.
  *
- * Flattened with a plain join, matching the billing address the route hands in
- * as `quotationAddress`. It is deliberately NOT run through
- * formatBillingAddress: that formatter is scoped to the public-registration
- * flow (three tests pin the in-house sites out of it), and a venue is not a
- * billing address.
+ * ── FORMATTED, AND THROUGH THE ADDRESS PRIMITIVE — NOT THROUGH "BILLING" ────
+ * This used to be a plain join, on the reasoning that the shared formatter was
+ * scoped to the public-registration flow and a venue is not a billing address.
+ * The first half is no longer true: the prefix rule has been extracted to
+ * `formatThaiAddress`, so a caller can have ตำบล/อำเภอ/จังหวัด — or แขวง/เขต
+ * for Bangkok — without describing its data as an invoice. The plain join
+ * emitted a venue with no prefixes at all, which is exactly as unreadable here
+ * as it was in the quotation address.
+ *
+ * The second half still holds and is why this calls `formatThaiAddress`
+ * DIRECTLY and never `formatBillingAddress`. Round 3 shipped a bug where the
+ * billing address rendered under a สถานที่จัดอบรม heading; the fix was to keep
+ * the two concepts apart by name, and routing a venue through a function called
+ * "billing" would put that naming straight back — the string would be right and
+ * the next reader would be wrong. The shared thing is the prefix rule, not the
+ * invoice.
  */
 function trainingVenue(d) {
   if (d.trainingFormat !== 'onsite') return false;
-  const v = d.onsiteVenue ?? {};
-  return textBlock(
-    [v.addressLine, v.subDistrict, v.district, v.province, v.postalCode].filter(Boolean).join(' ')
-  );
+  return textBlock(formatThaiAddress(d.onsiteVenue));
 }

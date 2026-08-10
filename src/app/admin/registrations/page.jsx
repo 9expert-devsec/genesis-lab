@@ -1,5 +1,6 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
+import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
@@ -16,9 +17,13 @@ export default async function Page({ searchParams }) {
   const source = ['public', 'inhouse'].includes(sp.source) ? sp.source : 'public';
   const range  = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
 
-  const [data, counts] = await Promise.all([
+  // The course map is only wanted by the in-house body, so a public render does
+  // not ask for it at all — and it joins the existing Promise.all rather than
+  // adding a serial await.
+  const [data, counts, courseNames] = await Promise.all([
     listRegistrations({ page, status, q, source }),
     getRegistrationStatusCounts({ range, source }),
+    source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
 
   // ONE audit query for the whole page, never one per row. It has to follow the
@@ -53,6 +58,7 @@ export default async function Page({ searchParams }) {
         initialRange={range}
         counts={counts}
         lastEdited={lastEdited}
+        courseNames={courseNames}
       />
     </div>
   );
