@@ -193,12 +193,6 @@ export function CoursesAdminClient({
                         >
                           แก้ไข
                         </Link>
-                        <Link
-                          href={`/admin/courses/${encodeURIComponent(course.course_id)}`}
-                          className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-action hover:bg-9e-ice"
-                        >
-                          SEO/Gallery
-                        </Link>
                         <button
                           type="button"
                           onClick={() => handleDelete(course)}

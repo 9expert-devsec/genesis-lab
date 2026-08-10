@@ -3,14 +3,18 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { X } from 'lucide-react';
+import { ChevronLeft, Eye, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
+import { saveCourseExtension } from '@/lib/actions/course-extensions';
+import { CourseSeoRail } from './CourseSeoRail';
+import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
+import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -58,10 +62,56 @@ export function CourseForm({
   programs = [],
   allCourses = [],
   mode = 'create',
+  /**
+   * The course's CourseExtension doc, or null when it has none yet.
+   *
+   * EDIT MODE ONLY. Passing it switches this form into the two-column shell
+   * (left column + sticky rail + one save), which is what /edit renders. The
+   * create page passes nothing and keeps the linear layout: a course has no
+   * extension until it exists, and its course_id — the key the extension is
+   * stored under — is still being typed.
+   */
+  extension = null,
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
+
+  // The shell is the edit page's layout. `mode` alone decides it, so the create
+  // page cannot accidentally acquire a rail for a store it cannot write to yet.
+  const isShell = mode === 'edit';
+
+  // ── CourseExtension state (the genesis-side store) ────────────────
+  // Controlled state, NOT form inputs: shapePayload must never see these.
+  const [urlAlias, setUrlAlias] = useState(
+    (extension?.urlAlias ?? '').replace(/^\//, '')
+  );
+  const [metaTitle, setMetaTitle] = useState(extension?.metaTitle ?? '');
+  const [metaDescription, setMetaDescription] = useState(extension?.metaDescription ?? '');
+  const [ogImage, setOgImage] = useState(extension?.ogImage ?? '');
+  const [tags, setTags] = useState((extension?.tags ?? []).join(', '));
+  const [gallery, setGallery] = useState(
+    Array.isArray(extension?.gallery) ? extension.gallery : []
+  );
+  const [isPublished, setIsPublished] = useState(extension?.isPublished !== false);
+
+  /**
+   * NOT EDITED HERE, AND THAT IS EXACTLY WHY IT IS IN STATE.
+   *
+   * `saveCourseExtension` writes a WHOLE document — its `update` object names
+   * every field, and `omisePaymentEnabled` defaults to `false` when the caller
+   * omits it (course-extensions.js:128). So saving this rail without carrying
+   * the flag through would silently switch off the card / PromptPay flow on the
+   * public registration wizard for that course, with nothing on screen to say
+   * so. It is read here, held unchanged, and written back.
+   *
+   * The toggle itself stays on /admin/courses/[courseId] under การชำระเงิน.
+   */
+  const [omisePaymentEnabled] = useState(extension?.omisePaymentEnabled === true);
+
+  // Which half of the last save failed, so the message can name it in Thai.
+  const [saveReport, setSaveReport] = useState(null);
+  const [showGallery, setShowGallery] = useState(false);
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
@@ -174,44 +224,89 @@ export function CourseForm({
 
     const fd = new FormData(e.currentTarget);
 
+    if (!isShell) {
+      startTransition(async () => {
+        const res = await createCourse(fd);
+        if (res?.ok) {
+          router.push('/admin/courses');
+          router.refresh();
+        } else {
+          setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+        }
+      });
+      return;
+    }
+
+    /**
+     * ── ONE BUTTON, TWO STORES ────────────────────────────────────────────
+     * The course body goes to MSDB over HTTP; the rail and the gallery go to
+     * the local `course_extensions` collection. They are independent writes and
+     * either can fail on its own.
+     *
+     * ORDER: MSDB first, then the extension. MSDB is the external call — a
+     * 10 s-timeout fetch to another service — and is by far the likelier to
+     * fail, so it is resolved before the fast local upsert rather than leaving
+     * the admin watching a spinner for a result already decided.
+     *
+     * BOTH ARE ALWAYS ATTEMPTED, even when the first fails. The two stores
+     * share no field, so a half-landed save is not an inconsistency — it is
+     * one of two unrelated saves not landing. Skipping the second would throw
+     * away a perfectly good Meta Title edit because an unrelated upstream was
+     * down, and the admin would have no way to tell that is what happened.
+     *
+     * NAVIGATION IS THE JOINT CONDITION. We leave the page only when both
+     * succeeded; anything else keeps the form mounted with every value the
+     * admin typed still in it, so the retry costs them nothing. Reporting
+     * "success" on a partial save is the one outcome that must be impossible.
+     */
+    setSaveReport(null);
     startTransition(async () => {
-      const action =
-        mode === 'edit'
-          ? () => updateCourse(initial?._id, fd)
-          : () => createCourse(fd);
-      const res = await action();
-      if (res?.ok) {
+      const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
+        ok: false,
+        error: err?.message ?? 'บันทึกไม่สำเร็จ',
+      }));
+
+      const extRes = await saveCourseExtension(courseId, {
+        urlAlias,
+        metaTitle,
+        metaDescription,
+        ogImage,
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        gallery: gallery.map((item, i) => ({ ...item, order: i })),
+        isPublished,
+        // Carried through unchanged — see the state declaration.
+        omisePaymentEnabled,
+      }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' }));
+
+      // The joint condition lives in lib/courses/courseSaveOutcome, so the
+      // "never claim success on a half-landed save" rule is one testable
+      // function rather than a boolean expression in a click handler.
+      const outcome = courseSaveOutcome({ courseResult: courseRes, extResult: extRes });
+
+      if (outcome.allOk) {
         router.push('/admin/courses');
         router.refresh();
-      } else {
-        setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+        return;
       }
+
+      setSaveReport(outcome);
     });
   }
 
   // Pre-cooked defaults that map upstream populated objects.
   const programId = initial?.program?._id ?? initial?.program ?? '';
 
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
-          {mode === 'edit' ? 'แก้ไขหลักสูตร' : 'สร้างหลักสูตรใหม่'}
-        </h1>
-        <Link
-          href="/admin/courses"
-          className="text-sm text-9e-action hover:underline"
-        >
-          ← กลับ
-        </Link>
-      </div>
-
-      {error && (
-        <div className="rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
+  /**
+   * The course body — every MSDB field except `website_urls`.
+   *
+   * Held as a fragment rather than inlined so BOTH layouts render the SAME
+   * sections from ONE source. A second copy for the shell is how the two would
+   * drift, and a field present in one layout and missing from the other is
+   * invisible in review: `shapePayload` reads whatever FormData contains, so a
+   * dropped input is a silently unsaved field, not an error.
+   */
+  const bodySections = (
+    <>
       {/* ───────────────────────────────────────────────────────────
           Section 1 — ข้อมูลหลัก
       ─────────────────────────────────────────────────────────── */}
@@ -628,30 +723,256 @@ export function CourseForm({
           course_outline_th / course_outline_en, which are a different field
           with their own uploader in section 7 and are unaffected.
       ─────────────────────────────────────────────────────────── */}
-      <Section title="8. เว็บไซต์อ้างอิง">
-        <BulletTextarea
-          name="website_urls"
-          label="เว็บไซต์อ้างอิง (website_urls)"
-          defaultValue={initial?.website_urls}
-          urls
-        />
-      </Section>
+    </>
+  );
 
-      {/* ─── Submit row ──────────────────────────────────────────── */}
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+  /**
+   * `website_urls` — an MSDB form input like any other, but rendered in the
+   * RAIL in shell mode (directly under URL Alias) and in section 8 on the
+   * create page. One element, placed differently; never two.
+   */
+  const websiteUrlsField = (
+    <BulletTextarea
+      name="website_urls"
+      label="เว็บไซต์อ้างอิง (website_urls)"
+      defaultValue={initial?.website_urls}
+      urls
+    />
+  );
+
+  // ── CREATE PAGE — untouched linear layout ─────────────────────────
+  if (!isShell) {
+    return (
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
+            สร้างหลักสูตรใหม่
+          </h1>
+          <Link href="/admin/courses" className="text-sm text-9e-action hover:underline">
+            ← กลับ
+          </Link>
+        </div>
+
+        {error && (
+          <div className="rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {bodySections}
+
+        <Section title="8. เว็บไซต์อ้างอิง">{websiteUrlsField}</Section>
+
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          >
+            {pending ? 'กำลังบันทึก…' : 'สร้าง'}
+          </button>
+          <Link
+            href="/admin/courses"
+            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            ยกเลิก
+          </Link>
+        </div>
+      </form>
+    );
+  }
+
+  // ── EDIT PAGE — the shell ─────────────────────────────────────────
+  const previewHref = urlAlias.trim()
+    ? `/${urlAlias.trim().replace(/^\//, '')}`
+    : `/${String(courseId ?? '').toLowerCase()}-training-course`;
+
+  return (
+    /* h-[100dvh] + an inner scroll, NOT `position: sticky`. The header stays
+       reachable because the PAGE never scrolls — the columns do — which is the
+       shape the article editor already uses. A sticky header inside a scrolling
+       document still scrolls away on a short viewport, and the publish control
+       being reachable without scrolling is the point of this layout. */
+    <form
+      onSubmit={handleSubmit}
+      className="flex h-[100dvh] flex-col bg-9e-ice/30 dark:bg-[#0D1B2A]/40"
+    >
+      <header className="flex-shrink-0 border-b border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
+        <div className="flex flex-wrap items-center gap-3 px-6 py-3">
+          <Link
+            href="/admin/courses"
+            className="inline-flex items-center gap-1 text-sm text-9e-action hover:underline"
+          >
+            <ChevronLeft className="h-4 w-4" /> รายการหลักสูตร
+          </Link>
+
+          <div className="mx-auto min-w-0 flex-1 px-4">
+            <p className="truncate text-center text-sm font-semibold text-9e-navy dark:text-white">
+              {initial?.course_name || 'แก้ไขหลักสูตร'}
+            </p>
+          </div>
+
+          <span
+            className={
+              'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' +
+              (isPublished
+                ? 'border-green-200 bg-green-50 text-green-700'
+                : 'border-gray-200 bg-gray-50 text-gray-600')
+            }
+          >
+            {isPublished ? 'เผยแพร่' : 'ซ่อน'}
+          </span>
+
+          {/* The four editors that stayed on /admin/courses/[courseId]. The
+              list's SEO/Gallery button is gone, so this is now their only way
+              in — without it they would be unreachable, not merely moved. */}
+          <Link
+            href={`/admin/courses/${encodeURIComponent(courseId)}`}
+            className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            โปรโมชัน / Early Bird / FAQ / ชำระเงิน
+          </Link>
+
+          <a
+            href={previewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            <Eye className="h-4 w-4" /> Preview
+          </a>
+
+          {/* THE PUBLISH CONTROL — in the header, never behind a scroll. */}
+          <div className="flex items-center gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5">
+            <span className="text-xs text-gray-500 dark:text-[#94a3b8]">เผยแพร่</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isPublished}
+              aria-label="เผยแพร่บนเว็บสาธารณะ"
+              onClick={() => setIsPublished((v) => !v)}
+              className={
+                'relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ' +
+                (isPublished ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600')
+              }
+            >
+              <span
+                className={
+                  'inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 ' +
+                  (isPublished ? 'translate-x-4' : 'translate-x-1')
+                }
+              />
+            </button>
+          </div>
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-9e-md bg-9e-action px-4 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+          >
+            {pending ? 'กำลังบันทึก…' : 'บันทึก'}
+          </button>
+        </div>
+      </header>
+
+      {/* PARTIAL-FAILURE REPORT — names the half that failed, in Thai. Rendered
+          only when at least one half failed; a both-succeeded save navigates
+          away and never reaches here, so "success" cannot be shown for a
+          half-landed write. */}
+      {saveReport && (
+        <div
+          role="alert"
+          className="flex-shrink-0 border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-900"
         >
-          {pending ? 'กำลังบันทึก…' : mode === 'edit' ? 'บันทึก' : 'สร้าง'}
-        </button>
-        <Link
-          href="/admin/courses"
-          className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-        >
-          ยกเลิก
-        </Link>
+          <p className="font-bold">
+            {saveReport.courseOk || saveReport.extOk
+              ? 'บันทึกสำเร็จเพียงบางส่วน — ข้อมูลที่กรอกไว้ยังอยู่ กรุณากดบันทึกอีกครั้ง'
+              : 'บันทึกไม่สำเร็จทั้งสองส่วน — ข้อมูลที่กรอกไว้ยังอยู่ กรุณากดบันทึกอีกครั้ง'}
+          </p>
+          <p>
+            {saveReport.courseOk
+              ? '✓ ข้อมูลหลักสูตร (MSDB): บันทึกแล้ว'
+              : `✗ ข้อมูลหลักสูตร (MSDB): ไม่สำเร็จ${saveReport.courseError ? ` — ${saveReport.courseError}` : ''}`}
+          </p>
+          <p>
+            {saveReport.extOk
+              ? '✓ SEO / URL / Gallery: บันทึกแล้ว'
+              : `✗ SEO / URL / Gallery: ไม่สำเร็จ${saveReport.extError ? ` — ${saveReport.extError}` : ''}`}
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex-shrink-0 border-b border-red-100 bg-red-50 px-6 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1">
+        {/* LEFT COLUMN — scrolls. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          {/* The ONLY tabbed region. */}
+          <div className="mb-5 flex gap-2 border-b border-[var(--surface-border)]">
+            <button
+              type="button"
+              onClick={() => setShowGallery(false)}
+              className={
+                'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
+                (showGallery
+                  ? 'border-transparent text-[var(--text-secondary)]'
+                  : 'border-9e-action text-9e-action')
+              }
+            >
+              เนื้อหาหลักสูตร
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowGallery(true)}
+              className={
+                'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
+                (showGallery
+                  ? 'border-9e-action text-9e-action'
+                  : 'border-transparent text-[var(--text-secondary)]')
+              }
+            >
+              Gallery ({gallery.length})
+            </button>
+          </div>
+
+          {/* HIDDEN, NOT UNMOUNTED. `FormData(form)` reads the DOM, so
+              conditionally rendering this away would drop every course field
+              from the payload while the Gallery tab happened to be open —
+              shapePayload would then send empty strings and zeroes for the
+              whole course body. `hidden` keeps the inputs submitted. */}
+          <div className={showGallery ? 'hidden' : 'space-y-6'}>{bodySections}</div>
+
+          {/* The gallery is extension state, not form inputs, so unmounting it
+              is harmless — but it is symmetric with the above for clarity. */}
+          <div className={showGallery ? '' : 'hidden'}>
+            <CourseGalleryEditor gallery={gallery} onChange={setGallery} />
+          </div>
+        </div>
+
+        {/* RIGHT RAIL — sticky by construction: the page does not scroll. */}
+        <aside className="w-80 flex-shrink-0 space-y-5 overflow-y-auto border-l border-[var(--surface-border)] bg-white p-4 dark:bg-[#111d2c]">
+          <CourseSeoRail
+            courseId={courseId}
+            courseName={initial?.course_name ?? ''}
+            urlAlias={urlAlias}
+            onUrlAlias={setUrlAlias}
+            metaTitle={metaTitle}
+            onMetaTitle={setMetaTitle}
+            metaDescription={metaDescription}
+            onMetaDescription={setMetaDescription}
+            ogImage={ogImage}
+            onOgImage={setOgImage}
+            tags={tags}
+            onTags={setTags}
+            isPublished={isPublished}
+            onIsPublished={setIsPublished}
+            urlSlot={websiteUrlsField}
+          />
+        </aside>
       </div>
     </form>
   );
