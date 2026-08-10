@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Eye, X } from 'lucide-react';
@@ -15,6 +15,8 @@ import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
+import { courseEditorSignature, isCourseEditorDirty } from '@/lib/courses/courseFormDirty';
+import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -112,6 +114,14 @@ export function CourseForm({
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
   const [showGallery, setShowGallery] = useState(false);
+
+  // ── Unsaved-changes guard ─────────────────────────────────────────
+  const formRef = useRef(null);
+  const baselineRef = useRef(null);   // the seeded signature, or null before capture
+  const touchedRef = useRef(false);   // has the admin actually typed/clicked a field?
+  const leavingRef = useRef(false);   // a leave the guard itself authorised
+  const [pendingHref, setPendingHref] = useState(null);
+  const [dirty, setDirty] = useState(false);
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
@@ -217,6 +227,123 @@ export function CourseForm({
     '';
   const [previousCourse, setPreviousCourse] = useState(initialPreviousCode);
 
+  // ── Unsaved-changes guard: snapshot, dirty, interception ──────────
+
+  /** Everything the editor can change, as one comparable string. */
+  const snapshot = useCallback(
+    () =>
+      courseEditorSignature({
+        formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
+        extension: {
+          urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
+        },
+      }),
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery]
+  );
+
+  /**
+   * Baseline AFTER a frame, not in this effect directly.
+   *
+   * React runs CHILD effects before the parent's, and TrainingTopicsEditor
+   * seeds its hidden input via `setRows` in its own mount effect. Snapshotting
+   * here would capture the pre-seed value, the re-render would change it, and
+   * every page load would look edited — the exact false positive that teaches
+   * admins to click straight through this dialog.
+   */
+  useEffect(() => {
+    if (!isShell) return undefined;
+    const id = requestAnimationFrame(() => { baselineRef.current = snapshot(); });
+    return () => cancelAnimationFrame(id);
+    // Once, on mount: re-running would re-baseline and erase the admin's edits
+    // from the comparison.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShell]);
+
+  /** Wrap a rail/gallery setter so a real user edit registers as one. */
+  const markTouched = useCallback(
+    (fn) => (value) => { touchedRef.current = true; fn(value); },
+    []
+  );
+
+  // Rail + gallery are React state, so a change re-renders and lands here.
+  useEffect(() => {
+    if (!isShell) return;
+    setDirty(touchedRef.current && isCourseEditorDirty(baselineRef.current, snapshot()));
+  }, [isShell, snapshot]);
+
+  // The course body is UNCONTROLLED — typing fires no React render, so the
+  // DOM's own input/change events are the only signal that it happened.
+  useEffect(() => {
+    const form = formRef.current;
+    if (!isShell || !form) return undefined;
+    const onEdit = () => {
+      touchedRef.current = true;
+      setDirty(isCourseEditorDirty(baselineRef.current, snapshot()));
+    };
+    form.addEventListener('input', onEdit);
+    form.addEventListener('change', onEdit);
+    return () => {
+      form.removeEventListener('input', onEdit);
+      form.removeEventListener('change', onEdit);
+    };
+  }, [isShell, snapshot]);
+
+  /**
+   * INTERCEPTING IN-APP NAVIGATION. The App Router has no `useBlocker`, so the
+   * only place left to stand is the click itself: a CAPTURE-phase listener on
+   * `document` runs before next/link's own handler, so cancelling there stops
+   * the navigation before the router ever hears about it.
+   *
+   * Listening on `document` rather than wrapping each <Link> is what makes the
+   * ADMIN SIDEBAR work too — those links live in the layout, outside this
+   * component, and could not be wrapped without editing a shared surface.
+   *
+   * Not intercepted, and stated rather than hidden: BACK/FORWARD. `popstate`
+   * fires after the history entry has already moved and the App Router gives no
+   * way to veto it; `beforeunload` does not fire for client-side history moves.
+   * Cancelling it would mean pushing a decoy entry, which breaks the back
+   * button for everyone to protect one case.
+   */
+  useEffect(() => {
+    if (!isShell || !dirty) return undefined;
+
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
+    const onClick = (e) => {
+      if (leavingRef.current || e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // open-in-new-tab
+      const anchor = e.target?.closest?.('a[href]');
+      if (!anchor) return;
+      // Preview is target="_blank": a new tab is not an exit, and prompting for
+      // it would be the false positive that discredits the whole guard.
+      if (anchor.target && anchor.target !== '_self') return;
+      if (anchor.hasAttribute('download')) return;
+      const raw = anchor.getAttribute('href');
+      if (!raw || raw.startsWith('#')) return;
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;  // beforeunload covers it
+      if (url.pathname === window.location.pathname) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingHref(url.pathname + url.search);
+    };
+    document.addEventListener('click', onClick, true);
+
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onClick, true);
+    };
+  }, [isShell, dirty]);
+
+  function leaveWithoutSaving() {
+    const href = pendingHref;
+    leavingRef.current = true;
+    setPendingHref(null);
+    setDirty(false);
+    if (href) router.push(href);
+  }
+
   // ── submit ────────────────────────────────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault();
@@ -284,11 +411,19 @@ export function CourseForm({
       const outcome = courseSaveOutcome({ courseResult: courseRes, extResult: extRes });
 
       if (outcome.allOk) {
+        // Clean again: both halves landed, so leaving must not prompt. Only
+        // reached on the JOINT condition — see courseSaveOutcome.
+        baselineRef.current = snapshot();
+        leavingRef.current = true;
+        setDirty(false);
         router.push('/admin/courses');
         router.refresh();
         return;
       }
 
+      // A PARTIAL save is still dirty. `dirty` is left exactly as it was: the
+      // admin has work that did not land, and the one thing worse than
+      // prompting them is letting them walk away believing it saved.
       setSaveReport(outcome);
     });
   }
@@ -794,9 +929,15 @@ export function CourseForm({
        document still scrolls away on a short viewport, and the publish control
        being reachable without scrolling is the point of this layout. */
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       className="flex h-[100dvh] flex-col bg-9e-ice/30 dark:bg-[#0D1B2A]/40"
     >
+      <UnsavedChangesDialog
+        open={pendingHref !== null}
+        onLeave={leaveWithoutSaving}
+        onStay={() => setPendingHref(null)}
+      />
       <header className="flex-shrink-0 border-b border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
         <div className="flex flex-wrap items-center gap-3 px-6 py-3">
           <Link
@@ -949,7 +1090,7 @@ export function CourseForm({
           {/* The gallery is extension state, not form inputs, so unmounting it
               is harmless — but it is symmetric with the above for clarity. */}
           <div className={showGallery ? '' : 'hidden'}>
-            <CourseGalleryEditor gallery={gallery} onChange={setGallery} />
+            <CourseGalleryEditor gallery={gallery} onChange={markTouched(setGallery)} />
           </div>
         </div>
 
@@ -959,17 +1100,17 @@ export function CourseForm({
             courseId={courseId}
             courseName={initial?.course_name ?? ''}
             urlAlias={urlAlias}
-            onUrlAlias={setUrlAlias}
+            onUrlAlias={markTouched(setUrlAlias)}
             metaTitle={metaTitle}
-            onMetaTitle={setMetaTitle}
+            onMetaTitle={markTouched(setMetaTitle)}
             metaDescription={metaDescription}
-            onMetaDescription={setMetaDescription}
+            onMetaDescription={markTouched(setMetaDescription)}
             ogImage={ogImage}
-            onOgImage={setOgImage}
+            onOgImage={markTouched(setOgImage)}
             tags={tags}
-            onTags={setTags}
+            onTags={markTouched(setTags)}
             isPublished={isPublished}
-            onIsPublished={setIsPublished}
+            onIsPublished={markTouched(setIsPublished)}
             urlSlot={websiteUrlsField}
           />
         </aside>
