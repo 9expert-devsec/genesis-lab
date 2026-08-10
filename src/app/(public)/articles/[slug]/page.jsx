@@ -7,6 +7,7 @@ import {
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
 import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
+import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -113,7 +114,19 @@ export default async function ArticleDetailPage({ params }) {
         // Authored inline colours are classified here, on the server, and only
         // for the render path — `minutes` and the JSON-LD above are computed
         // from the untouched body, and nothing is written back to Mongo.
-        article={{ ...article, content: normalizeAuthoredColors(article.content) }}
+        //
+        // Table wrapping runs AFTER the colour pass, and the order is load
+        // bearing in one direction only: the colour pass reads inline styles
+        // off existing elements and does not care about the wrapper divs, but
+        // running it second would make it re-serialise a body this one already
+        // re-serialised, for nothing. Both are server-side and both are
+        // complete in the first paint — no part of this waits for hydration,
+        // which is what keeps a reader without JS from getting the broken
+        // version.
+        article={{
+          ...article,
+          content: wrapArticleTables(normalizeAuthoredColors(article.content)),
+        }}
         related={related}
         relatedCoursesData={relatedCoursesData}
         minutes={minutes}
