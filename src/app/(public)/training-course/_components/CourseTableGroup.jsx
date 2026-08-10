@@ -45,7 +45,7 @@ export function CourseTableGroup({ program, courses }) {
                 ชม.
               </th>
               <th className="bg-9e-action px-4 py-3 text-right font-bold text-white">
-                ราคา (บาท)
+                ราคา (บาท / ท่าน)
               </th>
             </tr>
           </thead>
