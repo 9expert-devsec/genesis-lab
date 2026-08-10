@@ -65,20 +65,22 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
   }
 });
 
-test('CONTROL: program and previous_course are still OMITTED when empty', () => {
-  // These two are the "leave alone" channel, and they must stay in it. If the
-  // fix had generalised to "every absent field gets a value", these would start
-  // being sent — and `program: ''` is not a clearing instruction to MSDB, it is
-  // a cast error on an ObjectId ref.
+test('CONTROL: program is still OMITTED when empty', () => {
+  // `program` is the "leave alone" channel and must stay in it. If a clearing
+  // fix were generalised across the payload, this is the field that would start
+  // being written on every save — and `program: ''` is not a clearing
+  // instruction to MSDB, it is a cast error on an ObjectId ref.
+  //
+  // `previous_course` USED to be asserted here alongside it, and this control
+  // is what caught it moving: it is now `|| null`, deliberately, because an
+  // optional prerequisite has to be removable. That is a change of channel, not
+  // a weakening of this guard — the null semantics and the reason `''` cannot
+  // be used are pinned in test/fs/clearableFields.test.mjs. The two fields no
+  // longer behave the same way, so they are no longer asserted together.
   assert.match(
     SRC.code,
     /program:\s*toStr\(get\('program'\)\)\s*\|\|\s*undefined/,
     'program no longer falls back to undefined — it would now be written on every save'
-  );
-  assert.match(
-    SRC.code,
-    /previous_course:\s*toStr\(get\('previous_course'\)\)\s*\|\|\s*undefined/,
-    'previous_course no longer falls back to undefined'
   );
 });
 

@@ -414,13 +414,21 @@ export function CourseForm({
           Section 4 — โปรแกรม & สกิล
       ─────────────────────────────────────────────────────────── */}
       <Section title="4. โปรแกรม และ Skills">
-        <Field label="โปรแกรม (program)">
+        {/* REQUIRED, and enforced here because it cannot be enforced upstream:
+            MSDB's `program` path is a plain optional ObjectId. A course with no
+            program disappears from the mega menu, the /schedule grouping and
+            all-courses simultaneously, and the payload deliberately omits an
+            empty value (see shapePayload) so a cleared dropdown would silently
+            keep the old program instead of reporting anything. `required` turns
+            that silent no-op into the browser refusing to submit. */}
+        <Field label="โปรแกรม (program)" hint="จำเป็นต้องเลือก">
           <select
             name="program"
             defaultValue={programId}
+            required
             className={inputCls}
           >
-            <option value="">— ไม่ระบุ —</option>
+            <option value="">— เลือกโปรแกรม —</option>
             {programs.map((p) => (
               <option key={p._id ?? p.program_id} value={p._id ?? p.program_id}>
                 {p.name ?? p.program_name ?? p.label ?? p._id}

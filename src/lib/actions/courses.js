@@ -241,10 +241,23 @@ function shapePayload(formData) {
     course_workshop_status:    checkboxBool(get('course_workshop_status')),
     course_certificate_status: checkboxBool(get('course_certificate_status')),
     course_promote_status:     checkboxBool(get('course_promote_status')),
+    /* STAYS `|| undefined` — deliberately NOT clearable, unlike its neighbour.
+     * A course with no program drops out of the mega menu, the /schedule
+     * grouping and all-courses at once. Measured before ruling: 0 of the 77
+     * upstream courses have an empty program, so nothing depends on clearing
+     * it. MSDB would accept null (the path is not `required`), which is exactly
+     * why the guard has to live here and in the form's `required` select rather
+     * than upstream. Omitting the key leaves the stored program in place. */
     program:                   toStr(get('program')) || undefined,
     skills:                    toStrArr(getAll('skills')),
     // course_id strings — caller resolves to ObjectIds for MSDB body.
-    previous_course:           toStr(get('previous_course')) || undefined,
+    /* `null`, not undefined and NOT '': an optional prerequisite has to be
+     * removable, and undefined omitted the key so "— ไม่มี —" never saved.
+     * Verified read-only against MSDB's schema — the path is
+     * `{ ObjectId, ref: PublicCourse, default: null }`, so null is its own
+     * resting value and validates; '' is REJECTED with a cast-to-ObjectId
+     * error, which is why the empty string is not the fix here. */
+    previous_course:           toStr(get('previous_course')) || null,
     related_courses:           toStrArr(getAll('related_courses')).slice(0, 5),
     // Bullets / arrays
     course_objectives:           linesOf(formData, 'course_objectives'),

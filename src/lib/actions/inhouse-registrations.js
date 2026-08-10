@@ -133,7 +133,11 @@ export async function updateInhouseAdminNotes(id, adminNotes) {
   await dbConnect();
   const doc = await RegisterInhouse.findByIdAndUpdate(
     id,
-    { adminNotes: String(adminNotes ?? '').trim().slice(0, 2000) || undefined },
+    // '' NOT `|| undefined`: Mongoose drops an undefined value from an update
+    // object, so clearing the box sent nothing and the old note survived the
+    // save. A note is a plain String with no cast to fail, so the empty string
+    // is both a legal value and the only one that means "cleared".
+    { adminNotes: String(adminNotes ?? '').trim().slice(0, 2000) },
     { new: true, runValidators: false }
   );
   if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
