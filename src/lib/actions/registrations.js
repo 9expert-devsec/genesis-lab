@@ -100,7 +100,22 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(PAGE_SIZE)
-      .select('companyName contactFirstName contactLastName contactEmail coursesInterested participantsCount trainingFormat status createdAt')
+      /**
+       * THE PROJECTION IS THE RENDER LIST, field for field.
+       *
+       * It gained `contactPhone` and `preferredMonth` because InhouseTable shows
+       * both, and `trainingFormat` is back because the รูปแบบ column now renders
+       * it. It was dropped for one commit on the grounds that all four stored
+       * records say 'onsite' — which was reasoning from the sample, not the
+       * schema, where it is a required two-value enum with no default.
+       *
+       * Keeping the two lists equal is the actual guard here. A projection that
+       * is a superset of the render is dead weight over the wire; one that is a
+       * SUBSET renders `undefined`, and this whole table was blank because a
+       * public-shaped render was fed an in-house-shaped projection. If you add a
+       * column, add the field.
+       */
+      .select('companyName contactFirstName contactLastName contactEmail contactPhone coursesInterested participantsCount trainingFormat preferredMonth status createdAt')
       .lean();
   } else {
     docs = await Model.find(filter)

@@ -8,7 +8,6 @@ import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_LIST_PATH   = '/admin/registrations';
 const ADMIN_DETAIL_PATH = '/admin/registrations/inhouse';
-const PAGE_SIZE         = 20;
 
 /**
  * ── PII ENTITY — 5.1 / 5.2. READ THIS BEFORE ADDING A PAYLOAD ──────────────
@@ -28,56 +27,24 @@ function serialize(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-// ── List (paginated + filtered) ────────────────────────────────────
-
 /**
- * Returns one page of in-house registrations plus pagination metadata.
+ * ── THERE IS NO LIST ACTION HERE, AND THAT IS DELIBERATE ───────────────────
  *
- * @param {object} opts
- * @param {number}  opts.page    1-indexed page number (default 1)
- * @param {string}  opts.status  filter: 'all' | 'new' | 'contacted' | 'quoted' | 'closed-won' | 'closed-lost'
- * @param {string}  opts.q       search term matched against companyName, contact name/email
+ * `listInhouseRegistrations` and `getInhouseStatusCounts` used to live in this
+ * file and were deleted unused. /admin/registrations renders BOTH collections
+ * from one page, so it calls `listRegistrations({ source })` and
+ * `getRegistrationStatusCounts({ source })` in src/lib/actions/registrations.js;
+ * these two were a second implementation that nothing ever imported.
+ *
+ * They were not harmless. The two list projections had already drifted — this
+ * one selected `contactPhone` and the live one did not — so the dead copy read
+ * as evidence that the admin list fetched a field it had never fetched, while
+ * the real table rendered a blank cell. A second reading path for one collection
+ * is a place for the truth to diverge from the code that runs.
+ *
+ * If a list action is ever wanted here, the question to answer first is why the
+ * shared one is not enough — not how to keep two in step.
  */
-export async function listInhouseRegistrations({ page = 1, status = 'all', q = '' } = {}) {
-  await requireAdmin('registrations');
-  await dbConnect();
-
-  const filter = {};
-
-  if (status && status !== 'all') {
-    filter.status = status;
-  }
-
-  if (q && q.trim()) {
-    const term = q.trim();
-    filter.$or = [
-      { companyName:      { $regex: term, $options: 'i' } },
-      { contactFirstName: { $regex: term, $options: 'i' } },
-      { contactLastName:  { $regex: term, $options: 'i' } },
-      { contactEmail:     { $regex: term, $options: 'i' } },
-    ];
-  }
-
-  const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
-  const total = await RegisterInhouse.countDocuments(filter);
-  const docs  = await RegisterInhouse.find(filter)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(PAGE_SIZE)
-    .select(
-      'companyName contactFirstName contactLastName contactEmail contactPhone ' +
-      'coursesInterested participantsCount trainingFormat status createdAt'
-    )
-    .lean();
-
-  return {
-    items:     serialize(docs),
-    total,
-    page:      Math.max(1, page),
-    pageSize:  PAGE_SIZE,
-    pageCount: Math.ceil(total / PAGE_SIZE),
-  };
-}
 
 // ── Detail ─────────────────────────────────────────────────────────
 
@@ -177,45 +144,4 @@ export async function deleteInhouseRegistration(id) {
   });
 
   return { ok: true };
-}
-
-// ── Stat strip counts ──────────────────────────────────────────────
-
-/**
- * Returns status counts for the in-house stat strip.
- * @param {'today'|'week'|'month'|'all'} range
- */
-export async function getInhouseStatusCounts({ range = 'all' } = {}) {
-  await requireAdmin('registrations');
-  await dbConnect();
-
-  const now = new Date();
-  let from = null;
-  if (range === 'today') {
-    from = new Date(now); from.setHours(0, 0, 0, 0);
-  } else if (range === 'week') {
-    from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0, 0, 0, 0);
-  } else if (range === 'month') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  }
-  const base = from ? { createdAt: { $gte: from } } : {};
-
-  const [total, isNew, contacted, quoted, closedWon, closedLost] = await Promise.all([
-    RegisterInhouse.countDocuments(base),
-    RegisterInhouse.countDocuments({ ...base, status: 'new' }),
-    RegisterInhouse.countDocuments({ ...base, status: 'contacted' }),
-    RegisterInhouse.countDocuments({ ...base, status: 'quoted' }),
-    RegisterInhouse.countDocuments({ ...base, status: 'closed-won' }),
-    RegisterInhouse.countDocuments({ ...base, status: 'closed-lost' }),
-  ]);
-
-  return serialize({
-    total,
-    new: isNew,
-    contacted,
-    quoted,
-    closedWon,
-    closedLost,
-    range,
-  });
 }

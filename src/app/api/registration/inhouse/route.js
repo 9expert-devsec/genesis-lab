@@ -69,8 +69,8 @@ export async function POST(req) {
      * บริษัท / องค์กร field is gone and `companyName` is no longer on the zod
      * schema, so it is absent from `data` above. But the path has three live
      * readers that would go blank without it: the admin list projection AND its
-     * $regex search (src/lib/actions/inhouse-registrations.js), the admin
-     * detail row, and the confirmation email.
+     * $regex search (listRegistrations in src/lib/actions/registrations.js),
+     * the admin detail row, and the confirmation email.
      *
      * So it is a MIRROR of `quotationCompany`, derived here and nowhere else.
      * A second writer is how the two representations start disagreeing; an fs
