@@ -114,15 +114,26 @@ test('CONTROL: the matcher finds real links, and tells the two shapes apart', ()
 });
 
 test('the reveal gate checks BOTH arrival signals for membership', () => {
+  // `roundExists` became `roundSelectable` when upstream started releasing
+  // `full` rounds to this page: membership is no longer sufficient, because a
+  // sold-out round now DOES arrive in `schedules` and must not open the form.
+  // The invariant this test exists for is unchanged — both arrival signals are
+  // still resolved against the fetched rounds rather than merely tested for
+  // presence — so the probes follow the rename instead of pinning the old name.
   const src = read('src/components/registration/RegisterWizard.jsx');
   assert.match(
     src,
-    /const roundExists = \(id\) =>\s*Boolean\(id\) && \(schedules \?\? \[\]\)\.some\(\(s\) => s\._id === id\);/,
+    /const roundOf = \(id\) =>\s*\(id && \(schedules \?\? \[\]\)\.find\(\(s\) => s\._id === id\)\) \|\| null;/,
     'membership, not mere presence'
   );
   assert.match(
     src,
-    /useState\(\s*roundExists\(initialClassId\) \|\| roundExists\(initialValues\?\.classId\),\s*\)/,
+    /const roundSelectable = \(id\) => \{[\s\S]*?normalizeScheduleStatus\(round\.status\) !== "full";/,
+    'and membership alone is not enough — a full round is not selectable'
+  );
+  assert.match(
+    src,
+    /useState\(\s*roundSelectable\(initialClassId\) \|\| roundSelectable\(initialValues\?\.classId\),\s*\)/,
     'URL round or draft round, either resolving is enough'
   );
 });

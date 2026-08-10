@@ -4,7 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EarlyBirdRibbon } from '@/components/ui/EarlyBirdRibbon';
-import { NEUTRAL_STATUS, resolveScheduleBadge } from '@/lib/scheduleStatus';
+import {
+  NEUTRAL_STATUS,
+  normalizeScheduleStatus,
+  resolveScheduleBadge,
+} from '@/lib/scheduleStatus';
 
 /**
  * Horizontal scrollable list of schedule cards.
@@ -127,7 +131,24 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
     }
   }
 
-  const isClosed = schedule.status === 'closed';
+  /**
+   * WAS `schedule.status === 'closed'`, WHICH MSDB NEVER SENDS.
+   *
+   * `closed` is the LOCAL ScheduleStatus override collection's spelling; MSDB
+   * emits `full` for the same state (see the ALIASES table in lib/scheduleStatus).
+   * The literal compare therefore only ever disabled an override-closed round,
+   * and it went unnoticed for exactly one reason: upstream withheld `full` rounds
+   * from every public feed, so one had never reached this component to be
+   * mis-classified.
+   *
+   * Now that the public surfaces request all three statuses, a full round DOES
+   * arrive here — and under the old compare it would have rendered its red เต็ม
+   * badge on a card that was still selectable, still `aria-pressed`-able, and
+   * still able to carry the user into a booking form. Routing through
+   * `normalizeScheduleStatus` collapses both spellings onto the same canonical
+   * `full`, so the badge and the disabling can no longer disagree.
+   */
+  const isClosed = normalizeScheduleStatus(schedule.status) === 'full';
   // Unrecognised statuses keep the previous neutral-grey treatment and echo the
   // raw value rather than being advertised as green "เปิดรับ".
   const statusStyle = resolveScheduleBadge(schedule.status);
@@ -139,6 +160,10 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
       type="button"
       onClick={isClosed ? undefined : onSelect}
       disabled={isClosed}
+      // `disabled` already blocks the click; `aria-disabled` is what carries
+      // the state into the accessibility tree alongside `aria-pressed`, so the
+      // card is not announced as a plain unpressed toggle the user could pick.
+      aria-disabled={isClosed || undefined}
       aria-pressed={selected}
       className={cn(
         'relative flex-none snap-start overflow-hidden rounded-9e-lg border px-6 py-4 text-center transition-all',

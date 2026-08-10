@@ -1,6 +1,6 @@
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
-import { getAllSchedules } from '@/lib/api/schedules';
+import { PUBLIC_SCHEDULE_STATUSES, getAllSchedules } from '@/lib/api/schedules';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getSchedulePDF } from '@/lib/actions/schedule-pdf';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
@@ -25,7 +25,12 @@ export default async function SchedulePage() {
   ] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     listPrograms().catch(() => ({ items: [] })),
-    getAllSchedules().catch(() => ({ items: [] })),
+    // All three statuses, so a sold-out round renders as เต็ม (unclickable)
+    // instead of being absent. A round the user can see is full is strictly
+    // more informative than a gap they cannot interpret.
+    getAllSchedules({ status: PUBLIC_SCHEDULE_STATUSES }).catch(() => ({
+      items: [],
+    })),
     getSchedulePDF().catch(() => null),
     getAllActiveEarlyBirdMap().catch(() => ({})),
   ]);

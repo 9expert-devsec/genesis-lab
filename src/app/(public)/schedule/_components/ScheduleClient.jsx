@@ -1587,7 +1587,16 @@ function RoundRow({ schedule, courseId, isEarlyBird = false }) {
           {inner}
         </a>
       ) : (
-        <span className={ROUND_ROW_SURFACE}>{inner}</span>
+        /* No anchor at all, so there is nothing to tap and nothing to focus —
+           the row is inert in fact, not merely in appearance. `aria-disabled`
+           says so out loud for a screen reader, which would otherwise read a
+           plain <span> as ordinary text and give no hint why this round reads
+           differently from its neighbours. The `active:` press state and the
+           chevron are both absent above for the same reason: nothing should
+           promise a destination that does not exist. */
+        <span aria-disabled="true" className={ROUND_ROW_SURFACE}>
+          {inner}
+        </span>
       )}
     </li>
   );
@@ -1649,8 +1658,17 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
   );
 
   if (!href) {
+    // Same contract as RoundRow's inert branch: no anchor, so no navigation
+    // and no focus stop, and `aria-disabled` to say why. Note the cell also
+    // loses `group`, which is what the date's `group-hover:text-9e-action`
+    // hangs off — so a full round does not light up blue on hover either.
     return (
-      <span className="relative block overflow-hidden rounded-sm">{inner}</span>
+      <span
+        aria-disabled="true"
+        className="relative block overflow-hidden rounded-sm"
+      >
+        {inner}
+      </span>
     );
   }
   return (

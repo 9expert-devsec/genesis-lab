@@ -1,7 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
-import { listSchedulesByCourse } from '@/lib/api/schedules';
+import {
+  PUBLIC_SCHEDULE_STATUSES,
+  listSchedulesByCourse,
+} from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
@@ -69,7 +72,14 @@ export async function RegisterPageContent({ searchParams, step }) {
   }
 
   const [{ items: rawSchedules }, earlyBirdMap, ext] = await Promise.all([
-    listSchedulesByCourse(course._id, { limit: 20 }),
+    // All three statuses. A `?class=` deep link to a sold-out round used to
+    // land on a wizard whose carousel did not contain it — step 1 rendered
+    // nothing and said nothing. The round has to ARRIVE before RegisterWizard
+    // can tell the user it is full.
+    listSchedulesByCourse(course._id, {
+      limit: 20,
+      status: PUBLIC_SCHEDULE_STATUSES,
+    }),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getCourseExtension(course.course_id).catch(() => null),
   ]);

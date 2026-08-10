@@ -6,6 +6,7 @@ import { CalendarDays } from 'lucide-react';
 import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { isEarlyBirdSchedule } from '@/lib/isEarlyBird';
 import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
+import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 
 /**
  * Detail-page schedule block.
@@ -17,9 +18,26 @@ import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
  * If no schedules are open, shows an empty state — ScheduleCarousel
  * renders its own "ยังไม่มีรอบอบรม" message, so we just let it.
  */
+const isFull = (schedule) =>
+  normalizeScheduleStatus(schedule?.status) === 'full';
+
 export function ScheduleSection({ course, schedules, earlyBird }) {
+  /**
+   * The first SELECTABLE round, not merely the first one.
+   *
+   * `schedules?.[0]?._id` was safe only while upstream withheld full rounds
+   * from this page's fetch. It no longer does — and the very next round to sell
+   * out is, by definition, the earliest one, which is exactly the row this
+   * index-0 default lands on. That would have opened the page with a sold-out
+   * round pre-selected and the ลงทะเบียนรอบที่เลือก button pointing straight at
+   * it, on a card ScheduleCarousel simultaneously renders disabled: the user
+   * could not have chosen it, but it was chosen for them.
+   *
+   * Falls back to null rather than to the first round when EVERY round is full,
+   * so the CTA disappears instead of linking into a booking that cannot happen.
+   */
   const [selectedId, setSelectedId] = useState(
-    schedules?.[0]?._id ?? null
+    schedules?.find((s) => !isFull(s))?._id ?? null
   );
 
   const selected = schedules?.find((s) => s._id === selectedId) ?? null;
@@ -33,9 +51,14 @@ export function ScheduleSection({ course, schedules, earlyBird }) {
       ? earlyBird.schedule_id
       : null;
 
-  const hrefForSelected = selected
-    ? `/registration/public?course=${String(course.course_id).toLowerCase()}&class=${selected._id}`
-    : null;
+  // Belt to the default's braces: the CTA is built from whatever is selected,
+  // and a full round must never be what it points at — however the selection
+  // got there. Null collapses the button entirely (see `hrefForSelected &&`
+  // below) rather than rendering a greyed link that still navigates.
+  const hrefForSelected =
+    selected && !isFull(selected)
+      ? `/registration/public?course=${String(course.course_id).toLowerCase()}&class=${selected._id}`
+      : null;
 
   return (
     <section id="schedule" className={SECTION_ANCHOR_CLASS}>
