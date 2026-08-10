@@ -39,11 +39,11 @@ const SOURCE_COURSE_KEY = 'registration-inhouse-source-course-v1';
 // free-text note than by a card that means "ask me later".
 const CONTENT_MODES = [
   { value: 'standard', label: 'ใช้ Outline มาตรฐาน',  desc: 'อบรมตามหลักสูตรของ 9Expert',      icon: FileText },
-  { value: 'custom',   label: 'ปรับเนื้อหาบางส่วน',   desc: 'เพิ่ม/ลดหัวข้อให้ตรงกับงานจริง',  icon: StickyNote },
+  { value: 'custom',   label: 'ปรับเนื้อหาบางส่วน',   desc: 'มีค่าบริการเพิ่มเติมสำหรับการ Customize หลักสูตร',  icon: StickyNote },
 ];
 
 const TRAINING_FORMATS = [
-  { value: 'onsite',   label: 'Onsite',       desc: 'อบรมที่บริษัทหรือสถานที่ของลูกค้า',      icon: Building2 },
+  { value: 'onsite',   label: 'Onsite',       desc: 'ลูกค้าเป็นผู้จัดเตรียมสถานที่ด้วยตนเอง',      icon: Building2 },
   { value: 'online',   label: 'Online',       desc: 'อบรมสดผ่าน Microsoft Teams',             icon: Monitor },
 ];
 
@@ -517,13 +517,13 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
         {contentMode !== 'standard' && (
           <FieldGroup label="รายละเอียดเนื้อหาที่ต้องการเพิ่มเติม" error={errors.contentDetails?.message}>
             <Textarea {...register('contentDetails')} rows={3}
-              placeholder="เช่น ต้องการใช้ไฟล์งานจริง, workshop เฉพาะทีม, ปรับหัวข้อบางส่วน" />
+              placeholder="ระบุรายละเอียดที่ต้องการปรับ เช่น เพิ่ม/ลดหัวข้อ ปรับลำดับเนื้อหา เพิ่ม Workshop หรือเน้นเนื้อหาสำหรับแผนกของท่าน" />
           </FieldGroup>
         )}
       </FormSection>
 
       {/* ── Section 2: Schedule & Format ── */}
-      <FormSection icon={<Calendar className="h-5 w-5" />} title="ตารางเวลา & รูปแบบการอบรม">
+      <FormSection icon={<Calendar className="h-5 w-5" />} title="ช่วงเดือนที่อบรม & รูปแบบการอบรม">
 
         {/* Schedule — always visible, no mode selector and no branching. */}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -534,7 +534,7 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
             </select>
           </FieldGroup>
           <FieldGroup label="หมายเหตุเรื่องวันอบรม" error={errors.scheduleNote?.message}>
-            <Input {...register('scheduleNote')} placeholder="เช่น ขอเป็นวันศุกร์ หรือ 2 วันติดกัน" />
+            <Input {...register('scheduleNote')} placeholder="เช่น อบรมวันเสาร์อาทิตย์" />
           </FieldGroup>
         </div>
 
@@ -697,7 +697,7 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
         <Textarea
           {...register('message')}
           rows={4}
-          placeholder="ระบุข้อมูลเพิ่มเติม เช่น หลักสูตร custom ที่ต้องการซึ่งไม่อยู่ใน dropdown ด้านบน, PO number, เงื่อนไขพิเศษ"
+          placeholder="ระบุข้อมูลเพิ่มเติม"
         />
       </FormSection>
 
@@ -805,7 +805,7 @@ function InhouseStepPreview({
           )}
         </Section>
 
-        <Section title="ตารางเวลา & รูปแบบการอบรม">
+        <Section title="ช่วงเดือนที่อบรม & รูปแบบการอบรม">
           <ReadOnlyRow label="เดือนที่สนใจ" value={labelOf(THAI_MONTHS, data.preferredMonth)} />
           <ReadOnlyRow label="หมายเหตุเรื่องวัน" value={data.scheduleNote} />
           <ReadOnlyRow label="รูปแบบการอบรม" value={labelOf(TRAINING_FORMATS, data.trainingFormat)} />
