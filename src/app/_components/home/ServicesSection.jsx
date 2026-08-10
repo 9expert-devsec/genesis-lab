@@ -12,7 +12,7 @@ const SERVICES = [
     Icon: Building2,
     title: 'InHouse',
     desc: 'การจัดอบรมคอมพิวเตอร์ให้องค์กรท่าน โดยสามารถเลือกหลักสูตรและกำหนดเวลาการฝึกอบรมที่เหมาะสมกับองค์กร และวิทยากรผู้เชี่ยวชาญของ 9Expert',
-    href: '/contact-us',
+    href: '/registration/in-house',
   },
   {
     Icon: Monitor,

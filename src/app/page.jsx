@@ -187,7 +187,7 @@ export default async function HomePage() {
 
         <OnlineCoursesSection courses={onlineCoursesForSection} />
 
-        <InhouseCTA />
+        {/* <InhouseCTA /> */}
 
         <ClientLogosSection logos={clientLogos} />
 
