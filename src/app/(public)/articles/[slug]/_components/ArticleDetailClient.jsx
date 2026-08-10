@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
+import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ArticleImageLightbox } from './ArticleImageLightbox';
 
 /**

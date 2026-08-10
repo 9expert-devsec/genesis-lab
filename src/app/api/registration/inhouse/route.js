@@ -5,6 +5,7 @@ import RegisterInhouse from '@/models/RegisterInhouse';
 import { inhouseRegistrationSchema } from '@/lib/schemas/register-inhouse';
 import { sendInhouseRegistrationEmails } from '@/lib/email/template-senders/inhouse-registration';
 import { getCourseByCode } from '@/lib/api/public-courses';
+import { refNo } from '@/lib/refNo';
 
 /**
  * Cover image AND display title for the first course of interest, from ONE
