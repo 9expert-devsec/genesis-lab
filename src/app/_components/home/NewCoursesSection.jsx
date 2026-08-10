@@ -12,7 +12,7 @@ export function NewCoursesSection({ courses = [] }) {
               <BookOpen className="h-4 w-4 text-white" strokeWidth={2} />
             </div>
             <h2 className="text-xl font-bold text-9e-navy dark:text-white">
-              คอร์สใหม่แนะนำ
+              หลักสูตรแนะนำ
             </h2>
           </div>
           <Link
