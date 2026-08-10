@@ -606,37 +606,33 @@ export function CourseForm({
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
-          Section 8 — เอกสาร/ลิงก์ประกอบ (URL arrays)
+          Section 8 — เว็บไซต์อ้างอิง
+
+          WAS "เอกสาร / ลิงก์ประกอบ" with five URL arrays. Four are gone from
+          the form: course_doc_paths, course_lab_paths, course_case_study_paths
+          and exam_links. Their DATA is untouched upstream — shapePayload no
+          longer emits those keys at all, so MSDB's findByIdAndUpdate never sees
+          them and leaves the stored arrays exactly as they are. Deleting these
+          inputs WITHOUT that change would have sent `[]` for each on every save
+          and silently wiped 74 course_doc_paths rows.
+
+          website_urls STAYS, and is the reason this section still exists: it is
+          read on a public surface. The related-course cards on every article
+          detail page link through `website_urls[0]`
+          (articles/[slug]/_components/ArticleDetailClient.jsx:712), and
+          lib/actions/career-paths.js:286 copies it into a curriculum's
+          `publicUrl`. Removing the editor would leave a live public link with
+          no way to maintain it.
+
+          NOT the course outline. The download button reads
+          course_outline_th / course_outline_en, which are a different field
+          with their own uploader in section 7 and are unaffected.
       ─────────────────────────────────────────────────────────── */}
-      <Section title="8. เอกสาร / ลิงก์ประกอบ">
-        <BulletTextarea
-          name="course_doc_paths"
-          label="เอกสารประกอบ (course_doc_paths)"
-          defaultValue={initial?.course_doc_paths}
-          urls
-        />
-        <BulletTextarea
-          name="course_lab_paths"
-          label="ไฟล์ Lab (course_lab_paths)"
-          defaultValue={initial?.course_lab_paths}
-          urls
-        />
-        <BulletTextarea
-          name="course_case_study_paths"
-          label="Case study (course_case_study_paths)"
-          defaultValue={initial?.course_case_study_paths}
-          urls
-        />
+      <Section title="8. เว็บไซต์อ้างอิง">
         <BulletTextarea
           name="website_urls"
           label="เว็บไซต์อ้างอิง (website_urls)"
           defaultValue={initial?.website_urls}
-          urls
-        />
-        <BulletTextarea
-          name="exam_links"
-          label="ลิงก์ข้อสอบ (exam_links)"
-          defaultValue={initial?.exam_links}
           urls
         />
       </Section>

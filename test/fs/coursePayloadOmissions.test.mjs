@@ -65,23 +65,98 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
   }
 });
 
+/**
+ * THE LEAVE-ALONE ROSTER — the current claim, stated explicitly because it has
+ * now changed twice.
+ *
+ *   originally  program + previous_course were asserted here together
+ *   3abbe70     previous_course LEFT the roster (`|| null`, deliberately: an
+ *               optional prerequisite has to be removable). This guard failed
+ *               on that change, which is exactly what it is for; the claim was
+ *               narrowed to program and the null semantics moved to
+ *               test/fs/clearableFields.test.mjs.
+ *   now         FOUR MORE JOIN IT. Section 8's inputs were removed from the
+ *               form, so the payload stops mentioning them entirely.
+ *
+ * Removing the inputs alone would have been the data-loss bug: `linesOf`
+ * returns `[]` for a missing key, never undefined, so every save would have
+ * shipped four empty arrays into an unfiltered `findByIdAndUpdate` — measured
+ * before the change, 74 of the 77 upstream courses carry a course_doc_paths URL
+ * and 2 carry exam_links.
+ *
+ * `website_urls` is NOT on this roster and must not join it: it is still edited
+ * and is read on a public surface (article related-course card hrefs).
+ */
+const OMITTED = [
+  'program',
+  'course_doc_paths',
+  'course_lab_paths',
+  'course_case_study_paths',
+  'exam_links',
+];
+
 test('CONTROL: program is still OMITTED when empty', () => {
-  // `program` is the "leave alone" channel and must stay in it. If a clearing
-  // fix were generalised across the payload, this is the field that would start
-  // being written on every save — and `program: ''` is not a clearing
-  // instruction to MSDB, it is a cast error on an ObjectId ref.
-  //
-  // `previous_course` USED to be asserted here alongside it, and this control
-  // is what caught it moving: it is now `|| null`, deliberately, because an
-  // optional prerequisite has to be removable. That is a change of channel, not
-  // a weakening of this guard — the null semantics and the reason `''` cannot
-  // be used are pinned in test/fs/clearableFields.test.mjs. The two fields no
-  // longer behave the same way, so they are no longer asserted together.
+  // `program` is the original member of the roster. If a clearing fix were
+  // generalised across the payload, this is the field that would start being
+  // written on every save — and `program: ''` is not a clearing instruction to
+  // MSDB, it is a cast error on an ObjectId ref.
   assert.match(
     SRC.code,
     /program:\s*toStr\(get\('program'\)\)\s*\|\|\s*undefined/,
     'program no longer falls back to undefined — it would now be written on every save'
   );
+});
+
+test('the four removed section-8 fields are not emitted at all', () => {
+  // Absent, not empty. A `key: linesOf(...)` line puts the field back in the
+  // value channel with `[]` as its value, which is a wipe, not a no-op.
+  for (const key of OMITTED.slice(1)) {
+    assert.doesNotMatch(
+      SRC.code,
+      new RegExp(`\\n\\s*${key}:\\s*`),
+      `${key} is emitted again — an empty array here overwrites real upstream data`
+    );
+  }
+});
+
+test('the four removed fields have no input left in the form', () => {
+  // The other half: an input still posting the value while the payload ignores
+  // it would look like a working editor that silently saves nothing.
+  const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
+  for (const key of OMITTED.slice(1)) {
+    assert.doesNotMatch(
+      FORM.code,
+      new RegExp(`name="${key}"`),
+      `${key} still has a form input but the payload drops it — the editor would be a no-op`
+    );
+  }
+});
+
+test('CONTROL: website_urls IS still sent — it is edited and publicly read', () => {
+  // THE control for this pair. A shapePayload that returned {} would satisfy
+  // every doesNotMatch above. website_urls stayed in section 8 precisely
+  // because ArticleDetailClient links related-course cards through
+  // website_urls[0], so it must remain in the value channel AND in the form.
+  assert.match(
+    SRC.code,
+    /website_urls:\s*linesOf\(formData,\s*'website_urls'\)/,
+    'website_urls stopped being sent — the article related-course links lose their href'
+  );
+  const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
+  assert.match(FORM.code, /name="website_urls"/, 'website_urls lost its input');
+});
+
+test('CONTROL: the section-7 arrays are untouched and still sent', () => {
+  // A second, independent control from a section this change never went near —
+  // so "the payload still carries the fields it should" is not resting on
+  // website_urls alone.
+  for (const key of ['course_objectives', 'bullets', 'training_topics']) {
+    assert.match(
+      SRC.code,
+      new RegExp(`\\n\\s*${key}:\\s*\\S`),
+      `${key} stopped being sent — this change should not have touched it`
+    );
+  }
 });
 
 test('CONTROL: the control above can distinguish the two channels', () => {

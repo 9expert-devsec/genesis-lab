@@ -41,11 +41,12 @@
  *   course_system_requirements[] ← string[]
  *   bullets[]                    ← string[] (highlight bullets)
  *   training_topics              ← [{ title, bullets[] }]
- *   course_doc_paths[]           ← URL[]
- *   course_lab_paths[]           ← URL[]
- *   course_case_study_paths[]    ← URL[]
  *   website_urls[]               ← URL[]
- *   exam_links[]                 ← URL[]
+ *
+ * NOT SENT, and therefore not listed above: course_doc_paths, course_lab_paths,
+ * course_case_study_paths, exam_links. The form no longer edits them and the
+ * payload no longer mentions them, so MSDB keeps whatever it already holds.
+ * They still exist upstream and are still returned by the read side.
  */
 
 import { revalidatePath } from 'next/cache';
@@ -265,11 +266,18 @@ function shapePayload(formData) {
     course_prerequisites:        linesOf(formData, 'course_prerequisites'),
     course_system_requirements:  linesOf(formData, 'course_system_requirements'),
     bullets:                     linesOf(formData, 'bullets'),
-    course_doc_paths:            linesOf(formData, 'course_doc_paths'),
-    course_lab_paths:            linesOf(formData, 'course_lab_paths'),
-    course_case_study_paths:     linesOf(formData, 'course_case_study_paths'),
+    /* course_doc_paths, course_lab_paths, course_case_study_paths and
+     * exam_links are NOT EMITTED — the keys are absent, not empty.
+     *
+     * Their inputs were removed from the form (section 8). `linesOf` returns
+     * `[]` for a missing key, never undefined, so leaving these lines in place
+     * would have sent four empty arrays on every save and MSDB's unfiltered
+     * `findByIdAndUpdate(id, body)` would have written them: 74 of 77 courses
+     * carry a course_doc_paths URL and 2 carry exam_links. Omitting the keys
+     * puts them in the same leave-alone channel as `program`.
+     *
+     * Restoring one is one line — plus its input back in section 8. */
     website_urls:                linesOf(formData, 'website_urls'),
-    exam_links:                  linesOf(formData, 'exam_links'),
     training_topics:             parseTrainingTopics(formData),
     /* ── OUTLINE PDFs — ALWAYS BOTH KEYS, ALWAYS THE FULL 8-KEY OBJECT ──────
      *
