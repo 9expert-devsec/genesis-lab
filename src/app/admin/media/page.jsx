@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requirePage } from '@/lib/rbac/guard';
 import { listMediaCategories } from '@/lib/actions/media';
 import MediaClient from './_components/MediaClient';
@@ -36,6 +38,20 @@ export default async function MediaPage() {
           </code>{' '}
           ทันทีหลังอัปโหลด
         </p>
+
+        {/*
+          The only way in to the site-root replace screen. It is NOT a sidebar
+          entry on purpose: rbacNavParity asserts every NAV_GROUPS link is a
+          REGISTERED page, and that screen deliberately has no page key of its
+          own — it inherits `media` by href prefix. A link here costs nothing
+          and keeps the registry at 38 == 38.
+        */}
+        <Link
+          href="/admin/media/webroot-documents"
+          className="mt-3 inline-block text-sm text-9e-action hover:underline"
+        >
+          เอกสารหน้าเว็บหลัก (แทนที่ไฟล์ PDF สามรายการที่รากเว็บไซต์) →
+        </Link>
       </div>
 
       <MediaClient
