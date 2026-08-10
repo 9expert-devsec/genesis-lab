@@ -54,6 +54,7 @@ import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { aiFetch, unwrap } from '@/lib/api/client';
 import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
 import { outlineFromFormValue } from '@/lib/courses/courseOutline';
+import { checkboxBool, courseTypeFlags } from '@/lib/courses/courseTypeFlags';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -161,10 +162,6 @@ function toNullableNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
-function toBool(v) {
-  if (typeof v === 'boolean') return v;
-  return v === 'on' || v === 'true' || v === '1';
-}
 function toStrArr(v) {
   if (Array.isArray(v)) return v.map(toStr).filter(Boolean);
   if (typeof v === 'string' && v.length > 0) {
@@ -216,19 +213,16 @@ function shapePayload(formData) {
     return Array.isArray(v) ? v : [];
   };
 
-  // course_type comes from either two checkboxes (new form) or the
-  // legacy single select. Accept both.
-  const courseType = toStr(get('course_type'));
-  const explicitPublic  = get('course_type_public');
-  const explicitInhouse = get('course_type_inhouse');
-  const isPublic  =
-    explicitPublic  != null
-      ? toBool(explicitPublic)
-      : courseType !== 'inhouse';
-  const isInhouse =
-    explicitInhouse != null
-      ? toBool(explicitInhouse)
-      : courseType === 'inhouse';
+  // course_type comes from either two checkboxes (new form) or the legacy
+  // single select. Which dialect this is, is decided by whether the LEGACY
+  // FIELD was posted — never by whether a checkbox has a value, because an
+  // unchecked box posts nothing and so cannot tell the two apart. See
+  // lib/courses/courseTypeFlags for the trace this came out of.
+  const { isPublic, isInhouse } = courseTypeFlags({
+    courseType:   get('course_type'),
+    publicField:  get('course_type_public'),
+    inhouseField: get('course_type_inhouse'),
+  });
 
   return {
     course_name:               toStr(get('course_name') || get('title')),
@@ -244,9 +238,9 @@ function shapePayload(formData) {
     sort_order:                toNum(get('sort_order')),
     course_type_public:        isPublic,
     course_type_inhouse:       isInhouse,
-    course_workshop_status:    toBool(get('course_workshop_status')),
-    course_certificate_status: toBool(get('course_certificate_status')),
-    course_promote_status:     toBool(get('course_promote_status')),
+    course_workshop_status:    checkboxBool(get('course_workshop_status')),
+    course_certificate_status: checkboxBool(get('course_certificate_status')),
+    course_promote_status:     checkboxBool(get('course_promote_status')),
     program:                   toStr(get('program')) || undefined,
     skills:                    toStrArr(getAll('skills')),
     // course_id strings — caller resolves to ObjectIds for MSDB body.
