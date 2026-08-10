@@ -3,6 +3,11 @@
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { courseHref } from '@/lib/utils';
+import {
+  INHOUSE_ONLY_LABEL,
+  coursePriceLabel,
+  isInhouseOnlyPrice,
+} from '@/lib/coursePriceLabel';
 
 export function CourseTableGroup({ program, courses }) {
   const router = useRouter();
@@ -81,11 +86,20 @@ export function CourseTableGroup({ program, courses }) {
                   <td className="px-4 py-3 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {days ? days * 6 : '-'}
                   </td>
-                  <td className="px-4 py-3 text-right font-semibold text-9e-navy dark:text-white">
-                    {!c.course_price || Number(c.course_price) === 0 ? (
-                      <span className="text-9e-slate-dp-50 dark:text-[#94a3b8]">Call</span>
+                  {/* The label is ~3x the width of the word it replaces, in a
+                      right-aligned column of numbers. It fits without the
+                      column moving: the header above is `ราคา (บาท / ท่าน)`,
+                      already wider than "Inhouse Only" at this size, so the
+                      header — not the cells — is what sizes this column.
+                      `whitespace-nowrap` keeps that true if the header is ever
+                      shortened. */}
+                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-9e-navy dark:text-white">
+                    {isInhouseOnlyPrice(c.course_price) ? (
+                      <span className="text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                        {INHOUSE_ONLY_LABEL}
+                      </span>
                     ) : (
-                      Number(c.course_price).toLocaleString('th-TH')
+                      coursePriceLabel(c.course_price)
                     )}
                   </td>
                 </tr>

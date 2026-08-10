@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { courseHref } from "@/lib/utils";
+import { coursePriceLabel } from "@/lib/coursePriceLabel";
 import {
   SCHEDULE_STATUS_OPTIONS,
   resolveScheduleBadge,
@@ -172,13 +173,19 @@ function formatCardDateLabel(scheduleItem) {
  * private function of this file. See that module for why `&class=` matters.
  */
 
-/** `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows. */
+/**
+ * `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows.
+ *
+ * The wording and the no-price branch now come from lib/coursePriceLabel; this
+ * stays as the course→price adapter (the shared helper takes a price, not a
+ * course) and as the one place that knows this page's unit is `฿`. Note the
+ * unit is passed as `suffix` and therefore reaches numbers only — "Inhouse
+ * Only ฿" is not a string this function can produce.
+ */
 function formatCoursePrice(course, { withUnit = false } = {}) {
-  const raw = course?.course_price;
-  const n = Number(raw);
-  if (!raw || Number.isNaN(n)) return "Call";
-  const text = n.toLocaleString("th-TH");
-  return withUnit ? `${text} ฿` : text;
+  return coursePriceLabel(course?.course_price, {
+    suffix: withUnit ? "฿" : "",
+  });
 }
 
 /** `'2'`, or `'2 วัน'` with the unit the mobile card shows. */

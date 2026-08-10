@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { courseHref, careerPathHref } from '@/lib/utils';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
+import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import {
   SEARCH_MIN_CHARS,
@@ -85,8 +86,16 @@ function formatPromoDate(iso) {
 
 const SUGGESTIONS = ['Excel', 'Python', 'Power BI', 'AI', 'Power Automate', 'SQL'];
 
-const priceLabel = (price) =>
-  !price || Number(price) === 0 ? 'Call .-' : `${Number(price).toLocaleString('th-TH')} .-`;
+/**
+ * The `.-` suffix for this page's three price slots, applied to numbers only.
+ *
+ * Kept as a local one-liner rather than inlining `coursePriceLabel(..., {suffix})`
+ * at all three call sites: the suffix is a property of this page's treatment,
+ * and naming it once is what stopped the three from drifting in the first
+ * place. The WORDING is no longer this file's business — it comes from
+ * lib/coursePriceLabel, which is the only thing that changed here.
+ */
+const priceLabel = (price) => coursePriceLabel(price, { suffix: '.-' });
 
 // ── Highlight matched substring with brand lime ───────────────────
 function highlightText(text, term) {

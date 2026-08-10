@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
 import { cn, courseHref } from "@/lib/utils";
+import { coursePriceLabel } from "@/lib/coursePriceLabel";
 import ScheduleCard from "@/components/ScheduleCard";
 import { EarlyBirdRibbon } from "@/components/ui/EarlyBirdRibbon";
 import {
@@ -141,10 +142,13 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
           ) : (
             <span />
           )}
-          <span className="text-base font-bold text-9e-navy dark:text-white">
-            {!price || Number(price) === 0
-              ? "Call .-"
-              : `${Number(price).toLocaleString("th-TH")} .-`}
+          {/* whitespace-nowrap: "Inhouse Only" is two words where "Call" was
+              one, and a break between them reads as a layout bug rather than as
+              a label. The row above is `flex-wrap`, so when the card is too
+              narrow to hold duration and price side by side the ROW wraps —
+              which is legible — instead of the label splitting. */}
+          <span className="whitespace-nowrap text-base font-bold text-9e-navy dark:text-white">
+            {coursePriceLabel(price, { suffix: ".-" })}
           </span>
         </div>
 

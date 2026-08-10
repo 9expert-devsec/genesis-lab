@@ -4,6 +4,7 @@ import { useState, useEffect, useId, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Award, Clock, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
+import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
 
 /**
  * Hero for the course detail page.
@@ -53,8 +54,10 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
     course.course_id
   ).toLowerCase()}`;
 
-  // course_price === 0 means inhouse-only (no public schedule, no public price)
-  const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+  // course_price === 0 means inhouse-only (no public schedule, no public price).
+  // Shared predicate so this page's price line, the catalog table's cell and
+  // /schedule's column cannot disagree about what counts as priceless.
+  const isInhouseOnly = isInhouseOnlyPrice(course.course_price);
 
   const inhouseHref = `/registration/in-house?course=${String(course.course_id).toLowerCase()}`;
 
@@ -182,7 +185,17 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
-                  <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">Call</span>
+                  /* The widest slot the label has to fit: 3xl extrabold, and
+                     the only surface where it is the headline rather than a
+                     figure in a row. It holds — ~200px against a 360px viewport
+                     less the card's padding — but only as one line, so the
+                     break is disallowed explicitly rather than left to luck.
+                     The Thai gloss underneath (*รับเฉพาะ InHouse Training
+                     เท่านั้น) already carries the full explanation, so the
+                     label does not have to grow to say more. */
+                  <span className="whitespace-nowrap text-3xl font-extrabold text-9e-action dark:text-9e-air">
+                    {INHOUSE_ONLY_LABEL}
+                  </span>
                 ) : (
                   <>
                     <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">
