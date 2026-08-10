@@ -49,7 +49,9 @@ import mongoose from 'mongoose';
 import {
   WEBROOT_ARCHIVE_PREFIX, WEBROOT_DOCUMENTS, webrootUploadTarget,
 } from '../src/lib/webrootDocuments.mjs';
-import { RESTORE, runRestoreFlow, webrootArchiveDirFor } from '../src/lib/webroot/restoreFlow.mjs';
+import {
+  RESTORE, restoreDidWrite, runRestoreFlow, webrootArchiveDirFor,
+} from '../src/lib/webroot/restoreFlow.mjs';
 
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
@@ -77,22 +79,32 @@ const headOrNull = async (pathname) => {
 };
 
 /**
- * sha256 of what that key actually holds.
+ * The bytes that key holds, read AS FRESHLY AS THIS MACHINE CAN.
  *
- * CACHE-BUSTED ON PURPOSE. Blob public URLs sit behind a CDN under a long
- * max-age, and this function is used to verify an object IMMEDIATELY after
- * overwriting it. A cached response would confirm the bytes we just replaced —
- * the verification would be reading the very thing it exists to rule out.
+ * A NEW NONCE ON EVERY CALL, and that is the whole contract. The poll retries
+ * with the same identifier, so a nonce computed once would leave every retry
+ * reading the CDN's copy of the first busted URL — a loop that can only repeat
+ * its first answer. `cache: 'no-store'` covers the local HTTP cache; the query
+ * nonce is what asks the CDN for a different key.
+ *
+ * MEASURED LIMIT, stated because it is the defect this file exists to fix: on
+ * 2026-08-10 this still returned the PRE-COPY bytes when called milliseconds
+ * after a `copy`. It is a best effort at freshness, not a guarantee of it —
+ * which is exactly why head() decides success and this only decides the message.
  */
-async function hashOf(pathname) {
+async function fetchFreshBytes(pathname) {
   const meta = await head(pathname, { token: TOKEN });
   if (!meta?.url) throw new Error(`no url for ${pathname}`);
   const bust = `${meta.url}${meta.url.includes('?') ? '&' : '?'}__verify=${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
   const res = await fetch(bust, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status} reading ${pathname}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  return createHash('sha256').update(buf).digest('hex');
+  return Buffer.from(await res.arrayBuffer());
 }
+
+const sha256Of = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+/** Convenience for the listing, which wants a hash and not the bytes. */
+const hashOf = async (pathname) => sha256Of(await fetchFreshBytes(pathname));
 
 const deps = {
   headLive: headOrNull,
@@ -100,7 +112,10 @@ const deps = {
   copy: async (from, to) => copy(from, to, {
     access: 'public', addRandomSuffix: false, token: TOKEN,
   }),
-  hash: hashOf,
+  fetchFreshBytes,
+  sha256: sha256Of,
+  nowMs: () => Date.now(),
+  wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
 };
 
 // ── the listing: what is there, before anything is chosen ───────────────────
@@ -279,7 +294,9 @@ async function main() {
     return;
   }
 
-  if (result.status !== RESTORE.RESTORED) {
+  // A REAL failure is one head() saw. Everything else records — see the RESTORE
+  // enum's header for why absence is not failure here.
+  if (!restoreDidWrite(result.status)) {
     console.error(`✖ ${result.status} — ${result.error}`);
     if (result.safetyArchivePathname) {
       console.error(`  the current bytes WERE archived to ${result.safetyArchivePathname} and are safe`);
@@ -290,7 +307,20 @@ async function main() {
 
   console.log(`   archived the previous bytes to : ${result.safetyArchivePathname}`);
   console.log(`   restored                       : ${mib(result.bytes)}`);
-  console.log(`   sha256 verified                : ${result.restoredSha256}`);
+
+  if (result.status === RESTORE.RESTORED_VERIFIED) {
+    console.log(`   sha256 verified                : ${result.restoredSha256}`);
+    console.log(`   observed after                 : ${result.observed.attempts} attempt(s), ${(result.observed.elapsedMs / 1000).toFixed(1)}s`);
+  } else {
+    console.log('');
+    console.log('   ⚠ RESTORED, BUT NOT YET VISIBLE FROM THIS MACHINE — this is NOT a failure.');
+    console.log(`     ${result.caveat}`);
+    console.log(`     head() confirmed the object and its size; ${result.observed.attempts} read(s) over`);
+    console.log(`     ${(result.observed.elapsedMs / 1000).toFixed(1)}s still returned a cached copy.`);
+    console.log('     DO NOT re-run the restore: it would archive the correct object and');
+    console.log('     copy it again. Re-read the URL in a minute instead.');
+  }
+
   await recordRestore(result);
   console.log('');
   console.log('   The CDN may serve the previous copy for a while — the same');

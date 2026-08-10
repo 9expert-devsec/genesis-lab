@@ -40,7 +40,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { copy, del, head, put } from '@vercel/blob';
 
 import { webrootArchivePathname } from '../src/lib/webrootDocuments.mjs';
-import { RESTORE, runRestoreFlow } from '../src/lib/webroot/restoreFlow.mjs';
+import { RESTORE, restoreDidWrite, runRestoreFlow } from '../src/lib/webroot/restoreFlow.mjs';
 
 const TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 if (!TOKEN) { console.error('✖ BLOB_READ_WRITE_TOKEN not set — pass --env-file=.env.local'); process.exit(1); }
@@ -61,13 +61,16 @@ function check(label, condition, detail = '') {
 
 const headOrNull = async (p) => { try { return await head(p, { token: TOKEN }); } catch { return null; } };
 
-async function hashOf(pathname) {
+/** A NEW nonce on EVERY call — see the contract note in restoreFlow.mjs step 7b. */
+async function fetchFresh(pathname) {
   const meta = await head(pathname, { token: TOKEN });
   const bust = `${meta.url}${meta.url.includes('?') ? '&' : '?'}__verify=${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
   const res = await fetch(bust, { cache: 'no-store' });
   if (!res.ok) throw new Error(`HTTP ${res.status} reading ${pathname}`);
-  return sha(Buffer.from(await res.arrayBuffer()));
+  return Buffer.from(await res.arrayBuffer());
 }
+
+const hashOf = async (pathname) => sha(await fetchFresh(pathname));
 
 /**
  * `allowOverwrite: true` is REQUIRED, and finding that out here is part of the
@@ -137,12 +140,16 @@ try {
         await copy(from, to, { access: 'public', addRandomSuffix: false, token: TOKEN });
         created.add(to);
       },
-      hash: hashOf,
+      fetchFreshBytes: fetchFresh,
+      sha256: sha,
+      nowMs: () => Date.now(),
+      wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
     },
   );
 
   console.log(`   status: ${result.status}`);
-  check('the flow reports RESTORED', result.status === RESTORE.RESTORED, result.error ?? '');
+  check('the flow reports a written restore', restoreDidWrite(result.status), result.status + ' ' + (result.error ?? ''));
+  if (result.status === RESTORE.RESTORED_UNOBSERVED) console.log('   (verified by head(); this PoP had not caught up — not a failure)');
 
   // ── 4. the assertions that matter ───────────────────────────────────────
   const liveNow = await hashOf(SCRATCH_LIVE);

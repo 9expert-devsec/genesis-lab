@@ -99,6 +99,69 @@ test('verification is by hash and the read is cache-busted', () => {
   assert.match(src.code, /cache: 'no-store'/);
 });
 
+/** The body of one top-level function, bounded by the next top-level `const`/`async`. */
+function fnBody(code, name) {
+  const at = code.indexOf(`async function ${name}(`);
+  if (at === -1) return '';
+  const rest = code.slice(at + 1);
+  const next = rest.search(/\n(?:async function |const |function )/);
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
+test('the cache-buster is recomputed on EVERY call, not hoisted', () => {
+  // THE SUBTLETY THAT MAKES THE RETRY REAL. The poll passes the same identifier
+  // each attempt, so a nonce computed once would leave attempts 2..N reading the
+  // CDN's copy of the first busted URL — a retry loop that can only ever repeat
+  // its first answer.
+  const body = fnBody(readSource(SCRIPT).code, 'fetchFreshBytes');
+  assert.ok(body.length > 50, 'fetchFreshBytes not found — the matcher is broken');
+  assert.match(body, /__verify=/, 'the nonce must be built inside the function body');
+  assert.match(body, /cache: 'no-store'/, 'and the fetch inside it must say no-store');
+});
+
+test('CONTROL: the same check REJECTS a hoisted nonce and a missing no-store', () => {
+  // Two implementations that are wrong in the two ways that matter, put through
+  // the same matcher. Without this the assertions above are decoration.
+  const hoisted = `
+    const BUST = '__verify=' + Date.now();
+    async function fetchFreshBytes(pathname) {
+      const meta = await head(pathname);
+      const res = await fetch(meta.url + '?' + BUST, { cache: 'no-store' });
+      return Buffer.from(await res.arrayBuffer());
+    }`;
+  const noStoreless = `
+    async function fetchFreshBytes(pathname) {
+      const meta = await head(pathname);
+      const res = await fetch(meta.url + '?__verify=' + Date.now(), {});
+      return Buffer.from(await res.arrayBuffer());
+    }`;
+  assert.equal(/__verify=/.test(fnBody(hoisted, 'fetchFreshBytes')), false,
+    'a hoisted nonce must not satisfy the per-call check');
+  assert.equal(/cache: 'no-store'/.test(fnBody(noStoreless, 'fetchFreshBytes')), false,
+    'an init omitting no-store must not satisfy the check');
+});
+
+test('recording is gated on restoreDidWrite, so an unobserved restore still records', () => {
+  // The 2026-08-10 defect in one line: a status the flow considers written must
+  // reach the record. Gating on equality with a single "verified" status would
+  // silently drop the not-yet-observable case and leave Blob and Mongo apart.
+  const src = readSource(SCRIPT);
+  assert.match(src.code, /restoreDidWrite\(result\.status\)/,
+    'the script must ask the shared helper whether bytes were written');
+  assert.equal(
+    /result\.status\s*!==\s*RESTORE\.RESTORED_VERIFIED/.test(src.code), false,
+    'the script gates recording on the VERIFIED status alone, which drops the '
+    + 'not-yet-observable case — exactly the bug this change removed',
+  );
+  // `await recordRestore(`, not `recordRestore(result)` — the latter also matches
+  // the function's own DECLARATION, which sits above the gate and made this
+  // ordering check fail on correct code.
+  const gate = src.code.indexOf('restoreDidWrite(result.status)');
+  const record = src.code.indexOf('await recordRestore(');
+  assert.ok(gate > -1, 'the gate is missing');
+  assert.ok(record > gate, 'the gate must precede the record CALL');
+});
+
 test('the restore is recorded as a NEW row that says where it came from', () => {
   const src = readSource(SCRIPT);
   assert.match(src.code, /insertOne\(/, 'append-only: a new row, never an update');
