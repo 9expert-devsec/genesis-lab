@@ -1,4 +1,4 @@
-import { listSchedules } from '@/lib/api/schedules';
+import { ADMIN_SCHEDULE_STATUSES, listSchedules } from '@/lib/api/schedules';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { getScheduleLocals } from '@/lib/actions/schedules';
@@ -31,7 +31,14 @@ export default async function AdminSchedulesPage() {
       // revalidate: 0 — admin table must reflect a just-written row
       // immediately after `router.refresh()`. The `schedules` tag is
       // still attached so revalidateTag(...) busts public ISR caches.
-      listSchedules({ from, to, revalidate: 0 }),
+      //
+      // status: all — the admin table must NEVER read the public-filtered
+      // feed. Without this, `/schedules` hands back only the registerable
+      // statuses, so an admin who set a round to เต็ม watched it disappear
+      // from the very grid they set it in, with no way to set it back. `all`
+      // rather than the explicit public trio is deliberate: this is the one
+      // surface where a status MSDB adds later must show up unannounced.
+      listSchedules({ from, to, status: ADMIN_SCHEDULE_STATUSES, revalidate: 0 }),
       listPublicCourses(),
       listPrograms(),
       listInstructorsForAdmin(),
