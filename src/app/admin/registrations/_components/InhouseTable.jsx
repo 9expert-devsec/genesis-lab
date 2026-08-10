@@ -102,7 +102,7 @@ function fmtMonth(value) {
   return `${THAI_MONTHS[monthIndex]} ${Number(m[1]) + 543}`;
 }
 
-export function InhouseTable({ items, lastEdited = {} }) {
+export function InhouseTable({ items, lastEdited = {}, courseNames = null }) {
   return (
     <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
       <div className="overflow-x-auto">
@@ -156,15 +156,14 @@ export function InhouseTable({ items, lastEdited = {} }) {
                 </td>
 
                 {/*
-                  COURSE CODES, shown as codes. `coursesInterested` holds
-                  `course_id` values ('PP-AI'), and resolving one to a name means
-                  a live upstream request per row — see the report and
-                  scripts/audit-course-id-casing.mjs for why that is both
-                  expensive here and unsafe for five known mixed-case ids. The
-                  in-house detail page already prints the raw codes.
+                  NAME over CODE — the same two-line shape the public หลักสูตร
+                  cell uses, rather than a third arrangement. Sales staff know
+                  these by code, so the code stays visible underneath instead of
+                  being replaced. Slightly wider than the public cell's 180px
+                  because a course NAME is much longer than a class date.
                 */}
-                <td className="max-w-[180px] px-4 py-3">
-                  <CourseCodes codes={row.coursesInterested} />
+                <td className="max-w-[220px] px-4 py-3">
+                  <CourseCell codes={row.coursesInterested} courseNames={courseNames} />
                 </td>
 
                 {/*
@@ -273,30 +272,81 @@ function TrainingFormatChip({ value }) {
 }
 
 /**
- * `coursesInterested` is an ARRAY, and the column has room for one code.
+ * One code → its course name, or null.
+ *
+ * ── WHY LOWERCASING BOTH SIDES IS SAFE HERE, AND IS NOT THE BUG THE CASING
+ *    AUDIT IS ABOUT ────────────────────────────────────────────────────────
+ * That audit is about the UPSTREAM query `?course_id=`, which is exact-match
+ * case-sensitive and returns nothing when the case differs — a remote filter we
+ * do not control. This is a LOCAL lookup in a map we just built from the full
+ * list of every course, so lowercasing both sides cannot cause a wrong match:
+ * `course_id` values are unique, and two ids differing only in case would be
+ * the same course. Do NOT "fix" this back to an exact match — exact matching is
+ * what makes the four known mixed-case ids (SQL-PG-Query, SQL-ADM-Tuning,
+ * MS-SQL-19-Prov, SQL-ADM-Secure) unresolvable, and this is the one place we
+ * are free of that constraint.
+ *
+ * An empty or whitespace-only name is a MISS, not a resolution: page.jsx never
+ * stores one, and `|| null` here is the second guard. The caller must then show
+ * the code, never ''.
+ */
+function resolveCourseName(code, courseNames) {
+  if (!code || !courseNames) return null;
+  return courseNames[String(code).trim().toLowerCase()] || null;
+}
+
+/**
+ * `coursesInterested` is an ARRAY, and the column has room for one course.
  *
  * The current form is a single-select that wraps its one choice in an array, so
  * a second entry can only reach here from a legacy document or a hand-crafted
  * POST — the zod schema bounds the array below (min 1) and not above. Truncating
  * silently would make a two-course enquiry indistinguishable from a one-course
- * one, so the extras are COUNTED in the cell and listed in full in the title
- * attribute; the detail page prints all of them joined.
+ * one, so the extras are COUNTED in the cell and every code is listed in the
+ * title attribute; the detail page prints all of them joined.
+ *
+ * THE MISS PATH IS THE POINT. When the name does not resolve — upstream down,
+ * a course withdrawn, an id that no longer exists — the CODE becomes the primary
+ * line and the second line is dropped, because repeating the code under itself
+ * says nothing. What must never happen is an empty cell: that is indistinguishable
+ * from missing data, and this table exists because of cells that looked empty.
  */
-function CourseCodes({ codes }) {
+function CourseCell({ codes, courseNames }) {
   const list = (Array.isArray(codes) ? codes : []).filter(Boolean);
   if (list.length === 0) {
     return <span className="text-xs text-[var(--text-muted)]">—</span>;
   }
   const [first, ...rest] = list;
+  const name = resolveCourseName(first, courseNames);
+
+  // Every code, each with its name when known — so a +N row can still be read
+  // on hover rather than hiding what it holds.
+  const title = list
+    .map((c) => {
+      const n = resolveCourseName(c, courseNames);
+      return n ? `${c} — ${n}` : c;
+    })
+    .join('\n');
+
   return (
-    <div className="flex items-center gap-1.5" title={list.join(', ')}>
-      <span className="truncate font-mono text-xs font-semibold text-[var(--text-primary)]">
-        {first}
-      </span>
-      {rest.length > 0 && (
-        <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-          +{rest.length}
-        </span>
+    <div title={title}>
+      <div className="flex items-center gap-1.5">
+        <p className={cn(
+          'truncate',
+          name
+            ? 'font-medium text-[var(--text-primary)]'
+            : 'font-mono text-xs font-semibold text-[var(--text-primary)]'
+        )}>
+          {name ?? first}
+        </p>
+        {rest.length > 0 && (
+          <span className="shrink-0 rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+            +{rest.length}
+          </span>
+        )}
+      </div>
+      {name && (
+        <p className="truncate font-mono text-xs text-[var(--text-muted)]">{first}</p>
       )}
     </div>
   );

@@ -20,6 +20,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { ThaiAddressFields } from '@/components/registration/ThaiAddressFields';
 import { BranchFields, TaxIdField } from '@/components/registration/BranchFields';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
+import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
@@ -753,39 +755,25 @@ function InhouseStepPreview({
 
   const contactName = `${data.contactFirstName ?? ''} ${data.contactLastName ?? ''}`.trim();
 
-  const thaiAddr = data.thaiAddress
-    ? [
-        data.thaiAddress.addressLine,
-        data.thaiAddress.subDistrict,
-        data.thaiAddress.district,
-        data.thaiAddress.province,
-        data.thaiAddress.postalCode,
-      ].filter(Boolean).join(' ')
-    : '';
+  // ONE address, not two. `thaiAddr` and `intlAddr` were separate consts picked
+  // apart again at the row below by re-testing `quotationCountry` — which is
+  // the branch formatBillingAddress already owns, so the review step was
+  // duplicating both the branch AND the field lists.
+  //
+  // Adapted at the call site: in-house holds `quotationCountry` where an
+  // invoice holds `country`, and the two address sub-objects are identical in
+  // shape. See the same adapter in src/app/api/registration/inhouse/route.js —
+  // this screen must show the customer exactly the string the mail will carry.
+  const quotationAddr = formatBillingAddress({
+    country: data.quotationCountry,
+    thaiAddress: data.thaiAddress,
+    internationalAddress: data.internationalAddress,
+  });
 
-  const intlAddr = data.internationalAddress
-    ? [
-        data.internationalAddress.line1,
-        data.internationalAddress.line2,
-        data.internationalAddress.city,
-        data.internationalAddress.state,
-        data.internationalAddress.postalCode,
-        data.internationalAddress.country,
-      ].filter(Boolean).join(', ')
-    : '';
-
-  // The VENUE, which is a different address from the billing one above and is
-  // flattened with the same plain join for the same reason — see the note on
-  // training_venue in src/lib/email/models/inhouseRegistrationModel.js.
-  const venueAddr = data.onsiteVenue
-    ? [
-        data.onsiteVenue.addressLine,
-        data.onsiteVenue.subDistrict,
-        data.onsiteVenue.district,
-        data.onsiteVenue.province,
-        data.onsiteVenue.postalCode,
-      ].filter(Boolean).join(' ')
-    : '';
+  // The VENUE is a DIFFERENT address and goes through the prefix primitive
+  // directly, never through "billing" — see the note on training_venue in
+  // src/lib/email/models/inhouseRegistrationModel.js.
+  const venueAddr = formatThaiAddress(data.onsiteVenue);
 
   const branchLabel = formatBranchLabel({
     branchType:   data.branchType,
@@ -835,7 +823,7 @@ function InhouseStepPreview({
           {data.quotationCountry === 'TH' && (
             <ReadOnlyRow label="สาขา" value={branchLabel} />
           )}
-          <ReadOnlyRow label="ที่อยู่" value={data.quotationCountry === 'TH' ? thaiAddr : intlAddr} />
+          <ReadOnlyRow label="ที่อยู่" value={quotationAddr} />
         </Section>
 
         {data.message && (
