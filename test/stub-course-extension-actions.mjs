@@ -21,6 +21,15 @@ export async function listCourseExtensions() {
 export async function saveCourseExtension() {
   throw new Error('stub-course-extension-actions: saveCourseExtension must not be called in a render test');
 }
+/**
+ * CourseForm's create arm calls this BEFORE createCourse, so the stub must
+ * export it or the whole module fails to import and every render test that
+ * mounts the form contributes ZERO tests — which is what the runner's per-file
+ * meta-control caught when this was missing.
+ */
+export async function checkAliasAvailable() {
+  throw new Error('stub-course-extension-actions: checkAliasAvailable must not be called in a render test');
+}
 export async function deleteCourseExtension() {
   throw new Error('stub-course-extension-actions: deleteCourseExtension must not be called');
 }

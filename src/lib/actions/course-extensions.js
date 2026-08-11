@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
 import { duplicateKeyMessage } from '@/lib/db/duplicateKeyMessage';
+import { aliasConflict, normaliseAlias } from '@/lib/courses/aliasAvailability';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -28,12 +29,12 @@ function serialize(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
 
-function normalizeAlias(input) {
-  if (!input) return null;
-  const trimmed = String(input).trim();
-  if (!trimmed) return null;
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-}
+// The local `normalizeAlias` is GONE, replaced by `normaliseAlias` from
+// lib/courses/aliasAvailability. They were byte-identical, and two copies of
+// the rule that decides what a stored alias LOOKS like is precisely how the
+// create arm and the save action would come to disagree about whether "/x" and
+// "x" are the same URL — the check would find no conflict and the unique index
+// would then reject the write, which is the failure this whole round removed.
 
 /** Fetch a single extension by upstream `course_id`. */
 export async function getCourseExtension(courseId) {
@@ -72,7 +73,7 @@ export async function findCourseExtensionCodeInsensitive(code) {
 export async function getCourseExtensionByAlias(alias) {
   if (!alias) return null;
   await dbConnect();
-  const normalized = normalizeAlias(alias);
+  const normalized = normaliseAlias(alias);
   if (!normalized) return null;
   const doc = await CourseExtension.findOne({ urlAlias: normalized }).lean();
   return serialize(doc);
@@ -110,6 +111,45 @@ function extensionFields(doc) {
   };
 }
 
+/**
+ * Is `alias` free for `courseId` to take? `{ field, error }` or null.
+ *
+ * ── ONE RULE, TWO CALLERS, AND THAT IS THE POINT ────────────────────────────
+ * Called by `saveCourseExtension` just before its write, and by the CREATE arm
+ * of CourseForm BEFORE `createCourse` touches MSDB. Both must answer
+ * identically or the create flow refuses on a rule the save flow does not, and
+ * the admin learns the difference by hitting it.
+ *
+ * The decision itself is pure and lives in lib/courses/aliasAvailability; this
+ * is only the lookup, exactly as `courseIdConflict` is pure while
+ * `findCourseExtensionCodeInsensitive` does its reading.
+ *
+ * ── A FAILED LOOKUP IS NOT "FREE" ───────────────────────────────────────────
+ * Same ruling as the duplicate-code guard: refusing to answer is not the same
+ * as answering no. The error propagates rather than being swallowed into a
+ * cheerful null, because guessing here costs another course's public URL.
+ *
+ * Exported because this file is 'use server' — every export must be an async
+ * function, which is why the pure half lives in the other module.
+ */
+export async function checkAliasAvailable(alias, courseId) {
+  const wanted = normaliseAlias(alias);
+  if (!wanted) return null; // no custom URL — always allowed (sparse index)
+
+  await dbConnect();
+  const owner = await CourseExtension.findOne({
+    urlAlias: wanted,
+    // Scoped to OTHER courses: re-saving a course's own alias is not a
+    // collision, and this action is an upsert keyed on courseId, so the
+    // overwhelmingly common save is an edit that leaves the alias untouched.
+    courseId: { $ne: courseId },
+  })
+    .select('courseId')
+    .lean();
+
+  return aliasConflict({ alias: wanted, existingCourseId: owner?.courseId ?? null });
+}
+
 /** Admin-only — create or update by `courseId`. */
 export async function saveCourseExtension(courseId, data) {
   const session = await requireAdmin('courses');
@@ -119,7 +159,7 @@ export async function saveCourseExtension(courseId, data) {
     return { ok: false, error: 'Missing courseId' };
   }
 
-  const cleanAlias = normalizeAlias(data?.urlAlias);
+  const cleanAlias = normaliseAlias(data?.urlAlias);
 
   // Normalize gallery — drop empty rows, re-number `order`.
   const galleryRaw = Array.isArray(data?.gallery) ? data.gallery : [];
@@ -177,24 +217,14 @@ export async function saveCourseExtension(courseId, data) {
    * the admin gets a correct but unhelpful "alias already used" with no idea by
    * what. Both, deliberately.
    *
-   * Scoped `courseId: { $ne: courseId }` so re-saving a course's OWN alias is
-   * not a collision — this action is an upsert keyed on courseId, and the
-   * overwhelmingly common save is an edit that leaves the alias untouched.
+   * SAME CHECK THE CREATE ARM RUNS, via the same `checkAliasAvailable`. It is
+   * still needed here even though create now asks first: this action is also
+   * the EDIT path and the create arm's RETRY path, neither of which goes
+   * through that pre-flight, and it is the last thing between the alias and the
+   * write.
    */
-  if (cleanAlias) {
-    const clash = await CourseExtension.findOne({
-      urlAlias: cleanAlias,
-      courseId: { $ne: courseId },
-    })
-      .select('courseId')
-      .lean();
-    if (clash) {
-      return {
-        ok: false,
-        error: `URL Alias นี้ถูกใช้แล้วโดยหลักสูตร ${clash.courseId}`,
-      };
-    }
-  }
+  const clash = await checkAliasAvailable(cleanAlias, courseId);
+  if (clash) return { ok: false, ...clash };
 
   try {
     // `before` from an explicit read rather than `new: false`, because this
