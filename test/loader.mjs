@@ -90,6 +90,29 @@ export async function resolve(specifier, context, nextResolve) {
 }
 
 export async function load(url, context, nextLoad) {
+  // 3. Node requires `with { type: 'json' }` on a JSON import; webpack and every
+  //    other bundler take a bare one, so that is what the app code writes
+  //    (src/lib/address/postcodeIndex.js imports the derived postcode index).
+  //    Adding the attribute to the app module to satisfy Node would be the tail
+  //    wagging the dog — and its support across bundlers is still uneven — so
+  //    the bridge goes here, next to the alias and JSX bridges, for the same
+  //    reason those do. Serving it as a module means the app file stays exactly
+  //    what it would be in any other Next codebase.
+  if (url.startsWith('file:') && url.endsWith('.json')) {
+    const file = fileURLToPath(url);
+    if (file.startsWith(SRC)) {
+      // JSON.parse of a string literal, not an inlined object literal: it is the
+      // faster path for a payload this size and it cannot be mangled by the
+      // source text ever being read as code.
+      const json = readFileSync(file, 'utf8');
+      return {
+        format: 'module',
+        source: `export default JSON.parse(${JSON.stringify(json)});`,
+        shortCircuit: true,
+      };
+    }
+  }
+
   if (url.startsWith('file:') && /\.(jsx|js)$/.test(url)) {
     const file = fileURLToPath(url);
     if (file.startsWith(SRC)) {
