@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { aliasConflict, normaliseAlias } from '@/lib/courses/aliasAvailability';
+import {
+  aliasConflict,
+  normaliseAlias,
+  legacyPathOwner,
+} from '@/lib/courses/aliasAvailability';
 
 /**
  * The alias half of the create flow's duplicate guard — the sibling of
@@ -89,4 +93,141 @@ test('CONTROL: a conflict is only raised by an EXISTING owner, not by the alias 
   // pass every test above.
   assert.equal(aliasConflict({ alias: '/anything', existingCourseId: null }), null);
   assert.equal(aliasConflict({ alias: '/anything' }), null);
+});
+
+// ── G2 (1): a trailing slash is stripped ───────────────────────────────────
+
+test('G2: a trailing slash is stripped, so /x and /x/ are one alias', () => {
+  /**
+   * They are two distinct keys to a unique index, so both would save — while
+   * Next redirects /x/ to /x (trailingSlash unset, default applies), meaning
+   * two rows resolve to ONE final URL and the index sees no conflict.
+   *
+   * Measured behaviour-preserving before the change: zero of the 78 stored rows
+   * carry a trailing slash, so no existing alias changes meaning.
+   */
+  assert.equal(normaliseAlias('/excel-training-course/'), '/excel-training-course');
+  assert.equal(normaliseAlias('excel-training-course/'), '/excel-training-course');
+  assert.equal(normaliseAlias('/excel-training-course///'), '/excel-training-course');
+  assert.equal(
+    normaliseAlias('/x/'),
+    normaliseAlias('/x'),
+    'the two spellings still normalise apart'
+  );
+});
+
+test('G2: "/" alone is no custom URL, not an alias of nothing', () => {
+  // It strips to '', which must read as null — an empty-string alias is a value
+  // and the sparse unique index would let exactly one row hold it.
+  assert.equal(normaliseAlias('/'), null);
+  assert.equal(normaliseAlias('///'), null);
+});
+
+test('G2 CONTROL: an INTERNAL slash is untouched', () => {
+  // Only the trailing one goes. A nested path is a legitimate alias.
+  assert.equal(normaliseAlias('/a/b/c'), '/a/b/c');
+  assert.equal(normaliseAlias('/a/b/c/'), '/a/b/c');
+});
+
+// ── G2 (2): an alias may not shadow a course's derived legacy URL ──────────
+
+const COURSE_IDS = ['POWER-APPS', 'MSE-L1', 'Power_BI', 'COPILOT-STU'];
+
+test('G2: an alias equal to another course\'s legacy URL is refused', () => {
+  const owner = legacyPathOwner({
+    alias: '/power-apps-training-course',
+    courseIds: COURSE_IDS,
+    exceptCourseId: 'MSE-L1',
+  });
+  assert.equal(owner, 'POWER-APPS', 'the shadowed course was not found');
+
+  const c = aliasConflict({ alias: '/power-apps-training-course', legacyOwner: owner });
+  assert.ok(c, 'the shadowing alias was allowed');
+  assert.equal(c.field, 'urlAlias');
+  assert.match(c.error, /POWER-APPS/, 'the refusal does not name the course it would hide');
+});
+
+test('G2: the match is case-insensitive, because the derived path is lowercased', () => {
+  // /POWER-APPS-training-course and /power-apps-training-course are the same
+  // claim on the same course.
+  assert.equal(
+    legacyPathOwner({ alias: '/POWER-APPS-TRAINING-COURSE', courseIds: COURSE_IDS }),
+    'POWER-APPS'
+  );
+});
+
+test('G2: underscores in the course_id become hyphens, as the route derives them', () => {
+  // coursePathFromId turns POWER_BI into /power-bi-training-course; an alias of
+  // that string shadows it just the same.
+  assert.equal(
+    legacyPathOwner({ alias: '/power-bi-training-course', courseIds: COURSE_IDS }),
+    'Power_BI'
+  );
+});
+
+test('G2: a course may hold its OWN legacy path as an alias', () => {
+  // Harmless — both paths resolve to the same course — and refusing it would
+  // reject a perfectly ordinary save.
+  assert.equal(
+    legacyPathOwner({
+      alias: '/power-apps-training-course',
+      courseIds: COURSE_IDS,
+      exceptCourseId: 'POWER-APPS',
+    }),
+    null
+  );
+  // …including when the caller passes a differently-cased id for itself.
+  assert.equal(
+    legacyPathOwner({
+      alias: '/power-apps-training-course',
+      courseIds: COURSE_IDS,
+      exceptCourseId: 'power-apps',
+    }),
+    null
+  );
+});
+
+test('G2: an ordinary alias shadows nothing', () => {
+  assert.equal(
+    legacyPathOwner({ alias: '/excel-for-accountants', courseIds: COURSE_IDS }),
+    null
+  );
+  assert.equal(aliasConflict({ alias: '/excel-for-accountants', legacyOwner: null }), null);
+});
+
+test('G2 CONTROL: a NEAR miss does not count as shadowing', () => {
+  // Exact-except-case on the whole path, not a prefix or a contains.
+  for (const near of [
+    '/power-apps-training',            // truncated
+    '/power-apps-training-courses',    // pluralised
+    '/my-power-apps-training-course',  // prefixed
+  ]) {
+    assert.equal(
+      legacyPathOwner({ alias: near, courseIds: COURSE_IDS }),
+      null,
+      `${near} was treated as shadowing`
+    );
+  }
+});
+
+test('G2: an empty course list shadows nothing, and does not throw', () => {
+  assert.equal(legacyPathOwner({ alias: '/x', courseIds: [] }), null);
+  assert.equal(legacyPathOwner({ alias: '/x' }), null);
+  assert.equal(legacyPathOwner({}), null);
+});
+
+test('G2: a null or blank id in the list is skipped, not crashed on', () => {
+  assert.equal(
+    legacyPathOwner({ alias: '/power-apps-training-course', courseIds: [null, '', undefined, 'POWER-APPS'] }),
+    'POWER-APPS'
+  );
+});
+
+test('G2: both refusals name the owner, and they are different messages', () => {
+  const taken = aliasConflict({ alias: '/x', existingCourseId: 'AAA' });
+  const shadow = aliasConflict({ alias: '/x', legacyOwner: 'BBB' });
+  assert.match(taken.error, /AAA/);
+  assert.match(shadow.error, /BBB/);
+  assert.notEqual(taken.error, shadow.error, 'the two refusals are indistinguishable');
+  assert.equal(taken.field, shadow.field, 'both must attach to the same input');
 });
