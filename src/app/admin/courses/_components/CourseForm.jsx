@@ -560,6 +560,7 @@ export function CourseForm({
      * "success" on a partial save is the one outcome that must be impossible.
      */
     setSaveReport(null);
+    setAliasError(null);
     startTransition(async () => {
       const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
         ok: false,
@@ -600,6 +601,26 @@ export function CourseForm({
         setSavedAt(Date.now());
         return;
       }
+
+      /**
+       * ── BOTH, AND EACH ANSWERS A DIFFERENT QUESTION ────────────────────
+       * On EDIT the two stores are independent and both writes are attempted,
+       * so an alias refusal is not "nothing happened": `updateCourse` ran first
+       * and its half may genuinely have SAVED. The report is the truthful
+       * account of that — which half landed and which did not — and dropping it
+       * in favour of a field error would tell the admin their save failed when
+       * half of it did not.
+       *
+       * But the report alone does not say WHERE to fix it. It renders as a
+       * block about the extension half; the admin still has to work out that
+       * the URL Alias box in the rail is the thing to change. So the field
+       * error goes on too, exactly as it does on create.
+       *
+       * This is deliberately ADDITIVE. The create arm shows only the field
+       * error because on create nothing was written at all, so there is no
+       * partial state to report.
+       */
+      if (extRes?.field === 'urlAlias') setAliasError(extRes.error);
 
       // A PARTIAL save is still dirty. `dirty` is left exactly as it was: the
       // admin has work that did not land, and the one thing worse than

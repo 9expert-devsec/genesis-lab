@@ -20,6 +20,7 @@ import { readSource } from '../sourceScan.mjs';
 
 const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
 const ACTIONS = readSource('src/lib/actions/courses.js');
+const ACTIONS_EXT = readSource('src/lib/actions/course-extensions.js');
 
 /**
  * The create arm of the submit handler.
@@ -275,4 +276,85 @@ test('E2: extOk:false is still reachable — the pre-check has a race the index 
    */
   assert.match(CREATE_ARM, /extOk:\s*false/, 'the partial-create report is gone');
   assert.match(CREATE_ARM, /if \(createdCourse\)/, 'the retry path is gone');
+});
+
+// ── F1: on EDIT, an alias refusal shows BOTH ───────────────────────────────
+
+/**
+ * The edit arm: from its `updateCourse` call to the end of the submit handler.
+ * Bounded by CODE, like CREATE_ARM — `readSource().code` has comments stripped,
+ * so a banner-comment anchor would find nothing and collapse every assertion.
+ */
+const EDIT_ARM = (() => {
+  const start = FORM.code.indexOf('await updateCourse(');
+  assert.notEqual(start, -1, 'the edit arm is gone — has submit been rewritten?');
+  return FORM.code.slice(start);
+})();
+
+test('F1: an alias refusal on EDIT sets the field error AND keeps the report', () => {
+  /**
+   * Both, because each answers a different question. On edit both writes are
+   * attempted and updateCourse runs FIRST, so its half may genuinely have
+   * saved — the report is the truthful account of which half landed, and
+   * dropping it would tell the admin their save failed when half of it did not.
+   * The report does not say WHERE to fix it, which is the field error's job.
+   */
+  assert.match(
+    EDIT_ARM,
+    /if \(extRes\?\.field === 'urlAlias'\) setAliasError\(extRes\.error\)/,
+    'the edit arm does not put an alias refusal on the alias field'
+  );
+  assert.match(EDIT_ARM, /setSaveReport\(outcome\)/, 'the partial-save report was dropped');
+
+  // Ordering: the field error must be set on the way to the report, not inside
+  // a branch that returns before it.
+  const fieldErr = EDIT_ARM.indexOf("setAliasError(extRes.error)");
+  const report = EDIT_ARM.indexOf('setSaveReport(outcome)');
+  assert.ok(fieldErr < report, 'the alias error is set after the report returns');
+});
+
+test('F1: a NON-alias failure on edit produces the report only', () => {
+  // The field error is gated on `field === 'urlAlias'`. An MSDB failure, a
+  // validation error or a courseId duplicate must not put a red message under
+  // the URL Alias box, which would send the admin to the wrong field.
+  assert.ok(
+    !/setAliasError\((?!null)(?!extRes\.error\b)/.test(EDIT_ARM),
+    'something other than an alias refusal can set the alias error'
+  );
+  assert.match(
+    EDIT_ARM,
+    /if \(extRes\?\.field === 'urlAlias'\)/,
+    'the alias error is not gated on the field at all'
+  );
+});
+
+test('F1: the edit arm clears the alias error when a new submit begins', () => {
+  // Same reason as create: a stale refusal sitting under a field the admin has
+  // since fixed is its own bug.
+  const beforeTransition = FORM.code.slice(0, FORM.code.indexOf('await updateCourse('));
+  assert.ok(
+    beforeTransition.lastIndexOf('setAliasError(null)') > beforeTransition.lastIndexOf('setSaveReport(null)') - 200,
+    'the edit path does not reset the alias error'
+  );
+});
+
+test('F1: the CREATE arm still shows only the field error — nothing was written', () => {
+  // Deliberately NOT symmetric. On create a refusal means nothing landed
+  // anywhere, so there is no partial state to report; adding a report there
+  // would invent one.
+  const clashBranch = CREATE_ARM.slice(
+    CREATE_ARM.indexOf('if (aliasClash)'),
+    CREATE_ARM.indexOf('await createCourse(fd)')
+  );
+  assert.notEqual(clashBranch.length, 0, 'the alias-clash branch is gone');
+  assert.match(clashBranch, /setAliasError\(aliasClash\.error\)/);
+  assert.ok(!/setSaveReport\(/.test(clashBranch), 'create now reports a partial save that did not happen');
+});
+
+test('F1: the index-rejection path carries the field too, so both routes look alike', () => {
+  // The race the pre-check cannot close surfaces as E11000 from the unique
+  // index. It must reach the caller shaped like the pre-check's refusal, or the
+  // edit arm would show the field error for one and not the other.
+  assert.match(ACTIONS_EXT.code, /const field = duplicateKeyField\(err\)/);
+  assert.match(ACTIONS_EXT.code, /\.\.\.\(field \? \{ field \} : \{\}\)/);
 });
