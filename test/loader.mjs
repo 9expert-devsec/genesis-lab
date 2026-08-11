@@ -32,7 +32,13 @@ const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SRC = path.join(ROOT, 'src');
 const EXTS = ['.js', '.jsx'];
 
-const STUBS = {
+/**
+ * EXPORTED so test/fs/stubExportParity can compare each stub's export set
+ * against the module it stands in for, reading the mapping from the one place
+ * that defines it. A second copy of this list in the test would be the drift it
+ * exists to catch.
+ */
+export const STUBS = {
   'next/link': path.join(ROOT, 'test', 'stub-next-link.mjs'),
   'next/image': path.join(ROOT, 'test', 'stub-next-image.mjs'),
   // Client components in the render tier call useRouter/useSearchParams during

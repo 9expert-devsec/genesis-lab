@@ -33,3 +33,8 @@ export async function checkAliasAvailable() {
 export async function deleteCourseExtension() {
   throw new Error('stub-course-extension-actions: deleteCourseExtension must not be called');
 }
+
+// Parity with the real module — see test/fs/stubExportParity.
+export async function findCourseExtensionCodeInsensitive() {
+  throw new Error('stub-course-extension-actions: findCourseExtensionCodeInsensitive must not be called');
+}
