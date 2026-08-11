@@ -21,6 +21,7 @@
  *     upstream never wipes out a working snapshot.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import LandingCache from '@/models/LandingCache';
 
@@ -351,6 +352,41 @@ export async function syncLandingData() {
     },
     { upsert: true, new: true }
   );
+
+  /**
+   * REGENERATE THE HOME PAGE. Writing the cache is only half the job.
+   *
+   * `src/app/page.jsx` exports no `revalidate` and no `dynamic`, so `/` is
+   * FULLY STATIC: built once at deploy and refreshed only by an on-demand
+   * `revalidatePath('/')`. Until this line, exactly one of the four callers
+   * that rewrite this cache did that —
+   *
+   *   triggerLandingSync.js:30      revalidated ✓
+   *   api/cron/landing-sync         did not      (every 3h, the main path)
+   *   api/admin/landing/sync        did not      (the admin's "sync now")
+   *   webhooks/handlers.js:110      did not      (MSDB course events)
+   *
+   * — so a cache repaired by the cron never reached a visitor. That is what
+   * kept ค้นหาสิ่งที่คุณสนใจ showing its empty state for hours after the data
+   * behind it was correct: the snapshot said 8 programs, the served HTML was
+   * built when it said none, and nothing existed to reconcile them short of a
+   * deploy.
+   *
+   * Here rather than in each caller because the invariant belongs to the WRITE:
+   * whoever rewrites the snapshot has, by definition, made the built page
+   * stale. Three of four call sites forgetting it is what a shared invariant
+   * spread across call sites looks like.
+   *
+   * Guarded: `revalidatePath` throws outside a request/render scope, and a
+   * failure to regenerate must not fail a sync that has already succeeded —
+   * the next write will try again.
+   */
+  try {
+    revalidatePath('/');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[syncLandingData] revalidatePath("/") skipped:', err?.message ?? err);
+  }
 
   // eslint-disable-next-line no-console
   console.log(`[syncLandingData] status=${status} sections=`, sections);
