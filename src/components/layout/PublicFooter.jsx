@@ -3,7 +3,7 @@ import Link from "next/link";
 import { FaInstagram, FaTiktok, FaLinkedin, FaYoutube } from "react-icons/fa";
 import { TbBrandShopee } from "react-icons/tb";
 import { Logo } from "@/components/brand/Logo";
-import { siteConfig, footerNav } from "@/config/site";
+import { siteConfig, footerNav, policyNav } from "@/config/site";
 
 const SOCIALS = [
   {
@@ -143,10 +143,41 @@ export function PublicFooter() {
 
       {/* Bottom bar */}
       <div className="border-t border-[#E2E8F0] dark:border-[#1e3a5f]">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-2 px-4 py-4 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
-          <p>
-            © {year} {siteConfig.nameFull}. All rights reserved.
-          </p>
+        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
+          <div className="flex flex-col items-center gap-2 sm:items-start">
+            <p>
+              {/*
+                The glyph alone is a step larger than the line it sits in — at
+                12px the © renders as a smudge in most faces. `leading-none`
+                keeps the taller glyph from growing the line box, and the small
+                negative baseline shift re-centres it against the text now that
+                it no longer matches their cap height.
+              */}
+              <span className="align-[-0.055em] text-sm leading-none">©</span>{" "}
+              {year} {siteConfig.nameFull}. All rights reserved.
+            </p>
+
+            <nav aria-label="นโยบายและข้อกำหนด">
+              <ul className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 sm:justify-start">
+                {policyNav.map((item, i) => (
+                  <li key={item.href} className="flex items-center gap-2">
+                    {i > 0 && (
+                      <span aria-hidden="true" className="text-9e-slate-dp-300 dark:text-[#475569]">
+                        ·
+                      </span>
+                    )}
+                    <Link
+                      href={item.href}
+                      className="transition-colors hover:text-9e-action dark:hover:text-[#48B0FF]"
+                    >
+                      {item.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          </div>
+
           <p>
             {siteConfig.tagline} ·{" "}
             <span className="text-9e-action dark:text-[#48B0FF]">
