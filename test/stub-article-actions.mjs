@@ -32,3 +32,13 @@ export async function searchArticles()           { return []; }
 export async function createArticle()            { return { ok: false, error: 'stubbed' }; }
 export async function updateArticle()            { return { ok: false, error: 'stubbed' }; }
 export async function getFeaturedArticlesForLanding() { return []; }
+
+/**
+ * Added when test/fs/stubExportParity started asserting set equality against
+ * the real module. LATENT gaps, not live ones: nothing in the render tier
+ * imports these today, so nothing was failing — but the first component that
+ * did would have failed to LINK, taking its whole file to zero tests.
+ */
+export async function listUsedArticleSkillIds() { return []; }
+export async function getArticleBySlug()        { return null; }
+export async function getPinCapacity()          { return null; }

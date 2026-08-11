@@ -20,3 +20,10 @@ export async function updateCourse() {
 export async function deleteCourse() {
   throw new Error('stub-course-actions: deleteCourse must not be called in a render test');
 }
+
+// Parity with the real module — see test/fs/stubExportParity. Throws rather
+// than returning a benign value, matching the rest of this file: a render test
+// that reaches a duplicate-code lookup should fail loudly, not quietly agree.
+export async function findCourseCodeInsensitive() {
+  throw new Error('stub-course-actions: findCourseCodeInsensitive must not be called in a render test');
+}
