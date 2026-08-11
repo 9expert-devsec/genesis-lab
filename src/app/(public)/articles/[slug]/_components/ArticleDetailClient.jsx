@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
+import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { ArticleImageLightbox } from './ArticleImageLightbox';
 
 /**
@@ -772,8 +773,11 @@ function RelatedCourseCard({ course }) {
           ) : (
             <span />
           )}
-          <span className="text-sm font-bold text-9e-navy dark:text-white">
-            {!price ? 'Call .-' : `${price.toLocaleString('th-TH')} .-`}
+          {/* Same treatment as the catalog card this block was copied from:
+              nowrap on the label, and the enclosing row is `flex-wrap` so a
+              narrow related-course card wraps the ROW rather than the words. */}
+          <span className="whitespace-nowrap text-sm font-bold text-9e-navy dark:text-white">
+            {coursePriceLabel(price, { suffix: '.-' })}
           </span>
         </div>
 

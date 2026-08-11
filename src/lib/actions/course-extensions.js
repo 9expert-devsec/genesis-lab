@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
 import { requireAdmin } from '@/lib/actions/auth';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_PATH = '/admin/courses';
 
@@ -39,6 +40,31 @@ export async function getCourseExtension(courseId) {
   await dbConnect();
   const doc = await CourseExtension.findOne({ courseId }).lean();
   return serialize(doc);
+}
+
+/**
+ * The stored `courseId` matching this code IGNORING CASE, or null.
+ *
+ * Used by the create flow's duplicate guard. `getCourseExtension` is an exact
+ * match, which would let a new "MSE-L1" be created next to an existing "mse-l1"
+ * — two courses one keystroke apart sharing one extension row, where saving
+ * either overwrites the other's SEO and gallery.
+ *
+ * Returns the STORED spelling, not the queried one, so the caller can show the
+ * admin the casing they actually collided with. Anchored and escaped: a code
+ * is user input and `.` is a live regex metacharacter.
+ */
+export async function findCourseExtensionCodeInsensitive(code) {
+  const wanted = String(code ?? '').trim();
+  if (!wanted) return null;
+  await dbConnect();
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const doc = await CourseExtension.findOne({
+    courseId: { $regex: `^${escaped}$`, $options: 'i' },
+  })
+    .select('courseId')
+    .lean();
+  return doc?.courseId ?? null;
 }
 
 /** Fetch a single extension by its `urlAlias` (with or without leading slash). */

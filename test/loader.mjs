@@ -54,6 +54,13 @@ const STUBS = {
   // save/delete handlers; that chain reaches next-auth → next/headers. Same
   // reasoning as the two lines above.
   '@/lib/actions/registrations': path.join(ROOT, 'test', 'stub-registration-actions.mjs'),
+  // CourseForm imports the course + extension server actions for its save
+  // handler; both chains reach next-auth → next/headers (and mongoose). Same
+  // reasoning as the three lines above.
+  '@/lib/actions/courses': path.join(ROOT, 'test', 'stub-course-actions.mjs'),
+  '@/lib/actions/course-extensions': path.join(ROOT, 'test', 'stub-course-extension-actions.mjs'),
+  // Reached indirectly, via CourseOutlineUpload inside CourseForm.
+  '@/lib/actions/course-outlines': path.join(ROOT, 'test', 'stub-course-outline-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);

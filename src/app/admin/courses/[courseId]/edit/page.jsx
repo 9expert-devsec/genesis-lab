@@ -3,6 +3,8 @@ import { requirePage } from '@/lib/rbac/guard';
 import { aiFetch, unwrap } from '@/lib/api/client';
 import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
+import { getCourseExtension } from '@/lib/actions/course-extensions';
+import { courseListQuery } from '@/lib/courses/adminListQuery';
 import { CourseForm } from '../../_components/CourseForm';
 
 export const metadata = {
@@ -19,11 +21,14 @@ export const dynamic = 'force-dynamic';
  * but the routes are disjoint (`/edit` suffix vs. bare), so they
  * don't actually collide.
  */
-export default async function EditCoursePage({ params }) {
+export default async function EditCoursePage({ params, searchParams }) {
   await requirePage('courses');
 
   const { courseId } = await params;
   const id = decodeURIComponent(courseId);
+  // The list's filter state, arriving on the URL the list linked to. Passed
+  // down so this page's ← control can put the admin back where they were.
+  const listQuery = courseListQuery(await searchParams);
 
   // Fetch the course by upstream Mongo _id. The dedicated detail path
   // doesn't exist on MSDB so we filter listPublicCourses() and match
@@ -50,15 +55,35 @@ export default async function EditCoursePage({ params }) {
   const skills   = skillsRes.status   === 'fulfilled' ? skillsRes.value.items   ?? [] : [];
   const programs = programsRes.status === 'fulfilled' ? programsRes.value.items ?? [] : [];
 
+  /**
+   * The SEO / alias / gallery half of the editor, from the genesis-side
+   * `course_extensions` collection.
+   *
+   * KEYED BY THE CODE, NOT THE _id THIS ROUTE TAKES. `params.courseId` here is
+   * the MSDB ObjectId (the list's แก้ไข button passes it); CourseExtension is
+   * keyed on `course_id` — "MSE-L1". So the lookup goes through the course we
+   * just fetched, never through the route param. Getting that backwards returns
+   * null forever and the rail would silently render empty on every course.
+   *
+   * `null` is a normal result: a course that has never had SEO set has no
+   * extension row, and `saveCourseExtension` upserts one on first save.
+   */
+  let extension = null;
+  try {
+    extension = await getCourseExtension(course.course_id);
+  } catch (err) {
+    console.error('[admin/courses/edit] extension read failed', err?.message);
+  }
+
   return (
-    <div className="mx-auto max-w-4xl">
-      <CourseForm
-        mode="edit"
-        initial={course}
-        skills={skills}
-        programs={programs}
-        allCourses={allCourses}
-      />
-    </div>
+    <CourseForm
+      mode="edit"
+      initial={course}
+      skills={skills}
+      programs={programs}
+      allCourses={allCourses}
+      extension={extension}
+      listQuery={listQuery}
+    />
   );
 }

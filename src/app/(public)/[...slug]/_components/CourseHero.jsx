@@ -4,6 +4,7 @@ import { useState, useEffect, useId, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Award, Clock, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
+import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
 
 /**
  * Hero for the course detail page.
@@ -53,8 +54,10 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
     course.course_id
   ).toLowerCase()}`;
 
-  // course_price === 0 means inhouse-only (no public schedule, no public price)
-  const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+  // course_price === 0 means inhouse-only (no public schedule, no public price).
+  // Shared predicate so this page's price line, the catalog table's cell and
+  // /schedule's column cannot disagree about what counts as priceless.
+  const isInhouseOnly = isInhouseOnlyPrice(course.course_price);
 
   const inhouseHref = `/registration/in-house?course=${String(course.course_id).toLowerCase()}`;
 
@@ -164,25 +167,51 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-2">
-                {course.course_type_public && (
-                  <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
-                    Classroom
-                  </span>
-                )}
-                <span className="rounded-full border border-purple-400 bg-white px-3 py-1 text-xs font-bold text-purple-600">
-                  Hybrid
-                </span>
-                {course.course_type_inhouse && (
-                  <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
-                    Inhouse
-                  </span>
-                )}
-              </div>
+              {/* COURSE TYPE, from the two flags the admin actually edits.
+                  Both may be true — 49 of the 77 upstream courses are, MSE-L1
+                  among them — so this is two independent pills, not a choice.
+
+                  The whole block is conditional rather than just its children:
+                  an empty flex row still renders its `mb-4`, so a course with
+                  neither flag would leave a 16px ghost gap under the duration
+                  line. No such course exists upstream today (0 of 77), but
+                  9fd1a85 made unchecking Public actually save, so it is now
+                  reachable by an admin edit rather than impossible.
+
+                  NOT a delivery format. `Classroom` / `Hybrid` on /schedule and
+                  in search results come from a schedule's `type` and mean where
+                  a ROUND is held; these two mean who a COURSE is sold to. The
+                  old markup blurred them — it labelled `course_type_public` as
+                  "Classroom" and rendered "Hybrid" as an unconditional literal
+                  tied to no field at all. */}
+              {(course.course_type_public || course.course_type_inhouse) && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {course.course_type_public && (
+                    <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
+                      Public
+                    </span>
+                  )}
+                  {course.course_type_inhouse && (
+                    <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
+                      Inhouse
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
-                  <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">Call</span>
+                  /* The widest slot the label has to fit: 3xl extrabold, and
+                     the only surface where it is the headline rather than a
+                     figure in a row. It holds — ~200px against a 360px viewport
+                     less the card's padding — but only as one line, so the
+                     break is disallowed explicitly rather than left to luck.
+                     The Thai gloss underneath (*รับเฉพาะ InHouse Training
+                     เท่านั้น) already carries the full explanation, so the
+                     label does not have to grow to say more. */
+                  <span className="whitespace-nowrap text-3xl font-extrabold text-9e-action dark:text-9e-air">
+                    {INHOUSE_ONLY_LABEL}
+                  </span>
                 ) : (
                   <>
                     <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">

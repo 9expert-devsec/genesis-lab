@@ -1,7 +1,10 @@
 import { notFound, permanentRedirect } from 'next/navigation';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
-import { listSchedulesByCourse } from '@/lib/api/schedules';
+import {
+  PUBLIC_SCHEDULE_STATUSES,
+  listSchedulesByCourse,
+} from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
 import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
@@ -511,7 +514,13 @@ export default async function CatchAllPage({ params, searchParams }) {
       skillsRes, linkabilityRes,
     ] =
       await Promise.allSettled([
-        listSchedulesByCourse(course._id, { limit: 10 }),
+        // All three statuses — the detail page's ตารางอบรม block is where a
+        // buyer decides; a round that is full is information, not noise, and
+        // hiding it makes the course look like it simply has fewer dates.
+        listSchedulesByCourse(course._id, {
+          limit: 10,
+          status: PUBLIC_SCHEDULE_STATUSES,
+        }),
         listPrograms(),
         getEarlyBirdByCourse(course.course_id),
         getActiveCoursePromos(course.course_id),

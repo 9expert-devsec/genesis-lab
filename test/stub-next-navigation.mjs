@@ -3,7 +3,13 @@
 export const useRouter = () => ({
   push() {}, replace() {}, refresh() {}, back() {}, forward() {}, prefetch() {},
 });
-export const usePathname = () => '/';
+// The pathname is SETTABLE because at least one component under test branches
+// on it: AdminContentWrapper decides whether a route manages its own full
+// height. A guard on that has to drive the real matcher with real paths rather
+// than re-implement the pattern in the test, which would assert nothing.
+let pathname = '/';
+export function __setPathname(next) { pathname = next ?? '/'; }
+export const usePathname = () => pathname;
 export const useSearchParams = () => new URLSearchParams();
 export const useParams = () => ({});
 export const useSelectedLayoutSegment = () => null;

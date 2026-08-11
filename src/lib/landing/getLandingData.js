@@ -35,7 +35,10 @@ export async function getLandingData() {
     if (!cache?.data) {
       // eslint-disable-next-line no-console
       console.warn('[getLandingData] no cache present — returning empty defaults');
-      return { ...DEFAULT_DATA, _meta: { status: 'missing', syncedAt: null } };
+      return {
+        ...DEFAULT_DATA,
+        _meta: { status: 'missing', syncedAt: null, snapshotAvailable: false },
+      };
     }
 
     if (cache.schemaVersion !== CURRENT_SCHEMA_VERSION) {
@@ -50,6 +53,7 @@ export async function getLandingData() {
         _meta: {
           status: 'schema_mismatch',
           syncedAt: cache.syncedAt ?? null,
+          snapshotAvailable: false,
         },
       };
     }
@@ -60,11 +64,17 @@ export async function getLandingData() {
       _meta: {
         status: cache.status ?? 'unknown',
         syncedAt: cache.syncedAt ?? null,
+        // A snapshot was read. Its sections may still be empty, but that is an
+        // answer, not a failure — see snapshotAvailable's note above.
+        snapshotAvailable: true,
       },
     };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('[getLandingData] read failed:', err?.message ?? err);
-    return { ...DEFAULT_DATA, _meta: { status: 'error', syncedAt: null } };
+    return {
+      ...DEFAULT_DATA,
+      _meta: { status: 'error', syncedAt: null, snapshotAvailable: false },
+    };
   }
 }

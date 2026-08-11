@@ -290,7 +290,11 @@ export async function updateRegistration(id, data, source = 'public') {
       }
     }
     if (data.notes !== undefined) {
-      update.notes = String(data.notes ?? '').trim().slice(0, 500) || undefined;
+      // The `!== undefined` guard above already draws the line this file cares
+      // about: a caller that did not mention `notes` never reaches here, so the
+      // field is left alone. Once inside, the value is a deliberate one — and
+      // `|| undefined` threw that away again, making "clear the note" a no-op.
+      update.notes = String(data.notes ?? '').trim().slice(0, 500);
     }
   }
 

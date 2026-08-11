@@ -313,9 +313,13 @@ test('CONTROL: the confirm button DOES appear once a round is picked without one
   // The pre-change behaviour, reproduced by hand: a resolved round with the form
   // still shut. StepForm no longer produces this from a URL round, so it is
   // asserted against the component's own gate rather than a prop combination.
+  // The gate gained a second clause when full rounds started arriving here
+  // (`!activeRoundIsFull` — there is nothing to confirm about a sold-out
+  // round). `!formRevealed` is the part this test is about and it is still
+  // what leads the condition, so the probe is widened rather than deleted.
   assert.ok(
     readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8')
-      .includes('{!formRevealed && ('),
+      .includes('{!formRevealed && !activeRoundIsFull && ('),
     'the confirm button is still gated on !formRevealed, not deleted'
   );
 });

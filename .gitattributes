@@ -1,0 +1,75 @@
+# Line endings and binary classification.
+#
+# WHY THIS FILE EXISTS
+# Without it, every clone decides line endings from its own core.autocrlf, so
+# the same file is text on one machine and something else on the next, and a
+# checkout on Windows can produce a whole-file diff nobody edited. The index is
+# currently LF throughout (verified with `git ls-files --eol`); this pins that
+# so it stays true regardless of any individual machine's git config.
+#
+# NOTHING IS RENORMALISED BY ADDING THIS FILE. These rules apply as files are
+# next written or checked out. Run `git add --renormalize .` deliberately, on a
+# quiet tree, when you want the existing content converted.
+
+# ── default ─────────────────────────────────────────────────────────────────
+# `text=auto` lets git DETECT: content with NUL bytes is left binary and never
+# EOL-converted. That auto-detection is load-bearing here and is the reason the
+# source extensions below are not force-marked `text` — see the note further
+# down about .mjs.
+* text=auto
+
+# ── source and config: text, normalised to LF in the repository ─────────────
+# eol= is deliberately NOT set, so the working tree still follows the local
+# core.autocrlf (currently `true` on this machine, i.e. CRLF on checkout).
+# Forcing eol=lf here would mark every one of the ~880 CRLF working-tree files
+# as modified on sight, which is exactly the phantom diff this file is meant to
+# end.
+*.js     text
+*.jsx    text
+*.cjs    text
+*.json   text
+*.css    text
+*.md     text
+*.yml    text
+*.yaml   text
+*.txt    text
+*.svg    text
+*.example text
+.gitignore text
+.gitattributes text
+
+# ── .mjs IS DELIBERATELY ABSENT FROM THE LIST ABOVE ─────────────────────────
+# Three tracked .mjs files contain a literal NUL byte, used as a field
+# separator inside a composite-key template string:
+#
+#   scripts/audit-orphan-registrations.mjs
+#   scripts/lib/legacy-source-manifest.mjs
+#   scripts/rewrite-legacy-references.mjs
+#
+# git already classifies all three as binary (`git ls-files --eol` reports
+# i/-text w/-text) and therefore leaves their bytes alone. Writing `*.mjs text`
+# would OVERRIDE that detection and subject those three to EOL conversion —
+# rewriting files whose exact bytes are currently being relied on. `* text=auto`
+# above already covers the other ~219 .mjs files correctly.
+#
+# If the NUL bytes are ever replaced (U+241F renders the same intent and greps
+# cleanly), these files become ordinary text and `*.mjs text` can be added.
+
+# ── binary: never EOL-converted, never diffed as text ───────────────────────
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.ico    binary
+*.ttf    binary
+*.woff   binary
+*.woff2  binary
+*.pdf    binary
+*.zip    binary
+*.xlsx   binary
+
+# ── generated ───────────────────────────────────────────────────────────────
+# Collapsed in diffs and excluded from language stats; still tracked, still
+# merged normally.
+package-lock.json linguist-generated=true

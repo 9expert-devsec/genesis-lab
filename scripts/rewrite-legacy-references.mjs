@@ -69,7 +69,7 @@ import {
   MAX_DEPTH, decodePath, extractLegacyUrls, toPath, walkStrings,
 } from './lib/legacy-url-extract.mjs';
 import {
-  CLASS, REWRITING_CLASSES, applyEdits, decideReference,
+  CLASS, ENCODING_GATE, REWRITING_CLASSES, applyEdits, decideReference, encodingGate,
 } from './lib/legacy-reference-rewrite.mjs';
 import { REVERT, decideRevert, verifyReverted } from './lib/legacy-reference-revert.mjs';
 import { APPENDED_FORMATS, IMAGE_EXTENSIONS } from '../src/lib/legacyTransforms.mjs';
@@ -102,6 +102,16 @@ const BATCH_SIZE = 200;
 const BACKUP_COLLECTION = argOf('--backup-collection', 'legacy_reference_rewrites');
 
 function die(msg) { console.error(`✖ ${msg}`); process.exit(1); }
+
+/**
+ * A condition worth an operator's attention that is NOT a reason to stop.
+ *
+ * Collected as well as printed: a run prints several hundred lines of report,
+ * so a warning emitted at startup and never mentioned again is functionally
+ * silent by the time anyone reads the interesting part.
+ */
+const warnings = [];
+function warn(msg) { warnings.push(msg); console.warn(`⚠ ${msg}`); }
 
 const pad = (s, n) => String(s ?? '').padEnd(n);
 const padL = (s, n) => String(s ?? '').padStart(n);
@@ -446,11 +456,45 @@ async function main() {
   for (const r of await migrations.find({ status: 'superseded' }, { projection: { sourcePath: 1, supersededBy: 1 } }).toArray()) {
     if (r.sourcePath && r.supersededBy) supersededBy.set(r.sourcePath, r.supersededBy);
   }
-  // The superseded replacement is the ONE decoded value written back. If it
-  // ever contains a character that would need encoding, that assumption breaks.
+  // ── the ONE decoded value written back, and where its guarantee belongs ───
+  //
+  // The superseded replacement is the only case where a DECODED path is written
+  // back into content, and it is safe only while that path is plain ASCII. That
+  // has to be guaranteed. The question is WHERE.
+  //
+  // ══ WHY THIS IS NO LONGER A STARTUP ASSERTION ══════════════════════════════
+  //
+  // It used to die here, over the whole superseded map. That made a row that can
+  // never produce a rewrite able to halt the entire run — and one does: the
+  // `Build AI Multi-Agent with Claude Code.webp` cover has literal spaces in its
+  // replacement, and its only references in the database are inside
+  // legacy_file_migrations, which is an EXCLUDED collection. It cannot reach a
+  // write, so it was stopping the run over a value the run would never use.
+  //
+  // The fix is not to delete the guard, to special-case that row, or to start
+  // encoding (this script does not encode; whether it should is a separate
+  // correctness question). It is to SPLIT THE GUARD BY REACHABILITY:
+  //
+  //   HERE, at load     — a warning that NAMES the row. The operator learns
+  //                       about it up front, before anything scrolls past.
+  //   AT THE WRITE      — a hard die, at the exact point a superseded
+  //                       replacement becomes an actual edit.
+  //
+  // The guarantee therefore stays exactly where the value gets written, which is
+  // the only place it was ever really needed, and the run is no longer hostage
+  // to rows that are unreachable by construction.
+  //
+  // The warning is deliberately not silenced for unreachable rows: this repo
+  // treats an unreachable branch that fires as a SIGNAL, not noise (cf. the
+  // `pinTie` tripwire in src/lib/articleRank.js, kept precisely because the
+  // condition it reports should not be happening). If one of these rows ever
+  // starts being referenced in rewritable content, the warning is the notice
+  // that arrives BEFORE the die.
   for (const [from, to] of supersededBy) {
-    if (encodeURI(to) !== to) {
-      die(`superseded replacement needs encoding, which this script does not do: ${from} → ${to}`);
+    if (encodingGate({ phase: 'load', cls: CLASS.SUPERSEDED, replacement: to }) === ENCODING_GATE.WARN) {
+      warn(`superseded replacement would need encoding, which this script does not do: ${from} → ${to}`);
+      warn('   not fatal here — it only matters if that path is referenced in a REWRITABLE collection.');
+      warn('   If it ever is, this run dies at the write point rather than storing an unencoded value.');
     }
   }
 
@@ -562,6 +606,30 @@ async function main() {
           if (!REWRITING_CLASSES.has(result.cls) || result.replacement === null) {
             refsUnchanged += 1;
             continue;
+          }
+
+          // ── THE ENCODING GUARANTEE, AT THE POINT THE VALUE IS WRITTEN ─────
+          //
+          // Past the guard above, this reference IS going to be rewritten. The
+          // superseded class is the one that writes back a DECODED path taken
+          // from the migration record, so this is the moment — and the only
+          // moment — at which "the replacement is plain ASCII" has to be true.
+          //
+          // Loud and fatal on purpose. Storing a path with literal spaces in it
+          // would produce a URL that is wrong in a way nothing downstream would
+          // report: it would not throw, it would just quietly 404. Refusing here
+          // costs one halted dry run; not refusing costs a broken reference
+          // nobody notices until a customer does.
+          if (encodingGate({
+            phase: 'write', cls: result.cls, replacement: result.replacement,
+          }) === ENCODING_GATE.DIE) {
+            die(
+              'superseded replacement needs encoding, which this script does not do — '
+              + `and it is about to be WRITTEN: ${hit.url} → ${result.replacement}\n`
+              + `   at ${name} _id=${doc._id} ${fieldPath}\n`
+              + '   This was warned about at startup as unreachable. It is now reachable, '
+              + 'so the assumption that decoded paths are ASCII no longer holds.',
+            );
           }
 
           // IDEMPOTENCE, proven rather than claimed: the replacement must
@@ -821,6 +889,10 @@ async function main() {
   if (stats.depthTruncations) {
     console.log(`  ⚠ ${stats.depthTruncations} document subtrees deeper than ${MAX_DEPTH} were not walked.`);
   }
+  // Restated here because they were printed before several hundred lines of
+  // report. A warning nobody scrolls back to is a warning that was not given.
+  console.log(`  warnings    : ${warnings.length === 0 ? '✓ none' : `⚠ ${warnings.length}, restated below`}`);
+  for (const w of warnings) console.log(`      ${w.trim()}`);
   console.log('');
 
   const stale = (Date.now() - Date.parse(liveness.generatedAt)) / 86_400_000;

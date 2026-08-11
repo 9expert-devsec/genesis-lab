@@ -22,6 +22,11 @@ import {
 } from "lucide-react";
 import { courseHref } from "@/lib/utils";
 import {
+  INHOUSE_ONLY_LABEL,
+  coursePriceLabel,
+  isInhouseOnlyPrice,
+} from "@/lib/coursePriceLabel";
+import {
   SCHEDULE_STATUS_OPTIONS,
   resolveScheduleBadge,
 } from "@/lib/scheduleStatus";
@@ -172,13 +177,19 @@ function formatCardDateLabel(scheduleItem) {
  * private function of this file. See that module for why `&class=` matters.
  */
 
-/** `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows. */
+/**
+ * `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows.
+ *
+ * The wording and the no-price branch now come from lib/coursePriceLabel; this
+ * stays as the course→price adapter (the shared helper takes a price, not a
+ * course) and as the one place that knows this page's unit is `฿`. Note the
+ * unit is passed as `suffix` and therefore reaches numbers only — "Inhouse
+ * Only ฿" is not a string this function can produce.
+ */
 function formatCoursePrice(course, { withUnit = false } = {}) {
-  const raw = course?.course_price;
-  const n = Number(raw);
-  if (!raw || Number.isNaN(n)) return "Call";
-  const text = n.toLocaleString("th-TH");
-  return withUnit ? `${text} ฿` : text;
+  return coursePriceLabel(course?.course_price, {
+    suffix: withUnit ? "฿" : "",
+  });
 }
 
 /** `'2'`, or `'2 วัน'` with the unit the mobile card shows. */
@@ -1051,7 +1062,48 @@ const FROZEN_CELLS = {
     thClass: "px-3 text-center",
     tdClass:
       "px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:text-white",
-    cell: (c) => formatCoursePrice(c),
+    /**
+     * THE ONE CELL WHERE THE LABEL IS BROKEN ON PURPOSE.
+     *
+     * This column is frozen at 100px (FROZEN_COLUMNS in
+     * lib/schedule/scheduleTableLayout) and spends 24 of them on `px-3`, so the
+     * text box is 76px — and "Inhouse Only" at text-xs measures ~75. Left to
+     * `white-space: normal` the browser is free to fit it on one line or break
+     * it, and which one you get depends on the resolved font metrics: the same
+     * table renders one line on one machine and two on the next, and flips
+     * mid-session when a webfont finishes loading.
+     *
+     * Two block children make the break a fact of the markup instead of an
+     * accident of measurement. Same words, same order, centred by the cell's
+     * own `text-center`, and `leading-tight` keeps the two lines inside the
+     * row's existing rhythm rather than growing it.
+     *
+     * SPLIT FROM THE CONSTANT, NOT RETYPED — the words still live in exactly
+     * one place (lib/coursePriceLabel), which is the property the whole label
+     * refactor exists to hold. Retyping "Inhouse" and "Only" here would put an
+     * eighth copy back three commits after seven were removed.
+     *
+     * NUMBERS ARE UNTOUCHED and stay on one line: the widest realistic price
+     * ("199,000" at 7 glyphs, ~44px) is comfortably inside 76px, and the cell
+     * has no fixed height — only `py-2` — so nothing is clipped either way.
+     *
+     * Geometry is deliberately NOT the fix here. Widening the column to 130
+     * would also work and is a one-number edit by design, but it moves
+     * FROZEN_TOTAL 640 → 670 and the sticky offsets with it, which is a
+     * different change with its own guards.
+     */
+    cell: (c) =>
+      isInhouseOnlyPrice(c?.course_price) ? (
+        <span className="block leading-tight">
+          {INHOUSE_ONLY_LABEL.split(" ").map((word) => (
+            <span key={word} className="block">
+              {word}
+            </span>
+          ))}
+        </span>
+      ) : (
+        formatCoursePrice(c)
+      ),
   },
 };
 
@@ -1683,7 +1735,16 @@ function RoundRow({ schedule, courseId, isEarlyBird = false }) {
           {inner}
         </a>
       ) : (
-        <span className={ROUND_ROW_SURFACE}>{inner}</span>
+        /* No anchor at all, so there is nothing to tap and nothing to focus —
+           the row is inert in fact, not merely in appearance. `aria-disabled`
+           says so out loud for a screen reader, which would otherwise read a
+           plain <span> as ordinary text and give no hint why this round reads
+           differently from its neighbours. The `active:` press state and the
+           chevron are both absent above for the same reason: nothing should
+           promise a destination that does not exist. */
+        <span aria-disabled="true" className={ROUND_ROW_SURFACE}>
+          {inner}
+        </span>
       )}
     </li>
   );
@@ -1745,8 +1806,17 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
   );
 
   if (!href) {
+    // Same contract as RoundRow's inert branch: no anchor, so no navigation
+    // and no focus stop, and `aria-disabled` to say why. Note the cell also
+    // loses `group`, which is what the date's `group-hover:text-9e-action`
+    // hangs off — so a full round does not light up blue on hover either.
     return (
-      <span className="relative block overflow-hidden rounded-sm">{inner}</span>
+      <span
+        aria-disabled="true"
+        className="relative block overflow-hidden rounded-sm"
+      >
+        {inner}
+      </span>
     );
   }
   return (

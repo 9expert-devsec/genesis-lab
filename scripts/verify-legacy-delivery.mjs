@@ -638,12 +638,16 @@ for (const row of set.others) {
     legacy: r1.legacyDelivery, contentType: r1.contentType, cacheControl: r1.cacheControl, raw: [r1, r2] });
 }
 
-/* THE THREE WEBROOT PDFs — EXPECTED INERT.
- * BLOB_PUBLIC_BASE is unset, so next.config emits no rewrite for these. A 404
- * is the CORRECT answer and confirms nothing points at an undefined origin.
- * A 200 would mean a store was provisioned; anything else means a catch-all
- * rule is matching at the site root, which is the dangerous failure. */
-console.log('\n── WEBROOT PDFs (expected inert — BLOB_PUBLIC_BASE unset) ──');
+/* THE THREE WEBROOT PDFs — EXPECTED TO SERVE.
+ * BLOB_PUBLIC_BASE is set, so next.config emits the three hand-written webroot
+ * rules and these URLs resolve to the Blob store. A 200 whose body begins
+ * %PDF- is the PASS, and the magic-byte check is the point: a 200 carrying an
+ * HTML error page would be the worst of both.
+ * A 404 is still ACCEPTED rather than failed — not as the expected answer but
+ * as the pre-Blob one, meaning this particular deployment emitted no rewrite.
+ * That is inert, not broken. Anything else means a catch-all rule is matching
+ * at the site root, which is the dangerous failure. */
+console.log('\n── WEBROOT PDFs (BLOB_PUBLIC_BASE set — expect 200 %PDF-) ──');
 for (const file of ['how-to-create-chatgpt-account.pdf', '9expert-company-profile.pdf', '9expert-training-course-catalog.pdf']) {
   const url = `${ORIGIN}/${file}`;
   const r = await probe(url);

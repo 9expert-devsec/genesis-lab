@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Check, ArrowRight, Clock, FileText } from "lucide-react";
 import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
+import { coursePriceLabel } from "@/lib/coursePriceLabel";
 
 function Breadcrumb({ title }) {
   return (
@@ -220,10 +221,13 @@ function CourseSnapCard({ snap, externalName, externalUrl, note }) {
             {snap.days ? `${snap.days} วัน` : "—"}
             {snap.hours ? ` (${snap.hours} ชม.)` : ""}
           </span>
-          <span className="text-sm font-bold text-[var(--text-primary)]">
-            {!snap.price || Number(snap.price) === 0
-              ? "Call .-"
-              : `${Number(snap.price).toLocaleString("th-TH")} .-`}
+          {/* This row is `justify-between` WITHOUT flex-wrap, so it cannot
+              relieve pressure by wrapping the way the catalog card's does. The
+              price keeps `whitespace-nowrap` and the duration beside it is the
+              flexible half — losing a character off "(6 ชม.)" is recoverable,
+              a label broken across two lines is not. */}
+          <span className="whitespace-nowrap text-sm font-bold text-[var(--text-primary)]">
+            {coursePriceLabel(snap.price, { suffix: ".-" })}
           </span>
         </div>
         {note && (
