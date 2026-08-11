@@ -185,3 +185,94 @@ test('the create redirect sets leavingRef, or the guard blocks its own navigatio
     'the guard will intercept the post-create redirect'
   );
 });
+
+// ── E1: the ALIAS check joined the code check, ahead of the MSDB write ──────
+
+const RAIL = readSource('src/app/admin/courses/_components/CourseSeoRail.jsx');
+
+test('E1: the alias is checked BEFORE createCourse, not after', () => {
+  /**
+   * It used to be checked inside saveCourseExtension — i.e. after createCourse
+   * had already written to MSDB — so a clashing alias left a real course
+   * upstream with no extension row. The duplicate-CODE guard has always refused
+   * before writing anything; an alias clash is the same kind of refusal and now
+   * behaves the same way. Consistency was the reason, not the saved round trip.
+   */
+  const aliasCheck = CREATE_ARM.indexOf('await checkAliasAvailable(');
+  const created = CREATE_ARM.indexOf('await createCourse(fd)');
+  assert.notEqual(aliasCheck, -1, 'the alias pre-check is gone from the create arm');
+  assert.notEqual(created, -1, 'createCourse is no longer called');
+  assert.ok(
+    aliasCheck < created,
+    'the alias is checked after the course is created — the partial-create path is the ordinary route again'
+  );
+});
+
+test('E1: a clashing alias returns before createCourse runs', () => {
+  // Not merely checked first — it must LEAVE. A check whose result is ignored
+  // is the same bug with extra steps.
+  assert.match(
+    CREATE_ARM,
+    /if \(aliasClash\) \{[\s\S]{0,400}?return;\s*\}/,
+    'a clashing alias falls through to createCourse anyway'
+  );
+});
+
+test('E1: a failed alias lookup refuses the create, same ruling as the code guard', () => {
+  // Refusing to answer is not answering no. Waving it through to be caught by
+  // the unique index later would re-create the partial-create it just removed.
+  assert.match(
+    CREATE_ARM,
+    /checkAliasAvailable\([\s\S]{0,120}?\.catch\(/,
+    'a thrown lookup is not handled at the call site'
+  );
+  assert.match(CREATE_ARM, /ตรวจสอบ URL Alias ซ้ำไม่สำเร็จ จึงยังไม่ได้สร้างหลักสูตร/);
+});
+
+// ── E3: what the page shows, and where ─────────────────────────────────────
+
+test('E3: an alias refusal attaches to the ALIAS field, not to course_id', () => {
+  // Putting it on course_id would point the admin at the one field that is not
+  // the problem; putting it in the page banner would read as a failed save
+  // rather than a field to fix.
+  assert.match(CREATE_ARM, /setAliasError\(aliasClash\.error\)/);
+  assert.ok(
+    !/aliasClash[\s\S]{0,80}?setFieldError\(/.test(CREATE_ARM),
+    'the alias error is being routed to the course_id field'
+  );
+  assert.match(FORM.code, /aliasError=\{aliasError\}/, 'the error never reaches the rail');
+  assert.match(RAIL.code, /\{aliasError && \(/, 'the rail never renders it');
+});
+
+test('E3: the alias error is tied to the input for screen readers', () => {
+  assert.match(RAIL.code, /aria-invalid=\{aliasError \? 'true' : undefined\}/);
+  assert.match(RAIL.code, /aria-describedby=\{aliasError \? 'alias-error' : undefined\}/);
+});
+
+test('E3: the two field errors stay separate', () => {
+  // One state each. Sharing one would make a code refusal blank an alias
+  // refusal and vice versa.
+  assert.match(FORM.code, /const \[aliasError, setAliasError\] = useState\(null\)/);
+  assert.match(FORM.code, /const \[fieldError, setFieldError\] = useState\(null\)/);
+});
+
+test('E3: both field errors are cleared when a new submit begins', () => {
+  // A stale refusal sitting under a field the admin has since fixed is its own
+  // bug — they change the alias, resubmit, and the old message is still there.
+  assert.match(CREATE_ARM, /setFieldError\(null\)/);
+  assert.match(CREATE_ARM, /setAliasError\(null\)/);
+});
+
+// ── E2: the partial-create path survives, because the race does ────────────
+
+test('E2: extOk:false is still reachable — the pre-check has a race the index closes', () => {
+  /**
+   * The pre-check is not a guarantee: between its read and the write, another
+   * admin can take the alias. Only the unique index closes that window, and
+   * when it fires the extension write fails with the course already created —
+   * exactly the partial-create state. It stops being the ORDINARY route; it
+   * does not stop being reachable, so the handling stays.
+   */
+  assert.match(CREATE_ARM, /extOk:\s*false/, 'the partial-create report is gone');
+  assert.match(CREATE_ARM, /if \(createdCourse\)/, 'the retry path is gone');
+});

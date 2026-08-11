@@ -21,6 +21,7 @@ export function CourseSeoRail({
   courseName,
   urlAlias,
   onUrlAlias,
+  aliasError,
   metaTitle,
   onMetaTitle,
   metaDescription,
@@ -45,9 +46,21 @@ export function CourseSeoRail({
             value={urlAlias}
             onChange={(e) => onUrlAlias(e.target.value)}
             placeholder="excel-ai-business-training-course"
-            className={'flex-1 ' + input}
+            className={
+              'flex-1 ' + input + (aliasError ? ' border-red-500 focus:border-red-500' : '')
+            }
+            aria-invalid={aliasError ? 'true' : undefined}
+            aria-describedby={aliasError ? 'alias-error' : undefined}
           />
         </div>
+        {/* The refusal belongs HERE, on the box the admin has to change — not
+            on course_id, and not in the page-level banner where it reads as a
+            failed save rather than a field to fix. */}
+        {aliasError && (
+          <p id="alias-error" className="mt-1 text-xs text-red-500">
+            {aliasError}
+          </p>
+        )}
         <p className="mt-1 text-xs text-[var(--text-muted)]">
           ถ้าว่างจะใช้ <code>/{String(courseId ?? '').toLowerCase()}-training-course</code> โดยอัตโนมัติ
         </p>

@@ -5,7 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, Eye, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
-import { saveCourseExtension } from '@/lib/actions/course-extensions';
+import {
+  saveCourseExtension,
+  checkAliasAvailable,
+} from '@/lib/actions/course-extensions';
 import { CourseSeoRail } from './CourseSeoRail';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
@@ -139,6 +142,10 @@ export function CourseForm({
   const [createdCourse, setCreatedCourse] = useState(null);
   // A refusal that belongs on one field rather than in the page banner.
   const [fieldError, setFieldError] = useState(null);
+  // Separate from `fieldError`, which is bound to the course_id input. An alias
+  // refusal belongs on the alias box in the right rail — putting it on
+  // course_id would point the admin at the one field that is not the problem.
+  const [aliasError, setAliasError] = useState(null);
   const [showGallery, setShowGallery] = useState(false);
 
   // ── Unsaved-changes guard ─────────────────────────────────────────
@@ -447,6 +454,7 @@ export function CourseForm({
        */
       setSaveReport(null);
       setFieldError(null);
+      setAliasError(null);
       startTransition(async () => {
         // RETRY PATH: the course already exists from an earlier submit, and
         // only the extension half is outstanding. Never create twice.
@@ -460,6 +468,35 @@ export function CourseForm({
             courseOk: true, extOk: false,
             courseError: null, extError: retryRes?.error ?? null,
           });
+          return;
+        }
+
+        /**
+         * ── ALIAS CHECK, BEFORE THE COURSE EXISTS ─────────────────────────
+         * This used to run inside saveCourseExtension, i.e. AFTER createCourse
+         * had already written to MSDB — so a clashing alias left a real course
+         * upstream with no extension row, and the admin found out only once it
+         * was too late to not create it. The duplicate-CODE guard has always
+         * refused before writing anything; an alias clash is the same kind of
+         * refusal and had no business behaving differently. Consistency is the
+         * reason, not the saved round trip.
+         *
+         * A THROW IS NOT "FREE". Same ruling as the code guard: refusing to
+         * answer is not answering no, so a failed lookup stops the create
+         * rather than waving it through to be caught by the index later.
+         */
+        const aliasClash = await checkAliasAvailable(urlAlias, courseId).catch(
+          (err) => ({
+            field: 'urlAlias',
+            error:
+              'ตรวจสอบ URL Alias ซ้ำไม่สำเร็จ จึงยังไม่ได้สร้างหลักสูตร — '
+              + `กรุณาลองใหม่อีกครั้ง (${err?.message ?? 'lookup failed'})`,
+          })
+        );
+        if (aliasClash) {
+          // NOTHING WAS WRITTEN — not MSDB, not the extension. The create
+          // button stays armed because there is nothing to not-repeat.
+          setAliasError(aliasClash.error);
           return;
         }
 
@@ -1239,6 +1276,7 @@ export function CourseForm({
             courseName={initial?.course_name ?? ''}
             urlAlias={urlAlias}
             onUrlAlias={markTouched(setUrlAlias)}
+            aliasError={aliasError}
             metaTitle={metaTitle}
             onMetaTitle={markTouched(setMetaTitle)}
             metaDescription={metaDescription}
