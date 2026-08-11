@@ -29,6 +29,7 @@
 // `<id>` → `/<id>-training-course` rule is how this check and the route it
 // protects would come to disagree about which URL a course actually has.
 import { coursePathFromId } from '@/lib/webhooks/courseRevalidatePlan';
+import { reservedPathOwner } from '@/lib/courses/reservedPaths';
 
 /**
  * The canonical stored form of a typed alias: trimmed, with exactly one leading
@@ -110,6 +111,28 @@ export function legacyPathOwner({ alias, courseIds = [], exceptCourseId = null }
 export function aliasConflict({ alias, existingCourseId = null, legacyOwner = null } = {}) {
   const wanted = normaliseAlias(alias);
   if (!wanted) return null; // no custom URL is always allowed — sparse index
+
+  /**
+   * A RESERVED SEGMENT LOSES SILENTLY, which is why it is checked first.
+   *
+   * An alias of `/schedule` or `/promotion` does not produce a conflict, an
+   * error, or a duplicate — the static route or the redirect simply wins,
+   * [...slug] never runs, and the alias does nothing at all. Of the four
+   * refusals here it is the only one with no visible symptom whatsoever, so it
+   * is the one most worth catching at save time.
+   *
+   * Derived from RESERVED_PATHS, which is hand-listed BECAUSE the app-router
+   * tree is only part of the reserved space — see that file.
+   */
+  const reserved = reservedPathOwner(wanted);
+  if (reserved) {
+    return {
+      field: 'urlAlias',
+      error:
+        `"/${reserved.segment}" เป็น URL ที่ระบบใช้อยู่แล้ว — `
+        + 'ถ้าใช้ซ้ำ หน้าหลักสูตรนี้จะไม่ถูกเปิดเลย กรุณาใช้ URL อื่น',
+    };
+  }
 
   // Checked BEFORE the alias-vs-alias case only because it is the more
   // surprising of the two; either alone is a refusal. Both name the owner.

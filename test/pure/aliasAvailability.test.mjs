@@ -231,3 +231,48 @@ test('G2: both refusals name the owner, and they are different messages', () => 
   assert.notEqual(taken.error, shadow.error, 'the two refusals are indistinguishable');
   assert.equal(taken.field, shadow.field, 'both must attach to the same input');
 });
+
+// ── H1: a reserved segment is refused ──────────────────────────────────────
+
+test('H1: an alias claiming a reserved segment is refused', () => {
+  /**
+   * The only one of the four refusals with NO visible symptom. A reserved alias
+   * produces no conflict, no error and no duplicate — the static route or the
+   * redirect simply wins, [...slug] never runs, and the alias does nothing.
+   * Which is exactly why it is worth catching at save time.
+   */
+  for (const reserved of ['/schedule', '/admin', '/promotion', '/brand', '/api']) {
+    const c = aliasConflict({ alias: reserved });
+    assert.ok(c, `${reserved} was allowed as an alias`);
+    assert.equal(c.field, 'urlAlias');
+  }
+});
+
+test('H1: the refusal names the segment it collides with', () => {
+  const c = aliasConflict({ alias: '/schedule' });
+  assert.match(c.error, /schedule/);
+});
+
+test('H1: reserved beats the other refusals — it is checked first', () => {
+  // An alias that is BOTH reserved and taken must report the reserved reason:
+  // fixing the duplicate would not make /schedule work.
+  const c = aliasConflict({
+    alias: '/schedule',
+    existingCourseId: 'SOME-COURSE',
+    legacyOwner: 'OTHER-COURSE',
+  });
+  assert.match(c.error, /schedule/, 'the reserved reason was not the one reported');
+  assert.ok(!/SOME-COURSE/.test(c.error), 'it reported the alias-taken reason instead');
+});
+
+test('H1 CONTROL: an ordinary alias is unaffected by the reserved check', () => {
+  assert.equal(aliasConflict({ alias: '/excel-for-accountants' }), null);
+  assert.equal(aliasConflict({ alias: '/power-apps-for-business-training-course' }), null);
+});
+
+test('H1: a nested alias is judged on its FIRST segment', () => {
+  // Top-segment only, as scoped. /schedule/foo is still the schedule route's.
+  assert.ok(aliasConflict({ alias: '/schedule/foo' }), '/schedule/foo was allowed');
+  // …and a segment that merely CONTAINS a reserved word is fine.
+  assert.equal(aliasConflict({ alias: '/scheduler-course' }), null);
+});
