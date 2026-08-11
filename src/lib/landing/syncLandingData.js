@@ -22,6 +22,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
+import { classifyProbe, composeProgramList } from '@/lib/landing/programProbeOutcome';
 import { dbConnect } from '@/lib/db/connect';
 import LandingCache from '@/models/LandingCache';
 
@@ -254,19 +255,53 @@ export async function syncLandingData() {
     programs.map(async (p) => {
       const pid = String(p.program_id ?? p._id ?? '');
       const { items } = await listPublicCourses({ program: pid });
-      return { program: p, hasPublic: (items?.length ?? 0) > 0 };
+      return { itemCount: items?.length ?? 0 };
     })
   );
-  const publicPrograms = [];
-  programProbes.forEach((r, i) => {
-    if (r.status === 'fulfilled') {
-      if (r.value.hasPublic) publicPrograms.push(r.value.program);
-    } else {
-      const pid = String(programs[i]?.program_id ?? programs[i]?._id ?? '');
-      errors.push(`programPublicProbe:${pid}: ${r.reason?.message ?? 'failed'}`);
-      // exclude on error (fail-closed), consistent with nav-menu sync
-    }
+
+  /**
+   * THE SECOND OPINION ON A ZERO. `unwrap()` returns `{ items: [] }` for any
+   * response it cannot read, so a probe can report "no courses" without
+   * anything throwing. The full course list is already in hand from phase 1;
+   * if it shows this program owning a course, a zero from the probe is a
+   * contradiction, not a fact. Matching is by `_id` because that is the shape
+   * the list actually carries (`course.program` is a populated object).
+   */
+  const programIdsInCourses = new Set(
+    allCourses.map((c) => String(c?.program?._id ?? c?.program ?? '')).filter(Boolean)
+  );
+
+  // What the CURRENT snapshot says, so an unknown can fall back to it rather
+  // than to nothing. Read before the write, once.
+  const previousDoc = await LandingCache.findOne({ key: CACHE_KEY }).lean().exec();
+  const previousProgramIds = (previousDoc?.data?.programs ?? []).map((p) =>
+    String(p?.program_id ?? p?._id ?? '')
+  );
+
+  const probeRows = programs.map((p, i) => {
+    const settled = programProbes[i];
+    const rejected = settled.status === 'rejected';
+    return {
+      id: String(p.program_id ?? p._id ?? ''),
+      program: p,
+      outcome: classifyProbe({
+        rejected,
+        itemCount: rejected ? 0 : settled.value.itemCount,
+        referencedByCourses: programIdsInCourses.has(String(p._id ?? '')),
+      }),
+      reason: rejected
+        ? (settled.reason?.message ?? 'probe failed')
+        : 'probe reported 0 courses but the course list disagrees',
+    };
   });
+
+  const programOutcome = composeProgramList({
+    rows: probeRows,
+    previousIds: previousProgramIds,
+  });
+  const publicPrograms = programOutcome.programs;
+  // On EVERY run, not just failing ones — see composeProgramList.
+  errors.push(...programOutcome.errors);
 
   const banners = unwrapSettled(bannersResult, [], 'getActiveBanners', errors);
   const featuredCourseIds = unwrapSettled(
@@ -320,8 +355,23 @@ export async function syncLandingData() {
     sections.newCourses +
     sections.onlineCourses +
     sections.reviews;
+  /**
+   * EVERY PROBE UNKNOWN → publish nothing. If not one program could be
+   * established, this run learned nothing about the Programs tab, and the list
+   * it computed is an artefact of the outage rather than a view of the data.
+   * Forcing `error` routes it into the preserve-previous branch below, so the
+   * existing snapshot stays exactly as it is and the failure is recorded.
+   */
   const status =
-    errors.length === 0 ? 'ok' : totalContent > 0 ? 'partial' : 'error';
+    programOutcome.allUnknown
+      ? 'error'
+      : errors.length === 0 ? 'ok' : totalContent > 0 ? 'partial' : 'error';
+  if (programOutcome.allUnknown) {
+    errors.push(
+      `programProbeTotalFailure: all ${probeRows.length} program probes were `
+      + 'inconclusive — snapshot left untouched'
+    );
+  }
 
   // Preserve last-known-good payload on a total failure so the home
   // page doesn't go blank because of a transient outage.
@@ -333,9 +383,10 @@ export async function syncLandingData() {
     onlineCoursesForSection,
     reviews,
   };
-  if (status === 'error') {
-    const previous = await LandingCache.findOne({ key: CACHE_KEY }).lean().exec();
-    if (previous?.data) dataToWrite = previous.data;
+  // `previousDoc` was already read above for the program fallback — reuse it
+  // rather than paying for a second round-trip to answer the same question.
+  if (status === 'error' && previousDoc?.data) {
+    dataToWrite = previousDoc.data;
   }
 
   await LandingCache.findOneAndUpdate(
