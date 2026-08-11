@@ -56,19 +56,24 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'career-path-project', source: 'tree' },
   { segment: 'career-path-register', source: 'tree' },
   { segment: 'contact-us', source: 'tree' },
+  { segment: 'cookie-policy', source: 'tree' },
   { segment: 'faq', source: 'tree' },
   { segment: 'join-us', source: 'tree' },
   { segment: 'masterclass', source: 'tree' },
+  { segment: 'policies', source: 'tree' },
   { segment: 'portfolio', source: 'tree' },
   { segment: 'preview', source: 'tree' },
+  { segment: 'privacy-policy', source: 'tree' },
   { segment: 'program', source: 'tree' },
   { segment: 'promotions', source: 'tree' },
+  { segment: 'refund-policy', source: 'tree' },
   { segment: 'registration', source: 'tree' },
   { segment: 'restaurant-and-hotel-nearby-9expert-training', source: 'tree' },
   { segment: 'schedule', source: 'tree' },
   { segment: 'search', source: 'tree' },
   { segment: 'skill', source: 'tree' },
   { segment: 'social', source: 'tree' },
+  { segment: 'terms', source: 'tree' },
   { segment: 'training-course', source: 'tree' },
 
   // ── app-router tree: src/app (outside the (public) group) ────────────────
@@ -79,6 +84,7 @@ export const RESERVED_PATHS = Object.freeze([
   // ── next.config.mjs redirects() ──────────────────────────────────────────
   // These never reach the router, so an alias here is unreachable in a way no
   // amount of correct routing can fix.
+  { segment: 'cancellation-refund-policy', source: 'redirect' },
   { segment: 'online-course', source: 'redirect' },
   { segment: 'promotion', source: 'redirect' },
   { segment: 'rpa-all-courses', source: 'redirect' },
