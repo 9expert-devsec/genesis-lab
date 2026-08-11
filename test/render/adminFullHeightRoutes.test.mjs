@@ -65,6 +65,13 @@ const padded = (html) => /class="p-6"/.test(html);
 test('the full-height matcher covers the course editor and the article editor', () => {
   for (const path of [
     '/admin/courses/692d39b52ee07293c9131fd8/edit',
+    // FLIPPED DELIBERATELY. `/admin/courses/new` used to be asserted below as
+    // a route that KEEPS its padding, and that was correct while it rendered a
+    // linear layout. It now renders the same h-[100dvh] shell as the editor, so
+    // the padding is the defect rather than the requirement — a 100dvh child in
+    // a p-6 box is 100dvh + 48px, which is the second scrollbar this file
+    // exists to prevent.
+    '/admin/courses/new',
     '/admin/articles/abc123/edit',
     '/admin/articles/new',
   ]) {
@@ -80,7 +87,6 @@ test('CONTROL: the other course routes KEEP their padding', () => {
   // is the regression this control exists to catch.
   for (const path of [
     '/admin/courses',                  // the list
-    '/admin/courses/new',              // create — linear layout, needs padding
     '/admin/courses/COPILOT-STU',      // promos / Early Bird / FAQ / payment
   ]) {
     assert.equal(padded(wrapperFor(path)), true, `${path} lost its padding`);

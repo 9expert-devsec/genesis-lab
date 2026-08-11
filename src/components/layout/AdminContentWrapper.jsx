@@ -38,8 +38,23 @@ import { usePathname } from 'next/navigation';
 const FULL_HEIGHT_ROUTES = [
   // Every /admin/articles/* route is a full-height editor.
   (path) => path.startsWith('/admin/articles/'),
-  // ONLY the course editor — not the list, not new, not the promos page.
+  // The course editor…
   (path) => /^\/admin\/courses\/[^/]+\/edit\/?$/.test(path),
+  /**
+   * …and the course CREATE page, which now renders the same shell.
+   *
+   * This entry did not exist while `new` used a linear layout, and the test
+   * for this file asserted the opposite — that `new` KEEPS its padding. That
+   * assertion was correct then and is wrong now; it is flipped in the same
+   * commit as this line rather than left to fail mysteriously later.
+   *
+   * `new` is matched literally and separately from `[_id]/edit` because the
+   * two patterns describe different routes that happen to share a layout —
+   * collapsing them into `/admin/courses/(new|[^/]+/edit)` would also match a
+   * course whose _id is the string "new", which is not a thing worth being
+   * clever about.
+   */
+  (path) => /^\/admin\/courses\/new\/?$/.test(path),
 ];
 
 export function AdminContentWrapper({ children }) {

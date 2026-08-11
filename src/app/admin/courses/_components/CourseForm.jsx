@@ -68,11 +68,11 @@ export function CourseForm({
   /**
    * The course's CourseExtension doc, or null when it has none yet.
    *
-   * EDIT MODE ONLY. Passing it switches this form into the two-column shell
-   * (left column + sticky rail + one save), which is what /edit renders. The
-   * create page passes nothing and keeps the linear layout: a course has no
-   * extension until it exists, and its course_id — the key the extension is
-   * stored under — is still being typed.
+   * EDIT MODE ONLY — the create page passes nothing, because a course has no
+   * extension until it exists and its course_id, the key the row is stored
+   * under, is still being typed. Both modes render the SAME shell either way;
+   * on create the rail simply starts empty and its values are written after
+   * MSDB accepts the course.
    */
   extension = null,
   /**
@@ -87,9 +87,18 @@ export function CourseForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
 
-  // The shell is the edit page's layout. `mode` alone decides it, so the create
-  // page cannot accidentally acquire a rail for a store it cannot write to yet.
-  const isShell = mode === 'edit';
+  /**
+   * BOTH MODES RENDER THE SHELL. `isShell` used to mean "this is the edit
+   * page"; it now means nothing distinct, because create and edit share one
+   * layout, one rail and one unsaved-changes guard.
+   *
+   * It survives as a named constant rather than being deleted inline so the
+   * places where create and edit genuinely DIFFER stay visible: the write path
+   * (create must not touch the extension until MSDB has accepted the course),
+   * the header affordances that need a course to exist (Preview, the
+   * promos/FAQ link), and the post-success navigation.
+   */
+  const isCreate = mode === 'create';
 
   // ── CourseExtension state (the genesis-side store) ────────────────
   // Controlled state, NOT form inputs: shapePayload must never see these.
@@ -262,13 +271,12 @@ export function CourseForm({
    * admins to click straight through this dialog.
    */
   useEffect(() => {
-    if (!isShell) return undefined;
     const id = requestAnimationFrame(() => { baselineRef.current = snapshot(); });
     return () => cancelAnimationFrame(id);
     // Once, on mount: re-running would re-baseline and erase the admin's edits
     // from the comparison.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isShell]);
+  }, []);
 
   /** Wrap a rail/gallery setter so a real user edit registers as one. */
   const markTouched = useCallback(
@@ -278,15 +286,14 @@ export function CourseForm({
 
   // Rail + gallery are React state, so a change re-renders and lands here.
   useEffect(() => {
-    if (!isShell) return;
     setDirty(touchedRef.current && isCourseEditorDirty(baselineRef.current, snapshot()));
-  }, [isShell, snapshot]);
+  }, [snapshot]);
 
   // The course body is UNCONTROLLED — typing fires no React render, so the
   // DOM's own input/change events are the only signal that it happened.
   useEffect(() => {
     const form = formRef.current;
-    if (!isShell || !form) return undefined;
+    if (!form) return undefined;
     const onEdit = () => {
       touchedRef.current = true;
       setDirty(isCourseEditorDirty(baselineRef.current, snapshot()));
@@ -297,7 +304,7 @@ export function CourseForm({
       form.removeEventListener('input', onEdit);
       form.removeEventListener('change', onEdit);
     };
-  }, [isShell, snapshot]);
+  }, [snapshot]);
 
   /**
    * INTERCEPTING IN-APP NAVIGATION. The App Router has no `useBlocker`, so the
@@ -316,7 +323,7 @@ export function CourseForm({
    * button for everyone to protect one case.
    */
   useEffect(() => {
-    if (!isShell || !dirty) return undefined;
+    if (!dirty) return undefined;
 
     const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
     window.addEventListener('beforeunload', onBeforeUnload);
@@ -345,7 +352,7 @@ export function CourseForm({
       window.removeEventListener('beforeunload', onBeforeUnload);
       document.removeEventListener('click', onClick, true);
     };
-  }, [isShell, dirty]);
+  }, [dirty]);
 
   function leaveWithoutSaving() {
     const href = pendingHref;
@@ -881,47 +888,7 @@ export function CourseForm({
     </>
   );
 
-  // ── CREATE PAGE — untouched linear layout ─────────────────────────
-  if (!isShell) {
-    return (
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
-            สร้างหลักสูตรใหม่
-          </h1>
-          <Link href="/admin/courses" className="text-sm text-9e-action hover:underline">
-            ← กลับ
-          </Link>
-        </div>
-
-        {error && (
-          <div className="rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {bodySections}
-
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
-          >
-            {pending ? 'กำลังบันทึก…' : 'สร้าง'}
-          </button>
-          <Link
-            href="/admin/courses"
-            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-          >
-            ยกเลิก
-          </Link>
-        </div>
-      </form>
-    );
-  }
-
-  // ── EDIT PAGE — the shell ─────────────────────────────────────────
+  // ── THE SHELL — both modes ────────────────────────────────────────
   const previewHref = urlAlias.trim()
     ? `/${urlAlias.trim().replace(/^\//, '')}`
     : `/${String(courseId ?? '').toLowerCase()}-training-course`;
@@ -953,7 +920,7 @@ export function CourseForm({
 
           <div className="mx-auto min-w-0 flex-1 px-4">
             <p className="truncate text-center text-sm font-semibold text-9e-navy dark:text-white">
-              {initial?.course_name || 'แก้ไขหลักสูตร'}
+              {initial?.course_name || (isCreate ? 'สร้างหลักสูตรใหม่' : 'แก้ไขหลักสูตร')}
             </p>
           </div>
 
@@ -984,6 +951,14 @@ export function CourseForm({
             </span>
           )}
 
+          {/* Both of the next two need a course that EXISTS UPSTREAM, so they
+              are hidden while creating: the promos/FAQ page is keyed by a code
+              that has not been saved yet, and Preview would open the public URL
+              of a course that is not there. Rendering either would be a link
+              that 404s by construction. They appear on the edit page the create
+              flow redirects to. */}
+          {!isCreate && (
+          <>
           {/* The four editors that stayed on /admin/courses/[courseId]. The
               list's SEO/Gallery button is gone, so this is now their only way
               in — without it they would be unreachable, not merely moved. */}
@@ -1005,6 +980,8 @@ export function CourseForm({
           >
             <Eye className="h-4 w-4" /> Preview
           </a>
+          </>
+          )}
 
           {/* THE PUBLISH CONTROL — in the header, never behind a scroll. */}
           <div className="flex items-center gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5">
@@ -1034,7 +1011,7 @@ export function CourseForm({
             disabled={pending}
             className="rounded-9e-md bg-9e-action px-4 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
           >
-            {pending ? 'กำลังบันทึก…' : 'บันทึก'}
+            {pending ? 'กำลังบันทึก…' : isCreate ? 'สร้างหลักสูตร' : 'บันทึก'}
           </button>
         </div>
       </header>

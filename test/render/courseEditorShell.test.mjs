@@ -199,10 +199,16 @@ test('CONTROL: with no filter the links carry no trailing "?"', () => {
 
 // ── the create page is untouched this round ─────────────────────────────────
 
-test('CONTROL: the create page did NOT acquire a rail or a header', () => {
+test('the create page renders the SAME shell as the editor', () => {
+  // INVERTED DELIBERATELY. This was a control asserting the create page had NOT
+  // acquired a rail or a header, which was right while `new` used a linear
+  // layout. Layout parity is now the requirement, so the old assertion was
+  // pinning exactly what had to change; it is rewritten rather than deleted so
+  // the reversal is on the record.
   const html = renderCreate();
-  assert.doesNotMatch(html, /<aside/, 'the create page grew a rail it cannot save');
-  assert.doesNotMatch(html, /h-\[100dvh\]/, 'the create page grew the shell');
+  assert.match(html, /<aside/, 'the create page has no rail');
+  assert.match(html, /class="flex h-\[100dvh\] flex-col/, 'the create page is not the shell');
+  assert.match(html, /<header class="flex-shrink-0/, 'the create page has no fixed header');
   assert.match(html, /สร้างหลักสูตรใหม่/);
   // Section 8 is gone from BOTH layouts. shapePayload is shared, so leaving the
   // input here while the payload drops the key would give the create page an
