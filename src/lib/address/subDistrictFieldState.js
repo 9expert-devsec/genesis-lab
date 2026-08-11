@@ -13,14 +13,20 @@
  * There are TWO ways to arrive at the dead end and they look nothing alike from
  * the lookup's side:
  *
- *   · an UNKNOWN postcode — `getDataForZipCode('99999')` → null
- *   · a postcode that EXISTS as a key but carries nothing — 24 of the 978
- *     records in thai-data@3.0.2 have `subDistrictList: null` (81180, 81210,
- *     81190, 40002, 20131, …). The lookup returns a truthy object and the
- *     option list is still empty.
+ *   · an UNKNOWN postcode — the dataset has no such key
+ *   · a postcode that EXISTS as a key but carries nothing. The lookup returns a
+ *     truthy record and the option list is still empty.
  *
  * Keying on `entry == null` would fix the first and leave the second exactly as
  * broken. Both collapse to "no options", so that is what decides.
+ *
+ * THE SECOND CAUSE NO LONGER OCCURS, and this still does not key on the first.
+ * It described thai-data@3.0.2, where 24 of 978 records held nulls (81180,
+ * 81210, 40002, 20131, …); thailand_postcode_2026.json has none, which is what
+ * collapsed the `miss_route` telemetry parameter to a single value. The rule
+ * stays counted rather than caused anyway — it costs nothing, it is the reason
+ * this function needs no knowledge of any dataset, and a hollow entry arriving
+ * in some future refresh would otherwise re-open the trap in silence.
  *
  * ── THREE STATES ────────────────────────────────────────────────────────────
  *   locked  fewer than 5 digits — nothing has been asked yet. Unchanged
