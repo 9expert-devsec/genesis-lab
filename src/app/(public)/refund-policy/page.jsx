@@ -88,9 +88,20 @@ export default function RefundPolicyPage() {
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`${POLICY_ENTITY} (9EXPERT) กำหนดหลักเกณฑ์และเงื่อนไขการยกเลิกการสมัครอบรม การเลื่อนวันอบรม และการขอคืนเงิน เพื่อความชัดเจนและเป็นธรรมกับผู้เข้าอบรมทุกท่าน`}
+      updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      notice={<PolicyDraftNotice />}
+      /*
+        The strongest wording of the three. This page states refund PERCENTAGES
+        and NOTICE PERIODS — numbers a customer would act on and could later
+        hold the company to. If this page ships before real terms exist, this
+        banner is the only thing between us and having quoted refund figures we
+        invented, so it names the fabricated numbers explicitly rather than
+        warning about "content" in general.
+      */
+      notice={
+        <PolicyDraftNotice detail="ตัวเลขทั้งหมดในหัวข้อ 02 — ระยะเวลาแจ้งล่วงหน้าและเปอร์เซ็นต์การคืนเงิน — เป็นตัวอย่างที่สมมติขึ้นทั้งหมด ไม่ใช่เงื่อนไขของบริษัท และไม่สามารถใช้อ้างอิงในการขอคืนเงินได้" />
+      }
       help={{
         icon: 'help',
         title: 'ต้องการความช่วยเหลือ?',

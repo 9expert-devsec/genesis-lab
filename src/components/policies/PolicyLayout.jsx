@@ -27,6 +27,7 @@ export function PolicyLayout({
   title,
   titleEn,
   lede,
+  updated,
   toc,
   numbered = true,
   help,
@@ -42,11 +43,18 @@ export function PolicyLayout({
         title={title}
         titleEn={titleEn}
         lede={lede}
+        updated={updated}
       />
+
+      {/* The draft banner sits BETWEEN the hero and the content, full-bleed
+          and outside the content container. It used to render inside the
+          column, above the body — which put it in the same visual class as a
+          callout and let it read as part of the article. A warning that the
+          whole page is unapproved is not a callout within the page. */}
+      {notice}
 
       <div className="bg-[var(--page-bg)]">
         <div className="mx-auto w-full max-w-[1200px] px-0 py-12 max-md:px-4">
-          {notice}
           <div className="flex gap-10 max-lg:flex-col">
             <PolicyTocSidebar items={toc} numbered={numbered} help={help} />
             <div className="min-w-0 flex-1">{children}</div>
@@ -128,26 +136,54 @@ function PolicyRelatedStrip({ currentSlug }) {
  * /privacy-policy does NOT render this — its content is ported from the live
  * site and is real.
  */
-export function PolicyDraftNotice() {
+export function PolicyDraftNotice({ detail }) {
   return (
-    <div
-      role="note"
-      className="mb-8 flex gap-3 rounded-2xl border border-[#F0B429]/40 bg-[#F0B429]/10 p-4"
+    <aside
+      role="alert"
+      aria-labelledby="policy-draft-heading"
+      /*
+        Deliberately the loudest thing on the page, and deliberately NOT built
+        from the site's palette. Every other surface here is a semantic token,
+        so a token-coloured warning would harmonise with the page and read as
+        part of the design. This one is a solid amber slab with a black rule
+        top and bottom, identical in both themes, because it is not decoration
+        and it is not supposed to look at home.
+
+        It is also full-bleed rather than a card: a bordered box inside the
+        content column is a callout, and a callout is something a reader learns
+        to skip.
+      */
+      className="border-y-4 border-[#0D1B2A] bg-[#F5C518]"
     >
-      <PolicyIcon
-        name="help"
-        className="mt-0.5 h-5 w-5 shrink-0 text-[#B77C09] dark:text-[#F0B429]"
-      />
-      <div>
-        <p className="text-sm font-bold text-[var(--text-primary)]">
-          เนื้อหาฉบับร่าง — อยู่ระหว่างการตรวจสอบโดยฝ่ายกฎหมาย
-        </p>
-        <p className="mt-1 text-[13px] leading-relaxed text-[var(--text-secondary)]">
-          ข้อความในหน้านี้จัดทำขึ้นเป็นตัวอย่างเพื่อใช้ประกอบการออกแบบเท่านั้น
-          ยังไม่ผ่านการตรวจสอบและยังไม่มีผลผูกพันทางกฎหมาย
-          กรุณาติดต่อทีมงานเพื่อขอข้อมูลที่เป็นทางการ
-        </p>
+      <div className="mx-auto flex w-full max-w-[1200px] items-start gap-4 px-0 py-5 max-md:px-4">
+        <PolicyIcon
+          name="alert"
+          className="mt-0.5 h-8 w-8 shrink-0 text-[#0D1B2A]"
+          strokeWidth={2.25}
+        />
+        <div className="text-[#0D1B2A]">
+          <p
+            id="policy-draft-heading"
+            className="text-[17px] font-extrabold leading-tight"
+          >
+            เอกสารฉบับร่าง — ยังไม่มีผลบังคับใช้ และห้ามใช้อ้างอิง
+          </p>
+          <p className="mt-1.5 text-[14px] font-medium leading-[1.7]">
+            เนื้อหาทั้งหมดในหน้านี้จัดทำขึ้นเป็นตัวอย่างประกอบการออกแบบเท่านั้น
+            ยังไม่ผ่านการตรวจสอบโดยฝ่ายกฎหมาย และไม่ใช่เงื่อนไขที่บริษัทกำหนด
+            กรุณา
+            <Link href="/contact-us" className="font-bold underline underline-offset-2">
+              ติดต่อทีมงาน 9EXPERT
+            </Link>
+            เพื่อขอข้อมูลที่เป็นทางการก่อนตัดสินใจใดๆ
+          </p>
+          {detail && (
+            <p className="mt-2 border-t border-[#0D1B2A]/25 pt-2 text-[14px] font-bold leading-[1.7]">
+              {detail}
+            </p>
+          )}
+        </div>
       </div>
-    </div>
+    </aside>
   );
 }

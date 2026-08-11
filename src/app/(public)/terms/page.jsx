@@ -36,7 +36,13 @@ export const metadata = {
  * ── THE DATE ────────────────────────────────────────────────────────────────
  * The Figma stamped this page 11 มิถุนายน 2569 while stamping the other four
  * 11 สิงหาคม 2569. That is a design-file inconsistency, not two real review
- * dates. The page takes POLICY_UPDATED like every other, so it reads สิงหาคม.
+ * dates, so this page reads สิงหาคม like its siblings.
+ *
+ * The date comes from this page's own `updated` in config/policies.js. It is
+ * per page rather than global because /privacy-policy carries text from 2564
+ * and a shared stamp made it claim a 2569 review it never had — see that
+ * page's header. The three placeholder pages share a date only because their
+ * copy was genuinely written together.
  */
 
 const TOC = [
@@ -80,9 +86,12 @@ export default function TermsPage() {
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`ข้อกำหนดและเงื่อนไขนี้กำหนดข้อตกลงระหว่างผู้ใช้บริการกับ ${POLICY_ENTITY} (9EXPERT) ในการเข้าถึงและใช้งานเว็บไซต์ เนื้อหา และบริการทั้งหมดของเรา`}
+      updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      notice={<PolicyDraftNotice />}
+      notice={
+        <PolicyDraftNotice detail="รวมถึงข้อ 7 ข้อจำกัดความรับผิด และข้อ 8 การระงับการให้บริการ ซึ่งอ่านเหมือนมีผลผูกพันแต่ยังไม่มี" />
+      }
       help={{
         icon: 'help',
         title: 'ต้องการความช่วยเหลือ?',

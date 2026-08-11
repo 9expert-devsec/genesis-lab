@@ -123,10 +123,13 @@ export default function CookiePolicyPage() {
       title={policy.title}
       titleEn={policy.titleEn}
       lede="9EXPERT ใช้คุกกี้และเทคโนโลยีที่คล้ายกัน เพื่อให้เว็บไซต์ทำงานได้อย่างถูกต้อง จดจำการตั้งค่าของคุณ และช่วยให้เราปรับปรุงบริการได้ดียิ่งขึ้น"
+      updated={policy.updated}
       toc={TOC}
       numbered={false}
       currentSlug={policy.slug}
-      notice={<PolicyDraftNotice />}
+      notice={
+        <PolicyDraftNotice detail="รวมถึงตารางรายละเอียดคุกกี้ในหัวข้อ 03 ซึ่งเป็นตัวอย่างที่สมมติขึ้น ยังไม่ได้ตรวจสอบกับคุกกี้ที่เว็บไซต์ใช้งานจริง" />
+      }
       help={{
         icon: 'settings',
         title: 'ปรับการตั้งค่าคุกกี้ได้ทุกเวลา',

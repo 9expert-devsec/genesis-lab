@@ -1,16 +1,33 @@
 /**
  * The legal centre: the five policy pages and their shared metadata.
  *
- * ── WHY THE DATE AND VERSION LIVE HERE AND NOWHERE ELSE ─────────────────────
- * Five pages carry the same "ปรับปรุงล่าสุด" stamp, and the hub's summary panel
- * carries it a sixth time. Hardcoding it per page means the next legal review
- * updates four of six and nobody notices the two that drifted — a stale date on
- * a legal page is a factual claim about when the terms last changed. One export,
- * six readers.
+ * ── THE DATE IS PER PAGE. THE VERSION IS NOT. ───────────────────────────────
+ * These two look like the same kind of field and are not, which is why they are
+ * modelled differently.
+ *
+ * The date is a CLAIM ABOUT THE CONTENT: "this text was last reviewed on X".
+ * A single shared date makes that claim on behalf of pages whose text nobody
+ * touched. It went in as one export first, and the defect it produced was
+ * immediate and specific: /privacy-policy carries wording ported unchanged from
+ * a 2564 document, and a global stamp printed 11 สิงหาคม 2569 above it. That is
+ * not a cosmetic drift on a legal page — it tells a visitor the privacy terms
+ * were reviewed two years more recently than they were.
+ *
+ * So `updated` lives on each page and describes that page's copy:
+ *
+ *   privacy-policy   9 กันยายน 2564  — the real date of the ported text. It
+ *                                      moves when someone actually reviews the
+ *                                      wording, not when the site is rebuilt.
+ *   the other three  11 สิงหาคม 2569 — their copy was written for this build.
+ *                                      (It is also still placeholder copy; see
+ *                                      each page's header.)
+ *
+ * The version stays global: it numbers the legal centre as a document set, not
+ * any one page, and there is no equivalent per-page claim for it to get wrong.
  *
  * The Figma dated the terms page 11 มิถุนายน 2569 and the other four
- * 11 สิงหาคม 2569. That is a design-file inconsistency, not two real dates;
- * every page takes the value below.
+ * 11 สิงหาคม 2569. That one IS a design-file inconsistency rather than two real
+ * dates — terms takes สิงหาคม like its siblings.
  *
  * ── ON THE THAI IN THIS FILE ────────────────────────────────────────────────
  * สระอำ MUST be the composed form U+0E33, never the decomposed sequence
@@ -32,10 +49,17 @@
 
 import { siteConfig } from '@/config/site';
 
-/** Effective date shown on all five pages. Thai Buddhist-era, spelled out. */
-export const POLICY_UPDATED = '11 สิงหาคม 2569';
+/**
+ * The date to stamp on copy written for this build.
+ *
+ * NOT a default and NOT "today" — it is the review date of the new placeholder
+ * copy, and it is shared only because those three pages were written together.
+ * A page whose text has its own history carries its own date instead; see
+ * privacy-policy below.
+ */
+const DRAFTED_2569 = '11 สิงหาคม 2569';
 
-/** Document version shown alongside the date. */
+/** Document version for the legal centre as a set. Deliberately global. */
 export const POLICY_VERSION = '2.0';
 
 /** The legal entity these policies bind. Single source: siteConfig. */
@@ -61,6 +85,11 @@ export const POLICY_PAGES = [
     title: 'นโยบายคุ้มครองข้อมูลส่วนบุคคล',
     titleEn: 'Privacy Policy',
     blurb: 'อธิบายวิธีการเก็บรวบรวม ใช้ เปิดเผย และปกป้องข้อมูลส่วนบุคคลของคุณ',
+    // The date the PORTED TEXT was published, taken from the live site — not
+    // the date this page was built. The wording below it is that document's,
+    // unchanged, so this is the honest claim. Move it when the wording is
+    // actually reviewed, and only then.
+    updated: '9 กันยายน 2564',
   },
   {
     slug: 'cookie-policy',
@@ -69,6 +98,7 @@ export const POLICY_PAGES = [
     title: 'นโยบายการใช้คุกกี้',
     titleEn: 'Cookie Policy',
     blurb: 'อธิบายการใช้งานคุกกี้บนเว็บไซต์ของเรา และตัวเลือกการตั้งค่าของคุณ',
+    updated: DRAFTED_2569,
   },
   {
     slug: 'terms',
@@ -77,6 +107,7 @@ export const POLICY_PAGES = [
     title: 'ข้อกำหนดและเงื่อนไข',
     titleEn: 'Terms & Conditions',
     blurb: 'เงื่อนไขการใช้บริการเว็บไซต์ เนื้อหา และบริการของ 9EXPERT',
+    updated: DRAFTED_2569,
   },
   {
     slug: 'refund-policy',
@@ -85,6 +116,7 @@ export const POLICY_PAGES = [
     title: 'นโยบายการยกเลิกและคืนเงิน',
     titleEn: 'Cancellation & Refund Policy',
     blurb: 'เงื่อนไขและขั้นตอนการยกเลิกการซื้อคอร์สเรียนและการขอคืนเงิน',
+    updated: DRAFTED_2569,
   },
 ];
 

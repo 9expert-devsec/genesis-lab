@@ -8,7 +8,6 @@ import {
   POLICY_SHORTCUTS,
   POLICY_SUMMARY,
   POLICY_FAQ,
-  POLICY_UPDATED,
   POLICY_VERSION,
   findPolicy,
 } from '@/config/policies';
@@ -140,10 +139,14 @@ export default function PoliciesPage() {
                   ))}
                 </ul>
 
+                {/* The summary describes ONE policy, so it stamps that
+                    policy's date — not a site-wide one. Reading it off
+                    `summarySubject` means the panel cannot drift from the page
+                    it is summarising. */}
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--surface-border)] pt-4 text-xs text-[var(--text-muted)]">
                   <span className="flex items-center gap-1.5">
                     <PolicyIcon name="calendar" className="h-3.5 w-3.5" />
-                    อัปเดตล่าสุด: {POLICY_UPDATED}
+                    อัปเดตล่าสุด: {summarySubject?.updated}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <PolicyIcon name="help" className="h-3.5 w-3.5" />
