@@ -130,6 +130,15 @@ export function CourseForm({
 
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
+  /**
+   * Set once a CREATE has actually produced a course upstream but the
+   * extension write did not land. From then on the form is editing a course
+   * that EXISTS: the primary button retries only the extension, never a second
+   * create. `{ id, code }` — id for the edit link, code for the retry key.
+   */
+  const [createdCourse, setCreatedCourse] = useState(null);
+  // A refusal that belongs on one field rather than in the page banner.
+  const [fieldError, setFieldError] = useState(null);
   const [showGallery, setShowGallery] = useState(false);
 
   // ── Unsaved-changes guard ─────────────────────────────────────────
@@ -362,6 +371,59 @@ export function CourseForm({
     if (href) router.push(href);
   }
 
+  /**
+   * The rail + gallery write, for a given code. ONE definition, so the create
+   * path, the create RETRY and the edit save cannot disagree about which
+   * fields travel.
+   *
+   * `omisePaymentEnabled` is sent EXPLICITLY even on create, where there is no
+   * previous row to carry forward. `saveCourseExtension` writes a whole
+   * document and defaults an omitted flag to false, so relying on that default
+   * would mean the field's value depends on which caller happened to omit it —
+   * the same class of accident that switched the flag off on edit.
+   */
+  const saveExtensionFor = useCallback(
+    (code) =>
+      saveCourseExtension(code, {
+        urlAlias,
+        metaTitle,
+        metaDescription,
+        ogImage,
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        gallery: gallery.map((item, i) => ({ ...item, order: i })),
+        isPublished,
+        omisePaymentEnabled,
+      }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished, omisePaymentEnabled]
+  );
+
+  /**
+   * Both halves landed on CREATE — go to the new course's editor.
+   *
+   * The target is built from the `_id` MSDB RETURNED, never from the typed
+   * code: `/admin/courses/<CODE>/edit` is a 404 that reads as a missing course
+   * (that route takes an ObjectId). If no id came back we fall back to the
+   * list rather than guess a URL — losing the redirect is recoverable, landing
+   * on a 404 after a successful create is not.
+   *
+   * `leavingRef` MUST be set: the unsaved-changes guard now covers this page,
+   * and without it the guard would intercept its own redirect.
+   */
+  const finishCreate = useCallback(
+    (newId) => {
+      baselineRef.current = snapshot();
+      leavingRef.current = true;
+      setDirty(false);
+      router.push(
+        newId
+          ? withListQuery(`/admin/courses/${encodeURIComponent(newId)}/edit`, listQuery)
+          : withListQuery('/admin/courses', listQuery)
+      );
+      router.refresh();
+    },
+    [router, listQuery, snapshot]
+  );
+
   // ── submit ────────────────────────────────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault();
@@ -369,15 +431,71 @@ export function CourseForm({
 
     const fd = new FormData(e.currentTarget);
 
-    if (!isShell) {
+    if (isCreate) {
+      /**
+       * ── CREATE: ORDERED, NOT BOTH-ALWAYS ──────────────────────────────
+       * The edit page attempts both writes regardless, because its two stores
+       * are independent and a half-landed save loses nothing. CREATE IS NOT
+       * THAT. The extension row is keyed by the course_id CODE, so writing it
+       * after a failed create leaves an ORPHAN keyed to a course that does not
+       * exist — and the next course created with that code silently inherits
+       * its alias, gallery and SEO. So: MSDB first, extension ONLY if the
+       * course was actually created.
+       *
+       * The duplicate guard runs server-side inside createCourse, before any
+       * write, and covers both stores — see lib/courses/courseIdAvailability.
+       */
+      setSaveReport(null);
+      setFieldError(null);
       startTransition(async () => {
-        const res = await createCourse(fd);
-        if (res?.ok) {
-          router.push('/admin/courses');
-          router.refresh();
-        } else {
-          setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+        // RETRY PATH: the course already exists from an earlier submit, and
+        // only the extension half is outstanding. Never create twice.
+        if (createdCourse) {
+          const retryRes = await saveExtensionFor(createdCourse.code);
+          if (retryRes?.ok === true) {
+            finishCreate(createdCourse.id);
+            return;
+          }
+          setSaveReport({
+            courseOk: true, extOk: false,
+            courseError: null, extError: retryRes?.error ?? null,
+          });
+          return;
         }
+
+        const courseRes = await createCourse(fd).catch((err) => ({
+          ok: false, error: err?.message ?? 'สร้างหลักสูตรไม่สำเร็จ',
+        }));
+
+        if (courseRes?.ok !== true) {
+          // NOTHING WAS WRITTEN. Stay put, keep the create button enabled, and
+          // put a duplicate-code refusal on the field it belongs to.
+          if (courseRes?.field === 'course_id') setFieldError(courseRes.error);
+          else setError(courseRes?.error ?? 'สร้างหลักสูตรไม่สำเร็จ');
+          return;
+        }
+
+        const newId = courseRes.id ?? courseRes.item?._id ?? null;
+        const code = String(courseId ?? '').trim();
+
+        const extRes = await saveExtensionFor(code);
+        if (extRes?.ok === true) {
+          finishCreate(newId);
+          return;
+        }
+
+        /**
+         * PARTIAL CREATE. The course EXISTS now; only the rail did not land.
+         * Do not navigate, do not re-baseline, and do not leave a create button
+         * armed — a second submit would create a duplicate course. The form
+         * switches to "already created": every typed value stays, and the
+         * primary button retries the extension write alone.
+         */
+        setCreatedCourse({ id: newId, code });
+        setSaveReport({
+          courseOk: true, extOk: false,
+          courseError: null, extError: extRes?.error ?? null,
+        });
       });
       return;
     }
@@ -411,17 +529,8 @@ export function CourseForm({
         error: err?.message ?? 'บันทึกไม่สำเร็จ',
       }));
 
-      const extRes = await saveCourseExtension(courseId, {
-        urlAlias,
-        metaTitle,
-        metaDescription,
-        ogImage,
-        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        gallery: gallery.map((item, i) => ({ ...item, order: i })),
-        isPublished,
-        // Carried through unchanged — see the state declaration.
-        omisePaymentEnabled,
-      }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' }));
+      // Same one definition the create path uses — see saveExtensionFor.
+      const extRes = await saveExtensionFor(courseId);
 
       // The joint condition lives in lib/courses/courseSaveOutcome, so the
       // "never claim success on a half-landed save" rule is one testable
@@ -511,8 +620,14 @@ export function CourseForm({
               ' font-mono text-xs' +
               (mode === 'edit' ? ' cursor-not-allowed opacity-70' : '')
             }
+            aria-invalid={fieldError ? 'true' : undefined}
           />
-        </Field>
+        {fieldError && (
+            <p role="alert" className="mt-1 text-xs font-medium text-red-600">
+              {fieldError}
+            </p>
+          )}
+          </Field>
 
         <Field
           label="คำอธิบายสั้น (course_teaser)"
@@ -1011,7 +1126,13 @@ export function CourseForm({
             disabled={pending}
             className="rounded-9e-md bg-9e-action px-4 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
           >
-            {pending ? 'กำลังบันทึก…' : isCreate ? 'สร้างหลักสูตร' : 'บันทึก'}
+            {pending
+              ? 'กำลังบันทึก…'
+              : createdCourse
+                ? 'ลองบันทึก SEO / แกลเลอรีอีกครั้ง'
+                : isCreate
+                  ? 'สร้างหลักสูตร'
+                  : 'บันทึก'}
           </button>
         </div>
       </header>
@@ -1040,6 +1161,23 @@ export function CourseForm({
               ? '✓ SEO / URL / Gallery: บันทึกแล้ว'
               : `✗ SEO / URL / Gallery: ไม่สำเร็จ${saveReport.extError ? ` — ${saveReport.extError}` : ''}`}
           </p>
+          {createdCourse && (
+            <p className="mt-1">
+              หลักสูตรถูกสร้างแล้ว (รหัส {createdCourse.code}) — กดปุ่มด้านบนเพื่อลองบันทึก
+              SEO/แกลเลอรีอีกครั้ง หรือ{' '}
+              <Link
+                href={withListQuery(
+                  createdCourse.id
+                    ? `/admin/courses/${encodeURIComponent(createdCourse.id)}/edit`
+                    : '/admin/courses',
+                  listQuery
+                )}
+                className="font-bold underline"
+              >
+                เปิดหน้าแก้ไขหลักสูตรนี้
+              </Link>
+            </p>
+          )}
         </div>
       )}
 

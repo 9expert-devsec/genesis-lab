@@ -92,13 +92,21 @@ test('CONTROL: re-baselining exists exactly once in the save handler', () => {
   );
 });
 
-test('CONTROL: the create page still navigates after creating', () => {
-  // Explicitly out of scope this round. The create branch keeps its redirect —
-  // there is no course to stay on until it exists.
-  const create = SRC.code.slice(SRC.code.indexOf('if (!isShell) {'));
+test('CONTROL: the create page still navigates after a full create', () => {
+  // UPDATED DELIBERATELY. This asserted the literal `router.push('/admin/
+  // courses')`, which was right while create redirected to the list. It now
+  // goes to the NEW COURSE'S EDITOR, derived from the `_id` MSDB returned —
+  // `/admin/courses/<CODE>/edit` would be a 404 that reads as a missing
+  // course. The claim it guards is unchanged: create still navigates on full
+  // success, and this page still does not.
   assert.match(
-    create.slice(0, create.indexOf('return;')),
-    /router\.push\('\/admin\/courses'\)/,
-    'the create page lost its post-create navigation — that was not this round'
+    SRC.code,
+    /router\.push\(\s*newId\s*\?[\s\S]{0,160}?\/edit`/,
+    'the create page lost its post-create navigation'
+  );
+  assert.match(
+    SRC.code,
+    /encodeURIComponent\(newId\)/,
+    'the redirect is not built from the returned _id'
   );
 });

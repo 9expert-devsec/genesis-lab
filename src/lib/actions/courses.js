@@ -60,6 +60,8 @@ import { aiFetch, unwrap } from '@/lib/api/client';
 import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
 import { outlineFromFormValue } from '@/lib/courses/courseOutline';
 import { checkboxBool, courseTypeFlags } from '@/lib/courses/courseTypeFlags';
+import { courseIdConflict } from '@/lib/courses/courseIdAvailability';
+import { findCourseExtensionCodeInsensitive } from '@/lib/actions/course-extensions';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -323,11 +325,76 @@ async function resolveCourseRefs(body) {
   return out;
 }
 
+/**
+ * The MSDB course_id matching `code` IGNORING CASE, or null — read UNCACHED.
+ *
+ * Two reasons this is not `getCourseByCode`:
+ *   · that is ISR-cached for an hour, and a guard whose failure mode is
+ *     overwriting another course's SEO must not answer from a cache that
+ *     predates the course it is looking for;
+ *   · upstream `?course_id=` is EXACT-MATCH and case-sensitive (verified:
+ *     `COPILOT-STU` → 1 row, `copilot-stu` → 0), so the exact hit is only half
+ *     the question. The list scan is what catches a differently-cased twin.
+ *
+ * Returns the STORED spelling so the caller can name the casing that collided.
+ * Injectable for tests; the default fetches the real thing.
+ */
+export async function findCourseCodeInsensitive(code, { fetchAll } = {}) {
+  const wanted = String(code ?? '').trim();
+  if (!wanted) return null;
+
+  const load = fetchAll ?? (async () => {
+    const raw = await aiFetch('/public-course', { revalidate: 0 });
+    return unwrap(raw).items ?? [];
+  });
+
+  const items = await load();
+  const lower = wanted.toLowerCase();
+  const hit = (items ?? []).find(
+    (c) => String(c?.course_id ?? '').toLowerCase() === lower
+  );
+  return hit?.course_id ?? null;
+}
+
 export async function createCourse(formData) {
   const session = await requireAdmin('courses');
   const body = shapePayload(formData);
   if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
   if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
+
+  /**
+   * DUPLICATE GUARD — BEFORE ANY WRITE, and covering BOTH stores.
+   *
+   * Lives inside the action rather than in the form so it cannot be bypassed,
+   * and runs before `msdbCreate` so a refusal creates nothing at all. See
+   * lib/courses/courseIdAvailability for why a duplicate code is destructive
+   * rather than merely invalid: the extension write is an upsert keyed by the
+   * code, so it would silently overwrite a DIFFERENT course's SEO, gallery and
+   * omisePaymentEnabled.
+   *
+   * A failed lookup is NOT treated as "free". Refusing to answer is not the
+   * same as answering no, and guessing here costs another course's data.
+   */
+  try {
+    const [existingCourseId, existingExtensionId] = await Promise.all([
+      findCourseCodeInsensitive(body.course_id),
+      findCourseExtensionCodeInsensitive(body.course_id),
+    ]);
+    const conflict = courseIdConflict({
+      code: body.course_id,
+      existingCourseId,
+      existingExtensionId,
+    });
+    if (conflict) return { ok: false, ...conflict };
+  } catch (err) {
+    return {
+      ok: false,
+      field: 'course_id',
+      error:
+        'ตรวจสอบรหัสหลักสูตรซ้ำไม่สำเร็จ จึงยังไม่ได้สร้างหลักสูตร — '
+        + `กรุณาลองใหม่อีกครั้ง (${err?.message ?? 'lookup failed'})`,
+    };
+  }
 
   try {
     const payload = await resolveCourseRefs(body);
