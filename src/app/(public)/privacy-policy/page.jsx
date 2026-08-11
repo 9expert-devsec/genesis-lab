@@ -35,11 +35,16 @@ export const metadata = {
  *    guards it. Do NOT re-copy this text from the live site without
  *    re-checking; see that test for why no normalisation call will save you.
  *
- * 2. THE DATE. The live page is stamped 9 กันยายน 2564. Every page in this
- *    legal centre takes its date from POLICY_UPDATED instead, per the decision
- *    that the date lives in one config module. WORTH KNOWING: that makes this
- *    page claim a review date more recent than the text has actually had. The
- *    wording is 2564's; only the stamp is current.
+ * 2. THE DATE — AND THEN BACK AGAIN. The live page is stamped 9 กันยายน 2564,
+ *    and this page shows that date. It briefly showed 11 สิงหาคม 2569, from a
+ *    single shared date in config, and that was wrong in a way worth recording:
+ *    the wording below is 2564's, unchanged, so a 2569 stamp told every visitor
+ *    the privacy terms had been reviewed two years more recently than they had.
+ *    A date on a legal page is a claim about the CONTENT, not about the build.
+ *
+ *    `updated` is now per page in config/policies.js. This one moves when
+ *    somebody actually reviews the wording below — not when the site is
+ *    rebuilt, and not when the sibling pages get new copy.
  */
 
 /** The four data categories the live page publishes, as a table. */
@@ -173,6 +178,7 @@ export default function PrivacyPolicyPage() {
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`${POLICY_ENTITY} (9EXPERT) ให้ความสำคัญกับการคุ้มครองข้อมูลส่วนบุคคลของผู้ใช้บริการทุกท่าน และดำเนินการตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA)`}
+      updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
       help={{

@@ -1,6 +1,6 @@
 import { PolicyBreadcrumb } from './PolicyBreadcrumb';
 import { PolicyIcon } from './PolicyIcon';
-import { POLICY_UPDATED, POLICY_VERSION } from '@/config/policies';
+import { POLICY_VERSION } from '@/config/policies';
 
 /**
  * The one hero used by all five legal pages.
@@ -23,12 +23,18 @@ import { POLICY_UPDATED, POLICY_VERSION } from '@/config/policies';
  * If a hero looks bare, the fix is restraint — tighter type, more space — not
  * a second visual language.
  */
+/**
+ * `updated` is passed in rather than read from config: it is a claim about THIS
+ * page's copy, and each page owns its own. Passing it also means the stamp
+ * cannot render without a caller having supplied a date — see the guard below.
+ */
 export function PolicyHero({
   breadcrumb,
   icon,
   title,
   titleEn,
   lede,
+  updated,
   showStamp = true,
 }) {
   return (
@@ -53,10 +59,14 @@ export function PolicyHero({
                 {lede}
               </p>
             )}
-            {showStamp && (
+            {/* No date, no stamp. Rendering "ปรับปรุงล่าสุด:" followed by
+                nothing would be worse than omitting the line, and silently
+                falling back to a shared date is the exact defect that made
+                this a per-page field. */}
+            {showStamp && updated && (
               <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-muted)]">
                 <PolicyIcon name="clock" className="h-4 w-4 shrink-0" />
-                <span>ปรับปรุงล่าสุด: {POLICY_UPDATED}</span>
+                <span>ปรับปรุงล่าสุด: {updated}</span>
                 <span aria-hidden="true">·</span>
                 <span>เวอร์ชัน {POLICY_VERSION}</span>
               </p>
