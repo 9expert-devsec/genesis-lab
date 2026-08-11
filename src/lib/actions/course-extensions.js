@@ -17,6 +17,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
+import { duplicateKeyMessage } from '@/lib/db/duplicateKeyMessage';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -155,6 +156,46 @@ export async function saveCourseExtension(courseId, data) {
       typeof data?.omisePaymentEnabled === 'boolean' ? data.omisePaymentEnabled : false,
   };
 
+  /**
+   * ── THE APP-LEVEL ALIAS CHECK — BELT, WITH THE INDEX AS BRACES ────────────
+   * This does NOT replace the unique index on `urlAlias`, and must not be read
+   * as making it optional. The two do different jobs:
+   *
+   *   the INDEX is the guarantee. It is the only thing that holds under
+   *     concurrency — two admins saving the same alias at the same moment both
+   *     pass the check below, because between this read and the write there is
+   *     a window in which neither has committed. The index closes it; nothing
+   *     at application level can.
+   *
+   *   this CHECK is the message. It names the course that already owns the
+   *     alias, which the E11000 cannot — the driver reports the key, not the
+   *     owner — and it produces that message on the normal return path instead
+   *     of through an exception, so the caller gets `{ ok: false }` rather than
+   *     a rejected write it has to interpret.
+   *
+   * Delete the index and this becomes a race with a nice error. Delete this and
+   * the admin gets a correct but unhelpful "alias already used" with no idea by
+   * what. Both, deliberately.
+   *
+   * Scoped `courseId: { $ne: courseId }` so re-saving a course's OWN alias is
+   * not a collision — this action is an upsert keyed on courseId, and the
+   * overwhelmingly common save is an edit that leaves the alias untouched.
+   */
+  if (cleanAlias) {
+    const clash = await CourseExtension.findOne({
+      urlAlias: cleanAlias,
+      courseId: { $ne: courseId },
+    })
+      .select('courseId')
+      .lean();
+    if (clash) {
+      return {
+        ok: false,
+        error: `URL Alias นี้ถูกใช้แล้วโดยหลักสูตร ${clash.courseId}`,
+      };
+    }
+  }
+
   try {
     // `before` from an explicit read rather than `new: false`, because this
     // action RETURNS the post-update document to its caller — flipping the flag
@@ -196,11 +237,21 @@ export async function saveCourseExtension(courseId, data) {
 
     return { ok: true, data: serialize(doc) };
   } catch (err) {
-    // Mongo's E11000 on unique alias collisions is the most likely
-    // expected error — surface it cleanly.
-    if (err?.code === 11000) {
-      return { ok: false, error: 'URL Alias นี้ถูกใช้แล้วโดยหลักสูตรอื่น' };
-    }
+    /**
+     * TWO unique indexes now, so an E11000 no longer identifies itself.
+     *
+     * This used to return the alias message for ANY 11000. While `urlAlias` was
+     * not unique that branch could only ever be reached by a `courseId`
+     * collision — so the single error it could receive was the one it described
+     * wrongly. `duplicateKeyMessage` reads the failing index off the error and
+     * says the right thing for each, falling back to a generic message rather
+     * than guessing.
+     *
+     * Reaching here for an alias means the pre-check above lost the race, which
+     * is exactly the case the index exists to catch.
+     */
+    const duplicate = duplicateKeyMessage(err);
+    if (duplicate) return { ok: false, error: duplicate };
     return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
   }
 }
