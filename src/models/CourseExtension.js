@@ -36,31 +36,36 @@ const CourseExtensionSchema = new mongoose.Schema(
      * Stored with a leading slash, e.g. "/excel-ai-business-training-course".
      * Falsy → falls back to "/{course_id}-training-course" via resolveCourse.
      *
-     * ── THIS INDEX IS NOT UNIQUE, AND NOTHING ELSE ENFORCES UNIQUENESS ──────
-     * The previous comment here said `sparse: true` kept "the unique index"
-     * from rejecting documents without an alias. There is no unique index.
-     * `index: true` builds a PLAIN index — verified against the live
-     * collection, which reports `urlAlias_1 unique=false sparse=true` — and no
-     * code path checks for a duplicate either: saveCourseExtension normalises
-     * the alias and writes it, and the create-flow duplicate guard
-     * (findCourseExtensionCodeInsensitive) checks `courseId`, never `urlAlias`.
+     * ── UNIQUE, AND WHY `sparse` STAYS ──────────────────────────────────────
+     * Two courses pointing at one alias means `getCourseExtensionByAlias`
+     * (`findOne({ urlAlias })`, no sort) returns whichever the index hands back
+     * — so the admin edits one row while the public page renders the other, and
+     * every SEO/gallery/Omise change silently does nothing. That is worse than a
+     * 404 because a 404 is visible. It happened: POWER-APPS and Power-Apps both
+     * held /power-apps-for-business-training-course until 2026-08-11.
      *
-     * So two courses CAN be given the same alias, both saves succeed, and
-     * `getCourseExtensionByAlias` does `findOne({ urlAlias })` with no sort —
-     * which of them the public page gets is index/natural order, not a
-     * guarantee. That is not hypothetical: it is exactly how POWER-APPS and
-     * Power-Apps came to share /power-apps-for-business-training-course, with
-     * the admin editing one row while the public page rendered the other.
+     * `sparse` is doing nothing TODAY — all 78 rows carry an alias — and is kept
+     * for the case the unique index would otherwise create: a course with no
+     * custom URL must be able to store null, and under a NON-sparse unique index
+     * the second such row collides with the first on the null key.
      *
-     * The E11000 branch in saveCourseExtension's catch, which returns
-     * "URL Alias นี้ถูกใช้แล้วโดยหลักสูตรอื่น", therefore CANNOT FIRE for an
-     * alias collision. It is reachable only via the `courseId` unique index.
+     * ── THIS DECLARATION DOES NOT REACH THE DATABASE BY ITSELF ──────────────
+     * Nothing in this repo applies index CHANGES. `dbConnect()` leaves Mongoose's
+     * `autoIndex` at its default, so models do call `createIndexes()` on first
+     * use — but that only CREATES MISSING indexes. `urlAlias_1` already exists as
+     * non-unique, and MongoDB rejects a same-key/different-options create with
+     * IndexOptionsConflict rather than altering it. `syncIndexes()`, which would
+     * drop and rebuild the mismatch, is called nowhere.
      *
-     * Adding `unique: true` is a MIGRATION, not an edit: the index build fails
-     * outright while duplicates exist, so the data has to be resolved first and
-     * an application-level check added for the error to stay user-visible.
+     * So the index must be dropped and recreated BY HAND, once:
+     *     db.course_extensions.dropIndex('urlAlias_1')
+     *     db.course_extensions.createIndex({ urlAlias: 1 }, { unique: true, sparse: true })
+     * Until that is done this line is documentation, and the application-level
+     * check in saveCourseExtension is the only thing standing between two
+     * courses and one alias. Verify with `db.course_extensions.getIndexes()`:
+     * the goal state is `urlAlias_1 unique: true, sparse: true`.
      */
-    urlAlias: { type: String, default: '', trim: true, index: true, sparse: true },
+    urlAlias: { type: String, default: '', trim: true, index: true, unique: true, sparse: true },
 
     // ── SEO ─────────────────────────────────────────────────────
     metaTitle:       { type: String, default: '' },
@@ -85,9 +90,10 @@ const CourseExtensionSchema = new mongoose.Schema(
   { timestamps: true, collection: 'course_extensions' }
 );
 
-// `courseId` gets a UNIQUE index from `unique: true`; `urlAlias` gets a plain
-// sparse index from `index: true` — NOT a unique one. No additional `.index()`
-// declarations needed (Mongoose warns on duplicates).
+// Both `courseId` and `urlAlias` get UNIQUE indexes from `unique: true`;
+// `urlAlias` is additionally sparse. No `.index()` declarations needed (Mongoose
+// warns on duplicates). Two unique indexes means an E11000 no longer identifies
+// which constraint failed on its own — see duplicateKeyMessage.
 
 /**
  * Coerce an empty alias to null before save, so the sparse index skips the
