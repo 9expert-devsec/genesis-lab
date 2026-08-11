@@ -17,7 +17,7 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
-import { duplicateKeyMessage } from '@/lib/db/duplicateKeyMessage';
+import { duplicateKeyMessage, duplicateKeyField } from '@/lib/db/duplicateKeyMessage';
 import { aliasConflict, normaliseAlias } from '@/lib/courses/aliasAvailability';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
@@ -281,7 +281,14 @@ export async function saveCourseExtension(courseId, data) {
      * is exactly the case the index exists to catch.
      */
     const duplicate = duplicateKeyMessage(err);
-    if (duplicate) return { ok: false, error: duplicate };
+    if (duplicate) {
+      // `field` so the CALLER can put the refusal on the input that caused it,
+      // and so the pre-check path and this race path are indistinguishable to
+      // it — an alias refusal must land under the alias box whether the
+      // application check caught it or the unique index did.
+      const field = duplicateKeyField(err);
+      return { ok: false, error: duplicate, ...(field ? { field } : {}) };
+    }
     return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
   }
 }

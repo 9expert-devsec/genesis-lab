@@ -70,9 +70,13 @@ test('CONTROL: the check does not replace the index — both must be present', (
 // ── D3: the catch no longer guesses ────────────────────────────────────────
 
 test('the duplicate-key catch reads the failing index instead of assuming', () => {
+  // Matched on the BINDING, not the punctuation: the import gained
+  // `duplicateKeyField` when the catch started attaching the field for the
+  // caller, and a guard that breaks on formatting reports a defect that is not
+  // there. (It did exactly that once — this comment is the receipt.)
   assert.match(
     ACTIONS.withImports,
-    /import \{ duplicateKeyMessage \} from '@\/lib\/db\/duplicateKeyMessage'/,
+    /import \{[\s\S]*?\bduplicateKeyMessage\b[\s\S]*?\} from '@\/lib\/db\/duplicateKeyMessage'/,
     'the disambiguator is not imported'
   );
   assert.match(ACTIONS.code, /duplicateKeyMessage\(err\)/);
