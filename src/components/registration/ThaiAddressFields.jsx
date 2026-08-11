@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getDataForZipCode } from 'thai-data';
+import { subDistrictFieldState } from '@/lib/address/subDistrictFieldState';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
@@ -14,6 +15,22 @@ import { cn } from '@/lib/utils';
  *      แขวง/ตำบล dropdown
  *   3. User picks แขวง/ตำบล from the dropdown
  *   4. Each field remains manually editable after autofill
+ *
+ * ── AND WHEN THE ZIP IS NOT IN THE DATASET ──────────────────────────────────
+ * Step 4 used to be false exactly where it mattered. แขวง/ตำบล was
+ * `readOnly={subDistrictOptions.length === 0}` while the schemas require it, so
+ * a postcode the dataset does not cover gave a field that could be neither
+ * filled nor skipped — the form was unfinishable. A customer hit this on a
+ * masterclass registration.
+ *
+ * The field now has three states, decided in lib/address/subDistrictFieldState:
+ * `locked` below five digits (unchanged), `select` when options exist
+ * (unchanged), and `manual` when five digits produce none — typeable, with a
+ * hint. The requirement is untouched; the value became enterable.
+ *
+ * "No options" is the key, not "lookup returned null": 24 of the 978 records in
+ * thai-data@3.0.2 exist with `subDistrictList: null`, so an unknown postcode
+ * and one of those 24 reach the same dead end by different routes.
  *
  * Uses `thai-data` (zero runtime deps, 77 provinces, 978 zip codes)
  * instead of the Antd-based thai-address-autocomplete-react which is
@@ -33,22 +50,62 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
 
   const err = (k) => errors?.[prefix]?.[k]?.message;
 
+  /**
+   * locked / select / manual — the whole point of the fix, decided in one pure
+   * place (lib/address/subDistrictFieldState) so it can be tested without a
+   * DOM. `manual` is what stops a postcode the dataset does not cover from
+   * producing a field that is read-only AND required at the same time.
+   */
+  const subDistrictField = subDistrictFieldState({
+    postalCode: value.postalCode,
+    optionCount: subDistrictOptions.length,
+  });
+  const hintId = `${prefix}-subdistrict-hint`;
+
   const update = useCallback(
     (key, val) => onChange({ ...value, [key]: val }),
     [value, onChange]
   );
 
+  /**
+   * Drop the three fields the postcode lookup owns.
+   *
+   * Only called from the postcode effect, which is keyed on `value.postalCode`
+   * alone — so typing into แขวง/ตำบล in `manual` state cannot re-enter here and
+   * erase what is being typed.
+   */
+  const clearDerived = useCallback(() => {
+    if (!value.subDistrict && !value.district && !value.province) return;
+    onChange({ ...value, subDistrict: '', district: '', province: '' });
+  }, [value, onChange]);
+
   // When postalCode reaches 5 digits, look up district + province and
   // populate the subDistrict dropdown. Clear derived fields on invalid zip.
   useEffect(() => {
     const zip = (value.postalCode ?? '').trim();
+
+    /**
+     * A ZIP THAT ANSWERS NOTHING MUST ALSO CLEAR WHAT THE LAST ONE ANSWERED.
+     *
+     * Both of these paths used to `return` early WITHOUT touching
+     * district/province/subDistrict, so the values filled in for a PREVIOUS
+     * postcode survived underneath the new one and were submitted with it — a
+     * แขวง/ตำบล belonging to a different province, and no way to see it because
+     * the fields still looked correctly filled.
+     *
+     * The 24 present-but-empty records already cleared correctly by accident
+     * (their districtList is null, so the assignment below writes ''); the
+     * incomplete-zip and unknown-zip paths did not. Now all three agree.
+     */
     if (zip.length !== 5) {
       setSubDistrictOptions([]);
+      clearDerived();
       return;
     }
     const entry = getDataForZipCode(zip);
     if (!entry) {
       setSubDistrictOptions([]);
+      clearDerived();
       return;
     }
 
@@ -132,10 +189,11 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
               }}
               onFocus={() => subDistrictOptions.length > 0 && setShowDropdown(true)}
               className={inputCls}
-              placeholder={subDistrictOptions.length > 0 ? 'เลือกหรือพิมพ์' : 'กรอกรหัสไปรษณีย์ก่อน'}
-              readOnly={subDistrictOptions.length === 0}
+              placeholder={subDistrictField.placeholder}
+              readOnly={subDistrictField.readOnly}
               aria-haspopup="listbox"
               aria-expanded={showDropdown}
+              aria-describedby={subDistrictField.hint ? hintId : undefined}
             />
 
             {showDropdown && subDistrictOptions.length > 0 && (
@@ -168,6 +226,15 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
             )}
           </div>
         </FieldGroup>
+
+        {/* Only rendered in `manual`. Says the postcode was not found and that
+            the three fields below are now the admin's to fill — without it the
+            field simply becomes typeable and nothing explains why. */}
+        {subDistrictField.hint && (
+          <p id={hintId} className="-mt-2 text-xs text-amber-700 sm:col-span-2">
+            {subDistrictField.hint}
+          </p>
+        )}
 
         {/* ── เขต / อำเภอ — autofilled ──────────────────── */}
         <FieldGroup label="เขต / อำเภอ" error={err('district')} required>
