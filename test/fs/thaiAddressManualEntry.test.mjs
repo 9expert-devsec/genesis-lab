@@ -66,7 +66,7 @@ test('CONTROL: subDistrict is still required by both schemas', () => {
 
 // ── telemetry: which postcode missed, and NOTHING else ──────────────────────
 
-test('the miss event sends exactly two params: the postcode and the route', () => {
+test('the miss event sends exactly one param: the postcode', () => {
   /**
    * A PRIVACY constraint, not a formatting one. This event fires on the one
    * path where a real customer is stuck mid-registration, and the form it sits
@@ -74,9 +74,18 @@ test('the miss event sends exactly two params: the postcode and the route', () =
    * postcode alone identifies an area of thousands; joined to any of those it
    * identifies a person.
    *
-   * So the payload is pinned to its two keys, and the fields that must never
-   * join them are named individually — a regex for "no other keys" would pass
+   * So the payload is pinned to its keys, and the fields that must never join
+   * them are named individually — a regex for "no other keys" would pass
    * against a payload that added `email` under a different spelling.
+   *
+   * ── IT WAS TWO PARAMS UNTIL THE DATASET CHANGED ─────────────────────────────
+   * `miss_route` reported `absent` vs `present_but_empty`, a distinction that
+   * existed only because thai-data had 24 records that were keys carrying nulls.
+   * thailand_postcode_2026.json has none, so the second branch became
+   * unreachable and the parameter carried one value forever. It is asserted GONE
+   * below, not merely absent from the list above: a single-valued parameter is
+   * worse than no parameter, because the next reader believes the distinction is
+   * still live.
    */
   const call = FIELD.code.slice(
     FIELD.code.indexOf("gtagEvent('postcode_lookup_miss'"),
@@ -85,7 +94,8 @@ test('the miss event sends exactly two params: the postcode and the route', () =
   assert.notEqual(call.length, 0, 'the miss event is gone');
 
   assert.match(call, /postal_code: zip/);
-  assert.match(call, /miss_route: getDataForZipCode\(zip\) \? 'present_but_empty' : 'absent'/);
+  assert.doesNotMatch(call, /miss_route/, 'miss_route is back, and it has only one reachable value');
+  assert.doesNotMatch(FIELD.withImports, /thai-data/, 'the component still reaches for the old dataset');
 
   for (const forbidden of [
     'email', 'firstName', 'lastName', 'phone', 'companyName', 'taxId',
@@ -127,9 +137,14 @@ test('both no-option paths clear the fields the previous postcode filled', () =>
   // Before: each path `return`ed early without touching district / province /
   // subDistrict, so values chosen under postcode A survived under postcode B —
   // a แขวง/ตำบล from the wrong province, submitted looking correctly filled.
+  //
+  // The end anchor was `const district =`, a line the old effect had because it
+  // read districtList[0]. That line is gone with the guess it encoded, so the
+  // slice now ends at the surviving-option lookup — the first statement after
+  // the two early returns.
   const effect = FIELD.code.slice(
     FIELD.code.indexOf("const zip = (value.postalCode ?? '').trim()"),
-    FIELD.code.indexOf('const district =')
+    FIELD.code.indexOf('const surviving =')
   );
   assert.notEqual(effect.length, 0, 'the postcode effect is gone');
   assert.equal(
@@ -137,6 +152,68 @@ test('both no-option paths clear the fields the previous postcode filled', () =>
     2,
     'the incomplete-zip and unknown-zip paths do not both clear'
   );
+});
+
+// ── B2 / B3 / B7: the district travels with the choice ──────────────────────
+
+test('the component reads the derived index, never the nested source', () => {
+  assert.match(
+    FIELD.withImports,
+    /import \{[\s\S]*?\blookupPostcode\b[\s\S]*?\} from '@\/lib\/address\/postcodeIndex'/,
+    'the lookup is not imported from the single reader'
+  );
+  // The 352 KB nested file must not reach the browser; only the reader touches
+  // the 296 KB derived index.
+  assert.doesNotMatch(
+    FIELD.withImports,
+    /thailand_postcode_2026/,
+    'the component imports the nested source directly'
+  );
+});
+
+test('B2: choosing a แขวง/ตำบล writes district and province from THAT option', () => {
+  // The whole fix. Writing only subDistrict would leave whatever district the
+  // postcode guessed, which is the 10110 bug.
+  const fn = FIELD.code.slice(FIELD.code.indexOf('const handleSelectSubDistrict'));
+  const body = fn.slice(0, fn.indexOf('setShowDropdown(false);'));
+  assert.match(body, /subDistrict:\s*option\.subDistrict/);
+  assert.match(body, /district:\s*option\.district/);
+  assert.match(body, /province:\s*option\.province/);
+});
+
+test('B3: an ambiguous postcode fills district/province with nothing', () => {
+  // unambiguousLocation returns null when the postcode spans several districts;
+  // the `?? ''` is what makes that a blank rather than an undefined.
+  assert.match(FIELD.code, /const settled = unambiguousLocation\(zip\);/);
+  assert.match(FIELD.code, /settled\?\.district \?\? ''/);
+  assert.match(FIELD.code, /settled\?\.province \?\? ''/);
+});
+
+test('B7: overwriting a hand-typed district is announced, not silent', () => {
+  // The 168 ambiguous postcodes invite typing เขต/อำเภอ by hand. The choice
+  // still wins — a subdistrict and a district the dataset says cannot coexist
+  // is an invented address — but the customer is told the field moved.
+  assert.match(FIELD.code, /correctedByChoice/, 'nothing tracks the overwrite');
+  assert.match(
+    FIELD.code,
+    /value\.district && value\.district !== option\.district/,
+    'the overwrite is not detected against what the customer typed'
+  );
+  assert.match(
+    FIELD.code,
+    /\{correctedByChoice && \(/,
+    'the notice is never rendered'
+  );
+});
+
+test('B7 control: the notice cannot fire when nothing was overwritten', () => {
+  // Guarded on a NON-EMPTY prior value that DIFFERS. Dropping either half would
+  // make the note appear on every ordinary selection, which trains people to
+  // ignore it.
+  const fn = FIELD.code.slice(FIELD.code.indexOf('const handleSelectSubDistrict'));
+  const guard = fn.slice(0, fn.indexOf('onChange('));
+  assert.match(guard, /!!value\.district/, 'the empty-field case is not excluded');
+  assert.match(guard, /!==\s*option\.district/, 'an agreeing value would still raise the notice');
 });
 
 test('clearDerived drops exactly the three lookup-owned fields', () => {
