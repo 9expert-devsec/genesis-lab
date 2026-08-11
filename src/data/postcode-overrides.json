@@ -1,0 +1,66 @@
+{
+  "_readme": [
+    "EXPLICIT PATCH LIST, applied during derivation by scripts/derive-postcode-index.mjs.",
+    "",
+    "WHY IT EXISTS: thailand_postcode_2026.json is newer than the thai-data package it",
+    "replaces (it carries the 2017 บางนา and 2021 บางบอน แขวง splits), but it drops five",
+    "real tambons that thai-data listed. Editing them back into the source file would",
+    "create a second hand-maintained copy of a file the user maintains upstream — the next",
+    "refresh would silently revert them. They live here instead, and the derivation applies",
+    "them on top.",
+    "",
+    "HOW AN ENTRY BECOMES LIVE: postcode, district and province must ALL be non-null.",
+    "An entry with any of them null is UNRESOLVED — the derivation skips it and prints it",
+    "as a warning. It is not an error and does not fail the build.",
+    "",
+    "THE 'candidate' BLOCK IS DOCUMENTATION, NEVER APPLIED. It records what the OUTGOING",
+    "thai-data@3.0.2 said, so whoever resolves these has a starting point. It is not a",
+    "resolution: thai-data is the dataset being replaced precisely because it is wrong in",
+    "places — it files 10570 (อ.บางเสาธง) under 10540, and it disagrees with both the new",
+    "file and the public postcode sites about คลองหลา. A number from it is a lead to check,",
+    "not an answer to ship. Do not promote a candidate into `postcode` without confirming",
+    "it against Thailand Post."
+  ],
+  "additions": [
+    {
+      "subDistrict": "หนองเข็ง",
+      "district": null,
+      "province": "บึงกาฬ",
+      "postcode": null,
+      "status": "unresolved",
+      "candidate": { "source": "thai-data@3.0.2", "postcode": "38000", "district": "บุ่งคล้า" }
+    },
+    {
+      "subDistrict": "ขามเรียน",
+      "district": null,
+      "province": "มหาสารคาม",
+      "postcode": null,
+      "status": "unresolved",
+      "candidate": { "source": "thai-data@3.0.2", "postcode": "44210", "district": "ยางสีสุราช" }
+    },
+    {
+      "subDistrict": "สบโขง",
+      "district": "อำเภออมก๋อย",
+      "province": "เชียงใหม่",
+      "postcode": null,
+      "status": "unresolved",
+      "candidate": { "source": "thai-data@3.0.2", "postcode": "50310", "district": "อมก๋อย" }
+    },
+    {
+      "subDistrict": "สองห้อง",
+      "district": null,
+      "province": "หนองคาย",
+      "postcode": null,
+      "status": "unresolved",
+      "candidate": { "source": "thai-data@3.0.2", "postcode": "43100", "district": "สระใคร" }
+    },
+    {
+      "subDistrict": "โคกแหลม",
+      "district": null,
+      "province": "พิษณุโลก",
+      "postcode": null,
+      "status": "unresolved",
+      "candidate": { "source": "thai-data@3.0.2", "postcode": "65190", "district": "เนินมะปราง" }
+    }
+  ]
+}
