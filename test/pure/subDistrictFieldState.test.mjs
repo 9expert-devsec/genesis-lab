@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import { lookupPostcode, isKnownPostcode } from '@/lib/address/postcodeIndex';
 import {
   subDistrictFieldState,
   SUB_DISTRICT_LOCKED,
@@ -24,34 +24,43 @@ import {
  * its own bug.
  */
 
-const require = createRequire(import.meta.url);
-const { getDataForZipCode } = require('thai-data');
-
 /** A postcode with real subdistricts. */
 const POPULATED_ZIP = '10110';
-/**
- * One of the 24 records that EXIST as keys and carry nothing —
- * `{ zipCode: '81180', subDistrictList: null, districtList: null,
- *    provinceList: null }`, read from the installed package below rather than
- * transcribed, so the day upstream fills it in this fixture stops lying.
- */
-const EMPTY_ZIP = '81180';
 const UNKNOWN_ZIP = '99999';
 
-/** Exactly what the component computes from a lookup. */
-const optionsFor = (zip) =>
-  (getDataForZipCode(zip)?.subDistrictList ?? []).map((s) => s.subDistrictName).length;
+/**
+ * ── WHAT CHANGED HERE WHEN THE DATASET DID, AND WHY IT IS NOT A DELETION ────
+ * These fixtures used to come from `thai-data`, and one of them —
+ * `EMPTY_ZIP = '81180'` — was a record that EXISTED as a key while carrying
+ * nulls. Two tests were built on it: "a PRESENT-BUT-EMPTY postcode makes the
+ * field typeable too", and "both routes to manual are indistinguishable".
+ *
+ * thailand_postcode_2026.json has no such records — every key holds at least one
+ * subdistrict, pinned by a test in postcodeIndex.test.mjs — and 81180 is not in
+ * it at all. So those two tests had thai-data's SHAPE as their subject, not the
+ * field's behaviour, and no fixture substitution can keep them as they were.
+ *
+ * They are REFRAMED, not dropped, because the claim underneath them is still
+ * load-bearing: `subDistrictFieldState` decides on the OPTION COUNT and knows
+ * nothing about why the options are missing. That is what makes it correct for a
+ * cause that does not exist today but could return the moment the dataset gains
+ * a hollow entry. The reframed version below drives the function directly rather
+ * than through whichever dataset happens to be installed — which is also why it
+ * can no longer rot.
+ *
+ * Everything else in this file was always dataset-free and is untouched.
+ */
+const optionsFor = (zip) => lookupPostcode(zip).length;
 
 // ── the fixtures are what this file claims they are ─────────────────────────
 
 test('the fixtures still behave as this file assumes', () => {
-  // Not a control for the code under test — a check that the DATA has not
-  // moved underneath the tests. If upstream populates 81180, the two "manual"
-  // cases below silently become one and nobody would notice.
+  // Not a control for the code under test — a check that the DATA has not moved
+  // underneath the tests. If 10110 ever loses its subdistricts, or 99999 becomes
+  // a real postcode, the cases below stop testing what they claim to.
   assert.ok(optionsFor(POPULATED_ZIP) > 0, `${POPULATED_ZIP} lost its subdistricts`);
-  assert.ok(getDataForZipCode(EMPTY_ZIP), `${EMPTY_ZIP} is no longer a key — pick another empty record`);
-  assert.equal(optionsFor(EMPTY_ZIP), 0, `${EMPTY_ZIP} is no longer empty — pick another`);
-  assert.equal(getDataForZipCode(UNKNOWN_ZIP), null, `${UNKNOWN_ZIP} is now a real postcode — pick another`);
+  assert.equal(isKnownPostcode(UNKNOWN_ZIP), false, `${UNKNOWN_ZIP} is now a real postcode — pick another`);
+  assert.equal(optionsFor(UNKNOWN_ZIP), 0);
 });
 
 // ── locked ──────────────────────────────────────────────────────────────────
@@ -91,24 +100,28 @@ test('an UNKNOWN postcode makes the field typeable', () => {
   assert.match(f.hint ?? '', /ไม่พบรหัสไปรษณีย์นี้/);
 });
 
-test('a PRESENT-BUT-EMPTY postcode makes the field typeable too', () => {
-  // 81180 returns a truthy record whose subDistrictList is null. Keying the fix
-  // on `entry == null` would have fixed the unknown case and left this one
-  // exactly as broken — which is why the decision keys on the option count.
-  assert.ok(getDataForZipCode(EMPTY_ZIP), 'fixture is meant to EXIST in the dataset');
-  const f = subDistrictFieldState({
-    postalCode: EMPTY_ZIP,
-    optionCount: optionsFor(EMPTY_ZIP),
-  });
+test('a PRESENT-BUT-EMPTY postcode would make the field typeable too', () => {
+  // REFRAMED — see the fixture note at the top. thai-data had 24 records that
+  // were keys carrying nulls; keying the fix on `entry == null` would have fixed
+  // the unknown case and left those exactly as broken, which is why the decision
+  // keys on the OPTION COUNT instead.
+  //
+  // The 2026 dataset has no hollow records, so this cause cannot be reproduced
+  // from data any more. The guarantee is still worth pinning, so it is asserted
+  // where it actually lives — a full postcode with zero options is `manual`, and
+  // the function is never told which of the two reasons produced the zero.
+  const f = subDistrictFieldState({ postalCode: '81180', optionCount: 0 });
   assert.equal(f.state, SUB_DISTRICT_MANUAL);
-  assert.equal(f.readOnly, false, 'a present-but-empty record still traps the user');
+  assert.equal(f.readOnly, false, 'a present-but-empty record would still trap the user');
 });
 
 test('both routes to manual are indistinguishable to the field', () => {
-  // The claim the fix rests on: one behaviour, two causes.
+  // The claim the fix rests on: one behaviour, two causes. The function takes a
+  // COUNT, so it cannot tell an absent postcode from a hollow one — which is the
+  // property being asserted, and the reason it survives the dataset swap.
   assert.deepEqual(
     subDistrictFieldState({ postalCode: UNKNOWN_ZIP, optionCount: optionsFor(UNKNOWN_ZIP) }),
-    subDistrictFieldState({ postalCode: EMPTY_ZIP, optionCount: optionsFor(EMPTY_ZIP) })
+    subDistrictFieldState({ postalCode: '81180', optionCount: 0 })
   );
 });
 
