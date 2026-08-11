@@ -41,7 +41,7 @@ export function PublicFooter() {
           <p className="text-sm leading-relaxed text-9e-navy dark:text-white">
             {siteConfig.description}
           </p>
-          <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          <p className="text-xs text-9e-action dark:text-[#48B0FF]">
             {siteConfig.concept}
           </p>
         </div>
@@ -143,47 +143,48 @@ export function PublicFooter() {
 
       {/* Bottom bar */}
       <div className="border-t border-[#E2E8F0] dark:border-[#1e3a5f]">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-center justify-between gap-3 px-4 py-4 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
-          <div className="flex flex-col items-center gap-2 sm:items-start">
-            <p>
-              {/*
-                The glyph alone is a step larger than the line it sits in — at
-                12px the © renders as a smudge in most faces. `leading-none`
-                keeps the taller glyph from growing the line box, and the small
-                negative baseline shift re-centres it against the text now that
-                it no longer matches their cap height.
-              */}
-              <span className="align-[-0.055em] text-sm leading-none">©</span>{" "}
-              {year} {siteConfig.nameFull}. All rights reserved.
-            </p>
+        {/*
+          One row: © on the left, the policy links on the right.
 
-            <nav aria-label="นโยบายและข้อกำหนด">
-              <ul className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 sm:justify-start">
-                {policyNav.map((item, i) => (
-                  <li key={item.href} className="flex items-center gap-2">
-                    {i > 0 && (
-                      <span aria-hidden="true" className="text-9e-slate-dp-300 dark:text-[#475569]">
-                        ·
-                      </span>
-                    )}
-                    <Link
-                      href={item.href}
-                      className="transition-colors hover:text-9e-action dark:hover:text-[#48B0FF]"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </nav>
-          </div>
-
+          `flex-wrap` on the row matters at the tight sizes. Between about 640
+          and 900px the © line and four Thai links together are wider than the
+          container, and without it the nav would be squeezed into a narrow
+          column of stacked links beside the ©. With it, the nav drops whole
+          onto its own line and only sits beside the © when there is genuinely
+          room. Below sm the row is a column anyway and both centre.
+        */}
+        <div className="mx-auto flex max-w-[1200px] flex-col flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 text-center text-xs text-9e-slate-dp-50 dark:text-[#94a3b8] sm:flex-row sm:text-left lg:px-6">
           <p>
-            {siteConfig.tagline} ·{" "}
-            <span className="text-9e-action dark:text-[#48B0FF]">
-              {siteConfig.slogan}
-            </span>
+            {/*
+              The glyph alone is a step larger than the line it sits in — at
+              12px the © renders as a smudge in most faces. `leading-none`
+              keeps the taller glyph from growing the line box, and the small
+              negative baseline shift re-centres it against the text now that
+              it no longer matches their cap height.
+            */}
+            <span className="align-[-0.055em] text-sm leading-none">©</span>{" "}
+            {year} {siteConfig.nameFull}. All rights reserved.
           </p>
+
+          <nav aria-label="นโยบายและข้อกำหนด">
+            <ul className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 sm:justify-end">
+              {policyNav.map((item, i) => (
+                <li key={item.href} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <span aria-hidden="true" className="text-9e-slate-dp-300 dark:text-[#475569]">
+                      ·
+                    </span>
+                  )}
+                  <Link
+                    href={item.href}
+                    className="transition-colors hover:text-9e-action dark:hover:text-[#48B0FF]"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
       </div>
     </footer>
