@@ -124,6 +124,57 @@ test('with no _id it falls back to the LIST rather than guessing a URL', () => {
   );
 });
 
+// ── R6 ──────────────────────────────────────────────────────────────────────
+
+test('CONTROL: the create form uppercases course_id on its way to the payload', () => {
+  /**
+   * A CONTROL — it passes against the pre-change tree, deliberately, and is
+   * added under an explicit override of my own call to omit it.
+   *
+   * WHAT IT GUARDS, which is not this round's work but is inside the file this
+   * round rewrote: mixed-case course_ids are a LIVE upstream defect. Upstream
+   * `?course_id=` is exact-match and case-sensitive, so a mixed-case id makes
+   * the public detail page fall back to a list scan and poisons the ISR cache
+   * with a negative entry that cannot be busted by code. The create form is
+   * where new ones are born.
+   *
+   * The guarantee is not in shapePayload — `toStr` only trims. It rests
+   * entirely on this input being a CONTROLLED field whose onChange uppercases,
+   * so FormData reads back what React put there. Turn it into an uncontrolled
+   * input and every other test in the suite still passes while lowercase ids
+   * start reaching MSDB again. That gap is the whole reason this exists.
+   */
+  const input = FORM.code.slice(
+    FORM.code.indexOf('name="course_id"'),
+    FORM.code.indexOf('placeholder="POWER-BI-PQ"')
+  );
+  assert.notEqual(input.length, 0, 'the course_id input is gone');
+
+  assert.match(
+    input,
+    /value=\{courseId\}/,
+    'course_id is no longer a controlled input — React cannot normalise what it does not own'
+  );
+  assert.match(
+    input,
+    /onChange=\{\(e\) => setCourseId\(e\.target\.value\.toUpperCase\(\)\)\}/,
+    'course_id no longer uppercases on change'
+  );
+
+  // And nothing downstream re-lowers it: shapePayload passes the value through
+  // `toStr`, which trims only.
+  assert.match(
+    ACTIONS.code,
+    /course_id:\s*toStr\(get\('course_id'\)\)/,
+    'shapePayload no longer reads course_id straight from the form'
+  );
+  assert.doesNotMatch(
+    ACTIONS.code,
+    /course_id:[^,\n]*toLowerCase\(\)/,
+    'the payload lowercases course_id — that is the defect this guards'
+  );
+});
+
 test('the create redirect sets leavingRef, or the guard blocks its own navigation', () => {
   // R7 put the unsaved-changes guard on this page; the redirect is a
   // programmatic leave the guard must be told about.
