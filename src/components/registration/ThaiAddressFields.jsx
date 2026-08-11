@@ -2,7 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getDataForZipCode } from 'thai-data';
-import { subDistrictFieldState } from '@/lib/address/subDistrictFieldState';
+import {
+  subDistrictFieldState,
+  SUB_DISTRICT_MANUAL,
+} from '@/lib/address/subDistrictFieldState';
+import { gtagEvent } from '@/lib/analytics/gtag';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +65,47 @@ export function ThaiAddressFields({ value, onChange, errors, prefix = 'address' 
     optionCount: subDistrictOptions.length,
   });
   const hintId = `${prefix}-subdistrict-hint`;
+
+  /**
+   * WHICH POSTCODE MISSED, and nothing else.
+   *
+   * The original complaint was "a customer could not enter their address" and
+   * took a full investigation to turn into a postcode. This one number answers
+   * it in seconds, and tells the two causes apart:
+   *
+   *   absent              the dataset has no such key
+   *   present_but_empty   the key exists carrying nulls — 24 of the 978 records
+   *                       in thai-data@3.0.2 are like this
+   *
+   * WHAT IS DELIBERATELY NOT SENT: nothing else from the form. No name, email,
+   * phone, company, course, or order value. A postcode alone identifies an area
+   * of thousands of people; joined to a name it would identify a person, and
+   * this event fires on the ONE path where the customer is already having a bad
+   * time. The two params below are the whole payload, and an fs guard pins that.
+   *
+   * Rides the existing `gtagEvent` — no new endpoint, route or dependency. It
+   * no-ops when gtag is absent and never throws (see lib/analytics/gtag.js).
+   *
+   * ON READING THE DATA: a new GA4 event parameter is not queryable in standard
+   * reports until it is registered as a custom dimension in the property. Until
+   * someone does that it shows up in DebugView, Realtime and the BigQuery
+   * export only. An empty standard report is EXPECTED and is not a bug here.
+   */
+  const reportedMissRef = useRef(null);
+  useEffect(() => {
+    if (subDistrictField.state !== SUB_DISTRICT_MANUAL) return;
+
+    const zip = String(value.postalCode ?? '').replace(/\D/g, '');
+    // Once per postcode: this effect re-runs on every keystroke in the other
+    // address fields, and a miss is one event, not one per character.
+    if (!zip || reportedMissRef.current === zip) return;
+    reportedMissRef.current = zip;
+
+    gtagEvent('postcode_lookup_miss', {
+      postal_code: zip,
+      miss_route: getDataForZipCode(zip) ? 'present_but_empty' : 'absent',
+    });
+  }, [subDistrictField.state, value.postalCode]);
 
   const update = useCallback(
     (key, val) => onChange({ ...value, [key]: val }),
