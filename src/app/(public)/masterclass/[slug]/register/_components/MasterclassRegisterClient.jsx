@@ -1233,8 +1233,13 @@ export function MasterclassRegisterClient({ course, batch }) {
       if (!addr.addressLine?.trim())
         return "กรุณากรอกที่อยู่สำหรับออกใบเสนอราคา";
       if (!addr.postalCode?.trim()) return "กรุณากรอกรหัสไปรษณีย์";
-      if (!addr.subDistrict?.trim())
-        return "กรุณาเลือกแขวง/ตำบล (กรอกรหัสไปรษณีย์ก่อน)";
+      // STATE-NEUTRAL. This used to add "(กรอกรหัสไปรษณีย์ก่อน)", which told the
+      // customer to do the thing they had already done whenever the postcode
+      // was not in the dataset and the field had become typeable. The validator
+      // deliberately does NOT learn about the field's locked/select/manual
+      // state — a message that cannot be wrong is better than a second copy of
+      // that logic living here.
+      if (!addr.subDistrict?.trim()) return "กรุณาระบุแขวง/ตำบล";
       if (!addr.district?.trim()) return "กรุณาเลือกเขต/อำเภอ";
       if (!addr.province?.trim()) return "กรุณาเลือกจังหวัด";
     }

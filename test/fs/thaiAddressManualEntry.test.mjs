@@ -20,7 +20,14 @@ const INHOUSE_SCHEMA = readSource('src/lib/schemas/register-inhouse.js');
 // ── R1: the component defers to the pure decision ───────────────────────────
 
 test('the field takes readOnly and placeholder from the shared decision', () => {
-  assert.match(FIELD.withImports, /import \{ subDistrictFieldState \}/, 'the decision is not imported');
+  // Matched on the BINDING, not the punctuation: the import became a
+  // multi-line block when the telemetry pulled in SUB_DISTRICT_MANUAL, and a
+  // guard that breaks on formatting reports a defect that is not there.
+  assert.match(
+    FIELD.withImports,
+    /import \{[\s\S]*?\bsubDistrictFieldState\b[\s\S]*?\} from '@\/lib\/address\/subDistrictFieldState'/,
+    'the decision is not imported'
+  );
   assert.match(FIELD.code, /readOnly=\{subDistrictField\.readOnly\}/);
   assert.match(FIELD.code, /placeholder=\{subDistrictField\.placeholder\}/);
 });
@@ -55,6 +62,63 @@ test('CONTROL: subDistrict is still required by both schemas', () => {
       `${name} schema no longer requires subDistrict`
     );
   }
+});
+
+// ── telemetry: which postcode missed, and NOTHING else ──────────────────────
+
+test('the miss event sends exactly two params: the postcode and the route', () => {
+  /**
+   * A PRIVACY constraint, not a formatting one. This event fires on the one
+   * path where a real customer is stuck mid-registration, and the form it sits
+   * in holds their name, email, phone, company, course and order value. A
+   * postcode alone identifies an area of thousands; joined to any of those it
+   * identifies a person.
+   *
+   * So the payload is pinned to its two keys, and the fields that must never
+   * join them are named individually — a regex for "no other keys" would pass
+   * against a payload that added `email` under a different spelling.
+   */
+  const call = FIELD.code.slice(
+    FIELD.code.indexOf("gtagEvent('postcode_lookup_miss'"),
+    FIELD.code.indexOf('});', FIELD.code.indexOf("gtagEvent('postcode_lookup_miss'"))
+  );
+  assert.notEqual(call.length, 0, 'the miss event is gone');
+
+  assert.match(call, /postal_code: zip/);
+  assert.match(call, /miss_route: getDataForZipCode\(zip\) \? 'present_but_empty' : 'absent'/);
+
+  for (const forbidden of [
+    'email', 'firstName', 'lastName', 'phone', 'companyName', 'taxId',
+    'courseId', 'courseName', 'value', 'addressLine', 'district', 'province',
+  ]) {
+    assert.doesNotMatch(
+      call,
+      new RegExp(`\\b${forbidden}\\b`),
+      `the miss event carries ${forbidden} — it must send the postcode and the route only`
+    );
+  }
+});
+
+test('the miss event fires once per postcode, not once per keystroke', () => {
+  // The effect re-runs whenever any address field changes. Without the guard a
+  // customer typing their แขวง/ตำบล by hand would emit one event per character
+  // and the number would measure typing speed rather than misses.
+  assert.match(FIELD.code, /reportedMissRef\.current === zip/, 'no per-postcode de-duplication');
+  assert.match(FIELD.code, /reportedMissRef\.current = zip/);
+});
+
+test('the miss event only fires in the manual state', () => {
+  // A locked or select field is not a miss.
+  assert.match(
+    FIELD.code,
+    /if \(subDistrictField\.state !== SUB_DISTRICT_MANUAL\) return;/,
+    'the event is not gated on the manual state'
+  );
+});
+
+test('it rides the existing gtag wrapper — no new endpoint or transport', () => {
+  assert.match(FIELD.withImports, /import \{ gtagEvent \} from '@\/lib\/analytics\/gtag'/);
+  assert.doesNotMatch(FIELD.code, /\bfetch\(/, 'the component now makes its own network call');
 });
 
 // ── R3: a new postcode cannot inherit the old one's answers ─────────────────
