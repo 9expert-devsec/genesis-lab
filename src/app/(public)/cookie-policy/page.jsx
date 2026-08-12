@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SiYoutube, SiGoogleanalytics } from 'react-icons/si';
 import { PolicyLayout, PolicyDraftNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
@@ -114,9 +115,60 @@ const COOKIE_TYPES = [
   },
 ];
 
+/**
+ * §3 — third-party services whose code runs on our pages.
+ *
+ * ── WHAT IS ACTUALLY LOADED, MEASURED FROM THIS CODEBASE ────────────────────
+ * The brief offered five candidates. Only ONE survives a search of src/, and
+ * the difference between "we link to them" and "their code runs on our page"
+ * is exactly what decides whether a cookie gets set:
+ *
+ *   YouTube            IN USE. youtube.com/iframe_api is injected as a script
+ *                      and youtube.com/embed/ iframes are rendered on the
+ *                      masterclass and course pages. Note the embeds use
+ *                      youtube.com, NOT youtube-nocookie.com, so they do set
+ *                      cookies.
+ *   Google Analytics   NOT FOUND. No gtag(, no googletagmanager, no G- or GTM-
+ *                      id, no next/script analytics loader anywhere in src/.
+ *                      BOTH source documents name it, and §2's Analytics card
+ *                      lists it as the provider, so it is shown as pending
+ *                      rather than dropped — but nothing in this repo loads it.
+ *   Google Tag Manager NOT FOUND. Not rendered at all.
+ *   Meta / Facebook    NO PIXEL. There is no fbq( and no connect.facebook.
+ *                      siteConfig has a link to the Facebook page; an outbound
+ *                      link is not a pixel and sets no cookie here.
+ *   LINE               NO SDK. line.me appears only as outbound href links and
+ *                      a social-plugins share URL the visitor clicks. No LINE
+ *                      code executes on our pages.
+ *
+ * Meta, LINE and GTM are therefore not rendered. Listing a tracker we do not
+ * run is the same class of error as omitting one we do — it is a false
+ * statement about what happens on the visitor's device, just in the flattering
+ * direction.
+ *
+ * The trademarks are rendered from react-icons/si rather than committed image
+ * files: the monochrome set inherits currentColor, so one icon works on both
+ * themes, and we avoid holding copies of other companies' marks in public/.
+ */
+const THIRD_PARTY = [
+  {
+    Icon: SiYoutube,
+    name: 'YouTube',
+    purpose: 'ฝังวิดีโอประกอบหลักสูตรและ Masterclass บนหน้าเว็บไซต์',
+    confirmed: true,
+  },
+  {
+    Icon: SiGoogleanalytics,
+    name: 'Google Analytics',
+    purpose: 'วิเคราะห์ภาพรวมการใช้งานเว็บไซต์',
+    confirmed: false,
+  },
+];
+
 const TOC = [
   { id: 'about-cookies', title: 'คุกกี้คืออะไร' },
   { id: 'cookie-types', title: 'ประเภทคุกกี้ที่เราใช้' },
+  { id: 'third-party', title: 'คุกกี้จากบุคคลที่สาม' },
   { id: 'manage', title: 'วิธีจัดการคุกกี้' },
   { id: 'changes', title: 'การปรับปรุงนโยบาย' },
   { id: 'contact', title: 'ช่องทางติดต่อ' },
@@ -154,8 +206,20 @@ export default function CookiePolicyPage() {
       toc={TOC}
       numbered={false}
       currentSlug={policy.slug}
+      /*
+        The detail line USED to warn about a fabricated cookie inventory table
+        at §03. That table is gone — the source document replaced it — and §03
+        is now the third-party service list, so the old wording pointed at the
+        wrong section AND described content that no longer exists. Corrected to
+        the item that is genuinely still open.
+
+        NOTE: the banner's overall wording still calls this page a design
+        placeholder, which is no longer true now that the copy comes from the
+        source document. A replacement is proposed and awaiting a decision;
+        this edit only fixes the stale reference, it does not settle that.
+      */
       notice={
-        <PolicyDraftNotice detail="รวมถึงตารางรายละเอียดคุกกี้ในหัวข้อ 03 ซึ่งเป็นตัวอย่างที่สมมติขึ้น ยังไม่ได้ตรวจสอบกับคุกกี้ที่เว็บไซต์ใช้งานจริง" />
+        <PolicyDraftNotice detail="รายชื่อคุกกี้และผู้ให้บริการภายนอกในหัวข้อ 02 และ 03 ยังอยู่ระหว่างการตรวจสอบกับทีมพัฒนาระบบ และอาจไม่ตรงกับคุกกี้ที่เว็บไซต์ใช้งานจริงทั้งหมด" />
       }
       help={{
         icon: 'settings',
@@ -207,6 +271,49 @@ export default function CookiePolicyPage() {
               </li>
             ))}
           </ul>
+        </Section>
+
+        <Section id="third-party" number="03" title="คุกกี้จากบุคคลที่สาม">
+          <p>
+            เว็บไซต์ของเรามีการฝังบริการจากผู้ให้บริการภายนอกบางราย
+            ซึ่งอาจตั้งคุกกี้บนอุปกรณ์ของท่านตามนโยบายของผู้ให้บริการนั้นเอง
+          </p>
+          <ul className="mt-4 space-y-3">
+            {THIRD_PARTY.map((svc) => (
+              <li
+                key={svc.name}
+                className="flex items-start gap-4 rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-4"
+              >
+                {/* Trademarks, coloured with the body text token so the same
+                    glyph works on both themes. Decorative — the name is
+                    written out beside it. */}
+                <svc.Icon
+                  aria-hidden="true"
+                  className="mt-0.5 h-6 w-6 shrink-0 text-[var(--text-secondary)]"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[15px] font-bold text-[var(--text-primary)]">
+                    {svc.name}
+                  </p>
+                  <p className="text-[13px] leading-[1.7]">{svc.purpose}</p>
+                </div>
+                {!svc.confirmed && (
+                  <span className="shrink-0 rounded-full border border-[var(--surface-border)] px-3 py-1 text-[12px] font-semibold text-[var(--text-muted)]">
+                    รอการยืนยัน
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {/*
+            The source document is headed "ต้องยืนยันรายชื่อ Cookie/Pixel ที่ใช้
+            จริงกับทีม IDev ก่อนเผยแพร่". That confirmation has not happened, so
+            the list says so on the page rather than only in this comment.
+          */}
+          <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
+            * รายชื่อผู้ให้บริการข้างต้นอยู่ระหว่างการตรวจสอบกับทีมพัฒนาระบบ
+            และอาจมีการปรับปรุงก่อนประกาศใช้จริง
+          </p>
         </Section>
 
         <PolicyAccordion
