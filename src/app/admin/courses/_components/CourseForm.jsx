@@ -976,26 +976,40 @@ export function CourseForm({
           Section 6 — รายละเอียดคอร์ส (bullets)
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
+        {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
+            วัตถุประสงค์ is numbered there (CourseObjectives.jsx:12 prints
+            `{i + 1}.` from the index) and the other three carry a CheckCircle
+            (CourseTarget / CoursePrerequisites / CourseRequirements). Every
+            marker is drawn by the renderer on both sides — measured, none of
+            the 1118 stored items carries one — so the preview is a preview and
+            the payload is still exactly the lines typed. */}
         <BulletTextarea
           name="course_objectives"
           label="วัตถุประสงค์ (course_objectives)"
-          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์"
+          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
+          marker="number"
         />
         <BulletTextarea
           name="course_target_audience"
           label="กลุ่มเป้าหมาย (course_target_audience)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
+          marker="check"
         />
         <BulletTextarea
           name="course_prerequisites"
           label="ความรู้พื้นฐาน (course_prerequisites)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
+          marker="check"
         />
         <BulletTextarea
           name="course_system_requirements"
           label="ความต้องการของระบบ (course_system_requirements)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
+          marker="check"
         />
         <BulletTextarea
           name="bullets"
