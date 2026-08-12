@@ -35,6 +35,7 @@ import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { getReviewsById } from '@/lib/api/reviews';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 
 import { getActiveBanners } from '@/lib/actions/banners';
 import { getActiveFeaturedCourseIds } from '@/lib/actions/featured-courses';
@@ -202,6 +203,52 @@ export async function syncLandingData() {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  /**
+   * BEFORE THE FIRST READ, NOT AFTER THE WRITE.
+   *
+   * This job was the last of the six syncs still missing this, and the omission
+   * is invisible from its output: every read below is cached for an hour under
+   * one of these tags, so without the bust a run re-reads the SAME cached
+   * responses the previous run saw, writes them into LandingCache with a fresh
+   * `syncedAt`, and reports `status: 'ok'`. A course published upstream ten
+   * minutes ago is still missing from the home page afterwards, and the only
+   * signal anyone gets is a green sync. That is the exact failure
+   * bustUpstream.js:15-19 states the rule against, and the same one
+   * syncNavMenuData:99 and syncCareerPaths:167 already fixed.
+   *
+   * It matters most on the path where it is easiest to miss: the admin
+   * "Sync now" button and the webhook's background resync both exist to make
+   * a change appear NOW, and both were capable of returning success having
+   * changed nothing at all.
+   *
+   * ── THE FIVE TAGS ARE THE FIXED-TAG READS BELOW, AND ONLY THOSE ───────────
+   *   listPublicCourses      → public-courses   (also covers the per-program
+   *                            probe reads: a different `?program=` URL is a
+   *                            different Data Cache entry carrying the SAME
+   *                            tag, and revalidateTag busts every entry under
+   *                            it)
+   *   getOnlineCourses       → online-courses
+   *   listPrograms           → programs
+   *   listSkills             → skills
+   *   getReviewsById         → reviews
+   *
+   * The PER-RECORD tags are NOT busted, exactly as syncNavMenuData:94-98
+   * documents for the same reason: `course:<id>` (getCourseByCode) and
+   * `schedules:course:<oid>` (listSchedulesByCourse) are keyed by ids this job
+   * does not know until after the list read above has returned, so there is
+   * nothing to name at this point. A stale one costs an out-of-date cover or
+   * schedule row on a card that is otherwise present — visibly worse than
+   * fresh, but not the missing-entry class this bust exists for. Named here so
+   * the gap is a decision rather than an oversight.
+   */
+  bustUpstream(
+    UPSTREAM_TAGS.PUBLIC_COURSES,
+    UPSTREAM_TAGS.ONLINE_COURSES,
+    UPSTREAM_TAGS.PROGRAMS,
+    UPSTREAM_TAGS.SKILLS,
+    UPSTREAM_TAGS.REVIEWS
+  );
 
   // Phase 1 — fetch every "leaf" data source in parallel. Anything that
   // depends on the result of these (per-course detail, schedules, etc.)
