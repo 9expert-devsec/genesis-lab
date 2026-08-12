@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { PolicyLayout, PolicyDraftNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
-import { POLICY_HUB, findPolicy } from '@/config/policies';
+import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
 
 const policy = findPolicy('cookie-policy');
 
@@ -15,84 +15,111 @@ export const metadata = {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  ⚠ PLACEHOLDER COPY — NOT LEGAL TEXT, NOT APPROVED BY ANYONE
+ *  SOURCE: cookie-policy-9expert.docx  (4 sections, 1 table)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Every sentence of body copy on this page was written to fill the Figma's
- * structure so the layout could be built and reviewed. NOBODY IN LEGAL HAS
- * SEEN IT. It is scaffolding shaped like a cookie policy, which is the most
- * dangerous kind of placeholder: it reads as authoritative to anyone who does
- * not know where it came from.
+ * The document's four sections replace the whole previous body, and its
+ * cookie-type table replaces the FABRICATED inventory table that stood at §03.
+ * That table listed named cookies (_ga, _gid, theme, session) with invented
+ * retention periods; none of it was derived from an audit. It is gone.
  *
- * PolicyDraftNotice renders a matching banner at the top of the page, so the
- * warning reaches visitors and not only whoever opens this file. Do not remove
- * either half until real approved copy replaces the text below.
+ * The placeholder accordions that surrounded it — third-party, retention,
+ * consent, contact — were also written by us to fill the Figma's shape. The
+ * document does not cover them, and leaving invented prose interleaved with
+ * real document text is worse than either alone, so they are gone too. What
+ * remains is the document, plus a contact block pointing at channels that
+ * genuinely exist.
  *
- * ── THE COOKIE INVENTORY TABLE IS FABRICATED ────────────────────────────────
- * §3 lists named cookies with retention periods. THOSE ROWS ARE INVENTED. This
- * repo has no cookie inventory to read from and nobody audited what the site
- * actually sets. A cookie table is the one part of a cookie policy that is a
- * checkable factual claim, so it is labelled on the page as well as here.
+ * The source closes with the same note as the privacy document: a starting
+ * point under PDPA, not legal advice, counsel to review before publication.
+ * That is an instruction to us and is not rendered.
  *
- * ── NO CONSENT MANAGER EXISTS ───────────────────────────────────────────────
- * §6 describes managing consent through the browser and nothing else, on
- * purpose. There is no cookie-consent manager anywhere in this repo. Every
- * control that mentions cookie settings — including the hub's shortcut tile —
- * points at §7 below, which explains the browser route. Nothing here may
- * pretend to open a preferences dialog that does not exist.
+ * ── WHAT WAS DROPPED, AND WHY ───────────────────────────────────────────────
  *
- * §7's id is `browser-settings` and the hub links to it directly. Renaming it
- * silently breaks that shortcut.
+ * 1. THE EFFECTIVE DATE ([DD/MM/YYYY]). Same reasoning as the privacy page:
+ *    the site is not in production, so the policy has never taken effect.
+ *    `updated` is null and no stamp renders.
+ *
+ * 2. THE COOKIE BANNER SENTENCE. §3 of the document reads "ท่านสามารถจัดการ
+ *    หรือปฏิเสธคุกกี้ที่ไม่จำเป็นได้ผ่านแบนเนอร์ตั้งค่าคุกกี้บนเว็บไซต์ในครั้งแรก
+ *    ที่เข้าใช้งาน หรือผ่านการตั้งค่าเบราว์เซอร์ของท่านในภายหลัง."
+ *
+ *    THERE IS NO COOKIE BANNER IN THIS REPO. No consent manager, no preference
+ *    centre, no toggle. The clause is cut to the browser route, which is the
+ *    only one that works today.
+ *
+ *    TODO(cookie-banner): when a consent banner ships, restore the first half
+ *    of that sentence — management "ผ่านแบนเนอร์ตั้งค่าคุกกี้ในครั้งแรกที่เข้า
+ *    ใช้งาน" — to §3 below. The same edit is owed to the privacy page's §4
+ *    marketing row; both are marked with this tag.
+ *
+ * 3. THE PROVIDER AND RETENTION CELLS THAT WERE BRACKETED. See COOKIE_TYPES.
+ *
+ * ── THE DOCUMENT'S OWN CAVEAT, WHICH IS NOT YET SATISFIED ───────────────────
+ * The source is headed "[ร่างฉบับปรับปรุง — ต้องยืนยันรายชื่อ Cookie/Pixel ที่ใช้
+ * จริงกับทีม IDev ก่อนเผยแพร่]" — the real cookie and pixel list must be
+ * confirmed with the IDev team before publication. That has NOT happened. In
+ * particular the Targeting/Advertising category is declared here without any
+ * evidence that this site sets such a cookie; if it does not, the row should be
+ * removed rather than left as a category we merely might use.
  */
 
+/**
+ * §2 — cookie categories.
+ *
+ * The document's table had four columns: ประเภท | วัตถุประสงค์ |
+ * ตัวอย่างผู้ให้บริการ | อายุการเก็บ.
+ *
+ * THE RETENTION COLUMN IS NOT RENDERED. Three of its four cells were [ระบุ],
+ * and the fourth ("ตลอดช่วง Session / [ระบุ]") was half a value. A retention
+ * column that is three-quarters blank invites the reader to believe the blanks
+ * mean something. The one real fact in it — that strictly-necessary cookies
+ * last only for the session — is stated in that row's purpose text instead.
+ *
+ * THE PROVIDER COLUMN IS RENDERED, but only two of its cells hold a real value:
+ * 9EXPERT's own system, and Google Analytics. The other two were "[ระบุถ้ามี]"
+ * and "[ระบุ — เช่น Meta Pixel, TikTok Pixel ถ้ามีการใช้งานจริง]", i.e. the
+ * document asking us a question, not answering one. Those render as an explicit
+ * "ยังไม่ระบุ" rather than an empty cell: a blank reads as "none", which would
+ * be a claim, and this is honestly an open question.
+ */
 const COOKIE_TYPES = [
   {
     icon: 'shield',
-    name: 'คุกกี้ที่จำเป็น',
+    name: 'จำเป็นต่อการทำงาน',
     nameEn: 'Strictly Necessary',
-    blurb: 'จำเป็นต่อการทำงานพื้นฐานของเว็บไซต์ เช่น การเข้าสู่ระบบและความปลอดภัย ไม่สามารถปิดได้',
-  },
-  {
-    icon: 'settings',
-    name: 'คุกกี้เพื่อการทำงาน',
-    nameEn: 'Functional',
-    blurb: 'จดจำการตั้งค่าของคุณ เช่น ภาษาและธีมที่เลือกไว้ เพื่อให้ใช้งานได้สะดวกขึ้น',
+    purpose: 'ทำให้เว็บไซต์ทำงานได้ปกติ เช่น การเข้าสู่ระบบ ตะกร้าสินค้า โดยจัดเก็บเฉพาะช่วงที่ใช้งาน (Session)',
+    provider: 'ระบบของ 9EXPERT เอง',
   },
   {
     icon: 'listChecks',
-    name: 'คุกกี้เพื่อการวิเคราะห์',
+    name: 'วิเคราะห์การใช้งาน',
     nameEn: 'Analytics',
-    blurb: 'ช่วยให้เราเข้าใจภาพรวมการใช้งานเว็บไซต์ เพื่อนำไปปรับปรุงเนื้อหาและบริการ',
+    purpose: 'วิเคราะห์พฤติกรรมผู้เข้าชมเพื่อปรับปรุงเว็บไซต์',
+    provider: 'Google Analytics',
+  },
+  {
+    icon: 'settings',
+    name: 'ฟังก์ชันการใช้งาน',
+    nameEn: 'Functional',
+    purpose: 'จดจำการตั้งค่าที่ท่านเลือกไว้',
+    provider: null,
   },
   {
     icon: 'cookie',
-    name: 'คุกกี้เพื่อการตลาด',
-    nameEn: 'Marketing',
-    blurb: 'ใช้เพื่อนำเสนอเนื้อหาและโฆษณาที่สอดคล้องกับความสนใจของคุณ',
+    name: 'การตลาด/โฆษณา',
+    nameEn: 'Targeting-Advertising',
+    purpose: 'นำเสนอโฆษณาที่ตรงกับความสนใจของท่าน',
+    provider: null,
   },
-];
-
-/**
- * FABRICATED. See the header comment — these rows are illustrative only and
- * were not derived from anything this site actually sets.
- */
-const COOKIE_INVENTORY = [
-  { name: '_ga', purpose: 'Google Analytics — จำแนกผู้ใช้งาน', type: 'การวิเคราะห์', retention: '2 ปี' },
-  { name: '_gid', purpose: 'Google Analytics — จำแนกผู้ใช้งานรายวัน', type: 'การวิเคราะห์', retention: '24 ชั่วโมง' },
-  { name: 'theme', purpose: 'จดจำธีมสว่าง/มืดที่ผู้ใช้เลือก', type: 'การทำงาน', retention: '1 ปี' },
-  { name: 'session', purpose: 'รักษาสถานะการเข้าสู่ระบบ', type: 'จำเป็น', retention: 'สิ้นสุดเมื่อปิดเบราว์เซอร์' },
 ];
 
 const TOC = [
   { id: 'about-cookies', title: 'คุกกี้คืออะไร' },
-  { id: 'cookie-types', title: 'ประเภทของคุกกี้ที่เราใช้' },
-  { id: 'cookie-inventory', title: 'รายละเอียดคุกกี้ที่เราใช้' },
-  { id: 'third-party', title: 'คุกกี้จากบุคคลที่สาม' },
-  { id: 'retention', title: 'ระยะเวลาการจัดเก็บคุกกี้' },
-  { id: 'consent', title: 'การจัดการความยินยอม' },
-  { id: 'browser-settings', title: 'การจัดการผ่านเบราว์เซอร์' },
-  { id: 'changes', title: 'การเปลี่ยนแปลงนโยบาย' },
-  { id: 'contact', title: 'ติดต่อเรา' },
+  { id: 'cookie-types', title: 'ประเภทคุกกี้ที่เราใช้' },
+  { id: 'manage', title: 'วิธีจัดการคุกกี้' },
+  { id: 'changes', title: 'การปรับปรุงนโยบาย' },
+  { id: 'contact', title: 'ช่องทางติดต่อ' },
 ];
 
 function Section({ id, number, title, children }) {
@@ -122,7 +149,7 @@ export default function CookiePolicyPage() {
       icon={policy.icon}
       title={policy.title}
       titleEn={policy.titleEn}
-      lede="9EXPERT ใช้คุกกี้และเทคโนโลยีที่คล้ายกัน เพื่อให้เว็บไซต์ทำงานได้อย่างถูกต้อง จดจำการตั้งค่าของคุณ และช่วยให้เราปรับปรุงบริการได้ดียิ่งขึ้น"
+      lede={`เอกสารนี้เป็นส่วนเสริมของนโยบายคุ้มครองข้อมูลส่วนบุคคลของ ${POLICY_ENTITY} (9EXPERT) อธิบายประเภทคุกกี้ที่เว็บไซต์ใช้งาน วัตถุประสงค์ และวิธีที่ท่านจัดการคุกกี้ได้`}
       updated={policy.updated}
       toc={TOC}
       numbered={false}
@@ -132,26 +159,27 @@ export default function CookiePolicyPage() {
       }
       help={{
         icon: 'settings',
-        title: 'ปรับการตั้งค่าคุกกี้ได้ทุกเวลา',
-        blurb: 'ดูวิธีจัดการคุกกี้ผ่านเบราว์เซอร์ที่คุณใช้งาน',
-        href: '#browser-settings',
-        cta: 'ไปที่วิธีตั้งค่า',
+        title: 'จัดการคุกกี้ของท่าน',
+        blurb: 'ดูวิธีปรับหรือปฏิเสธคุกกี้ผ่านการตั้งค่าเบราว์เซอร์',
+        href: '#manage',
+        cta: 'ไปที่วิธีจัดการคุกกี้',
       }}
     >
       <div className="space-y-10">
         <Section id="about-cookies" number="01" title="คุกกี้คืออะไร">
           <p>
-            คุกกี้ (Cookies) คือไฟล์ข้อความขนาดเล็กที่เว็บไซต์บันทึกไว้ในเบราว์เซอร์ของคุณ
-            เมื่อคุณเข้าชมเว็บไซต์ ไฟล์เหล่านี้ช่วยให้เว็บไซต์จดจำอุปกรณ์และการตั้งค่าของคุณได้
-            ทำให้การใช้งานครั้งถัดไปสะดวกและต่อเนื่องมากขึ้น
+            คุกกี้ (Cookies) คือ ไฟล์ข้อมูลขนาดเล็กที่เว็บไซต์บันทึกไว้บนอุปกรณ์ของท่าน
+            เพื่อจดจำการตั้งค่า และพฤติกรรมการใช้งาน
+            ช่วยให้เว็บไซต์ทำงานได้อย่างมีประสิทธิภาพ
+            และมอบประสบการณ์การใช้งานที่เหมาะสมกับท่านมากขึ้น
           </p>
         </Section>
 
-        <Section id="cookie-types" number="02" title="ประเภทของคุกกี้ที่เราใช้">
+        <Section id="cookie-types" number="02" title="ประเภทคุกกี้ที่เราใช้">
           <ul className="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
             {COOKIE_TYPES.map((type) => (
               <li
-                key={type.name}
+                key={type.nameEn}
                 className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-5"
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-9e-action/10 text-9e-action dark:bg-[#48B0FF]/10 dark:text-[#48B0FF]">
@@ -163,99 +191,43 @@ export default function CookiePolicyPage() {
                 <p className="text-[13px] font-semibold text-[var(--text-muted)]">
                   ({type.nameEn})
                 </p>
-                <p className="mt-2 text-[13px] leading-[1.7]">{type.blurb}</p>
+                <p className="mt-2 text-[13px] leading-[1.7]">{type.purpose}</p>
+                <p className="mt-3 border-t border-[var(--surface-border)] pt-3 text-[12px] text-[var(--text-muted)]">
+                  ผู้ให้บริการ:{' '}
+                  <span
+                    className={
+                      type.provider
+                        ? 'font-semibold text-[var(--text-secondary)]'
+                        : 'italic'
+                    }
+                  >
+                    {type.provider ?? 'ยังไม่ระบุ'}
+                  </span>
+                </p>
               </li>
             ))}
           </ul>
         </Section>
 
-        <Section id="cookie-inventory" number="03" title="รายละเอียดคุกกี้ที่เราใช้">
-          <p>
-            ตารางด้านล่างแสดงตัวอย่างคุกกี้ที่อาจถูกใช้งานบนเว็บไซต์นี้
-          </p>
-          {/*
-            THIS TABLE IS ILLUSTRATIVE AND FABRICATED — see the file header.
-            The on-page note below says so too, because a cookie table is the
-            one part of a cookie policy a visitor could act on, and an invented
-            retention period is a factual claim we have not earned.
-          */}
-          <div className="mt-4 overflow-x-auto rounded-2xl border border-[var(--surface-border)]">
-            <table className="w-full min-w-[620px] border-collapse text-left text-[13px]">
-              <thead>
-                <tr className="bg-[var(--surface-muted)]">
-                  <th className="px-4 py-3 font-bold text-[var(--text-primary)]">ชื่อคุกกี้</th>
-                  <th className="px-4 py-3 font-bold text-[var(--text-primary)]">วัตถุประสงค์</th>
-                  <th className="px-4 py-3 font-bold text-[var(--text-primary)]">ประเภท</th>
-                  <th className="px-4 py-3 font-bold text-[var(--text-primary)]">ระยะเวลา</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COOKIE_INVENTORY.map((row) => (
-                  <tr key={row.name} className="border-t border-[var(--surface-border)]">
-                    <th scope="row" className="px-4 py-3 align-top font-mono font-semibold text-[var(--text-primary)]">
-                      {row.name}
-                    </th>
-                    <td className="px-4 py-3 align-top leading-[1.7]">{row.purpose}</td>
-                    <td className="px-4 py-3 align-top">{row.type}</td>
-                    <td className="px-4 py-3 align-top">{row.retention}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-            * ตารางนี้เป็นตัวอย่างประกอบการออกแบบ ยังไม่ได้ตรวจสอบกับคุกกี้ที่เว็บไซต์ใช้งานจริง
-          </p>
-        </Section>
-
         <PolicyAccordion
           items={[
             {
-              id: 'third-party',
-              icon: 'cookie',
-              title: 'คุกกี้จากบุคคลที่สาม',
-              body: (
-                <p>
-                  เว็บไซต์ของเราอาจมีคุกกี้จากผู้ให้บริการภายนอก เช่น Google Analytics
-                  เพื่อช่วยวิเคราะห์ภาพรวมการใช้งาน
-                  การเก็บและใช้ข้อมูลของผู้ให้บริการเหล่านั้นเป็นไปตามนโยบายของผู้ให้บริการเอง
-                </p>
-              ),
-            },
-            {
-              id: 'retention',
-              icon: 'calendar',
-              title: 'ระยะเวลาการจัดเก็บคุกกี้',
-              body: (
-                <p>
-                  คุกกี้ประเภทเซสชันจะถูกลบเมื่อคุณปิดเบราว์เซอร์
-                  ส่วนคุกกี้ถาวรจะถูกเก็บไว้ตามระยะเวลาที่กำหนดไว้ในตารางข้างต้น
-                  หรือจนกว่าคุณจะลบออกจากเบราว์เซอร์ด้วยตนเอง
-                </p>
-              ),
-            },
-            {
-              id: 'consent',
-              icon: 'check',
-              title: 'การจัดการความยินยอม',
-              body: (
-                <p>
-                  ปัจจุบันเว็บไซต์นี้ยังไม่มีระบบจัดการความยินยอมคุกกี้แบบรวมศูนย์
-                  คุณสามารถควบคุมการใช้งานคุกกี้ทั้งหมดได้ผ่านการตั้งค่าเบราว์เซอร์ของคุณ
-                  ตามวิธีในหัวข้อถัดไป
-                </p>
-              ),
-            },
-            {
-              id: 'browser-settings',
+              id: 'manage',
               icon: 'settings',
-              title: 'การจัดการผ่านเบราว์เซอร์',
+              title: 'วิธีจัดการคุกกี้',
               defaultOpen: true,
+              /*
+                The document offered two routes — a first-visit cookie banner
+                and browser settings. Only the second exists. See the file
+                header's TODO(cookie-banner).
+              */
               body: (
                 <>
                   <p>
-                    เบราว์เซอร์ทุกตัวมีเมนูสำหรับดู ลบ และปิดกั้นคุกกี้
-                    โดยทั่วไปจะอยู่ในหัวข้อการตั้งค่าความเป็นส่วนตัวและความปลอดภัย
+                    ท่านสามารถจัดการ
+                    หรือปฏิเสธคุกกี้ที่ไม่จำเป็นได้ผ่านการตั้งค่าเบราว์เซอร์ของท่าน
+                    ทั้งนี้
+                    การปิดใช้งานคุกกี้บางประเภทอาจส่งผลกระทบต่อการใช้งานฟังก์ชันบางส่วนของเว็บไซต์
                   </p>
                   <ul className="mt-4 space-y-2">
                     {[
@@ -273,37 +245,41 @@ export default function CookiePolicyPage() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-4 rounded-xl bg-[var(--surface-muted)] px-4 py-3 text-[13px]">
-                    หมายเหตุ: การปิดกั้นคุกกี้ที่จำเป็นอาจทำให้บางฟังก์ชันของเว็บไซต์ทำงานไม่ถูกต้อง
-                  </p>
                 </>
               ),
             },
             {
               id: 'changes',
               icon: 'calendar',
-              title: 'การเปลี่ยนแปลงนโยบาย',
+              title: 'การปรับปรุงนโยบาย',
               body: (
                 <p>
-                  เราอาจปรับปรุงนโยบายนี้เป็นครั้งคราว
-                  โดยจะระบุวันที่ปรับปรุงล่าสุดและหมายเลขเวอร์ชันไว้ที่ด้านบนของหน้าเสมอ
+                  บริษัทอาจปรับปรุงนโยบายฉบับนี้เป็นครั้งคราว
+                  และจะแจ้งวันที่มีผลบังคับใช้ล่าสุดไว้ที่ด้านบนของเอกสาร
                 </p>
               ),
             },
             {
               id: 'contact',
               icon: 'mail',
-              title: 'ติดต่อเรา',
+              title: 'ช่องทางติดต่อ',
               body: (
                 <p>
-                  หากมีคำถามเกี่ยวกับการใช้คุกกี้ของเรา สามารถ{' '}
-                  <Link
-                    href="/contact-us"
+                  หากมีคำถามเกี่ยวกับการใช้คุกกี้ของเรา
+                  โปรดติดต่อเจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล (DPO) ที่{' '}
+                  <a
+                    href="mailto:dpo@9expert.co.th"
                     className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
                   >
-                    ติดต่อทีมงาน 9EXPERT
-                  </Link>{' '}
-                  ได้ทุกช่องทาง
+                    dpo@9expert.co.th
+                  </a>{' '}
+                  หรือดูช่องทางทั้งหมดใน{' '}
+                  <Link
+                    href="/privacy-policy#section-14"
+                    className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
+                  >
+                    นโยบายคุ้มครองข้อมูลส่วนบุคคล ข้อ 14
+                  </Link>
                 </p>
               ),
             },
