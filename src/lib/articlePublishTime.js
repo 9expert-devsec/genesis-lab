@@ -112,6 +112,34 @@ export function siteDateParts(iso) {
 }
 
 /**
+ * The current year AS SEEN IN BANGKOK. Gregorian, e.g. 2026.
+ *
+ * ── WHY IT LIVES HERE AND WHY IT IS CALLED ON THE SERVER ────────────────────
+ * `formatRoundDays(..., { showYear: 'auto' })` needs to know what year it is and
+ * REFUSES to find out for itself (see lib/schedule/roundDateLabel). Something
+ * has to read the clock, and the read has to be zone-pinned for the same reason
+ * everything else in this module is: Vercel runs in UTC, so between 17:00 and
+ * midnight Bangkok on 31 December `new Date().getFullYear()` gives one answer on
+ * the server and another in the browser. A course card holding a next-year round
+ * would render without its year on the server and with it after hydration — a
+ * mismatch on the one night of the year when the year is the question.
+ *
+ * So the SERVER page calls this once and passes the number down as a prop. The
+ * client components never call it; they are handed an answer that was already
+ * fixed when the HTML was built, which is what makes server and client agree by
+ * construction rather than by luck.
+ *
+ * It is the only function in this module that reads the clock, which is why it
+ * is the only one a test cannot pin to a fixture — every consumer takes the year
+ * as an argument precisely so the test can supply its own.
+ *
+ * @returns {number}
+ */
+export function siteCurrentYear() {
+  return siteDateParts(new Date()).year;
+}
+
+/**
  * `<input type="datetime-local">` value → an ISO instant string.
  *
  * The wall-clock time is read as Asia/Bangkok, never as the runtime's zone.

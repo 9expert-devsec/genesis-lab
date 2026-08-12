@@ -113,7 +113,7 @@ test('FIXTURE GUARD: the search fixture actually renders schedule rows', () => {
 
 const OPEN_SURFACES = {
   ScheduleCard: () => R(createElement(ScheduleCard, { status: 'open', dateLabel: '17-18\nOCT' })),
-  ScheduleCarousel: () => R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {} })),
+  ScheduleCarousel: () => R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {}, currentYear: 2026 })),
   course_schedule: () => R(CourseScheduleSection({ content: { courseId: 'MSE-AI' }, data: SCHEDS })),
   ScheduleClient: () => schedulePage(['open']),
   SearchClient: () => searchPage(['open']),
@@ -157,7 +157,7 @@ for (const key of ['nearly_full', 'nearFull']) {
 
 test('every surface renders ใกล้เต็ม for nearly_full', () => {
   const cases = {
-    ScheduleCarousel: R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {} })),
+    ScheduleCarousel: R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {}, currentYear: 2026 })),
     course_schedule: R(CourseScheduleSection({ content: { courseId: 'MSE-AI' }, data: SCHEDS })),
     ScheduleClient: schedulePage(['nearly_full']),
     SearchClient: searchPage(['nearly_full']),
@@ -170,7 +170,7 @@ test('every surface renders ใกล้เต็ม for nearly_full', () => {
 
 test('every surface renders เต็ม for full', () => {
   assert.ok(R(createElement(ScheduleCard, { status: 'full', dateLabel: '1\nJAN' })).includes('เต็ม'));
-  assert.ok(R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {} })).includes('เต็ม'));
+  assert.ok(R(createElement(ScheduleCarousel, { schedules: SCHEDS, onSelect() {}, currentYear: 2026 })).includes('เต็ม'));
   assert.ok(R(CourseScheduleSection({ content: { courseId: 'MSE-AI' }, data: SCHEDS })).includes('เต็ม'));
   assert.ok(schedulePage(['full']).includes('เต็ม'));
   assert.ok(searchPage(['full']).includes('เต็ม'));
@@ -207,6 +207,7 @@ const UNKNOWN_SURFACES = {
   ScheduleCarousel: (status) => R(createElement(ScheduleCarousel, {
     schedules: [{ _id: 'x', dates: ['2026-10-17'], type: 'classroom', status }],
     onSelect() {},
+    currentYear: 2026,
   })),
   course_schedule: (status) => R(CourseScheduleSection({
     content: { courseId: 'MSE-AI' },

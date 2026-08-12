@@ -7,6 +7,7 @@ import { ScheduleCarousel } from '@/components/registration/ScheduleCarousel';
 import { isEarlyBirdSchedule } from '@/lib/isEarlyBird';
 import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
+import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
 
 /**
  * Detail-page schedule block.
@@ -21,7 +22,7 @@ import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 const isFull = (schedule) =>
   normalizeScheduleStatus(schedule?.status) === 'full';
 
-export function ScheduleSection({ course, schedules, earlyBird }) {
+export function ScheduleSection({ course, schedules, earlyBird, currentYear }) {
   /**
    * The first SELECTABLE round, not merely the first one.
    *
@@ -77,6 +78,7 @@ export function ScheduleSection({ course, schedules, earlyBird }) {
           selectedId={selectedId}
           onSelect={setSelectedId}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          currentYear={currentYear}
         />
 
         {hasSchedules && hrefForSelected && (
@@ -95,6 +97,44 @@ export function ScheduleSection({ course, schedules, earlyBird }) {
 }
 
 /**
+ * The two delivery modes this legend explains, as DATA.
+ *
+ * ── IT USED TO BE FOUR HARDCODED SWATCHES ───────────────────────────────────
+ * `bg-9e-action` and `bg-purple-500`, written out twice each — once in the
+ * legend row and once again inside the `?` tooltip. That was a FIFTH spelling of
+ * the training-type palette, and the worst-placed one: this is the legend FOR
+ * the cards below it, so it is the component whose whole job is to say what the
+ * colours mean. It was saying something the cards did not use.
+ *
+ * The dot now takes `trainingTypeColor(key)` inline, for the same reason every
+ * other surface does: Tailwind never evaluates a template literal, so
+ * `bg-[${color}]` compiles to no class at all and fails silently as an
+ * invisible dot.
+ */
+const TRAINING_TYPES = [
+  {
+    key: 'classroom',
+    label: 'Classroom',
+    description: 'อบรมแบบ Class Room ณ ห้องอบรม 9EXPERT',
+  },
+  {
+    key: 'hybrid',
+    label: 'Hybrid',
+    description: 'เลือกอบรมแบบ Class Room หรือ Ms Teams',
+  },
+];
+
+/** One legend swatch, so the row and the tooltip cannot draw different dots. */
+function TypeDot({ type }) {
+  return (
+    <span
+      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: trainingTypeColor(type) }}
+    />
+  );
+}
+
+/**
  * Training-type legend with a "?" hover tooltip that explains the two
  * delivery modes. Pure CSS via Tailwind's `group-hover` — no JS, no
  * portal needed because the tooltip only needs to float above local
@@ -105,14 +145,12 @@ function TrainingTypeLegend() {
   return (
     <div className="mb-3 flex items-center justify-end gap-3 text-sm text-[var(--text-secondary)]">
       <span>รูปแบบการอบรม:</span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
-        Classroom
-      </span>
-      <span className="flex items-center gap-1">
-        <span className="inline-block h-2 w-2 rounded-full bg-purple-500" />
-        Hybrid
-      </span>
+      {TRAINING_TYPES.map(({ key, label }) => (
+        <span key={key} className="flex items-center gap-1">
+          <TypeDot type={key} />
+          {label}
+        </span>
+      ))}
 
       <div className="group relative">
         <button
@@ -126,25 +164,24 @@ function TrainingTypeLegend() {
         <div className="pointer-events-none invisible absolute bottom-full right-0 z-50 mb-2 w-80 opacity-0 transition-all duration-9e-micro ease-9e group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
           <div className="absolute bottom-[-6px] right-3 h-3 w-3 rotate-45 border-b border-r border-[var(--surface-border)] bg-[var(--surface-raised)]" />
           <div className="rounded-xl border border-[var(--surface-border)] bg-[var(--surface-raised)] p-4 text-left shadow-9e-md">
+            {/* Same list, same dots. The tooltip used to repeat both the
+                swatches and the wording as literals, so it could describe a
+                colour the row beside it no longer drew. */}
             <div className="space-y-3">
-              <div>
-                <p className="mb-0.5 flex items-center gap-1.5 text-sm font-bold text-[var(--text-primary)]">
-                  <span className="inline-block h-2 w-2 rounded-full bg-9e-action" />
-                  Classroom
-                </p>
-                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-                  อบรมแบบ Class Room ณ ห้องอบรม 9EXPERT
-                </p>
-              </div>
-              <div className="border-t border-[var(--surface-border)] pt-3">
-                <p className="mb-0.5 flex items-center gap-1.5 text-sm font-bold text-[var(--text-primary)]">
-                  <span className="inline-block h-2 w-2 rounded-full bg-purple-500" />
-                  Hybrid
-                </p>
-                <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
-                  เลือกอบรมแบบ Class Room หรือ Ms Teams
-                </p>
-              </div>
+              {TRAINING_TYPES.map(({ key, label, description }, i) => (
+                <div
+                  key={key}
+                  className={i > 0 ? 'border-t border-[var(--surface-border)] pt-3' : undefined}
+                >
+                  <p className="mb-0.5 flex items-center gap-1.5 text-sm font-bold text-[var(--text-primary)]">
+                    <TypeDot type={key} />
+                    {label}
+                  </p>
+                  <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+                    {description}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

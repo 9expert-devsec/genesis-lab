@@ -23,6 +23,8 @@ import { courseHref, careerPathHref } from '@/lib/utils';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { TRAINING_TYPE_COLOR } from '@/lib/schedule/trainingTypeColor';
 import {
   SEARCH_MIN_CHARS,
   emptySearchCounts,
@@ -35,17 +37,29 @@ import {
   visibleSearchTabs,
 } from '@/lib/search/searchTabs';
 
-// ── Local re-implementations from ScheduleClient (not exported) ────
+/**
+ * The month names this file still needs for ONE thing — the promotion range.
+ *
+ * The round-date formatter that used to sit beside this array is gone; see
+ * `formatDateLabel` below. This array survives only because `formatPromoDate`
+ * formats a PROMOTION's start/end date, which is a different kind of date and
+ * out of scope for the round-label consolidation. It hand-adds 543 and should
+ * be moved onto Intl too — reported as a follow-up, not done here.
+ */
 const MONTH_TH = [
   'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
 
-const TYPE_COLOR = {
-  classroom: '#00CCFF',
-  hybrid:    '#8B5CF6',
-  online:    '#22C55E',
-};
+/**
+ * The delivery-type colours. Imported, not declared.
+ *
+ * This was a BYTE-IDENTICAL copy of /schedule's map — the cheapest kind of
+ * duplication to miss, because nothing about it ever looked wrong. It agreed
+ * right up until the moment someone edited one of the two, and two of the four
+ * copies that existed site-wide had already diverged by then.
+ */
+const TYPE_COLOR = TRAINING_TYPE_COLOR;
 
 const TYPE_LABEL = {
   classroom: 'Classroom',
@@ -53,23 +67,28 @@ const TYPE_LABEL = {
   online:    'Online',
 };
 
+/**
+ * A round's dates. ONE formatter, shared with /schedule — this file's own copy
+ * is gone.
+ *
+ * ── WHAT THE COPY GOT WRONG ─────────────────────────────────────────────────
+ * It was first-date-to-last-date, and its own comment admitted it was a "local
+ * re-implementation from ScheduleClient". A round on 8, 10 and 12 ต.ค. — three
+ * separate days — rendered `8-12 ต.ค. 2569`, advertising training on the 9th
+ * and the 11th on a page whose rows link straight into the registration wizard.
+ *
+ * `showYear: true` rather than `'auto'`, and that is deliberate: these rows
+ * always carried a year and there is no column header here to supply one, so
+ * keeping it unconditional preserves the behaviour while the DAYS get fixed.
+ * `'auto'` would need a clock, and this component has none it could read
+ * without reintroducing an SSR/hydration split (see roundDateLabel).
+ *
+ * The year is now 2-digit Buddhist (`69`) rather than 4-digit (`2569`), because
+ * it comes from `Intl` — which is also what retires the `+ 543` this function
+ * used to do by hand. Two digits is what every other schedule surface shows.
+ */
 function formatDateLabel(scheduleItem) {
-  const dates = (scheduleItem?.dates ?? [])
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b);
-  if (dates.length === 0) return '-';
-  const first = dates[0];
-  const last  = dates[dates.length - 1];
-  const firstM = MONTH_TH[first.getMonth()];
-  if (dates.length === 1) {
-    return `${first.getDate()} ${firstM} ${first.getFullYear() + 543}`;
-  }
-  if (first.getMonth() === last.getMonth()) {
-    return `${first.getDate()}-${last.getDate()} ${firstM} ${first.getFullYear() + 543}`;
-  }
-  const lastM = MONTH_TH[last.getMonth()];
-  return `${first.getDate()} ${firstM} - ${last.getDate()} ${lastM} ${last.getFullYear() + 543}`;
+  return formatRoundDays(scheduleItem?.dates, { showMonth: true, showYear: true });
 }
 
 // The article-date formatter that used to live here is gone with the date it

@@ -1,7 +1,7 @@
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 
-export function RelatedCourses({ courses }) {
+export function RelatedCourses({ courses, currentYear }) {
   const list = Array.isArray(courses) ? courses.filter(Boolean) : [];
   if (!list.length) return null;
 
@@ -16,6 +16,7 @@ export function RelatedCourses({ courses }) {
             <CourseCard
               key={c._id ?? c.course_id}
               course={c}
+              currentYear={currentYear}
               className="min-w-[260px] lg:min-w-0"
             />
           ))}

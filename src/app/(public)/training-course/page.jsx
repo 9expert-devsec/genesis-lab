@@ -6,6 +6,7 @@ import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { CourseListClient } from './_components/CourseListClient';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
 
@@ -48,6 +49,7 @@ export default async function Page() {
         items={items}
         programOrder={programOrder}
         earlyBirdMap={earlyBirdMap}
+        currentYear={siteCurrentYear()}
       />
     </Suspense>
   );

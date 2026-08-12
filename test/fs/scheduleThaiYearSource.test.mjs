@@ -28,8 +28,13 @@ import { readSource, walkSources } from '../sourceScan.mjs';
 
 const SCHEDULE_SURFACES = [
   'src/lib/schedule/monthWindow.js',
+  'src/lib/schedule/roundDateLabel.js',
   'src/lib/schedule/scheduleTableLayout.js',
   'src/app/(public)/schedule/_components/ScheduleClient.jsx',
+  // Added when the two round PICKERS (course detail, registration step 1)
+  // stopped rendering English months and moved onto formatRoundDays. It is a
+  // Thai-year surface now, and this guard is what stops the next `+ 543`.
+  'src/components/registration/ScheduleCarousel.jsx',
 ];
 
 test('no schedule surface contains a 543 literal', () => {
@@ -66,6 +71,31 @@ test('every Thai date formatter on these surfaces goes through Intl', () => {
   const src = readSource('src/lib/schedule/monthWindow.js');
   const formatters = src.code.match(/new Intl\.DateTimeFormat\('th-TH'/g) ?? [];
   assert.equal(formatters.length, 4, 'month, month+year, year-only, and long month+year');
+});
+
+test('roundDateLabel asks Intl for BOTH the month and the year', () => {
+  /**
+   * The same positive half, for the round formatter. It matters more here than
+   * anywhere else on the list: this module was written to retire five
+   * hand-rolled formatters, THREE of which carried their own `MONTH_TH` array
+   * and one of which hand-added 543. A "no 543" sweep is satisfied by a file
+   * that does no Thai formatting at all, so the ban alone would not notice a
+   * ninth copy of that array growing back beside the Intl calls.
+   */
+  const src = readSource('src/lib/schedule/roundDateLabel.js');
+  const formatters = src.code.match(/new Intl\.DateTimeFormat\('th-TH'/g) ?? [];
+  assert.equal(formatters.length, 2, 'the short month, and the 2-digit year');
+  assert.match(src.code, /month: 'short'/);
+  assert.match(src.code, /formatToParts\(/, 'the year must come out as a PART');
+  assert.match(src.code, /p\.type === 'year'/);
+
+  // And no hand-written month table beside them. The eight copies already in
+  // src/ are exactly how these surfaces drifted apart in the first place.
+  assert.equal(
+    /'ม\.ค\.'/.test(src.code),
+    false,
+    'a ninth MONTH_TH array — the month is locale data, ask the formatter',
+  );
 });
 
 // ── Controls ────────────────────────────────────────────────────────────────

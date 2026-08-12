@@ -11,6 +11,8 @@ import {
   rollingWindow,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
+import { siteDateParts } from '@/lib/articlePublishTime';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import {
   FROZEN_COLUMNS,
   MONTH_MIN_WIDTH,
@@ -45,6 +47,13 @@ const now = new Date();
 const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
 const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
 const DEFAULTS = defaultScheduleFilters(now);
+
+// The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
+// same derivation the page itself does, off the same instant WINDOW came from.
+// `formatRoundDays` THROWS rather than reading a clock, so ScheduleBoard has to
+// be handed one; a harness that omitted it would fail loudly here rather than
+// render the wrong year in production. That is the intended failure mode.
+const CURRENT_YEAR = siteDateParts(now).year;
 
 /**
  * The properties EARLY_BIRD_CHIP owns — word, lime, padding, type, shadow.
@@ -82,6 +91,7 @@ const render = (overrides = {}) =>
       earlyBirdMap: { 'POWER-BI': 's-cross' },
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -94,11 +104,40 @@ const render = (overrides = {}) =>
 const tableRegion = (html) => (html.match(/<table[\s\S]*?<\/table>/g) ?? []).join('');
 const cardRegion = (html) => (html.match(/<article[\s\S]*?<\/article>/g) ?? []).join('');
 
-/** Every populated month `<td>` of the desktop table, inner markup only. */
+/**
+ * Every populated month `<td>` of the desktop table, inner markup only.
+ *
+ * `col[Ss]pan` is OPTIONAL and both spellings are accepted. A cross-month round
+ * now renders `<td colSpan="2">`, so the old literal silently skipped the very
+ * cell this file is about — `filledCells()[0]` quietly became the round with NO
+ * early bird, and the chip assertions failed as "the chip is gone". (React
+ * 18.3.1 emits `colSpan` camel-cased while emitting `rowspan` lowercase; HTML
+ * attribute names are case-insensitive, so both are correct and both are
+ * matched.)
+ */
 const filledCells = (html) =>
-  [...tableRegion(html).matchAll(/<td class="px-2 py-2 text-center align-middle">([\s\S]*?)<\/td>/g)]
+  [...tableRegion(html).matchAll(
+    /<td(?: col[Ss]pan="\d+")? class="px-2 py-2 text-center align-middle">([\s\S]*?)<\/td>/g,
+  )]
     .map((m) => m[1])
     .filter((c) => c.includes('<a '));
+
+/**
+ * The same cells keyed by schedule id.
+ *
+ * Positional indexing stopped being safe when the table began packing rounds
+ * into LANES: document order is lane order, so a cross-month round's neighbour
+ * moves to the end of the markup. Every test below that means "the early-bird
+ * cell" now says so by name.
+ */
+const cellById = (html) => {
+  const out = {};
+  for (const cell of filledCells(html)) {
+    const id = cell.match(/&amp;class=([^"&]+)/)?.[1] ?? 'no-link';
+    out[id] = cell;
+  }
+  return out;
+};
 
 /**
  * The stacking wrapper's class attribute, matched on the WHOLE value.
@@ -148,17 +187,20 @@ test('the centring the cell actually relies on is untouched', () => {
    * visually. Asserted so a future "simplify" does not delete the rule that IS
    * load-bearing along with the one that was not.
    */
-  const cell = filledCells(render())[0];
+  const cell = cellById(render())['s-cross'];
+  // The column moved ONTO the anchor: the round is a bordered box now, so the
+  // box and the column are one element instead of an <a> wrapping a <span>.
+  // The centring classes are unchanged, which is the claim.
   assert.match(
     cell,
-    /<span class="flex flex-col items-center gap-0\.5/,
+    /<a [^>]*class="[^"]*flex flex-col items-center gap-0\.5/,
     'ScheduleCell must still centre its own dot, date and status',
   );
   // `filledCells` strips the <td>, so the cell's own text-align is checked on
   // the table markup rather than on the extracted inner HTML.
   assert.match(
     tableRegion(render()),
-    /<td class="px-2 py-2 text-center align-middle">/,
+    /<td(?: col[Ss]pan="\d+")? class="px-2 py-2 text-center align-middle">/,
     'and the cell is still text-centred',
   );
 });
@@ -174,7 +216,7 @@ test('THE PILL IS IN FLOW — it cannot be excluded from its own width again', (
    * Asserted as the ABSENCE of positioning on the chip, plus the absence of the
    * whole overlay apparatus that only existed to support it.
    */
-  const cell = filledCells(render())[0];
+  const cell = cellById(render())['s-cross'];
   const chip = cell.match(/<span class="([^"]*)">Early Bird<\/span>/)?.[1];
   assert.ok(chip, 'the chip is gone');
   assert.equal(/\babsolute\b/.test(chip), false, `the chip is positioned again: "${chip}"`);
@@ -214,7 +256,7 @@ test('CONTROL: the in-flow probes DO fire on the overlay this replaced', () => {
   assert.ok(/\bpt-3\b/.test(overlay));
   assert.ok(/\bz-10\b/.test(overlay));
   // …and the live cell really is the thing being read, not a fixture.
-  assert.ok(filledCells(render())[0].includes('Early Bird'));
+  assert.ok(cellById(render())['s-cross'].includes('Early Bird'));
 });
 
 test('the chip comes AFTER the status, last in the cell’s column', () => {
@@ -224,9 +266,11 @@ test('the chip comes AFTER the status, last in the cell’s column', () => {
    * order), and an in-flow chip that stayed first in the markup would render at
    * the top of the column and look like nothing had moved.
    */
-  const cell = filledCells(render())[0];
-  const column = cell.match(/<span class="flex flex-col items-center gap-0\.5">([\s\S]*?)<\/span><\/a>/)?.[1];
-  assert.ok(column, 'the cell’s inner column is gone');
+  const cell = cellById(render())['s-cross'];
+  // The anchor IS the column now — see the centring test above. Its children are
+  // everything between the opening <a …> and its </a>.
+  const column = cell.match(/<a [^>]*>([\s\S]*?)<\/a>/)?.[1];
+  assert.ok(column, 'the cell’s column is gone');
 
   const dotAt = column.indexOf('background-color:#00CCFF');
   // RE-POINTED with the cell's type scale (date label -> text-sm). This
@@ -250,7 +294,7 @@ test('CONTROL: the order probe DOES catch a chip put back at the top', () => {
   // extractor happened to return, including one where the chip leads.
   const topFirst = '<span>Early Bird</span><span>background-color:#00CCFF</span><span>เปิดรับ</span>';
   assert.ok(topFirst.indexOf('Early Bird') < topFirst.indexOf('เปิดรับ'), 'the probe can see a leading chip');
-  const cell = filledCells(render())[0];
+  const cell = cellById(render())['s-cross'];
   assert.ok(
     cell.indexOf('เปิดรับ') < cell.indexOf('Early Bird'),
     'and the live cell puts the status first',
@@ -264,7 +308,7 @@ test('the complete label renders — the whole string, not a prefix', () => {
    * so an `includes` sweep for them fires on a perfectly good render. Same trap
    * as the Thai labels elsewhere in this suite, wearing Latin letters.
    */
-  const cell = filledCells(render())[0];
+  const cell = cellById(render())['s-cross'];
   const chipText = cell.match(/shadow-sm">([^<]*)<\/span>/)?.[1];
   assert.equal(chipText, 'Early Bird', 'the pill must carry the whole label');
   assert.ok(cell.includes('>Early Bird</span>'), 'and render it as its own text node');
@@ -285,9 +329,9 @@ test('a cell with NO early bird is unchanged by the move', () => {
    * `pt-3` branch, so removing that branch left its markup byte for byte the
    * same. Pinned against the same golden the affordance suite carries.
    */
-  const plain = filledCells(render({ earlyBirdMap: {} }))[0];
-  assert.match(plain, /<span class="flex flex-col items-center gap-0\.5">/,
-    'the column class must be the same literal a plain cell always had');
+  const plain = cellById(render({ earlyBirdMap: {} }))['s-cross'];
+  assert.match(plain, /<a [^>]*class="[^"]*flex flex-col items-center gap-0\.5 /,
+    'the column classes must be the same literal a plain cell always had');
   assert.equal(plain.includes('Early Bird'), false);
   assert.equal(/\bpt-3\b/.test(plain), false);
   assert.equal(/\babsolute\b/.test(plain), false);
@@ -351,7 +395,33 @@ test('the fix bought the width from layout, not from the column geometry', () =>
  * would have moved the card's inline tag too, on a layout settled one round
  * ago. The fix touched neither the chip nor the tag, and this is how that is
  * known rather than assumed.
+ *
+ * ── RE-BASELINED: THE DATE LABEL ────────────────────────────────────────────
+ * The date moved to the shared formatter (lib/schedule/roundDateLabel). This
+ * fixture round is the last day of one month and the 2nd of the next — TWO
+ * days with a gap — and the retired formatter printed it as a RANGE,
+ * `31 ส.ค. - 2 ก.ย. 69`, claiming training on every day between. It now reads
+ * `31 ส.ค., 2 ก.ย.`, and the year is gone because `showYear: 'auto'` omits it
+ * for a round in the current year.
+ *
+ * RE-CAPTURED FROM RENDERED OUTPUT. The full row was printed from a real
+ * ScheduleBoard render and diffed against this constant; the ONLY delta was the
+ * text inside the date `<span>`. Every class, the inline `style`, the attribute
+ * order, the chip and the chevron `<svg>` were unchanged — which is exactly the
+ * claim this golden exists to make.
+ *
+ * The date is interpolated through the formatter rather than written out for
+ * the same reason as in scheduleRoundRowAffordance: WINDOW rolls off the real
+ * clock, so in November these two months straddle a year and 'auto' adds a year
+ * to BOTH tokens. No literal survives that. The label's CONTENT is pinned by
+ * test/pure/roundDateLabel against fixed dates; what this constant pins is
+ * everything around it.
  */
+const CARD_DATE_LABEL = formatRoundDays(
+  [`${WINDOW[0]}-${CROSS_START}`, `${WINDOW[1]}-02`],
+  { showMonth: true, showYear: 'auto', currentYear: CURRENT_YEAR },
+);
+
 const CARD_EARLY_BIRD_ROW =
   '<li><a href="/registration/public?course=power-bi&amp;class=s-cross" '
   + 'class="flex min-h-[44px] w-full items-center gap-3 rounded-9e-md border border-[var(--surface-border)] '
@@ -359,7 +429,7 @@ const CARD_EARLY_BIRD_ROW =
   + 'active:bg-9e-air/20">'
   + '<span class="h-2.5 w-2.5 flex-none rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
   + '<span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">'
-  + `<span class="text-sm font-medium text-9e-navy dark:text-white">${CROSS_START} ${monthLabel(WINDOW[0])} - 2 ${monthLabelWithYear(WINDOW[1])}</span>`
+  + `<span class="text-sm font-medium text-9e-navy dark:text-white">${CARD_DATE_LABEL}</span>`
   + '<span class="flex-none rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] '
   + 'font-black leading-none text-9e-navy shadow-sm">Early Bird</span></span>'
   + '<span class="flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold '
@@ -399,7 +469,7 @@ test('the two layouts still render the shared chip identically', () => {
    * pill go from `rounded-b-sm` to `rounded-sm` without the card noticing.
    */
   const html = render();
-  const cell = filledCells(html)[0];
+  const cell = cellById(html)['s-cross'];
   const row = (cardRegion(html).match(/<li>[\s\S]*?<\/li>/g) ?? []).find((r) => r.includes('Early Bird'));
   const chip = /whitespace-nowrap bg-\[#D4F73F\] px-1\.5 py-\[2px\] text-\[0\.5rem\] font-black leading-none text-9e-navy shadow-sm/;
   assert.match(cell, chip, 'desktop pill lost the shared chip');

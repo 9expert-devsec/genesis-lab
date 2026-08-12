@@ -128,22 +128,125 @@ test('TYPE_COLOR is declared once and read by both layouts', () => {
   assert.equal(countOf(CLIENT.code, /const TYPE_LEGEND\s*=/g), 1);
 });
 
-test('formatDateLabel is declared once and is the basis of the card label too', () => {
-  assert.equal(countOf(CLIENT.code, /function formatDateLabel\(/g), 1);
+test('the date label is ONE imported formatter and two option objects', () => {
+  /**
+   * ── WHAT CHANGED, AND WHY THE CLAIM SURVIVED THE CHANGE ────────────────────
+   * This test used to assert that `formatDateLabel` was declared exactly once IN
+   * THIS FILE and that `formatCardDateLabel` was built on top of it. Both of
+   * those functions are gone, so the assertion as written no longer has a
+   * subject — but the claim it was making is the one worth keeping, and it is
+   * now true of a WIDER scope than this file.
+   *
+   * The old arrangement was "one local formatter, wrapped by a second local
+   * formatter". It held the two layouts on this page in agreement and could not
+   * see anything outside it — which is exactly how /search, the page-builder
+   * section and lib/formatScheduleDate each grew their own copy, and how three
+   * of the five ended up rendering a round on 8, 10 and 12 ต.ค. as `8-12`.
+   *
+   * The new arrangement is "one formatter, IMPORTED, called at two sites that
+   * differ only in their options object". So the guard now checks:
+   *   · the formatter is imported, not declared here;
+   *   · neither of the two old local functions has grown back;
+   *   · the table cell calls it with NO options (the column header carries the
+   *     month and the year, so the cell must not repeat them);
+   *   · the card row calls it with month + 'auto' year + a threaded currentYear;
+   *   · this file no longer carries a MONTH_TH array at all.
+   */
   assert.match(
-    functionSlice(CLIENT.code, 'formatCardDateLabel'),
-    /formatDateLabel\(scheduleItem\)/,
-    'the card label must be built ON the table label, not beside it',
+    CLIENT.withImports,
+    /import\s*\{\s*formatRoundDays\s*\}\s*from\s*"@\/lib\/schedule\/roundDateLabel"/,
+    'the formatter must be imported from the shared module',
   );
+  assert.equal(
+    countOf(CLIENT.code, /function formatRoundDays\b/g),
+    0,
+    'and never redeclared here',
+  );
+  for (const retired of ['formatDateLabel', 'formatCardDateLabel']) {
+    assert.equal(
+      countOf(CLIENT.code, new RegExp(String.raw`function ${retired}\s*\(`, 'g')),
+      0,
+      `${retired} was replaced by the shared formatter — it must not grow back`,
+    );
+  }
+
+  // The table cell: no options at all.
   assert.match(
     functionSlice(CLIENT.code, 'ScheduleCell'),
-    /formatDateLabel\(schedule\)/,
-    'and the table cell still uses it directly',
+    /formatRoundDays\(schedule\.dates\)/,
+    'the desktop cell takes the bare call — the header supplies month and year',
   );
-  // The month/year the card appends comes from the shared Intl formatter, never
-  // from a second hand-written month table.
-  assert.equal(countOf(CLIENT.code, /const MONTH_TH\s*=/g), 1);
-  assert.match(functionSlice(CLIENT.code, 'formatCardDateLabel'), /monthLabelWithYear\(/);
+
+  // The card row: month, 'auto' year, and a currentYear it was HANDED.
+  const row = functionSlice(CLIENT.code, 'RoundRow');
+  assert.match(row, /formatRoundDays\(schedule\.dates,\s*\{/);
+  assert.match(row, /showMonth:\s*true/);
+  assert.match(row, /showYear:\s*"auto"/);
+  assert.match(row, /currentYear/);
+
+  // No ninth month table. The card's month and year are locale data now.
+  assert.equal(countOf(CLIENT.code, /const MONTH_TH\s*=/g), 0);
+});
+
+test('the card year comes from the page\'s ONE clock read, in Asia/Bangkok', () => {
+  /**
+   * `showYear: 'auto'` needs to know what year it is, and roundDateLabel refuses
+   * to find out for itself. That read has to happen exactly once and in a pinned
+   * zone, for two separate reasons:
+   *
+   *   · ONCE — this page already reads the clock a single time into `now` and
+   *     derives the window, the reset target and the horizon from it, precisely
+   *     because three separate `new Date()` calls once disagreed. A fourth read
+   *     inside RoundRow would be the same defect wearing a fourth hat.
+   *   · IN BANGKOK — RoundRow renders during SSR too, and Vercel is UTC. Between
+   *     17:00 and midnight Bangkok on 31 December, `getFullYear()` differs
+   *     between server and browser, so every card holding a next-year round
+   *     would hydrate to a different string than it rendered.
+   */
+  assert.match(
+    CLIENT.withImports,
+    /import\s*\{\s*siteDateParts\s*\}\s*from\s*"@\/lib\/articlePublishTime"/,
+    'the zone must come from the module that owns it',
+  );
+  assert.match(
+    functionSlice(CLIENT.code, 'ScheduleClient'),
+    /siteDateParts\(now\)\.year/,
+    'derived from the SAME `now` the rest of the page uses',
+  );
+  // And nowhere below it. `new Date()` appears once in this file, in the
+  // `useState` initialiser that produces `now`.
+  assert.equal(
+    countOf(CLIENT.code, /new Date\(\)/g),
+    1,
+    'a second clock read is a second answer to "what year is it"',
+  );
+  assert.equal(
+    countOf(functionSlice(CLIENT.code, 'RoundRow'), /new Date\(/g),
+    0,
+    'RoundRow must be handed the year, not go and get one',
+  );
+});
+
+test('CONTROL: the wiring probes above DO fire on the arrangement they replaced', () => {
+  /**
+   * Every assertion in the two tests above is either a `match` on the current
+   * text or an `equal(count, 0)`. Both shapes pass trivially against a file that
+   * simply does not contain the thing — so the probes are run here against a
+   * SAMPLE of the old arrangement to show they discriminate.
+   */
+  const oldShape = [
+    'const MONTH_TH = ["ม.ค."];',
+    'function formatDateLabel(scheduleItem) { return "8-12"; }',
+    'function formatCardDateLabel(scheduleItem) { return formatDateLabel(scheduleItem); }',
+    'function RoundRow() { const y = new Date().getFullYear(); }',
+  ].join('\n');
+
+  assert.equal(countOf(oldShape, /const MONTH_TH\s*=/g), 1, 'the MONTH_TH probe must see one');
+  assert.equal(countOf(oldShape, /function formatDateLabel\s*\(/g), 1);
+  assert.equal(countOf(oldShape, /function formatCardDateLabel\s*\(/g), 1);
+  assert.equal(countOf(oldShape, /new Date\(\)/g), 1, 'the second-clock probe must see the read');
+  // And the import probe finds nothing in it, which is the whole point.
+  assert.equal(/import\s*\{\s*formatRoundDays\s*\}/.test(oldShape), false);
 });
 
 test('resolveScheduleBadge is imported, never redefined, and used by both', () => {
@@ -186,11 +289,20 @@ test('the early-bird condition and lookup are each written once', () => {
 });
 
 test('the matcher and the window are shared, not re-derived by the card', () => {
-  // `courseRounds` is the agreement point: same buckets, same visibleMonths,
-  // same matcher as the table's cells.
+  /**
+   * `courseRounds` is the agreement point: the SAME round list, the SAME
+   * visibleMonths and the SAME matcher the table's lanes are packed from.
+   *
+   * The first argument used to be `scheduleMap[c._id] ?? {}` — the per-month
+   * BUCKETS. It is `roundsByCourse[c._id] ?? []` now, a flat list, and the change
+   * is not cosmetic: buckets keyed a round by its first date only, so a
+   * cross-month round was invisible from its second month. Under the span-based
+   * rule that replaced them, a round appears in two months' worth of columns, and
+   * a bucket walk would emit it once per month and list it twice on the card.
+   */
   assert.match(
     functionSlice(CLIENT.code, 'ProgramGroup'),
-    /courseRounds\(\s*scheduleMap\[c\._id\] \?\? \{\},\s*visibleMonths,\s*sessionMatches,?\s*\)/,
+    /courseRounds\(\s*roundsByCourse\[c\._id\] \?\? \[\],\s*visibleMonths,\s*sessionMatches,?\s*\)/,
     'the card must be fed the table’s own window and matcher',
   );
   assert.equal(

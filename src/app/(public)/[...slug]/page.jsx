@@ -28,6 +28,7 @@ import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { CourseStickyCTA } from './_components/CourseStickyCTA';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
@@ -814,6 +815,7 @@ function CourseDetail({
                 course={course}
                 schedules={schedules}
                 earlyBird={earlyBird}
+                currentYear={siteCurrentYear()}
               />
             )}
             <CourseDescription course={course} />
@@ -860,7 +862,7 @@ function CourseDetail({
         </div>
       </div>
 
-      <RelatedCourses courses={relatedCourses} />
+      <RelatedCourses courses={relatedCourses} currentYear={siteCurrentYear()} />
 
       <CourseStickyCTA
         title={course.course_name}

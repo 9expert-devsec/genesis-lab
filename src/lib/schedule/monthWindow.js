@@ -52,20 +52,37 @@
 export const PUBLIC_SCHEDULE_DEFAULT_MONTHS = 6;
 
 /**
- * How far ahead the two filter dropdowns let a visitor look.
+ * How far ahead the two filter dropdowns let a visitor look. TWELVE months,
+ * i.e. offsets 0..11 from the current month inclusive.
  *
- * 18 = 12 + 6, and both terms are the reason:
- *   · 12 — a full year ahead, so the SAME MONTH NEXT YEAR is always selectable
- *     no matter which month you visit in. Anything less and the horizon
- *     shrinks as the year goes on, which is the defect this module removes.
- *   · 6  — the default window's length, so the default's last column is never
- *     also the last option: there is always somewhere further to extend to.
+ * ── WHAT THE 18 WAS, AND WHY THAT ARGUMENT NO LONGER APPLIES ────────────────
+ * It was 18, derived as `12 + 6`, and the 12 term was justified by a specific
+ * property: "the SAME MONTH NEXT YEAR is always selectable, no matter which
+ * month you visit in". THAT PROPERTY IS GONE at a horizon of 12, and it is
+ * important to say so rather than quietly keep the sentence: reaching the same
+ * month next year needs THIRTEEN options (offsets 0..12), not twelve. From
+ * August, the last option is now next July.
  *
- * It is a UI horizon, not a fetch bound. `getAllSchedules()` is unbounded and
- * stays that way; if upstream ever publishes a round beyond 18 months it is
- * fetched, and it is unreachable from the filter until this number moves.
+ * It was given up deliberately, because it was buying nothing. Measured against
+ * the live feed on 2026-08-12: of 104 future rounds, ZERO sat at offset >= 12,
+ * and the furthest was at +5 — the data does not reach even halfway to the old
+ * horizon. Twelve months of options is already more than upstream publishes,
+ * and a dropdown of 18 mostly-empty months is a longer list to scroll for
+ * months that cannot contain anything. If upstream ever starts publishing
+ * further out, this number is the one place to change.
+ *
+ * ── THE PROPERTY THAT SURVIVES, AND IS STILL LOAD-BEARING ───────────────────
+ * 12 > PUBLIC_SCHEDULE_DEFAULT_MONTHS (6), so the DEFAULT WINDOW'S LAST COLUMN
+ * IS NEVER ALSO THE LAST OPTION: a visitor who opens the page and wants to look
+ * further always has somewhere to go. That is what would break if this were
+ * ever set to 6 or below, and it is what the test pins.
+ *
+ * It remains a UI horizon, not a fetch bound. `getAllSchedules()` is unbounded
+ * and stays that way; a round beyond 12 months is still FETCHED and still
+ * rendered if the window reaches it — it is merely unreachable through the
+ * dropdown until this number moves.
  */
-export const PUBLIC_SCHEDULE_FILTER_HORIZON = 18;
+export const PUBLIC_SCHEDULE_FILTER_HORIZON = 12;
 
 /**
  * `YYYY-MM` for a Date, in LOCAL time.

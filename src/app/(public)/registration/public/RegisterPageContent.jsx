@@ -9,6 +9,7 @@ import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getScheduleLocals } from '@/lib/actions/schedules';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
 import { courseHref } from '@/lib/utils';
 
@@ -148,6 +149,7 @@ export async function RegisterPageContent({ searchParams, step }) {
           omisePaymentEnabled={omisePaymentEnabled}
           coursePrice={course.course_price ?? null}
           priceByScheduleId={priceByScheduleId}
+          currentYear={siteCurrentYear()}
         />
       )}
     </article>

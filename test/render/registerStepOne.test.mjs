@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StepForm } from '@/components/registration/RegisterWizard';
 
@@ -25,9 +26,37 @@ const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
 const COURSE = { course_id: 'DA-PBI', course_name: 'Power BI Essentials' };
 
+/**
+ * The Bangkok year the round cards measure showYear:'auto' against.
+ *
+ * Pinned, not read from the clock: a fixture that took the real year would
+ * mean something different every January. formatRoundDays THROWS without it,
+ * which is why a harness that omits it fails loudly here rather than shipping
+ * a wrong year — the intended failure mode.
+ */
+const CURRENT_YEAR = 2026;
+
 const SEP = { _id: 'sch-sep', dates: ['2026-09-10', '2026-09-11'], status: 'open', type: 'classroom' };
 const OCT = { _id: 'sch-oct', dates: ['2026-10-15', '2026-10-16'], status: 'open', type: 'classroom' };
 const SCHEDULES = [SEP, OCT];
+
+/**
+ * The two round labels, DERIVED from the shared formatter.
+ *
+ * They were the literals `10-11 SEP` and `15-16 OCT`. ScheduleCarousel no
+ * longer renders English months — it uses lib/schedule/roundDateLabel like every
+ * other round surface — so those strings match nothing.
+ *
+ * Derived rather than retyped in Thai, because what these tests actually claim
+ * is "the card FOR THIS ROUND is/is not pressed". The label is how the card is
+ * located, not what is being asserted; its content is pinned in
+ * test/pure/roundDateLabel against fixed dates. A control below stops the
+ * derivation from going vacuous.
+ */
+const labelOf = (s) =>
+  formatRoundDays(s.dates, { showMonth: true, showYear: 'auto', currentYear: CURRENT_YEAR });
+const SEP_LABEL = labelOf(SEP);
+const OCT_LABEL = labelOf(OCT);
 
 // A draft that remembers the September round AND carries typed-in fields. The
 // point of the fix is that changing rounds keeps all of this.
@@ -77,6 +106,7 @@ const render = (props) =>
       initialClassId: null,
       initialValues: null,
       onSubmit: noop,
+      currentYear: CURRENT_YEAR,
       ...props,
     })
   );
@@ -110,8 +140,8 @@ const anyStrip = (html) => STRIP_LABELS.some((l) => html.includes(l));
 
 test('a URL classId beats a differing draft classId', () => {
   const html = render({ initialClassId: OCT._id, initialValues: DRAFT });
-  assert.equal(isPressed(html, '15-16 OCT'), true, 'the URL round is selected');
-  assert.equal(isPressed(html, '10-11 SEP'), false, 'the draft round is not');
+  assert.equal(isPressed(html, OCT_LABEL), true, 'the URL round is selected');
+  assert.equal(isPressed(html, SEP_LABEL), false, 'the draft round is not');
 });
 
 test('CONTROL: the OLD precedence would have selected the draft round', () => {
@@ -120,13 +150,13 @@ test('CONTROL: the OLD precedence would have selected the draft round', () => {
   // If this and the test above ever agree, the swap has been undone: the two
   // orderings would be indistinguishable and the test above would prove nothing.
   const oldOrdering = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(oldOrdering, '10-11 SEP'), true, 'draft-only selects September');
-  assert.equal(isPressed(oldOrdering, '15-16 OCT'), false);
+  assert.equal(isPressed(oldOrdering, SEP_LABEL), true, 'draft-only selects September');
+  assert.equal(isPressed(oldOrdering, OCT_LABEL), false);
 
   const newOrdering = render({ initialClassId: OCT._id, initialValues: DRAFT });
   assert.notEqual(
-    isPressed(oldOrdering, '15-16 OCT'),
-    isPressed(newOrdering, '15-16 OCT'),
+    isPressed(oldOrdering, OCT_LABEL),
+    isPressed(newOrdering, OCT_LABEL),
     'the two orderings must disagree, or the precedence test is vacuous'
   );
 });
@@ -195,14 +225,14 @@ test('with NO URL classId the draft round is still restored', () => {
   // CourseHero links to /registration/public?course=<id> with no &class=, so
   // this is the live path for a returning user, not a hypothetical one.
   const html = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(html, '10-11 SEP'), true, 'the draft round is selected');
+  assert.equal(isPressed(html, SEP_LABEL), true, 'the draft round is selected');
   assert.ok(html.includes('10-11 ก.ย. 2569'), 'and drives the summary strip');
 });
 
 test('with neither, nothing is selected and the summary strip is absent', () => {
   const html = render({ initialClassId: null, initialValues: null });
-  assert.equal(isPressed(html, '10-11 SEP'), false);
-  assert.equal(isPressed(html, '15-16 OCT'), false);
+  assert.equal(isPressed(html, SEP_LABEL), false);
+  assert.equal(isPressed(html, OCT_LABEL), false);
   assert.equal(anyStrip(html), false, 'no round selected → no summary strip');
 });
 
@@ -226,8 +256,8 @@ test('a draft round missing from schedules degrades, it does not crash', () => {
     initialValues: { ...DRAFT, classId: 'sch-deleted' },
   });
   assert.ok(html.length > 0, 'it renders');
-  assert.equal(isPressed(html, '10-11 SEP'), false, 'no card is pressed');
-  assert.equal(isPressed(html, '15-16 OCT'), false);
+  assert.equal(isPressed(html, SEP_LABEL), false, 'no card is pressed');
+  assert.equal(isPressed(html, OCT_LABEL), false);
   assert.equal(anyStrip(html), false, 'and no round summary strip');
 });
 
@@ -235,7 +265,7 @@ test('CONTROL: the same draft with a LIVE round does show the strip', () => {
   // Proves the stale-round assertions above measure the missing round and not a
   // strip that is simply never rendered once a draft reveals the form.
   const html = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(html, '10-11 SEP'), true);
+  assert.equal(isPressed(html, SEP_LABEL), true);
   assert.equal(anyStrip(html), true, 'the strip renders for a round that exists');
 });
 
@@ -299,7 +329,7 @@ test('CONTROL: both states DO render the schedule carousel', () => {
     render({ initialClassId: null, initialValues: null }),
   ]) {
     assert.ok(html.includes('เลือกรอบการอบรม'), 'the schedule section heading');
-    assert.ok(html.includes('10-11 SEP') && html.includes('15-16 OCT'), 'both round cards');
+    assert.ok(html.includes(SEP_LABEL) && html.includes(OCT_LABEL), 'both round cards');
   }
 });
 
@@ -338,15 +368,15 @@ test('nothing auto-selects a round when none was given', () => {
   // The other thing explicitly out of scope. Revealing early must not slide into
   // choosing for the user.
   const html = render({ initialClassId: null, initialValues: null });
-  assert.equal(isPressed(html, '10-11 SEP'), false);
-  assert.equal(isPressed(html, '15-16 OCT'), false);
+  assert.equal(isPressed(html, SEP_LABEL), false);
+  assert.equal(isPressed(html, OCT_LABEL), false);
   assert.equal(anyStrip(html), false, 'and no round summary strip');
 });
 
 test('a draft with no URL classId still reveals — unchanged behaviour', () => {
   const html = render({ initialClassId: null, initialValues: DRAFT });
   assert.equal(isRevealed(html), true);
-  assert.equal(isPressed(html, '10-11 SEP'), true, 'on the round the draft remembers');
+  assert.equal(isPressed(html, SEP_LABEL), true, 'on the round the draft remembers');
 });
 
 test('CONTROL: the draft alone is what reveals it, not the fixture being non-empty', () => {
@@ -364,8 +394,8 @@ test('a URL classId naming a round NOT in schedules leaves the form shut', () =>
   // page's own limit-20 fetch window while the detail page still linked it.
   const html = render({ initialClassId: GHOST, initialValues: null });
   assert.equal(anyRevealed(html), false, 'the form body stays closed');
-  assert.equal(isPressed(html, '10-11 SEP'), false, 'and nothing is selected for them');
-  assert.equal(isPressed(html, '15-16 OCT'), false);
+  assert.equal(isPressed(html, SEP_LABEL), false, 'and nothing is selected for them');
+  assert.equal(isPressed(html, OCT_LABEL), false);
   assert.equal(anyStrip(html), false, 'and there is no summary strip');
 });
 
@@ -375,7 +405,7 @@ test('a draft whose classId is NOT in schedules likewise leaves it shut', () => 
   // discover at submit.
   const html = render({ initialClassId: null, initialValues: { ...DRAFT, classId: GHOST } });
   assert.equal(anyRevealed(html), false, 'the form body stays closed');
-  assert.equal(isPressed(html, '10-11 SEP'), false);
+  assert.equal(isPressed(html, SEP_LABEL), false);
   assert.equal(anyStrip(html), false);
 });
 

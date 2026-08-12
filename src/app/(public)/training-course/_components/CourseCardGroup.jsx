@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import { CourseCard } from './CourseCard';
 
-export function CourseCardGroup({ program, courses, earlyBirdMap = {} }) {
+export function CourseCardGroup({ program, courses, earlyBirdMap = {}, currentYear }) {
   return (
     <section className="mb-10">
       <div className="mb-4 flex items-center gap-3">
@@ -31,6 +31,7 @@ export function CourseCardGroup({ program, courses, earlyBirdMap = {} }) {
             earlyBirdScheduleId={
               earlyBirdMap[String(c.course_id).toUpperCase()] ?? null
             }
+            currentYear={currentYear}
           />
         ))}
       </div>

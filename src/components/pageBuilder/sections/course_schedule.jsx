@@ -1,6 +1,7 @@
 import { CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 
 /**
  * course_schedule — upcoming sessions for one course (2C.2b). Server component;
@@ -20,28 +21,32 @@ import { resolveScheduleBadge } from '@/lib/scheduleStatus';
  * no upcoming sessions, or an unresolved code) renders nothing; the editor warns.
  */
 
-const MONTH_TH = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-
 const TYPE_TH = { classroom: 'ในห้องเรียน', hybrid: 'ไฮบริด', online: 'ออนไลน์' };
 
-// Format a schedule's `dates` array into a compact Thai range: "17-18 ต.ค." or
-// "30 ต.ค. - 2 พ.ย." across a month boundary. Mirrors the schedule page's own
-// label logic; kept local because that one is a client component.
+/**
+ * A round's dates, adapted to this section's null-means-unknown contract.
+ *
+ * ── THE LOGIC IS NO LONGER LOCAL, AND THE OLD COMMENT WAS THE WARNING ───────
+ * This used to be a hand-rolled range with its own `MONTH_TH` array, explaining
+ * itself as "mirrors the schedule page's own label logic; kept local because
+ * that one is a client component". It did not mirror it — it had drifted, and
+ * both were wrong the same way: first-date-to-last-date rendered a round on
+ * 8, 10 and 12 ต.ค. as `8-12 ต.ค.`, three days advertised as five.
+ *
+ * `lib/schedule/roundDateLabel` is a PURE module — no React, no next/*, no db —
+ * so the server/client split that justified the copy does not apply to it. The
+ * reason the copy existed is gone; the copy goes with it.
+ *
+ * `showMonth: true` and no year, which is what this section rendered before.
+ * The month/year come from Intl, so the eighth `MONTH_TH` array in src/ goes
+ * too.
+ *
+ * @returns {string|null} null when there is no usable date, so the caller's
+ *   `range ?? 'ยังไม่ระบุวันที่'` fallback keeps working unchanged.
+ */
 function formatRange(dates) {
-  const parsed = (Array.isArray(dates) ? dates : [])
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b);
-  if (!parsed.length) return null;
-  const first = parsed[0];
-  const last = parsed[parsed.length - 1];
-  if (parsed.length === 1 || first.getTime() === last.getTime()) {
-    return `${first.getDate()} ${MONTH_TH[first.getMonth()]}`;
-  }
-  if (first.getMonth() === last.getMonth()) {
-    return `${first.getDate()}-${last.getDate()} ${MONTH_TH[first.getMonth()]}`;
-  }
-  return `${first.getDate()} ${MONTH_TH[first.getMonth()]} - ${last.getDate()} ${MONTH_TH[last.getMonth()]}`;
+  const label = formatRoundDays(dates, { showMonth: true });
+  return label === '-' ? null : label;
 }
 
 function scheduleHref(schedule, code) {

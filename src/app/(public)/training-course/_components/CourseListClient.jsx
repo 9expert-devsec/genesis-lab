@@ -23,7 +23,7 @@ import { EmptyState } from './EmptyState';
  * server page — the list endpoint returns ~73 courses, well within the
  * size where client-side filter is simpler than refetching.
  */
-export function CourseListClient({ items, programOrder = [], earlyBirdMap = {} }) {
+export function CourseListClient({ items, programOrder = [], earlyBirdMap = {}, currentYear }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -168,6 +168,7 @@ export function CourseListClient({ items, programOrder = [], earlyBirdMap = {} }
               program={g.program}
               courses={g.courses}
               earlyBirdMap={earlyBirdMap}
+              currentYear={currentYear}
             />
           ))
         ) : (
