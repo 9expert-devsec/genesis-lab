@@ -36,6 +36,11 @@ import { listSkills } from '@/lib/api/skills';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { getReviewsById } from '@/lib/api/reviews';
 import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
+import {
+  assessDowngrade,
+  sectionCountsOf,
+  permitsSnapshotWrite,
+} from '@/lib/cache-console/downgradeGuard';
 
 import { getActiveBanners } from '@/lib/actions/banners';
 import { getActiveFeaturedCourseIds } from '@/lib/actions/featured-courses';
@@ -199,7 +204,19 @@ function buildOnlineCoursesForSection({
     }));
 }
 
-export async function syncLandingData() {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.allowShrink] bypass the downgrade guard for THIS
+ *   run only. Set exclusively by the admin override action, which has shown a
+ *   human both counts and taken an explicit confirmation. It is a parameter and
+ *   not stored state on purpose: a persisted flag is a permanently disabled
+ *   guard that nobody remembers turning off.
+ * @param {string} [options.actor] who to attribute a refusal to. Defaults to
+ *   the reserved `system:cron` id — the cron and the webhook resync are the
+ *   overwhelmingly common callers, and a row that cannot be mistaken for a
+ *   person is the point of reserving it.
+ */
+export async function syncLandingData({ allowShrink = false, actor = 'system:cron' } = {}) {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
@@ -445,6 +462,77 @@ export async function syncLandingData() {
     dataToWrite = previousDoc.data;
   }
 
+  /**
+   * ── THE DOWNGRADE GUARD, ON THE WRITE ───────────────────────────────────
+   *
+   * Here rather than in any caller. `syncLandingData` has four — the cron
+   * route, the admin sync route, triggerLandingSync, and the webhook's
+   * background resync — and b10bd54 is the standing evidence for what an
+   * invariant spread across call sites costs: `revalidatePath` ended up in one
+   * writer of four and three shipped stale pages for months.
+   *
+   * COUNTS COME FROM THE PAYLOADS, NOT FROM `sections`. The `sections` object
+   * written below reports the NEW counts even on the preserve-previous branch
+   * above, so a stored document can hold 27 programs beside a `sections.programs`
+   * of 0. Comparing that against the incoming run would find nothing that could
+   * shrink and wave through exactly the run this exists to stop.
+   */
+  const storedCounts = sectionCountsOf(previousDoc?.data);
+  const incomingCounts = sectionCountsOf(dataToWrite);
+  const downgrade = assessDowngrade({ storedCounts, incomingCounts, allowShrink });
+
+  if (!permitsSnapshotWrite(downgrade.verdict)) {
+    /**
+     * REFUSED. `data`, `syncedAt`, `status` and `sections` are all left exactly
+     * as they were — the only field written is the refusal record, so the
+     * stored snapshot is untouched in every sense that matters to a reader.
+     *
+     * `$set` on a single field, so a refusal REPLACES its predecessor. A run
+     * that would still shrink refuses again next cycle and overwrites this;
+     * the refusal never expires on a timer and never auto-clears. It goes away
+     * when a run writes — because the world recovered, or because an admin
+     * overrode.
+     */
+    await LandingCache.updateOne(
+      { key: CACHE_KEY },
+      {
+        $set: {
+          lastRefusal: {
+            at: syncedAt,
+            actor,
+            storedSections: storedCounts,
+            incomingSections: incomingCounts,
+            shrunk: downgrade.shrunk,
+            vanished: downgrade.vanished,
+            reason: downgrade.reason,
+            syncStatus: status,
+            syncErrors: errors,
+          },
+        },
+      }
+    );
+
+    // eslint-disable-next-line no-console
+    console.warn(`[syncLandingData] ${downgrade.reason}`);
+
+    // NO revalidatePath: nothing was published, so there is nothing to
+    // regenerate, and regenerating would only re-render the same stored
+    // snapshot at the cost of a full rebuild.
+    return {
+      ok: false,
+      refused: true,
+      verdict: downgrade.verdict,
+      reason: downgrade.reason,
+      shrunk: downgrade.shrunk,
+      storedSections: storedCounts,
+      incomingSections: incomingCounts,
+      syncedAt: previousDoc?.syncedAt ?? null,
+      status,
+      sections,
+      errors,
+    };
+  }
+
   await LandingCache.findOneAndUpdate(
     { key: CACHE_KEY },
     {
@@ -456,6 +544,9 @@ export async function syncLandingData() {
       sections,
       schemaVersion: 1,
       source: 'external_api',
+      // Writing clears the refusal: whatever was blocked has either been
+      // repaired by a healthy run or deliberately overridden.
+      lastRefusal: null,
     },
     { upsert: true, new: true }
   );
