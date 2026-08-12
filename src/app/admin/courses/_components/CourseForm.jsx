@@ -10,6 +10,7 @@ import {
   checkAliasAvailable,
 } from '@/lib/actions/course-extensions';
 import { CourseSeoRail } from './CourseSeoRail';
+import { CourseSearchSelect } from './CourseSearchSelect';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
@@ -796,21 +797,19 @@ export function CourseForm({
           label="หลักสูตรก่อนหน้า (previous_course)"
           hint="เลือกหลักสูตรที่เป็นพื้นฐานก่อน — ใช้ใน roadmap"
         >
-          <select
+          {/* Was a 77-option <select>. The picker keeps a hidden named input in
+              the DOM so `new FormData(form)` still sees this field, and
+              dispatches a real bubbling `change` so the unsaved-changes guard
+              still fires — see CourseSearchSelect's header for both. */}
+          <CourseSearchSelect
             name="previous_course"
+            label="หลักสูตรก่อนหน้า"
             value={previousCourse}
-            onChange={(e) => setPreviousCourse(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">— ไม่มี —</option>
-            {allCourses
-              .filter((c) => c?.course_id && c.course_id !== initial?.course_id)
-              .map((c) => (
-                <option key={c.course_id} value={c.course_id}>
-                  {c.course_name_th || c.course_name} ({c.course_id})
-                </option>
-              ))}
-          </select>
+            onChange={setPreviousCourse}
+            options={allCourses}
+            excludeCode={initial?.course_id}
+            inputClassName={inputCls}
+          />
         </Field>
       </Section>
 
