@@ -17,7 +17,7 @@ import { MirrorResetClient } from './MirrorResetClient';
  * has it, but can also mean the run partially failed, or that an admin action
  * wrote the row outside a sync.
  */
-export function MirrorPanel({ mirrors, resetTargets = null }) {
+export function MirrorPanel({ mirrors, resetTargets = null, history = null }) {
   if (!mirrors?.ok) {
     return (
       <Panel title="2. Mirror collections" subtitle="career_paths · faqs · instructors · promotions">
@@ -86,6 +86,11 @@ export function MirrorPanel({ mirrors, resetTargets = null }) {
           <MirrorResetClient targets={resetTargets} />
         </div>
       )}
+
+      {/* The audit trail for every purge on this menu. Rendered by the page,
+          placed here — see the mount point's note on why it is not built
+          in this component. */}
+      {history}
     </Panel>
   );
 }

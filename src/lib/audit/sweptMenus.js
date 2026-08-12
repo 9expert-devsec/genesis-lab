@@ -61,13 +61,17 @@ export const SWEPT = Object.freeze([
   //    destructive action outside the sweep and it is instrumented from the
   //    start rather than joining a later round already un-audited.
   //
-  // OWED, and recorded rather than quietly skipped: the inline RecordHistory
-  // widget is NOT mounted for this menu. The definition of done above says
-  // mounting is part of finishing a round, and it has not been done here. The
-  // rows are reachable from /admin/audit-log filtered by menu; what is missing
-  // is the per-record view on the console itself. A cache key is an unusual
-  // "record" and the right shape for that widget is a design question this
-  // round did not answer.
+  // The OWED note that stood here is DISCHARGED: RecordHistory is mounted on
+  // /admin/cache — twice, because this menu holds two record kinds. The
+  // snapshot panel carries `entity: 'snapshot'` for `homepage_v1`, and the
+  // mirror panel carries `entity: 'mirror'` with all four collection keys as an
+  // array (the shape `courses` uses for its two key spaces), so one panel
+  // answers "has anyone purged anything lately" across every collection.
+  //
+  // Both mounts live in page.jsx rather than inside the panels: RecordHistory
+  // is an async server component and the panels are deliberately synchronous so
+  // the render tier can drive them with renderToStaticMarkup, which cannot
+  // await a child.
   { file: 'src/lib/actions/cache-console.js', menus: ['landing_cache'] },
 ]);
 

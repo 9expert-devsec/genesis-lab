@@ -34,7 +34,7 @@ function Absent({ what, consequence }) {
   );
 }
 
-export function SnapshotPanel({ snapshots }) {
+export function SnapshotPanel({ snapshots, history = null }) {
   if (!snapshots?.ok) {
     return (
       <Panel title="1. Snapshot caches" subtitle="landing_cache · nav_menu_cache">
@@ -131,6 +131,10 @@ export function SnapshotPanel({ snapshots }) {
             the healthy case adds nothing to the page.
           */}
           <DowngradeRefusalPanel refusal={landing.lastRefusal} />
+
+          {/* The override trail for this snapshot. Rendered by the page and
+              placed here — see the mount point for why. */}
+          {history}
         </div>
 
         {/* ── nav_menu_cache ────────────────────────────────────────── */}

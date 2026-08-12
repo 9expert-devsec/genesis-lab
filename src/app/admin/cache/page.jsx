@@ -30,6 +30,7 @@ import { requirePage } from '@/lib/rbac/guard';
 import { readCacheConsoleState } from '@/lib/cache-console/readCacheState';
 import { SEARCH_CORPUS_TTL_MS } from '@/lib/search/searchCorpus';
 import { MIRROR_TARGETS } from '@/lib/cache-console/resetTargets';
+import { RecordHistory } from '@/components/audit/RecordHistory';
 import { SnapshotPanel } from './_components/SnapshotPanel';
 import { MirrorPanel } from './_components/MirrorPanel';
 import { WebhookTrailPanel } from './_components/WebhookTrailPanel';
@@ -79,7 +80,29 @@ export default async function CacheConsolePage() {
         </p>
       </header>
 
-      <SnapshotPanel snapshots={state.snapshots} />
+      {/*
+        RecordHistory is an ASYNC server component; the panels are deliberately
+        SYNCHRONOUS so the render tier can drive them with renderToStaticMarkup,
+        which cannot await a child. So it is mounted HERE, where the page is
+        already async, and handed down as a ready-made element. The panels place
+        it and know nothing about it — in a render test the prop is absent and
+        nothing renders, which is why the existing panel assertions still hold.
+
+        `menu` and `entity` are LITERALS written into this mount point, never
+        derived from a URL or from client state, per the widget's own contract.
+        The widget re-checks canAccess against the session regardless.
+      */}
+      <SnapshotPanel
+        snapshots={state.snapshots}
+        history={
+          <RecordHistory
+            menu="landing_cache"
+            entity="snapshot"
+            recordId="homepage_v1"
+            title="ประวัติการ override สแนปช็อตหน้าแรก"
+          />
+        }
+      />
       {/*
         Only the three serialisable fields cross to the client. The registry
         entries also carry a model loader and an upstream fetcher, which are
@@ -92,6 +115,20 @@ export default async function CacheConsolePage() {
         resetTargets={MIRROR_TARGETS.map((t) => ({
           key: t.key, label: t.label, idField: t.idField,
         }))}
+        history={
+          /*
+            All four mirror keys in ONE panel. `recordId` accepts an array —
+            the shape `courses` uses for its two key spaces — so one mount
+            covers every collection, rather than four panels an admin has to
+            scan separately to answer "has anyone purged anything lately".
+          */
+          <RecordHistory
+            menu="landing_cache"
+            entity="mirror"
+            recordId={MIRROR_TARGETS.map((t) => t.key)}
+            title="ประวัติการล้างแถวของทุก collection"
+          />
+        }
       />
       <WebhookTrailPanel webhooks={state.webhooks} limit={state.webhookLimit} />
       <RouteWindowPanel />
