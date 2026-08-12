@@ -52,12 +52,30 @@ import { siteConfig } from '@/config/site';
 /**
  * The date to stamp on copy written for this build.
  *
- * NOT a default and NOT "today" — it is the review date of the new placeholder
- * copy, and it is shared only because those three pages were written together.
- * A page whose text has its own history carries its own date instead; see
- * privacy-policy below.
+ * NOT a default and NOT "today" — it is the review date of the placeholder
+ * copy on /terms and /refund-policy, and it is shared only because those two
+ * pages were written together.
+ *
+ * NOTE: the same objection that removed the date from /privacy-policy and
+ * /cookie-policy applies here — the site is not in production, so no page has
+ * an honest effective date yet. These two keep theirs only because changing
+ * them was outside the scope of the content rewrite. Raised for a decision.
  */
 const DRAFTED_2569 = '11 สิงหาคม 2569';
+
+/**
+ * `updated: null` means "not yet in force", and it is a real state rather than
+ * missing data.
+ *
+ * The privacy and cookie documents both arrived stamped [DD/MM/YYYY] — a
+ * placeholder for a launch that has not happened. There is no honest date to
+ * put there: the site is not in production, so the policy has never taken
+ * effect, and inventing a date would claim it had. PolicyHero renders no stamp
+ * at all when this is null rather than printing an empty label.
+ *
+ * WHEN THE SITE LAUNCHES, the launch date becomes the effective date for both.
+ */
+const NOT_YET_IN_FORCE = null;
 
 /** Document version for the legal centre as a set. Deliberately global. */
 export const POLICY_VERSION = '2.0';
@@ -85,11 +103,11 @@ export const POLICY_PAGES = [
     title: 'นโยบายคุ้มครองข้อมูลส่วนบุคคล',
     titleEn: 'Privacy Policy',
     blurb: 'อธิบายวิธีการเก็บรวบรวม ใช้ เปิดเผย และปกป้องข้อมูลส่วนบุคคลของคุณ',
-    // The date the PORTED TEXT was published, taken from the live site — not
-    // the date this page was built. The wording below it is that document's,
-    // unchanged, so this is the honest claim. Move it when the wording is
-    // actually reviewed, and only then.
-    updated: '9 กันยายน 2564',
+    // Was 9 กันยายน 2564, the publication date of the text ported from the live
+    // site. That text has since been replaced wholesale by the 14-section
+    // rewrite, so the 2564 date no longer describes anything on the page — and
+    // the rewrite has no date of its own yet. See NOT_YET_IN_FORCE.
+    updated: NOT_YET_IN_FORCE,
   },
   {
     slug: 'cookie-policy',
@@ -98,7 +116,7 @@ export const POLICY_PAGES = [
     title: 'นโยบายการใช้คุกกี้',
     titleEn: 'Cookie Policy',
     blurb: 'อธิบายการใช้งานคุกกี้บนเว็บไซต์ของเรา และตัวเลือกการตั้งค่าของคุณ',
-    updated: DRAFTED_2569,
+    updated: NOT_YET_IN_FORCE,
   },
   {
     slug: 'terms',
@@ -146,6 +164,9 @@ export function findPolicy(slug) {
  */
 export const POLICY_SHORTCUTS = [
   {
+    // Anchors into the cookie policy's "วิธีจัดการคุกกี้" section. Renaming
+    // that section's id silently breaks this tile — it was `#browser-settings`
+    // until the page was rebuilt from the source document.
     icon: 'settings',
     href: '/cookie-policy#browser-settings',
     title: 'จัดการการตั้งค่าคุกกี้',

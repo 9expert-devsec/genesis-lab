@@ -142,12 +142,24 @@ export default function PoliciesPage() {
                 {/* The summary describes ONE policy, so it stamps that
                     policy's date — not a site-wide one. Reading it off
                     `summarySubject` means the panel cannot drift from the page
-                    it is summarising. */}
+                    it is summarising.
+
+                    The date is CONDITIONAL for the same reason PolicyHero's is:
+                    the privacy policy is not yet in force and has no honest
+                    date, and "อัปเดตล่าสุด:" followed by nothing is worse than
+                    no line at all. */}
                 <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--surface-border)] pt-4 text-xs text-[var(--text-muted)]">
-                  <span className="flex items-center gap-1.5">
-                    <PolicyIcon name="calendar" className="h-3.5 w-3.5" />
-                    อัปเดตล่าสุด: {summarySubject?.updated}
-                  </span>
+                  {summarySubject?.updated ? (
+                    <span className="flex items-center gap-1.5">
+                      <PolicyIcon name="calendar" className="h-3.5 w-3.5" />
+                      อัปเดตล่าสุด: {summarySubject.updated}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <PolicyIcon name="clock" className="h-3.5 w-3.5" />
+                      ยังไม่มีผลบังคับใช้
+                    </span>
+                  )}
                   <span className="flex items-center gap-1.5">
                     <PolicyIcon name="help" className="h-3.5 w-3.5" />
                     เวอร์ชัน: {POLICY_VERSION}
