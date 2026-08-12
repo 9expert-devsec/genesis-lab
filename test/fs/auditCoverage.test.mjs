@@ -567,7 +567,17 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                         would defeat the preview-before-apply ruling.
  *   listMirrorResetKeys   returns a constant list. Read-only.
  */
-const MUTATING_EXPORT_COUNT = 165;
+// 165 → 166 for round 4's applySnapshotOverride. It writes the snapshot through
+// syncLandingData, which it imports STATICALLY for exactly this reason: this
+// walk resolves static imports only, so a dynamic one classified a mutating,
+// snapshot-writing export as read-only — and "every mutating export records an
+// audit row" then skipped it in silence. The classification was correct by luck
+// rather than by the guard, which is the state this file exists to prevent.
+//
+// W2-b's depth-0 figure is UNCHANGED at 161: the file-local classifier cannot
+// see through an import, and that difference is what the walk exists to close.
+// previewSnapshotOverride reads the stored refusal and writes nothing.
+const MUTATING_EXPORT_COUNT = 166;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -575,6 +585,12 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
   'src/lib/actions/previewAccess.js': { submitPreviewPassword: 'src/lib/actions/pageBuilder.js#verifyPreviewPassword' },
+  // Round 4. `applySnapshotOverride` writes nothing itself — it re-runs the
+  // landing sync with the downgrade guard bypassed for one call, so the write
+  // is syncLandingData's. The import is STATIC precisely so this walk can see
+  // it; with a dynamic import the export read as read-only and the "every
+  // mutating export records an audit row" check skipped it in silence.
+  'src/lib/actions/cache-console.js': { applySnapshotOverride: 'src/lib/landing/syncLandingData.js#syncLandingData' },
 });
 
 test('the mutating-export count across every action module is pinned', () => {
@@ -747,7 +763,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
     MUTATING_EXPORT_COUNT,
-    'and the delta is exactly the four exports named in REACHED_THROUGH_IMPORT'
+    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT'
   );
 });
 

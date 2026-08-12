@@ -71,7 +71,15 @@ for (const target of MIRROR_TARGETS) {
   // 2. The identity field is unique locally. Two rows sharing an id would both
   //    be deleted by one $in match, so a duplicate is a hidden multiplier on
   //    any purge.
+  // The `$match` on a present, non-empty id is NOT optional, and leaving it out
+  // was a real defect in this script's first version: without it every row
+  // missing the field groups into ONE `_id: null` bucket, which then reports as
+  // a duplicated value. `instructors` has 6 such rows and this check called
+  // them "1 duplicated instructor_id" — one finding counted twice, and the
+  // wrong one, since a missing id and a duplicated id have opposite
+  // consequences for a purge.
   const dupes = await col.aggregate([
+    { $match: { [target.idField]: { $exists: true, $nin: [null, ''] } } },
     { $group: { _id: `$${target.idField}`, n: { $sum: 1 } } },
     { $match: { n: { $gt: 1 } } },
     { $count: 'dupes' },

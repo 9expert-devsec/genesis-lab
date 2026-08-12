@@ -25,3 +25,11 @@ export async function applyMirrorReset() {
 export async function listMirrorResetKeys() {
   throw new Error('stub-cache-console-actions: listMirrorResetKeys must not be called in a render test');
 }
+
+/** Round 4's override pair — parity with the real module. */
+export async function previewSnapshotOverride() {
+  throw new Error('stub-cache-console-actions: previewSnapshotOverride must not be called in a render test');
+}
+export async function applySnapshotOverride() {
+  throw new Error('stub-cache-console-actions: applySnapshotOverride must not be called in a render test — it WRITES the snapshot');
+}

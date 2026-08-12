@@ -47,26 +47,39 @@ import { dbConnect } from '@/lib/db/connect';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { mirrorTarget, MIRROR_KEYS } from '@/lib/cache-console/resetTargets';
 import { resetMirror } from '@/lib/cache-console/applyReset';
-import { assessReplace, VERDICT } from '@/lib/cache-console/resetPlan';
+import { assessReplace, assessPreview, permitsWrite, VERDICT } from '@/lib/cache-console/resetPlan';
+import { sectionCountsOf } from '@/lib/cache-console/downgradeGuard';
+// STATIC, not a dynamic import inside the function. auditCoverage's walk
+// resolves static imports only, so a dynamic one would classify this file's
+// override as READ-ONLY — it writes the snapshot through this very function —
+// and the 'every mutating export records an audit row' check would skip it.
+// The classification would then be correct by luck rather than by the guard.
+import { syncLandingData } from '@/lib/landing/syncLandingData';
 
 /**
  * Read every local row's Mongo `_id` alongside its mirror id.
  *
  * ── WHY THE PURGE IS KEYED ON `_id` AND NOT ON THE MIRROR ID ────────────────
  * MEASURED on production: `instructors` holds 16 rows, of which 6 carry no
- * `instructor_id` at all and one `instructor_id` value appears TWICE.
+ * `instructor_id` at all. Those six are records an admin created directly
+ * rather than ones a sync brought in, and they must never be doomed: nothing
+ * upstream can vouch for them, so "absent from the upstream list" is true of
+ * them permanently. They are excluded EXPLICITLY and reported, rather than
+ * falling out of a `.filter(Boolean)` by accident — an accident that inverts
+ * the moment someone keys the comparison differently.
  *
- * Both facts break a delete written as `{ [idField]: { $in: doomed } }`:
+ * CORRECTION, kept rather than quietly rewritten: this note previously also
+ * cited a DUPLICATED `instructor_id` as justification. There is none. The
+ * check that reported it grouped on the field without excluding missing
+ * values, so the six null-id rows collapsed into one `_id: null` bucket and
+ * were reported as a duplicated value — one finding counted twice, and the
+ * wrong one, since a missing id and a duplicated id have opposite consequences.
  *
- *   · the DUPLICATE makes the delete remove two rows for one doomed id, so the
- *     number an admin confirmed understates what actually goes. Deleting by
- *     `_id` makes the count exact by construction — one id, one row.
- *   · the SIX rows with no mirror id are records an admin created directly
- *     rather than ones a sync brought in. They must never be doomed: nothing
- *     upstream can vouch for them, so "not in the upstream list" is true of
- *     them permanently. They are excluded explicitly and reported, rather than
- *     falling out of a `.filter(Boolean)` by accident — an accident that
- *     inverts the moment someone keys the comparison differently.
+ * Keying on `_id` is still right, and the surviving reason is the stronger one:
+ * one id is one row BY CONSTRUCTION, so `removedCount` cannot exceed what the
+ * admin confirmed even if a duplicate appears upstream later. That is a
+ * property of the key space rather than of today's data, which is what a guard
+ * against a destructive action should rest on.
  *
  * `unmanaged` is returned so the preview can say so on screen: a count of 10
  * next to a collection of 16 is a number that needs its own sentence.
@@ -288,4 +301,127 @@ export async function applyMirrorReset(key, preview, confirmed = false) {
 export async function listMirrorResetKeys() {
   await requireAdmin('landing_cache');
   return [...MIRROR_KEYS];
+}
+
+// ── THE DOWNGRADE OVERRIDE ──────────────────────────────────────────────────
+
+/**
+ * PREVIEW the refused downgrade. Read-only, and cheap.
+ *
+ * It reads the refusal the SYNC already recorded rather than rebuilding, for
+ * two reasons. The numbers it shows are then the ones a real refused run
+ * actually computed — not a second build's, which could differ from both the
+ * refusal and the eventual apply. And a rebuild costs the full 5-15s upstream
+ * fan-out, which is not a thing to spend on a screen someone is only reading.
+ *
+ * The staleness shape is round 3's, not a second vocabulary: `issuedAt` plus a
+ * `beforeCount` the apply re-reads and compares. Here `beforeCount` is the
+ * stored snapshot's own `syncedAt`, which is what changes if a cron writes
+ * between the two clicks.
+ */
+export async function previewSnapshotOverride() {
+  await requireAdmin('landing_cache');
+  await dbConnect();
+
+  const LandingCache = (await import('@/models/LandingCache')).default;
+  const doc = await LandingCache.findOne({ key: 'homepage_v1' }).lean();
+
+  if (!doc) {
+    return { ok: false, error: 'ยังไม่มีสแนปช็อต — ไม่มีอะไรให้ override' };
+  }
+  if (!doc.lastRefusal) {
+    return { ok: false, error: 'ไม่มีการปฏิเสธค้างอยู่ — sync ล่าสุดเขียนได้ตามปกติ' };
+  }
+
+  const r = doc.lastRefusal;
+  return {
+    ok: true,
+    preview: {
+      target: 'landing_cache',
+      // The compare-and-swap key. A cron writing between preview and apply
+      // moves this, and the apply refuses rather than overwriting it.
+      beforeCount: doc.syncedAt ? new Date(doc.syncedAt).getTime() : 0,
+      issuedAt: Date.now(),
+    },
+    refusedAt: r.at ?? null,
+    actor: r.actor ?? null,
+    reason: r.reason ?? '',
+    shrunk: r.shrunk ?? [],
+    vanished: r.vanished ?? [],
+    storedSections: r.storedSections ?? {},
+    incomingSections: r.incomingSections ?? {},
+    storedSyncedAt: doc.syncedAt ?? null,
+  };
+}
+
+/**
+ * APPLY the override — accept the shrinkage and let one run write.
+ *
+ * ── THIS IS AN OVERRIDE, NOT A RESET, AND RULING 1 STILL HOLDS ──────────────
+ * It re-runs the sync with the guard bypassed for that single call. The sync
+ * builds the full replacement first and only writes a complete, non-empty one;
+ * on a total failure it still preserves the previous payload. There is no path
+ * here that empties the document, and `allowShrink` is a parameter rather than
+ * stored state precisely so it cannot outlive this call.
+ *
+ * The numbers RECORDED are the ones the run actually produced, not the ones the
+ * preview showed — §8.12's rule that a row logs the value the action used. The
+ * preview's numbers are used only to detect that the world moved.
+ */
+export async function applySnapshotOverride(preview) {
+  const session = await requireAdmin('landing_cache');
+  await dbConnect();
+
+  const LandingCache = (await import('@/models/LandingCache')).default;
+  const doc = await LandingCache.findOne({ key: 'homepage_v1' }).lean();
+  if (!doc) return { ok: false, error: 'ยังไม่มีสแนปช็อต — ไม่มีอะไรให้ override' };
+
+  const live = {
+    target: 'landing_cache',
+    beforeCount: doc.syncedAt ? new Date(doc.syncedAt).getTime() : 0,
+  };
+  const check = assessPreview(preview, live, Date.now());
+  if (!permitsWrite(check.verdict)) {
+    return { ok: false, verdict: check.verdict, error: check.reason };
+  }
+
+  const beforeSections = sectionCountsOf(doc.data);
+
+  let result;
+  try {
+    result = await syncLandingData({
+      allowShrink: true,
+      actor: session.user?.id ? String(session.user.id) : 'admin',
+    });
+  } catch (err) {
+    return { ok: false, error: `sync ไม่สำเร็จ: ${err?.message ?? err}` };
+  }
+
+  // The sync can still refuse for a reason the override does not cover — an
+  // incomplete build, say. Ruling 1 outranks the override.
+  if (result?.refused) {
+    return { ok: false, verdict: result.verdict, error: result.reason };
+  }
+
+  const after = await LandingCache.findOne({ key: 'homepage_v1' }).lean();
+  const afterSections = sectionCountsOf(after?.data);
+
+  recordAdminActionAfter({
+    menu:        'landing_cache',
+    action:      'override',
+    entity:      'snapshot',
+    recordId:    'homepage_v1',
+    recordLabel: 'สแนปช็อตหน้าแรก',
+    before:      { sections: beforeSections },
+    after:       { sections: afterSections },
+    meta: {
+      overrodeDowngrade: true,
+      refusedShrunk: doc.lastRefusal?.shrunk ?? [],
+      syncStatus: result?.status ?? null,
+      syncErrorCount: Array.isArray(result?.errors) ? result.errors.length : 0,
+    },
+    actor: { id: session.user?.id, name: session.user?.name },
+  });
+
+  return { ok: true, before: beforeSections, after: afterSections, status: result?.status ?? null };
 }
