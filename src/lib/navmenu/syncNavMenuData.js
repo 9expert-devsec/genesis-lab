@@ -25,10 +25,10 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 import { skills as SKILLS_CONFIG } from '@/config/site';
 import {
-  assessDowngrade,
+  assessNavDowngrade,
   sectionCountsOf,
+  leafCountsOf,
   permitsSnapshotWrite,
-  NAV_SECTION_SHRINK_RATIO,
 } from '@/lib/cache-console/downgradeGuard';
 
 const CACHE_KEY = 'navmenu_v1';
@@ -185,13 +185,23 @@ export async function syncNavMenuData({ allowShrink = false, actor = 'system:cro
    * constant's own docstring carries the arithmetic.
    */
   const previousDoc = await NavMenuCache.findOne({ key: CACHE_KEY }).lean().exec();
+  const incomingData = { programs: programsData, skills: skillsData };
   const storedCounts = sectionCountsOf(previousDoc?.data);
-  const incomingCounts = sectionCountsOf({ programs: programsData, skills: skillsData });
-  const downgrade = assessDowngrade({
-    storedCounts,
-    incomingCounts,
+  const incomingCounts = sectionCountsOf(incomingData);
+
+  /**
+   * TWO MEASURES AND ONE BOOLEAN — see assessNavDowngrade.
+   *
+   * Group count alone cannot see the failure this sync produces most readily:
+   * the skills arm above KEEPS a failed group with `items: []`, so six groups
+   * stay six while a mega-menu column renders blank on every public page. The
+   * programs arm drops a failed group instead, so only skills has the hole —
+   * which is precisely why the leaf measure is not optional.
+   */
+  const downgrade = assessNavDowngrade({
+    storedData: previousDoc?.data,
+    incomingData,
     allowShrink,
-    shrinkRatio: NAV_SECTION_SHRINK_RATIO,
   });
 
   if (!permitsSnapshotWrite(downgrade.verdict)) {
@@ -206,8 +216,14 @@ export async function syncNavMenuData({ allowShrink = false, actor = 'system:cro
             actor,
             storedSections: storedCounts,
             incomingSections: incomingCounts,
+            // Both measures are recorded, so the console can show an admin
+            // WHICH one objected — "6 groups became 6, but 107 courses became
+            // 78" is the sentence that makes an emptied group legible.
+            storedLeaves: leafCountsOf(previousDoc?.data),
+            incomingLeaves: leafCountsOf(incomingData),
             shrunk: downgrade.shrunk,
             vanished: downgrade.vanished,
+            emptied: downgrade.emptied,
             reason: downgrade.reason,
             syncStatus: status,
             syncErrors: errors,

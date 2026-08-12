@@ -87,22 +87,18 @@ test('the boundary is exclusive, and both sides are pinned', () => {
   assert.equal(past.verdict, DOWNGRADE_VERDICT.REFUSE_DOWNGRADE, 'one past it refuses');
 });
 
-test('THE THRESHOLD IS ITS OWN CONSTANT, not round 3 reused', () => {
+test('this file no longer pins threshold DIFFERENCES — see the shared table', () => {
   /**
-   * Snapshot sections and mirror row counts are different quantities. Sections
-   * are small and legitimately volatile — one banner off moves a 5-item section
-   * by 20% — so at round 3's threshold this guard would refuse after ordinary
-   * content edits, and a guard that refuses constantly gets raised until it
-   * does nothing.
+   * The pairwise assertion that stood here (landing vs the mirror constant) has
+   * moved into ONE table-driven check in test/fs/navDowngradeGuard, which fails
+   * when ANY TWO thresholds converge rather than only the pair someone thought
+   * to compare. Two pairwise checks were already one short of covering three
+   * constants; a fourth would have needed three more.
    *
-   * Pinned as a DIFFERENCE so that "someone tidied these into one constant"
-   * fails here rather than silently changing what the guard blocks.
+   * What stays here is this constant's own sanity — the table owns the
+   * relationships, this owns the value.
    */
-  assert.notEqual(
-    SNAPSHOT_SECTION_SHRINK_RATIO, COLLAPSE_SHRINK_RATIO,
-    'the two thresholds govern different quantities and must stay separate'
-  );
-  assert.ok(SNAPSHOT_SECTION_SHRINK_RATIO > COLLAPSE_SHRINK_RATIO);
+  assert.equal(typeof SNAPSHOT_SECTION_SHRINK_RATIO, 'number');
   assert.ok(SNAPSHOT_SECTION_SHRINK_RATIO > 0 && SNAPSHOT_SECTION_SHRINK_RATIO < 1);
 });
 

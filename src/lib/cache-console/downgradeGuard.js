@@ -299,3 +299,126 @@ export function overrideConfirmLabel(shrunk) {
     .join(', ');
   return `override และ sync ทับเลย — ยอมให้หาย ${detail}`;
 }
+
+/**
+ * Count the LEAVES under each nav section — courses inside groups.
+ *
+ * ── WHY GROUP COUNT ALONE IS NOT ENOUGH, MEASURED ───────────────────────────
+ * syncNavMenuData treats a failed group differently per section, and the
+ * difference is exactly the hole:
+ *
+ *   programs  a failed group is DROPPED (`if (entry.items.length > 0)`), so
+ *             the group count falls and the existing measure sees it.
+ *   skills    a failed group is KEPT with `items: []` (the catch arm writes
+ *             `{ items: [], firstCover: null }`), so groups stay 6 → 6, the
+ *             group measure sees NOTHING, and a mega-menu column renders
+ *             empty on every public page.
+ *
+ * Live totals: programs 25 groups / 78 leaves, skills 6 groups / 107 leaves.
+ */
+export function leafCountsOf(data) {
+  const out = {};
+  if (!data || typeof data !== 'object') return out;
+  for (const [section, groups] of Object.entries(data)) {
+    if (!groups || typeof groups !== 'object' || Array.isArray(groups)) continue;
+    let n = 0;
+    for (const g of Object.values(groups)) {
+      if (Array.isArray(g?.items)) n += g.items.length;
+    }
+    out[section] = n;
+  }
+  return out;
+}
+
+/** Groups that held something and now hold nothing, as `section/groupId`. */
+export function emptiedGroups(storedData, incomingData) {
+  const out = [];
+  const stored = storedData && typeof storedData === 'object' ? storedData : {};
+  const incoming = incomingData && typeof incomingData === 'object' ? incomingData : {};
+  for (const [section, groups] of Object.entries(stored)) {
+    if (!groups || typeof groups !== 'object' || Array.isArray(groups)) continue;
+    for (const [id, g] of Object.entries(groups)) {
+      const before = Array.isArray(g?.items) ? g.items.length : 0;
+      if (before === 0) continue;
+      const now = incoming?.[section]?.[id];
+      // A group that DISAPPEARED is not emptied — that is the group measure's
+      // business, and treating it as emptied would double-count one loss.
+      if (now === undefined) continue;
+      const after = Array.isArray(now?.items) ? now.items.length : 0;
+      if (after === 0) out.push(`${section}/${id}`);
+    }
+  }
+  return out;
+}
+
+/**
+ * The nav snapshot's downgrade assessment: groups, leaves, and emptied groups.
+ *
+ * ── THE THIRD THRESHOLD IS REUSED FOR LEAVES, AND THE MEASUREMENT SAYS SO ───
+ * NAV_SECTION_SHRINK_RATIO governs both measures. It fits leaves because the
+ * two scales turn out to be comparable: the largest program group is 20.5% of
+ * program leaves and the largest skill group is 27.1% of skill leaves, so
+ * "a quarter of this section" means roughly the same size of event whichever
+ * way it is counted. A fourth constant would be a second number to argue about
+ * with no measurement distinguishing it from the third.
+ *
+ * ── THE EMPTIED-GROUP RULE IS A BOOLEAN, NOT A THRESHOLD ────────────────────
+ * It exists because a ratio cannot catch the case that matters most here. If
+ * the SMALLEST skill (9 of 107 leaves) fails, leaves fall 8.4% — under any
+ * sane threshold — while its mega-menu column goes blank. Tightening the ratio
+ * until that trips would fire on ordinary churn everywhere else. So the shape
+ * is named directly: a group that held courses and now holds none is material,
+ * whatever the arithmetic says.
+ */
+export function assessNavDowngrade({ storedData, incomingData, allowShrink = false } = {}) {
+  const groups = assessDowngrade({
+    storedCounts: sectionCountsOf(storedData),
+    incomingCounts: sectionCountsOf(incomingData),
+    allowShrink,
+    shrinkRatio: NAV_SECTION_SHRINK_RATIO,
+  });
+  const leaves = assessDowngrade({
+    storedCounts: leafCountsOf(storedData),
+    incomingCounts: leafCountsOf(incomingData),
+    allowShrink,
+    shrinkRatio: NAV_SECTION_SHRINK_RATIO,
+  });
+  const emptied = emptiedGroups(storedData, incomingData);
+
+  const refused =
+    groups.verdict === DOWNGRADE_VERDICT.REFUSE_DOWNGRADE
+    || leaves.verdict === DOWNGRADE_VERDICT.REFUSE_DOWNGRADE
+    || (emptied.length > 0 && !allowShrink);
+
+  if (!refused) {
+    return {
+      verdict: DOWNGRADE_VERDICT.OK,
+      shrunk: [...groups.shrunk, ...leaves.shrunk],
+      vanished: groups.vanished,
+      emptied,
+      reason: '',
+    };
+  }
+
+  const parts = [];
+  if (groups.reason) parts.push(`กลุ่ม: ${groups.reason}`);
+  if (leaves.reason) parts.push(`หลักสูตรในกลุ่ม: ${leaves.reason}`);
+  if (emptied.length > 0) {
+    parts.push(
+      `กลุ่มที่เคยมีหลักสูตรแต่ตอนนี้ว่างเปล่า: ${emptied.join(', ')} `
+      + '(a group that held courses now holds none — its menu column renders blank)'
+    );
+  }
+
+  return {
+    verdict: DOWNGRADE_VERDICT.REFUSE_DOWNGRADE,
+    // Labelled so the console can tell an admin WHICH measure objected.
+    shrunk: [
+      ...groups.shrunk.map((s) => ({ ...s, measure: 'groups' })),
+      ...leaves.shrunk.map((s) => ({ ...s, measure: 'leaves' })),
+    ],
+    vanished: groups.vanished,
+    emptied,
+    reason: parts.join(' | '),
+  };
+}
