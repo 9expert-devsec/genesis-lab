@@ -1,5 +1,6 @@
 import { Panel, PanelError } from './Panel';
 import { MirrorCaveat } from './Caveat';
+import { MirrorResetClient } from './MirrorResetClient';
 
 /**
  * Panel 2 — the four row-level mirror collections.
@@ -16,7 +17,7 @@ import { MirrorCaveat } from './Caveat';
  * has it, but can also mean the run partially failed, or that an admin action
  * wrote the row outside a sync.
  */
-export function MirrorPanel({ mirrors }) {
+export function MirrorPanel({ mirrors, resetTargets = null }) {
   if (!mirrors?.ok) {
     return (
       <Panel title="2. Mirror collections" subtitle="career_paths · faqs · instructors · promotions">
@@ -64,6 +65,27 @@ export function MirrorPanel({ mirrors }) {
       </p>
 
       <MirrorCaveat />
+
+      {/*
+        THE ONLY DESTRUCTIVE CONTROL IN THE CONSOLE, and it sits directly under
+        the caveat explaining that no sync deletes — because that sentence is
+        the reason this control exists at all. Rendered only when the page hands
+        over the targets, so the panel stays usable in a read-only context.
+      */}
+      {resetTargets && (
+        <div className="mt-6 border-t border-[var(--surface-border)] pt-5">
+          <h3 className="text-sm font-bold text-[var(--text-primary)]">
+            ล้างแถวที่ถูกลบไปแล้วที่ต้นทาง (replace-set)
+          </h3>
+          <p className="mb-4 mt-1 max-w-3xl text-sm text-[var(--text-secondary)]">
+            นี่คือทางเดียวที่จะลบแถวซึ่งต้นทางลบไปแล้ว และเป็นการกระทำเดียวในหน้านี้ที่
+            <strong> ทำให้ข้อมูลหายถาวร</strong> — ต้องกดดูตัวอย่างก่อนทุกครั้ง
+            และถ้าจำนวนแถวจะหายไปมากผิดปกติ ระบบจะขอให้ยืนยันอีกครั้งโดยอ่านตัวเลขก่อน
+            ถ้าชุดข้อมูลใหม่ว่างเปล่า ระบบจะปฏิเสธเสมอและไม่มีปุ่มยืนยัน
+          </p>
+          <MirrorResetClient targets={resetTargets} />
+        </div>
+      )}
     </Panel>
   );
 }

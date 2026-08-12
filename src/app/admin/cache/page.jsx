@@ -29,6 +29,7 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { readCacheConsoleState } from '@/lib/cache-console/readCacheState';
 import { SEARCH_CORPUS_TTL_MS } from '@/lib/search/searchCorpus';
+import { MIRROR_TARGETS } from '@/lib/cache-console/resetTargets';
 import { SnapshotPanel } from './_components/SnapshotPanel';
 import { MirrorPanel } from './_components/MirrorPanel';
 import { WebhookTrailPanel } from './_components/WebhookTrailPanel';
@@ -79,7 +80,19 @@ export default async function CacheConsolePage() {
       </header>
 
       <SnapshotPanel snapshots={state.snapshots} />
-      <MirrorPanel mirrors={state.mirrors} />
+      {/*
+        Only the three serialisable fields cross to the client. The registry
+        entries also carry a model loader and an upstream fetcher, which are
+        functions and must not be handed to a client component — and should not
+        be, on principle: the client names a target, the server decides what
+        that target means.
+      */}
+      <MirrorPanel
+        mirrors={state.mirrors}
+        resetTargets={MIRROR_TARGETS.map((t) => ({
+          key: t.key, label: t.label, idField: t.idField,
+        }))}
+      />
       <WebhookTrailPanel webhooks={state.webhooks} limit={state.webhookLimit} />
       <RouteWindowPanel />
       <InProcessPanel ttlMs={SEARCH_CORPUS_TTL_MS} />
