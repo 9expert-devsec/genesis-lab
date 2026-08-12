@@ -229,3 +229,83 @@ export function assessPreview(preview, live, now) {
 export function permitsWrite(verdict) {
   return verdict === VERDICT.OK;
 }
+
+// ── LABELS FOR STATES THAT ONLY EXIST AFTER A CLICK ─────────────────────────
+//
+// Every string below was previously a template literal inside a client
+// component, in a branch that only renders once a preview has returned. That
+// made each of them STRUCTURALLY UNASSERTABLE: renderToStaticMarkup reaches
+// only the initial render, and no test here may mount a React root (the runner
+// is isolation:'none', and a root over jsdom leaks globalThis.window into every
+// other render test in the process).
+//
+// Round 5 found this the hard way — a control-break that stripped the numbers
+// out of the override confirm label left the entire suite green — and moved
+// that one label out. These are the rest of the same class, found by auditing
+// for it rather than by waiting for the next break to miss.
+//
+// The rule they encode: A CONTROL THAT DESTROYS DATA RESTATES WHAT IS LOST IN
+// ITS OWN LABEL. A button reading "ยืนยัน" beneath a table is a button people
+// press having read the heading and not the rows.
+
+/**
+ * The confirm label for a purge that tripped the collapse guard.
+ *
+ * Names both numbers — what goes and what it goes from — because the collapse
+ * confirmation is the one the admin is most likely to meet while surprised.
+ */
+export function mirrorCollapseConfirmLabel(preview) {
+  // Read off a possibly-null object rather than destructured with a default:
+  // a parameter default only covers `undefined`, and `null` is exactly what a
+  // cleared preview state holds. Throwing here would blank the panel that is
+  // the only route to the action.
+  const going = Number(preview?.doomedTotal) || 0;
+  const from = Number(preview?.beforeCount) || 0;
+  return `ยืนยันลบ ${going} แถว จาก ${from} แถว`;
+}
+
+/** The label for an ordinary purge, below the collapse threshold. */
+export function mirrorDeleteLabel(preview) {
+  const going = Number(preview?.doomedTotal) || 0;
+  return `ลบ ${going} แถวที่ถูกลบไปแล้วที่ต้นทาง`;
+}
+
+/**
+ * One line per section an override would shrink, for the list beside the
+ * confirm button.
+ *
+ * Returns an ARRAY, not a joined string: the component renders one element per
+ * entry, and a test that asserts on the array cannot be satisfied by a single
+ * line that happens to contain every number.
+ */
+export function overrideLossLines(shrunk) {
+  const list = Array.isArray(shrunk) ? shrunk : [];
+  return list.map((s) => {
+    const lost = Number.isFinite(s?.lost) ? s.lost : (Number(s?.before) || 0) - (Number(s?.after) || 0);
+    const pct = Number.isFinite(s?.ratio) ? Math.round(s.ratio * 100) : 0;
+    return `${s?.section}: ${s?.before} → ${s?.after} (หายไป ${lost}, -${pct}%)`;
+  });
+}
+
+/**
+ * The staleness note shown under every preview.
+ *
+ * DERIVED FROM `PREVIEW_MAX_AGE_MS`, not written out. Both components carried
+ * "ประมาณ 2 นาที" as prose beside a constant of 120_000 — a duplicated number
+ * with nothing holding the two together, so raising or lowering the window
+ * would have left the UI confidently stating the old one. The window is a
+ * safety property; the copy describing it must not be able to disagree.
+ */
+export function previewWindowNote(ms = PREVIEW_MAX_AGE_MS) {
+  // The window is a PARAMETER defaulting to the constant, not a closed-over
+  // read of it. Hardcoding  produced a byte-identical note while
+  // the constant happened to be 120_000, so a control-break that severed the
+  // derivation reddened nothing — the output is the same until the day someone
+  // changes the window, which is the day it matters. Taking it as an argument
+  // makes the derivation observable: a test can pass a different window and
+  // watch the sentence follow.
+  const seconds = Math.round(ms / 1000);
+  const minutes = seconds % 60 === 0 ? seconds / 60 : null;
+  const window = minutes ? `${minutes} นาที` : `${seconds} วินาที`;
+  return `ตัวอย่างนี้ใช้ได้ประมาณ ${window} — ถ้าเกินกว่านั้น หรือข้อมูลเปลี่ยนไประหว่างนี้ ระบบจะปฏิเสธและให้กดดูตัวอย่างใหม่`;
+}

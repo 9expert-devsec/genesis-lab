@@ -8,6 +8,10 @@ import {
   assessReplace,
   assessPreview,
   permitsWrite,
+  mirrorCollapseConfirmLabel,
+  mirrorDeleteLabel,
+  overrideLossLines,
+  previewWindowNote,
 } from '@/lib/cache-console/resetPlan';
 
 /**
@@ -236,4 +240,118 @@ test('permitsWrite is true for OK and false for EVERY refusal', () => {
     if (v === VERDICT.OK) continue;
     assert.equal(permitsWrite(v), false, `${name} must not permit a write`);
   }
+});
+
+// ══ LABELS FOR POST-CLICK STATES — the class round 5 found unassertable ════
+//
+// Every assertion below covers a string that used to live in a client
+// component branch reachable only after a preview returned. Nothing could see
+// them: renderToStaticMarkup reaches only the initial render, and no test may
+// mount a React root (isolation:'none'). Round 5's control-break proved the
+// gap by stripping numbers out of one such label and watching the suite stay
+// green. These are the rest of that class, moved out and covered.
+
+test('RULING REVERSED: the collapse confirm label names BOTH numbers', () => {
+  // "ยืนยัน" beneath a table is a button people press having read the heading
+  // and not the rows. What is being destroyed goes in the control's own label.
+  const label = mirrorCollapseConfirmLabel({ doomedTotal: 35, beforeCount: 40 });
+  assert.match(label, /35/, 'how many rows go');
+  assert.match(label, /40/, 'and what they go from');
+});
+
+test('CONTROL: different numbers produce a different collapse label', () => {
+  // Without this, "contains 35" passes for a hardcoded string.
+  const label = mirrorCollapseConfirmLabel({ doomedTotal: 3, beforeCount: 12 });
+  assert.match(label, /3/);
+  assert.match(label, /12/);
+  assert.ok(!label.includes('35'), 'the other fixture\'s number is gone');
+});
+
+test('RULING REVERSED: the ordinary delete label states the count', () => {
+  const label = mirrorDeleteLabel({ doomedTotal: 7 });
+  assert.match(label, /7/);
+});
+
+test('both mirror labels are total — malformed input does not throw', () => {
+  // The component renders no button in those states, but a label that threw
+  // would take down the panel that is the only route to the action.
+  for (const bad of [undefined, null, {}, { doomedTotal: 'x' }]) {
+    assert.equal(typeof mirrorCollapseConfirmLabel(bad), 'string');
+    assert.equal(typeof mirrorDeleteLabel(bad), 'string');
+  }
+});
+
+test('RULING REVERSED: the override loss list is ONE LINE PER SECTION', () => {
+  /**
+   * An ARRAY, not a joined string. A single line containing every number would
+   * satisfy a `.includes` assertion while rendering as one unreadable run-on —
+   * and the component maps over this, so the shape is the contract.
+   */
+  const lines = overrideLossLines([
+    { section: 'programs', before: 25, after: 3, lost: 22, ratio: 0.88 },
+    { section: 'banners', before: 15, after: 2, lost: 13, ratio: 0.867 },
+  ]);
+  assert.equal(lines.length, 2, 'one line per shrunken section');
+  assert.match(lines[0], /programs/);
+  assert.match(lines[0], /25/);
+  assert.match(lines[0], /3/);
+  assert.match(lines[0], /22/);
+  assert.match(lines[0], /88/);
+  assert.match(lines[1], /banners/);
+});
+
+test('the loss list derives `lost` when the caller did not supply it', () => {
+  // The refusal record is Mixed in the schema; a row written by an older build
+  // may carry before/after without lost.
+  const [line] = overrideLossLines([{ section: 's', before: 10, after: 4, ratio: 0.6 }]);
+  assert.match(line, /หายไป 6/);
+});
+
+test('an empty or malformed shrink list yields an empty list, not a throw', () => {
+  for (const bad of [[], null, undefined, 'nope', 42]) {
+    assert.deepEqual(overrideLossLines(bad), []);
+  }
+});
+
+test('THE STALENESS COPY IS DERIVED FROM THE CONSTANT, never written out', () => {
+  /**
+   * Both components carried "ประมาณ 2 นาที" as prose beside a constant of
+   * 120_000, with nothing holding the two together — raise or lower the window
+   * and the UI would confidently state the old one. The window is a safety
+   * property; the sentence describing it must not be able to disagree.
+   */
+  const note = previewWindowNote();
+  assert.match(note, new RegExp(String(PREVIEW_MAX_AGE_MS / 60_000)), 'states the real window');
+  assert.match(note, /นาที/);
+  assert.match(note, /ปฏิเสธ/, 'and says what happens when it lapses');
+});
+
+test('CONTROL: the note tracks the constant rather than repeating a literal', () => {
+  /**
+   * The claim is that the sentence is COMPUTED. Proven by arithmetic on the
+   * constant rather than by a second hardcoded number: whatever
+   * PREVIEW_MAX_AGE_MS is, the note names that many minutes and not 2.
+   */
+  const minutes = PREVIEW_MAX_AGE_MS / 60_000;
+  assert.equal(Number.isInteger(minutes), true, 'the window is a whole number of minutes today');
+  assert.ok(previewWindowNote().includes(`${minutes} นาที`));
+  // And if it were ever set to a non-multiple of a minute, the note falls back
+  // to seconds rather than rounding a safety window in the copy.
+  assert.match(previewWindowNote(), /\d+ (นาที|วินาที)/);
+});
+
+test('CONTROL: the note is COMPUTED — a different window gives a different note', () => {
+  /**
+   * The assertion the first draft of this section could not make. Hardcoding
+   * `seconds = 120` inside the function produced a byte-identical string while
+   * PREVIEW_MAX_AGE_MS happened to be 120_000, so severing the derivation
+   * reddened nothing. Passing the window in is what makes "this tracks the
+   * constant" observable rather than merely true today.
+   */
+  assert.match(previewWindowNote(300_000), /5 นาที/);
+  assert.match(previewWindowNote(60_000), /1 นาที/);
+  assert.ok(!previewWindowNote(300_000).includes('2 นาที'));
+  // A window that is not a whole number of minutes falls back to seconds
+  // rather than rounding a safety property in the copy.
+  assert.match(previewWindowNote(90_000), /90 วินาที/);
 });

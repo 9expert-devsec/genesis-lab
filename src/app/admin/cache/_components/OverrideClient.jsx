@@ -7,6 +7,7 @@ import {
   applySnapshotOverride,
 } from '@/lib/actions/cache-console';
 import { overrideConfirmLabel } from '@/lib/cache-console/downgradeGuard';
+import { overrideLossLines, previewWindowNote } from '@/lib/cache-console/resetPlan';
 
 /**
  * The override control: preview → confirm → sync anyway.
@@ -107,13 +108,9 @@ export function OverrideClient() {
           {/* THE NUMBERS, RESTATED AT THE POINT OF CLICK — not only in the
               panel above. */}
           <ul className="flex flex-col gap-0.5">
-            {(preview.shrunk ?? []).map((s) => (
-              <li
-                key={s.section}
-                className="font-mono text-sm text-red-900 dark:text-red-200"
-              >
-                {s.section}: {s.before} → {s.after} (หายไป {s.lost},
-                {' '}-{Math.round(s.ratio * 100)}%)
+            {overrideLossLines(preview.shrunk).map((line) => (
+              <li key={line} className="font-mono text-sm text-red-900 dark:text-red-200">
+                {line}
               </li>
             ))}
           </ul>
@@ -129,10 +126,8 @@ export function OverrideClient() {
               : overrideConfirmLabel(preview.shrunk)}
           </button>
 
-          <p className="text-xs text-[var(--text-muted)]">
-            ตัวอย่างนี้ใช้ได้ประมาณ 2 นาที — ถ้าเกินกว่านั้น
-            หรือมี sync อื่นเขียนสแนปช็อตระหว่างนี้ ระบบจะปฏิเสธและให้กดดูตัวอย่างใหม่
-          </p>
+          {/* Derived from PREVIEW_MAX_AGE_MS — see previewWindowNote. */}
+          <p className="text-xs text-[var(--text-muted)]">{previewWindowNote()}</p>
         </div>
       )}
     </div>

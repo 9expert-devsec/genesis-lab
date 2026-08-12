@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { previewMirrorReset, applyMirrorReset } from '@/lib/actions/cache-console';
+import {
+  mirrorCollapseConfirmLabel,
+  mirrorDeleteLabel,
+  previewWindowNote,
+} from '@/lib/cache-console/resetPlan';
 
 /**
  * Preview → apply, per mirror collection. The only destructive control in the
@@ -153,7 +158,7 @@ function MirrorReset({ target }) {
                   disabled={busy}
                   className="self-start rounded-9e-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
                 >
-                  ยืนยันลบ {preview.doomedTotal} แถว จาก {preview.beforeCount} แถว
+                  {mirrorCollapseConfirmLabel(preview)}
                 </button>
               </div>
             ) : (
@@ -163,15 +168,15 @@ function MirrorReset({ target }) {
                 disabled={busy}
                 className="self-start rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
               >
-                ลบ {preview.doomedTotal} แถวที่ถูกลบไปแล้วที่ต้นทาง
+                {mirrorDeleteLabel(preview)}
               </button>
             )
           )}
 
-          <p className="text-xs text-[var(--text-muted)]">
-            ตัวอย่างนี้ใช้ได้ประมาณ 2 นาที — ถ้าเกินกว่านั้น หรือข้อมูลเปลี่ยนไประหว่างนี้
-            ระบบจะปฏิเสธและให้กดดูตัวอย่างใหม่
-          </p>
+          {/* Derived from PREVIEW_MAX_AGE_MS, never written out — the window is
+              a safety property and the copy describing it must not be able to
+              disagree with it. */}
+          <p className="text-xs text-[var(--text-muted)]">{previewWindowNote()}</p>
         </div>
       )}
     </div>
