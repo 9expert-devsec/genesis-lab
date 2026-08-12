@@ -221,6 +221,37 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   entry('media', 'file', 'ไฟล์ในคลังไฟล์', 'act_only'),
 
   // ── ระบบ ────────────────────────────────────────────────────────
+  /**
+   * The cache console. The menu key is `landing_cache` and NOT `cache`, even
+   * though the page now lives at /admin/cache and covers six cache surfaces:
+   * `Role.pages` stores these strings in Mongo, so minting a new key would
+   * revoke the screen from every role that holds the old one. The key outlived
+   * its name deliberately (see rbac/pages.js).
+   *
+   * THIS MENU WAS `MENUS_WITHOUT_MUTATIONS` UNTIL NOW, and the docstring below
+   * still says so for `dashboard`. It was read-only and correctly had no entry;
+   * round 3 of the cache-console work gives it destructive actions, so it joins
+   * the contract — exactly the shape §8.7's `security` note describes for sweep
+   * round 6. Without these pairs `buildAuditRow` fails closed: the policy drops
+   * to act_only and every before/after is discarded with a console.warn, so the
+   * pre-image a destructive action is required to capture would be thrown away
+   * by the writer that was asked to keep it.
+   *
+   * `full` and not `count_only`, which is what the five `*_sync` pairs use. A
+   * sync's outcome genuinely IS a count, so count_only loses nothing there. A
+   * reset has a real before→after worth diffing — "27 programs → 5" is the
+   * claim an admin needs — and count_only nulls both sides
+   * (recordAdminAction.js:140). There is no PII in a cache summary, so nothing
+   * argues for a lower ceiling.
+   *
+   * Two entities because two different KINDS of record change, per §8.7's rule
+   * that `entity` distinguishes kinds and the verb lives in `action`: a
+   * single-document snapshot and a mirror collection have different shapes,
+   * different failure modes and different reset semantics.
+   */
+  entry('landing_cache', 'snapshot', 'สแนปช็อตแคช', 'full'),
+  entry('landing_cache', 'mirror',   'คอลเลกชันมิเรอร์', 'full'),
+
   // PII entities (§5.1/§5.2): status transitions only, never a field diff.
   entry('registrations', 'public',  'ใบสมัครอบรม (Public)', 'status_only'),
   entry('registrations', 'inhouse', 'คำขออบรม In-house', 'status_only'),

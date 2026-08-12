@@ -72,17 +72,35 @@ test('CONTROL: a one-character typo of a REAL contract menu is not in the regist
 
 // ── §1's correction, encoded so it cannot drift back ───────────────
 
-test('dashboard and landing_cache are ABSENT — they have no mutating action', () => {
-  for (const menu of ['dashboard', 'landing_cache']) {
-    assert.ok(
-      ALL_PAGE_KEYS.includes(menu),
-      `${menu} must still be a real page key, or this test is asserting nothing`
-    );
-    assert.equal(
-      menu in AUDIT_CONTRACT, false,
-      `${menu} is read-only — a contract entry would promise rows that never come`
-    );
-  }
+test('dashboard is ABSENT — it has no mutating action', () => {
+  // `landing_cache` USED TO BE HERE and is not any more. That is the expected
+  // consequence of the cache console gaining destructive actions, not a
+  // regression — the same shape the `security` test below describes for sweep
+  // round 6. It was correctly listed while the page was read-only; a menu that
+  // can now purge a collection needs a contract or the writer silently
+  // discards its payload.
+  assert.ok(
+    ALL_PAGE_KEYS.includes('dashboard'),
+    'dashboard must still be a real page key, or this test is asserting nothing'
+  );
+  assert.equal(
+    'dashboard' in AUDIT_CONTRACT, false,
+    'dashboard is read-only — a contract entry would promise rows that never come'
+  );
+});
+
+test('landing_cache IS present now, with both cache-console entities', () => {
+  // The replacement for the assertion above, so the move is pinned in both
+  // directions: reverting the contract entry reddens here rather than leaving
+  // a menu whose destructive rows are silently reduced to act_only.
+  assert.ok(ALL_PAGE_KEYS.includes('landing_cache'));
+  assert.equal('landing_cache' in AUDIT_CONTRACT, true);
+  assert.equal(isValidPair('landing_cache', 'snapshot'), true);
+  assert.equal(isValidPair('landing_cache', 'mirror'), true);
+  // `full`, not count_only: a reset has a real before→after, and count_only
+  // would null both sides of exactly the pre-image the ruling requires.
+  assert.equal(pairContract('landing_cache', 'snapshot').diff, 'full');
+  assert.equal(pairContract('landing_cache', 'mirror').diff, 'full');
 });
 
 test('security is ABSENT — UNTIL SWEEP ROUND 6, which is EXPECTED to change this line', () => {

@@ -553,8 +553,21 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                              our own storage).
  *
  * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
+ *
+ * 164 → 165, and W2-b's depth-0 figure 160 → 161, for cache-console.js:
+ *
+ *   applyMirrorReset      calls Model.deleteMany, so the FILE-LOCAL classifier
+ *                         sees it. It is the only export in this repo whose
+ *                         purpose is to DELETE rows in bulk, which is why it
+ *                         carries three separate refusal gates before the call.
+ *   previewMirrorReset    reads and computes; writes nothing. Correctly
+ *                         classified read-only and absent from both counts —
+ *                         and that absence is load-bearing rather than
+ *                         incidental, since a preview that mutated anything
+ *                         would defeat the preview-before-apply ruling.
+ *   listMirrorResetKeys   returns a constant list. Read-only.
  */
-const MUTATING_EXPORT_COUNT = 164;
+const MUTATING_EXPORT_COUNT = 165;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -721,13 +734,15 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 160,
+    zero, 161,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
     'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
     '(which mutates through a file-local helper), 159 since media.js gained ' +
-    'deleteMediaFile (which writes directly), and 160 since course-outlines.js gained ' +
-    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate). Its sibling ' +
-    'signCourseOutlineUpload writes nothing and is deliberately NOT in this figure'
+    'deleteMediaFile (which writes directly), 160 since course-outlines.js gained ' +
+    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate), and 161 since ' +
+    'cache-console.js gained applyMirrorReset (Model.deleteMany). Its siblings ' +
+    'previewMirrorReset and listMirrorResetKeys write nothing and are deliberately ' +
+    'NOT in this figure — a preview that mutated would defeat its own ruling'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

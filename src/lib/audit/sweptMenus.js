@@ -56,6 +56,19 @@ export const SWEPT = Object.freeze([
   // A step can rebalance a span; a pin renumbers the block behind it. All of
   // those are one audit row with the collateral counted in `meta.alsoTouched`.
   { file: 'src/lib/actions/articles.js', menus: ['articles'] },
+
+  // ── Cache console round 3 — NOT a sweep round, but it adds the first
+  //    destructive action outside the sweep and it is instrumented from the
+  //    start rather than joining a later round already un-audited.
+  //
+  // OWED, and recorded rather than quietly skipped: the inline RecordHistory
+  // widget is NOT mounted for this menu. The definition of done above says
+  // mounting is part of finishing a round, and it has not been done here. The
+  // rows are reachable from /admin/audit-log filtered by menu; what is missing
+  // is the per-record view on the console itself. A cache key is an unusual
+  // "record" and the right shape for that widget is a design question this
+  // round did not answer.
+  { file: 'src/lib/actions/cache-console.js', menus: ['landing_cache'] },
 ]);
 
 /**
