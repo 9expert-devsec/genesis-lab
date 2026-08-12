@@ -79,6 +79,16 @@ async function readSnapshots() {
       // identifies which code produced the snapshot — see the panel copy.
       syncErrors: Array.isArray(landing?.syncErrors) ? landing.syncErrors : [],
       updatedAt: landing?.updatedAt ? new Date(landing.updatedAt).toISOString() : null,
+      /**
+       * The downgrade the guard last REFUSED to write, or null.
+       *
+       * Its presence means the 3-hourly cron is currently blocked: every run
+       * since has recomputed the same refusal and left the snapshot alone. That
+       * is a state a human has to resolve, so it is READ here and rendered
+       * prominently rather than being something an admin discovers by noticing
+       * the home page has stopped changing.
+       */
+      lastRefusal: landing?.lastRefusal ?? null,
     },
     navmenu: {
       present: Boolean(navmenu),

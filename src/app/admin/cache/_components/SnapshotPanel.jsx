@@ -1,6 +1,7 @@
 import { Panel, PanelError, Field } from './Panel';
 import { SyncedAtCaveat } from './Caveat';
 import { LandingSyncButton } from './LandingSyncButton';
+import { DowngradeRefusalPanel } from './DowngradeRefusalPanel';
 
 /**
  * Panel 1 — the two single-document snapshot caches.
@@ -121,6 +122,15 @@ export function SnapshotPanel({ snapshots }) {
 
           <SyncedAtCaveat />
           <LandingSyncButton />
+
+          {/*
+            Rendered ONLY when the guard is currently blocking a write. Its
+            presence means every cron run since the refusal has recomputed the
+            same answer and left the snapshot alone — the sync is stuck and a
+            human has to decide. It returns null when there is no refusal, so
+            the healthy case adds nothing to the page.
+          */}
+          <DowngradeRefusalPanel refusal={landing.lastRefusal} />
         </div>
 
         {/* ── nav_menu_cache ────────────────────────────────────────── */}
