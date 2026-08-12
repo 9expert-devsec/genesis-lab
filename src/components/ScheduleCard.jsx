@@ -1,93 +1,125 @@
 "use client";
 
-import { useId } from "react";
 import { NEUTRAL_STATUS, resolveScheduleBadge } from "@/lib/scheduleStatus";
+import { trainingTypeColor } from "@/lib/schedule/trainingTypeColor";
 
-const TYPE_STYLES = {
-  classroom: { stroke: "#005eff", dot: "#005eff" },
-  hybrid: { stroke: "#a854f7", dot: "#a854f7" },
-  online: { stroke: "#22C55E", dot: "#22C55E" },
-};
+/**
+ * One round on a course card: a type-coloured border, a corner dot, the date
+ * and the status.
+ *
+ * ── THE SVG BOX HAD TO GO, AND THAT IS A MEASUREMENT ────────────────────────
+ * This used to draw its border as a hand-authored SVG `<path>` inside a fixed
+ * `viewBox="0 0 90 80"`, in a fixed `h-[70px] w-[83px]` box, with the type
+ * colour on the path stroke and a notch cut out of the top-left corner for the
+ * dot. The path geometry is ABSOLUTE — 89 units wide, with every curve written
+ * out — so the box could not grow to fit its contents, and the contents changed:
+ * a Thai round label is `8, 10, 12 ต.ค. 69`, which overflows 83px, and the inner
+ * text was `whitespace-nowrap`, so it overflowed VISIBLY rather than wrapping.
+ *
+ * The replacement is an ordinary element with a CSS `border-color`. The visual
+ * result is the one that was asked for — type-coloured border, dot, date,
+ * status — and only the drawing mechanism changes. What it buys is that the box
+ * now sizes to its content, which no amount of editing the path could do.
+ *
+ * Retired with the path: the `<mask>`, the `useId` maskId it needed to stay
+ * unique across instances, and the `TYPE_STYLES` table (whose `stroke` and `dot`
+ * were always the same value). Nothing else read them — checked before removal.
+ *
+ * ── THE COLOURS: THE FOLLOW-UP WAS TAKEN ────────────────────────────────────
+ * This paragraph used to argue FOR the divergence. It said the SVG's
+ * `#005eff` / `#a854f7` / `#22C55E` were "deliberately NOT unified with
+ * /schedule's TYPE_COLOR", on the reasoning that repainting this card's rounds
+ * was not what a box-geometry change should do, and flagged it as a follow-up.
+ *
+ * That was right about the sequencing and wrong as a resting state. The
+ * follow-up is now taken: the palette lives in lib/schedule/trainingTypeColor
+ * and this card reads it, so classroom moves `#005eff` → `#00CCFF` and hybrid
+ * `#a854f7` → `#8B5CF6`. That is a VISIBLE change to this card, intended.
+ *
+ * /schedule's values won rather than these because that page's table, its mobile
+ * rows and both of its legends already agreed on them — it is the largest
+ * surface showing a delivery type, and the one a visitor is most likely to have
+ * seen first. `online` was `#22C55E` in every copy and does not move.
+ *
+ * The docstring is rewritten rather than left in place because prose arguing for
+ * a divergence the code no longer has is worse than no prose: the next reader
+ * trusts it and reintroduces the fifth copy.
+ */
 
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
 export default function ScheduleCard({
-  dateLabel = "17-18\nOCT",
+  dateLabel = "-",
   type = "classroom",
   status = "open",
   statusLabel,
   className = "",
 }) {
-  const maskId = useId();
-  const typeStyle = TYPE_STYLES[type] || TYPE_STYLES.classroom;
+  // The `|| classroom` fallback moved INTO the shared helper, which is where it
+  // stops being a thing each consumer has to remember.
+  const color = trainingTypeColor(type);
   // Accepts either MSDB's `nearly_full` or the camel-cased `nearFull` that
   // formatStatusFromAPI hands in — both resolve to the same entry, so a
   // nearly-full session can no longer fall through to green "open".
   const statusStyle = resolveScheduleBadge(status);
 
-  const lines = dateLabel.split("\n");
-
   return (
-      <div
-        className={cx(
-          "relative h-[70px] w-[83px] flex-shrink-0 @[280px]:h-[80px] @[280px]:w-[88px]",
-          className,
-        )}
-      >
-        <svg
-          viewBox="0 0 90 80"
-          preserveAspectRatio="xMidYMid meet"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="absolute inset-0 h-full w-full overflow-visible"
-          aria-hidden="true"
-        >
-          <mask id={maskId} fill="white">
-            <path d="M75 0C82.732 1.06302e-06 89 6.26801 89 14V54C89 61.732 82.732 68 75 68H14C6.26801 68 9.6645e-08 61.732 0 54V14C6.09614e-08 13.2684 0.0559054 12.5499 0.164062 11.8486C1.73559 13.1891 3.77256 14 6 14C10.9706 14 15 9.97056 15 5C15 3.15391 14.4437 1.43799 13.4902 0.00976562C13.6594 0.00371008 13.8293 7.64327e-09 14 0H75Z" />
-          </mask>
-          <path
-            d="M75 0C82.732 1.06302e-06 89 6.26801 89 14V54C89 61.732 82.732 68 75 68H14C6.26801 68 9.6645e-08 61.732 0 54V14C6.09614e-08 13.2684 0.0559054 12.5499 0.164062 11.8486C1.73559 13.1891 3.77256 14 6 14C10.9706 14 15 9.97056 15 5C15 3.15391 14.4437 1.43799 13.4902 0.00976562C13.6594 0.00371008 13.8293 7.64327e-09 14 0H75Z"
-            className="fill-white dark:fill-9e-border"
-          />
-          <path
-            d="M75 0V-2V-2V0ZM89 14H91H89ZM89 54H91V54H89ZM75 68V70V70V68ZM14 68V70V70V68ZM0 54H-2H0ZM0 14H-2V14H0ZM0.164062 11.8486L1.46197 10.327L-1.26604 8.00011L-1.81257 11.5438L0.164062 11.8486ZM13.4902 0.00976562L13.4187 -1.98895L9.83686 -1.86075L11.8268 1.12019L13.4902 0.00976562ZM14 0V-2V-2V0ZM75 0V2C81.6274 2 87 7.37258 87 14H89H91C91 5.16344 83.8366 -2 75 -2V0ZM89 14H87V54H89H91V14H89ZM89 54H87C87 60.6274 81.6274 66 75 66V68V70C83.8366 70 91 62.8366 91 54H89ZM75 68V66H14V68V70H75V68ZM14 68V66C7.37258 66 2 60.6274 2 54H0H-2C-2 62.8366 5.16345 70 14 70V68ZM0 54H2V14H0H-2V54H0ZM0 14H2C2 13.3705 2.0481 12.7539 2.14069 12.1535L0.164062 11.8486L-1.81257 11.5438C-1.93629 12.346 -2 13.1664 -2 14H0ZM0.164062 11.8486L-1.13384 13.3703C0.784874 15.0069 3.27772 16 6 16V14V12C4.26739 12 2.68631 11.3713 1.46197 10.327L0.164062 11.8486ZM6 14V16C12.0751 16 17 11.0751 17 5H15H13C13 8.86599 9.86599 12 6 12V14ZM15 5H17C17 2.74605 16.3194 0.645684 15.1536 -1.10066L13.4902 0.00976562L11.8268 1.12019C12.5679 2.2303 13 3.56178 13 5H15ZM13.4902 0.00976562L13.5618 2.00849C13.7126 2.00309 13.8581 2 14 2V0V-2C13.8006 -2 13.6063 -1.99567 13.4187 -1.98895L13.4902 0.00976562ZM14 0V2H75V0V-2H14V0Z"
-            fill={typeStyle.stroke}
-            mask={`url(#${maskId})`}
-          />
-          <circle cx="6.5" cy="5.5" r="5.5" fill={typeStyle.dot} />
-        </svg>
+    <div
+      /*
+        `h-full` and no width: the two-up grid above gives this its column, and
+        `h-full` is what keeps both cells the same height when one label wraps to
+        two lines and the other does not. The old fixed `h-[70px] w-[83px]` is
+        exactly what could not do that.
 
-        <div className="pointer-events-none absolute inset-0 z-10 flex -translate-y-[3px] flex-col items-center justify-center gap-[1px] sm:-translate-y-[5px]">
-          {lines.map((line, i) => (
-            <div
-              key={i}
-              className={cx(
-                "leading-none text-center whitespace-nowrap",
-                i === lines.length - 1 && lines.length > 1
-                  ? "text-[0.6rem] sm:text-[0.72rem] font-bold text-9e-slate-dp-50 dark:text-white"
-                  : "text-[0.68rem] sm:text-[0.82rem] font-bold text-9e-navy dark:text-white",
-              )}
-            >
-              {line}
-            </div>
-          ))}
+        `border-2` rather than `border`, because the SVG path it replaces was a
+        2-unit stroke and the type colour is the card's main identifier.
+      */
+      className={cx(
+        "relative flex h-full flex-col items-center justify-center gap-1 rounded-9e-md border-2 px-2 py-2 text-center",
+        className,
+      )}
+      style={{ borderColor: color }}
+    >
+      {/*
+        The dot the SVG used to notch out of its own corner. As an ordinary
+        positioned circle it needs no mask, no path and no unique id.
 
-          {/* No badge at all when the status is missing/blank — never a
-              green default. See resolveScheduleBadge. */}
-          {(statusStyle || statusLabel) && (
-            <div
-              className={cx(
-                "mt-[1px] rounded-full px-1.5 py-[2px] text-[0.55rem] font-bold leading-none whitespace-nowrap sm:mt-[2px] sm:px-2 sm:py-[3px] sm:text-[0.65rem]",
-                statusStyle?.solid ?? NEUTRAL_STATUS.solid,
-              )}
-            >
-              {statusLabel || statusStyle.label}
-            </div>
+        INSIDE THE BOX (`left-1 top-1`), NOT hanging off it. The card's link
+        wrapper is `relative overflow-hidden` — required by EarlyBirdRibbon, whose
+        diagonal tails clip against it — so a dot at a negative offset is not
+        merely outside the border, it is CLIPPED AWAY ENTIRELY. That is also
+        where the SVG had it: `<circle cx="6.5" cy="5.5">` sat inside the 90x80
+        viewBox, with the border notched around it rather than the dot escaping.
+      */}
+      <span
+        className="absolute left-1 top-1 h-2.5 w-2.5 rounded-full"
+        style={{ backgroundColor: color }}
+        aria-hidden="true"
+      />
+
+      {/*
+        NO `whitespace-nowrap`. This is the line that used to overflow the fixed
+        box; it is allowed to wrap now, and the box grows to hold it. `leading-
+        tight` keeps a wrapped label from doubling the card's height.
+      */}
+      <span className="text-[0.72rem] font-bold leading-tight text-9e-navy dark:text-white">
+        {dateLabel}
+      </span>
+
+      {/* No badge at all when the status is missing/blank — never a green
+          default. See resolveScheduleBadge. */}
+      {(statusStyle || statusLabel) && (
+        <span
+          className={cx(
+            "whitespace-nowrap rounded-full px-2 py-[2px] text-[0.6rem] font-bold leading-none",
+            statusStyle?.solid ?? NEUTRAL_STATUS.solid,
           )}
-        </div>
-      </div>
-
+        >
+          {statusLabel || statusStyle.label}
+        </span>
+      )}
+    </div>
   );
 }

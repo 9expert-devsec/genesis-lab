@@ -9,6 +9,11 @@ import {
   normalizeScheduleStatus,
   resolveScheduleBadge,
 } from '@/lib/scheduleStatus';
+import {
+  trainingTypeColor,
+  trainingTypeTint,
+} from '@/lib/schedule/trainingTypeColor';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 
 /**
  * Horizontal scrollable list of schedule cards.
@@ -22,8 +27,18 @@ import {
  * - schedules: Array<{ _id, dates: string[], status, type }>
  * - selectedId: string | null
  * - onSelect: (scheduleId: string) => void
+ * - currentYear: number — the Gregorian year in Asia/Bangkok, from the SERVER
+ *   page via siteCurrentYear(). NO DEFAULT: the date label runs
+ *   showYear:'auto', which throws without it rather than reading a clock this
+ *   component cannot read consistently across SSR and hydration.
  */
-export function ScheduleCarousel({ schedules, selectedId, onSelect, earlyBirdScheduleId = null }) {
+export function ScheduleCarousel({
+  schedules,
+  selectedId,
+  onSelect,
+  earlyBirdScheduleId = null,
+  currentYear,
+}) {
   const scrollerRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -91,6 +106,7 @@ export function ScheduleCarousel({ schedules, selectedId, onSelect, earlyBirdSch
             selected={s._id === selectedId}
             onSelect={() => onSelect(s._id)}
             isEarlyBird={!!earlyBirdScheduleId && s._id === earlyBirdScheduleId}
+            currentYear={currentYear}
           />
         ))}
       </div>
@@ -98,38 +114,72 @@ export function ScheduleCarousel({ schedules, selectedId, onSelect, earlyBirdSch
   );
 }
 
-const MONTHS_EN = [
-  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
-];
-
 const TYPE_LABEL = {
   hybrid:    'Hybrid',
   online:    'Online',
   classroom: 'Classroom',
 };
 
-const TYPE_BADGE_CLASS = {
-  hybrid:    'bg-violet-100 text-violet-700',
-  online:    'bg-emerald-100 text-emerald-700',
-  classroom: 'bg-sky-100 text-sky-700',
-};
+/**
+ * The type tag: a solid dot, dark text, and a 12% tint of the type colour.
+ *
+ * ── WHAT THIS REPLACED, AND WHY NOT JUST RECOLOUR IT ────────────────────────
+ * `TYPE_BADGE_CLASS` was `bg-sky-100 text-sky-700` / `bg-violet-100 …` /
+ * `bg-emerald-100 …` — a FOURTH spelling of the training-type palette, in
+ * Tailwind classes rather than hexes, so the badge here and the dot on
+ * /schedule were different colours for the same delivery type. It also had NO
+ * `dark:` variant at all, so on a dark background it rendered a pale blue chip
+ * with mid-blue text on a dark card.
+ *
+ * ── THE TYPE COLOUR MUST NOT BECOME THE TEXT COLOUR ─────────────────────────
+ * The obvious port — `color: trainingTypeColor(type)` — fails contrast: `#00CCFF`
+ * on white is roughly 1.9:1, nowhere near the 4.5:1 WCAG AA needs for body text,
+ * and this repo has already paid for contrast fixes once. So the colour is
+ * carried by a DOT and a TINT, and the label stays in the existing dark text
+ * token, which already has its dark-mode variant.
+ *
+ * That is also exactly how /schedule expresses a type (a dot, plus a border in
+ * the same hue), so the two surfaces now say the same thing the same way.
+ *
+ * ── 12% IS NOT THE 10% IN ScheduleClient's HOVER ────────────────────────────
+ * They are different numbers for different reasons and MUST NOT BE UNIFIED.
+ * This pill is PERMANENT and sits on a white card, where 10% nearly vanishes;
+ * the /schedule cell's 10% is a TRANSIENT hover and was specified at 10%
+ * directly. If anyone ever makes them equal, that equality is a coincidence and
+ * needs a comment saying so — the same trap as the four `4`s in
+ * adminScheduleHorizon, where a cleanup that unified numbers equal by accident
+ * broke a working surface.
+ */
+const TYPE_TINT_ALPHA = 0.12;
 
-function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
-  const dates = [...(schedule.dates || [])].sort();
-  const start = dates[0] ? new Date(dates[0]) : null;
-  const end = dates.at(-1) ? new Date(dates.at(-1)) : null;
-
-  let dateLabel = '—';
-  if (start && end) {
-    if (start.getDate() === end.getDate() && start.getMonth() === end.getMonth()) {
-      dateLabel = `${start.getDate()} ${MONTHS_EN[start.getMonth()]}`;
-    } else if (start.getMonth() === end.getMonth()) {
-      dateLabel = `${start.getDate()}-${end.getDate()} ${MONTHS_EN[start.getMonth()]}`;
-    } else {
-      dateLabel = `${start.getDate()} ${MONTHS_EN[start.getMonth()]} - ${end.getDate()} ${MONTHS_EN[end.getMonth()]}`;
-    }
-  }
+function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false, currentYear }) {
+  /**
+   * THE DATE LABEL, from the shared formatter.
+   *
+   * ── WHAT THE LOCAL ONE GOT WRONG ────────────────────────────────────────────
+   * It was English (`17-18 SEP`) on two Thai screens, and it was
+   * first-date-to-last-date: a round on 8, 10 and 12 ต.ค. — three separate days
+   * — rendered `8-12 OCT`, advertising training on the 9th and the 11th on the
+   * two screens where a visitor picks the round they are about to book.
+   *
+   * ── WHY `'auto'` AND NOT `true` OR `false` ──────────────────────────────────
+   * The standing card rule. These rounds come from `listSchedulesByCourse` with
+   * NO time horizon, so a low-frequency course viewed in Q4 lists next-year
+   * rounds, and a bare `16-17 ก.พ.` on a card you can book from reads as a date
+   * that has already passed. `'auto'` prints the Buddhist year exactly when the
+   * round is not in `currentYear`.
+   *
+   * `currentYear` is a PROP, computed on the server. `formatRoundDays` throws on
+   * `'auto'` without a numeric one, deliberately: this component renders during
+   * SSR too, and on Vercel (UTC) the server's year and a Bangkok visitor's year
+   * disagree for the seven hours before midnight every 31 December — a hydration
+   * mismatch on the one night the year is the thing being asked about.
+   */
+  const dateLabel = formatRoundDays(schedule.dates, {
+    showMonth: true,
+    showYear: 'auto',
+    currentYear,
+  });
 
   /**
    * WAS `schedule.status === 'closed'`, WHICH MSDB NEVER SENDS.
@@ -186,13 +236,31 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false }) {
       >
         {statusLabel}
       </span>
-      {schedule.type && schedule.type !== 'classroom' && (
+      {/*
+        EVERY round shows its type, classroom included.
+
+        This was gated on `schedule.type !== 'classroom'`, so the most common
+        delivery type was the one with no tag — and its absence had to be read
+        as meaning something, which is only possible if you already know the
+        rule. A visitor comparing two cards saw a labelled Hybrid beside an
+        unlabelled card and had no way to tell whether that meant Classroom or
+        "not recorded".
+
+        `schedule.type &&` still guards, so a round with NO type renders no tag
+        rather than a tag reading "classroom" that upstream never said. That is
+        a different claim from the colour fallback, which does default to
+        classroom — a missing colour still has to paint something, a missing
+        label does not have to say anything.
+      */}
+      {schedule.type && (
         <span
-          className={cn(
-            'mt-1.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
-            TYPE_BADGE_CLASS[schedule.type] ?? 'bg-slate-100 text-slate-600'
-          )}
+          className="mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold text-[var(--text-primary)]"
+          style={{ backgroundColor: trainingTypeTint(schedule.type, TYPE_TINT_ALPHA) }}
         >
+          <span
+            className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: trainingTypeColor(schedule.type) }}
+          />
           {TYPE_LABEL[schedule.type] ?? schedule.type}
         </span>
       )}

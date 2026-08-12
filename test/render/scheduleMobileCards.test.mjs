@@ -13,8 +13,11 @@ import {
   monthLabel,
   monthLabelWithYear,
   rollingWindow,
+  windowBetween,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
+import { siteDateParts } from '@/lib/articlePublishTime';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { scrollTrackInset } from '@/lib/schedule/scheduleTableLayout';
 
 /**
@@ -45,6 +48,13 @@ const now = new Date();
 const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
 const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
 const DEFAULTS = defaultScheduleFilters(now);
+
+// The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
+// same derivation the page itself does, off the same instant WINDOW came from.
+// `formatRoundDays` THROWS rather than reading a clock, so ScheduleBoard has to
+// be handed one; a harness that omitted it would fail loudly here rather than
+// render the wrong year in production. That is the intended failure mode.
+const CURRENT_YEAR = siteDateParts(now).year;
 
 const BEFORE = addMonths(WINDOW[0], -1);
 const AFTER = addMonths(WINDOW[WINDOW.length - 1], 1);
@@ -100,6 +110,7 @@ const renderBoard = (overrides = {}) =>
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -168,15 +179,26 @@ test('CONTROL: an unfiltered card WOULD show more rounds than the table does', (
    * Without this the agreement above is satisfiable by a card that renders
    * nothing at all, and by a fixture whose every round happens to be visible.
    * `courseRounds` is called here the way a careless card would call it — every
-   * month the course has, no matcher — and must come out strictly larger.
+   * month the course touches, no matcher — and must come out strictly larger.
+   *
+   * It takes a FLAT LIST now, not per-month buckets. The buckets were only ever
+   * safe because a round lived in exactly one of them (the month of its first
+   * date), which is the bucketing defect this commit removes: under a span-based
+   * rule a cross-month round appears in two buckets and a bucket walk would
+   * emit it twice.
+   *
+   * The window goes through `windowBetween` rather than being a SET of the
+   * months the fixture happens to mention. `roundSpanIndices` — which is what
+   * decides "is this round in view" — maps a month key to a column INDEX by
+   * arithmetic, so it requires a CONTIGUOUS list. Handed a set with a hole in
+   * it, it computes an index past the end and silently drops the round beyond
+   * the gap, which is what this control caught on its first run.
    */
-  const buckets = {};
-  for (const s of COURSE.schedules) {
-    const key = s.dates[0].slice(0, 7);
-    (buckets[key] ??= []).push(s);
-  }
-  const everyMonth = Object.keys(buckets).sort();
-  const naive = courseRounds(buckets, everyMonth, () => true).map((s) => s._id);
+  const touched = COURSE.schedules
+    .flatMap((s) => s.dates.map((d) => d.slice(0, 7)))
+    .sort();
+  const everyMonth = windowBetween(touched[0], touched[touched.length - 1]);
+  const naive = courseRounds(COURSE.schedules, everyMonth, () => true).map((s) => s._id);
 
   const html = renderBoard({ filters: { ...DEFAULTS, type: 'classroom' } });
   const shown = roundIds(cardRegion(html));
@@ -247,6 +269,7 @@ test('a round with no _id falls back to signup_url on BOTH layouts', () => {
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -336,35 +359,91 @@ test('an empty earlyBirdMap marks nothing — the condition is unchanged', () =>
   );
 });
 
-test('a cross-month round reads with BOTH months on the card', () => {
+/** Escape a string for use inside a RegExp — the Thai month abbreviations have dots. */
+const rx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('a cross-month round LISTS both its months on the card', () => {
   /**
-   * The card has no column header to lean on, so the month travels with the
-   * row. The trap is appending the BUCKET month — the month the round is filed
-   * under, which is its first date — which would render this round as
-   * "30 ต.ค. - 2 ต.ค. 69" and move a November session into October.
+   * The card has no column header to lean on, so the months travel with the row.
+   * Two traps, and this round walks into both:
    *
-   * Expected shape:  <last day of month A> <month A> - <day> <month B> <BE year>
+   *   · appending the BUCKET month — the month the round is filed under, which
+   *     is its first date — would render it as "30 ต.ค. - 2 ต.ค." and move a
+   *     November session into October;
+   *   · joining the two days with a RANGE would claim training on every day
+   *     between them. This round is the last day of one month and the 2nd of the
+   *     next — TWO days with a gap, not a span — and the old formatter printed
+   *     exactly that range. It is now a comma list.
+   *
+   * ── WHY A REGEX AND NOT A LITERAL ───────────────────────────────────────────
+   * WINDOW rolls off the real clock. When WINDOW[1] is December the two months
+   * are in different YEARS, and `showYear: 'auto'` then puts a 2-digit year on
+   * BOTH tokens — `31 ธ.ค. 69, 2 ม.ค. 70` — because each one's neighbour is in
+   * another year. So the year is optional between the tokens, and matching it as
+   * optional is what makes this assertion mean the same thing in every month.
    */
-  const html = renderBoard();
-  const expected =
-    `${CROSS_START} ${monthLabel(WINDOW[1])} - 2 ${monthLabelWithYear(WINDOW[2])}`;
-  const cards = cardRegion(html);
-  assert.ok(
-    cards.includes(expected),
-    `expected the cross-month round to read "${expected}"`,
+  const cards = cardRegion(renderBoard());
+  const first = `${CROSS_START} ${monthLabel(WINDOW[1])}`;
+  const second = `2 ${monthLabel(WINDOW[2])}`;
+  const optionalYear = String.raw`(?: \d{2})?`;
+
+  assert.match(
+    cards,
+    new RegExp(`${rx(first)}${optionalYear}, ${rx(second)}`),
+    `expected the cross-month round to read "${first}, ${second}" (year optional)`,
+  );
+  assert.equal(
+    cards.includes(`${first} - `),
+    false,
+    'a range here claims training on the days between — the defect this replaced',
   );
 });
 
-test('a same-month round reads as days plus one month and year', () => {
+test('a same-month round carries its month ONCE, and no year in the current year', () => {
   const cards = cardRegion(renderBoard());
+
+  // WINDOW[0] is the CURRENT month, so this round is always in the current year.
   assert.ok(
+    cards.includes(`3-4 ${monthLabel(WINDOW[0])}`),
+    'a same-month range must carry the month once, after the days',
+  );
+  assert.equal(
     cards.includes(`3-4 ${monthLabelWithYear(WINDOW[0])}`),
-    'a same-month range must carry the month once, with the year',
+    false,
+    "showYear:'auto' must NOT print the year for a round in the current year",
   );
+
+  // A single day, three months out. `includes` rather than an equality, because
+  // WINDOW[3] may be in the next year, in which case a year follows the month.
   assert.ok(
-    cards.includes(`9 ${monthLabelWithYear(WINDOW[3])}`),
-    'a single-day round must carry the month and year too',
+    cards.includes(`9 ${monthLabel(WINDOW[3])}`),
+    'a single-day round must carry its month too',
   );
+});
+
+test("CONTROL: the year probes DO tell 'auto' from a constant", () => {
+  /**
+   * The assertion above is `equal(includes(month + year), false)`, which passes
+   * for free if `monthLabelWithYear` returned something no label could contain.
+   * So: the two labels must differ, the year form must extend the bare one, and
+   * a round that IS in another year must actually show its year somewhere on the
+   * page — otherwise 'auto' could be a hardcoded `false` and nothing would say.
+   */
+  const bare = monthLabel(WINDOW[0]);
+  const withYear = monthLabelWithYear(WINDOW[0]);
+  assert.notEqual(bare, withYear, 'the two month labels must differ');
+  assert.ok(withYear.startsWith(bare), 'the year form extends the bare one');
+  assert.match(withYear, /\d{2}$/, 'and ends in a 2-digit Buddhist year');
+
+  // The other direction: force a next-year round through the same card and it
+  // must gain a year. Rendered, not reasoned about.
+  const nextYear = new Date(CURRENT_YEAR + 1, 5, 16);
+  const label = formatRoundDays([nextYear], {
+    showMonth: true,
+    showYear: 'auto',
+    currentYear: CURRENT_YEAR,
+  });
+  assert.match(label, /\d{2}$/, "a round outside currentYear MUST carry a year under 'auto'");
 });
 
 test('CONTROL: the card label is NOT the table label', () => {
@@ -425,6 +504,7 @@ const renderCourse = (course, overrides = {}) =>
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -484,6 +564,7 @@ test('both layouts are in the DOM at once, and nothing keys off a hand-written i
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},

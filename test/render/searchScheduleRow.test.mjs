@@ -420,7 +420,9 @@ test('the second line carries date, then status, then price — in that order', 
   const { compact } = rows(render(['open']))[0];
   const meta = compact.match(/<span class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">([\s\S]*?)<\/span><\/span>/);
   assert.ok(meta, 'the second line is gone');
-  const dateAt = meta[1].indexOf('17 ต.ค. 2569');
+  // 2-digit Buddhist year — the shared formatter takes it from Intl now, where
+  // the retired local copy hand-added 543 and printed four.
+  const dateAt = meta[1].indexOf('17 ต.ค. 69');
   const statusAt = meta[1].indexOf('>เปิดรับ</span>');
   const priceAt = meta[1].indexOf('9,000 .-');
   assert.notEqual(dateAt, -1, 'the date must render');
@@ -459,13 +461,33 @@ test('the course name is the first line, and the term is still highlighted in it
  * The OUTER div's class attribute is deliberately not part of it: `flex` became
  * `hidden md:flex`, which is the visibility switch and the only intended change.
  * That one line is asserted separately, below.
+ *
+ * ── RE-BASELINED: THE DATE LABEL ────────────────────────────────────────────
+ * `17 ต.ค. 2569` became `17 ต.ค. 69`. This file's local `formatDateLabel` — the
+ * one whose own comment called it a "local re-implementation from
+ * ScheduleClient" — is gone, replaced by the shared formatter. Two consequences,
+ * both intended:
+ *
+ *   · the YEAR is now 2-digit Buddhist, because it comes from `Intl` instead of
+ *     a hand-rolled `getFullYear() + 543`. Two digits is what every other
+ *     schedule surface on the site shows;
+ *   · a NON-CONSECUTIVE round is now listed rather than ranged. This fixture is
+ *     a single day so it cannot show that, but it is the defect the replacement
+ *     was for: `8, 10, 12 ต.ค.` used to render `8-12 ต.ค. 2569` on a row that
+ *     links straight into the registration wizard.
+ *
+ * RE-CAPTURED FROM RENDERED OUTPUT: the row was printed from a real render and
+ * diffed against this constant; the ONLY delta was the four characters of the
+ * year inside the `<p>`. Every class, every href, the price and the CTA were
+ * unchanged. The fixture dates here are FIXED (`2026-10-17`), so unlike the
+ * /schedule goldens this one stays a literal.
  */
 const DESKTOP_OPEN_INNER =
   '<span class="inline-flex h-fit shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold" style="background-color:#00CCFF1A;color:#00CCFF">'
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF"></span>Classroom</span>'
   + '<div class="min-w-0 flex-1">'
   + '<a href="/mse-pbi-training-course" class="line-clamp-1 text-sm font-semibold text-[#0D1B2A] hover:text-[#005CFF]">Power BI Desktop</a>'
-  + '<p class="mt-0.5 text-xs text-gray-500">17 ต.ค. 2569</p></div>'
+  + '<p class="mt-0.5 text-xs text-gray-500">17 ต.ค. 69</p></div>'
   + '<span class="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#39b980]">'
   + '<span class="h-2 w-2 rounded-full bg-[#39b980]" aria-hidden="true"></span>เปิดรับ</span>'
   + '<span class="shrink-0 text-sm font-bold text-[#0D1B2A]">9,000 .-</span>'

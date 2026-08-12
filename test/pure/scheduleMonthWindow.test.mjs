@@ -212,18 +212,90 @@ test('the default is 6, and the window it produces is 6 long', () => {
   }
 });
 
-test('the filter horizon is 12 + the default, and always reaches next year', () => {
-  assert.equal(PUBLIC_SCHEDULE_FILTER_HORIZON, 18);
-  assert.equal(PUBLIC_SCHEDULE_FILTER_HORIZON, 12 + PUBLIC_SCHEDULE_DEFAULT_MONTHS);
-  // The 12 term's purpose: the same month next year is selectable from any
-  // starting month. The 6 term's: the default's last column is never the last
-  // option, so there is always somewhere further to extend to.
+test('the filter horizon is twelve months, i.e. offsets 0..11', () => {
+  /**
+   * ── THIS TEST WAS REWRITTEN, NOT RENUMBERED ─────────────────────────────────
+   * It used to assert `=== 18`, `=== 12 + DEFAULT`, and that the SAME MONTH NEXT
+   * YEAR is always selectable. That third assertion was the whole justification
+   * for the 18, and it is now FALSE by construction: reaching the same month
+   * next year needs thirteen options (offsets 0..12), and there are twelve.
+   * Deleting it silently would have left the number unexplained; renumbering it
+   * to `=== 12` while keeping the next-year claim would have been a test
+   * asserting something the code deliberately gave up.
+   *
+   * What replaces it is what 12 actually guarantees, below.
+   */
+  assert.equal(PUBLIC_SCHEDULE_FILTER_HORIZON, 12);
+
   for (const start of ['2026-01', '2026-08', '2026-12']) {
     const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
-    assert.ok(options.includes(addMonths(start, 12)), `${start}: same month next year`);
+    assert.equal(options.length, 12, `${start}: twelve options`);
+    assert.equal(options[0], start, `${start}: the current month is offset 0`);
+    assert.equal(options.at(-1), addMonths(start, 11), `${start}: the last is offset 11`);
+  }
+});
+
+test('THE PROPERTY THAT SURVIVES: the default window never ends at the last option', () => {
+  /**
+   * The 6 term's purpose, and the only one left. A visitor opens on a six-month
+   * window; if its last column were also the last dropdown option there would be
+   * nowhere to extend to, and the filter would look broken at first use.
+   *
+   * This is what would break if the horizon were ever set to 6 or below, which
+   * is the realistic direction of a future edit — so it is asserted as a
+   * RELATIONSHIP between the two constants rather than as a second literal.
+   */
+  assert.ok(
+    PUBLIC_SCHEDULE_FILTER_HORIZON > PUBLIC_SCHEDULE_DEFAULT_MONTHS,
+    'the horizon must exceed the default window, or there is nowhere to extend to',
+  );
+  for (const start of ['2026-01', '2026-08', '2026-12']) {
+    const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
     const defaultEnd = rollingWindow(start, PUBLIC_SCHEDULE_DEFAULT_MONTHS).at(-1);
+    assert.ok(options.includes(defaultEnd), `${start}: the default window fits inside the options`);
     assert.ok(options.indexOf(defaultEnd) < options.length - 1, `${start}: room to extend`);
   }
+});
+
+test('the horizon DELIBERATELY no longer reaches the same month next year', () => {
+  /**
+   * Stated as an explicit expectation rather than left as an absence, because it
+   * is the property that was given up and the one a future reader is most likely
+   * to try to "restore" without knowing it was a decision.
+   *
+   * It was given up because it was buying nothing: measured against the live
+   * feed on 2026-08-12, of 104 future rounds ZERO were at offset >= 12 and the
+   * furthest was +5. If upstream ever publishes further out, this test is the
+   * place that says what changing the number back would mean.
+   *
+   * Note a round beyond the horizon is still FETCHED and still rendered when the
+   * window reaches it — `getAllSchedules()` is unbounded. Only the dropdown is
+   * capped.
+   */
+  for (const start of ['2026-01', '2026-08', '2026-12']) {
+    const options = rollingWindow(start, PUBLIC_SCHEDULE_FILTER_HORIZON);
+    assert.equal(
+      options.includes(addMonths(start, 12)),
+      false,
+      `${start}: offset +12 must be out of reach — that needs THIRTEEN options`,
+    );
+    // …and the boundary is exactly there: +11 is the last one in.
+    assert.ok(options.includes(addMonths(start, 11)), `${start}: offset +11 is still selectable`);
+  }
+});
+
+test('CONTROL: the offset probes DO distinguish 12 from 13 options', () => {
+  /**
+   * Both assertions above turn on one option's presence, so the probe is shown
+   * to move: a thirteen-long window DOES contain the same month next year, which
+   * is precisely what the old 18 bought and the new 12 does not.
+   */
+  const start = '2026-08';
+  assert.equal(rollingWindow(start, 13).includes(addMonths(start, 12)), true, '13 reaches it');
+  assert.equal(rollingWindow(start, 12).includes(addMonths(start, 12)), false, '12 does not');
+  assert.equal(rollingWindow(start, 18).includes(addMonths(start, 12)), true, 'the old 18 did');
+  // And the two window lengths really are different lists.
+  assert.notDeepEqual(rollingWindow(start, 12), rollingWindow(start, 18));
 });
 
 // ── Labels ──────────────────────────────────────────────────────────────────

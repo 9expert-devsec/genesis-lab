@@ -82,6 +82,10 @@ export function RegisterWizard({
   omisePaymentEnabled = false,
   coursePrice = null,
   priceByScheduleId = {},
+  // The Bangkok year, from the server page. NO DEFAULT — the round cards run
+  // showYear:'auto', which throws rather than reading a clock this component
+  // cannot read consistently across SSR and hydration.
+  currentYear,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -324,6 +328,7 @@ export function RegisterWizard({
           onSubmit={handleFormSubmit}
           earlyBirdScheduleId={earlyBirdScheduleId}
           courseDetailHref={courseDetailHref}
+          currentYear={currentYear}
         />
       )}
 
@@ -412,6 +417,8 @@ export function StepForm({
   onSubmit,
   earlyBirdScheduleId = null,
   courseDetailHref = "/training-course",
+  // The Bangkok year for the round cards. NO DEFAULT — see RegisterWizard.
+  currentYear,
 }) {
   const restoredClassId = initialValues?.classId;
   const router = useRouter();
@@ -695,6 +702,7 @@ export function StepForm({
           selectedId={selectedScheduleId}
           onSelect={handleSelectSchedule}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          currentYear={currentYear}
         />
 
         {activeSchedule && (

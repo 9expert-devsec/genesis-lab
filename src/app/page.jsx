@@ -20,6 +20,7 @@ import { HeroBannerCarousel } from "./_components/home/HeroBannerCarousel";
 import { ServicesSection } from "./_components/home/ServicesSection";
 import { ProgramSelector } from "./_components/home/ProgramSelector";
 import { NewCoursesSection } from "./_components/home/NewCoursesSection";
+import { siteCurrentYear } from "@/lib/articlePublishTime";
 import { OnlineCoursesSection } from "./_components/home/OnlineCoursesSection";
 import { InhouseCTA } from "./_components/home/InhouseCTA";
 import { TestimonialStats } from "./_components/home/TestimonialStats";
@@ -190,7 +191,7 @@ export default async function HomePage() {
           snapshotAvailable={landing._meta?.snapshotAvailable !== false}
         />
 
-        <NewCoursesSection courses={newCoursesWithSchedules} />
+        <NewCoursesSection courses={newCoursesWithSchedules} currentYear={siteCurrentYear()} />
 
         <OnlineCoursesSection courses={onlineCoursesForSection} />
 

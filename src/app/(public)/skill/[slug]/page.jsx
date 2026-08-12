@@ -7,6 +7,7 @@ import { resolveSkillBySlug } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { SkillPageClient } from './_components/SkillPageClient';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 export const revalidate = 3600;
 
@@ -75,6 +76,7 @@ export default async function SkillPage({ params }) {
       coursesByProgram={coursesByProgram}
       totalCourses={skillCourses.length}
       faqs={faqs}
+      currentYear={siteCurrentYear()}
     />
   );
 }

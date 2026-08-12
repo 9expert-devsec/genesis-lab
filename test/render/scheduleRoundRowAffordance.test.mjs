@@ -11,6 +11,8 @@ import {
   rollingWindow,
 } from '@/lib/schedule/monthWindow';
 import { defaultScheduleFilters } from '@/lib/schedule/scheduleFilters';
+import { siteDateParts } from '@/lib/articlePublishTime';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { SCHEDULE_STATUS, NEUTRAL_STATUS } from '@/lib/scheduleStatus';
 
 /**
@@ -34,6 +36,16 @@ const now = new Date();
 const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
 const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
 const DEFAULTS = defaultScheduleFilters(now);
+
+/**
+ * The year the card's `showYear: 'auto'` measures against, in Asia/Bangkok —
+ * the same derivation the page itself does, off the same instant the WINDOW
+ * above came from. It has to be passed: `formatRoundDays` THROWS rather than
+ * reading a clock, so a render harness that omitted it would fail loudly here
+ * instead of quietly rendering the wrong year in production. That is the
+ * intended failure mode.
+ */
+const CURRENT_YEAR = siteDateParts(now).year;
 
 const lastDayOf = (key) => {
   const [y, m] = key.split('-').map(Number);
@@ -59,6 +71,32 @@ const COURSE = {
   ],
 };
 
+/**
+ * The card labels for the two fixture rounds.
+ *
+ * ── WHY THESE ARE DERIVED AND NOT LITERAL ───────────────────────────────────
+ * They used to be written out as `8 ${monthLabelWithYear(WINDOW[1])}` and
+ * `${CROSS_START} ${monthLabel(WINDOW[0])} - 2 ${monthLabelWithYear(WINDOW[1])}`
+ * — literal, because the card's year was UNCONDITIONAL. It no longer is: under
+ * `showYear: 'auto'` the year appears only when the round is not in
+ * CURRENT_YEAR, and WINDOW rolls off the real clock, so whether these fixture
+ * months land in the next year depends on the day the suite runs. In December,
+ * WINDOW[1] is January and the year appears — mid-string, between the two
+ * tokens of the crossing round. No literal survives that.
+ *
+ * So the label is derived, with the SAME options and the SAME CURRENT_YEAR the
+ * component is rendered with. That is deliberately not a pin on the label's
+ * CONTENT — the content is pinned by test/pure/roundDateLabel (45 tests against
+ * a fixed table) and by the byte-identical golden further down, both of which
+ * use fixed dates and a fixed year. What these three tests claim is only that
+ * the row CARRIES its date alongside its pill and its chevron, which is a
+ * layout claim; the control below stops the derivation going vacuous.
+ */
+const cardLabel = (dates) =>
+  formatRoundDays(dates, { showMonth: true, showYear: 'auto', currentYear: CURRENT_YEAR });
+const CROSS_CARD_LABEL = cardLabel(COURSE.schedules[0].dates);
+const NEAR_CARD_LABEL = cardLabel(COURSE.schedules[1].dates);
+
 const render = (overrides = {}) =>
   renderToStaticMarkup(
     createElement(ScheduleBoard, {
@@ -68,6 +106,7 @@ const render = (overrides = {}) =>
       earlyBirdMap: { 'POWER-BI': 's-cross' },
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -253,7 +292,7 @@ test('a SHORT date and its Early Bird tag share one wrapping line', () => {
     'a fixed column forces the tag onto a second line even when there is room',
   );
 
-  const dateAt = inside.indexOf(`8 ${monthLabelWithYear(WINDOW[1])}`);
+  const dateAt = inside.indexOf(NEAR_CARD_LABEL);
   const tagAt = inside.indexOf('Early Bird');
   assert.notEqual(dateAt, -1, 'the date is not in the column');
   assert.notEqual(tagAt, -1, 'the Early Bird tag is not in the column');
@@ -286,9 +325,8 @@ test('the LONG cross-month row still carries everything, overflow staying inside
    */
   const row = rowsById(render())['s-cross'];
   const { classes, inside } = middleColumn(row);
-  const longDate = `${CROSS_START} ${monthLabel(WINDOW[0])} - 2 ${monthLabelWithYear(WINDOW[1])}`;
 
-  assert.ok(inside.includes(longDate), 'the cross-month date is gone');
+  assert.ok(inside.includes(CROSS_CARD_LABEL), 'the cross-month date is gone');
   assert.ok(inside.includes('Early Bird'), 'the tag is gone');
   assert.match(classes, /\bmin-w-0\b/, 'the column must be the thing that can shrink');
   assert.match(classes, /\bflex-1\b/, 'and the thing that takes the slack');
@@ -339,9 +377,35 @@ test('the same row still carries its date AND its pill AND the chevron', () => {
   // The regression the second line could cause: moving the tag out of the main
   // line must not push anything else out of the row.
   const row = rowsById(render())['s-cross'];
-  assert.ok(row.includes(`${CROSS_START} ${monthLabel(WINDOW[0])} - 2 ${monthLabelWithYear(WINDOW[1])}`));
+  assert.ok(row.includes(CROSS_CARD_LABEL));
   assert.ok(row.includes(SCHEDULE_STATUS.open.soft), 'the pill survived');
   assert.ok(row.includes('bg-9e-air/20'), 'and the accent circle');
+});
+
+test('CONTROL: the derived card labels are real labels, not empty or "-"', () => {
+  /**
+   * The three tests above search the rendered row for a string this file
+   * computed. If that computation ever returned `''`, `includes('')` is true for
+   * every row and all three pass while guarding nothing — the exact vacuity the
+   * derivation risks. So the labels are checked for the parts they must have.
+   *
+   * The DAY numbers are literal here (8, and the 2 of the cross-month round's
+   * second month), because those are the one part of the label the clock cannot
+   * move — the fixture pins them.
+   */
+  for (const [name, label] of [['near', NEAR_CARD_LABEL], ['cross', CROSS_CARD_LABEL]]) {
+    assert.notEqual(label, '', `${name}: empty label`);
+    assert.notEqual(label, '-', `${name}: the no-dates fallback — the fixture is not reaching the formatter`);
+    assert.match(label, /[ก-ฮ]/, `${name}: a card label always carries a Thai month`);
+  }
+  assert.match(NEAR_CARD_LABEL, /^8 /, 'the single-day round starts with its day');
+  assert.match(CROSS_CARD_LABEL, new RegExp(`^${CROSS_START} `), 'the crossing round starts on its first day');
+  assert.match(CROSS_CARD_LABEL, /, 2 /, 'and LISTS its second day rather than ranging to it');
+  assert.equal(
+    CROSS_CARD_LABEL.includes(' - '),
+    false,
+    'a range would claim training on every day between the two — the defect this replaced',
+  );
 });
 
 test('a row with no Early Bird has no second line to grow', () => {
@@ -449,39 +513,220 @@ test('…but it is still a link to the same place', () => {
  *    That distinction matters: hand-typing a believed-correct string is how a
  *    byte-identical guard ends up pinning something the component never emits
  *    and passing while guarding nothing.
+ * 4. The date LABEL moved to the shared formatter, lib/schedule/roundDateLabel.
+ *    The `s-cross` fixture is the last day of one month and the 2nd of the next
+ *    — TWO days, not consecutive — and the retired formatter printed it as a
+ *    RANGE, `31 ส.ค. - 2`, which claims training on every day between. It now
+ *    renders as the list it is: `31 ส.ค., 2 ก.ย.`, with the crossing rule
+ *    supplying both months.
+ *
+ *    Only CELL_EARLY_BIRD_OPEN moved. CELL_BLANK_STATUS is a single day (`9`),
+ *    which the old and new formatters spell identically — worth stating,
+ *    because item 3 above is the reminder that this constant carries the date
+ *    label too and can move without a status line to draw the eye.
+ *
+ *    RE-CAPTURED FROM RENDERED OUTPUT, again. The full markup was printed from
+ *    a real ScheduleBoard render and diffed against these constants; the ONLY
+ *    delta was the date string. Attribute order, class order, the inline
+ *    `style`, `aria-hidden`, the anchor's class list and the early-bird chip
+ *    were unchanged.
+ * 5. THE ROUND BECAME A BORDERED BOX. This is the one re-baseline so far that
+ *    is a real redesign rather than a token swap, so the deltas are listed:
+ *
+ *      · the anchor absorbed the inner wrapper. `<a class="…rounded-sm">` +
+ *        `<span class="flex flex-col items-center gap-0.5">` are now ONE
+ *        element carrying both jobs — the box and the column;
+ *      · `relative` and `overflow-hidden` are gone. Both were documented as
+ *        inert in item 2 above, and `overflow-hidden` on a box that may now
+ *        WRAP TO TWO LINES is a clipping question nobody should have to think
+ *        about;
+ *      · `rounded-sm` → `rounded-9e-md`, plus `border px-1 py-1.5` and a
+ *        `transition-colors` / `hover:bg-9e-air/10` pair;
+ *      · a new inline `style="border-color:#00CCFF"` — the DELIVERY TYPE, from
+ *        the same `TYPE_COLOR` map the dot beneath it reads. Inline because
+ *        those are hex values and Tailwind never evaluates a template literal.
+ *
+ *    The INTERNAL ORDER is untouched: type colour, then the dates, then the
+ *    status, then the Early Bird chip as an in-flow last child. That last point
+ *    is not incidental — an absolutely-positioned pill is what once rendered as
+ *    `arly Bir`, and scheduleEarlyBirdPillWidth exists because of it.
+ *
+ *    RE-CAPTURED FROM RENDERED OUTPUT. Both constants were printed from a real
+ *    ScheduleBoard render and replaced wholesale; the class ORDER below is the
+ *    order React emitted, not a tidied version of it.
+ * 6. `border` -> `border-2`, and the hover moved to the round's OWN type colour
+ *    at 10%. Three deltas, all captured from a real render:
+ *
+ *      · `border` -> `border-2` in the class list;
+ *      · `hover:bg-9e-air/10 dark:hover:bg-9e-air/10` -> the single static
+ *        `hover:bg-[var(--round-hover-bg)]`. One declaration now covers both
+ *        themes: an rgba at 10% composites over whatever is beneath it, so the
+ *        dark duplicate had nothing left to say;
+ *      · the inline `style` gained the custom property that class reads, so its
+ *        serialisation changed — `border-color:#00CCFF` became
+ *        `border-color:#00CCFF;--round-hover-bg:rgba(0, 204, 255, 0.1)`.
+ *
+ *    The class had to become a variable reference rather than
+ *    `hover:bg-[${color}]/10`: Tailwind scans source TEXT and never evaluates
+ *    it, so a template literal compiles to no class at all and fails silently as
+ *    a box that does not react to the pointer.
+ *
+ *    Class order was checked against the capture and did not shift for any other
+ *    reason. Both constants moved — CELL_BLANK_STATUS carries the box class and
+ *    the style too.
+ * 7. `border-2` -> `border`, and the emphasis moved to a HOVER RING. Item 6
+ *    above thickened the border; this reverts that half and spends the emphasis
+ *    somewhere that costs no layout. Three deltas, all captured from a real
+ *    render:
+ *
+ *      · `border-2` -> `border` in the class list;
+ *      · `transition-colors` -> the explicit property list plus `box-shadow`,
+ *        and `hover:ring-2` appended after the existing hover background.
+ *        `transition-colors` does not cover `box-shadow`, so without the wider
+ *        list the tint would fade over 200ms while the ring appeared and
+ *        vanished instantly. The list is `transition-colors`'s own six
+ *        properties VERBATIM plus `box-shadow` — purely additive;
+ *      · the inline `style` gained a THIRD property and its serialisation
+ *        changed again — `border-color:#00CCFF;--round-hover-bg:rgba(0, 204,
+ *        255, 0.1)` became `border-color:#00CCFF;--round-ring:#00CCFF;
+ *        --round-hover-bg:rgba(0, 204, 255, 0.1)`. Note the ORDER: React
+ *        serialises in insertion order, and the ring colour was inserted second.
+ *
+ *    ── THE RING IS TWO CLASSES, AND THE COLOUR VARIABLE IS OURS ─────────────
+ *    `hover:ring-2` paints and `hover:ring-[color:var(--round-ring)]` colours;
+ *    in Tailwind the width utility is what composes the box-shadow, so a
+ *    ring-colour class alone emits a valid declaration and draws nothing.
+ *
+ *    The obvious shortcut — set Tailwind's own `--tw-ring-color` inline and drop
+ *    the second class — was tried and REJECTED, and it is worth recording why,
+ *    because it works perfectly under a mouse. An inline custom property
+ *    outranks every author rule, including globals.css's app-wide
+ *    `*:focus-visible { … ring-9e-brand ring-offset-2 }`, so it repaints the
+ *    KEYBOARD FOCUS ring in the round's type colour: 1.90:1 for a classroom
+ *    round against a white page, under WCAG 1.4.11's 3:1 floor, where the brand
+ *    blue it replaced was 3.54:1. Only the light theme is affected. A variable
+ *    of our own is read by one selector under `:hover` and reaches nothing else.
+ *    scheduleFullRoundNotClickable pins the absence directly.
+ *
+ *    RE-CAPTURED FROM RENDERED OUTPUT, not retyped. Both constants were printed
+ *    from a real ScheduleBoard render; the only deltas were the three above.
+ *    Attribute order, class order, the dot, the date span, the status span and
+ *    the early-bird chip were unchanged byte for byte.
  */
+const CELL_BOX_CLASS =
+  'group cursor-pointer flex flex-col items-center gap-0.5 rounded-9e-md border px-1 py-1.5 '
+  + 'transition-[color,background-color,border-color,text-decoration-color,fill,stroke,box-shadow] '
+  + 'duration-9e-micro ease-9e hover:bg-[var(--round-hover-bg)] hover:ring-2 '
+  + 'hover:ring-[color:var(--round-ring)]';
+
+/**
+ * The cell's inline style, INCLUDING both custom properties.
+ *
+ * Both fixture rounds are `classroom`, so one string serves both goldens — but
+ * it is named rather than inlined twice because the custom properties are the
+ * part most likely to be edited, and a golden that carried them in only one of
+ * the two constants is exactly the CELL_BLANK_STATUS trap this file has fallen
+ * into before (that constant carries the DATE LABEL too, which is easy to miss
+ * because it has no status line).
+ *
+ * Note the serialisation: React emits the three declarations semicolon-joined
+ * with no space after the property colon, while the rgba keeps its own spaced
+ * commas — and it emits them in INSERTION ORDER, which is why the ring colour
+ * sits between the border and the tint rather than at the end. That is React's
+ * style serialisation, not a formatting choice here, which is why this was
+ * CAPTURED from a real render rather than written out.
+ *
+ * The two variables are deliberately different SHAPES: `--round-ring` is the
+ * full type hex, because the ring restates the border, and `--round-hover-bg`
+ * is the 10% rgba, because the background washes behind it. A ring at 10% on a
+ * 1px border would be invisible — scheduleFullRoundNotClickable asserts the
+ * distinction directly.
+ *
+ * And neither of them is `--tw-ring-color`. That absence is load-bearing, not
+ * incidental: see the focus-ring note in item 7 above.
+ */
+const CELL_BOX_STYLE =
+  'border-color:#00CCFF;--round-ring:#00CCFF;--round-hover-bg:rgba(0, 204, 255, 0.1)';
+
 const CELL_EARLY_BIRD_OPEN =
-  '<a href="/registration/public?course=power-bi&amp;class=s-cross" class="group relative block cursor-pointer overflow-hidden rounded-sm">'
-  + '<span class="flex flex-col items-center gap-0.5">'
+  `<a href="/registration/public?course=power-bi&amp;class=s-cross" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
   + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
-  + `${CROSS_START} ${monthLabel(WINDOW[0])} - 2</span>`
+  + `${CROSS_START} ${monthLabel(WINDOW[0])}, 2 ${monthLabel(WINDOW[1])}</span>`
   + '<span class="text-[10px] font-bold leading-none text-[#39b980]">เปิดรับ</span>'
   + '<span class="rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">Early Bird</span>'
-  + '</span></a>';
+  + '</a>';
 
 const CELL_BLANK_STATUS =
-  '<a href="/registration/public?course=power-bi&amp;class=s-blank" class="group relative block cursor-pointer overflow-hidden rounded-sm">'
-  + '<span class="flex flex-col items-center gap-0.5">'
+  `<a href="/registration/public?course=power-bi&amp;class=s-blank" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
-  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></span></a>';
+  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></a>';
 
-/** Every non-empty schedule cell of the desktop table, in document order. */
+/**
+ * Every non-empty schedule cell of the desktop table, in document order.
+ *
+ * ── THE PATTERN HAD TO WIDEN, AND THE FAILURE IT PRODUCED WAS MISLEADING ────
+ * It used to match the literal `<td class="px-2 py-2 text-center align-middle">`.
+ * A cross-month round now renders `<td colspan="2" class="…">`, so that literal
+ * stopped matching the very cell this file's golden is about — and the test did
+ * NOT fail as a diff. It failed as `expected three linked cells — the fixture
+ * moved`, which points at the fixture rather than at the extractor and is
+ * exactly the kind of failure that gets "fixed" by editing the count.
+ *
+ * The attribute is OPTIONAL in the pattern rather than required, because a
+ * single-month cell genuinely does not emit one: `colSpan={1}` would render
+ * `colspan="1"`, a no-op that would change the markup of every cell on the page,
+ * so the component passes `undefined` instead. Both forms are real and both
+ * must be extracted.
+ *
+ * ── AND THE CASE IS `col[Ss]pan` ON PURPOSE ─────────────────────────────────
+ * React 18.3.1 emits `colSpan="2"` — CAMEL CASE — while emitting `rowspan="2"`
+ * lowercase from the identically-shaped `rowSpan` prop. That is React's own
+ * attribute table, not this component: verified by rendering a bare `<td>` with
+ * each prop. It is valid either way, because HTML attribute names are
+ * ASCII case-insensitive at parse time, so the browser applies the span
+ * regardless. Matching both spellings means a React upgrade that normalises it
+ * does not silently empty this extractor and vacate the golden.
+ */
 const tableCells = (html) =>
-  [...tableRegion(html).matchAll(/<td class="px-2 py-2 text-center align-middle">([\s\S]*?)<\/td>/g)]
+  [...tableRegion(html).matchAll(
+    /<td(?: col[Ss]pan="\d+")? class="px-2 py-2 text-center align-middle">([\s\S]*?)<\/td>/g,
+  )]
     .map((m) => m[1])
     .filter((c) => c.includes('<a '));
 
+/**
+ * The same cells, keyed by the schedule they link to.
+ *
+ * Positional indexing was fine while every course was one `<tr>` in column
+ * order. It is not any more: the table packs rounds into LANES, so document
+ * order is lane order — a cross-month round spanning columns 0-1 pushes the
+ * round at column 1 into a second lane and therefore to the END of the markup.
+ * `cells[2]` silently became a different round, which a golden would report as
+ * a diff in the wrong cell.
+ */
+const cellsById = (html) => {
+  const out = {};
+  for (const cell of tableCells(html)) {
+    const id = cell.match(/&amp;class=([^"&]+)/)?.[1] ?? 'no-link';
+    out[id] = cell;
+  }
+  return out;
+};
+
 test('the desktop ScheduleCell markup is byte-identical to before this change', () => {
-  const cells = tableCells(render());
-  assert.equal(cells.length, 3, 'expected three linked cells — the fixture moved');
+  const html = render();
+  assert.equal(tableCells(html).length, 3, 'expected three linked cells — the fixture moved');
+  // Keyed, not indexed: lane packing makes document order lane order, so the
+  // cross-month round's neighbour is now LAST in the markup rather than second.
+  const cells = cellsById(html);
   assert.equal(
-    cells[0],
+    cells['s-cross'],
     `<div class="flex flex-col gap-2">${CELL_EARLY_BIRD_OPEN}</div>`,
     'the early-bird / open cell changed',
   );
   assert.equal(
-    cells[2],
+    cells['s-blank'],
     `<div class="flex flex-col gap-2">${CELL_BLANK_STATUS}</div>`,
     'the blank-status cell changed',
   );
@@ -491,11 +736,11 @@ test('the table cell kept the OLD status treatment, not the card’s pill', () =
   // The specific way the desktop could have been dragged along: `soft` is a
   // shared token, and swapping `text` for it in the wrong component would move
   // both surfaces at once.
-  const cells = tableCells(render());
-  assert.ok(cells[0].includes(`text-[10px] font-bold leading-none ${SCHEDULE_STATUS.open.text}`));
-  assert.equal(cells[0].includes(SCHEDULE_STATUS.open.soft), false, 'the table has no pill');
-  assert.equal(cells[0].includes('min-h-[44px]'), false, 'nor a tap-target floor');
-  assert.equal(cells[0].includes('bg-9e-ice'), false, 'nor a row fill');
+  const cells = cellsById(render());
+  assert.ok(cells['s-cross'].includes(`text-[10px] font-bold leading-none ${SCHEDULE_STATUS.open.text}`));
+  assert.equal(cells['s-cross'].includes(SCHEDULE_STATUS.open.soft), false, 'the table has no pill');
+  assert.equal(cells['s-cross'].includes('min-h-[44px]'), false, 'nor a tap-target floor');
+  assert.equal(cells['s-cross'].includes('bg-9e-ice'), false, 'nor a row fill');
 });
 
 test('CONTROL: the golden comparison DOES fail on a one-class edit', () => {
@@ -507,14 +752,14 @@ test('CONTROL: the golden comparison DOES fail on a one-class edit', () => {
    */
   const mutated = CELL_EARLY_BIRD_OPEN.replace('gap-0.5', 'gap-1');
   assert.notEqual(mutated, CELL_EARLY_BIRD_OPEN, 'the mutation is real');
-  const cells = tableCells(render());
+  const cells = cellsById(render());
   assert.equal(
-    cells[0] === `<div class="flex flex-col gap-2">${mutated}</div>`,
+    cells['s-cross'] === `<div class="flex flex-col gap-2">${mutated}</div>`,
     false,
     'a one-class edit to ScheduleCell must break the golden',
   );
   // …and the extractor really is reading the live table.
-  assert.ok(cells[0].includes('registration/public?course=power-bi'));
+  assert.ok(cells['s-cross'].includes('registration/public?course=power-bi'));
 });
 
 test('CONTROL: the card and the table render DIFFERENT markup for one round', () => {
@@ -522,11 +767,37 @@ test('CONTROL: the card and the table render DIFFERENT markup for one round', ()
   // old text row, every "byte-identical" claim above would hold trivially.
   const html = render();
   const cardRow = rowsById(html)['s-cross'];
-  const cell = tableCells(html)[0];
+  const cell = cellsById(html)['s-cross'];
   assert.notEqual(cardRow, cell);
   assert.ok(cardRow.includes('min-h-[44px]') && !cell.includes('min-h-[44px]'));
-  assert.ok(
-    cardRow.includes(monthLabelWithYear(WINDOW[1])) && !cell.includes(monthLabelWithYear(WINDOW[1])),
-    'the card label carries a month the table cell does not',
-  );
+});
+
+test('the card carries a month the table cell does not — on a SAME-MONTH round', () => {
+  /**
+   * ── WHY THIS MOVED OFF `s-cross` ────────────────────────────────────────────
+   * It used to make this claim about the cross-month round, and that claim is
+   * now FALSE there — correctly so. A round crossing a month keeps its months on
+   * every surface, table included, because `31 - 2` under a single ก.ย. heading
+   * is a date that does not exist. So the cross-month cell legitimately carries
+   * a month now and cannot demonstrate the difference.
+   *
+   * `s-near` is a single day inside one month, which is where the two surfaces
+   * genuinely differ: the table cell shows the bare day because its column
+   * header supplies the month, and the card shows `8 ก.ย.` because it has no
+   * header to lean on. Same formatter, different options — which is the whole
+   * point of the consolidation.
+   *
+   * The year is deliberately NOT asserted here: under `showYear: 'auto'` it
+   * appears only when the round is not in `CURRENT_YEAR`, and WINDOW rolls off
+   * the real clock, so whether these fixture months land in the next year
+   * depends on the date the suite is run. The MONTH is unconditional.
+   */
+  const html = render();
+  const cardRow = rowsById(html)['s-near'];
+  const cell = cellsById(html)['s-near'];
+  const month = monthLabel(WINDOW[1]);
+  assert.ok(cardRow.includes(month), `the card row must carry ${month}`);
+  assert.equal(cell.includes(month), false, 'the table cell must not repeat its header');
+  // And the day itself is on both, so the difference above is the month alone.
+  assert.ok(cardRow.includes('>8') && cell.includes('>8'));
 });

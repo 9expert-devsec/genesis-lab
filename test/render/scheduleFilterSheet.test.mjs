@@ -16,6 +16,7 @@ import {
   activeScheduleFilterCount,
   defaultScheduleFilters,
 } from '@/lib/schedule/scheduleFilters';
+import { siteDateParts } from '@/lib/articlePublishTime';
 
 /**
  * The mobile filter sheet, rendered.
@@ -43,6 +44,13 @@ const now = new Date();
 const WINDOW = rollingWindow(now, PUBLIC_SCHEDULE_DEFAULT_MONTHS);
 const OPTIONS = rollingWindow(now, PUBLIC_SCHEDULE_FILTER_HORIZON);
 const DEFAULTS = defaultScheduleFilters(now);
+
+// The year the card measures `showYear: 'auto'` against, in Asia/Bangkok — the
+// same derivation the page itself does, off the same instant WINDOW came from.
+// `formatRoundDays` THROWS rather than reading a clock, so ScheduleBoard has to
+// be handed one; a harness that omitted it would fail loudly here rather than
+// render the wrong year in production. That is the intended failure mode.
+const CURRENT_YEAR = siteDateParts(now).year;
 
 const dayIn = (key, day) => `${key}-${String(day).padStart(2, '0')}`;
 
@@ -86,6 +94,7 @@ const renderBoard = (overrides = {}) =>
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
@@ -364,6 +373,7 @@ test('the schedule PDF keeps a mobile home in the hero', () => {
       earlyBirdMap: {},
       filters: DEFAULTS,
       defaults: DEFAULTS,
+      currentYear: CURRENT_YEAR,
       monthOptions: OPTIONS,
       onFilterChange() {},
       onReset() {},
