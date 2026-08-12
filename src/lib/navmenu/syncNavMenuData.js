@@ -15,6 +15,7 @@
  * browser, so an empty program has nothing to show and must not appear.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import NavMenuCache from '@/models/NavMenuCache';
 import CourseExtension from '@/models/CourseExtension';
@@ -152,6 +153,59 @@ export async function syncNavMenuData() {
     },
     { upsert: true, new: true }
   );
+
+  /**
+   * REGENERATE THE PAGES THAT BAKED THE OLD MENU. Writing the cache is only
+   * half the job — the same half syncLandingData used to stop at.
+   *
+   * getNavMenuData() reads Mongo through mongoose, NOT through `fetch`. That
+   * means it carries no Next cache tag and there is nothing to `revalidateTag`:
+   * its result is captured into the statically rendered output and can only be
+   * released by a path revalidation. Measured on this branch: `/` is ○ Static
+   * (Revalidate 1h), `/training-course` ○ Static (30m), `/policies` ○ Static
+   * (1h). So a snapshot written here reached a visitor only when an unrelated
+   * ISR timer happened to expire.
+   *
+   * MEASURED, and why the scope is 'layout' rather than a bare path. Three
+   * surfaces mount PublicHeader, and they do not share one URL prefix:
+   *
+   *   src/app/(public)/layout.jsx:15   every route in the (public) group
+   *   src/app/page.jsx:122             the home page, mounted INLINE because
+   *                                    it sits outside the group and does not
+   *                                    inherit that layout
+   *   src/app/not-found.jsx:9          the 404 page
+   *
+   * `revalidatePath('/')` alone covers only the home page — a visitor on
+   * /training-course would still be served the stale menu, which is most of the
+   * site. `(public)` is a route GROUP, so it contributes no path segment and
+   * there is no expression that selects exactly its routes; the alternative is
+   * enumerating ~30 paths that rot the moment a route is added.
+   *
+   * 'layout' at '/' is also the idiom this repo already uses for precisely
+   * "the header changed" — eight existing call sites, including
+   * page-configs.js:86 which busts the nav slug maps that this same menu reads,
+   * and site-notifications.js:48. Home's own comment (page.jsx:63) names it as
+   * the mechanism that keeps the inline header and the group layout in step.
+   * Copying it keeps one pattern rather than adding a second.
+   *
+   * Here rather than in the two callers because the invariant belongs to the
+   * WRITE: whoever rewrites the snapshot has, by definition, made the rendered
+   * menu stale. Both callers forgetting it is what that looks like when it is
+   * spread across call sites.
+   *
+   * Guarded exactly as syncLandingData is: `revalidatePath` throws outside a
+   * request/render scope, and failing to regenerate must not fail a sync that
+   * has already written successfully — the next write tries again.
+   */
+  try {
+    revalidatePath('/', 'layout');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[syncNavMenuData] revalidatePath("/", "layout") skipped:',
+      err?.message ?? err
+    );
+  }
 
   return {
     status,
