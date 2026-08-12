@@ -512,10 +512,12 @@ export default async function CatchAllPage({ params, searchParams }) {
   // Course resolver handles both alias and `-training-course` suffix.
   //
   // The admin-preview arm runs ONLY when the public answer was null, so the
-  // happy path — every published course — is byte-for-byte the request it was
-  // before this existed, and stays in the full-route cache. See
-  // resolveHiddenCourseForAdmin for why that ordering is load-bearing rather
-  // than tidy.
+  // happy path — every published course — does exactly the work it did before
+  // this existed. See resolveHiddenCourseForAdmin for why that ordering is
+  // load-bearing rather than tidy, and for the correction to the reason this
+  // comment originally gave (the full-route cache, which this route does not
+  // have: `next build` reports /[...slug] as ƒ Dynamic, and did before this
+  // change too).
   const publicResolved = await resolveCourse(segment);
   const resolved =
     publicResolved ?? (await resolveHiddenCourseForAdmin(segment, searchParams));

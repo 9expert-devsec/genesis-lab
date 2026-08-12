@@ -132,13 +132,18 @@ const SUFFIX = '-training-course';
  * Does this public slug belong to a HIDDEN course? The `courseId`, or null.
  *
  * ── WHY THIS PROBE EXISTS RATHER THAN JUST RESOLVING THE COURSE ─────────────
- * The catch-all route is ISR-cached (revalidate 3600). The admin preview needs
- * `cookies()`, and reading a dynamic API anywhere in a render takes that render
- * out of the full-route cache — so a preview check placed on the ordinary path
- * would make all 78 course pages, plus every custom and builder page, render
- * dynamically. This answers "is there even anything here to preview?" using
- * nothing dynamic, so the cookie read happens ONLY on the handful of URLs that
- * belong to a course an admin has hidden.
+ * It answers "is there even anything here to preview?" cheaply enough to run
+ * first, so the session read and the full course resolution happen ONLY on the
+ * handful of URLs that belong to a course an admin has hidden — rather than on
+ * every request to the catch-all route, which is the site's entire public URL
+ * space.
+ *
+ * An earlier version of this note justified the ordering by Next's full-route
+ * cache, claiming a cookie read here would make 78 static course pages dynamic.
+ * That was asserted rather than measured, and `next build` says otherwise:
+ * `/[...slug]` is ƒ (Dynamic), and already was at c5f4ad6. The ordering is
+ * still right — it is per-request work, not cache loss, and the correction is
+ * left visible rather than swapped for a second unverified reason.
  *
  * ── AND WHY IT IS ALMOST FREE ───────────────────────────────────────────────
  * It starts from `loadHiddenCourseIds()`, which the public header has already

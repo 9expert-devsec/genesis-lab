@@ -48,17 +48,23 @@ export async function resolveCourse(
     fetchCourse = getCourseByCodeInsensitive,
     /**
      * ── THE ADMIN PREVIEW BYPASS, AND THE ONLY THING THAT OPENS IT ───────────
-     * `true` resolves a course whose extension says `isPublished: false`. Its
-     * one caller is /preview/course/[code], which calls `auth()` and 404s
-     * before it gets here if there is no admin session. There is deliberately
-     * NO query parameter and NO cookie of our own behind this: a bypass that
-     * leaks is worse than the defect, and the safest bypass is one with nothing
-     * to forge — an unauthenticated request cannot set a NextAuth session, so
-     * it cannot reach a `true` here by any route.
+     * `true` resolves a course whose extension says `isPublished: false`.
      *
-     * The PUBLIC route never passes it, and cannot: it is ISR-cached
-     * (revalidate 3600), so it must not read cookies at all — doing so would
-     * make every one of the 78 course pages render dynamically.
+     * It has exactly ONE caller: `resolveHiddenCourseForAdmin`, which returns
+     * null — and therefore never reaches this — unless there is an authenticated
+     * admin session. The gate is the session and nothing else. `?preview=1`
+     * appears on the URL, but it is not a credential and grants nothing on its
+     * own; that module is where the distinction is written down, because it is
+     * the one place both halves are visible.
+     *
+     * A bypass that leaks is worse than the defect it fixes, so the safest
+     * bypass is one with nothing to forge. There is no token, no secret and no
+     * cookie of our own here — an anonymous request cannot mint a NextAuth
+     * session, so it cannot reach a `true` in this parameter by any route.
+     *
+     * The PUBLIC resolution path never passes it. Both branches below default
+     * to false, so forgetting to thread it fails CLOSED — a hidden course stays
+     * hidden — which is the direction a mistake here has to fall.
      */
     includeHidden = false,
   } = {}

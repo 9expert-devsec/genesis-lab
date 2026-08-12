@@ -230,8 +230,9 @@ test('CONTROL: that loop is not vacuous — "1" in the same harness DOES resolve
 
 test('a slug that is NOT a hidden course never reads the session', async () => {
   // The ordering that keeps every published course, custom page and builder
-  // page statically cached. If the session read moved above this check, the
-  // whole catch-all route would render dynamically.
+  // page from paying for a feature that concerns none of them. If the session
+  // read moved above this check, every request to the site's entire public URL
+  // space would decode a session to answer a question about a handful of URLs.
   const g = gate({ hidden: null, session: { user: { id: 'u1' } } });
   assert.equal(
     await resolveHiddenCourseForAdmin('some-custom-page', { preview: '1' }, g.deps),

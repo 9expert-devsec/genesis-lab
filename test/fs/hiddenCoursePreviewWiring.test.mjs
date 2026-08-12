@@ -5,8 +5,15 @@ import { readSource, countCallSites } from '../sourceScan.mjs';
 /**
  * The wiring the pure tier cannot reach: the catch-all route is an async Server
  * Component that awaits network I/O before rendering, and its ORDER — public
- * answer first, preview arm only on a null — is what keeps 78 course pages,
- * every custom page and every builder page inside Next's full-route cache.
+ * answer first, preview arm only on a null — is what keeps every published
+ * course, custom page and builder page from paying for a feature that concerns
+ * none of them.
+ *
+ * That ordering was originally justified here by Next's full-route cache. It
+ * was wrong: `next build` reports `/[...slug]` as ƒ (Dynamic), at c5f4ad6 as
+ * well as at HEAD, because it is a catch-all with no generateStaticParams whose
+ * metadata already awaits searchParams. The saving is per-request work — a
+ * session read on the site's entire public URL space — not a cached render.
  *
  * The GATE itself (no session → no course) is tested behaviourally in
  * test/pure/hiddenCoursePreviewGate. Nothing here is a substitute for that; a
@@ -16,9 +23,9 @@ import { readSource, countCallSites } from '../sourceScan.mjs';
 const ROUTE = 'src/app/(public)/[...slug]/page.jsx';
 
 test('the public resolver runs FIRST and the preview arm only on its null', () => {
-  // Reversed, every course page would read cookies and go dynamic. Written as
-  // a `??` so there is no second code path to keep in step, and so a published
-  // course's request is byte-for-byte what it was before this existed.
+  // Reversed, every request to this route would read the session. Written as a
+  // `??` so there is no second code path to keep in step, and so a published
+  // course's request does what it did before this existed.
   const { code } = readSource(ROUTE);
   assert.match(code, /const publicResolved = await resolveCourse\(segment\);/);
   assert.match(

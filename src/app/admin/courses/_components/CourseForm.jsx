@@ -1078,7 +1078,8 @@ export function CourseForm({
   /**
    * Preview opens the REAL public URL. `?preview=1` is appended when the course
    * is hidden, because that URL now 404s for everyone — including this admin,
-   * whose session the ISR-cached page deliberately does not read.
+   * who by default sees the same site a visitor does. Previewing is something
+   * you ask for, on one URL, rather than a state you are permanently in.
    *
    * The parameter is not a credential and grants nothing on its own; the server
    * gate is the admin session (see resolveHiddenCourseForAdmin in the catch-all

@@ -8,11 +8,34 @@ import { resolveCourse } from '@/lib/resolveCourse';
  * THE ADMIN SESSION GRANTS. `?preview=1` GRANTS NOTHING. It is not a token and
  * must never be read as one: it carries no secret, it is trivially guessable,
  * and on its own it produces exactly the 404 an anonymous visitor already gets.
- * It exists for one reason — `auth()` reads cookies, and reading cookies
- * anywhere in a render takes that render out of Next's full-route cache — so
- * without a cheap way to know a request is even ASKING to preview, all 78
- * course pages plus every custom and builder page on the catch-all route would
- * render dynamically.
+ * It buys two things, neither of them access:
+ *
+ *   · AN ADMIN'S VIEW OF THE PUBLIC SITE MATCHES THE PUBLIC'S BY DEFAULT.
+ *     Without it, anyone logged in browses a different site from everyone else
+ *     — hidden courses silently present for them, 404 for visitors — and the
+ *     admin least able to notice the difference is the one who hid the course.
+ *     Previewing is then something you ASK for, once, on one URL.
+ *   · `auth()` is not run on every request to this route. It is the site's
+ *     whole public URL space; a session read per request buys nothing on the
+ *     overwhelming majority of them.
+ *
+ * ── A CORRECTION, KEPT RATHER THAN QUIETLY REWRITTEN ────────────────────────
+ * The first version of this comment justified the parameter by Next's
+ * full-route cache: that `auth()` would take these renders out of it and make
+ * all 78 course pages dynamic. THAT WAS WRONG, and it was asserted rather than
+ * measured. `next build` reports `/[...slug]` as ƒ (Dynamic) — and did so at
+ * c5f4ad6, before any of this work — because it is a catch-all with no
+ * generateStaticParams, and because both `generateMetadata` and the custom-page
+ * resolver already await `searchParams`. There was no static render on this
+ * route to protect. The route table is byte-identical before and after this
+ * change; the surrounding pages that ARE static (`/` 1h, `/training-course`
+ * 30m, `/schedule` 30m, `/promotions` 1h) do not render this gate.
+ *
+ * The design did not change when the reason did, which is worth being explicit
+ * about: the two benefits above are real on a dynamic route, and the ordering
+ * below still avoids per-request work. But the number that would have made the
+ * cache argument true was never taken, and a comment that sounds measured while
+ * being a guess is worse than no comment.
  *
  * This is the one place it differs from the custom-page bypass on the same
  * route, whose `?preview=<token>` IS the credential, compared against a
@@ -22,17 +45,18 @@ import { resolveCourse } from '@/lib/resolveCourse';
  * cannot mint one, so there is nothing here to forge.
  *
  * ── THE ORDER OF THE THREE CHECKS IS THE WHOLE DESIGN ───────────────────────
- *   1. is this slug even a hidden course — Mongo only, nothing dynamic, and
- *      free when nothing is hidden (0 of 78 rows, measured 2026-08-12). Every
- *      published course, custom page and builder page returns here and keeps
- *      its static render.
- *   2. did the request ask to preview — the first dynamic read, and by now it
- *      can only be reached on a URL belonging to a course an admin has hidden.
+ *   1. is this slug even a hidden course — and free when nothing is hidden
+ *      (0 of 78 rows, measured 2026-08-12), because it starts from a set the
+ *      public header has already loaded this request. Every published course,
+ *      custom page and builder page returns here having done no extra work.
+ *   2. did the request ask to preview — reachable only on a URL belonging to a
+ *      course an admin has hidden.
  *   3. is there an admin session — the actual gate.
  *
- * Reversing 1 and 2 makes the entire route dynamic. Reversing 2 and 3 is
- * harmless but pointless. Removing 3 is the leak, and is what the tests around
- * this function exist to make impossible to do quietly.
+ * Reversing 1 and 2 costs a session read on every request to the site's entire
+ * public URL space. Reversing 2 and 3 is harmless but pointless. Removing 3 is
+ * the leak, and is what the tests around this function exist to make impossible
+ * to do quietly.
  *
  * ── WHY IT LIVES HERE AND NOT IN THE ROUTE ──────────────────────────────────
  * A page file cannot export anything but Next's own contract, so a gate written
