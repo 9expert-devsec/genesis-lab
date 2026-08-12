@@ -6,6 +6,7 @@ import {
   previewSnapshotOverride,
   applySnapshotOverride,
 } from '@/lib/actions/cache-console';
+import { overrideConfirmLabel } from '@/lib/cache-console/downgradeGuard';
 
 /**
  * The override control: preview → confirm → sync anyway.
@@ -74,11 +75,6 @@ export function OverrideClient() {
     }
   }
 
-  const lossLabel = (shrunk) =>
-    (shrunk ?? [])
-      .map((s) => `${s.section} ${s.before}→${s.after}`)
-      .join(', ');
-
   return (
     <div className="flex flex-col gap-3">
       {error && (
@@ -130,7 +126,7 @@ export function OverrideClient() {
           >
             {busy
               ? 'กำลัง sync…'
-              : `override และ sync ทับเลย — ยอมให้หาย ${lossLabel(preview.shrunk)}`}
+              : overrideConfirmLabel(preview.shrunk)}
           </button>
 
           <p className="text-xs text-[var(--text-muted)]">

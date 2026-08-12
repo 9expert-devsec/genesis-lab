@@ -61,6 +61,46 @@
  */
 export const SNAPSHOT_SECTION_SHRINK_RATIO = 0.5;
 
+/**
+ * ── NAV'S OWN THRESHOLD, AND WHY IT IS TIGHTER THAN LANDING'S ───────────────
+ *
+ * MEASURED on the live snapshot, not assumed: `nav_menu_cache.data` has just
+ * TWO sections — `programs` with 25 groups and `skills` with SIX — and no
+ * `sections` counter field at all, so landing's payload-vs-counter divergence
+ * has no analogue here.
+ *
+ * Six is the number that decides this. At landing's 50%, `skills` would have to
+ * lose FOUR of its six groups before anything stopped it — by which point
+ * two-thirds of the mega menu, on every public page, has silently gone.
+ *
+ * 25% instead, and the arithmetic is the argument:
+ *   skills   1 of 6 = 17%  → allowed. A skill genuinely retired upstream is a
+ *                            legitimate taxonomy change and must not need a
+ *                            click, or the guard gets raised until it is inert.
+ *   skills   2 of 6 = 33%  → gated. Two whole mega-menu columns disappearing
+ *                            at once is worth stopping for.
+ *   programs 6 of 25 = 24% → allowed;  7 of 25 = 28% → gated.
+ *
+ * The deeper reason the numbers differ: landing's sections are ADMIN-EDITED
+ * CONTENT (banners, featured courses, reviews) that moves every week, so its
+ * threshold has to tolerate ordinary editing. Nav's two sections are UPSTREAM
+ * TAXONOMY — programs and skills change rarely and never by an editor's hand —
+ * so ordinary churn there is one group, and anything larger deserves a look.
+ *
+ * A SEPARATE CONSTANT, deliberately not consolidated with landing's. They
+ * govern different quantities with different volatility, and a single shared
+ * number could only be right for one of them.
+ *
+ * ── WHAT THIS CANNOT SEE, stated because it is a real limit ─────────────────
+ * The count is GROUPS, not courses within them. A skills group collapsing from
+ * 29 courses to 1 while remaining present is invisible here. It is not
+ * invisible in practice — syncNavMenuData omits a group whose `items` came back
+ * empty (buildEntry's caller drops `items.length === 0`), so a fully-failed
+ * group leaves the count — but a PARTIAL collapse inside a surviving group is
+ * genuinely not covered by this guard.
+ */
+export const NAV_SECTION_SHRINK_RATIO = 0.25;
+
 export const DOWNGRADE_VERDICT = Object.freeze({
   OK: 'ok',
   REFUSE_DOWNGRADE: 'refuse-downgrade',
@@ -105,7 +145,16 @@ export function sectionCountsOf(data) {
  * sections present on BOTH sides are compared; a section that vanishes from the
  * shape is reported separately so it is visible rather than silently ignored.
  */
-export function assessDowngrade({ storedCounts, incomingCounts, allowShrink = false } = {}) {
+export function assessDowngrade({
+  storedCounts,
+  incomingCounts,
+  allowShrink = false,
+  // Which threshold governs THIS snapshot. Defaults to landing's so existing
+  // callers are unchanged; nav passes its own. A parameter rather than a
+  // lookup keyed on the cache name, so the choice is visible at the call site
+  // and a new snapshot cannot silently inherit a number nobody chose for it.
+  shrinkRatio = SNAPSHOT_SECTION_SHRINK_RATIO,
+} = {}) {
   const stored = storedCounts ?? {};
   const incoming = incomingCounts ?? {};
 
@@ -140,7 +189,7 @@ export function assessDowngrade({ storedCounts, incomingCounts, allowShrink = fa
     // ratio, and that is asserted directly.
     if (before <= 0) continue;
     const ratio = (before - after) / before;
-    if (ratio > SNAPSHOT_SECTION_SHRINK_RATIO) {
+    if (ratio > shrinkRatio) {
       shrunk.push({ section: key, before, after, lost: before - after, ratio });
     }
   }
@@ -172,7 +221,7 @@ export function assessDowngrade({ storedCounts, incomingCounts, allowShrink = fa
     vanished,
     hadStoredSnapshot: true,
     reason:
-      `สแนปช็อตใหม่เล็กลงมากเกินเกณฑ์ ${Math.round(SNAPSHOT_SECTION_SHRINK_RATIO * 100)}% `
+      `สแนปช็อตใหม่เล็กลงมากเกินเกณฑ์ ${Math.round(shrinkRatio * 100)}% `
       + `จึงไม่เขียนทับของเดิม: ${detail} `
       + '(refused: the incoming snapshot is materially smaller; the stored one is untouched)',
   };
@@ -219,4 +268,34 @@ export function buildRefusalRecord({ assessment, incomingCounts, at, actor = 'sy
     vanished: assessment.vanished,
     reason: assessment.reason,
   };
+}
+
+/**
+ * The confirm control's own label, as a function of what will be lost.
+ *
+ * ── WHY THIS IS NOT JUST A TEMPLATE STRING IN THE COMPONENT ─────────────────
+ * The ruling is that the override confirm RESTATES THE NUMBERS AT THE POINT OF
+ * CLICK — the panel's table above it is not enough, because a button reading
+ * "ยืนยัน" under a table is a button people click having read the heading and
+ * not the rows.
+ *
+ * As a template literal inside a client component that only renders after a
+ * preview, that ruling had NOTHING over it: a control-break that dropped the
+ * numbers from the label left the whole suite green, because
+ * renderToStaticMarkup can only reach the component's initial state and no
+ * test can mount a React root here (the runner is isolation:'none'). Extracting
+ * it makes the claim behavioural — the label is a value a pure test can assert
+ * on — rather than text nobody can see.
+ */
+export function overrideConfirmLabel(shrunk) {
+  const list = Array.isArray(shrunk) ? shrunk : [];
+  if (list.length === 0) {
+    // No numbers to state means no confirmation to give. The caller renders no
+    // button in this case; the label exists so the function is total.
+    return 'override และ sync ทับเลย';
+  }
+  const detail = list
+    .map((s) => `${s.section} ${s.before}→${s.after}`)
+    .join(', ');
+  return `override และ sync ทับเลย — ยอมให้หาย ${detail}`;
 }

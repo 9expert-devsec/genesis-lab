@@ -24,6 +24,12 @@ import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 import { skills as SKILLS_CONFIG } from '@/config/site';
+import {
+  assessDowngrade,
+  sectionCountsOf,
+  permitsSnapshotWrite,
+  NAV_SECTION_SHRINK_RATIO,
+} from '@/lib/cache-console/downgradeGuard';
 
 const CACHE_KEY = 'navmenu_v1';
 
@@ -86,7 +92,14 @@ async function buildEntry(filter) {
   return { items: courseListWithAlias, firstCover };
 }
 
-export async function syncNavMenuData() {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.allowShrink] bypass the downgrade guard for THIS
+ *   run only — set by an admin override, never persisted.
+ * @param {string} [options.actor] who a refusal is attributed to; defaults to
+ *   the reserved system:cron id.
+ */
+export async function syncNavMenuData({ allowShrink = false, actor = 'system:cron' } = {}) {
   await dbConnect();
   const errors = [];
 
@@ -153,6 +166,75 @@ export async function syncNavMenuData() {
 
   // ── Upsert ────────────────────────────────────────────────────────
   const status = errors.length === 0 ? 'ok' : 'partial';
+
+  /**
+   * ── THE DOWNGRADE GUARD, ON THIS WRITE TOO ──────────────────────────────
+   *
+   * Same invariant, same place: in the writer, not in its callers. This job has
+   * two — the cron route and the admin resync route — and neither should have
+   * to remember.
+   *
+   * The previous document is read HERE and only here; this sync did not read it
+   * before, because it had no reason to. The counts come from `data`, which for
+   * nav is two maps of groups — `sectionCountsOf` handles both shapes, so there
+   * is one guard rather than a second implementation that could drift.
+   *
+   * NAV_SECTION_SHRINK_RATIO, not landing's. Measured: `skills` holds SIX
+   * groups, so at landing's 50% it would have to lose four before anything
+   * stopped it — two-thirds of the mega menu, on every public page. The
+   * constant's own docstring carries the arithmetic.
+   */
+  const previousDoc = await NavMenuCache.findOne({ key: CACHE_KEY }).lean().exec();
+  const storedCounts = sectionCountsOf(previousDoc?.data);
+  const incomingCounts = sectionCountsOf({ programs: programsData, skills: skillsData });
+  const downgrade = assessDowngrade({
+    storedCounts,
+    incomingCounts,
+    allowShrink,
+    shrinkRatio: NAV_SECTION_SHRINK_RATIO,
+  });
+
+  if (!permitsSnapshotWrite(downgrade.verdict)) {
+    // Only the refusal record is written — `data`, `syncedAt` and `status` are
+    // left exactly as they were, so the mega menu keeps serving what it has.
+    await NavMenuCache.updateOne(
+      { key: CACHE_KEY },
+      {
+        $set: {
+          lastRefusal: {
+            at: new Date(),
+            actor,
+            storedSections: storedCounts,
+            incomingSections: incomingCounts,
+            shrunk: downgrade.shrunk,
+            vanished: downgrade.vanished,
+            reason: downgrade.reason,
+            syncStatus: status,
+            syncErrors: errors,
+          },
+        },
+      }
+    );
+
+    // eslint-disable-next-line no-console
+    console.warn(`[syncNavMenuData] ${downgrade.reason}`);
+
+    // No revalidatePath: nothing was published, so there is nothing to
+    // regenerate — and `('/', 'layout')` is the widest bust in the codebase to
+    // spend on a write that did not happen.
+    return {
+      ok: false,
+      refused: true,
+      verdict: downgrade.verdict,
+      reason: downgrade.reason,
+      shrunk: downgrade.shrunk,
+      storedSections: storedCounts,
+      incomingSections: incomingCounts,
+      status,
+      errors,
+    };
+  }
+
   await NavMenuCache.findOneAndUpdate(
     { key: CACHE_KEY },
     {
@@ -161,6 +243,9 @@ export async function syncNavMenuData() {
         'data.skills':   skillsData,
         syncedAt: new Date(),
         status,
+        // Writing clears the refusal: whatever was blocked has either been
+        // repaired by a healthy run or deliberately overridden.
+        lastRefusal: null,
       },
     },
     { upsert: true, new: true }

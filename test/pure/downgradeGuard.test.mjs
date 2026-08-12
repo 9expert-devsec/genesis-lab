@@ -6,6 +6,7 @@ import {
   assessDowngrade,
   sectionCountsOf,
   permitsSnapshotWrite,
+  overrideConfirmLabel,
 } from '@/lib/cache-console/downgradeGuard';
 import { COLLAPSE_SHRINK_RATIO } from '@/lib/cache-console/resetPlan';
 
@@ -230,4 +231,51 @@ test('permitsSnapshotWrite is an allow-list of exactly one verdict', () => {
   assert.equal(permitsSnapshotWrite(DOWNGRADE_VERDICT.OK), true);
   assert.equal(permitsSnapshotWrite(DOWNGRADE_VERDICT.REFUSE_DOWNGRADE), false);
   assert.equal(permitsSnapshotWrite('anything-else'), false);
+});
+
+// ══ THE CONFIRM LABEL — the ruling that had nothing over it ════════════════
+
+test('RULING REVERSED: the confirm label RESTATES the numbers', () => {
+  /**
+   * "The override confirm must restate the numbers at the point of click."
+   *
+   * As a template literal inside OverrideClient this ruling was unguarded: a
+   * control-break that dropped the numbers from the button label left the whole
+   * suite green, because the confirm state only exists after a preview and
+   * renderToStaticMarkup reaches only the initial render. Extracting the label
+   * is what makes the ruling assertable at all.
+   */
+  const label = overrideConfirmLabel([
+    { section: 'programs', before: 25, after: 3, lost: 22, ratio: 0.88 },
+    { section: 'banners', before: 15, after: 2, lost: 13, ratio: 0.867 },
+  ]);
+  for (const n of ['programs', '25', '3', 'banners', '15', '2']) {
+    assert.ok(label.includes(n), `the confirm label omits ${n}`);
+  }
+});
+
+test('CONTROL: a label built from a DIFFERENT loss says different numbers', () => {
+  // Without this, "the label contains 25" would pass for a hardcoded string.
+  const label = overrideConfirmLabel([{ section: 'skills', before: 9, after: 1, lost: 8, ratio: 0.889 }]);
+  assert.ok(label.includes('skills') && label.includes('9') && label.includes('1'));
+  assert.ok(!label.includes('programs'));
+});
+
+test('the label states EVERY shrunken section, not just the first', () => {
+  // A confirm naming one of three losses is a confirm for the wrong thing.
+  const label = overrideConfirmLabel([
+    { section: 'a', before: 10, after: 1 },
+    { section: 'b', before: 20, after: 2 },
+    { section: 'c', before: 30, after: 3 },
+  ]);
+  for (const s of ['a', 'b', 'c']) assert.ok(label.includes(s), `missing ${s}`);
+});
+
+test('the label is total — an empty or malformed loss list does not throw', () => {
+  // The component renders no button in this case, but a label function that
+  // threw would take the whole panel down with it — and the panel is the only
+  // route to unblocking the cron.
+  for (const bad of [[], null, undefined, 'nope', 42]) {
+    assert.equal(typeof overrideConfirmLabel(bad), 'string');
+  }
 });
