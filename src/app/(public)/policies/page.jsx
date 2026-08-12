@@ -44,7 +44,7 @@ export default function PoliciesPage() {
           { label: 'หน้าหลัก', href: '/' },
           { label: POLICY_HUB.title },
         ]}
-        icon="listChecks"
+        illustration={POLICY_HUB.illustration}
         title={POLICY_HUB.title}
         titleEn={POLICY_HUB.titleEn}
         lede="ศูนย์รวมเอกสารนโยบายและข้อกำหนด ที่เกี่ยวข้องกับความเป็นส่วนตัว และการใช้บริการเว็บไซต์และบริการของ 9EXPERT"

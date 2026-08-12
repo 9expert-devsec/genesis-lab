@@ -100,6 +100,7 @@ export const POLICY_PAGES = [
     slug: 'privacy-policy',
     href: '/privacy-policy',
     icon: 'shield',
+    illustration: { src: '/policies-img/privacy-hero.png', width: 360, height: 240 },
     title: 'นโยบายคุ้มครองข้อมูลส่วนบุคคล',
     titleEn: 'Privacy Policy',
     blurb: 'อธิบายวิธีการเก็บรวบรวม ใช้ เปิดเผย และปกป้องข้อมูลส่วนบุคคลของคุณ',
@@ -113,6 +114,7 @@ export const POLICY_PAGES = [
     slug: 'cookie-policy',
     href: '/cookie-policy',
     icon: 'cookie',
+    illustration: { src: '/policies-img/cookie-hero.png', width: 360, height: 240 },
     title: 'นโยบายการใช้คุกกี้',
     titleEn: 'Cookie Policy',
     blurb: 'อธิบายการใช้งานคุกกี้บนเว็บไซต์ของเรา และตัวเลือกการตั้งค่าของคุณ',
@@ -122,6 +124,7 @@ export const POLICY_PAGES = [
     slug: 'terms',
     href: '/terms',
     icon: 'terms',
+    illustration: { src: '/policies-img/terms-hero.png', width: 360, height: 240 },
     title: 'ข้อกำหนดและเงื่อนไข',
     titleEn: 'Terms & Conditions',
     blurb: 'เงื่อนไขการใช้บริการเว็บไซต์ เนื้อหา และบริการของ 9EXPERT',
@@ -131,6 +134,7 @@ export const POLICY_PAGES = [
     slug: 'refund-policy',
     href: '/refund-policy',
     icon: 'refund',
+    illustration: { src: '/policies-img/refund-hero.png', width: 360, height: 240 },
     title: 'นโยบายการยกเลิกและคืนเงิน',
     titleEn: 'Cancellation & Refund Policy',
     blurb: 'เงื่อนไขและขั้นตอนการยกเลิกการซื้อคอร์สเรียนและการขอคืนเงิน',
@@ -143,7 +147,28 @@ export const POLICY_HUB = {
   href: '/policies',
   title: 'นโยบายและข้อกำหนด',
   titleEn: 'Policies & Legal Center',
+  illustration: { src: '/policies-img/policies-hero.png', width: 240, height: 240 },
 };
+
+/**
+ * ── ABOUT THE HERO ARTWORK ──────────────────────────────────────────────────
+ *
+ * Lives in public/policies-img/ — NOT public/policies/, which would sit at the
+ * same URL as the /policies route and shadow it in a way that is very hard to
+ * see. reservedPaths.js carries a matching `policies-img` entry, and the parity
+ * test derived from readdir(public/) went red until it did.
+ *
+ * `width`/`height` are the RENDERED box, not the file's intrinsic size. The
+ * sources are 1254×1254 (the hub) and 1536×1024 (the four detail pages), so
+ * every one is being served far larger than it draws; next/image resizes and
+ * re-encodes, which is why the box is declared here rather than the file size.
+ *
+ * The four 3:2 files render at 360×240 and the square hub file at 240×240, so
+ * all five have the same optical height and the row of heroes reads as one set.
+ *
+ * The artwork is DECORATIVE. It carries no information the heading does not,
+ * and PolicyHero renders it aria-hidden with an empty alt.
+ */
 
 /** Look up one policy page by slug. Returns undefined if unknown. */
 export function findPolicy(slug) {

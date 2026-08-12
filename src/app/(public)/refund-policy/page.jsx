@@ -84,7 +84,7 @@ export default function RefundPolicyPage() {
         { label: POLICY_HUB.title, href: POLICY_HUB.href },
         { label: policy.title },
       ]}
-      icon={policy.icon}
+      illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`${POLICY_ENTITY} (9EXPERT) กำหนดหลักเกณฑ์และเงื่อนไขการยกเลิกการสมัครอบรม การเลื่อนวันอบรม และการขอคืนเงิน เพื่อความชัดเจนและเป็นธรรมกับผู้เข้าอบรมทุกท่าน`}

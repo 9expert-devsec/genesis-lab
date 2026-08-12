@@ -95,6 +95,10 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
   { segment: 'people', source: 'static' },
+  // The legal centre's hero artwork. NOT `policies` — that is the /policies
+  // route, and a public/ directory of the same name would shadow it in a way
+  // that is very hard to see. The `-img` suffix is deliberate.
+  { segment: 'policies-img', source: 'static' },
   { segment: 'port', source: 'static' },
 
   // ── HAND-MAINTAINED. NOTHING VERIFIES THESE. ─────────────────────────────

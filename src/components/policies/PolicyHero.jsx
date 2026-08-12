@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { PolicyBreadcrumb } from './PolicyBreadcrumb';
 import { PolicyIcon } from './PolicyIcon';
 import { POLICY_VERSION } from '@/config/policies';
@@ -5,23 +6,24 @@ import { POLICY_VERSION } from '@/config/policies';
 /**
  * The one hero used by all five legal pages.
  *
- * ── WHY ONE MOTIF AND NOT THE FIGMA'S FIVE ──────────────────────────────────
- * The design gave each page a bespoke illustration: a folder-and-scales pair, a
- * cookie bubble over a browser panel, a document stack with a lock badge, a
- * credit card with a wallet and a sync ring. Four hand-built vector
- * compositions, all of them light-mode art built from literal hex.
+ * ── IT NOW RENDERS REAL ARTWORK, AND THE COMPONENT DID NOT MOVE ─────────────
+ * This used to draw a single geometric motif — a token-filled panel holding the
+ * page's icon — because the Figma's four bespoke illustrations were light-only
+ * vector art that would each have needed re-tuning by hand for dark mode.
  *
- * They are not ported, for two reasons. Five pages carrying two visual
- * languages read as unfinished, and every one of those compositions would need
- * re-tuning by hand for dark mode. What replaces them is deliberately one
- * shape — a token-filled panel holding the page's own icon — drawn entirely
- * from CSS variables and `currentColor`, so the dark theme costs nothing.
+ * Commissioned artwork replaced them, one per page. The COMPONENT is unchanged:
+ * the box, the spacing, and the below-md rule all still live here, so the five
+ * pages cannot drift apart. Only what fills the box changed.
  *
- * The icon is the SAME glyph as the hub card that links here (see PolicyIcon),
- * which is what carries the sense of continuity the bespoke art was carrying.
+ * The artwork carries no baked-in background — verified, 0.00% opaque pixels
+ * around the border of all six files — which is what lets one set of PNGs sit
+ * on both the light and the dark surface. If a future file arrives with a white
+ * rectangle in it, the fix is a new export, NOT a CSS filter or a blend mode:
+ * those would wash out the blues that make the set look like one family.
  *
- * If a hero looks bare, the fix is restraint — tighter type, more space — not
- * a second visual language.
+ * `illustration` comes from config/policies.js, which owns the rendered box
+ * size. See the note there for why the declared size is much smaller than the
+ * source files.
  */
 /**
  * `updated` is passed in rather than read from config: it is a claim about THIS
@@ -30,7 +32,7 @@ import { POLICY_VERSION } from '@/config/policies';
  */
 export function PolicyHero({
   breadcrumb,
-  icon,
+  illustration,
   title,
   titleEn,
   lede,
@@ -73,16 +75,26 @@ export function PolicyHero({
             )}
           </div>
 
-          {/* The motif. Decorative: hidden from assistive tech and dropped
-              below md, where the text column needs the full width. */}
-          <div aria-hidden="true" className="shrink-0 max-md:hidden">
-            <div className="relative flex h-[140px] w-[200px] items-center justify-center rounded-2xl bg-9e-action/10 ring-1 ring-inset ring-9e-action/20 dark:bg-[#48B0FF]/10 dark:ring-[#48B0FF]/25">
-              <span className="absolute h-[104px] w-[104px] rounded-full bg-9e-action/5 dark:bg-[#48B0FF]/5" />
-              <span className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface)] text-9e-action shadow-sm dark:text-[#48B0FF]">
-                <PolicyIcon name={icon} className="h-8 w-8" strokeWidth={1.6} />
-              </span>
+          {/* The illustration. DECORATIVE — empty alt and aria-hidden, because
+              the h1 beside it already carries the meaning and a screen reader
+              announcing "folder with shield and scales" would only add noise.
+
+              Dropped below md, where the text column needs the full width.
+              Explicit width/height reserve the box so nothing reflows when the
+              image arrives, and it is deliberately NOT priority: on mobile it
+              is not rendered at all, and on desktop it is decoration that must
+              not compete with the text for bandwidth. */}
+          {illustration && (
+            <div aria-hidden="true" className="shrink-0 max-md:hidden">
+              <Image
+                src={illustration.src}
+                alt=""
+                width={illustration.width}
+                height={illustration.height}
+                className="h-auto w-auto select-none"
+              />
             </div>
-          </div>
+          )}
         </div>
       </div>
     </section>
