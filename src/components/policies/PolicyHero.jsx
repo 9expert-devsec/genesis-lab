@@ -46,7 +46,7 @@ export function PolicyHero({
           {/* Text column — 640 in the Figma, unchanged at 1200 because it is
               capped by readable measure, not by the container width. */}
           <div className="max-w-[640px]">
-            <h1 className="text-[32px] font-extrabold leading-tight text-[var(--text-primary)]">
+            <h1 className="text-[32px] font-bold leading-tight text-[var(--text-primary)]">
               {title}
             </h1>
             {titleEn && (

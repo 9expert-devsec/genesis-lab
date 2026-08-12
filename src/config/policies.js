@@ -168,7 +168,7 @@ export const POLICY_SHORTCUTS = [
     // that section's id silently breaks this tile — it was `#browser-settings`
     // until the page was rebuilt from the source document.
     icon: 'settings',
-    href: '/cookie-policy#browser-settings',
+    href: '/cookie-policy#manage',
     title: 'จัดการการตั้งค่าคุกกี้',
     blurb: 'ดูวิธีปรับแต่งคุกกี้ผ่านเบราว์เซอร์ของคุณ',
   },
