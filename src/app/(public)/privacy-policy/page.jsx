@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { PolicyLayout } from '@/components/policies/PolicyLayout';
+import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -218,6 +218,21 @@ export default function PrivacyPolicyPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
+      /*
+        This page never carried a banner, because its content was real and the
+        amber draft warning would have been false. But "real" was never the
+        same as "in force": the site is not in production, the policy has never
+        taken effect, and counsel has not reviewed the rewrite. A visitor had no
+        way to know any of that.
+
+        The detail line names the one substantive gap — §5's retention periods,
+        which were dropped because every row in the source was [ระบุจำนวนปี].
+        Phrased as "ยังไม่ได้กำหนด", not "อยู่ระหว่างการกำหนด": nobody is
+        currently determining them.
+      */
+      notice={
+        <PolicyStatusNotice detail="ระยะเวลาการเก็บรักษาข้อมูลแต่ละประเภทในข้อ 5 ยังไม่ได้กำหนด และจะระบุเพิ่มเติมเมื่อนโยบายฉบับนี้เริ่มมีผลบังคับใช้" />
+      }
       help={{
         icon: 'dpo',
         title: 'มีคำถามเกี่ยวกับข้อมูลส่วนบุคคล?',
