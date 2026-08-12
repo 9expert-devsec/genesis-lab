@@ -46,6 +46,21 @@ export async function resolveCourse(
     fetchExtensionByAlias = getCourseExtensionByAlias,
     fetchExtension = getCourseExtension,
     fetchCourse = getCourseByCodeInsensitive,
+    /**
+     * ── THE ADMIN PREVIEW BYPASS, AND THE ONLY THING THAT OPENS IT ───────────
+     * `true` resolves a course whose extension says `isPublished: false`. Its
+     * one caller is /preview/course/[code], which calls `auth()` and 404s
+     * before it gets here if there is no admin session. There is deliberately
+     * NO query parameter and NO cookie of our own behind this: a bypass that
+     * leaks is worse than the defect, and the safest bypass is one with nothing
+     * to forge — an unauthenticated request cannot set a NextAuth session, so
+     * it cannot reach a `true` here by any route.
+     *
+     * The PUBLIC route never passes it, and cannot: it is ISR-cached
+     * (revalidate 3600), so it must not read cookies at all — doing so would
+     * make every one of the 78 course pages render dynamically.
+     */
+    includeHidden = false,
   } = {}
 ) {
   if (!slug) return null;
@@ -55,7 +70,7 @@ export async function resolveCourse(
   // 1) Custom URL alias.
   const alias = seg.startsWith('/') ? seg : `/${seg}`;
   const byAlias = await fetchExtensionByAlias(alias).catch(() => null);
-  if (byAlias && byAlias.isPublished !== false) {
+  if (byAlias && (includeHidden || byAlias.isPublished !== false)) {
     /**
      * CASE-TOLERANT, because the stored key can LAG AN UPSTREAM RENAME.
      *
@@ -82,7 +97,9 @@ export async function resolveCourse(
      * this one URL and none of the next ones — nothing stops upstream renaming
      * again tomorrow.
      */
-    const course = await fetchCourse(byAlias.courseId).catch(() => null);
+    const course = await fetchCourse(byAlias.courseId, { includeHidden }).catch(
+      () => null
+    );
     if (course) {
       return { course, extension: byAlias, mode: 'alias' };
     }
@@ -97,13 +114,28 @@ export async function resolveCourse(
     // and four siblings 404 outright.
     const courseId = seg.slice(0, -SUFFIX.length).toUpperCase();
     if (!courseId) return null;
-    const course = await fetchCourse(courseId).catch(() => null);
+    const course = await fetchCourse(courseId, { includeHidden }).catch(() => null);
     if (!course) return null;
     // Look up extension by the upstream's canonical course_id (which
     // may differ in case from the URL fragment).
     const extension = await fetchExtension(course.course_id).catch(
       () => null
     );
+    /**
+     * ── PATH 2 HAD NO isPublished GATE AT ALL, AND THAT WAS HALF THE DEFECT ──
+     * Un-publishing a course removed only its PRETTY url. The derived
+     * /<code>-training-course kept serving the full page, because this branch
+     * read the extension for its SEO and gallery and never looked at the flag.
+     * So "hidden" meant one of a course's two public URLs stopped working —
+     * which is worse than either outcome on its own, since the admin sees the
+     * alias 404 and reasonably concludes the course is gone.
+     *
+     * The check sits AFTER the extension read rather than before, because the
+     * flag lives on the extension and this path arrives holding only a code.
+     * `=== false` and not `!isPublished`: a course with no extension row at all
+     * has never been hidden by anybody, and must keep resolving.
+     */
+    if (!includeHidden && extension?.isPublished === false) return null;
     return { course, extension, mode: 'code' };
   }
 

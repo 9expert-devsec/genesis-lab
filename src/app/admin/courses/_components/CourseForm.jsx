@@ -1075,9 +1075,22 @@ export function CourseForm({
   );
 
   // ── THE SHELL — both modes ────────────────────────────────────────
-  const previewHref = urlAlias.trim()
+  /**
+   * Preview opens the REAL public URL. `?preview=1` is appended when the course
+   * is hidden, because that URL now 404s for everyone — including this admin,
+   * whose session the ISR-cached page deliberately does not read.
+   *
+   * The parameter is not a credential and grants nothing on its own; the server
+   * gate is the admin session (see resolveHiddenCourseForAdmin in the catch-all
+   * route). It is appended off the FORM's `isPublished` — the admin's intent,
+   * possibly unsaved — which is safe in both directions: the parameter is inert
+   * on a published course, and the preview arm serves a published one too. So
+   * neither an unsaved toggle nor a stale one produces a broken link.
+   */
+  const previewPath = urlAlias.trim()
     ? `/${urlAlias.trim().replace(/^\//, '')}`
     : `/${String(courseId ?? '').toLowerCase()}-training-course`;
+  const previewHref = isPublished ? previewPath : `${previewPath}?preview=1`;
 
   return (
     /* h-[100dvh] + an inner scroll, NOT `position: sticky`. The header stays

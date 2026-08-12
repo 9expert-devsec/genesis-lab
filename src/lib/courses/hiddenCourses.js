@@ -126,6 +126,63 @@ export function filterNavMenuGroups(groups, hidden) {
   return out;
 }
 
+const SUFFIX = '-training-course';
+
+/**
+ * Does this public slug belong to a HIDDEN course? The `courseId`, or null.
+ *
+ * ── WHY THIS PROBE EXISTS RATHER THAN JUST RESOLVING THE COURSE ─────────────
+ * The catch-all route is ISR-cached (revalidate 3600). The admin preview needs
+ * `cookies()`, and reading a dynamic API anywhere in a render takes that render
+ * out of the full-route cache — so a preview check placed on the ordinary path
+ * would make all 78 course pages, plus every custom and builder page, render
+ * dynamically. This answers "is there even anything here to preview?" using
+ * nothing dynamic, so the cookie read happens ONLY on the handful of URLs that
+ * belong to a course an admin has hidden.
+ *
+ * ── AND WHY IT IS ALMOST FREE ───────────────────────────────────────────────
+ * It starts from `loadHiddenCourseIds()`, which the public header has already
+ * called this request (getNavMenuData), so the memo usually answers it. With
+ * nothing hidden — the production state as measured, 0 of 78 — it returns on
+ * that set being empty and issues no query at all. Only when something IS
+ * hidden does the alias branch cost one indexed findOne.
+ *
+ * Both URL shapes are checked, because a course has two and un-publishing has
+ * to govern both: the stored `urlAlias`, and the derived
+ * `/<code>-training-course`.
+ */
+export async function findHiddenCourseForSlug(
+  slug,
+  { hidden, findByAlias } = {}
+) {
+  const seg = String(slug ?? '').trim();
+  if (!seg) return null;
+
+  const set = hidden ?? (await loadHiddenCourseIds());
+  if (set.size === 0) return null;
+
+  // Legacy shape — decidable from the string alone, no query.
+  if (seg.endsWith(SUFFIX)) {
+    const code = seg.slice(0, -SUFFIX.length);
+    if (isHiddenCourse(set, code)) return normaliseCourseKey(code);
+  }
+
+  // Alias shape — one indexed lookup, scoped to hidden rows.
+  const alias = seg.startsWith('/') ? seg : `/${seg}`;
+  const lookup = findByAlias ?? defaultFindHiddenByAlias;
+  const doc = await lookup(alias).catch(() => null);
+  return doc?.courseId ? normaliseCourseKey(doc.courseId) : null;
+}
+
+async function defaultFindHiddenByAlias(alias) {
+  const { dbConnect } = await import('@/lib/db/connect');
+  await dbConnect();
+  const { default: CourseExtension } = await import('@/models/CourseExtension');
+  return CourseExtension.findOne({ urlAlias: alias, isPublished: false })
+    .select('courseId')
+    .lean();
+}
+
 /**
  * The set of hidden course codes. ONE indexed read, memoised per request.
  *
