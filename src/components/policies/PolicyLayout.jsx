@@ -23,7 +23,7 @@ import { POLICY_PAGES, POLICY_HUB } from '@/config/policies';
  */
 export function PolicyLayout({
   breadcrumb,
-  icon,
+  illustration,
   title,
   titleEn,
   lede,
@@ -39,7 +39,7 @@ export function PolicyLayout({
     <>
       <PolicyHero
         breadcrumb={breadcrumb}
-        icon={icon}
+        illustration={illustration}
         title={title}
         titleEn={titleEn}
         lede={lede}

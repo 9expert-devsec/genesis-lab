@@ -146,7 +146,7 @@ export default function CookiePolicyPage() {
         { label: POLICY_HUB.title, href: POLICY_HUB.href },
         { label: policy.title },
       ]}
-      icon={policy.icon}
+      illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`เอกสารนี้เป็นส่วนเสริมของนโยบายคุ้มครองข้อมูลส่วนบุคคลของ ${POLICY_ENTITY} (9EXPERT) อธิบายประเภทคุกกี้ที่เว็บไซต์ใช้งาน วัตถุประสงค์ และวิธีที่ท่านจัดการคุกกี้ได้`}

@@ -82,7 +82,7 @@ export default function TermsPage() {
         { label: POLICY_HUB.title, href: POLICY_HUB.href },
         { label: policy.title },
       ]}
-      icon={policy.icon}
+      illustration={policy.illustration}
       title={policy.title}
       titleEn={policy.titleEn}
       lede={`ข้อกำหนดและเงื่อนไขนี้กำหนดข้อตกลงระหว่างผู้ใช้บริการกับ ${POLICY_ENTITY} (9EXPERT) ในการเข้าถึงและใช้งานเว็บไซต์ เนื้อหา และบริการทั้งหมดของเรา`}
