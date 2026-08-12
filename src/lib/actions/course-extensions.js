@@ -20,6 +20,7 @@ import CourseExtension from '@/models/CourseExtension';
 import { duplicateKeyMessage, duplicateKeyField } from '@/lib/db/duplicateKeyMessage';
 import { aliasConflict, normaliseAlias, legacyPathOwner } from '@/lib/courses/aliasAvailability';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -296,7 +297,13 @@ export async function saveCourseExtension(courseId, data) {
     //
     // null here is meaningful, not missing: this is an upsert, so a null
     // `before` is how the trail says "this created the extension".
-    const before = extensionFields(await CourseExtension.findOne({ courseId }).lean());
+    // The raw document is kept alongside the summary because the visibility
+    // plan must distinguish "the field is absent" from "the field is false",
+    // and `extensionFields` coerces both to false — correct for an audit line
+    // that reports a boolean, wrong for a rule whose whole premise is that an
+    // absent flag means VISIBLE.
+    const beforeDoc = await CourseExtension.findOne({ courseId }).lean();
+    const before = extensionFields(beforeDoc);
 
     const doc = await CourseExtension.findOneAndUpdate({ courseId }, update, {
       upsert: true,
@@ -310,6 +317,36 @@ export async function saveCourseExtension(courseId, data) {
     revalidatePath(`${ADMIN_PATH}/${courseId}`);
     if (cleanAlias) revalidatePath(cleanAlias);
     revalidatePath(`/${courseId.toLowerCase()}-training-course`);
+
+    /**
+     * A VISIBILITY FLIP CHANGES EVERY LISTING, NOT JUST THIS COURSE'S PAGES.
+     *
+     * The four paths above were sufficient while `isPublished` gated only URL
+     * resolution. Hiding a course now also takes it out of the mega menu, the
+     * home page, /training-course, /schedule, every catalog page, the article
+     * related-course rails and every page-builder course_list — all of which
+     * bake their output and none of which is under those four paths. Without
+     * this the course page 404s the instant the toggle is saved while the
+     * listings keep advertising it for up to the ISR window (and, for the two
+     * snapshot surfaces, up to 3h plus that window).
+     *
+     * The plan is a pure function so the DECISION — flip or no flip — is
+     * testable without a request context or a database, the same split
+     * courseRevalidatePlan.js already uses for the webhook path.
+     *
+     * NOT wrapped in try/catch, unlike the sync writers that share this
+     * `('/', 'layout')` scope. Their guard exists because `revalidatePath`
+     * throws outside a request scope and a cron must not fail a write it has
+     * already made. This is a server action: it always has one, the four calls
+     * above are unguarded for the same reason, and adding a catch here would be
+     * copying the shape of that fix rather than its reason.
+     */
+    for (const { path, type } of planVisibilityRevalidation({
+      before: beforeDoc,
+      after: update,
+    }).paths) {
+      revalidatePath(path, type);
+    }
 
     // THE SECOND KEY SPACE. `recordId` is the `course_id` CODE, not an MSDB
     // ObjectId — CourseExtension keys on it (see the model: "matches course_id
@@ -371,6 +408,22 @@ export async function deleteCourseExtension(courseId) {
   const removed = await CourseExtension.findOneAndDelete({ courseId }).lean();
 
   revalidatePath(ADMIN_PATH);
+
+  /**
+   * DELETING A HIDDEN COURSE'S EXTENSION UN-HIDES IT, and that is a visibility
+   * flip like any other. The row carried the only `isPublished: false` there
+   * was; with it gone the course is visible again everywhere — so the listings
+   * that were told to drop it have to be told to put it back.
+   *
+   * `after: null` says exactly that: no extension means visible. Same plan and
+   * same scope as the save path, rather than a second rule about deletion.
+   */
+  for (const { path, type } of planVisibilityRevalidation({
+    before: removed,
+    after: null,
+  }).paths) {
+    revalidatePath(path, type);
+  }
 
   recordAdminActionAfter({
     menu:        'courses',
