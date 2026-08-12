@@ -87,7 +87,14 @@ export const ADMIN_PAGES = [
       { key: 'registrations',             label: 'การลงทะเบียน',                href: '/admin/registrations',             match: 'prefix' },
       { key: 'career_path_registrations', label: 'Career Path Registrations',   href: '/admin/career-path-registrations', match: 'prefix' },
       { key: 'recruits',      label: 'ประกาศงาน',     href: '/admin/recruits',      match: 'prefix' },
-      { key: 'landing_cache', label: 'Landing Cache', href: '/admin/landing-cache', match: 'prefix' },
+      // THE KEY IS DELIBERATELY STILL `landing_cache` while the page is now the
+      // whole cache console at /admin/cache. `Role.pages` stores these strings
+      // in Mongo, so renaming the key would revoke the screen from every role
+      // that had been granted it until each was edited by hand — a silent
+      // permission regression dressed up as a tidy-up. The label and href moved;
+      // the permission did not. /admin/landing-cache still resolves to this key
+      // through its own requirePage call (that page is now a redirect).
+      { key: 'landing_cache', label: 'Cache Console', href: '/admin/cache', match: 'prefix' },
       { key: 'webhook_logs',  label: 'Webhook Logs',  href: '/admin/webhook-logs',  match: 'prefix' },
       { key: 'security',      label: 'ความปลอดภัย',   href: '/admin/security',      match: 'prefix' },
       { key: 'profile',       label: 'โปรไฟล์',       href: '/admin/profile',       match: 'prefix' },
