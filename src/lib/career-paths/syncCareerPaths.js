@@ -25,6 +25,7 @@
  * Intentionally NOT marked "use server" — server-internal helper.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CareerPath from '@/models/CareerPath';
 import { listCareerPaths } from '@/lib/api/career-paths';
@@ -203,6 +204,39 @@ export async function syncCareerPaths() {
         `upsert ${shaped.filter.career_path_id}: ${err?.message ?? 'failed'}`
       );
     }
+  }
+
+  /**
+   * REGENERATE THE PAGES THAT BAKED THE OLD LIST — same invariant as
+   * syncLandingData:436 and syncNavMenuData.
+   *
+   * triggerCareerPathSync:16 already revalidates, but it is ONE of four
+   * callers. The cron (every 6h, the main path), the admin resync route and
+   * lib/actions/career-paths all call syncCareerPaths directly and bypass it,
+   * so from those three the write reached Mongo and never reached a visitor.
+   * The invariant belongs to the WRITE.
+   *
+   * Scope measured, not defaulted: career paths are read by PublicHeader.jsx:34
+   * for the Career Path dropdown, which mounts on EVERY public route plus the
+   * home page (inline, outside the group) plus the 404. `/career-path-project`
+   * is ○ Static (1h) and every other public route is static too, so a narrower
+   * path would leave the dropdown stale nearly everywhere. Same three-surface
+   * argument as the nav menu; same idiom as the eight existing call sites.
+   *
+   * `/[...slug]` (career-path detail) is ƒ Dynamic and needs no invalidation —
+   * the trigger's extra revalidatePath for it is harmless but not load-bearing.
+   *
+   * Guarded like syncLandingData: revalidatePath throws outside a request
+   * scope, and a failed regeneration must not fail a sync that already wrote.
+   */
+  try {
+    revalidatePath('/', 'layout');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[syncCareerPaths] revalidatePath("/", "layout") skipped:',
+      err?.message ?? err
+    );
   }
 
   // eslint-disable-next-line no-console
