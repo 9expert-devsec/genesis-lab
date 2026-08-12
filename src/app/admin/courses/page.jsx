@@ -23,7 +23,10 @@ export default async function AdminCoursesPage() {
   await requirePage('courses');
 
   const [coursesRes, extensionsRes, programsRes] = await Promise.allSettled([
-    listPublicCourses(),
+    // includeHidden — this IS the management table. It carries the สถานะ
+    // column that says เผยแพร่ / ซ่อน, so a hidden course missing from it would
+    // remove the only control that can un-hide it.
+    listPublicCourses({ includeHidden: true }),
     listCourseExtensions(),
     listPrograms(),
   ]);

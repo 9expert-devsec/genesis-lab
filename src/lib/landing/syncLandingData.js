@@ -216,7 +216,12 @@ export async function syncLandingData() {
     featuredOnlineIdsResult,
     featuredReviewIdsResult,
   ] = await Promise.allSettled([
-    listPublicCourses(),
+    // includeHidden — the snapshot stores the SUPERSET and getLandingData
+    // filters on the way out. Same reasoning as syncNavMenuData's buildEntry:
+    // this cron runs on the main-built Production deployment, so a write-time
+    // filter would not reach the dev-served home page, and it would make
+    // re-publishing wait up to three hours for the next sync.
+    listPublicCourses({ includeHidden: true }),
     getOnlineCourses(),
     listPrograms(),
     listSkills(),
@@ -254,7 +259,11 @@ export async function syncLandingData() {
   const programProbes = await Promise.allSettled(
     programs.map(async (p) => {
       const pid = String(p.program_id ?? p._id ?? '');
-      const { items } = await listPublicCourses({ program: pid });
+      // includeHidden, matching the phase-1 read above: this probe decides
+      // whether a PROGRAM appears at all, and it is cross-checked against
+      // `allCourses` just below. Filter one side and not the other and the
+      // contradiction check fires on every hidden course.
+      const { items } = await listPublicCourses({ program: pid, includeHidden: true });
       return { itemCount: items?.length ?? 0 };
     })
   );

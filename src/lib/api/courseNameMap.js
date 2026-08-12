@@ -41,7 +41,12 @@ import { listPublicCourses } from '@/lib/api/public-courses';
  * @returns {Promise<Record<string, string>>} lowercased code → name, `{}` on failure
  */
 export async function buildCourseNameMap() {
-  const { items } = await listPublicCourses().catch(() => ({ items: [] }));
+  // includeHidden — this map exists to turn a stored CODE into a NAME on admin
+  // screens. Its whole contract is "a miss must never produce a blank", and a
+  // registration taken before the course was hidden is precisely the row that
+  // would go blank: the code is in the database forever, the course is not in
+  // the filtered list. Hiding a course must not degrade a sales screen.
+  const { items } = await listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] }));
   const map = {};
   for (const c of items ?? []) {
     const code = String(c?.course_id ?? '').trim();

@@ -32,7 +32,19 @@ const CACHE_KEY = 'navmenu_v1';
  * Returns { items, firstCover } — never throws (caller handles via allSettled).
  */
 async function buildEntry(filter) {
-  const { items } = await listPublicCourses(filter);
+  /**
+   * includeHidden — THE SNAPSHOT STORES THE SUPERSET, getNavMenuData FILTERS.
+   *
+   * Not an oversight and not a leak. This job runs as a Vercel Cron on the
+   * PRODUCTION deployment, which builds `main`; the site under test is served
+   * from `dev`. A filter here would therefore not reach the UAT mega menu until
+   * main shipped — on the very surface the defect was found on. Worse, it would
+   * make un-hiding asymmetric: a write-time filter DELETES the row, so
+   * re-publishing a course would leave it missing from the menu for up to three
+   * hours until the next sync re-added it, while the read-time filter restores
+   * it on the next request.
+   */
+  const { items } = await listPublicCourses({ ...filter, includeHidden: true });
   const courseList = (items ?? []).map((c) => ({
     course_id: c.course_id,
     course_name: c.course_name ?? '',

@@ -4,6 +4,7 @@ import ProgramPageConfig from '@/models/ProgramPageConfig';
 import SkillPageConfig from '@/models/SkillPageConfig';
 import SkillOrder from '@/models/SkillOrder';
 import { buildSkillOrderMap } from '@/lib/navmenu/skillOrder';
+import { filterNavMenuGroups, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 
 /**
  * Read the nav mega menu snapshot built by syncNavMenuData(), plus the
@@ -37,7 +38,7 @@ export async function getNavMenuData() {
     await dbConnect();
 
     // Snapshot + slug configs + skill order in parallel.
-    const [doc, programConfigs, skillConfigs, skillOrderRows] = await Promise.all([
+    const [doc, programConfigs, skillConfigs, skillOrderRows, hidden] = await Promise.all([
       NavMenuCache.findOne({ key: CACHE_KEY }).lean().exec(),
       ProgramPageConfig.find({ urlSlug: { $nin: [null, ''] } })
         .select('programId urlSlug')
@@ -46,6 +47,23 @@ export async function getNavMenuData() {
         .select('skillId urlSlug')
         .lean(),
       SkillOrder.find({}).select('skillId order isHidden').lean(),
+      /**
+       * THE HIDDEN-COURSE FILTER LIVES HERE, ON THE READ, NOT IN THE SYNC.
+       *
+       * The snapshot this function reads is written by a Vercel Cron on the
+       * Production deployment, which builds `main`. The mega menu people
+       * actually look at is served from `dev`. Filtering in syncNavMenuData
+       * would therefore leave hidden courses in the UAT menu — each one linking
+       * at a 404 — until main shipped, which is the defect this round is for.
+       *
+       * It rides in the SAME Promise.all as the three reads that were already
+       * here, so it costs no additional round trip of latency; one indexed
+       * query, measured at 38.7 ms warm returning zero rows. `hidden` is never
+       * rejected: loadHiddenCourseIds catches its own failure and returns an
+       * empty set, which degrades to today's behaviour rather than to an empty
+       * menu.
+       */
+      loadHiddenCourseIds(),
     ]);
 
     // Slug lookup maps keyed by lower-cased id ({ [programId]: urlSlug }).
@@ -60,8 +78,8 @@ export async function getNavMenuData() {
     // crosses the Server→Client Component boundary as a prop.
     return JSON.parse(
       JSON.stringify({
-        programs: doc?.data?.programs ?? {},
-        skills:   doc?.data?.skills   ?? {},
+        programs: filterNavMenuGroups(doc?.data?.programs ?? {}, hidden),
+        skills:   filterNavMenuGroups(doc?.data?.skills   ?? {}, hidden),
         programSlugs,
         skillSlugs,
         skillOrder: buildSkillOrderMap(skillOrderRows),

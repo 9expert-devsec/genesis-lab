@@ -176,7 +176,13 @@ export async function checkAliasAvailable(alias, courseId) {
     })
       .select('courseId')
       .lean(),
-    listPublicCourses().then(
+    // includeHidden — a HIDDEN course still owns its derived
+    // /<code>-training-course path. Filtering here would let an admin take an
+    // alias that shadows it, and the collision would only surface the day that
+    // course is re-published — at which point two rows point at one URL and
+    // `findOne({urlAlias})` decides which page the public sees. That is the
+    // exact failure the unique index and this check were added for.
+    listPublicCourses({ includeHidden: true }).then(
       (r) => ({ ok: true, items: r?.items ?? [] }),
       (err) => ({ ok: false, error: err?.message ?? 'upstream lookup failed' })
     ),

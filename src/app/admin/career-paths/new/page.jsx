@@ -12,7 +12,8 @@ export default async function NewCareerPathPage() {
 
   // We pass the full list so the curriculum item editor can do a local,
   // typeahead-style filter without a roundtrip per keystroke.
-  const result = await listPublicCourses().catch(() => ({ items: [] }));
+  // includeHidden — admin picker; see lib/api/public-courses for the rule.
+  const result = await listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] }));
   const courses = (result?.items ?? []).map((c) => ({
     _id:         c._id,
     course_id:   c.course_id,

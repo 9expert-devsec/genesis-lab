@@ -201,7 +201,12 @@ test('the helper tries the direct call FIRST and returns it unconditionally', ()
   const body = /export async function getCourseByCodeInsensitive\(([\s\S]*?)\n\}/.exec(ADAPTER);
   assert.ok(body, 'the helper is where it is expected');
   const directAt = body[1].indexOf('const direct = await fetchByCode(courseId)');
-  const listAt = body[1].indexOf('await fetchList()');
+  // `fetchList(` rather than `fetchList()` — the fallback now forwards
+  // `includeHidden` so an admin preview of one of the five mixed-case courses
+  // can still recover it from the list. The claim this test makes is about
+  // ORDER, not about the argument list, and pinning the empty parens made it go
+  // red for a change that left the ordering untouched.
+  const listAt = body[1].indexOf('await fetchList(');
   assert.ok(directAt > -1 && listAt > -1, 'both paths are present');
   assert.ok(directAt < listAt, 'the direct call comes first');
   assert.match(body[1], /if \(direct\) return direct;/, 'and short-circuits on a hit');
