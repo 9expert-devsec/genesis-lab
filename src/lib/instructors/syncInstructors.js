@@ -6,6 +6,7 @@
  * with `$setOnInsert` so admin toggles survive subsequent syncs.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Instructor from '@/models/Instructor';
 import { listInstructors } from '@/lib/api/instructors';
@@ -75,6 +76,39 @@ export async function syncInstructors() {
         `upsert ${shaped.filter.instructor_id}: ${err?.message ?? 'failed'}`
       );
     }
+  }
+
+  /**
+   * REGENERATE THE PAGE THAT BAKED THE OLD ROSTER — same invariant as
+   * syncLandingData:436.
+   *
+   * triggerInstructorSync:16 revalidates `/admin/instructors` and nothing else.
+   * That path is ƒ Dynamic, so it needed no invalidation, and the PUBLIC
+   * surface got none at all — from every caller, including the trigger.
+   *
+   * Scope measured, and deliberately NARROW. Instructors reach exactly one
+   * statically cached public surface:
+   *
+   *   /about-us              ○ Static (1h)   ← via actions/about.js:37
+   *   /masterclass/[slug]    ƒ Dynamic       ← getInstructorsByIds, no cache
+   *   /[...slug]             ƒ Dynamic       ← pageBuilder resolveSectionData
+   *
+   * So `revalidatePath('/about-us')` covers it. This one does NOT widen to
+   * '/' + 'layout' the way the nav menu and career paths do: instructors are
+   * not in the header, so nothing outside /about-us goes stale, and dropping
+   * the whole public layout cache on a 6-hourly sync would be a cost with no
+   * corresponding staleness to fix.
+   *
+   * Guarded like syncLandingData.
+   */
+  try {
+    revalidatePath('/about-us');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[syncInstructors] revalidatePath("/about-us") skipped:',
+      err?.message ?? err
+    );
   }
 
   // eslint-disable-next-line no-console
