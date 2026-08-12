@@ -136,54 +136,150 @@ function PolicyRelatedStrip({ currentSlug }) {
  * /privacy-policy does NOT render this — its content is ported from the live
  * site and is real.
  */
-export function PolicyDraftNotice({ detail }) {
+function NoticeBand({ tone, icon, role, headingId, heading, body, detail }) {
+  const draft = tone === 'draft';
+
   return (
     <aside
-      role="alert"
-      aria-labelledby="policy-draft-heading"
-      /*
-        Deliberately the loudest thing on the page, and deliberately NOT built
-        from the site's palette. Every other surface here is a semantic token,
-        so a token-coloured warning would harmonise with the page and read as
-        part of the design. This one is a solid amber slab with a black rule
-        top and bottom, identical in both themes, because it is not decoration
-        and it is not supposed to look at home.
-
-        It is also full-bleed rather than a card: a bordered box inside the
-        content column is a callout, and a callout is something a reader learns
-        to skip.
-      */
-      className="border-y-4 border-[#0D1B2A] bg-[#F5C518]"
+      role={role}
+      aria-labelledby={headingId}
+      className={
+        draft
+          ? 'border-y-4 border-[#0D1B2A] bg-[#F5C518]'
+          : 'border-y border-[var(--surface-border)] bg-[var(--surface-muted)]'
+      }
     >
       <div className="mx-auto flex w-full max-w-[1200px] items-start gap-4 px-0 py-5 max-md:px-4">
         <PolicyIcon
-          name="alert"
-          className="mt-0.5 h-8 w-8 shrink-0 text-[#0D1B2A]"
-          strokeWidth={2.25}
+          name={icon}
+          className={
+            draft
+              ? 'mt-0.5 h-8 w-8 shrink-0 text-[#0D1B2A]'
+              : 'mt-0.5 h-6 w-6 shrink-0 text-9e-action dark:text-[#48B0FF]'
+          }
+          strokeWidth={draft ? 2.25 : 2}
         />
-        <div className="text-[#0D1B2A]">
+        <div className={draft ? 'text-[#0D1B2A]' : ''}>
           <p
-            id="policy-draft-heading"
-            className="text-[17px] font-extrabold leading-tight"
+            id={headingId}
+            className={
+              draft
+                ? 'text-[17px] font-extrabold leading-tight'
+                : 'text-[15px] font-bold leading-tight text-[var(--text-primary)]'
+            }
           >
-            เอกสารฉบับร่าง — ยังไม่มีผลบังคับใช้ และห้ามใช้อ้างอิง
+            {heading}
           </p>
-          <p className="mt-1.5 text-[14px] font-medium leading-[1.7]">
-            เนื้อหาทั้งหมดในหน้านี้จัดทำขึ้นเป็นตัวอย่างประกอบการออกแบบเท่านั้น
-            ยังไม่ผ่านการตรวจสอบโดยฝ่ายกฎหมาย และไม่ใช่เงื่อนไขที่บริษัทกำหนด
-            กรุณา
-            <Link href="/contact-us" className="font-bold underline underline-offset-2">
-              ติดต่อทีมงาน 9EXPERT
-            </Link>
-            เพื่อขอข้อมูลที่เป็นทางการก่อนตัดสินใจใดๆ
+          <p
+            className={
+              draft
+                ? 'mt-1.5 text-[14px] font-medium leading-[1.7]'
+                : 'mt-1.5 text-[13px] leading-[1.7] text-[var(--text-secondary)]'
+            }
+          >
+            {body}
           </p>
           {detail && (
-            <p className="mt-2 border-t border-[#0D1B2A]/25 pt-2 text-[14px] font-bold leading-[1.7]">
+            <p
+              className={
+                draft
+                  ? 'mt-2 border-t border-[#0D1B2A]/25 pt-2 text-[14px] font-bold leading-[1.7]'
+                  : 'mt-2 border-t border-[var(--surface-border)] pt-2 text-[13px] font-semibold leading-[1.7] text-[var(--text-secondary)]'
+              }
+            >
               {detail}
             </p>
           )}
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * TIER 2 — the page is a DRAFT and its specifics are invented.
+ *
+ * /terms and /refund-policy only. Deliberately the loudest thing on the page,
+ * and deliberately NOT built from the site's palette: every other surface here
+ * is a semantic token, so a token-coloured warning would harmonise with the
+ * page and read as part of the design. A solid amber slab with a dark rule top
+ * and bottom, identical in both themes, because it is not decoration and is not
+ * supposed to look at home. role="alert", not "note".
+ *
+ * Full-bleed rather than a card — a bordered box inside the content column is a
+ * callout, and a callout is something readers learn to skip.
+ */
+export function PolicyDraftNotice({ detail }) {
+  return (
+    <NoticeBand
+      tone="draft"
+      icon="alert"
+      role="alert"
+      headingId="policy-draft-heading"
+      heading="เอกสารฉบับร่าง — ยังไม่มีผลบังคับใช้ และห้ามใช้อ้างอิง"
+      body={
+        <>
+          เนื้อหาทั้งหมดในหน้านี้จัดทำขึ้นเป็นตัวอย่างประกอบการออกแบบเท่านั้น
+          ยังไม่ผ่านการตรวจสอบโดยฝ่ายกฎหมาย และไม่ใช่เงื่อนไขที่บริษัทกำหนด กรุณา
+          <Link href="/contact-us" className="font-bold underline underline-offset-2">
+            ติดต่อทีมงาน 9EXPERT
+          </Link>
+          เพื่อขอข้อมูลที่เป็นทางการก่อนตัดสินใจใดๆ
+        </>
+      }
+      detail={detail}
+    />
+  );
+}
+
+/**
+ * TIER 1 — the content is REAL, but the policy is not yet in force.
+ *
+ * /privacy-policy and /cookie-policy. Their text came from the company's own
+ * source documents, so the draft banner's wording was actively false on them:
+ * it called counsel-drafted policy "ตัวอย่างประกอบการออกแบบ" and denied it was
+ * "เงื่อนไขที่บริษัทกำหนด". Both clauses are gone here.
+ *
+ * What remains true, and all this says: the site is not in production, so the
+ * policy has never taken effect, and counsel has not reviewed it.
+ *
+ * ── WHY THE HEADING IS PHRASED AS A NEGATIVE ────────────────────────────────
+ * It reads "ยังไม่ผ่านการตรวจทานโดยที่ปรึกษากฎหมาย" — has NOT been reviewed —
+ * and NOT "อยู่ระหว่างการตรวจทาน", which would say a review is underway. No
+ * review is underway. The source documents recommend that counsel review before
+ * publication; a recommendation is not a status, and stating one as the other
+ * is the same defect as describing a cookie banner that does not exist.
+ *
+ * The same rule governs every `detail` line passed in here: say what is NOT
+ * done, never what is supposedly in progress.
+ *
+ * Still full-bleed for the same reason as tier 2, but built from semantic
+ * tokens and role="note" — this is a status, not a warning, and it should not
+ * compete with the amber slab on the two pages that genuinely need one.
+ */
+export function PolicyStatusNotice({ detail }) {
+  return (
+    <NoticeBand
+      tone="status"
+      icon="info"
+      role="note"
+      headingId="policy-status-heading"
+      heading="ฉบับก่อนเริ่มใช้บังคับ — ยังไม่ผ่านการตรวจทานโดยที่ปรึกษากฎหมาย"
+      body={
+        <>
+          เนื้อหาในหน้านี้จัดทำขึ้นตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
+          (PDPA) และยังไม่มีผลบังคับใช้
+          โดยจะเริ่มมีผลเมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ หากมีข้อสงสัย
+          กรุณาติดต่อเจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล (DPO) ที่{' '}
+          <a
+            href="mailto:dpo@9expert.co.th"
+            className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
+          >
+            dpo@9expert.co.th
+          </a>
+        </>
+      }
+      detail={detail}
+    />
   );
 }

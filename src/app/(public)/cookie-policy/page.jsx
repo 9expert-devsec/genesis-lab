@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { SiYoutube, SiGoogleanalytics } from 'react-icons/si';
-import { PolicyLayout, PolicyDraftNotice } from '@/components/policies/PolicyLayout';
+import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -207,19 +207,18 @@ export default function CookiePolicyPage() {
       numbered={false}
       currentSlug={policy.slug}
       /*
-        The detail line USED to warn about a fabricated cookie inventory table
-        at §03. That table is gone — the source document replaced it — and §03
-        is now the third-party service list, so the old wording pointed at the
-        wrong section AND described content that no longer exists. Corrected to
-        the item that is genuinely still open.
+        TIER 1, not the amber draft banner. This page's copy came from the
+        company's own source document, so calling it "ตัวอย่างประกอบการออกแบบ"
+        was false. What is still true is that the site is not in production and
+        counsel has not reviewed the text — which is all PolicyStatusNotice
+        claims.
 
-        NOTE: the banner's overall wording still calls this page a design
-        placeholder, which is no longer true now that the copy comes from the
-        source document. A replacement is proposed and awaiting a decision;
-        this edit only fixes the stale reference, it does not settle that.
+        The detail line says the cookie list has NOT been verified, rather than
+        that verification is under way. Nobody has started it. Same rule as the
+        heading: state what is not done, never a status that does not exist.
       */
       notice={
-        <PolicyDraftNotice detail="รายชื่อคุกกี้และผู้ให้บริการภายนอกในหัวข้อ 02 และ 03 ยังอยู่ระหว่างการตรวจสอบกับทีมพัฒนาระบบ และอาจไม่ตรงกับคุกกี้ที่เว็บไซต์ใช้งานจริงทั้งหมด" />
+        <PolicyStatusNotice detail="รายชื่อคุกกี้และผู้ให้บริการภายนอกในหัวข้อ 02 และ 03 ยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ จึงอาจไม่ตรงกับคุกกี้ที่เว็บไซต์ใช้งานจริงทั้งหมด" />
       }
       help={{
         icon: 'settings',
@@ -309,9 +308,13 @@ export default function CookiePolicyPage() {
             The source document is headed "ต้องยืนยันรายชื่อ Cookie/Pixel ที่ใช้
             จริงกับทีม IDev ก่อนเผยแพร่". That confirmation has not happened, so
             the list says so on the page rather than only in this comment.
+
+            Phrased as "ยังไม่ได้ตรวจสอบ" — has not been verified — and not
+            "อยู่ระหว่างการตรวจสอบ", which would assert a review in progress
+            that nobody has begun.
           */}
           <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-            * รายชื่อผู้ให้บริการข้างต้นอยู่ระหว่างการตรวจสอบกับทีมพัฒนาระบบ
+            * รายชื่อผู้ให้บริการข้างต้นยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ
             และอาจมีการปรับปรุงก่อนประกาศใช้จริง
           </p>
         </Section>

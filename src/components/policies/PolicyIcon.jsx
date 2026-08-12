@@ -15,6 +15,7 @@ import {
   Calendar,
   Mail,
   TriangleAlert,
+  Info,
 } from 'lucide-react';
 
 /**
@@ -57,6 +58,7 @@ const ICONS = {
   calendar: Calendar,
   mail: Mail,
   alert: TriangleAlert,
+  info: Info,
 };
 
 /**
