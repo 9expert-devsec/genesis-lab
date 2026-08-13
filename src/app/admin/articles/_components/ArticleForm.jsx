@@ -44,6 +44,11 @@ import {
 import { pinCapacityMessage } from '@/lib/articlePositioning';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
 import {
+  excerptStatus,
+  fieldFromActionError,
+  EXCERPT_BLOCK_AT,
+} from '@/lib/articles/excerptStatus';
+import {
   formatSiteDateTime,
   fromLocalInput,
   toLocalInput,
@@ -160,6 +165,12 @@ export function ArticleForm({
   const isEdit = Boolean(article?._id);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
+  /**
+   * The server's rejection, split into the field it names and the rest. Kept
+   * apart from `error` so the message can be shown ON the field while anything
+   * unattributable still reaches the banner — see fieldFromActionError.
+   */
+  const [fieldError, setFieldError] = useState(null); // { field, message } | null
 
   // Sidebar — Cover
   const [coverUrl,      setCoverUrl]      = useState(article?.coverUrl      ?? '');
@@ -389,6 +400,16 @@ export function ArticleForm({
     immediatelyRender: false,
   });
 
+  /**
+   * The excerpt's live state. Recomputed on every keystroke — the rule lives in
+   * lib/articles/excerptStatus.js so it can be tested; this is only the read.
+   * `seoDescription` is an input because the warn threshold only applies when
+   * the excerpt is what becomes the meta description.
+   */
+  const excerptState = excerptStatus(excerpt, { seoDescription });
+  /** The server's message, but only when the server blamed THIS field. */
+  const excerptFieldError = fieldError?.field === 'excerpt' ? fieldError.message : null;
+
   // Auto-grow the title / excerpt textareas as their content grows.
   const titleRef = useRef(null);
   const excerptRef = useRef(null);
@@ -425,6 +446,7 @@ export function ArticleForm({
   //                       a date to render.
   const submit = useCallback(({ asDraft } = {}) => {
     setError(null);
+    setFieldError(null);
     if (!editor) {
       setError('Editor ยังไม่พร้อม');
       return;
@@ -437,6 +459,18 @@ export function ArticleForm({
     if (!trimmed)             { setError('กรุณาใส่เนื้อหา');         return; }
     if (!title.trim())        { setError('กรุณาใส่ชื่อบทความ');       return; }
     if (!slug.trim())         { setError('กรุณาใส่ slug');             return; }
+
+    // BLOCK only at the schema cap — the one length the server will actually
+    // refuse. Checked here rather than left to the round-trip so the admin is
+    // told before the save, and the message is the same one already sitting
+    // under the field. The WARN level deliberately does not gate: a truncated
+    // meta description is a trade-off to be aware of, not an error.
+    const excerptCheck = excerptStatus(excerpt, { seoDescription });
+    if (excerptCheck.blocked) {
+      setFieldError({ field: 'excerpt', message: excerptCheck.message });
+      setError(`คำโปรย: ${excerptCheck.message}`);
+      return;
+    }
 
     let finalActive      = active;
     let finalPublishedAt = publishedAt;
@@ -489,7 +523,13 @@ export function ArticleForm({
           ? await updateArticle(article._id, fd)
           : await createArticle(fd);
         if (!res || res.ok === false) {
-          setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+          const raw = res?.error ?? 'บันทึกไม่สำเร็จ';
+          setError(raw);
+          // Also attach it to the field the server named, when it named one.
+          // Unattributable messages ('ไม่พบบทความ', a thrown Error) get
+          // `field: null` and stay in the banner alone — guessing a field for
+          // them would point the admin at something that is not wrong.
+          setFieldError(fieldFromActionError(raw));
           return;
         }
         if (isEdit) {
@@ -696,14 +736,58 @@ export function ArticleForm({
               rows={1}
               className="w-full resize-none border-0 bg-transparent p-0 text-3xl font-bold leading-tight text-9e-navy outline-none placeholder:text-9e-slate-dp-50 dark:text-white"
             />
+            {/*
+              NO maxLength, deliberately — see lib/articles/excerptStatus.js.
+              It would truncate a paste silently, and the text is gone from the
+              clipboard too by the time anyone notices. The counter below says
+              what happened instead of hiding it.
+            */}
             <textarea
               ref={excerptRef}
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
               placeholder="สรุปสั้นๆ..."
               rows={1}
+              aria-invalid={excerptState.blocked || excerptFieldError ? 'true' : undefined}
+              aria-describedby="excerpt-status"
               className="mt-3 w-full resize-none border-0 bg-transparent p-0 text-lg leading-relaxed text-9e-slate-dp-50 outline-none placeholder:text-9e-slate-dp-50 dark:text-[#94a3b8]"
             />
+
+            {/*
+              Same shape as the editor's own footer stats further down — a plain
+              count in the same 11px muted type, so the two counters on this
+              screen read as one idea rather than as a stat and a validation.
+              It gains colour only when it has something to say.
+            */}
+            <div
+              id="excerpt-status"
+              className={
+                'mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] ' +
+                (excerptState.level === 'block'
+                  ? 'text-red-600 dark:text-red-400'
+                  : excerptState.level === 'warn'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-9e-slate-dp-50 dark:text-[#94a3b8]')
+              }
+            >
+              <span>
+                {excerptState.length.toLocaleString('en-US')} /{' '}
+                {EXCERPT_BLOCK_AT.toLocaleString('en-US')} ตัวอักษร
+              </span>
+              {excerptState.message && <span>{excerptState.message}</span>}
+              {/*
+                The server's own rejection, on the FIELD. It used to appear only
+                in the banner at the top of a scrolling page — which names the
+                field and then puts the message as far from it as the layout
+                allows. Shown alongside the live count, so "over by how much" is
+                answerable without doing the subtraction.
+              */}
+              {excerptFieldError && (
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  เซิร์ฟเวอร์ปฏิเสธ: {excerptFieldError}
+                </span>
+              )}
+            </div>
 
             <hr className="my-4 border-[var(--surface-border)]" />
 
