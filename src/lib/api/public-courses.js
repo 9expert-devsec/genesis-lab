@@ -9,6 +9,8 @@
  */
 
 import { aiFetch, unwrap } from './client';
+import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
+import { orderCoursesInCategory, orderCoursesGlobally } from '@/lib/courses/courseOrder';
 import { dropHiddenCourses, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 
 const PATH = '/public-course';
@@ -58,13 +60,59 @@ export async function listPublicCourses(
    * called" is what let the original gate sit here, green, covering one surface
    * out of twelve. Production callers pass nothing.
    */
-  { fetchUpstream = aiFetch, loadHidden = loadHiddenCourseIds } = {}
+  { fetchUpstream = aiFetch, loadHidden = loadHiddenCourseIds, loadOrder = loadCourseOrder } = {}
 ) {
   const raw = await fetchUpstream(PATH, {
     params: { skill, program },
     tags: ['public-courses'],
   });
-  const result = unwrap(raw);
+  let result = unwrap(raw);
+
+  /**
+   * ── THE ORDER IS APPLIED HERE, AT THE ORIGIN, AND ABOVE THE EARLY RETURN ──
+   *
+   * Every course list in this codebase comes from this function — there is no
+   * second origin. Ordering here rather than at the surfaces means two whole
+   * classes of mistake cannot occur: there is no separate call whose result a
+   * caller could compute and then drop, and a filtered call cannot be ordered
+   * by the wrong category, because the rank map is derived from THE SAME
+   * ARGUMENT that selected the courses.
+   *
+   * ABOVE `if (includeHidden) return result` ON PURPOSE. Thirteen of the
+   * twenty-five call sites take that path — including syncNavMenuData, which
+   * builds the entire mega menu, and syncLandingData. Ordering below it would
+   * leave the highest-traffic surface on upstream's order, and because the seed
+   * captures the order the site already renders, that mistake looks CORRECT on
+   * the day it ships and only appears the first time an admin rearranges
+   * something. There is an assertion pinned to this specifically.
+   *
+   * NO OPT-OUT PARAMETER, ruled and deliberate. The order is a property of the
+   * origin, not a request a caller may decline. A surface that one day needs a
+   * different order — a "sort by price" control, say — is a deliberate decision
+   * that gets its own guard, not a quiet argument threaded through here; adding
+   * one re-opens exactly the hole this closes, because "did this caller opt
+   * out, and should it have?" is unanswerable from source.
+   *
+   * `loadOrder` returns null when the order must not be applied — the read
+   * failed, or nothing is seeded yet. Both leave the array exactly as upstream
+   * sent it. See lib/courses/courseOrderStore.js for why that is the safe
+   * direction and "order nothing" is not.
+   */
+  const order = await loadOrder();
+  if (order) {
+    const items = result.items ?? [];
+    if (program) {
+      result = { ...result, items: orderCoursesInCategory(items, order.programCourseOrder.get(String(program))) };
+    } else if (skill) {
+      result = { ...result, items: orderCoursesInCategory(items, order.skillCourseOrder.get(String(skill))) };
+    } else {
+      result = { ...result, items: orderCoursesGlobally(items, {
+        programRank: order.programRank,
+        courseOrderByProgram: order.programCourseOrder,
+      }) };
+    }
+  }
+
   if (includeHidden) return result;
 
   const hidden = await loadHidden();
