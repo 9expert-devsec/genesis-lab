@@ -6,6 +6,7 @@ import {
 } from '@/lib/actions/articles';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
+import { toMetaDescription } from '@/lib/seo/metaDescription';
 import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
 import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
@@ -21,7 +22,16 @@ export async function generateMetadata({ params }) {
   try { slug = decodeURIComponent(rawSlug); } catch { /* malformed → keep raw */ }
   const article = await getArticleBySlug(slug);
   if (!article) return { title: 'ไม่พบบทความ' };
-  const description = article.seoDescription || article.excerpt || article.title;
+  // Truncated at RENDER, not at storage. `seoDescription` is capped at 160 by
+  // articleSchema, but the moment the value comes from the FALLBACK that cap
+  // does not apply — `excerpt` is capped at 2000 and `title` at 200, so either
+  // could put a paragraph in a <meta> tag. See lib/seo/metaDescription.js for
+  // the boundary rule and what it does to Thai.
+  const description = toMetaDescription(
+    article.seoDescription,
+    article.excerpt,
+    article.title
+  );
   const pageUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/articles/${slug}`;
   return {
     title:       article.seoTitle || article.title,
