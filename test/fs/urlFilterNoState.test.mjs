@@ -49,6 +49,11 @@ const FILTER_SCREENS = [
     component: 'RegistrationsClient',
     filters: ['status', 'q', 'source', 'range'],
   },
+  {
+    rel: 'src/app/admin/masterclass/registrations/_components/MasterclassRegistrationsClient.jsx',
+    component: 'MasterclassRegistrationsClient',
+    filters: ['status', 'q', 'range', 'courseId', 'batchId', 'licenseScope'],
+  },
 ];
 
 /** Screens that already followed the rule and are the reference for it. */
@@ -129,13 +134,48 @@ for (const { rel, component, filters } of FILTER_SCREENS) {
    * click. Every filter must appear in the object `navigate` serialises.
    */
   test(`${component}: navigate serialises every filter`, () => {
-    const nav = /const navigate = useCallback\(([\s\S]*?)\n  \}, \[/.exec(src);
-    assert.ok(nav, `${component}: navigate not found in the expected shape`);
+    /**
+     * The `next` OBJECT specifically, not the whole navigate body.
+     *
+     * The body also names every filter as a STRING literal in its
+     * `isDefault` checks (`k === 'licenseScope'`), so a scan of the body
+     * would go on matching after a filter was dropped from the serialised
+     * object — green while the filter silently stopped reaching the URL.
+     * This reads the object literal, where the filters appear as bare
+     * identifiers.
+     */
+    const next = /const next = \{([^}]*)\}/.exec(src);
+    assert.ok(next, `${component}: navigate's next-object not found in the expected shape`);
     for (const f of filters) {
-      assert.match(nav[1], new RegExp(`\\b${f}\\b`), `navigate does not carry ${f}`);
+      assert.match(
+        next[1],
+        new RegExp(`(^|[{,]\\s*)${f}\\s*[,:}]`),
+        `navigate does not serialise ${f} — it would be dropped from the next URL`
+      );
     }
   });
 }
+
+/**
+ * THE MASTERCLASS CONSEQUENCE, NAMED.
+ *
+ * On this screen a stale filter did more than mislabel the chrome: `courseId`
+ * feeds a FETCH. The batch dropdown is loaded from it, so following one
+ * `?courseId=A&batchId=…` deep link and then a second one for course B left the
+ * table showing B's registrations beside a รุ่น dropdown still listing A's
+ * batches — an admin could pick a batch that does not belong to the course on
+ * screen.
+ *
+ * The fix is that `courseId` is a prop, so the effect's dependency is the URL's
+ * value and it re-fetches on every navigation instead of once per mount. This
+ * pins the dependency, because a `useState` copy would satisfy every other
+ * assertion in this file the moment someone reintroduced it under another name.
+ */
+test('MasterclassRegistrationsClient: the batch options effect keys on the courseId prop', () => {
+  const src = readSource('src/app/admin/masterclass/registrations/_components/MasterclassRegistrationsClient.jsx').code;
+  assert.match(src, /getMasterclassBatchOptions\(courseId\)/, 'the batch fetch does not read courseId');
+  assert.match(src, /\}, \[courseId\]\);/, 'the batch effect does not re-run when courseId changes');
+});
 
 // ── The reference implementations, asserted so the argument keeps its examples ─
 
