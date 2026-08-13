@@ -7,7 +7,12 @@
  * them returns only genuine leftovers.) The vocabulary is now exactly three
  * states:
  *
- *   open -> เปิดรับ (green)   nearly_full -> ใกล้เต็ม (amber)   full -> เต็ม (red)
+ *   open         green   state เปิดรับ    action ลงทะเบียน
+ *   nearly_full  amber   state ใกล้เต็ม   action ใกล้เต็ม
+ *   full         red     state เต็ม      action เต็ม
+ *
+ * TWO words per state, not one — see the note on SCHEDULE_STATUS below for
+ * which surface reads which, and why the two equalities are deliberate.
  *
  * PRESENTATION ONLY. Nothing here writes, validates, or reinterprets a stored
  * status. The canonical keys below are the vocabulary MSDB actually emits —
@@ -129,8 +134,10 @@ export const SCHEDULE_STATUS = {
  * status at all.
  *
  * Returning null rather than defaulting to 'open' is deliberate: defaulting to
- * open is how an unrecognised value ends up advertised as green "เปิดรับ".
- * Call sites choose their own fallback explicitly.
+ * open is how an unrecognised value ends up advertised as green — and since
+ * the state/action split it would be advertised with an IMPERATIVE,
+ * "ลงทะเบียน", on a round nothing is known about. Call sites choose their own
+ * fallback explicitly.
  */
 export function normalizeScheduleStatus(raw) {
   if (typeof raw !== 'string') return null;

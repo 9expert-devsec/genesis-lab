@@ -48,8 +48,13 @@
  * Follows resolveScheduleBadge (lib/scheduleStatus.js:125): a pure function
  * returning a ready-to-render descriptor, so no call site re-derives the
  * classification. It shares NONE of that module's values — those are the
- * schedule vocabulary (เปิดรับ / ใกล้เต็ม / เต็ม) and a second surface reusing
- * them would tie course publication to schedule capacity.
+ * schedule vocabulary (states เปิดรับ / ใกล้เต็ม / เต็ม, with ลงทะเบียน as
+ * open's badge wording) and a second surface reusing them would tie course
+ * publication to schedule capacity.
+ *
+ * Note the SHAPE is not shared either: a schedule status carries `state` and
+ * `action`, this one carries a single `label`, because a course badge answers
+ * only "is it published" and offers the reader nothing to do.
  *
  * Colour is carried by the DOT, not the text. The text token is
  * --text-primary / --text-secondary, which is legible on both themes by
