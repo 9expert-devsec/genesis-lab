@@ -93,12 +93,23 @@ async function buildNewCoursesWithSchedules({
     })
     .filter(Boolean);
 
-  // Fall back to the top 8 from the list if no curated featured exist.
-  const sorted = [...allCourses].sort(
-    (a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999)
-  );
+  /**
+   * Fall back to the top 8 from the list if no curated featured exist.
+   *
+   * ── THE sort_order COMPARATOR HERE IS REPLACED, NOT SUPPLEMENTED ──────────
+   * This used to be `[...allCourses].sort((a,b) => (a.sort_order ?? 999) - …)`,
+   * the ONLY explicit course sort anywhere in genesis. `allCourses` comes from
+   * `listPublicCourses({ includeHidden: true })` above, which now returns the
+   * arranged order, so re-sorting by upstream's `sort_order` would take the
+   * order back off it — a second owner disagreeing with the first, on the home
+   * page.
+   *
+   * So the sort is GONE rather than made secondary: "the top 8" now means the
+   * first 8 in the arranged order, which is what the phrase meant all along.
+   * test/fs/courseOrderOwnership fails if any array sort returns here.
+   */
   const promotedRaw =
-    featuredDetails.length > 0 ? featuredDetails : sorted.slice(0, MAX_NEW_COURSES);
+    featuredDetails.length > 0 ? featuredDetails : allCourses.slice(0, MAX_NEW_COURSES);
 
   // Detail-by-id map for cheap lookups during enrichment.
   const detailById = new Map(featuredDetails.map((d) => [d.course_id, d]));
