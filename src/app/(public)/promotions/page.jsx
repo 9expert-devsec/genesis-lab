@@ -141,13 +141,13 @@ export default async function PromotionsListPage() {
 
       {/* Featured banner carousel (renders nothing when banners are empty) */}
       {banners.length > 0 && (
-        <section className="mx-auto max-w-[1200px] py-6">
+        <section className="mx-auto max-w-[1200px] px-4 py-6 lg:px-6">
           <PromotionBannerCarousel banners={banners} />
         </section>
       )}
 
       {/* Grid */}
-      <section className="mx-auto max-w-[1200px] py-10 lg:py-14">
+      <section className="mx-auto max-w-[1200px] px-4 py-10 lg:px-6 lg:py-14">
         {cards.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--surface-border)] bg-white p-10 text-center dark:bg-9e-border">
             <p className="text-base text-[#465469] dark:text-[#C5CEDA]">

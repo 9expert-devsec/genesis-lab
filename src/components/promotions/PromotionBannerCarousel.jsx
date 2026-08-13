@@ -133,7 +133,25 @@ export function PromotionBannerCarousel({ banners }) {
 
 function BannerSlide({ banner, priority = false }) {
   const img = (
-    <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-9e-ice md:aspect-[16/5] dark:bg-[#0D1B2A]">
+    /*
+      16:5 AT EVERY WIDTH — THE MOBILE aspect-[4/3] OVERRIDE IS GONE.
+
+      The banners admins upload are wide: measured against the live set, the
+      artwork is 360x112, a ratio of 3.214, which `aspect-[16/5]` (3.2) matches
+      almost exactly. Below `md` this box used to be `aspect-[4/3]` (1.333), and
+      `object-cover` resolves that mismatch by scaling to fill the taller box:
+      270/112 = 2.411, putting an 868px-wide image inside a 360px box and
+      DISCARDING 58.5% OF THE ARTWORK — 254px off each side, centred, so a
+      banner's logo and its call to action both fall outside the frame.
+
+      The band is short on a phone as a result (~102px tall inside the section's
+      px-4 at 360px), and that is the accepted trade: showing the whole banner
+      beats filling a taller strip with the middle third of it. If the design
+      wants a taller mobile band, that is a SEPARATE MOBILE ASSET authored at the
+      taller ratio and chosen here — a CMS problem, not a ratio problem. Do not
+      solve it by reinstating a mobile ratio the artwork does not have.
+    */
+    <div className="relative aspect-[16/5] w-full overflow-hidden rounded-2xl bg-9e-ice dark:bg-[#0D1B2A]">
       <Image
         src={banner.image_url}
         alt={banner.alt_text || 'โปรโมชั่น'}

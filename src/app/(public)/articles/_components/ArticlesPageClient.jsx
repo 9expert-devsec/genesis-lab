@@ -76,7 +76,13 @@ export function ArticlesPageClient({
   };
 
   return (
-    <div className="rounded-2xl bg-white pt-10 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
+    // `px-4 pt-10 sm:p-6` — the shell's own padding started at `sm`, so below
+    // 640px this white rounded-2xl card had NO horizontal padding at all and its
+    // side corners and shadow fell off the screen. `pt-10` is kept rather than
+    // folded into the `sm:p-6` shorthand because the extra top spacing above the
+    // toolbar is deliberate at every width; `sm:p-6` still overrides all four
+    // sides from 640px up, exactly as before.
+    <div className="rounded-2xl bg-white px-4 pt-10 shadow-9e-lg dark:bg-[#111d2c] sm:p-6">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-9e-slate-dp-50" />

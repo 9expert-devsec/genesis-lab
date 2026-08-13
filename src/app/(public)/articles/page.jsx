@@ -108,7 +108,7 @@ export default async function ArticlesIndexPage({ searchParams }) {
         </div>
       </section>
 
-      <section className="mx-auto mt-8 max-w-[1200px] pb-16">
+      <section className="mx-auto mt-8 max-w-[1200px] px-4 pb-16 lg:px-6">
         {/* useSearchParams inside ArticlesPageClient forces a CSR
             bailout for the search-param-driven subtree — Suspense
             gives the static pre-render something to flush. */}
