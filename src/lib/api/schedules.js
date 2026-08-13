@@ -103,11 +103,25 @@ export async function getAllSchedules({ status } = {}) {
  * @param {string} [options.status] — see PUBLIC_SCHEDULE_STATUSES above.
  *
  * Without `status`, upstream auto-filters to the registerable statuses and
- * dates >= today, so a `full` round never arrives. The registration page and
- * the course detail page pass PUBLIC_SCHEDULE_STATUSES because both must SHOW
- * a sold-out round rather than pretend it does not exist.
+ * dates >= today, so a `full` round never arrives. The registration page, the
+ * course detail page and the course CARDS pass PUBLIC_SCHEDULE_STATUSES
+ * because all must SHOW a sold-out round rather than pretend it does not exist.
  *
- * curl-verified 2026-04-23; status param curl-verified 2026-08-10.
+ * WHAT `status` DOES AND DOES NOT WIDEN — measured, because only the no-status
+ * case used to be documented and the difference decides whether a caller needs
+ * its own date filter:
+ *   · `status` widens the STATUS set only. The `>= today` bound is applied
+ *     UNCONDITIONALLY by the endpoint and is NOT lifted by passing `status` —
+ *     checked at the widest the enum allows (`status=all`): 104 rows globally,
+ *     zero dated before today, and per-course `all` returned byte-identical
+ *     rows to the public subset.
+ *   · Rows come back in ASCENDING date order.
+ * So a caller passing `status` still gets upcoming-only, already sorted, and
+ * needs NO client-side filter and NO client-side sort. A `full` round therefore
+ * lands in strict chronological position among the open ones.
+ *
+ * curl-verified 2026-04-23; status param curl-verified 2026-08-10;
+ * date bound + ordering under `status` curl-verified 2026-08-13.
  */
 export async function listSchedulesByCourse(courseObjectId, options = {}) {
   if (!courseObjectId) return { items: [], total: 0 };
