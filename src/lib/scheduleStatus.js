@@ -60,7 +60,7 @@ const ALIASES = {
  */
 export const SCHEDULE_STATUS = {
   open: {
-    label: 'เปิดรับ',
+    label: 'ลงทะเบียน',
     dot: 'bg-[#39b980]',
     text: 'text-[#39b980]',
     solid: 'bg-[#39b980] text-white',

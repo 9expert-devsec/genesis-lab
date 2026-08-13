@@ -2146,24 +2146,26 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
    * LINES is a clipping question nobody should have to think about.
    */
   const inner = (
-    <>
+  <>
+    <span className="flex items-center gap-1">
       <span
-        className="h-2 w-2 rounded-full"
+        className="h-2 w-2 flex-none rounded-full"
         style={{ backgroundColor: color }}
         aria-hidden
       />
       <span className="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
         {dateLabel}
       </span>
-      {/* Omitted entirely when the status is missing/blank. */}
-      {statusStyle && (
-      <span className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
-        {statusStyle.label}
-      </span>
-      )}
-      {isEarlyBird && <EarlyBirdPill />}
-    </>
-  );
+    </span>
+    {/* Omitted entirely when the status is missing/blank. */}
+    {statusStyle && (
+    <span className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
+      {statusStyle.label}
+    </span>
+    )}
+    {isEarlyBird && <EarlyBirdPill />}
+  </>
+);
 
   if (!href) {
     /*
