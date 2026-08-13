@@ -2,6 +2,7 @@ import { requirePage } from '@/lib/rbac/guard';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
 import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
+import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
 export const metadata = { title: 'การลงทะเบียน' };
@@ -45,6 +46,13 @@ export default async function Page({ searchParams }) {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
+      {/*
+        `dynamic = 'force-dynamic'` above keeps the SERVER fresh; it does not
+        reach the client Router Cache, which is what served a list missing a
+        just-created row while the same URL under F5 showed it. See the cost and
+        the no-flash reasoning in the component.
+      */}
+      <RefreshOnNavigate />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">การลงทะเบียน</h1>
