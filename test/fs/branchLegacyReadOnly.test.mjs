@@ -23,6 +23,9 @@ import { readSource, walkSources, countCallSites } from '../sourceScan.mjs';
 
 const ACTIONS = readSource('src/lib/actions/registrations.js');
 const INHOUSE_ROUTE = readSource('src/app/api/registration/inhouse/route.js');
+// The list query's `$or` clauses live here now — see the note in the
+// companyName test below.
+const LIST_FILTER = readSource('src/lib/registrations/listFilter.js');
 
 // ── 1. Nothing writes `branch` ──────────────────────────────────────────────
 
@@ -200,7 +203,18 @@ test('the admin action READS companyName but never writes the in-house one', () 
   assert.equal(/update\[['"]companyName['"]\]/.test(ACTIONS.code), false, 'no bracket assignment');
   assert.equal(INHOUSE_ALLOWLIST.includes("'companyName'"), false, 'not in the allowlist');
 
-  assert.match(ACTIONS.code, /\{\s*companyName:\s*\{\s*\$regex/, 'the search still matches on it');
+  /**
+   * THE SEARCH CLAUSE MOVED, THE CLAIM DID NOT.
+   *
+   * `listRegistrations` no longer hand-rolls its `$or`: the filter is built by
+   * `buildRegistrationFilter` in src/lib/registrations/listFilter.js, so that the
+   * date window can reach the list query and the summary counts from one
+   * derivation. The assertion follows the clause to its new home rather than
+   * being dropped — "the mirror exists because the search reads it" is exactly
+   * as load-bearing as before, and deleting the check because the code moved is
+   * how a reason gets lost.
+   */
+  assert.match(LIST_FILTER.code, /\bcompanyName:\s*rx\b/, 'the search still matches on it');
   assert.match(ACTIONS.code, /\.select\('companyName /, 'the list projection still selects it');
 });
 

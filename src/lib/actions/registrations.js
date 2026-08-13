@@ -6,6 +6,8 @@ import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { INHOUSE_STATUS_VALUES } from '@/lib/registrations/inhouseStatuses';
+import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
@@ -61,35 +63,23 @@ function entityForSource(source) {
 
 // ── List (paginated + filtered) ────────────────────────────────────
 
-export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public' } = {}) {
+export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public', range = 'all' } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
-  const Model  = getModel(source);
-  const filter = {};
+  const Model = getModel(source);
 
-  if (status && status !== 'all') {
-    filter.status = status;
-  }
-
-  if (q && q.trim()) {
-    const term = q.trim();
-    if (source === 'inhouse') {
-      filter.$or = [
-        { companyName:        { $regex: term, $options: 'i' } },
-        { contactFirstName:   { $regex: term, $options: 'i' } },
-        { contactLastName:    { $regex: term, $options: 'i' } },
-        { contactEmail:       { $regex: term, $options: 'i' } },
-      ];
-    } else {
-      filter.$or = [
-        { courseName:              { $regex: term, $options: 'i' } },
-        { 'coordinator.firstName': { $regex: term, $options: 'i' } },
-        { 'coordinator.lastName':  { $regex: term, $options: 'i' } },
-        { 'coordinator.email':     { $regex: term, $options: 'i' } },
-      ];
-    }
-  }
+  /**
+   * THE FILTER IS BUILT IN ONE PLACE, SHARED WITH THE COUNTS.
+   *
+   * `range` used to stop at `getRegistrationStatusCounts` and never reach this
+   * query, so the summary cards were filtered by date and the table below them
+   * was not — วันนี้ showed ทั้งหมด 1 above a table listing all seven rows.
+   * Both callers now derive from `buildRegistrationFilter` /
+   * `rangeToDateFilter` in lib/registrations/listFilter.js, so a date window
+   * that applies to one and not the other is no longer expressible.
+   */
+  const filter = buildRegistrationFilter({ status, q, source, range });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
   const total = await Model.countDocuments(filter);
@@ -149,7 +139,14 @@ export async function getRegistrationById(id, source = 'public') {
 // ── Status update ──────────────────────────────────────────────────
 
 const PUBLIC_STATUSES  = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
-const INHOUSE_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
+/**
+ * DERIVED, not written out again. This Set is the write-side gate on
+ * `updateRegistrationStatus`; the cards and the chips on the list screen are
+ * built from the same array in lib/registrations/inhouseStatuses.js. Spelling
+ * the five values here a second time is how the screen came to offer a `quoted`
+ * chip that no card could display.
+ */
+const INHOUSE_STATUSES = new Set(INHOUSE_STATUS_VALUES);
 
 export async function updateRegistrationStatus(id, status, source = 'public') {
   const session = await requireAdmin('registrations');
@@ -360,28 +357,37 @@ export async function getRegistrationStatusCounts({ range = 'all', source = 'pub
   await requireAdmin('registrations');
   await dbConnect();
 
-  const now = new Date();
-  let from = null;
-  if (range === 'today') {
-    from = new Date(now); from.setHours(0, 0, 0, 0);
-  } else if (range === 'week') {
-    from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0, 0, 0, 0);
-  } else if (range === 'month') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  }
-
-  const dateFilter = from ? { createdAt: { $gte: from } } : {};
+  // The SAME derivation the list query uses — see listRegistrations.
+  const dateFilter = rangeToDateFilter(range);
   const Model = getModel(source);
 
   if (source === 'inhouse') {
-    const [total, newCount, contacted, closedWon, closedLost] = await Promise.all([
+    /**
+     * ONE COUNT PER DECLARED STATUS, driven by the array — never by a list of
+     * names written here.
+     *
+     * The four hand-named counts this replaces omitted `quoted` entirely, so a
+     * real record was included in `total` and returned under no key at all. The
+     * card for it could not have shown a number even if one had been declared.
+     * Counting `INHOUSE_STATUS_VALUES` means a status added to that array is
+     * counted here without this file being edited.
+     *
+     * Keys are the STORED VALUE (`closed-won`, not `closedWon`), which is also
+     * the card key and the filter value, so no consumer has to map between
+     * spellings.
+     */
+    const [total, ...perStatus] = await Promise.all([
       Model.countDocuments(dateFilter),
-      Model.countDocuments({ ...dateFilter, status: 'new' }),
-      Model.countDocuments({ ...dateFilter, status: 'contacted' }),
-      Model.countDocuments({ ...dateFilter, status: 'closed-won' }),
-      Model.countDocuments({ ...dateFilter, status: 'closed-lost' }),
+      ...INHOUSE_STATUS_VALUES.map((value) =>
+        Model.countDocuments({ ...dateFilter, status: value })
+      ),
     ]);
-    return serialize({ total, new: newCount, contacted, closedWon, closedLost, range, source });
+
+    const byStatus = Object.fromEntries(
+      INHOUSE_STATUS_VALUES.map((value, i) => [value, perStatus[i]])
+    );
+
+    return serialize({ total, ...byStatus, range, source });
   } else {
     const [total, pending, confirmed, paid, cancelled] = await Promise.all([
       Model.countDocuments(dateFilter),

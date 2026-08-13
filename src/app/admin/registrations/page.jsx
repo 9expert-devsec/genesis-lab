@@ -21,7 +21,11 @@ export default async function Page({ searchParams }) {
   // not ask for it at all — and it joins the existing Promise.all rather than
   // adding a serial await.
   const [data, counts, courseNames] = await Promise.all([
-    listRegistrations({ page, status, q, source }),
+    // `range` goes to BOTH queries. It used to reach only the counts, so the
+    // date chips filtered the summary cards and left the table below them
+    // showing everything — see buildRegistrationFilter in
+    // src/lib/registrations/listFilter.js.
+    listRegistrations({ page, status, q, source, range }),
     getRegistrationStatusCounts({ range, source }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
@@ -50,12 +54,18 @@ export default async function Page({ searchParams }) {
         </div>
       </div>
 
+      {/*
+        The filters go down as PLAIN NAMES, not `initial*`. They are derived
+        from searchParams above on every render and the client renders straight
+        from them — see the header of RegistrationsClient for what the `initial`
+        prefix cost when they were seeded into useState instead.
+      */}
       <RegistrationsClient
         initialData={data}
-        initialStatus={status}
-        initialQ={q}
-        initialSource={source}
-        initialRange={range}
+        status={status}
+        q={q}
+        source={source}
+        range={range}
         counts={counts}
         lastEdited={lastEdited}
         courseNames={courseNames}
