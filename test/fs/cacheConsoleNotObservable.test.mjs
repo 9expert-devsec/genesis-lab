@@ -228,11 +228,23 @@ test('CONTROL: those claim patterns fire on the text they are meant to catch', (
   assert.ok(/\bserving from cache\b/i.test('currently serving from cache'));
 });
 
-test('the sync button is the ONLY write the console can perform', () => {
+test('the two sync buttons are the ONLY writes the console can perform', () => {
   /**
-   * Round 2 is read-only apart from the ported "Sync now". Any other mutating
-   * fetch would be round-3 scope landing early and unreviewed, so the count is
-   * pinned rather than the absence of a keyword: one POST, to one endpoint.
+   * Round 2 pinned this at ONE — the ported "Sync now" — because any other
+   * mutating fetch would have been round-3 scope landing early and unreviewed.
+   * The mechanism is unchanged and still the point: an exhaustive LIST, not the
+   * absence of a keyword, so a new write has to be added here by someone who
+   * has read this comment.
+   *
+   * Round 7 makes it TWO. The second is the nav-menu resync, and it exists
+   * because there was no way to rebuild nav_menu_cache from this screen at all:
+   * the landing button drives syncLandingData, and landing_cache is nowhere in
+   * the mega menu's read chain, so an admin whose menu was stale pressed the
+   * only control available and correctly concluded it did nothing.
+   *
+   * Note what did NOT change: the round-3+ destructive paths are server
+   * ACTIONS, not fetches, and are covered by their own guards. This list is
+   * specifically the console's client-initiated HTTP writes.
    */
   const posts = [];
   for (const f of consoleFiles()) {
@@ -240,8 +252,9 @@ test('the sync button is the ONLY write the console can perform', () => {
       posts.push(`${f.rel}: ${m[1]}`);
     }
   }
-  assert.deepEqual(posts, [
+  assert.deepEqual(posts.sort(), [
     "src/app/admin/cache/_components/LandingSyncButton.jsx: POST",
+    "src/app/admin/cache/_components/NavMenuSyncButton.jsx: POST",
   ]);
 });
 

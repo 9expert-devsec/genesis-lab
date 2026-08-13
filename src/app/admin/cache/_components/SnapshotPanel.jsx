@@ -1,6 +1,7 @@
 import { Panel, PanelError, Field } from './Panel';
 import { SyncedAtCaveat } from './Caveat';
 import { LandingSyncButton } from './LandingSyncButton';
+import { NavMenuSyncButton } from './NavMenuSyncButton';
 import { DowngradeRefusalPanel } from './DowngradeRefusalPanel';
 
 /**
@@ -183,6 +184,7 @@ export function SnapshotPanel({ snapshots, history = null }) {
             และรอบที่ล้มเหลวบางส่วนไม่ได้ทิ้งรายละเอียดไว้ที่ไหนเลย
           </p>
           <SyncedAtCaveat />
+          <NavMenuSyncButton />
         </div>
       </div>
     </Panel>

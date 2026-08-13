@@ -251,6 +251,34 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
    */
   entry('landing_cache', 'snapshot', 'สแนปช็อตแคช', 'full'),
   entry('landing_cache', 'mirror',   'คอลเลกชันมิเรอร์', 'full'),
+  /**
+   * Round 7. The manual nav-menu resync, now that /admin/cache has a button
+   * for it. Same menu key for the same reason as the two above — `landing_cache`
+   * is the RBAC page key for this whole screen (rbac/pages.js:97) and minting
+   * a nav-specific one would revoke the console from every role holding the
+   * old key. No new menu key was invented.
+   *
+   * A THIRD ENTITY and not a reuse of `snapshot`. `snapshot` could have carried
+   * it — nav_menu_cache is also a single document, and recordId ('navmenu_v1'
+   * vs 'homepage_v1') would tell the two records apart. It is separate anyway,
+   * for two reasons that outweigh the saved line. First, `snapshot` is `full`,
+   * a ceiling chosen for RESETS because "27 programs → 5" is the claim an admin
+   * needs; a sync's outcome genuinely IS a count, which is what the five
+   * existing `*_sync` pairs use and why they exist as their own entities rather
+   * than as an action on the record they sync. Second, filing both under one
+   * entity mixes "someone overrode the downgrade guard on the landing snapshot"
+   * with "the nav resync ran" in a single history stream, and those two are read
+   * for different reasons by someone in different trouble.
+   *
+   * NOTE for whoever adds the next one: this is the FIRST sync in the codebase
+   * that actually writes a row. The other five `*_sync` pairs are registered
+   * and unwritten — recordAdminAction has no call site under src/app/api/ and
+   * syncCareerPathsAction/syncFaqsAction/syncPromotionsAction record nothing.
+   * The landing sync button beside this one is equally silent. That asymmetry
+   * is real and is not fixed here; it is noted so the gap is not mistaken for
+   * a deliberate exemption.
+   */
+  entry('landing_cache', 'nav_menu_sync', 'ซิงก์เมกะเมนูหลักสูตร', 'count_only'),
 
   // PII entities (§5.1/§5.2): status transitions only, never a field diff.
   entry('registrations', 'public',  'ใบสมัครอบรม (Public)', 'status_only'),
