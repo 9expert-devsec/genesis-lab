@@ -451,6 +451,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           courses={programData.courses}
           earlyBirdMap={programData.earlyBirdMap}
           faqs={programData.faqs}
+          currentYear={siteCurrentYear()}
         />
       );
     }
@@ -463,6 +464,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
           faqs={skillData.faqs}
+          currentYear={siteCurrentYear()}
         />
       );
     }
