@@ -213,7 +213,7 @@ test('the status renders as a tinted pill, in the shared soft tokens', () => {
   const near = rows['s-near'];
 
   assert.ok(open.includes(SCHEDULE_STATUS.open.soft), 'the open pill must use the soft tokens');
-  assert.ok(open.includes('>เปิดรับ<'), 'and say เปิดรับ');
+  assert.ok(open.includes('>ลงทะเบียน<'), 'and say ลงทะเบียน');
   assert.ok(near.includes(SCHEDULE_STATUS.nearly_full.soft), 'and amber for nearly_full');
   assert.ok(near.includes('>ใกล้เต็ม<'));
 
@@ -233,12 +233,14 @@ test('the soft tokens carry their own dark variants', () => {
 test('a blank status renders NO pill — not an empty one, not a default', () => {
   /**
    * The behaviour M3 exists to protect, re-asserted against the new shape: a
-   * pill is more prominent than the old text was, so a default "เปิดรับ" here
-   * would advertise a session as taking bookings more loudly than before.
+   * pill is more prominent than the old text was, so a default "ลงทะเบียน"
+   * here would advertise a session as taking bookings more loudly than
+   * before — and since the state/action split that default would be an
+   * IMPERATIVE on a round we know nothing about.
    */
   const row = rowsById(render())['s-blank'];
   assert.ok(row, 'the blank-status round did not render a row');
-  for (const label of ['เปิดรับ', 'ใกล้เต็ม', 'เต็ม']) {
+  for (const label of ['ลงทะเบียน', 'ใกล้เต็ม', 'เต็ม']) {
     assert.equal(row.includes(label), false, `a blank status must not be labelled ${label}`);
   }
   assert.equal(
@@ -332,9 +334,10 @@ test('the LONG cross-month row still carries everything, overflow staying inside
   assert.match(classes, /\bflex-1\b/, 'and the thing that takes the slack');
 
   // The two neighbours it must never displace, each still unshrinkable.
-  // s-cross is the `open` round, so its pill reads เปิดรับ — matched as
-  // `>label<` because a Thai label is a substring of its own negation.
-  const pill = row.match(/<span class="(flex-none[^"]*)">เปิดรับ<\/span>/);
+  // s-cross is the `open` round, so its pill reads the ACTION word ลงทะเบียน —
+  // badges take `action`, never `state`. Matched as `>label<` because a Thai
+  // label can be a substring of another (เต็ม inside ใกล้เต็ม).
+  const pill = row.match(/<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/);
   assert.ok(pill, 'the status pill left the row');
   assert.match(pill[1], /\bflex-none\b/, 'the pill must not shrink to make room for a date');
   const circle = row.match(/<span aria-hidden="true" class="([^"]*)">/);
@@ -346,15 +349,15 @@ test('CONTROL: the flex-none probes DO distinguish a shrinkable neighbour', () =
   // A pill that lost `flex-none` is exactly the regression the test above
   // guards, and it is invisible until a long date renders on a narrow phone.
   assert.equal(
-    /<span class="(flex-none[^"]*)">เปิดรับ<\/span>/.test(
-      '<span class="whitespace-nowrap rounded-full">เปิดรับ</span>',
+    /<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/.test(
+      '<span class="whitespace-nowrap rounded-full">ลงทะเบียน</span>',
     ),
     false,
     'the probe must not match a pill that dropped flex-none',
   );
   assert.ok(
-    /<span class="(flex-none[^"]*)">เปิดรับ<\/span>/.test(
-      '<span class="flex-none whitespace-nowrap rounded-full">เปิดรับ</span>',
+    /<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/.test(
+      '<span class="flex-none whitespace-nowrap rounded-full">ลงทะเบียน</span>',
     ),
     '…but it must match one that kept it',
   );
@@ -653,7 +656,7 @@ const CELL_EARLY_BIRD_OPEN =
   + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
   + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
   + `${CROSS_START} ${monthLabel(WINDOW[0])}, 2 ${monthLabel(WINDOW[1])}</span>`
-  + '<span class="text-[10px] font-bold leading-none text-[#39b980]">เปิดรับ</span>'
+  + '<span class="text-[10px] font-bold leading-none text-[#39b980]">ลงทะเบียน</span>'
   + '<span class="rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">Early Bird</span>'
   + '</a>';
 

@@ -19,7 +19,7 @@ test('course_schedule renders injected rows, fails closed on empty/absent data',
   ];
   const html = R(CourseScheduleSection, { content: { courseId: 'MSE-AI' }, data: rows });
   assert.ok(html.includes('17-18'));        // formatted date range
-  assert.ok(html.includes('เปิดรับ'));       // open status label (lib/scheduleStatus)
+  assert.ok(html.includes('ลงทะเบียน'));       // open status label (lib/scheduleStatus)
   assert.ok(html.includes('ใกล้เต็ม'));       // nearly_full status label
   // register link built from the course code + schedule _id (& is HTML-escaped)
   assert.ok(html.includes('/registration/public?course=mse-ai') && html.includes('class=1'));
@@ -54,6 +54,6 @@ test('course_list renders a DERIVED list identically to a manual one (source-agn
 test('control: course_schedule renders every injected row (limit is a resolver concern)', () => {
   const rows = Array.from({ length: 3 }, (_, i) => ({ _id: String(i), dates: ['2026-10-17'], status: 'open', type: 'classroom' }));
   const html = R(CourseScheduleSection, { content: { courseId: 'MSE-AI', limit: 1 }, data: rows });
-  const count = (html.match(/เปิดรับ/g) ?? []).length;
+  const count = (html.match(/ลงทะเบียน/g) ?? []).length;
   assert.equal(count, 3); // all three, not clamped to content.limit
 });
