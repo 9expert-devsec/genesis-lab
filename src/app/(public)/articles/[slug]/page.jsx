@@ -7,6 +7,7 @@ import {
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { buildJsonLd } from '@/lib/articles/buildJsonLd';
 import { toMetaDescription } from '@/lib/seo/metaDescription';
+import { pickPinnedCourses } from '@/lib/articles/pinnedCourses';
 import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
 import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
@@ -90,14 +91,18 @@ export default async function ArticleDetailPage({ params }) {
   }
 
   // Related courses → fetch the public-course catalogue once and
-  // filter to the course_ids the admin pinned on the article. One
+  // resolve the course_ids the admin pinned on the article. One
   // round-trip beats N-by-id lookups when the list is small (it is).
+  //
+  // Through `pickPinnedCourses`, not a `.filter` over the catalogue: filtering
+  // walks the CATALOGUE and therefore returns upstream's order, discarding the
+  // sequence the admin arranged — and its `Set.has` was exact-case, so a
+  // mixed-case pin resolved to nothing at all. See the module for both.
   let relatedCoursesData = [];
   if (article.relatedCourses?.length) {
     try {
       const { items } = await listPublicCourses();
-      const wanted = new Set(article.relatedCourses);
-      relatedCoursesData = (items ?? []).filter((c) => wanted.has(c.course_id));
+      relatedCoursesData = pickPinnedCourses(article.relatedCourses, items);
     } catch {
       relatedCoursesData = [];
     }
