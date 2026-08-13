@@ -651,19 +651,47 @@ const CELL_BOX_CLASS =
 const CELL_BOX_STYLE =
   'border-color:#00CCFF;--round-ring:#00CCFF;--round-hover-bg:rgba(0, 204, 255, 0.1)';
 
+/**
+ * ── RE-BASELINED ON TWO AXES, AND ONLY TWO ─────────────────────────────────
+ *
+ * 807f6a0 made two changes to ScheduleCell and re-baselined neither, so this
+ * golden had been failing on a difference that has nothing to do with the
+ * status label it also changed:
+ *
+ *   1. the dot and the date are now wrapped in `<span class="flex items-center
+ *      gap-1">`, so they sit on one line inside the column
+ *   2. the dot gained `flex-none`, so it cannot be squeezed by a long
+ *      cross-month date
+ *
+ * Both are hand-applied from ScheduleClient's source, NOT pasted from the
+ * current render. Pasting is how an unrelated regression gets absorbed into a
+ * golden and stops being visible ever again — the whole point of this file.
+ *
+ * The wrapper is unconditional in the component, so it applies to the
+ * blank-status cell too even though that cell has no status span to separate.
+ *
+ * `flex-none` here is the same property the sibling probe test asserts
+ * independently ("the flex-none probes DO distinguish a shrinkable
+ * neighbour"), which is why that one has been passing throughout: it reads the
+ * live class list rather than a captured string. Two views of one fact, and
+ * only one of them had gone stale.
+ */
 const CELL_EARLY_BIRD_OPEN =
   `<a href="/registration/public?course=power-bi&amp;class=s-cross" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
-  + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
+  + '<span class="flex items-center gap-1">'
+  + '<span class="h-2 w-2 flex-none rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
   + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
   + `${CROSS_START} ${monthLabel(WINDOW[0])}, 2 ${monthLabel(WINDOW[1])}</span>`
+  + '</span>'
   + '<span class="text-[10px] font-bold leading-none text-[#39b980]">ลงทะเบียน</span>'
   + '<span class="rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">Early Bird</span>'
   + '</a>';
 
 const CELL_BLANK_STATUS =
   `<a href="/registration/public?course=power-bi&amp;class=s-blank" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
-  + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
-  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></a>';
+  + '<span class="flex items-center gap-1">'
+  + '<span class="h-2 w-2 flex-none rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
+  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></span></a>';
 
 /**
  * Every non-empty schedule cell of the desktop table, in document order.
