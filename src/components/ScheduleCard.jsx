@@ -117,7 +117,7 @@ export default function ScheduleCard({
             statusStyle?.solid ?? NEUTRAL_STATUS.solid,
           )}
         >
-          {statusLabel || statusStyle.label}
+          {statusLabel || statusStyle.action}
         </span>
       )}
     </div>

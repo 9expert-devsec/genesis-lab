@@ -96,8 +96,13 @@ test('resolveScheduleBadge renders an unrecognised status NEUTRALLY, never open'
   const badge = resolveScheduleBadge('bogus');
   assert.ok(badge, 'an unrecognised but non-empty status still gets a badge');
   assert.equal(badge.isKnown, false);
-  assert.equal(badge.label, 'bogus', 'the raw value is shown verbatim, not guessed at');
-  assert.notEqual(badge.label, 'เปิดรับ');
+  // BOTH fields carry the raw value. An unrecognised status has no
+  // state/action distinction to make, and giving the shape the same keys either
+  // way is what lets a call site read a word without branching on `isKnown`.
+  assert.equal(badge.state, 'bogus', 'the raw value is shown verbatim, not guessed at');
+  assert.equal(badge.action, 'bogus', 'and the badge word is the raw value too');
+  assert.notEqual(badge.state, 'เปิดรับ');
+  assert.notEqual(badge.action, 'ลงทะเบียน');
   const tokens = [badge.dot, badge.text, badge.solid, badge.soft].join(' ');
   assert.ok(!tokens.includes('#39b980'), `unrecognised must not be the open green: ${tokens}`);
 });

@@ -202,7 +202,10 @@ function ScheduleCard({ schedule, selected, onSelect, isEarlyBird = false, curre
   // Unrecognised statuses keep the previous neutral-grey treatment and echo the
   // raw value rather than being advertised as green "เปิดรับ".
   const statusStyle = resolveScheduleBadge(schedule.status);
-  const statusLabel = statusStyle?.label ?? schedule.status;
+  // `.action`, not `.state`: this card is selectable (onSelect drives the
+  // registration step), so its badge is a call to action like every other
+  // badge. See lib/scheduleStatus.js for why those are two fields now.
+  const statusLabel = statusStyle?.action ?? schedule.status;
   const statusClass = statusStyle?.soft ?? NEUTRAL_STATUS.soft;
 
   return (
