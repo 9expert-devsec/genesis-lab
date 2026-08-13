@@ -437,3 +437,103 @@ undifferentiated "refresh" control would hide a 100× cost difference.
 2. **Whether `/contact-us`'s 24h intent is being silently overridden** or
    whether 1h is acceptable. The mismatch is measured (§B.4); nobody's intent is
    recorded anywhere I could find.
+
+---
+
+## G. The rename → mega-menu gap (round 7 measurement). RECORDED, NOT BUILT.
+
+Traced while fixing "the mega menu shows two names at once". The name defect
+itself is fixed (`lib/navmenu/coursePreview.js`), and `/admin/cache` now has a
+nav sync button. Everything below is what the trace turned up around it and did
+**not** change. It is written down because each item is invisible from any
+screen and each will look like a new bug to whoever meets it next.
+
+### G.1 A course rename does not reach the mega menu at all until the cron
+
+`handlers.js:147` — `handleCourseEvent` calls `syncLanding()` and nothing else.
+There is no navmenu sync on the webhook path.
+
+This is not an oversight that a line of code fixes, and that is the point:
+`nav_menu_cache` is a **Mongo document**, so it is unreachable by `revalidateTag`
+or `revalidatePath` by construction. No amount of invalidation touches it. Only
+`syncNavMenuData` rewrites it, and its only callers are the 3-hourly cron
+(`vercel.json`) and `/api/admin/navmenu/sync`.
+
+Consequence: after a rename, the mega menu carries the old name for **up to 3
+hours**, on every public page, and nothing anywhere records that it is doing so.
+The round-7 fix makes all three menu surfaces agree during that window; it does
+not shorten the window.
+
+### G.2 The webhook and the nav sync bust different scopes
+
+`courseRevalidatePlan.js:61` adds `revalidatePath('/')` — the bare path.
+`syncNavMenuData.js:314` uses `revalidatePath('/', 'layout')`, and says why: the
+header is in the layout, so whoever rewrites the snapshot has by definition made
+the rendered menu stale.
+
+The difference is currently **harmless and will not stay that way**. Today the
+webhook has no fresh snapshot to publish, so the narrower bust costs nothing.
+The moment anything makes `nav_menu_cache` fresh at webhook time, `'/'` alone
+regenerates the home page and leaves every other route serving a cached header
+built from the old snapshot — a bug that will present as "it works on the home
+page", which is the least useful symptom a caching defect can have.
+
+### G.3 `updateCourse` performs no public revalidation whatsoever
+
+`lib/actions/courses.js:420-430` — `revalidatePath('/admin/courses')` and
+`revalidatePath('/admin/courses/<id>/edit')`. That is all.
+
+Every public effect of an admin course edit arrives via the **upstream webhook**,
+not via the action that made the change. The admin write and the public
+invalidation are joined only by MSDB choosing to call back. If a delivery is
+lost, dropped, or the endpoint is down, the admin sees a successful save and the
+public site never learns. Nothing in the admin surfaces that.
+
+### G.4 `webhook_logs` writes two rows per delivery. NOT DIAGNOSED.
+
+Measured over the full collection, read-only, on 2026-08-13:
+
+| | |
+|---|---|
+| rows | 640 |
+| rows carrying a `revalidated` array | 305 |
+| rows carrying none | 335 |
+| groups keyed by `event` + `payload.timestamp` + `payload.data._id` | 338 |
+| — of size 2, exactly one of which has `revalidated` | **302** |
+| — of size 1 | 36 |
+| — any other shape | 0 |
+| rows accounted for by those pairs | **604 of 640 (94.4%)** |
+| gap within a pair | min 1 ms · median 142 ms · max 1967 ms |
+
+So this is not an anomaly around one rename — it is how the collection is
+written, 94% of it. Both rows carry `status: 'ok'` and an empty `error`; the
+second carries no `revalidated` field at all.
+
+**Not diagnosed, deliberately.** The data cannot distinguish a genuine duplicate
+HTTP delivery from one delivery logged twice by the handler, and guessing would
+put a wrong cause in writing. What is certain is that anyone counting rows in
+this collection to answer "how many webhooks did we get" is currently getting
+roughly **double**, and that the second row of each pair attests "processed"
+while recording nothing about what was touched.
+
+### G.5 Two schema-allowed `revalidated[].type` values have never occurred
+
+`WebhookLog.js:22-34` documents five: `tag`, `path`, `alias-lookup`,
+`visibility`, `visibility-uncertain`. Occurrences across all 640 rows:
+
+| type | occurrences |
+|---|---|
+| `path` | 1054 |
+| `tag` | 533 |
+| `visibility` | 43 |
+| `alias-lookup` | **0** |
+| `visibility-uncertain` | **0** |
+
+Both zeros are consistent with their writers being failure/uncertainty branches
+that have simply never been taken — `alias-lookup` is written only when the
+CourseExtension lookup throws, `visibility-uncertain` only when the schedule
+visibility assessment cannot decide. Neither is evidence of a bug. It is
+recorded so that a future reader who greps for these values and finds nothing
+does not conclude the code that writes them is dead, and so that anyone building
+a reader for this field knows two of its five cases have never been exercised
+against real data.
