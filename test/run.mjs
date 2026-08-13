@@ -112,6 +112,38 @@
 //
 // `git worktree remove` refuses paths git does not own, which is the property
 // that makes it the safe verb here.
+//
+// ── WHAT THIS SUITE, AND `npm run build`, CANNOT TELL YOU ───────────────────
+//
+// Recorded after 35 catalog pages (27 program + 8 skill `-all-courses` slugs)
+// served a 500 on the deployed dev site while both this suite and the build
+// were green. Three separate things each looked like evidence and were not:
+//
+// 1. A GREEN BUILD PROVES NOTHING ABOUT `/[...slug]`. That route is `ƒ`
+//    Dynamic and has no `generateStaticParams` — no `-all-courses` URL is
+//    prerendered, so `next build` never renders one and exits 0 with the route
+//    permanently broken. `✓ Generating static pages (46/46)` counts the 46 that
+//    ARE static and says nothing about the catch-all. To test a Dynamic route
+//    you have to REQUEST it: `next dev` on a free port and curl the URL.
+//
+// 2. A 500 WITH NO APPLICATION TRACE IS NOT A SECOND BUG. Next's own error
+//    reporter can throw while serialising the first error — observed as
+//    `TypeError: frame.join is not a function` and
+//    `TypeError: chunk.reason.enqueueModel is not a function`, both with their
+//    own digests. Those are React flight/stack-frame internals, not app frames.
+//    Of two requests that failed identically, only the first printed the real
+//    trace; the second printed only the serialiser's own failure. Request one
+//    URL at a time, and do not conclude "different error" from a different
+//    surface message.
+//
+// 3. THE DEV OVERLAY'S "N ISSUES" COUNTER IS NOT A DEFECT COUNT. One exception
+//    is reported twice — once in Console, once in Runtime — with identical
+//    stacks. "2 Issues" was one bug.
+//
+// The guard that came out of it is test/fs/currentYearThreading: source-level,
+// deriving its subject from the import graph, because a render test only covers
+// mounts someone already thought of and the failure mode was a mount nobody had
+// written yet.
 
 process.env.NODE_ENV = 'production'; // match component runtime branches (fail-closed, no dev blocks)
 
