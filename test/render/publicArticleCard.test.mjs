@@ -85,7 +85,14 @@ function render(articles, skillNames = SKILL_NAMES, programNames = PROGRAM_NAMES
       page: 1,
       totalPages: 1,
       total: articles.length,
-      initialFilters: { q: '', tag: '', program: '', skill: '' },
+      // Discrete props, not the `initialFilters` bundle this replaced — see
+      // test/fs/urlFilterNoState, where this component moved from OUTSTANDING
+      // into FILTER_SCREENS.
+      q: '',
+      tag: '',
+      program: '',
+      skill: '',
+      articleType: '',
     })
   );
 }
@@ -404,7 +411,11 @@ test('S5-g — tags, the ?tag= filter and search are untouched', () => {
       page: 1,
       totalPages: 1,
       total: 1,
-      initialFilters: { q: '', tag: 'tag-alpha', program: '', skill: '' },
+      q: '',
+      tag: 'tag-alpha',
+      program: '',
+      skill: '',
+      articleType: '',
     })
   );
   assert.match(filtered, /กรองตาม tag:/, 'the active-tag chip still renders');

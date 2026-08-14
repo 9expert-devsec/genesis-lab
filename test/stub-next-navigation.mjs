@@ -25,7 +25,39 @@ let search = '';
 export function __setSearchParams(next) {
   search = typeof next === 'string' ? next : new URLSearchParams(next ?? {}).toString();
 }
-export const useSearchParams = () => new URLSearchParams(search);
+
+/**
+ * Make `useSearchParams` UNAVAILABLE, to model the render path where Next
+ * refuses to serve it.
+ *
+ * ── WHAT THIS MODELS, AND WHAT IT IS NOT ────────────────────────────────────
+ * In a real static render the hook does not throw: Next bails the client
+ * subtree out to CSR up to the nearest Suspense boundary, and the server flushes
+ * the fallback instead of the subtree. That machinery does not exist in this
+ * runner and cannot be reproduced by a stub.
+ *
+ * What CAN be reproduced is the precondition — "this render path cannot supply
+ * the URL" — and the only honest way to assert a component survives it is to
+ * make reading it fail loudly. So this is a MODEL of the bailout's cause, not a
+ * reproduction of its behaviour, and a test using it may claim exactly one
+ * thing: that the component's server output does not depend on the hook. See
+ * test/render/articlesGridServerRender.
+ *
+ * Off by default and restored by the test that turns it on — the runner shares
+ * one process across every file, so a leaked `true` here would break every
+ * other render test that has a component legitimately reading the URL.
+ */
+let failing = false;
+export function __failSearchParams(on = true) { failing = !!on; }
+export const useSearchParams = () => {
+  if (failing) {
+    throw new Error(
+      'useSearchParams() is not available on this render path — '
+      + 'a client subtree reading it here would bail out to CSR'
+    );
+  }
+  return new URLSearchParams(search);
+};
 export const useParams = () => ({});
 export const useSelectedLayoutSegment = () => null;
 export const useSelectedLayoutSegments = () => [];
