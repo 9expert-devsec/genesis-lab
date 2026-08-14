@@ -4,8 +4,22 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTransition } from 'react';
 import { cn } from '@/lib/utils';
+import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
 
 // ── Constants ──────────────────────────────────────────────────────
+
+/**
+ * The public registration status labels, DERIVED.
+ *
+ * These four cards link straight into `/admin/registrations?status=…`, so a
+ * label here that disagrees with the one on the list screen sends the admin to
+ * a page whose heading contradicts the card they clicked. 'ยืนยันแล้ว' had four
+ * copies across the admin; this was one of them.
+ *
+ * The `badge` text beside each card is deliberately NOT derived — it is a
+ * two-or-three character abbreviation chosen to fit the card, not a label.
+ */
+const PUBLIC_STATUS_LABEL = buildStatusLabels();
 
 const RANGE_OPTIONS = [
   { value: 'today', label: 'วันนี้' },
@@ -95,25 +109,25 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, isSupe
             accent="border-l-4 border-l-9e-action"
           />
           <StatCard
-            label="รอดำเนินการ"
+            label={PUBLIC_STATUS_LABEL.pending}
             value={data.public.pending}
             href="/admin/registrations?status=pending"
             badge={{ text: 'รอ', cls: 'bg-amber-100 text-amber-700' }}
           />
           <StatCard
-            label="ยืนยันแล้ว"
+            label={PUBLIC_STATUS_LABEL.confirmed}
             value={data.public.confirmed}
             href="/admin/registrations?status=confirmed"
-            badge={{ text: 'ยืนยัน', cls: 'bg-blue-100 text-blue-700' }}
+            badge={{ text: 'ใบเสนอราคา', cls: 'bg-blue-100 text-blue-700' }}
           />
           <StatCard
-            label="ชำระแล้ว"
+            label={PUBLIC_STATUS_LABEL.paid}
             value={data.public.paid}
             href="/admin/registrations?status=paid"
             badge={{ text: 'ชำระ', cls: 'bg-emerald-100 text-emerald-700' }}
           />
           <StatCard
-            label="ยกเลิก"
+            label={PUBLIC_STATUS_LABEL.cancelled}
             value={data.public.cancelled}
             href="/admin/registrations?status=cancelled"
             badge={{ text: 'ยกเลิก', cls: 'bg-slate-100 text-slate-500' }}

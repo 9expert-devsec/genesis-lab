@@ -9,8 +9,19 @@ import Article         from '@/models/Article';
 import FeaturedReview  from '@/models/FeaturedReview';
 import Recruit         from '@/models/Recruit';
 import { requireAdmin } from '@/lib/actions/auth';
+import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+
+/**
+ * The public status labels for the donut, DERIVED.
+ *
+ * The chart colours live below because they are this chart's business and
+ * belong to no other consumer; the LABELS are the shared vocabulary and are
+ * not respelled here. 'ยืนยันแล้ว' had four copies across the admin and the
+ * dashboard was one of them.
+ */
+const PUBLIC_STATUS_LABEL = buildStatusLabels();
 
 /**
  * Compute the [start, end] Date range from a range key.
@@ -120,10 +131,10 @@ export async function getDashboardMetrics(range = 'today') {
 
   // ── Status distribution for pie/donut (Public, range-filtered) ─
   const statusDist = [
-    { status: 'pending',   label: 'รอดำเนินการ', count: publicPending,   color: '#f59e0b' },
-    { status: 'confirmed', label: 'ยืนยันแล้ว',  count: publicConfirmed, color: '#3b82f6' },
-    { status: 'paid',      label: 'ชำระแล้ว',    count: publicPaid,      color: '#10b981' },
-    { status: 'cancelled', label: 'ยกเลิก',      count: publicCancelled, color: '#94a3b8' },
+    { status: 'pending',   label: PUBLIC_STATUS_LABEL.pending,   count: publicPending,   color: '#f59e0b' },
+    { status: 'confirmed', label: PUBLIC_STATUS_LABEL.confirmed, count: publicConfirmed, color: '#3b82f6' },
+    { status: 'paid',      label: PUBLIC_STATUS_LABEL.paid,      count: publicPaid,      color: '#10b981' },
+    { status: 'cancelled', label: PUBLIC_STATUS_LABEL.cancelled, count: publicCancelled, color: '#94a3b8' },
   ];
 
   return serialize({

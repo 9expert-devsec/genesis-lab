@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { RegistrationsClient } from '@/app/admin/registrations/_components/RegistrationsClient';
 import { INHOUSE_STATUSES } from '@/lib/registrations/inhouseStatuses';
+import { PUBLIC_STATUSES } from '@/lib/registrations/publicStatuses';
 
 /**
  * The summary strip and the table chrome, AS RENDERED, for each `source`.
@@ -131,9 +132,62 @@ test('source=public renders the public columns', () => {
   }
 });
 
-test('the public strip offers no in-house status label, and vice versa', () => {
-  assert.ok(!publik.includes('ส่งใบเสนอราคาแล้ว'), 'an in-house status leaked onto the public strip');
-  assert.ok(!inhouse.includes('รอดำเนินการ'), 'a public status leaked onto the in-house strip');
+/**
+ * NEITHER STRIP OFFERS A STATUS ITS COLLECTION CANNOT HOLD.
+ *
+ * ── WHY THIS TEST WAS REWRITTEN, AND WHAT IT USED TO SAY ────────────────────
+ * It used to name two literals: 'ส่งใบเสนอราคาแล้ว' must not appear on the
+ * public strip, 'รอดำเนินการ' must not appear on the in-house one. The first
+ * half is now FALSE BY RULING — public `confirmed` was relabelled from
+ * 'ยืนยันแล้ว' to 'ส่งใบเสนอราคาแล้ว', which is the same words in-house
+ * `quoted` already used. The two collections now genuinely share one label,
+ * because they genuinely describe the same real-world act: a quotation went out.
+ *
+ * The old assertion is not weakened away, it is restated over the thing it was
+ * really protecting. Each side is checked against the labels UNIQUE to the
+ * other, derived by set difference from the two modules — so a shared label is
+ * excluded automatically and a future relabel cannot make this test wrong
+ * again, while a genuine leak (in-house columns over public rows, the defect
+ * this file was written for) still reddens it.
+ *
+ * Element-boundary matching, because Thai negates by prefix and compounds by
+ * suffix with no separator: 'ปิดงานสำเร็จ' and 'ไม่สำเร็จ' share 'สำเร็จ', and a
+ * bare substring test cannot tell a leaked card from a coincidence.
+ */
+test('the public strip offers no in-house-ONLY status label, and vice versa', () => {
+  const publicLabels  = PUBLIC_STATUSES.map((s) => s.label);
+  const inhouseLabels = INHOUSE_STATUSES.map((s) => s.label);
+  const publicOnly  = publicLabels.filter((l) => !inhouseLabels.includes(l));
+  const inhouseOnly = inhouseLabels.filter((l) => !publicLabels.includes(l));
+
+  // The set difference must not be empty, or this test asserts nothing.
+  assert.ok(publicOnly.length  >= 3, 'the two vocabularies overlap far more than expected');
+  assert.ok(inhouseOnly.length >= 4, 'the two vocabularies overlap far more than expected');
+
+  for (const label of inhouseOnly) {
+    assert.ok(!publik.includes(`>${label}<`), `an in-house-only status leaked onto the public strip: ${label}`);
+  }
+  for (const label of publicOnly) {
+    assert.ok(!inhouse.includes(`>${label}<`), `a public-only status leaked onto the in-house strip: ${label}`);
+  }
+});
+
+test('each strip DOES render its own full vocabulary', () => {
+  // The positive half, without which the test above passes on an empty page.
+  for (const { label } of PUBLIC_STATUSES) {
+    assert.ok(publik.includes(`>${label}<`), `the public strip is missing a card for ${label}`);
+  }
+  for (const { label } of INHOUSE_STATUSES) {
+    assert.ok(inhouse.includes(`>${label}<`), `the in-house strip is missing a card for ${label}`);
+  }
+});
+
+test('the shared label is on BOTH strips — a collision, deliberately', () => {
+  // Pins the fact the rewrite above is built on. If the two vocabularies stop
+  // sharing a label, the set-difference logic silently reverts to the old
+  // literal-naming behaviour and this is the line that says so.
+  assert.ok(publik.includes('>ส่งใบเสนอราคาแล้ว<'),  'public `confirmed` lost the relabel');
+  assert.ok(inhouse.includes('>ส่งใบเสนอราคาแล้ว<'), 'in-house `quoted` lost its label');
 });
 
 /**
