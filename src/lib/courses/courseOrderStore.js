@@ -45,6 +45,7 @@ const perRequest = typeof React.cache === 'function' ? React.cache : (fn) => fn;
  * @returns {Promise<null | {
  *   programRank: Map<string, number>,
  *   programCourseOrder: Map<string, string[]>,
+ *   programOrderSource: Map<string, '' | 'seeded' | 'arranged'>,
  *   skillCourseOrder: Map<string, string[]>,
  * }>} null when the order must not be applied — see the note above.
  */
@@ -57,17 +58,24 @@ export const loadCourseOrder = perRequest(async function loadCourseOrder(deps = 
     const SkillOrder = deps.SkillOrder ?? (await import('@/models/SkillOrder')).default;
 
     const [programs, skills] = await Promise.all([
-      ProgramOrder.find({}, { programId: 1, order: 1, courseOrder: 1, _id: 0 }).lean(),
-      SkillOrder.find({}, { skillId: 1, courseOrder: 1, _id: 0 }).lean(),
+      // `courseOrderSource` joined the projection for /admin/courses, which must
+      // tell "captured from the old system" apart from "somebody arranged this"
+      // — the distinction ProgramOrder.courseOrderSource was added to carry, and
+      // which its own field note anticipated a screen would need. Projected
+      // rather than fetched separately so the ordering read stays one query.
+      ProgramOrder.find({}, { programId: 1, order: 1, courseOrder: 1, courseOrderSource: 1, _id: 0 }).lean(),
+      SkillOrder.find({}, { skillId: 1, courseOrder: 1, courseOrderSource: 1, _id: 0 }).lean(),
     ]);
 
     const programRank = new Map();
     const programCourseOrder = new Map();
+    const programOrderSource = new Map();
     for (const p of programs ?? []) {
       const id = String(p?.programId ?? '');
       if (!id) continue;
       if (Number.isFinite(p?.order)) programRank.set(id, p.order);
       programCourseOrder.set(id, Array.isArray(p?.courseOrder) ? p.courseOrder : []);
+      programOrderSource.set(id, String(p?.courseOrderSource ?? ''));
     }
 
     const skillCourseOrder = new Map();
@@ -82,7 +90,7 @@ export const loadCourseOrder = perRequest(async function loadCourseOrder(deps = 
       [...skillCourseOrder.values()].some((v) => v.length > 0);
     if (!seeded) return null; // failure mode 2 — nothing seeded, order nothing
 
-    return { programRank, programCourseOrder, skillCourseOrder };
+    return { programRank, programCourseOrder, programOrderSource, skillCourseOrder };
   } catch (err) {
     warn(
       '[courseOrder] could not read the stored order — listings are serving in '

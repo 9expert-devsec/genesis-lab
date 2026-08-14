@@ -9,6 +9,7 @@ import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
 import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
+import { normalizeCourseCode } from '@/lib/courses/courseOrder';
 
 function programIdOf(p) {
   return String(p.program_id ?? p._id ?? '');
@@ -128,6 +129,108 @@ export async function saveProgramOrder(orderedIds) {
   revalidatePath('/training-course');
   triggerLandingSync();
   return { ok: true };
+}
+
+/**
+ * Persist the COURSE order inside one program, from /admin/courses.
+ *
+ * ── WHAT A SAVE WRITES, AND WHY IT IS THE WHOLE GROUP ──────────────────────
+ * `courseOrder` IS the ordered array of codes — there is no per-course number to
+ * patch — so a save replaces the array with the complete membership of that
+ * program group, in the order the admin arranged. Two consequences follow BY
+ * CONSTRUCTION, and both are correct rather than side effects to be suppressed:
+ *
+ *   · PREVIOUSLY-UNLISTED COURSES BECOME LISTED. The unlisted tier
+ *     (courseOrder.js, rank -1) exists for courses nobody has positioned yet;
+ *     once an admin saves a group containing one, it HAS been positioned. The
+ *     tier empties for that group and that is what "arranged" means. Note the
+ *     direction this locks in: unlisted courses sort FIRST, so an admin who
+ *     saves without moving anything freezes a new course at the top — which is
+ *     exactly what the screen was showing them, so the save is honest.
+ *
+ *   · DEAD CODES ARE PRUNED. A stored code matching no live course contributes
+ *     nothing to any ranking today (rankOf only ever asks about live courses),
+ *     and rebuilding from live membership drops it. Nothing else prunes them, so
+ *     this is the only thing that ever will.
+ *
+ * NEITHER conflicts with lib/courses/courseOrder.js. That module is a pure
+ * comparator over whatever list it is given; it has no opinion about how the
+ * list came to exist.
+ *
+ * ── THE CALLER MUST HAND OVER THE COMPLETE GROUP ───────────────────────────
+ * This writes what it is given. If a caller passed a FILTERED subset, every
+ * course it filtered out would be deleted from the stored order. /admin/courses
+ * therefore refuses to enable dragging while a narrowing filter is active — see
+ * `canReorderCourseGroups` in lib/courses/courseOrderEditing.js. The refusal
+ * below (empty list) is the backstop, not the rule.
+ *
+ * ── OPERATOR FORM, LIKE EVERY OTHER WRITE IN THIS FILE ─────────────────────
+ * `$set` of the two fields, never an enumerated document. CourseExtension's
+ * writer takes the other shape and this deliberately does not follow it: an
+ * enumerated object here would rewrite `order`, `displayName`, `iconUrl` and
+ * `isHidden` from whatever the caller happened to hold, and this caller holds
+ * none of them.
+ *
+ * @param {string} programId the program's CODE (ProgramOrder.programId)
+ * @param {string[]} orderedCodes complete group membership, in display order
+ */
+export async function saveProgramCourseOrder(programId, orderedCodes) {
+  await requireAdmin('courses');
+  await dbConnect();
+
+  const id = String(programId ?? '').trim();
+  if (!id) return { ok: false, error: 'ไม่พบรหัสโปรแกรม' };
+
+  // Normalised and de-duplicated on the way in, matching the key discipline the
+  // seed and the rank map already use (normalizeCourseCode → upper, trimmed).
+  // A rank lookup that missed on case would silently make a course unlisted.
+  const codes = [];
+  const seen = new Set();
+  for (const raw of orderedCodes ?? []) {
+    const code = normalizeCourseCode(raw);
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    codes.push(code);
+  }
+
+  /**
+   * AN EMPTY LIST IS REFUSED, NOT WRITTEN.
+   *
+   * `$set: { courseOrder: [] }` would make every course in the program unlisted
+   * and mark the group 'arranged', so the re-seed — which skips 'arranged' —
+   * could never repair it. The states that could produce an empty array are all
+   * failures: a group whose rows never loaded, a caller that lost its list, or
+   * the loadCourseOrder-null screen state calling in when it must not. A program
+   * that genuinely has no courses has no group on screen and no way to save.
+   */
+  if (codes.length === 0) {
+    return { ok: false, error: 'ไม่มีรายการหลักสูตรที่จะบันทึก — ไม่ได้เขียนทับลำดับเดิม' };
+  }
+
+  await ProgramOrder.findOneAndUpdate(
+    { programId: id },
+    {
+      $set: {
+        courseOrder: codes,
+        // 'arranged' is what stops the re-seed overwriting this. Set on every
+        // save rather than only the first: a group re-seeded in between must not
+        // stay re-seedable after a person has touched it again.
+        courseOrderSource: 'arranged',
+      },
+    },
+    { upsert: true }
+  );
+
+  // Same set as saveProgramOrder above, plus the screen that did the writing.
+  // NOT revalidated, and following their own ISR windows exactly as they do
+  // after a saveProgramOrder today: /schedule, /search, /program/[slug],
+  // /skill/[slug]. The mega menu is a SNAPSHOT and does not follow at all until
+  // a nav sync runs — the screen says so.
+  revalidatePath('/');
+  revalidatePath('/training-course');
+  revalidatePath('/admin/courses');
+  triggerLandingSync();
+  return { ok: true, count: codes.length };
 }
 
 export async function toggleProgramHidden(programId, isHidden) {
