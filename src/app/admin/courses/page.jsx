@@ -89,7 +89,11 @@ export default async function AdminCoursesPage({ searchParams }) {
    * the public course hero and programme page paint with; nothing is copied
    * into the admin tree and no colour is stored anywhere.
    */
-  const { names: programNames, colors: programColors } = buildProgramIndex(programs);
+  const {
+    names: programNames,
+    colors: programColors,
+    icons: programIcons,
+  } = buildProgramIndex(programs);
 
   return (
     <div>
@@ -118,6 +122,7 @@ export default async function AdminCoursesPage({ searchParams }) {
         programCourseOrder={programCourseOrder}
         programNames={programNames}
         programColors={programColors}
+        programIcons={programIcons}
         q={q}
         program={program}
         type={type}
