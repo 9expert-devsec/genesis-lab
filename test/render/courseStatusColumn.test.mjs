@@ -109,7 +109,10 @@ test('header cell count and the empty-state colSpan agree', () => {
   // test fail against correct markup on its first run.
   const headerCount = (thead.match(/<th[\s>]/g) ?? []).length;
 
-  assert.equal(headerCount, 7, 'expected 7 header cells');
+  // 8 since the ลำดับ column landed. The NUMBER is not the point of this
+  // assertion — the agreement between it and the empty-state colSpan below is,
+  // and that is exactly what adding a column breaks.
+  assert.equal(headerCount, 8, 'expected 8 header cells');
 
   const empty = renderToStaticMarkup(
     createElement(CoursesAdminClient, { courses: [], extensions: {}, programs: [] }),

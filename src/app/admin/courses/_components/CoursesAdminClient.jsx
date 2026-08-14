@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { deleteCourse } from '@/lib/actions/courses';
 import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
 import { resolveCourseStatusBadge } from '@/lib/courses/courseStatusBadge';
+import { groupCoursesByProgram } from '@/lib/courses/groupCoursesByProgram';
 
 const TYPE_OPTIONS = [
   { value: '',         label: 'ทุกประเภท' },
@@ -14,50 +15,92 @@ const TYPE_OPTIONS = [
   { value: 'inhouse',  label: 'In-house' },
 ];
 
+/**
+ * ── THE FILTERS ARE PROPS, AND THE URL IS WRITTEN IN ONE PLACE ──────────────
+ *
+ * `q`, `program` and `type` are read from `searchParams` by page.jsx and passed
+ * down. They were `useState(() => searchParams.get(…))` — lazily seeded from the
+ * URL, then written back with `window.history.replaceState` — which is the
+ * shape test/fs/urlFilterNoState recorded as OUTSTANDING for this file.
+ *
+ * WHAT THAT SEEDING COST. The lazy initialiser runs once per mounted instance,
+ * so any navigation that KEPT the instance left the state holding the old
+ * value while the URL held the new one. Following a second filtered link from
+ * the sidebar, or pressing Back, showed a table filtered by one thing and a
+ * toolbar claiming another. And because `listQuery` is re-serialised from those
+ * same values into every row's แก้ไข link, the stale value was written back —
+ * the edit page's ← control carried the filter the admin had just left.
+ *
+ * ── WHY THE ROUND-TRIP OBJECTION NO LONGER APPLIES ─────────────────────────
+ * The replaced comment argued, correctly, that `router.replace` re-runs the
+ * server component on every keystroke — a round-trip per character for a list
+ * filtered entirely on the client. That objection is about WRITING ON EVERY
+ * KEYSTROKE, not about the URL owning the filter. So the search box no longer
+ * writes on every keystroke: it is uncontrolled and commits on Enter or blur,
+ * exactly as AuditLogClient's free-text field does. The selects commit
+ * immediately because a select IS a completed decision.
+ *
+ * The cost is now one server render per deliberate filter action, where it was
+ * zero. That is a real cost and it is stated rather than buried: this page is
+ * `force-dynamic` and each render re-reads upstream courses, extensions and
+ * programs. It buys a URL that survives a reload, a Back, and a pasted link —
+ * and a toolbar that cannot disagree with its own table.
+ *
+ * THE LIST IS STILL FILTERED ON THE CLIENT. Moving the filter into the query
+ * would change what `courses.length` means in the counter and what the folder
+ * counts count; that is a separate decision and is not taken here.
+ */
 export function CoursesAdminClient({
   courses,
   extensions,
   programs = [],
+  // programId (the CODE) → its stored `courseOrder`. `null` when the order
+  // could not be read or nothing is seeded — every row is then unlisted.
+  programCourseOrder = null,
+  programNames = {},
+  q = '',
+  program = '',
+  type = '',
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [busyId, setBusyId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
 
-  /**
-   * SEEDED FROM THE URL, and mirrored back into it.
-   *
-   * These were plain `useState`, so editing a course and coming back reset the
-   * search and both filters — the admin re-typed them every time. Component
-   * state cannot survive the App Router unmounting this list.
-   */
-  const searchParams = useSearchParams();
-  const [search, setSearch]               = useState(() => searchParams.get('q') ?? '');
-  const [filterProgram, setFilterProgram] = useState(() => searchParams.get('program') ?? '');
-  const [filterType, setFilterType]       = useState(() => searchParams.get('type') ?? '');
-
-  const listQuery = courseListQuery({ q: search, program: filterProgram, type: filterType });
+  const listQuery = courseListQuery({ q, program, type });
 
   /**
-   * `history.replaceState`, NOT `router.replace`.
+   * The next URL, serialised FROM THE PROPS — the one and only writer.
    *
-   * The URL has to be real so a reload or a browser back reproduces the filter,
-   * but `router.replace` re-runs the server component on every keystroke in the
-   * search box — a round-trip per character for a list that is already filtered
-   * entirely on the client. replaceState updates the address bar and nothing
-   * else, which is exactly the amount of work this needs.
+   * Same shape as AuditLogClient, WebhookLogsClient and DashboardClient, which
+   * are the reference implementations this file is brought into line with.
    */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const next = window.location.pathname + (listQuery ? `?${listQuery}` : '');
-    if (next !== window.location.pathname + window.location.search) {
-      window.history.replaceState(null, '', next);
-    }
-  }, [listQuery]);
+  const navigate = useCallback(
+    (overrides = {}) => {
+      const next = { q, program, type, ...overrides };
+      const params = new URLSearchParams();
+      Object.entries(next).forEach(([k, v]) => {
+        const value = String(v ?? '').trim();
+        if (value) params.set(k, value);
+      });
+      const qs = params.toString();
+      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+    },
+    [router, pathname, q, program, type]
+  );
 
-  // Match against program either as a populated object (`program._id`)
-  // or as a bare ObjectId string. Genesis sees both depending on the
-  // upstream populate level.
+  /**
+   * THE FILTER'S PROGRAM KEY IS `_id`; THE ORDER'S IS `program_id`.
+   *
+   * Both are reachable from `course.program` and they are NOT interchangeable.
+   * The dropdown has always carried the ObjectId, and `?program=<_id>` is in
+   * links the edit pages already hand back — changing it would break every one
+   * of those. The stored order is keyed by the CODE, because that is what
+   * `ProgramOrder.programId` holds. So this local accessor stays on `_id` and
+   * everything about RANK goes through `programKeyOf` in lib/courses/courseOrder,
+   * which is the only reader of the other key.
+   */
   function programIdOf(course) {
     const p = course?.program;
     if (!p) return '';
@@ -65,21 +108,35 @@ export function CoursesAdminClient({
   }
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const needle = q.trim().toLowerCase();
     return courses.filter((c) => {
       const matchSearch =
-        !q ||
-        (c.course_name || '').toLowerCase().includes(q) ||
-        (c.course_name_th || '').toLowerCase().includes(q) ||
-        (c.course_id || '').toLowerCase().includes(q);
-      const matchProgram = !filterProgram || programIdOf(c) === filterProgram;
+        !needle ||
+        (c.course_name || '').toLowerCase().includes(needle) ||
+        (c.course_name_th || '').toLowerCase().includes(needle) ||
+        (c.course_id || '').toLowerCase().includes(needle);
+      const matchProgram = !program || programIdOf(c) === program;
       const matchType =
-        !filterType ||
-        (filterType === 'public'  && c.course_type_public) ||
-        (filterType === 'inhouse' && c.course_type_inhouse);
+        !type ||
+        (type === 'public'  && c.course_type_public) ||
+        (type === 'inhouse' && c.course_type_inhouse);
       return matchSearch && matchProgram && matchType;
     });
-  }, [courses, search, filterProgram, filterType]);
+  }, [courses, q, program, type]);
+
+  /**
+   * Folders. Grouped AFTER filtering, so a folder's count is what the admin can
+   * see in it rather than what exists behind the filter — a count that does not
+   * match the rows under it is the defect this ordering avoids.
+   *
+   * The positions are NOT recomputed from the filtered array: they come from the
+   * stored list, so filtering to one course still shows that course's real
+   * ลำดับ instead of renumbering it to 1. See lib/courses/groupCoursesByProgram.
+   */
+  const groups = useMemo(
+    () => groupCoursesByProgram(filtered, { programCourseOrder, programNames }),
+    [filtered, programCourseOrder, programNames]
+  );
 
   async function handleDelete(course) {
     const ok = window.confirm(
@@ -113,18 +170,30 @@ export function CoursesAdminClient({
             className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
             aria-hidden="true"
           />
+          {/* UNCONTROLLED, committing on Enter or blur — see the header. The
+              `key` is what keeps it honest: when the URL's `q` changes the
+              input is a new element, so it cannot go on showing a term the
+              table is not filtered by. Safe here, unlike on a debounced box,
+              because nothing writes the URL while the admin is still typing. */}
           <input
+            key={q}
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="ค้นหาชื่อหลักสูตรหรือ Course ID..."
+            defaultValue={q}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                navigate({ q: e.currentTarget.value });
+              }
+            }}
+            onBlur={(e) => e.target.value !== q && navigate({ q: e.target.value })}
+            placeholder="ค้นหาชื่อหลักสูตรหรือ Course ID... (Enter เพื่อค้นหา)"
             className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white pl-8 pr-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
           />
         </div>
 
         <select
-          value={filterProgram}
-          onChange={(e) => setFilterProgram(e.target.value)}
+          value={program}
+          onChange={(e) => navigate({ program: e.target.value })}
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           <option value="">ทุกโปรแกรม</option>
@@ -139,8 +208,8 @@ export function CoursesAdminClient({
         </select>
 
         <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
+          value={type}
+          onChange={(e) => navigate({ type: e.target.value })}
           className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
         >
           {TYPE_OPTIONS.map((o) => (
@@ -166,6 +235,17 @@ export function CoursesAdminClient({
         </div>
       )}
 
+      {/* The order could not be read, or nothing is seeded. Said out loud
+          rather than rendered as a column of dashes nobody can interpret —
+          `null` is a real state with two causes, and both mean the public site
+          is serving UPSTREAM order right now. See lib/courses/courseOrderStore. */}
+      {programCourseOrder === null && (
+        <div className="mb-3 rounded-9e-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          ยังไม่มีลำดับที่บันทึกไว้ — อ่านลำดับไม่สำเร็จ หรือยังไม่ได้ seed
+          ขณะนี้ทุกหลักสูตรแสดงเป็น &ldquo;ยังไม่จัดลำดับ&rdquo; และเว็บไซต์กำลังเรียงตามลำดับของต้นทาง
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <div className="max-h-[70vh] overflow-x-auto overflow-y-auto">
           {/* min-w so the seventh column cannot squeeze the others instead of
@@ -176,6 +256,10 @@ export function CoursesAdminClient({
           <table className="w-full min-w-[900px] text-sm">
             <thead className="sticky top-0 bg-[var(--surface-muted)]">
               <tr className="border-b border-[var(--surface-border)] text-left">
+                {/* READ-ONLY in this commit. There is no reorder control and no
+                    write path — the number shown is the course's index in its
+                    program's stored courseOrder, nothing more. */}
+                <th className="w-16 px-4 py-3 text-right font-medium text-[var(--text-secondary)]">ลำดับ</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">Course ID</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">ชื่อหลักสูตร</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">URL Alias</th>
@@ -185,17 +269,36 @@ export function CoursesAdminClient({
                 <th className="px-4 py-3 text-right font-medium text-[var(--text-secondary)]">จัดการ</th>
               </tr>
             </thead>
-            <tbody>
-              {filtered.length === 0 && (
+            {filtered.length === 0 && (
+              <tbody>
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-muted)]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--text-muted)]">
                     {courses.length === 0
                       ? 'ไม่สามารถโหลดรายการหลักสูตรได้ — ลองรีเฟรช หรือดู console log'
                       : 'ไม่พบหลักสูตรที่ตรงกับตัวกรอง'}
                   </td>
                 </tr>
-              )}
-              {filtered.map((course) => {
+              </tbody>
+            )}
+            {/* ONE <tbody> PER FOLDER. A grouping header row inside a single
+                body would be a row pretending to be a heading; a body per group
+                is what the element is for, and it keeps the header row from
+                being counted as a course by anything walking rows. */}
+            {groups.map((group) => (
+              <tbody key={group.programId || '(none)'} className="border-b border-[var(--surface-border)] last:border-b-0">
+                <tr className="bg-[var(--surface-muted)]">
+                  <th
+                    colSpan={8}
+                    scope="colgroup"
+                    className="px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)]"
+                  >
+                    {group.programName}
+                    <span className="ml-2 font-normal tabular-nums text-[var(--text-muted)]">
+                      {group.count} หลักสูตร
+                    </span>
+                  </th>
+                </tr>
+                {group.rows.map(({ course, position, unlisted }) => {
                 const ext = extensions[course.course_id];
                 const status = resolveCourseStatusBadge(ext);
                 const busy = busyId === course._id;
@@ -204,6 +307,22 @@ export function CoursesAdminClient({
                     key={course.course_id}
                     className="border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)]"
                   >
+                    {/* The number is the position in the STORED list, so it
+                        restarts at 1 in every folder. An unlisted course gets a
+                        word, never a number — it has no position, and printing
+                        the row's screen position would invent one. */}
+                    <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
+                      {unlisted ? (
+                        <span
+                          className="whitespace-nowrap rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
+                          title="ยังไม่อยู่ในลำดับของโปรแกรมนี้ — จะแสดงก่อนหลักสูตรที่จัดลำดับแล้ว"
+                        >
+                          ยังไม่จัดลำดับ
+                        </span>
+                      ) : (
+                        position
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
                       {course.course_id}
                     </td>
@@ -265,8 +384,9 @@ export function CoursesAdminClient({
                     </td>
                   </tr>
                 );
-              })}
-            </tbody>
+                })}
+              </tbody>
+            ))}
           </table>
         </div>
       </div>

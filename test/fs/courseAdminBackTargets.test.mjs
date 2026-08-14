@@ -55,30 +55,57 @@ test('with no upstream course it falls back to the list rather than a dead link'
 
 // ── B2: the filter survives the round trip ──────────────────────────────────
 
-test('the list seeds its filters FROM the URL', () => {
-  for (const [state, param] of [['search', 'q'], ['filterProgram', 'program'], ['filterType', 'type']]) {
-    assert.match(
-      LIST.code,
-      new RegExp(String.raw`\[${state},[^\]]*\]\s*=\s*useState\(\(\)\s*=>\s*searchParams\.get\('${param}'\)`),
-      `${state} is not seeded from ?${param}`
-    );
+/**
+ * ── THE FILTER NOW ARRIVES AS A PROP AND LEAVES THROUGH ONE WRITER ─────────
+ *
+ * These three cases used to assert the OPPOSITE MECHANISM: that the filters
+ * were `useState(() => searchParams.get(…))` and were mirrored back with
+ * `window.history.replaceState`. That shape is the defect
+ * test/fs/urlFilterNoState recorded for this file, and it has been converted —
+ * so the cases are rewritten rather than deleted, because what they were
+ * really protecting still matters: THE FILTER MUST REACH THE URL, or every
+ * back-link below it carries nothing.
+ *
+ * The old CONTROL argued that `router.replace` would round-trip the server per
+ * keystroke. That objection was about WRITING ON EVERY KEYSTROKE, not about the
+ * URL owning the filter, and it is now answered by the search box committing on
+ * Enter/blur instead of on input. The cost is stated in the component.
+ */
+test('the list takes its filters as props rather than seeding them from the URL', () => {
+  const sig = /export function CoursesAdminClient\(\{([\s\S]*?)\}\)/.exec(LIST.code);
+  assert.ok(sig, 'the component signature was not found');
+  for (const param of ['q', 'program', 'type']) {
+    assert.match(sig[1], new RegExp(`\\b${param}\\b`), `${param} is not a prop`);
   }
-});
-
-test('the list mirrors its filters back into the URL', () => {
-  // Without this the URL never carries the filter, so nothing downstream can.
-  assert.match(LIST.code, /window\.history\.replaceState/, 'the filter never reaches the URL');
-});
-
-test('CONTROL: the list does not re-run the server on every keystroke', () => {
-  // `router.replace` would round-trip the server component per character for a
-  // list already filtered entirely on the client. replaceState is the whole
-  // point of the choice — if this becomes router.replace, that was a mistake.
   assert.doesNotMatch(
     LIST.code,
-    /router\.replace\(/,
-    'the filter sync went back to router.replace — a server round-trip per keystroke'
+    /useState\(\(\)\s*=>\s*searchParams\.get/,
+    'the lazily-seeded filter state is back — it goes stale on any navigation that keeps the instance'
   );
+});
+
+test('the list writes its filters back into the URL, through exactly one writer', () => {
+  // Without a write the URL never carries the filter, so nothing downstream can.
+  const writes = [...LIST.code.matchAll(/router\.(push|replace)\(/g)].length;
+  assert.equal(writes, 1, `expected a single URL writer, found ${writes}`);
+  assert.doesNotMatch(
+    LIST.code,
+    /window\.history\.replaceState/,
+    'replaceState is back — it writes an address the router never observes, so useSearchParams and the URL disagree'
+  );
+});
+
+test('the search box does not write the URL on every keystroke', () => {
+  // The surviving half of the original CONTROL, and the reason the conversion
+  // was affordable: this page is force-dynamic, so a write per character would
+  // re-read upstream courses, extensions and programs per character.
+  assert.doesNotMatch(
+    LIST.code,
+    /onChange=\{\(e\)\s*=>\s*navigate\(\{\s*q:/,
+    'the search box commits on every keystroke — one server render per character'
+  );
+  assert.match(LIST.code, /onBlur=\{/, 'the search box has no blur commit');
+  assert.match(LIST.code, /e\.key === 'Enter'/, 'the search box has no Enter commit');
 });
 
 test('the list carries the filter into the edit link', () => {
