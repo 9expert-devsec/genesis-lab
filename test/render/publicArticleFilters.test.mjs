@@ -90,7 +90,14 @@ function render({ skillOptions = SKILL_OPTIONS, skill = '' } = {}) {
       page: 1,
       totalPages: 1,
       total: 1,
-      initialFilters: { q: '', tag: '', program: '', skill },
+      // Discrete props, not the `initialFilters` bundle this replaced — see
+      // test/fs/urlFilterNoState, where this component moved from OUTSTANDING
+      // into FILTER_SCREENS.
+      q: '',
+      tag: '',
+      program: '',
+      skill,
+      articleType: '',
     })
   );
 }
@@ -234,29 +241,42 @@ test('T-d — the current skill round-trips from the URL into the control', () =
   assert.match(skillSelect(render({ skill: '' })), /<option value="" selected="">/);
 });
 
-test('T-e — selecting a skill goes through pushWith, which sets ?skill= and drops page', () => {
+test('T-e — selecting a skill goes through navigate, which sets ?skill= and drops page', () => {
   // ASSERTED AT THE SOURCE, because renderToStaticMarkup cannot dispatch an
   // onChange — there is no DOM and no event loop in this tier, and
   // test/stub-next-navigation's useRouter().push is deliberately inert. What can
   // be pinned is the wiring: the control calls the SAME helper the program
   // filter uses, and that helper deletes empty values and resets the page.
+  //
+  // `pushWith` WAS the helper's name. It was renamed to `navigate` when it
+  // stopped merging into `useSearchParams()` and started serialising from the
+  // props — the same name, and the same shape, as the two admin screens in
+  // FILTER_SCREENS. The rename is asserted rather than papered over because the
+  // old name is still the one in this repo's history.
   assert.match(
-    client, /onChange=\{\(e\) => pushWith\(\{ skill: e\.target\.value \}\)\}/,
-    'the select routes through pushWith, not through a second URL builder',
+    client, /onChange=\{\(e\) => navigate\(\{ skill: e\.target\.value \}\)\}/,
+    'the select routes through navigate, not through a second URL builder',
   );
-  assert.match(client, /pushWith\(\{ program: e\.target\.value \}\)/, 'exactly as the program filter does');
+  assert.match(client, /navigate\(\{ program: e\.target\.value \}\)/, 'exactly as the program filter does');
+  assert.ok(
+    !/pushWith/.test(client),
+    'the old merge-from-the-hook builder is back — it is what forced the CSR bailout',
+  );
 
-  // pushWith's own contract, pinned here because the assertion above leans on it.
+  // navigate's own contract, pinned here because the assertion above leans on it.
   assert.match(
-    client, /if \(v === '' \|\| v == null \|\| v === 'all'\) next\.delete\(k\);/,
+    client, /if \(v === '' \|\| v == null \|\| v === 'all'\) return;/,
     'an empty value REMOVES the param rather than writing ?skill=',
   );
   assert.match(
-    client, /if \(resetPage\) next\.delete\('page'\);/,
+    client, /if \(k === 'page' && Number\(v\) <= 1\) return;/,
     'and a filter change drops `page` — landing on page 4 of a 1-page result is the ' +
     'classic filter-plus-pager bug',
   );
-  assert.match(client, /\(updates, resetPage = true\)/, 'with resetting as the DEFAULT');
+  assert.match(
+    client, /const next = \{ page: 1, q, tag, program, skill, type: articleType, \.\.\.updates \};/,
+    'the next URL must be serialised from the PROPS, with page reset unless overridden',
+  );
 });
 
 // ── the seam only the source can see ─────────────────────────────────────────

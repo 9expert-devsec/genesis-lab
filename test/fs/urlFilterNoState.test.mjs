@@ -54,6 +54,24 @@ const FILTER_SCREENS = [
     component: 'MasterclassRegistrationsClient',
     filters: ['status', 'q', 'range', 'courseId', 'batchId', 'licenseScope'],
   },
+  /**
+   * Promoted out of OUTSTANDING, where it sat as "the half-fixed case": three
+   * filters derived, `q` alone in `useState`. All four are props now.
+   *
+   * It belongs in THIS list rather than in DERIVED_SCREENS because page.jsx is
+   * what reads `searchParams` and hands the values down — the same shape as the
+   * two admin screens above, not CourseListClient's read-the-hook-directly one.
+   *
+   * The conversion carried a second consequence the other entries did not: the
+   * hook it removed was the only reason the route needed a Suspense boundary,
+   * so the grid's server render stopped depending on one. That half is guarded
+   * in test/fs/articlesServerRender and test/render/articlesGridServerRender.
+   */
+  {
+    rel: 'src/app/(public)/articles/_components/ArticlesPageClient.jsx',
+    component: 'ArticlesPageClient',
+    filters: ['q', 'tag', 'program', 'skill'],
+  },
 ];
 
 /**
@@ -80,8 +98,10 @@ const DERIVED_SCREENS = [
 /**
  * ── OUTSTANDING, AND SELF-INVALIDATING BY CONSTRUCTION ──────────────────────
  *
- * Three screens still hold a URL filter in state. They are recorded here so the
+ * Two screens still hold a URL filter in state. They are recorded here so the
  * remaining work is visible in the suite rather than in somebody's notes.
+ * (It was three; ArticlesPageClient was converted and is now in FILTER_SCREENS,
+ * which is the register doing exactly what the note below says it must.)
  *
  * THIS IS NOT AN ALLOWLIST. An allowlist of known-broken files is a guard that
  * has quietly become decoration: it grows, nobody re-reads it, and a file that
@@ -113,13 +133,6 @@ const OUTSTANDING = [
     lines: [
       'const [q, setQ] = useState(initialQ);',
       'const [debouncedQ, setDebouncedQ] = useState(initialQ);',
-    ],
-  },
-  {
-    rel: 'src/app/(public)/articles/_components/ArticlesPageClient.jsx',
-    why: 'q only — program/skill/tag are already derived per render, so this is the half-fixed case',
-    lines: [
-      "const [query, setQuery] = useState(initialFilters.q ?? '');",
     ],
   },
 ];

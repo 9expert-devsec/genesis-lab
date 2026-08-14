@@ -16,8 +16,9 @@
  */
 
 import { toMetaDescription } from '@/lib/seo/metaDescription';
+import { ARTICLE_SITE_URL, articleCanonicalUrl } from '@/lib/articles/articleUrl';
 
-export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app') {
+export function buildJsonLd(article, siteUrl = ARTICLE_SITE_URL) {
   if (!article?.jsonLd?.enabled) return null;
   if (!article.active || !article.publishedAt) return null;
 
@@ -32,7 +33,10 @@ export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app'
   }
 
   const ov = article.jsonLd.overrides ?? {};
-  const canonicalUrl = `${siteUrl}/articles/${article.slug}`;
+  // Through the shared helper, not a local template literal: /articles now
+  // emits an ItemList whose entries must name this exact string. See
+  // lib/articles/articleUrl.js.
+  const canonicalUrl = articleCanonicalUrl(article.slug, siteUrl);
   const publisherName = '9Expert Training';
   const publisherLogo = `${siteUrl}/logo.png`;
 
