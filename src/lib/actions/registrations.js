@@ -7,6 +7,11 @@ import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { INHOUSE_STATUS_VALUES } from '@/lib/registrations/inhouseStatuses';
+import {
+  PUBLIC_STATUS_VALUES,
+  allowedFromStates,
+  buildStatusLabels,
+} from '@/lib/registrations/publicStatuses';
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 
 const ADMIN_PATH = '/admin/registrations';
@@ -138,16 +143,44 @@ export async function getRegistrationById(id, source = 'public') {
 
 // ── Status update ──────────────────────────────────────────────────
 
-const PUBLIC_STATUSES  = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
 /**
- * DERIVED, not written out again. This Set is the write-side gate on
- * `updateRegistrationStatus`; the cards and the chips on the list screen are
- * built from the same array in lib/registrations/inhouseStatuses.js. Spelling
- * the five values here a second time is how the screen came to offer a `quoted`
- * chip that no card could display.
+ * DERIVED, both of them, not written out again. These Sets are the write-side
+ * membership gate on `updateRegistrationStatus`; the cards and the chips on the
+ * list screen are built from the same two arrays in
+ * lib/registrations/publicStatuses.js and lib/registrations/inhouseStatuses.js.
+ * Spelling the values here a second time is how the screen came to offer a
+ * `quoted` chip that no card could display.
  */
+const PUBLIC_STATUSES  = new Set(PUBLIC_STATUS_VALUES);
 const INHOUSE_STATUSES = new Set(INHOUSE_STATUS_VALUES);
 
+const PUBLIC_STATUS_LABEL = buildStatusLabels();
+
+/**
+ * ── THE TRANSITION IS ENFORCED HERE, NOT BY WHICH BUTTONS RENDER ────────────
+ *
+ * Every export of a `'use server'` module is a POST endpoint. Which transitions
+ * RegistrationDetailClient chooses to offer is therefore a CONVENTION the
+ * client is trusted to follow, not a guarantee — anything that can speak the
+ * action protocol can call this with any pair of states. This repo has already
+ * paid for that exact shape once, in applyArticlePositionPlan.
+ *
+ * So the rule lives in lib/registrations/publicStatuses.js and is applied
+ * against the STORED value, by the database:
+ *
+ *   · the membership check below rejects a target that is not a declared
+ *     status at all;
+ *   · the conditional update rejects a target the CURRENT state may not reach.
+ *
+ * ── WHY A CONDITIONAL UPDATE AND NOT A READ-THEN-WRITE ──────────────────────
+ * `allowedFromStates(status)` names the permitted from-states and they go into
+ * the filter, so Mongo matches the document and writes it in one operation. A
+ * read-then-write leaves a window in which a concurrent call — a second admin,
+ * a double-clicked button, the Omise webhook settling a charge — changes the
+ * status between the read and the write, and the write then lands on a state
+ * nobody checked. `paid → cancelled` racing `cancelled → paid` is not a
+ * hypothetical here; it is the exact case the webhook guard was added for.
+ */
 export async function updateRegistrationStatus(id, status, source = 'public') {
   const session = await requireAdmin('registrations');
   const validSet = source === 'inhouse' ? INHOUSE_STATUSES : PUBLIC_STATUSES;
@@ -155,23 +188,62 @@ export async function updateRegistrationStatus(id, status, source = 'public') {
 
   await dbConnect();
   const Model = getModel(source);
-  // `new: false` returns the PRE-update document, which is the only place the
-  // previous status exists. The existence check below is unchanged (a missing
-  // id returns null either way) and `doc` is not returned to the caller, so
-  // this costs nothing and adds no query.
-  const doc   = await Model.findByIdAndUpdate(id, { status }, { new: false, runValidators: false });
-  if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+
+  let previous;
+  if (source === 'inhouse') {
+    // UNCHANGED THIS ROUND. In-house has its own vocabulary and no agreed
+    // transition table yet; inventing one here would be a guess enforced on
+    // the sales team. It gets the same treatment in its own round.
+    //
+    // `new: false` returns the PRE-update document, which is the only place the
+    // previous status exists. The existence check below is unchanged (a missing
+    // id returns null either way) and `doc` is not returned to the caller, so
+    // this costs nothing and adds no query.
+    const doc = await Model.findByIdAndUpdate(id, { status }, { new: false, runValidators: false });
+    if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+    previous = doc.status;
+  } else {
+    /**
+     * ATOMIC. The filter names both the id AND the states permitted to reach
+     * `status`, so a document in any other state is not matched and not
+     * written.
+     *
+     * A NULL RESULT IS AMBIGUOUS — it means EITHER no such id OR an id whose
+     * stored status may not make this move, and the two deserve different
+     * messages ("ไม่พบรายการ" sends the admin looking for a deleted record;
+     * the refusal tells them the rule). One extra read resolves which, and it
+     * runs ONLY on this path — the successful path is still a single write.
+     */
+    const doc = await Model.findOneAndUpdate(
+      { _id: id, status: { $in: allowedFromStates(status) } },
+      { $set: { status } },
+      { new: false, runValidators: false }
+    );
+    if (!doc) {
+      const existing = await Model.findById(id).select('status').lean();
+      if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+      const from = PUBLIC_STATUS_LABEL[existing.status] ?? existing.status;
+      const to   = PUBLIC_STATUS_LABEL[status] ?? status;
+      return { ok: false, error: `ไม่สามารถเปลี่ยนสถานะจาก "${from}" เป็น "${to}" ได้` };
+    }
+    previous = doc.status;
+  }
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
 
+  // BELOW EVERY EARLY RETURN, and that placement is the rule: a REJECTED
+  // transition writes NO audit row. The trail is a record of what happened, and
+  // a refused move did not happen — filing one would put a status change in the
+  // history of a record that never changed status, which is worse than silence
+  // because it reads as evidence.
   recordAdminActionAfter({
     menu:        'registrations',
     action:      'status',
     entity:      entityForSource(source),
     recordId:    String(id),
     recordLabel: '', // the reference number IS the id — see the header
-    before:      { status: doc.status },
+    before:      { status: previous },
     after:       { status },
     actor:       { id: session.user?.id, name: session.user?.name },
   });
@@ -299,8 +371,51 @@ export async function updateRegistration(id, data, source = 'public') {
 
   await dbConnect();
   const Model = getModel(source);
-  const doc   = await Model.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: false });
-  if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+
+  /**
+   * ── THE CANCELLATION LOCK ───────────────────────────────────────────────
+   *
+   * A cancelled PUBLIC registration is READ-ONLY. The gate is in the FILTER,
+   * not in a preceding read, for the same reason as the transition check
+   * above: a read-then-write can be raced by the cancel it is checking for,
+   * and the edit then lands on a record that was cancelled a millisecond ago.
+   *
+   * ── THE SCOPE IS EXACTLY THIS, AND THE OMISSIONS ARE RULINGS ────────────
+   *
+   *   · `cancelled` ⇒ THE WHOLE RECORD IS FROZEN. Every field, and every
+   *     cancelled record — including one cancelled before any payment. There
+   *     is no "it was only a pending registration" carve-out, because the
+   *     value of the lock is that a cancelled row means one thing.
+   *
+   *   · `paid` (not cancelled) LOCKS THE STATUS FIELD ONLY, and it is locked
+   *     by the transition table, not here. Editing attendees, the coordinator,
+   *     the invoice/billing address and the notes stays fully available on a
+   *     paid record — those are exactly the things that need correcting after
+   *     money arrives (a misspelled name on a tax invoice, a substituted
+   *     attendee). Do NOT extend this filter to `paid`.
+   *
+   *   · DELETE STAYS AVAILABLE ON A CANCELLED RECORD. That is a decision, not
+   *     a hole in the lock. Delete is a different permission from edit, it
+   *     writes its own audit row, and the team needs to clear test rows —
+   *     which is also the escape hatch for a wrongly-cancelled registration,
+   *     since cancellation itself is terminal. Nothing here should be
+   *     "completed" by gating deleteRegistration.
+   *
+   * In-house is not gated: it has no `cancelled` in its vocabulary, so the
+   * filter would be inert, and its own rules land in its own round.
+   */
+  const filter = source === 'inhouse'
+    ? { _id: id }
+    : { _id: id, status: { $ne: 'cancelled' } };
+
+  const doc = await Model.findOneAndUpdate(filter, { $set: update }, { new: true, runValidators: false });
+  if (!doc) {
+    // Same ambiguity as the status gate — no such id, or a locked one. One
+    // extra read on the refusal path only, so the two messages stay distinct.
+    const existing = await Model.findById(id).select('status').lean();
+    if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+    return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
+  }
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
@@ -389,13 +504,28 @@ export async function getRegistrationStatusCounts({ range = 'all', source = 'pub
 
     return serialize({ total, ...byStatus, range, source });
   } else {
-    const [total, pending, confirmed, paid, cancelled] = await Promise.all([
+    /**
+     * ONE COUNT PER DECLARED STATUS, driven by the array — the same shape as
+     * the in-house branch above and for the same reason. The four hand-named
+     * counts this replaces were the last hand-written spelling of the public
+     * enum on the server, and a fifth status added to PUBLIC_STATUSES would
+     * have been counted by nothing while its card rendered `undefined`.
+     *
+     * The returned keys are unchanged (`pending`, `confirmed`, `paid`,
+     * `cancelled`) because they ARE the stored values, which is also the card
+     * key and the URL filter value.
+     */
+    const [total, ...perStatus] = await Promise.all([
       Model.countDocuments(dateFilter),
-      Model.countDocuments({ ...dateFilter, status: 'pending' }),
-      Model.countDocuments({ ...dateFilter, status: 'confirmed' }),
-      Model.countDocuments({ ...dateFilter, status: 'paid' }),
-      Model.countDocuments({ ...dateFilter, status: 'cancelled' }),
+      ...PUBLIC_STATUS_VALUES.map((value) =>
+        Model.countDocuments({ ...dateFilter, status: value })
+      ),
     ]);
-    return serialize({ total, pending, confirmed, paid, cancelled, range, source });
+
+    const byStatus = Object.fromEntries(
+      PUBLIC_STATUS_VALUES.map((value, i) => [value, perStatus[i]])
+    );
+
+    return serialize({ total, ...byStatus, range, source });
   }
 }
