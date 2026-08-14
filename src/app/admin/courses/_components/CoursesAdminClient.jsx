@@ -5,9 +5,17 @@ import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { deleteCourse } from '@/lib/actions/courses';
+import { saveProgramCourseOrder } from '@/lib/actions/program-order';
 import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
 import { resolveCourseStatusBadge } from '@/lib/courses/courseStatusBadge';
 import { groupCoursesByProgram } from '@/lib/courses/groupCoursesByProgram';
+import {
+  canReorderCourseGroups,
+  orderedCodesForGroup,
+  REORDER_BLOCKED,
+} from '@/lib/courses/courseOrderEditing';
+import { useDragReorder } from '@/hooks/useDragReorder';
+import { DragHandle } from '@/components/ui/DragHandle';
 
 const TYPE_OPTIONS = [
   { value: '',         label: 'ทุกประเภท' },
@@ -138,6 +146,11 @@ export function CoursesAdminClient({
     [filtered, programCourseOrder, programNames]
   );
 
+  // Whether a drag may be offered at all, and if not, which reason to show.
+  // See lib/courses/courseOrderEditing.js — a save writes the WHOLE group, so a
+  // narrowed view or an absent stored order must not be able to write one.
+  const reorder = canReorderCourseGroups({ programCourseOrder, q, type });
+
   async function handleDelete(course) {
     const ok = window.confirm(
       `ลบหลักสูตร "${course.course_name_th || course.course_name}" ?\nการลบจะไม่สามารถย้อนกลับได้`
@@ -235,6 +248,39 @@ export function CoursesAdminClient({
         </div>
       )}
 
+      {/* ── WHAT THIS SCREEN DOES NOT DO, SAID ON THE SCREEN ────────────────
+          The admin is arranging ONE of the two dimensions a course sits in. A
+          course holds a position in its program's list and an INDEPENDENT one
+          in each skill list it belongs to (up to three), and nothing here
+          touches the second. Nor does the mega menu follow immediately — it
+          renders from the nav_menu_cache snapshot, not from a live read.
+
+          Stated in the UI rather than in this comment because the admin is the
+          one who will be surprised, and a field that stays silent about its own
+          reach is how the last round's defect happened. */}
+      {reorder.allowed && (
+        <div className="mb-3 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2 text-xs leading-relaxed text-[var(--text-secondary)]">
+          <span className="font-semibold text-[var(--text-primary)]">ลากเพื่อจัดลำดับได้เฉพาะภายในโปรแกรมเดียวกัน</span>
+          {' — '}
+          ลำดับนี้ใช้กับ <strong>หน้าโปรแกรม</strong> เท่านั้น
+          <strong> ไม่มีผลกับหน้า Skill และคอลัมน์ Skill ในเมกะเมนู</strong> ซึ่งเก็บลำดับแยกของตัวเอง
+          <br />
+          เมกะเมนูอ่านจาก snapshot จึงจะยังไม่เปลี่ยนจนกว่าจะมีการ sync ครั้งถัดไป — สั่ง sync ได้ที่{' '}
+          <Link href="/admin/cache" className="font-semibold text-9e-action hover:underline">
+            /admin/cache
+          </Link>
+        </div>
+      )}
+
+      {/* Why the handles are absent, when they are. An admin who saw drag
+          handles yesterday and none today needs the reason, not a guess. */}
+      {!reorder.allowed && reorder.reason === REORDER_BLOCKED.FILTERED && (
+        <div className="mb-3 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+          ปิดการจัดลำดับชั่วคราวเพราะกำลังกรองรายการอยู่ — การบันทึกจะเขียนสมาชิกทั้งกลุ่ม
+          ถ้าบันทึกขณะกรอง หลักสูตรที่ถูกกรองออกจะหายไปจากลำดับ ล้างช่องค้นหาและตัวกรองประเภทเพื่อจัดลำดับ
+        </div>
+      )}
+
       {/* The order could not be read, or nothing is seeded. Said out loud
           rather than rendered as a column of dashes nobody can interpret —
           `null` is a real state with two causes, and both mean the public site
@@ -256,9 +302,9 @@ export function CoursesAdminClient({
           <table className="w-full min-w-[900px] text-sm">
             <thead className="sticky top-0 bg-[var(--surface-muted)]">
               <tr className="border-b border-[var(--surface-border)] text-left">
-                {/* READ-ONLY in this commit. There is no reorder control and no
-                    write path — the number shown is the course's index in its
-                    program's stored courseOrder, nothing more. */}
+                {/* The course's index in its program's stored courseOrder.
+                    Draggable only when the whole group is on screen and a
+                    stored order exists — see courseOrderEditing.js. */}
                 <th className="w-16 px-4 py-3 text-right font-medium text-[var(--text-secondary)]">ลำดับ</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">Course ID</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">ชื่อหลักสูตร</th>
@@ -285,111 +331,256 @@ export function CoursesAdminClient({
                 is what the element is for, and it keeps the header row from
                 being counted as a course by anything walking rows. */}
             {groups.map((group) => (
-              <tbody key={group.programId || '(none)'} className="border-b border-[var(--surface-border)] last:border-b-0">
-                <tr className="bg-[var(--surface-muted)]">
-                  <th
-                    colSpan={8}
-                    scope="colgroup"
-                    className="px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)]"
-                  >
-                    {group.programName}
-                    <span className="ml-2 font-normal tabular-nums text-[var(--text-muted)]">
-                      {group.count} หลักสูตร
-                    </span>
-                  </th>
-                </tr>
-                {group.rows.map(({ course, position, unlisted }) => {
-                const ext = extensions[course.course_id];
-                const status = resolveCourseStatusBadge(ext);
-                const busy = busyId === course._id;
-                return (
-                  <tr
-                    key={course.course_id}
-                    className="border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)]"
-                  >
-                    {/* The number is the position in the STORED list, so it
-                        restarts at 1 in every folder. An unlisted course gets a
-                        word, never a number — it has no position, and printing
-                        the row's screen position would invent one. */}
-                    <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
-                      {unlisted ? (
-                        <span
-                          className="whitespace-nowrap rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
-                          title="ยังไม่อยู่ในลำดับของโปรแกรมนี้ — จะแสดงก่อนหลักสูตรที่จัดลำดับแล้ว"
-                        >
-                          ยังไม่จัดลำดับ
-                        </span>
-                      ) : (
-                        position
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
-                      {course.course_id}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-primary)]">
-                      {course.course_name_th || course.course_name}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">
-                      {ext?.urlAlias || (
-                        <span className="text-[var(--text-muted)]">—</span>
-                      )}
-                    </td>
-                    {/* Publication state. Read from the SAME `extensions` map
-                        the alias above uses — the server component already
-                        batches that in one query, so this column adds no read
-                        and nothing per-row. The mapping is total, so this cell
-                        can never be blank; see lib/courses/courseStatusBadge. */}
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span
-                        className={
-                          'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium '
-                          + status.badge
-                        }
-                      >
-                        <span
-                          aria-hidden="true"
-                          className={'h-1.5 w-1.5 rounded-full ' + status.dot}
-                        />
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
-                      {ext?.tags?.length ?? 0}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
-                      {ext?.gallery?.length ?? 0}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1">
-                        <Link
-                          // Carries the filter so the editor's ← can bring it
-                          // back. Miss this link and the filter dies here.
-                          href={withListQuery(
-                            `/admin/courses/${encodeURIComponent(course._id)}/edit`,
-                            listQuery
-                          )}
-                          className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                        >
-                          แก้ไข
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(course)}
-                          disabled={busy}
-                          className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
-                        >
-                          {busy ? '…' : 'ลบ'}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-                })}
-              </tbody>
+              <ProgramGroupBody
+                /**
+                 * KEYED BY THE GROUP'S CODE SEQUENCE, not just its id.
+                 *
+                 * ProgramGroupBody seeds `useDragReorder` from its rows, and that
+                 * hook owns the array in state. When the server sends a new order
+                 * — after a save, or a refresh — a stable key would keep the old
+                 * state and the table would show the pre-save arrangement over
+                 * post-save data. Changing the key remounts it with the server's
+                 * truth, which is the whole point of remounting rather than
+                 * syncing: there is no window in which the two disagree.
+                 */
+                key={`${group.programId || '(none)'}:${group.rows.map((r) => r.course.course_id).join(',')}`}
+                group={group}
+                extensions={extensions}
+                listQuery={listQuery}
+                busyId={busyId}
+                onDelete={handleDelete}
+                canReorder={reorder.allowed}
+              />
             ))}
           </table>
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * One program folder: its header, its rows, and — when reordering is permitted
+ * — the drag state and the save.
+ *
+ * ── ITS OWN COMPONENT BECAUSE THE HOOK IS PER GROUP ────────────────────────
+ * `useDragReorder` owns one array. There is one array per folder, and hooks
+ * cannot be called in a loop, so each folder has to be a component. That is the
+ * mechanical reason; the useful consequence is that a drag in one program can
+ * never move a row in another, because the two arrays never meet.
+ *
+ * ── THE NUMBER WHILE DIRTY ─────────────────────────────────────────────────
+ * Unsaved, the column shows the position the row WOULD get — its index in the
+ * arranged array — because that is what the save is about to write, and showing
+ * the pre-drag number over post-drag rows would be a lie in the other
+ * direction. Saved and clean, it goes back to the stored position from
+ * groupCoursesByProgram, unlisted marker and all. Nothing renumbers from render
+ * position in the clean state, which is the rule f596901 established.
+ *
+ * A dirty group therefore shows every row numbered, including ones that were
+ * ยังไม่จัดลำดับ a moment ago. That is correct and it is the point: saving
+ * ADOPTS them. The banner above the buttons says so rather than leaving the
+ * admin to infer it from a marker that quietly disappeared.
+ */
+function ProgramGroupBody({
+  group,
+  extensions,
+  listQuery,
+  busyId,
+  onDelete,
+  canReorder,
+}) {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [error, setError] = useState(null);
+  const { items, draggingIndex, dragOverIndex, getDragProps, resetItems } =
+    useDragReorder(group.rows, () => setDirty(true));
+
+  const cancel = () => {
+    resetItems(group.rows);
+    setDirty(false);
+    setError(null);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      // The COMPLETE membership of this group, in the arranged order — see
+      // lib/courses/courseOrderEditing.js. Built from the rendered rows, which
+      // is what the admin agreed to, and normalised there so the list the screen
+      // renumbers from is the list that was written.
+      const res = await saveProgramCourseOrder(group.programId, orderedCodesForGroup(items));
+      if (res?.ok) {
+        setDirty(false);
+        // The server re-renders with the stored order, the key above changes,
+        // and this component remounts on it.
+        router.refresh();
+      } else {
+        setError(res?.error ?? 'บันทึกลำดับไม่สำเร็จ');
+      }
+    } catch (err) {
+      setError(err?.message ?? 'บันทึกลำดับไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <tbody className="border-b border-[var(--surface-border)] last:border-b-0">
+      <tr className="bg-[var(--surface-muted)]">
+        <th
+          colSpan={8}
+          scope="colgroup"
+          className="px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)]"
+        >
+          <span className="inline-flex w-full flex-wrap items-center gap-2">
+            <span>{group.programName}</span>
+            <span className="font-normal tabular-nums text-[var(--text-muted)]">
+              {group.count} หลักสูตร
+            </span>
+            {dirty && (
+              <span className="ml-auto inline-flex items-center gap-2">
+                <span className="font-normal text-amber-700 dark:text-amber-300">
+                  ยังไม่บันทึก — การบันทึกจะเขียนลำดับของทั้งกลุ่ม
+                  {group.rows.some((r) => r.unlisted) && ' และรับหลักสูตรที่ยังไม่จัดลำดับเข้าลำดับ'}
+                </span>
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={saving}
+                  className="rounded bg-9e-action px-2.5 py-1 text-xs font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+                >
+                  {saving ? 'กำลังบันทึก…' : 'บันทึกลำดับ'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancel}
+                  disabled={saving}
+                  className="rounded border border-[var(--surface-border)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] disabled:opacity-50"
+                >
+                  ยกเลิก
+                </button>
+              </span>
+            )}
+            {error && (
+              <span className="ml-auto font-normal text-red-600 dark:text-red-400">{error}</span>
+            )}
+          </span>
+        </th>
+      </tr>
+      {items.map((row, index) => (
+        <CourseRow
+          key={row.course.course_id}
+          row={row}
+          index={index}
+          dirty={dirty}
+          canReorder={canReorder}
+          dragProps={canReorder ? getDragProps(index) : null}
+          isDragging={draggingIndex === index}
+          isDragOver={dragOverIndex === index && draggingIndex !== index}
+          ext={extensions[row.course.course_id]}
+          listQuery={listQuery}
+          busy={busyId === row.course._id}
+          onDelete={onDelete}
+        />
+      ))}
+    </tbody>
+  );
+}
+
+/** One course row. Extracted so the drag body and the read-only body cannot
+ *  drift into two different tables. */
+function CourseRow({
+  row, index, dirty, canReorder, dragProps, isDragging, isDragOver,
+  ext, listQuery, busy, onDelete,
+}) {
+  const { course, position, unlisted } = row;
+  const status = resolveCourseStatusBadge(ext);
+  return (
+    <tr
+      {...(dragProps ?? {})}
+      className={
+        'border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)]'
+        + (isDragging ? ' opacity-40' : '')
+        + (isDragOver ? ' border-t-2 border-t-9e-action' : '')
+      }
+    >
+      {/* Clean: the position in the STORED list, restarting at 1 in every
+          folder, with an unlisted course MARKED rather than numbered. Dirty:
+          the position this row is about to be written to. Never the render
+          index in the clean state — see the note on the component. */}
+      <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
+        <span className="inline-flex items-center justify-end gap-1">
+          {canReorder && <DragHandle className="shrink-0" />}
+          {dirty ? (
+            <span className="font-semibold text-9e-action">{index + 1}</span>
+          ) : unlisted ? (
+            <span
+              className="whitespace-nowrap rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
+              title="ยังไม่อยู่ในลำดับของโปรแกรมนี้ — จะแสดงก่อนหลักสูตรที่จัดลำดับแล้ว"
+            >
+              ยังไม่จัดลำดับ
+            </span>
+          ) : (
+            position
+          )}
+        </span>
+      </td>
+      <td className="px-4 py-3 font-mono text-xs text-[var(--text-primary)]">
+        {course.course_id}
+      </td>
+      <td className="px-4 py-3 text-[var(--text-primary)]">
+        {course.course_name_th || course.course_name}
+      </td>
+      <td className="px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">
+        {ext?.urlAlias || <span className="text-[var(--text-muted)]">—</span>}
+      </td>
+      {/* Publication state. Read from the SAME `extensions` map the alias above
+          uses — the server component already batches that in one query, so this
+          column adds no read and nothing per-row. The mapping is total, so this
+          cell can never be blank; see lib/courses/courseStatusBadge. */}
+      <td className="whitespace-nowrap px-4 py-3">
+        <span
+          className={
+            'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium '
+            + status.badge
+          }
+        >
+          <span aria-hidden="true" className={'h-1.5 w-1.5 rounded-full ' + status.dot} />
+          {status.label}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
+        {ext?.tags?.length ?? 0}
+      </td>
+      <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
+        {ext?.gallery?.length ?? 0}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="inline-flex gap-1">
+          <Link
+            // Carries the filter so the editor's ← can bring it back. Miss this
+            // link and the filter dies here.
+            href={withListQuery(
+              `/admin/courses/${encodeURIComponent(course._id)}/edit`,
+              listQuery
+            )}
+            className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            แก้ไข
+          </Link>
+          <button
+            type="button"
+            onClick={() => onDelete(course)}
+            disabled={busy}
+            className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
+          >
+            {busy ? '…' : 'ลบ'}
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }

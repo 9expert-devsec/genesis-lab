@@ -64,6 +64,9 @@ export const STUBS = {
   // handler; both chains reach next-auth → next/headers (and mongoose). Same
   // reasoning as the three lines above.
   '@/lib/actions/courses': path.join(ROOT, 'test', 'stub-course-actions.mjs'),
+  // CoursesAdminClient imports saveProgramCourseOrder for the reorder save;
+  // same chain, same reasoning as the line above.
+  '@/lib/actions/program-order': path.join(ROOT, 'test', 'stub-program-order-actions.mjs'),
   '@/lib/actions/course-extensions': path.join(ROOT, 'test', 'stub-course-extension-actions.mjs'),
   // Reached indirectly, via CourseOutlineUpload inside CourseForm.
   '@/lib/actions/course-outlines': path.join(ROOT, 'test', 'stub-course-outline-actions.mjs'),

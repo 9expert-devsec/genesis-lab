@@ -169,14 +169,30 @@ test('the banner is ABSENT when the order is present', () => {
   assert.ok(!/ยังไม่มีลำดับที่บันทึกไว้/.test(render()), 'the banner shows over a seeded order');
 });
 
-// ── Read-only: this commit ships no write path ──────────────────────────────
+// ── The grouping survives the arrival of the write path ─────────────────────
 
-test('there is NO reorder control in the markup', () => {
-  // Commit 1 is read-only by ruling. A drag handle or a move button rendered
-  // here would be a control with no write behind it.
+/**
+ * This case asserted "there is NO reorder control in the markup", which was
+ * commit 1's ruling and is no longer true — commit 2 adds the drag. Rewritten
+ * rather than deleted, because the property that mattered still holds: the
+ * NUMBERING is read from the stored array, and a drag affordance must not
+ * change that. A control appearing beside the number is fine; a control that
+ * renumbers from render position is the defect.
+ *
+ * Which states offer the drag, and the limits the screen states about it, are
+ * in test/render/coursesAdminReorder.
+ */
+test('the drag affordance does not disturb the stored numbering', () => {
   const html = render();
-  assert.ok(!/draggable/i.test(html), 'a drag affordance appeared');
-  assert.ok(!/aria-label="(เลื่อนขึ้น|เลื่อนลง)"/.test(html), 'a move control appeared');
+  assert.deepEqual(positionCells(html), ['1', '2', '3', '1', '2']);
+  // The handle sits inside the ลำดับ cell, so the extractor above must still
+  // read the NUMBER and not the handle's markup.
+  assert.match(html, /aria-label="Drag handle"/, 'the drag affordance is missing entirely');
+});
+
+test('an unlisted row keeps its marker even with the drag offered', () => {
+  const html = render({ courses: [course('BRAND-NEW', 'CLAUDE'), ...ROWS] });
+  assert.equal(positionCells(html)[0], 'ยังไม่จัดลำดับ');
 });
 
 // ── Controls ────────────────────────────────────────────────────────────────
