@@ -72,6 +72,22 @@ const FILTER_SCREENS = [
     component: 'ArticlesPageClient',
     filters: ['q', 'tag', 'program', 'skill'],
   },
+  /**
+   * Promoted out of OUTSTANDING. Its filters were the LAZILY-SEEDED variant —
+   * `useState(() => searchParams.get('q'))` — which is the same defect wearing
+   * the costume that looks most like a fix: the initialiser reads the live URL,
+   * so it is correct on mount and only wrong on a navigation that keeps the
+   * instance. It is now the AuditLogClient shape, filters in as props.
+   *
+   * This screen is also the reason the `navigate serialises every filter`
+   * matcher below was fixed: its `next` object legitimately LEADS with a
+   * filter, and the old pattern could not match a key in first position.
+   */
+  {
+    rel: 'src/app/admin/courses/_components/CoursesAdminClient.jsx',
+    component: 'CoursesAdminClient',
+    filters: ['q', 'program', 'type'],
+  },
 ];
 
 /**
@@ -167,10 +183,11 @@ const DERIVED_SCREENS = [
 /**
  * ── OUTSTANDING, AND SELF-INVALIDATING BY CONSTRUCTION ──────────────────────
  *
- * Two screens still hold a URL filter in state. They are recorded here so the
+ * ONE screen still holds a URL filter in state. It is recorded here so the
  * remaining work is visible in the suite rather than in somebody's notes.
- * (It was three; ArticlesPageClient was converted and is now in FILTER_SCREENS,
- * which is the register doing exactly what the note below says it must.)
+ * (It was three. ArticlesPageClient and CoursesAdminClient have both been
+ * converted and are now in FILTER_SCREENS — the register doing exactly what the
+ * note below says it must, twice.)
  *
  * THIS IS NOT AN ALLOWLIST. An allowlist of known-broken files is a guard that
  * has quietly become decoration: it grows, nobody re-reads it, and a file that
@@ -187,15 +204,6 @@ const DERIVED_SCREENS = [
  * statement does, which is the point.
  */
 const OUTSTANDING = [
-  {
-    rel: 'src/app/admin/courses/_components/CoursesAdminClient.jsx',
-    why: 'q / program / type, lazily seeded from useSearchParams, written back with history.replaceState',
-    lines: [
-      "const [search, setSearch]               = useState(() => searchParams.get('q') ?? '');",
-      "const [filterProgram, setFilterProgram] = useState(() => searchParams.get('program') ?? '');",
-      "const [filterType, setFilterType]       = useState(() => searchParams.get('type') ?? '');",
-    ],
-  },
   {
     rel: 'src/app/(public)/search/_components/SearchClient.jsx',
     why: 'q + debouncedQ seeded from the initialQ prop; navigating to a bare /search keeps the old term',
@@ -214,16 +222,111 @@ const REFERENCE_SCREENS = [
 ];
 
 /**
- * Every `useState(...)` argument in a source file.
+ * Every `useState(...)` argument in a source file, to its MATCHING paren.
  *
- * Deliberately shallow — it captures up to the first `)` or `,`, which is enough
- * for the seeded-from-a-prop forms this rule is about (`useState(initialQ)`,
- * `useState(sp.status)`, `useState(searchParams.get('q'))`) and cannot be
- * defeated by a nested call, because the identifier still appears in the slice.
+ * ── WHY THIS IS NOT THE `[^)]*` ONE-LINER IT USED TO BE ────────────────────
+ * It was `/useState(?:<[^>]*>)?\(([^)]*)\)/`, which stops at the FIRST `)`. For
+ * the plain forms this rule was written against (`useState(initialQ)`) that is
+ * enough. For a LAZY INITIALISER it is not, and the difference is total rather
+ * than partial:
+ *
+ *     useState(() => searchParams.get('q') ?? '')
+ *              ^^ the first `)` is the arrow's own empty parameter list
+ *
+ * so the captured argument was the two characters `()`, and every assertion
+ * below — all of which are negatives — passed on it. That is defect 6 in
+ * test/sourceScan.mjs's header ("a regex bounded by `[^)]*` could not cross the
+ * arrow function's OWN `)`"), and it is the reason CoursesAdminClient's entry in
+ * OUTSTANDING had to record its three lines as EXACT TEXT: the rule could not
+ * see the shape at all, so the register was doing the rule's job by hand.
+ *
+ * That file is now in FILTER_SCREENS. Moving it there under an extractor blind
+ * to the very shape it used to have would have been a downgrade wearing the
+ * costume of a fix — the screen would be "guarded" by four assertions that
+ * cannot fail on it.
+ *
+ * Counts depth instead, so the argument comes out whole and a nested call, an
+ * arrow, or an object literal cannot truncate it.
  */
 function useStateArgs(src) {
-  return [...src.matchAll(/useState(?:<[^>]*>)?\(([^)]*)\)/g)].map((m) => m[1].trim());
+  const out = [];
+  const opener = /useState(?:<[^>]*>)?\(/g;
+  let m;
+  while ((m = opener.exec(src)) !== null) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    const start = i;
+    while (i < src.length && depth > 0) {
+      const c = src[i];
+      if (c === '(') depth += 1;
+      else if (c === ')') depth -= 1;
+      i += 1;
+    }
+    // Unbalanced (truncated source) → skip rather than capture to end-of-file,
+    // which would sweep the whole rest of the module into one "argument".
+    if (depth === 0) out.push(src.slice(start, i - 1).trim());
+  }
+  return out;
 }
+
+test('CONTROL: the extractor captures a LAZY initialiser whole, not just its `()`', () => {
+  // The defect, pinned. Without this the extractor could go back to `[^)]*`
+  // and every negative assertion in this file would keep passing.
+  const lazy = useStateArgs("const [search, setSearch] = useState(() => searchParams.get('q') ?? '');");
+  assert.deepEqual(lazy, ["() => searchParams.get('q') ?? ''"]);
+  assert.ok(/\bq\b/i.test(lazy[0]), 'the rule could not see the filter inside a lazy initialiser');
+  assert.ok(/searchParams/.test(lazy[0]), 'the rule could not see the URL read inside a lazy initialiser');
+
+  // The plain forms it always handled still come out identically.
+  assert.deepEqual(useStateArgs('useState(initialSource)'), ['initialSource']);
+  assert.deepEqual(useStateArgs('useState(null)'), ['null']);
+  assert.deepEqual(useStateArgs('useState()'), ['']);
+  // And a nested call no longer truncates.
+  assert.deepEqual(useStateArgs('useState(buildThing(a, b))'), ['buildThing(a, b)']);
+});
+
+/**
+ * `f` appearing as a KEY of an object literal's captured body — including in
+ * FIRST position.
+ *
+ * ── THE MATCHER DEFECT THIS FIXES, AT BOTH ENDS ────────────────────────────
+ * It was `(^|[{,]\s*)…[,:}]`. The capture from `/const next = \{([^}]*)\}/`
+ * excludes BOTH braces, and the old pattern assumed neither was missing:
+ *
+ *   · LEADING. For `const next = { q, program, type }` the capture is
+ *     ` q, program, type ` — it begins with a SPACE. The `^` branch had to
+ *     match `q` at index 0 where a space sits, and the `[{,]` branch had no
+ *     comma to find. The first key was unmatchable.
+ *   · TRAILING. The last key has no `}` after it either, so a key in final
+ *     position with no trailing comma could not match the `[,:}]` terminator.
+ *
+ * Both went unnoticed because the two original screens lead with a non-filter
+ * (`page: '1'`, `cursor: ''`) and end with `...overrides`, so every filter they
+ * declare happens to sit between two commas. CoursesAdminClient has no such key
+ * to lead with, and adding one purely to satisfy a regex would be the test
+ * dictating the code.
+ *
+ * Still a KEY match, not a substring one: the name must be followed by `,`,
+ * `:`, `}` or the end of the object body, so `...overrides` and a longer
+ * identifier ending in the same letters cannot satisfy it.
+ */
+const FIRST_CLASS_KEY = (f) => new RegExp(`(^\\s*|[{,]\\s*)${f}(\\s*[,:}]|\\s*$)`);
+
+test('CONTROL: the next-object matcher finds a key at BOTH ends, and rejects a non-key', () => {
+  // The defect, pinned at each end. Without this the fix above could be
+  // reverted and only the screens that sandwich every filter between two commas
+  // would notice — which is exactly how it survived being written.
+  assert.match(' q, program, type, ...overrides ', FIRST_CLASS_KEY('q'), 'first position');
+  assert.match(' q, program, type ', FIRST_CLASS_KEY('type'), 'last position, no trailing comma');
+  assert.match(" page: '1', status, q, source ", FIRST_CLASS_KEY('q'), 'the shape that always worked');
+  assert.match(' menu: m, entity ', FIRST_CLASS_KEY('menu'), 'first position with a value');
+
+  // And it is still a key match rather than a substring one.
+  assert.ok(!FIRST_CLASS_KEY('q').test(' query, program '), 'a longer identifier satisfied the key match');
+  assert.ok(!FIRST_CLASS_KEY('type').test(' ...overrides, subtype '), 'a suffix match was accepted');
+  assert.ok(!FIRST_CLASS_KEY('skill').test(' q, program '), 'a missing key was reported as present');
+  assert.ok(!FIRST_CLASS_KEY('q').test(' program, type '), 'a missing key at neither end was accepted');
+});
 
 for (const { rel, component, filters } of FILTER_SCREENS) {
   const src = readSource(rel).code;
@@ -299,7 +402,7 @@ for (const { rel, component, filters } of FILTER_SCREENS) {
     for (const f of filters) {
       assert.match(
         next[1],
-        new RegExp(`(^|[{,]\\s*)${f}\\s*[,:}]`),
+        FIRST_CLASS_KEY(f),
         `navigate does not serialise ${f} — it would be dropped from the next URL`
       );
     }

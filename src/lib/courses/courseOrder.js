@@ -69,6 +69,21 @@ export function normalizeCourseCode(value) {
 export const UNLISTED_RANK = -1;
 
 /**
+ * The key a course is ranked BY — its program's `program_id`, never `_id`.
+ *
+ * Exported rather than left as a closure inside makeGlobalComparator because
+ * /admin/courses now groups its table by the same key to display the position.
+ * Two spellings of "which program is this course in" is how a screen ends up
+ * showing a ลำดับ that the site does not order by: `ProgramOrder.programId`
+ * stores the CODE, while the admin filter dropdown carries the ObjectId, and
+ * both are reachable from `course.program`. Anything reading a rank must come
+ * through here.
+ */
+export function programKeyOf(course) {
+  return String(course?.program?.program_id ?? '');
+}
+
+/**
  * `['MSE-L1', 'mse-l2']` → Map { 'MSE-L1' => 0, 'MSE-L2' => 1 }.
  *
  * First occurrence wins, as in lib/articles/pinnedCourses: a code repeated in a
@@ -152,7 +167,7 @@ export function makeGlobalComparator({ programRank, courseOrderByProgram } = {})
   // Matches ProgramOrder.order's own default: a program nobody has ordered
   // sorts after every program somebody has.
   const UNRANKED_PROGRAM = 999;
-  const programIdOf = (c) => String(c?.program?.program_id ?? '');
+  const programIdOf = programKeyOf;
 
   return (a, b) => {
     const pa = pRank.has(programIdOf(a)) ? pRank.get(programIdOf(a)) : UNRANKED_PROGRAM;
