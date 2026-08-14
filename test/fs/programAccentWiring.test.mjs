@@ -21,7 +21,33 @@ test('the page builds both maps from ONE shared walk and passes the colours down
   assert.match(withImports, /from '@\/lib\/courses\/programAccent'/, 'the page does not import the accessor');
   assert.equal(countCallSites(code, 'buildProgramIndex'), 1, 'the index is not built exactly once');
   assert.match(code, /programColors=\{programColors\}/, 'the colours are not passed to the client');
+  assert.match(code, /programIcons=\{programIcons\}/, 'the icons are not passed to the client');
   assert.match(code, /programNames=\{programNames\}/, 'the names stopped being passed');
+});
+
+test('the icons come from the SAME walk as the names and colours', () => {
+  // One walk, one key discipline. A second derivation is a second chance to key
+  // by `_id` instead of `program_id` and paint every group blank.
+  const { code } = readSource(PAGE);
+  assert.match(
+    code,
+    /names:\s*programNames,[\s\S]{0,80}colors:\s*programColors,[\s\S]{0,80}icons:\s*programIcons/,
+    'the three maps are not destructured from one buildProgramIndex call'
+  );
+});
+
+test('the icon is the upstream field, NOT the ProgramOrder mirror', () => {
+  /**
+   * `ProgramOrder.iconUrl` is written by syncProgramsFromAPI and refreshed only
+   * when somebody presses sync, and it has ALREADY drifted — measured
+   * 2026-08-14, GHC holds a superseded Cloudinary asset in Mongo while upstream
+   * carries a newer one. Reading the mirror would show admins a stale icon that
+   * disagrees with the mega menu.
+   */
+  const { code, withImports } = readSource(MODULE);
+  assert.match(code, /programiconurl/, 'the module does not read the upstream field');
+  assert.ok(!/iconUrl/.test(code), 'the module reads the ProgramOrder mirror');
+  assert.ok(!/ProgramOrder/.test(withImports), 'the accent module reached into the order model');
 });
 
 test('the colours ride on the listPrograms call the page already makes', () => {
@@ -72,13 +98,36 @@ test('no programme colour was pasted into the /admin/courses tree', () => {
   );
 });
 
-test('the only inline style in the tree is the accent, and it reads from the accessor', () => {
+test('the accent is the only thing painted inline, and it reads from the accessor', () => {
   const { code } = readSource(CLIENT);
-  const styles = [...code.matchAll(/style=\{\{([^}]*)\}\}/g)].map((m) => m[1].trim());
-  assert.deepEqual(
-    styles, ['borderLeftColor: accent.color'],
-    'the inline styles in this file are no longer just the accent'
+  // One `style=` on the group header, branching between the band and the
+  // neutral edge. Both arms read the accessor's output; neither names a colour.
+  // Sliced by position rather than by a balanced-brace regex: the attribute is
+  // a multi-line ternary, and `[^}]*` / non-greedy `}` both stop at the first
+  // inner object — the `[^)]*` family of matcher defects in sourceScan's header.
+  const starts = [...code.matchAll(/style=\{/g)].map((m) => m.index);
+  assert.equal(starts.length, 1, `expected exactly one inline style, found ${starts.length}`);
+  const slice = code.slice(starts[0], starts[0] + 220);
+  assert.match(slice, /backgroundImage:\s*accent\.band/, 'the band does not come from the accessor');
+  assert.match(slice, /borderLeftColor:\s*accent\.color/, 'the neutral edge does not come from the accessor');
+});
+
+test('the gradient is built in the shared module, not spelled out in the screen', () => {
+  const { code } = readSource(CLIENT);
+  assert.ok(
+    !/linear-gradient/.test(code),
+    'the screen writes its own gradient — the alpha and the fade must live in one place'
   );
+  assert.match(readSource(MODULE).code, /linear-gradient\(90deg/, 'the module no longer owns the band');
+});
+
+test('the band fades to transparent, never to a theme colour', () => {
+  // A hard end stop would be a second palette wearing a gradient, and it would
+  // be wrong in one of the two themes by construction.
+  const { code } = readSource(MODULE);
+  const grad = /linear-gradient\(90deg,[^`]*/.exec(code)?.[0] ?? '';
+  assert.match(grad, /transparent/, 'the band does not fade to transparent');
+  assert.ok(!/#fff|#ffffff|white|#000|black/i.test(grad), 'the band fades to a hard-coded colour');
 });
 
 test('the accent module holds NO colour values of its own', () => {
@@ -88,6 +137,22 @@ test('the accent module holds NO colour values of its own', () => {
   const hexes = code.match(/#[0-9a-f]{3,6}\b/gi) ?? [];
   assert.deepEqual(hexes, [], `the module carries colour values: ${hexes.join(', ')}`);
   assert.match(code, /var\(--text-muted\)/, 'the neutral is not an existing token');
+});
+
+/**
+ * THE ICON'S FAILURE PATH IS WIRED, and only source can show it.
+ *
+ * `renderToStaticMarkup` cannot fire `onError` — there is no DOM and no network
+ * — so the render tier can prove the NO-ICON case and not the FAILED-ICON one.
+ * A 404 or a blocked Cloudinary asset renders a broken-image glyph in a table
+ * that is otherwise plain text, and it is the case nobody sees until it happens
+ * in production. Asserted from source, with that limit stated rather than
+ * implied: this proves the handler is attached, not that it fires.
+ */
+test('the icon drops itself on a load failure rather than showing a broken glyph', () => {
+  const { code } = readSource(CLIENT);
+  assert.match(code, /onError=\{\(\)\s*=>\s*setFailed\(true\)\}/, 'the icon has no error handler');
+  assert.match(code, /const show = Boolean\(src\) && !failed;/, 'the failure flag does not gate the image');
 });
 
 test('nothing added a colour field to a model', () => {

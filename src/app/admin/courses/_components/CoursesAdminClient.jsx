@@ -14,7 +14,7 @@ import {
   orderedCodesForGroup,
   REORDER_BLOCKED,
 } from '@/lib/courses/courseOrderEditing';
-import { programAccentOf } from '@/lib/courses/programAccent';
+import { programAccentOf, programIconOf } from '@/lib/courses/programAccent';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 
@@ -70,6 +70,9 @@ export function CoursesAdminClient({
   // program_id → its upstream `programcolor`. Built server-side from the same
   // listPrograms() call that supplies the names — see lib/courses/programAccent.
   programColors = {},
+  // program_id → its upstream `programiconurl`. Same walk, same source — see
+  // lib/courses/programAccent. NOT ProgramOrder.iconUrl, which is a mirror.
+  programIcons = {},
   q = '',
   program = '',
   type = '',
@@ -350,6 +353,7 @@ export function CoursesAdminClient({
                 key={`${group.programId || '(none)'}:${group.rows.map((r) => r.course.course_id).join(',')}`}
                 group={group}
                 programColors={programColors}
+                programIcons={programIcons}
                 extensions={extensions}
                 listQuery={listQuery}
                 busyId={busyId}
@@ -390,6 +394,7 @@ export function CoursesAdminClient({
 function ProgramGroupBody({
   group,
   programColors,
+  programIcons,
   extensions,
   listQuery,
   busyId,
@@ -443,6 +448,7 @@ function ProgramGroupBody({
    * wrong colour — so it is asserted rather than reasoned about.
    */
   const accent = programAccentOf(programColors, group.programId);
+  const iconUrl = programIconOf(programIcons, group.programId);
 
   return (
     <tbody className="border-b border-[var(--surface-border)] last:border-b-0">
@@ -451,19 +457,23 @@ function ProgramGroupBody({
           colSpan={8}
           scope="colgroup"
           /**
-           * A 4px LEFT ACCENT BAR, not a tinted background. A tint has to sit
-           * behind the group name, so it would have to be alpha-blended to keep
-           * the text readable — and at a readable alpha the darkest of these
-           * colours is invisible in dark mode and the lightest is invisible in
-           * light mode. A bar carries no text and is legible as a shape either
-           * way. It is also the smaller intervention in a dense working table.
+           * A HORIZONTAL GRADIENT BAND, replacing b65aeea's 4px left bar.
            *
-           * SOLID for a real colour, DASHED + neutral for none. The difference
-           * is structural rather than a second hue on purpose: several real
-           * colours have low contrast against this surface in one theme or the
-           * other (measured — see the commit), and a neutral distinguished only
-           * by ITS colour would be confusable with one of them exactly when the
-           * contrast is poor. A dashed edge is not.
+           * Strongest at the left and gone by 55%, and it fades to
+           * `transparent` rather than to a light or dark literal — the row has
+           * to sit on whatever surface the theme provides, and an end stop
+           * written as a colour would be a second palette wearing a gradient.
+           * The alpha is 0.14 and the reasoning, with the measurements, is at
+           * BAND_ALPHA in lib/courses/programAccent.
+           *
+           * THE NEUTRAL, now that the bar is gone: an unmatched programme gets
+           * NO BAND AT ALL plus a dashed neutral left edge. Still structural
+           * rather than a second hue, for the reason b65aeea established — a
+           * neutral distinguished only by ITS colour is confusable with a real
+           * one exactly when contrast is worst, and several of these colours do
+           * have poor contrast in one theme or the other. A wash means "this
+           * programme has a colour"; a dashed grey edge over a plain surface
+           * means "it does not". No real colour can produce the second.
            */
           title={
             accent.matched
@@ -471,12 +481,17 @@ function ProgramGroupBody({
               : `${group.programName} — ไม่ได้กำหนดสีของโปรแกรมนี้`
           }
           className={
-            'border-l-4 px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)] '
-            + (accent.matched ? 'border-solid' : 'border-dashed')
+            'px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)]'
+            + (accent.matched ? '' : ' border-l-[3px] border-dashed')
           }
-          style={{ borderLeftColor: accent.color }}
+          style={
+            accent.matched
+              ? { backgroundImage: accent.band }
+              : { borderLeftColor: accent.color }
+          }
         >
           <span className="inline-flex w-full flex-wrap items-center gap-2">
+            <ProgramGroupIcon src={iconUrl} alt={group.programName} />
             <span>{group.programName}</span>
             <span className="font-normal tabular-nums text-[var(--text-muted)]">
               {group.count} หลักสูตร
@@ -528,6 +543,54 @@ function ProgramGroupBody({
         />
       ))}
     </tbody>
+  );
+}
+
+/**
+ * The programme icon in a group header.
+ *
+ * ── THE SLOT IS ALWAYS THERE; THE IMAGE IS NOT ─────────────────────────────
+ * A fixed 20×20 box is rendered whether or not there is an icon, so the group
+ * name starts at the same x in every folder and a slow image cannot reflow the
+ * row when it arrives. The `<img>` only appears when there is a usable URL.
+ *
+ * ── THE FAILURE PATH, WHICH IS THE ONE NOBODY SEES UNTIL PRODUCTION ────────
+ * A URL that 404s or is blocked renders as a broken-image glyph, and the alt
+ * text would then read as the programme name twice. `onError` drops the image
+ * and leaves the empty slot: name + count on the band, no glyph, no shift.
+ * Cloudinary URLs are the one thing here that genuinely can disappear —
+ * upstream has already superseded one of these assets (GHC), and a delivery
+ * failure is indistinguishable from a stale mirror at render time.
+ *
+ * A plain `<img>` rather than next/image, matching the other admin lists
+ * (ProgramOrderClient, PageConfigEditor): these are 20px PNGs behind auth, the
+ * optimiser buys nothing, and `onError` is what this needs.
+ *
+ * `alt=""` + `aria-hidden`: the programme NAME is right beside it, so a
+ * described icon would be read twice by a screen reader. Decorative by
+ * construction — the colour and the icon are both additional cues.
+ */
+function ProgramGroupIcon({ src, alt }) {
+  const [failed, setFailed] = useState(false);
+  const show = Boolean(src) && !failed;
+  return (
+    <span
+      className="inline-flex h-5 w-5 flex-none items-center justify-center overflow-hidden"
+      title={show ? undefined : `ไม่มีไอคอนสำหรับ ${alt}`}
+    >
+      {show && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          width={20}
+          height={20}
+          onError={() => setFailed(true)}
+          className="h-5 w-5 object-contain"
+        />
+      )}
+    </span>
   );
 }
 

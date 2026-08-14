@@ -47,21 +47,35 @@ function render(props = {}) {
 }
 
 /**
- * The `border-left-color` of every group header, in document order.
+ * The accent each group header carries, in document order.
  *
- * Read off the `<th colspan="8">` specifically — the header cell is the only
- * thing that carries an accent, so a match anywhere else would mean the colour
- * leaked onto a row.
+ * A matched header paints a gradient BAND (`background-image`); an unmatched
+ * one paints no band and takes a dashed neutral left edge
+ * (`border-left-color`). Both are read off the `<th colspan="8">` specifically
+ * — the header cell is the only thing that may carry an accent, so a match
+ * anywhere else would mean the treatment leaked onto a row.
+ *
+ * Returns the COLOUR in either case, so the stale-carry assertions can compare
+ * a matched group against an unmatched one directly.
  */
 function headerAccents(html) {
-  return [...html.matchAll(/<th colspan="8"[^>]*style="([^"]*)"[^>]*>/gi)]
-    .map((m) => /border-left-color:\s*([^;"]+)/i.exec(m[1])?.[1]?.trim() ?? null);
+  return [...html.matchAll(/<th colspan="8"[^>]*style="([^"]*)"[^>]*>/gi)].map((m) => {
+    const band = /background-image:\s*linear-gradient\(90deg,\s*(#[0-9a-f]{6})[0-9a-f]{2}/i.exec(m[1]);
+    if (band) return band[1].toLowerCase();
+    return /border-left-color:\s*([^;"]+)/i.exec(m[1])?.[1]?.trim() ?? null;
+  });
 }
 
-/** Whether each group header's left border is solid or dashed. */
+/** The raw `background-image` of each group header, or null. */
+function headerBands(html) {
+  return [...html.matchAll(/<th colspan="8"[^>]*style="([^"]*)"[^>]*>/gi)]
+    .map((m) => /background-image:\s*([^;"]+)/i.exec(m[1])?.[1]?.trim() ?? null);
+}
+
+/** Whether each group header wears the dashed neutral edge. */
 function headerBorderStyles(html) {
   return [...html.matchAll(/<th colspan="8"[^>]*class="([^"]*)"[^>]*>/gi)]
-    .map((m) => (/\bborder-dashed\b/.test(m[1]) ? 'dashed' : /\bborder-solid\b/.test(m[1]) ? 'solid' : null));
+    .map((m) => (/\bborder-dashed\b/.test(m[1]) ? 'dashed' : 'none'));
 }
 
 // ── The colour reaches the header ───────────────────────────────────────────
@@ -76,8 +90,30 @@ test('the colour comes from the shared source, not a literal in the admin tree',
   assert.deepEqual(headerAccents(html), ['#123456', '#abcdef']);
 });
 
-test('a matched header draws a SOLID bar', () => {
-  assert.deepEqual(headerBorderStyles(render()), ['solid', 'solid']);
+test('a matched header draws a BAND that fades to transparent', () => {
+  const bands = headerBands(render());
+  assert.equal(bands.length, 2);
+  for (const b of bands) {
+    assert.match(b, /^linear-gradient\(90deg,/, 'the band is not a horizontal gradient');
+    assert.match(b, /transparent \d+%\)$/, 'the band does not fade to transparent');
+    assert.ok(
+      !/#(?:f{3,6}|fff|ffffff)\b/i.test(b) && !/\bwhite\b|\bblack\b/i.test(b),
+      `the band fades to a hard-coded colour instead of transparent: ${b}`
+    );
+  }
+});
+
+test('the band carries an ALPHA, not the colour at full strength', () => {
+  // It sits behind the group name; at full strength several of these colours
+  // put the name below AA. See BAND_ALPHA for the measurements.
+  for (const b of headerBands(render())) {
+    assert.match(b, /#[0-9a-f]{6}[0-9a-f]{2}\s+0%/i, 'the first stop is not an 8-digit (alpha) colour');
+    assert.ok(!/#[0-9a-f]{6}\s+0%/i.test(b), 'the colour is painted at full opacity');
+  }
+});
+
+test('a matched header takes NO dashed edge', () => {
+  assert.deepEqual(headerBorderStyles(render()), ['none', 'none']);
 });
 
 // ── The unmatched group ─────────────────────────────────────────────────────
@@ -107,11 +143,16 @@ test('the carry does not happen in the other direction either', () => {
 test('an unmatched group is structurally different, not just a different hue', () => {
   // Several real colours have poor contrast against this surface in one theme
   // or the other, so a neutral distinguished ONLY by its colour would be
-  // confusable with a real one exactly when contrast is worst.
+  // confusable with a real one exactly when contrast is worst. A wash means
+  // "has a colour"; a dashed grey edge over a plain surface means "does not".
   const html = render({
     courses: [course('CLAUDE-AI', 'CLAUDE'), course('ORPHAN-1', 'ORPHAN')],
   });
-  assert.deepEqual(headerBorderStyles(html), ['solid', 'dashed']);
+  assert.deepEqual(headerBorderStyles(html), ['none', 'dashed']);
+  assert.deepEqual(headerBands(html), [
+    'linear-gradient(90deg, #de735624 0%, transparent 55%)',
+    null,
+  ], 'the unmatched group painted a band');
 });
 
 test('the unmatched header says so in its title', () => {
@@ -123,6 +164,103 @@ test('an EMPTY colour map turns every group neutral — the listPrograms-failed 
   const html = render({ programColors: {} });
   assert.deepEqual(headerAccents(html), [NO_ACCENT_COLOR, NO_ACCENT_COLOR]);
   assert.deepEqual(headerBorderStyles(html), ['dashed', 'dashed']);
+  assert.deepEqual(headerBands(html), [null, null], 'a band survived with no colours at all');
+});
+
+// ── The icon ────────────────────────────────────────────────────────────────
+
+/** The `src` of each group header's icon, or null when no image is rendered. */
+function headerIcons(html) {
+  return [...html.matchAll(/<th colspan="8"[\s\S]*?<\/th>/gi)]
+    .map((m) => /<img[^>]*src="([^"]*)"/i.exec(m[0])?.[1] ?? null);
+}
+
+/** The 20×20 slot is rendered whether or not there is an image. */
+const iconSlots = (html) => (html.match(/class="inline-flex h-5 w-5 flex-none/g) ?? []).length;
+
+const ICONS = {
+  CLAUDE: 'https://res.cloudinary.com/x/programs/icons/claude.png',
+  'POWER-BI': 'https://res.cloudinary.com/x/programs/icons/pbi.png',
+};
+
+test('each group header renders its programme icon', () => {
+  const html = render({ programIcons: ICONS });
+  assert.deepEqual(headerIcons(html), [ICONS.CLAUDE, ICONS['POWER-BI']]);
+});
+
+test('the icon has FIXED dimensions so a slow image cannot shift the row', () => {
+  const html = render({ programIcons: ICONS });
+  const imgs = [...html.matchAll(/<img[^>]*>/gi)].map((m) => m[0]);
+  assert.equal(imgs.length, 2);
+  for (const img of imgs) {
+    assert.match(img, /width="20"/, 'the icon has no intrinsic width');
+    assert.match(img, /height="20"/, 'the icon has no intrinsic height');
+    assert.match(img, /h-5 w-5/, 'the icon is not size-locked in CSS too');
+  }
+});
+
+/**
+ * THE PATH NOBODY SEES UNTIL PRODUCTION.
+ *
+ * A programme with no icon must still render name + count, with no
+ * broken-image box and no collapsed layout. The slot stays so the name starts
+ * at the same x in every folder.
+ */
+test('a programme with NO icon still renders its name and count', () => {
+  const html = render({ programIcons: {} });
+  assert.deepEqual(headerIcons(html), [null, null], 'an <img> was rendered with no source');
+  assert.ok(!/<img[^>]*src=""/.test(html), 'an empty src would request the page itself');
+  assert.match(html, /Claude AI/);
+  assert.match(html, /Power BI/);
+  assert.match(html, /1 หลักสูตร/);
+});
+
+test('the slot is reserved even when there is no icon, so nothing shifts', () => {
+  assert.equal(iconSlots(render({ programIcons: ICONS })), 2);
+  assert.equal(iconSlots(render({ programIcons: {} })), 2, 'the slot collapsed when the icon was absent');
+});
+
+test('an unusable icon URL is treated as absent rather than put in src', () => {
+  const html = render({
+    programIcons: { CLAUDE: 'not-a-url', 'POWER-BI': 'javascript:alert(1)' },
+  });
+  assert.deepEqual(headerIcons(html), [null, null]);
+  assert.ok(!/javascript:/i.test(html), 'a non-http src reached the markup');
+});
+
+test('a missing icon says so, rather than rendering a silent gap', () => {
+  const html = render({ programIcons: {} });
+  assert.match(html, /title="ไม่มีไอคอนสำหรับ Claude AI"/);
+});
+
+test('the icon carries no duplicate label for a screen reader', () => {
+  // The programme NAME sits immediately beside it; a described icon would be
+  // announced twice.
+  const html = render({ programIcons: ICONS });
+  for (const img of [...html.matchAll(/<img[^>]*>/gi)].map((m) => m[0])) {
+    assert.match(img, /alt=""/, 'the icon has non-empty alt beside the name it repeats');
+    assert.match(img, /aria-hidden="true"/);
+  }
+});
+
+test('the icon is independent of the colour — one can exist without the other', () => {
+  // A programme with an icon but no colour, and the reverse. Folding the two
+  // into one "matched" flag would make both states unrepresentable.
+  const iconNoColour = render({ programColors: {}, programIcons: ICONS });
+  assert.deepEqual(headerIcons(iconNoColour), [ICONS.CLAUDE, ICONS['POWER-BI']]);
+  assert.deepEqual(headerBorderStyles(iconNoColour), ['dashed', 'dashed']);
+
+  const colourNoIcon = render({ programIcons: {} });
+  assert.deepEqual(headerIcons(colourNoIcon), [null, null]);
+  assert.deepEqual(headerAccents(colourNoIcon), ['#de7356', '#a88429']);
+});
+
+test('CONTROL: the icon extractor is not returning null always', () => {
+  // Three assertions above are "no icon was rendered". A broken extractor
+  // satisfies all of them.
+  assert.deepEqual(headerIcons(render({ programIcons: ICONS })), [ICONS.CLAUDE, ICONS['POWER-BI']]);
+  assert.deepEqual(headerIcons('<table></table>'), []);
+  assert.equal(iconSlots('<table></table>'), 0);
 });
 
 // ── Colour is an ADDITIONAL cue ─────────────────────────────────────────────
@@ -142,7 +280,7 @@ test('the accent is on the HEADER only — no course row is coloured', () => {
   const html = render();
   const rowStyles = [...html.matchAll(/<tr[^>]*style="([^"]*)"/gi)].map((m) => m[1]);
   assert.deepEqual(rowStyles, [], 'a row carried an inline style — the accent leaked out of the header');
-  assert.equal((html.match(/border-left-color/gi) ?? []).length, 2, 'exactly one accent per group header');
+  assert.equal((html.match(/linear-gradient/gi) ?? []).length, 2, 'exactly one band per group header');
 });
 
 // ── fc46953 and f596901 behaviour is untouched ──────────────────────────────
@@ -181,6 +319,10 @@ test('CONTROL: the accent extractor finds real values and nothing in bare markup
   assert.deepEqual(headerAccents(render()), ['#de7356', '#a88429']);
   assert.deepEqual(headerAccents('<table><tbody></tbody></table>'), []);
   assert.deepEqual(headerBorderStyles('<table></table>'), []);
+  assert.deepEqual(headerBands('<table></table>'), []);
+  // and it reads a band and a neutral edge as DIFFERENT things
+  const mixed = render({ courses: [course('CLAUDE-AI', 'CLAUDE'), course('ORPHAN-1', 'ORPHAN')] });
+  assert.deepEqual(headerAccents(mixed), ['#de7356', NO_ACCENT_COLOR]);
 });
 
 test('CONTROL: the two colours really are different documents', () => {
