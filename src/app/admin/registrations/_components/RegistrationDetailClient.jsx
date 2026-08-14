@@ -15,14 +15,46 @@ import {
 } from '@/lib/actions/registrations';
 import { Button } from '@/components/ui/button';
 import { refNo } from '@/lib/refNo';
+import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/publicStatuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
 const STATUS_BADGE   = { pending: 'bg-amber-100 text-amber-700', confirmed: 'bg-blue-100 text-blue-700', paid: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-slate-100 text-slate-500' };
-const STATUS_LABEL   = { pending: 'รอดำเนินการ', confirmed: 'ยืนยันแล้ว', paid: 'ชำระแล้ว', cancelled: 'ยกเลิก' };
-const STATUS_ACTIONS = { pending: ['confirmed','cancelled'], confirmed: ['paid','cancelled'], paid: ['cancelled'], cancelled: ['pending'] };
-const ACTION_LABEL   = { confirmed: 'ยืนยันการสมัคร', paid: 'บันทึกชำระแล้ว', cancelled: 'ยกเลิกการสมัคร', pending: 'คืนสถานะ รอดำเนินการ' };
-const ACTION_VARIANT = { confirmed: 'primary', paid: 'cta', cancelled: 'outline', pending: 'outline' };
+
+/**
+ * value → Thai label, DERIVED from lib/registrations/publicStatuses.js.
+ * `confirmed` reads 'ส่งใบเสนอราคาแล้ว'; the stored value is unchanged.
+ */
+const STATUS_LABEL   = buildStatusLabels();
+
+/**
+ * ── THERE IS NO STATUS-ACTION MAP IN THIS FILE ANY MORE ─────────────────────
+ *
+ * It used to be a hand-written literal here:
+ *
+ *   { pending: ['confirmed','cancelled'], confirmed: ['paid','cancelled'],
+ *     paid: ['cancelled'], cancelled: ['pending'] }
+ *
+ * and it was the ONLY place the rules existed. `updateRegistrationStatus`
+ * checked that the target was a valid status and nothing else, so this literal
+ * was load-bearing security in a client component — which in a Next app means
+ * a convention, since every `'use server'` export is a POST endpoint anyone can
+ * call directly.
+ *
+ * The buttons are now a projection of the same table the server enforces, so a
+ * button offering a move the server would reject is not expressible. Two edges
+ * disappeared with it and both were deliberate:
+ *   · `confirmed → paid` — only Omise writes `paid` (see the module);
+ *   · `cancelled → pending` — cancellation is terminal.
+ *
+ * ACTION_LABEL/ACTION_VARIANT are keyed by TARGET, not by from-state, and they
+ * carry only the two targets an admin can still choose. They are presentation,
+ * not rules: a target with no entry renders no button, so if a new edge is
+ * added to the table and forgotten here, the button is silently missing rather
+ * than wrongly offered. The fs tier pins the two lists against each other.
+ */
+const ACTION_LABEL   = { confirmed: 'บันทึกส่งใบเสนอราคาแล้ว', cancelled: 'ยกเลิกการสมัคร' };
+const ACTION_VARIANT = { confirmed: 'primary', cancelled: 'outline' };
 
 const PAYMENT_METHOD_LABEL = { credit_card: 'บัตรเครดิต/เดบิต', promptpay: 'QR PromptPay', quote: 'ขอใบเสนอราคา' };
 const OMISE_STATUS_LABEL   = { pending: 'รอชำระ', successful: 'สำเร็จ', failed: 'ล้มเหลว', expired: 'หมดอายุ' };
@@ -100,7 +132,16 @@ export function RegistrationDetailClient({ doc }) {
 
   // ── Status action ─────────────────────────────────────────────
   const handleStatusAction = (next) => {
-    if (!window.confirm(`เปลี่ยนสถานะเป็น "${STATUS_LABEL[next]}"?`)) return;
+    // The cancel target gets its own wording because it is the only
+    // IRREVERSIBLE one. A generic "change the status to X?" reads the same for
+    // a move that can be walked back and one that cannot, and the second is
+    // now every cancellation — including from `paid`, which this dialog also
+    // covers. The record additionally becomes read-only, which is not
+    // guessable from the word ยกเลิก alone, so it is stated.
+    const message = next === 'cancelled'
+      ? 'ยกเลิกใบสมัครนี้?\n\nการยกเลิกไม่สามารถย้อนกลับได้ และหลังจากนี้จะแก้ไขข้อมูลใบสมัครไม่ได้อีก'
+      : `เปลี่ยนสถานะเป็น "${STATUS_LABEL[next]}"?`;
+    if (!window.confirm(message)) return;
     setBusy(next); setError(null);
     startTransition(async () => {
       const res = await updateRegistrationStatus(doc._id, next);
@@ -132,7 +173,39 @@ export function RegistrationDetailClient({ doc }) {
   const updateAttendee = (i, field, val) =>
     setAttendees((prev) => prev.map((a, idx) => idx === i ? { ...a, [field]: val } : a));
 
-  const statusActions = STATUS_ACTIONS[status] ?? [];
+  /**
+   * The permitted moves, MINUS any the presentation maps cannot draw.
+   *
+   * The filter is not defensive padding — it was measured. Without it, a target
+   * the table permits but ACTION_LABEL does not name renders a Button whose
+   * children are `undefined`: a real, clickable, COMPLETELY EMPTY button that
+   * fires a status change nobody can read. Discovered by re-introducing the old
+   * hand-written map as a deliberate break — the fs guard caught the map, and
+   * the render tier stayed green because a button with no text is invisible to
+   * a text scan.
+   *
+   * So an unlabelled edge degrades to NO BUTTON, which is a missing affordance
+   * rather than an unlabelled trap, and fs/registrationActionsDerived asserts
+   * that every edge in the table has a label so the degradation never actually
+   * happens in the product.
+   */
+  const statusActions = allowedTransitions(status).filter((next) => ACTION_LABEL[next]);
+
+  /**
+   * A CANCELLED RECORD IS READ-ONLY, AND THE SCREEN SAYS SO.
+   *
+   * `updateRegistration` refuses the write regardless of what renders here —
+   * the lock is in the query filter, not in this flag. What this flag does is
+   * stop the screen OFFERING an edit that would be refused, which is a
+   * different job: a แก้ไข button that opens a form, accepts typing and then
+   * fails on save is a worse experience than no button at all.
+   *
+   * `statusActions` is already empty for `cancelled` (the table has no outgoing
+   * edges), so the status buttons need no separate flag — they simply have
+   * nothing to render. DELETE IS DELIBERATELY STILL AVAILABLE; see the ruling
+   * in lib/actions/registrations.js.
+   */
+  const readOnly = status === 'cancelled';
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -163,6 +236,14 @@ export function RegistrationDetailClient({ doc }) {
               ))}
             </div>
           )}
+          {/* Without this line the missing แก้ไข buttons read as a bug. It says
+              the rule, and says delete is still available, because that is the
+              next question anyone asks when a screen goes read-only. */}
+          {readOnly && (
+            <p className="max-w-[16rem] text-right text-xs text-[var(--text-muted)]">
+              ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้ (ยังลบได้)
+            </p>
+          )}
           <button type="button" onClick={handleDelete} disabled={busy !== null}
             className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-9e-accent transition-colors disabled:opacity-40">
             {busy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -173,7 +254,7 @@ export function RegistrationDetailClient({ doc }) {
       </div>
 
       {/* ── Course (editable) ── */}
-      <CardEditable title="ข้อมูลคอร์ส"
+      <CardEditable title="ข้อมูลคอร์ส" readOnly={readOnly}
         isEditing={editSection === 'course'} isSaving={busy === 'save-course'}
         onEdit={() => setEditSection('course')}
         onSave={() => save({ classDate: course.classDate, scheduleType: course.scheduleType, attendanceMode: course.attendanceMode }, 'save-course')}
@@ -220,7 +301,7 @@ export function RegistrationDetailClient({ doc }) {
       </CardEditable>
 
       {/* ── Coordinator (editable) ── */}
-      <CardEditable title="ผู้ประสานงาน"
+      <CardEditable title="ผู้ประสานงาน" readOnly={readOnly}
         isEditing={editSection === 'coordinator'} isSaving={busy === 'save-coord'}
         onEdit={() => setEditSection('coordinator')}
         onSave={() => save({ coordinator }, 'save-coord')}
@@ -244,7 +325,7 @@ export function RegistrationDetailClient({ doc }) {
 
       {/* ── Attendees (editable) ── */}
       <CardEditable
-        title={`ผู้เข้าอบรม (${attendeesCount} ท่าน)`}
+        title={`ผู้เข้าอบรม (${attendeesCount} ท่าน)`} readOnly={readOnly}
         isEditing={editSection === 'attendees'} isSaving={busy === 'save-attendees'}
         onEdit={() => setEditSection('attendees')}
         onSave={() => save({ attendeesListProvided, attendeesCount, attendees }, 'save-attendees')}
@@ -318,6 +399,7 @@ export function RegistrationDetailClient({ doc }) {
       {/* ── Invoice (editable) ── */}
       <CardEditable
         title="ใบเสนอราคา / ใบกำกับภาษี"
+        readOnly={readOnly}
         isEditing={editSection === 'invoice'}
         isSaving={busy === 'save-invoice'}
         onEdit={() => setEditSection('invoice')}
@@ -342,7 +424,7 @@ export function RegistrationDetailClient({ doc }) {
       )}
 
       {/* ── Notes (editable) ── */}
-      <CardEditable title="หมายเหตุ"
+      <CardEditable title="หมายเหตุ" readOnly={readOnly}
         isEditing={editSection === 'notes'} isSaving={busy === 'save-notes'}
         onEdit={() => setEditSection('notes')}
         onSave={() => save({ notes }, 'save-notes')}
@@ -389,16 +471,26 @@ function Card({ title, children }) {
   );
 }
 
-function CardEditable({ title, children, isEditing, isSaving, onEdit, onSave, onCancel }) {
+/**
+ * `readOnly` renders NO edit affordance at all — not a disabled one.
+ *
+ * A greyed-out แก้ไข invites the click and then explains nothing; on a
+ * cancelled record the honest surface is a card with no control, plus the one
+ * line of copy in the header saying why. Defaults to false so every existing
+ * call site keeps its button until it opts in.
+ */
+function CardEditable({ title, children, isEditing, isSaving, onEdit, onSave, onCancel, readOnly = false }) {
   return (
     <section className={cn('rounded-9e-lg border bg-[var(--surface)] p-6 transition-colors', isEditing ? 'border-9e-brand/40' : 'border-[var(--surface-border)]')}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-bold text-[var(--text-primary)]">{title}</h2>
         {!isEditing ? (
+          readOnly ? null : (
           <button type="button" onClick={onEdit}
             className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-9e-action transition-colors">
             <Pencil className="h-3.5 w-3.5" />แก้ไข
           </button>
+          )
         ) : (
           <div className="flex items-center gap-2">
             <button type="button" onClick={onCancel} disabled={isSaving}
