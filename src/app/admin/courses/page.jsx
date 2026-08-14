@@ -10,6 +10,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
 import { listCourseExtensions } from '@/lib/actions/course-extensions';
 import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
+import { buildProgramIndex } from '@/lib/courses/programAccent';
 import { CoursesAdminClient } from './_components/CoursesAdminClient';
 
 export const runtime = 'nodejs';
@@ -78,11 +79,17 @@ export default async function AdminCoursesPage({ searchParams }) {
   const programCourseOrder = order
     ? Object.fromEntries(order.programCourseOrder)
     : null;
-  const programNames = Object.fromEntries(
-    programs
-      .map((p) => [String(p.program_id ?? ''), p.program_name ?? ''])
-      .filter(([id]) => id)
-  );
+
+  /**
+   * Names AND colours, from ONE walk of the SAME array, under one key
+   * discipline — see lib/courses/programAccent.js.
+   *
+   * `programcolor` rides on the `listPrograms()` response this page already
+   * fetches, so the accent costs no extra read. It is the same upstream field
+   * the public course hero and programme page paint with; nothing is copied
+   * into the admin tree and no colour is stored anywhere.
+   */
+  const { names: programNames, colors: programColors } = buildProgramIndex(programs);
 
   return (
     <div>
@@ -110,6 +117,7 @@ export default async function AdminCoursesPage({ searchParams }) {
         programs={programs}
         programCourseOrder={programCourseOrder}
         programNames={programNames}
+        programColors={programColors}
         q={q}
         program={program}
         type={type}
