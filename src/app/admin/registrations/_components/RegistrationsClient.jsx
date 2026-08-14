@@ -8,18 +8,28 @@ import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 import { LastEditedHint } from '@/components/audit/auditRowParts';
 import { buildStatCards, buildStatusChips } from '@/lib/registrations/inhouseStatuses';
+import {
+  buildStatCards  as buildPublicStatCards,
+  buildStatusChips as buildPublicStatusChips,
+  buildStatusLabels as buildPublicStatusLabels,
+} from '@/lib/registrations/publicStatuses';
 import { InhouseTable } from './InhouseTable';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = [
-  { value: 'all',       label: 'ทั้งหมด' },
-  { value: 'pending',   label: 'รอดำเนินการ' },
-  { value: 'confirmed', label: 'ยืนยันแล้ว' },
-  { value: 'paid',      label: 'ชำระแล้ว' },
-  { value: 'cancelled', label: 'ยกเลิก' },
-];
-
+/**
+ * BOTH VOCABULARIES ARE IMPORTED, NEITHER IS WRITTEN HERE.
+ *
+ * The two modules are aliased apart rather than merged: in-house stores
+ * new / contacted / quoted / closed-won / closed-lost and public stores
+ * pending / confirmed / paid / cancelled. They are different enums for
+ * different collections and folding them into one list would produce a screen
+ * that can offer a status the selected collection cannot hold.
+ *
+ * The public side used to be three hand-written lists in this file — the filter
+ * options, the label map and the stat-card literal — which is the same shape
+ * that had already drifted on the in-house side.
+ */
 const RANGE_OPTIONS = [
   { value: 'all',   label: 'ทั้งหมด' },
   { value: 'today', label: 'วันนี้' },
@@ -34,12 +44,18 @@ const STATUS_BADGE = {
   cancelled: 'bg-slate-100 text-slate-500',
 };
 
-const STATUS_LABEL = {
-  pending:   'รอดำเนินการ',
-  confirmed: 'ยืนยันแล้ว',
-  paid:      'ชำระแล้ว',
-  cancelled: 'ยกเลิก',
-};
+/**
+ * value → Thai label, for the public สถานะ cell.
+ *
+ * DERIVED. A status with no entry here renders its raw enum value in the table,
+ * which is the same class of bug as a status with no card — and it is how
+ * `confirmed` came to be labelled 'ยืนยันแล้ว' in five places and needed
+ * changing in five places.
+ *
+ * The in-house rows do not read this map: InhouseTable derives its own labels
+ * from INHOUSE_STATUSES.
+ */
+const STATUS_LABEL = buildPublicStatusLabels();
 
 const SCHEDULE_BADGE = {
   hybrid:    'bg-violet-100 text-violet-700',
@@ -157,32 +173,34 @@ export function RegistrationsClient({
   };
 
   const { items, page, pageCount } = initialData;
-  const statCounts = counts ?? { total: 0, pending: 0, confirmed: 0, paid: 0, cancelled: 0 };
+  // `{}`, not a hand-written zero-filled object. That fallback was a fourth
+  // spelling of the public enum — and it was the WRONG enum on an in-house
+  // render. The card already reads `statCounts[key] ?? 0`, so an empty object
+  // produces the same zeroes for whichever collection is showing.
+  const statCounts = counts ?? {};
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? 'ทั้งหมด';
 
   /**
-   * BOTH IN-HOUSE LISTS COME FROM ONE ARRAY — see
-   * src/lib/registrations/inhouseStatuses.js.
+   * EVERY LIST ON THIS SCREEN COMES FROM ONE ARRAY PER COLLECTION — see
+   * src/lib/registrations/inhouseStatuses.js and
+   * src/lib/registrations/publicStatuses.js.
    *
-   * They were two hand-written lists fifteen lines apart and they had drifted:
-   * the cards had five entries and no `ส่งใบเสนอราคาแล้ว`, the chips had six and
-   * did. A record in that status was counted in ทั้งหมด and displayed by nothing,
-   * so the strip read 6 over cards summing to 5. Deriving both from
-   * `INHOUSE_STATUSES` makes a card-without-a-chip unrepresentable.
+   * The in-house cards and chips were two hand-written lists fifteen lines
+   * apart and they had drifted: the cards had five entries and no
+   * `ส่งใบเสนอราคาแล้ว`, the chips had six and did. A record in that status was
+   * counted in ทั้งหมด and displayed by nothing, so the strip read 6 over cards
+   * summing to 5.
+   *
+   * Public had the identical shape and had not yet been bitten. Deriving both
+   * sides makes a card-without-a-chip unrepresentable in either.
    */
   const statCards = source === 'inhouse'
     ? buildStatCards()
-    : [
-        { key: 'total',     label: 'ทั้งหมด',     filterVal: 'all',       cls: 'border-l-4 border-l-[var(--surface-border)]' },
-        { key: 'pending',   label: 'รอดำเนินการ', filterVal: 'pending',   cls: 'border-l-4 border-l-amber-400' },
-        { key: 'confirmed', label: 'ยืนยันแล้ว',  filterVal: 'confirmed', cls: 'border-l-4 border-l-blue-400' },
-        { key: 'paid',      label: 'ชำระแล้ว',    filterVal: 'paid',      cls: 'border-l-4 border-l-emerald-400' },
-        { key: 'cancelled', label: 'ยกเลิก',      filterVal: 'cancelled', cls: 'border-l-4 border-l-slate-300' },
-      ];
+    : buildPublicStatCards();
 
   const statusOptions = source === 'inhouse'
     ? buildStatusChips()
-    : STATUS_OPTIONS;
+    : buildPublicStatusChips();
 
   return (
     <div className="space-y-5">
