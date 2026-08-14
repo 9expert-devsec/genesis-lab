@@ -56,6 +56,74 @@ const FILTER_SCREENS = [
   },
 ];
 
+/**
+ * Screens that derive their filters from `useSearchParams` DIRECTLY, rather than
+ * from server props.
+ *
+ * A separate list because the shape is genuinely different — there is no
+ * `page.jsx` reading searchParams to assert against, so "the filters arrive as
+ * props" does not apply — but the rule is the same one: the URL is the only
+ * place the filter lives.
+ */
+const DERIVED_SCREENS = [
+  {
+    rel: 'src/app/(public)/training-course/_components/CourseListClient.jsx',
+    component: 'CourseListClient',
+    // The identifiers, and the URL keys they are read from.
+    filters: ['skillSlug', 'programName', 'view'],
+    // `search` is NOT here: it is local by design (search terms are noisy for
+    // URL history) and has never been a URL parameter. A value that lives in
+    // exactly one place is already conformant.
+  },
+];
+
+/**
+ * ── OUTSTANDING, AND SELF-INVALIDATING BY CONSTRUCTION ──────────────────────
+ *
+ * Three screens still hold a URL filter in state. They are recorded here so the
+ * remaining work is visible in the suite rather than in somebody's notes.
+ *
+ * THIS IS NOT AN ALLOWLIST. An allowlist of known-broken files is a guard that
+ * has quietly become decoration: it grows, nobody re-reads it, and a file that
+ * was fixed years ago still sits in it exempting a defect that no longer exists.
+ *
+ * Each entry names the file AND the EXACT source line that is outstanding, and
+ * asserts that line is STILL THERE. So fixing the file breaks this entry: the
+ * line disappears, the assertion fails, and whoever did the fix is told to
+ * delete the entry and add the screen to DERIVED_SCREENS or FILTER_SCREENS
+ * above. The register cannot outlive the defects it records.
+ *
+ * Lines are matched after comment/import scrubbing and compared trimmed, so
+ * reindentation does not produce a false failure — but a genuine edit to the
+ * statement does, which is the point.
+ */
+const OUTSTANDING = [
+  {
+    rel: 'src/app/admin/courses/_components/CoursesAdminClient.jsx',
+    why: 'q / program / type, lazily seeded from useSearchParams, written back with history.replaceState',
+    lines: [
+      "const [search, setSearch]               = useState(() => searchParams.get('q') ?? '');",
+      "const [filterProgram, setFilterProgram] = useState(() => searchParams.get('program') ?? '');",
+      "const [filterType, setFilterType]       = useState(() => searchParams.get('type') ?? '');",
+    ],
+  },
+  {
+    rel: 'src/app/(public)/search/_components/SearchClient.jsx',
+    why: 'q + debouncedQ seeded from the initialQ prop; navigating to a bare /search keeps the old term',
+    lines: [
+      'const [q, setQ] = useState(initialQ);',
+      'const [debouncedQ, setDebouncedQ] = useState(initialQ);',
+    ],
+  },
+  {
+    rel: 'src/app/(public)/articles/_components/ArticlesPageClient.jsx',
+    why: 'q only — program/skill/tag are already derived per render, so this is the half-fixed case',
+    lines: [
+      "const [query, setQuery] = useState(initialFilters.q ?? '');",
+    ],
+  },
+];
+
 /** Screens that already followed the rule and are the reference for it. */
 const REFERENCE_SCREENS = [
   'src/app/admin/audit-log/_components/AuditLogClient.jsx',
@@ -175,6 +243,97 @@ test('MasterclassRegistrationsClient: the batch options effect keys on the cours
   const src = readSource('src/app/admin/masterclass/registrations/_components/MasterclassRegistrationsClient.jsx').code;
   assert.match(src, /getMasterclassBatchOptions\(courseId\)/, 'the batch fetch does not read courseId');
   assert.match(src, /\}, \[courseId\]\);/, 'the batch effect does not re-run when courseId changes');
+});
+
+// ── Screens deriving straight from useSearchParams ──────────────────────────
+
+for (const { rel, component, filters } of DERIVED_SCREENS) {
+  const src = readSource(rel).code;
+
+  test(`${component}: every filter is read from searchParams, not stored`, () => {
+    for (const f of filters) {
+      const decl = new RegExp(`const ${f} = [^;]*searchParams`, 's');
+      assert.match(src, decl, `${f} is not derived from searchParams on every render`);
+    }
+  });
+
+  test(`${component}: no filter is copied into useState`, () => {
+    for (const arg of useStateArgs(src)) {
+      for (const f of filters) {
+        assert.ok(!new RegExp(`\\b${f}\\b`).test(arg), `useState(${arg}) stores the ${f} filter`);
+      }
+      assert.ok(!/searchParams/.test(arg), `useState(${arg}) seeds state from the URL — it will go stale`);
+    }
+  });
+
+  test(`${component}: no filter setter survives`, () => {
+    for (const f of filters) {
+      const setter = new RegExp(`\\bset${f[0].toUpperCase()}${f.slice(1)}\\b`);
+      assert.ok(!setter.test(src), `${component} still has a set${f} setter`);
+    }
+  });
+
+  /**
+   * NO EFFECT MAY DEPEND ON `searchParams`. This is the defect itself.
+   *
+   * The removed sync effect listed `searchParams` in its own dependency array
+   * and wrote the URL from state inside its body. So a navigation to the same
+   * route with new parameters re-ran it with the OLD state and wrote the old
+   * values back — deleting an incoming `?skill=`, or reverting it to the
+   * previous one. Any future effect here that watches the URL and writes the URL
+   * is that loop again.
+   */
+  test(`${component}: no effect depends on searchParams`, () => {
+    const effects = [...src.matchAll(/useEffect\([\s\S]*?\}, \[([^\]]*)\]\)/g)].map((m) => m[1]);
+    for (const deps of effects) {
+      assert.ok(
+        !/searchParams/.test(deps),
+        `an effect depends on [${deps}] — a URL-watching effect that writes the URL is the erasure defect`
+      );
+    }
+  });
+
+  /**
+   * ONE WRITER. The parameters are written in exactly one place, so "when does
+   * the URL change" has a single answer, and ARRIVAL — which writes nothing at
+   * all — stays distinguishable from an action.
+   */
+  test(`${component}: the URL is written in exactly one place`, () => {
+    const writes = [...src.matchAll(/router\.(replace|push)\(/g)].length;
+    assert.equal(writes, 1, `expected a single URL writer, found ${writes}`);
+  });
+}
+
+// ── The outstanding register — self-invalidating ─────────────────────────────
+
+for (const { rel, why, lines } of OUTSTANDING) {
+  const name = rel.split('/').pop().replace('.jsx', '');
+
+  test(`OUTSTANDING ${name}: still holds a URL filter in state (${why})`, () => {
+    const src = readSource(rel).code;
+    const present = src.split('\n').map((l) => l.trim());
+    for (const line of lines) {
+      assert.ok(
+        present.includes(line.trim()),
+        `${rel} no longer contains:\n    ${line.trim()}\n\n`
+        + 'If you FIXED this screen: delete its entry from OUTSTANDING and add the\n'
+        + 'file to DERIVED_SCREENS or FILTER_SCREENS so it is guarded from now on.\n'
+        + 'If you merely edited the line: update the entry to the new text.\n'
+        + 'This register records defects that still exist — it is not an allowlist,\n'
+        + 'and it is designed to fail the moment it becomes stale.'
+      );
+    }
+  });
+}
+
+test('CONTROL: the outstanding register is not empty and names real files', () => {
+  // A register that silently emptied itself would make every assertion above
+  // vacuous while reading as "all clear".
+  assert.ok(OUTSTANDING.length > 0, 'the register is empty — say so deliberately rather than by deletion');
+  for (const { rel, lines } of OUTSTANDING) {
+    assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing`);
+    assert.ok(lines.length > 0, `${rel} has no outstanding line recorded`);
+  }
 });
 
 // ── The reference implementations, asserted so the argument keeps its examples ─
