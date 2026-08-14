@@ -6,6 +6,7 @@ import {
   listSchedulesByCourse,
 } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { resolveHiddenCourseForAdmin } from '@/lib/courses/adminCoursePreview';
 import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
@@ -125,6 +126,14 @@ async function resolveCustomPageForRequest(segment, searchParams) {
 // telling an author a page is live while this route 404s it. The ISR caveat
 // (revalidate = 3600, so a scheduled page goes live within the hour, not on the
 // second) is documented there.
+
+// ── ADMIN PREVIEW OF A HIDDEN COURSE ──────────────────────────────────────
+// Same shape as resolveCustomPageForRequest above — `?preview=` on this route,
+// gated, falling through to the ordinary answer when it does not apply — so
+// this route has ONE preview idiom rather than two. The gate itself lives in
+// lib/courses/adminCoursePreview because a page file can export nothing but
+// Next's own contract, and "no session means no course" is a claim that needs a
+// callable function to prove, not a grep over this file.
 
 // Resolve a PUBLIC builder page. Reads any-status (the published-only action
 // can't express the date window) and gates in JS. Preview lives on its own
@@ -442,6 +451,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           courses={programData.courses}
           earlyBirdMap={programData.earlyBirdMap}
           faqs={programData.faqs}
+          currentYear={siteCurrentYear()}
         />
       );
     }
@@ -454,6 +464,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
           faqs={skillData.faqs}
+          currentYear={siteCurrentYear()}
         />
       );
     }
@@ -502,9 +513,20 @@ export default async function CatchAllPage({ params, searchParams }) {
   }
 
   // Course resolver handles both alias and `-training-course` suffix.
-  const resolved = await resolveCourse(segment);
+  //
+  // The admin-preview arm runs ONLY when the public answer was null, so the
+  // happy path — every published course — does exactly the work it did before
+  // this existed. See resolveHiddenCourseForAdmin for why that ordering is
+  // load-bearing rather than tidy, and for the correction to the reason this
+  // comment originally gave (the full-route cache, which this route does not
+  // have: `next build` reports /[...slug] as ƒ Dynamic, and did before this
+  // change too).
+  const publicResolved = await resolveCourse(segment);
+  const resolved =
+    publicResolved ?? (await resolveHiddenCourseForAdmin(segment, searchParams));
   if (resolved) {
     const { course, extension } = resolved;
+    const isHiddenPreview = publicResolved === null;
 
     // Parallelise schedules + programs. `/programs` carries `programcolor`
     // which the hero gradient uses; the course detail response doesn't
@@ -613,16 +635,30 @@ export default async function CatchAllPage({ params, searchParams }) {
 
     return (
       <>
-        {courseJsonLd && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }}
-          />
+        {/* Structured data is SUPPRESSED on a preview. A hidden course is one
+            an admin has taken off the site; emitting Course + BreadcrumbList
+            JSON-LD for it would be publishing machine-readable claims about a
+            page that officially does not exist. The banner sits outside the
+            article for the same reason the builder-page one does — nothing in
+            the rendered course can style it away. */}
+        {isHiddenPreview ? (
+          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
+            ตัวอย่างหลักสูตรที่ซ่อนอยู่ (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
+          </div>
+        ) : (
+          <>
+            {courseJsonLd && (
+              <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }}
+              />
+            )}
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+            />
+          </>
         )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-        />
         <CourseDetail
           course={course}
           skillHrefs={skillHrefs}

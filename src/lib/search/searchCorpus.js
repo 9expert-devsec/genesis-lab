@@ -113,20 +113,37 @@ async function buildSearchCorpus() {
   // courseMap lookup on the client. The card needs the name, the code and the
   // price; nothing else about the course travels with a schedule row.
   const courseById = new Map(courses.map((c) => [String(c._id), c]));
-  const schedules = (schedulesResult.items ?? []).map((s) => {
-    const c = courseById.get(String(s.course?._id ?? s.course ?? ''));
-    return {
-      ...s,
-      course_ref: c
-        ? {
-            _id: String(c._id),
-            course_id: c.course_id ?? null,
-            course_name: c.course_name ?? null,
-            course_price: c.course_price ?? null,
-          }
-        : null,
-    };
-  });
+  /**
+   * ── A ROUND FOR A HIDDEN COURSE IS DROPPED, NOT LEFT UNRESOLVED ────────────
+   * `listPublicCourses` above already filtered hidden courses out of the
+   * COURSES tab, but /schedules is a separate upstream domain and still returns
+   * their rounds. Leaving them in would keep a hidden course in the SCHEDULES
+   * tab under its own name: `scheduleHaystack` falls back to the row's raw
+   * `course_name` when `course_ref` is null, so the round stays matchable, and
+   * it would render as a result whose only link is the 404 the course now is.
+   *
+   * This is the one place the join is lossy on purpose. A round whose course
+   * did not resolve for any OTHER reason (decommissioned upstream, a genuine
+   * /schedules ↔ /public-course drift) was already unrenderable — the card
+   * reads its title straight off `course_ref` — so nothing that used to display
+   * stops displaying here.
+   */
+  const schedules = (schedulesResult.items ?? [])
+    .map((s) => {
+      const c = courseById.get(String(s.course?._id ?? s.course ?? ''));
+      return {
+        ...s,
+        course_ref: c
+          ? {
+              _id: String(c._id),
+              course_id: c.course_id ?? null,
+              course_name: c.course_name ?? null,
+              course_price: c.course_price ?? null,
+            }
+          : null,
+      };
+    })
+    .filter((s) => s.course_ref !== null);
 
   await dbConnect();
   /**

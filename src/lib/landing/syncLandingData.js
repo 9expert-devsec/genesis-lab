@@ -35,6 +35,12 @@ import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
 import { getReviewsById } from '@/lib/api/reviews';
+import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
+import {
+  assessDowngrade,
+  sectionCountsOf,
+  permitsSnapshotWrite,
+} from '@/lib/cache-console/downgradeGuard';
 
 import { getActiveBanners } from '@/lib/actions/banners';
 import { getActiveFeaturedCourseIds } from '@/lib/actions/featured-courses';
@@ -87,12 +93,23 @@ async function buildNewCoursesWithSchedules({
     })
     .filter(Boolean);
 
-  // Fall back to the top 8 from the list if no curated featured exist.
-  const sorted = [...allCourses].sort(
-    (a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999)
-  );
+  /**
+   * Fall back to the top 8 from the list if no curated featured exist.
+   *
+   * ── THE sort_order COMPARATOR HERE IS REPLACED, NOT SUPPLEMENTED ──────────
+   * This used to be `[...allCourses].sort((a,b) => (a.sort_order ?? 999) - …)`,
+   * the ONLY explicit course sort anywhere in genesis. `allCourses` comes from
+   * `listPublicCourses({ includeHidden: true })` above, which now returns the
+   * arranged order, so re-sorting by upstream's `sort_order` would take the
+   * order back off it — a second owner disagreeing with the first, on the home
+   * page.
+   *
+   * So the sort is GONE rather than made secondary: "the top 8" now means the
+   * first 8 in the arranged order, which is what the phrase meant all along.
+   * test/fs/courseOrderOwnership fails if any array sort returns here.
+   */
   const promotedRaw =
-    featuredDetails.length > 0 ? featuredDetails : sorted.slice(0, MAX_NEW_COURSES);
+    featuredDetails.length > 0 ? featuredDetails : allCourses.slice(0, MAX_NEW_COURSES);
 
   // Detail-by-id map for cheap lookups during enrichment.
   const detailById = new Map(featuredDetails.map((d) => [d.course_id, d]));
@@ -198,10 +215,68 @@ function buildOnlineCoursesForSection({
     }));
 }
 
-export async function syncLandingData() {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.allowShrink] bypass the downgrade guard for THIS
+ *   run only. Set exclusively by the admin override action, which has shown a
+ *   human both counts and taken an explicit confirmation. It is a parameter and
+ *   not stored state on purpose: a persisted flag is a permanently disabled
+ *   guard that nobody remembers turning off.
+ * @param {string} [options.actor] who to attribute a refusal to. Defaults to
+ *   the reserved `system:cron` id — the cron and the webhook resync are the
+ *   overwhelmingly common callers, and a row that cannot be mistaken for a
+ *   person is the point of reserving it.
+ */
+export async function syncLandingData({ allowShrink = false, actor = 'system:cron' } = {}) {
   await dbConnect();
   const errors = [];
   const syncedAt = new Date();
+
+  /**
+   * BEFORE THE FIRST READ, NOT AFTER THE WRITE.
+   *
+   * This job was the last of the six syncs still missing this, and the omission
+   * is invisible from its output: every read below is cached for an hour under
+   * one of these tags, so without the bust a run re-reads the SAME cached
+   * responses the previous run saw, writes them into LandingCache with a fresh
+   * `syncedAt`, and reports `status: 'ok'`. A course published upstream ten
+   * minutes ago is still missing from the home page afterwards, and the only
+   * signal anyone gets is a green sync. That is the exact failure
+   * bustUpstream.js:15-19 states the rule against, and the same one
+   * syncNavMenuData:99 and syncCareerPaths:167 already fixed.
+   *
+   * It matters most on the path where it is easiest to miss: the admin
+   * "Sync now" button and the webhook's background resync both exist to make
+   * a change appear NOW, and both were capable of returning success having
+   * changed nothing at all.
+   *
+   * ── THE FIVE TAGS ARE THE FIXED-TAG READS BELOW, AND ONLY THOSE ───────────
+   *   listPublicCourses      → public-courses   (also covers the per-program
+   *                            probe reads: a different `?program=` URL is a
+   *                            different Data Cache entry carrying the SAME
+   *                            tag, and revalidateTag busts every entry under
+   *                            it)
+   *   getOnlineCourses       → online-courses
+   *   listPrograms           → programs
+   *   listSkills             → skills
+   *   getReviewsById         → reviews
+   *
+   * The PER-RECORD tags are NOT busted, exactly as syncNavMenuData:94-98
+   * documents for the same reason: `course:<id>` (getCourseByCode) and
+   * `schedules:course:<oid>` (listSchedulesByCourse) are keyed by ids this job
+   * does not know until after the list read above has returned, so there is
+   * nothing to name at this point. A stale one costs an out-of-date cover or
+   * schedule row on a card that is otherwise present — visibly worse than
+   * fresh, but not the missing-entry class this bust exists for. Named here so
+   * the gap is a decision rather than an oversight.
+   */
+  bustUpstream(
+    UPSTREAM_TAGS.PUBLIC_COURSES,
+    UPSTREAM_TAGS.ONLINE_COURSES,
+    UPSTREAM_TAGS.PROGRAMS,
+    UPSTREAM_TAGS.SKILLS,
+    UPSTREAM_TAGS.REVIEWS
+  );
 
   // Phase 1 — fetch every "leaf" data source in parallel. Anything that
   // depends on the result of these (per-course detail, schedules, etc.)
@@ -216,7 +291,12 @@ export async function syncLandingData() {
     featuredOnlineIdsResult,
     featuredReviewIdsResult,
   ] = await Promise.allSettled([
-    listPublicCourses(),
+    // includeHidden — the snapshot stores the SUPERSET and getLandingData
+    // filters on the way out. Same reasoning as syncNavMenuData's buildEntry:
+    // this cron runs on the main-built Production deployment, so a write-time
+    // filter would not reach the dev-served home page, and it would make
+    // re-publishing wait up to three hours for the next sync.
+    listPublicCourses({ includeHidden: true }),
     getOnlineCourses(),
     listPrograms(),
     listSkills(),
@@ -254,7 +334,11 @@ export async function syncLandingData() {
   const programProbes = await Promise.allSettled(
     programs.map(async (p) => {
       const pid = String(p.program_id ?? p._id ?? '');
-      const { items } = await listPublicCourses({ program: pid });
+      // includeHidden, matching the phase-1 read above: this probe decides
+      // whether a PROGRAM appears at all, and it is cross-checked against
+      // `allCourses` just below. Filter one side and not the other and the
+      // contradiction check fires on every hidden course.
+      const { items } = await listPublicCourses({ program: pid, includeHidden: true });
       return { itemCount: items?.length ?? 0 };
     })
   );
@@ -389,6 +473,77 @@ export async function syncLandingData() {
     dataToWrite = previousDoc.data;
   }
 
+  /**
+   * ── THE DOWNGRADE GUARD, ON THE WRITE ───────────────────────────────────
+   *
+   * Here rather than in any caller. `syncLandingData` has four — the cron
+   * route, the admin sync route, triggerLandingSync, and the webhook's
+   * background resync — and b10bd54 is the standing evidence for what an
+   * invariant spread across call sites costs: `revalidatePath` ended up in one
+   * writer of four and three shipped stale pages for months.
+   *
+   * COUNTS COME FROM THE PAYLOADS, NOT FROM `sections`. The `sections` object
+   * written below reports the NEW counts even on the preserve-previous branch
+   * above, so a stored document can hold 27 programs beside a `sections.programs`
+   * of 0. Comparing that against the incoming run would find nothing that could
+   * shrink and wave through exactly the run this exists to stop.
+   */
+  const storedCounts = sectionCountsOf(previousDoc?.data);
+  const incomingCounts = sectionCountsOf(dataToWrite);
+  const downgrade = assessDowngrade({ storedCounts, incomingCounts, allowShrink });
+
+  if (!permitsSnapshotWrite(downgrade.verdict)) {
+    /**
+     * REFUSED. `data`, `syncedAt`, `status` and `sections` are all left exactly
+     * as they were — the only field written is the refusal record, so the
+     * stored snapshot is untouched in every sense that matters to a reader.
+     *
+     * `$set` on a single field, so a refusal REPLACES its predecessor. A run
+     * that would still shrink refuses again next cycle and overwrites this;
+     * the refusal never expires on a timer and never auto-clears. It goes away
+     * when a run writes — because the world recovered, or because an admin
+     * overrode.
+     */
+    await LandingCache.updateOne(
+      { key: CACHE_KEY },
+      {
+        $set: {
+          lastRefusal: {
+            at: syncedAt,
+            actor,
+            storedSections: storedCounts,
+            incomingSections: incomingCounts,
+            shrunk: downgrade.shrunk,
+            vanished: downgrade.vanished,
+            reason: downgrade.reason,
+            syncStatus: status,
+            syncErrors: errors,
+          },
+        },
+      }
+    );
+
+    // eslint-disable-next-line no-console
+    console.warn(`[syncLandingData] ${downgrade.reason}`);
+
+    // NO revalidatePath: nothing was published, so there is nothing to
+    // regenerate, and regenerating would only re-render the same stored
+    // snapshot at the cost of a full rebuild.
+    return {
+      ok: false,
+      refused: true,
+      verdict: downgrade.verdict,
+      reason: downgrade.reason,
+      shrunk: downgrade.shrunk,
+      storedSections: storedCounts,
+      incomingSections: incomingCounts,
+      syncedAt: previousDoc?.syncedAt ?? null,
+      status,
+      sections,
+      errors,
+    };
+  }
+
   await LandingCache.findOneAndUpdate(
     { key: CACHE_KEY },
     {
@@ -400,6 +555,9 @@ export async function syncLandingData() {
       sections,
       schemaVersion: 1,
       source: 'external_api',
+      // Writing clears the refusal: whatever was blocked has either been
+      // repaired by a healthy run or deliberately overridden.
+      lastRefusal: null,
     },
     { upsert: true, new: true }
   );

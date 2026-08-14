@@ -80,7 +80,7 @@ export function CourseScheduleSection({ content, data }) {
               {/* Omitted entirely when the status is missing/blank. */}
               {status && (
                 <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', status.soft)}>
-                  {status.label}
+                  {status.action}
                 </span>
               )}
             </div>

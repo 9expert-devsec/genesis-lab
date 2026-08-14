@@ -1,0 +1,277 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  SNAPSHOT_SECTION_SHRINK_RATIO,
+  DOWNGRADE_VERDICT,
+  assessDowngrade,
+  sectionCountsOf,
+  permitsSnapshotWrite,
+  overrideConfirmLabel,
+} from '@/lib/cache-console/downgradeGuard';
+import { COLLAPSE_SHRINK_RATIO } from '@/lib/cache-console/resetPlan';
+
+/**
+ * THE DOWNGRADE RULING AND THE OVERRIDE RULING, each with the assertion that
+ * goes red if it is REVERSED.
+ *
+ * Written before the wiring, per the standing instruction — that ordering has
+ * caught these four rounds running and code review has caught none.
+ */
+
+// ══ THE DOWNGRADE RULING ═══════════════════════════════════════════════════
+
+const HEALTHY = { banners: 4, programs: 27, skills: 9, newCourses: 8, reviews: 6 };
+
+test('RULING REVERSED: a materially smaller snapshot does NOT write', () => {
+  // The incident: 22 of 27 programs, 81%.
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, programs: 5 },
+  });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.REFUSE_DOWNGRADE);
+  assert.equal(permitsSnapshotWrite(a.verdict), false);
+  assert.deepEqual(a.shrunk.map((s) => s.section), ['programs']);
+  assert.equal(a.shrunk[0].lost, 22);
+  assert.match(a.reason, /27/, 'the refusal names both counts');
+  assert.match(a.reason, /5/);
+});
+
+test('RULING REVERSED: a section collapsing to EMPTY is refused', () => {
+  // 100% shrink, and the shape that puts the homepage failure string on a live
+  // public page.
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, banners: 0 },
+  });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.REFUSE_DOWNGRADE);
+  assert.equal(a.shrunk[0].section, 'banners');
+});
+
+test('GROWTH ALWAYS WRITES — this is the repair path, not leniency', () => {
+  /**
+   * A bad snapshot republishes itself every cycle, so only a fully healthy run
+   * can fix one. A guard that blocked writes generally would lock the bad
+   * snapshot in permanently — which is a worse failure than the one being
+   * fixed, and is the reason this assertion is not merely a control.
+   */
+  const repair = assessDowngrade({
+    storedCounts: { ...HEALTHY, programs: 5 }, // today's damaged snapshot
+    incomingCounts: HEALTHY,                    // a healthy run
+  });
+  assert.equal(repair.verdict, DOWNGRADE_VERDICT.OK);
+  assert.equal(permitsSnapshotWrite(repair.verdict), true);
+});
+
+test('an unchanged snapshot writes — the common case is never blocked', () => {
+  const a = assessDowngrade({ storedCounts: HEALTHY, incomingCounts: { ...HEALTHY } });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.OK);
+  assert.deepEqual(a.shrunk, []);
+});
+
+test('ordinary editing does NOT trip the guard', () => {
+  // One banner deactivated (4 → 3) and one review removed (6 → 5). Both are
+  // routine content edits and both must write.
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, banners: 3, reviews: 5 },
+  });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.OK);
+});
+
+test('the boundary is exclusive, and both sides are pinned', () => {
+  // 50% of 8 is exactly 4. At the threshold: writes. Past it: refused.
+  const at = assessDowngrade({ storedCounts: { s: 8 }, incomingCounts: { s: 4 } });
+  assert.equal(at.verdict, DOWNGRADE_VERDICT.OK, 'exactly 50% still writes');
+
+  const past = assessDowngrade({ storedCounts: { s: 8 }, incomingCounts: { s: 3 } });
+  assert.equal(past.verdict, DOWNGRADE_VERDICT.REFUSE_DOWNGRADE, 'one past it refuses');
+});
+
+test('this file no longer pins threshold DIFFERENCES — see the shared table', () => {
+  /**
+   * The pairwise assertion that stood here (landing vs the mirror constant) has
+   * moved into ONE table-driven check in test/fs/navDowngradeGuard, which fails
+   * when ANY TWO thresholds converge rather than only the pair someone thought
+   * to compare. Two pairwise checks were already one short of covering three
+   * constants; a fourth would have needed three more.
+   *
+   * What stays here is this constant's own sanity — the table owns the
+   * relationships, this owns the value.
+   */
+  assert.equal(typeof SNAPSHOT_SECTION_SHRINK_RATIO, 'number');
+  assert.ok(SNAPSHOT_SECTION_SHRINK_RATIO > 0 && SNAPSHOT_SECTION_SHRINK_RATIO < 1);
+});
+
+test('CONTROL: at round 3\'s 20% an ordinary banner edit WOULD be refused', () => {
+  /**
+   * The concrete reason the numbers differ, asserted rather than argued — using
+   * the fixture's own banner count so the arithmetic is about real data.
+   *
+   * 4 → 3 is 25%: past round 3's threshold, well short of this one. Both
+   * comparisons are exclusive, so a 5 → 4 edit (exactly 20%) would NOT have
+   * fired even at round 3's number — the first draft of this control claimed it
+   * would and was wrong. Picking a case that straddles both thresholds is the
+   * point; picking one that straddles neither proves nothing.
+   */
+  const before = HEALTHY.banners, after = HEALTHY.banners - 1;
+  const ratio = (before - after) / before;
+  assert.equal(ratio, 0.25);
+  assert.ok(ratio > COLLAPSE_SHRINK_RATIO, 'round 3\'s 20% WOULD fire on one banner of four');
+  assert.ok(ratio <= SNAPSHOT_SECTION_SHRINK_RATIO, 'and this guard\'s 50% does not');
+});
+
+test('NO STORED SNAPSHOT means no refusal — Ruling 1 still holds', () => {
+  // The first run, or one after the document was lost. Refusing here would
+  // leave the site with no snapshot, which is forbidden outright.
+  for (const stored of [null, undefined, {}]) {
+    const a = assessDowngrade({ storedCounts: stored, incomingCounts: { programs: 1 } });
+    assert.equal(a.verdict, DOWNGRADE_VERDICT.OK);
+    assert.equal(a.hadStoredSnapshot, false);
+  }
+});
+
+test('a section ABSENT from the incoming shape is not treated as a shrink to zero', () => {
+  // A renamed or removed section is a shape change, not a downgrade. Treating
+  // an absent key as 0 would refuse every run after such a change.
+  const a = assessDowngrade({
+    storedCounts: { programs: 27, retiredSection: 10 },
+    incomingCounts: { programs: 27 },
+  });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.OK);
+  assert.deepEqual(a.vanished, ['retiredSection'], 'but it is reported, not ignored');
+});
+
+test('EVERY shrunken section is reported, not just the first', () => {
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, programs: 2, skills: 1 },
+  });
+  assert.deepEqual(a.shrunk.map((s) => s.section).sort(), ['programs', 'skills']);
+});
+
+// ══ COUNTING FROM THE PAYLOAD, NOT FROM `sections` ═════════════════════════
+
+test('counts come from the PAYLOAD — the stored `sections` field can lie', () => {
+  /**
+   * MEASURED in syncLandingData: on a total failure it preserves
+   * `previousDoc.data` but writes the NEW zeroed `sections` alongside it, so a
+   * stored snapshot can hold 27 programs while `sections.programs` says 0.
+   *
+   * A guard reading `sections` would compare against zeros, find nothing that
+   * could shrink, and wave through exactly the run it exists to stop. This
+   * pins that the counter reads arrays in `data`.
+   */
+  const data = { programs: [1, 2, 3], banners: [1], reviews: [] };
+  assert.deepEqual(sectionCountsOf(data), { programs: 3, banners: 1, reviews: 0 });
+});
+
+test('sectionCountsOf handles the nav_menu_cache map shape too', () => {
+  // One guard, two snapshots. nav_menu_cache stores `{ [id]: {...} }` maps
+  // rather than arrays; the number of groups is the comparable quantity.
+  const navData = { programs: { p1: {}, p2: {} }, skills: { s1: {} } };
+  assert.deepEqual(sectionCountsOf(navData), { programs: 2, skills: 1 });
+});
+
+test('a non-array, non-object value is not counted as a section', () => {
+  // Counting a scalar as 1 would invent a section that can never shrink and
+  // would quietly dilute the comparison.
+  assert.deepEqual(sectionCountsOf({ n: 5, s: 'x', arr: [1] }), { arr: 1 });
+});
+
+test('sectionCountsOf survives a null or non-object payload', () => {
+  for (const bad of [null, undefined, 'x', 7]) {
+    assert.deepEqual(sectionCountsOf(bad), {});
+  }
+});
+
+// ══ THE OVERRIDE RULING ════════════════════════════════════════════════════
+
+test('OVERRIDE RULING: allowShrink lets a legitimate shrinkage through', () => {
+  // An admin unticking เผยแพร่ on twenty courses produces exactly the shape the
+  // guard blocks, so the guard must be overridable or it becomes the bug.
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, programs: 5 },
+    allowShrink: true,
+  });
+  assert.equal(a.verdict, DOWNGRADE_VERDICT.OK);
+  assert.equal(a.overridden, true);
+});
+
+test('OVERRIDE RULING REVERSED: the override still REPORTS what it let through', () => {
+  /**
+   * An override that discarded the numbers would make the audit row say a write
+   * happened and nothing about what it cost. `shrunk` survives the override so
+   * the caller can log both counts — which is the whole reason the override is
+   * an audited admin action rather than a config flag.
+   */
+  const a = assessDowngrade({
+    storedCounts: HEALTHY,
+    incomingCounts: { ...HEALTHY, programs: 5 },
+    allowShrink: true,
+  });
+  assert.equal(a.shrunk.length, 1);
+  assert.equal(a.shrunk[0].before, 27);
+  assert.equal(a.shrunk[0].after, 5);
+});
+
+test('the override is NOT sticky — it applies to the call that passed it', () => {
+  // A flag that persisted would be a permanently disabled guard. The same
+  // inputs without the flag must refuse again.
+  const args = { storedCounts: HEALTHY, incomingCounts: { ...HEALTHY, programs: 5 } };
+  assert.equal(assessDowngrade({ ...args, allowShrink: true }).verdict, DOWNGRADE_VERDICT.OK);
+  assert.equal(assessDowngrade(args).verdict, DOWNGRADE_VERDICT.REFUSE_DOWNGRADE);
+});
+
+test('permitsSnapshotWrite is an allow-list of exactly one verdict', () => {
+  assert.equal(permitsSnapshotWrite(DOWNGRADE_VERDICT.OK), true);
+  assert.equal(permitsSnapshotWrite(DOWNGRADE_VERDICT.REFUSE_DOWNGRADE), false);
+  assert.equal(permitsSnapshotWrite('anything-else'), false);
+});
+
+// ══ THE CONFIRM LABEL — the ruling that had nothing over it ════════════════
+
+test('RULING REVERSED: the confirm label RESTATES the numbers', () => {
+  /**
+   * "The override confirm must restate the numbers at the point of click."
+   *
+   * As a template literal inside OverrideClient this ruling was unguarded: a
+   * control-break that dropped the numbers from the button label left the whole
+   * suite green, because the confirm state only exists after a preview and
+   * renderToStaticMarkup reaches only the initial render. Extracting the label
+   * is what makes the ruling assertable at all.
+   */
+  const label = overrideConfirmLabel([
+    { section: 'programs', before: 25, after: 3, lost: 22, ratio: 0.88 },
+    { section: 'banners', before: 15, after: 2, lost: 13, ratio: 0.867 },
+  ]);
+  for (const n of ['programs', '25', '3', 'banners', '15', '2']) {
+    assert.ok(label.includes(n), `the confirm label omits ${n}`);
+  }
+});
+
+test('CONTROL: a label built from a DIFFERENT loss says different numbers', () => {
+  // Without this, "the label contains 25" would pass for a hardcoded string.
+  const label = overrideConfirmLabel([{ section: 'skills', before: 9, after: 1, lost: 8, ratio: 0.889 }]);
+  assert.ok(label.includes('skills') && label.includes('9') && label.includes('1'));
+  assert.ok(!label.includes('programs'));
+});
+
+test('the label states EVERY shrunken section, not just the first', () => {
+  // A confirm naming one of three losses is a confirm for the wrong thing.
+  const label = overrideConfirmLabel([
+    { section: 'a', before: 10, after: 1 },
+    { section: 'b', before: 20, after: 2 },
+    { section: 'c', before: 30, after: 3 },
+  ]);
+  for (const s of ['a', 'b', 'c']) assert.ok(label.includes(s), `missing ${s}`);
+});
+
+test('the label is total — an empty or malformed loss list does not throw', () => {
+  // The component renders no button in this case, but a label function that
+  // threw would take the whole panel down with it — and the panel is the only
+  // route to unblocking the cron.
+  for (const bad of [[], null, undefined, 'nope', 42]) {
+    assert.equal(typeof overrideConfirmLabel(bad), 'string');
+  }
+});

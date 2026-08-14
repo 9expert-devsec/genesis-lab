@@ -20,6 +20,7 @@ import CourseExtension from '@/models/CourseExtension';
 import { duplicateKeyMessage, duplicateKeyField } from '@/lib/db/duplicateKeyMessage';
 import { aliasConflict, normaliseAlias, legacyPathOwner } from '@/lib/courses/aliasAvailability';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -112,100 +113,6 @@ function extensionFields(doc) {
   };
 }
 
-/**
- * Is `alias` free for `courseId` to take? `{ field, error }` or null.
- *
- * ── ONE RULE, TWO CALLERS, AND THAT IS THE POINT ────────────────────────────
- * Called by `saveCourseExtension` just before its write, and by the CREATE arm
- * of CourseForm BEFORE `createCourse` touches MSDB. Both must answer
- * identically or the create flow refuses on a rule the save flow does not, and
- * the admin learns the difference by hitting it.
- *
- * The decision itself is pure and lives in lib/courses/aliasAvailability; this
- * is only the lookup, exactly as `courseIdConflict` is pure while
- * `findCourseExtensionCodeInsensitive` does its reading.
- *
- * ── A FAILED LOOKUP IS NOT "FREE" ───────────────────────────────────────────
- * Same ruling as the duplicate-code guard: refusing to answer is not the same
- * as answering no. The error propagates rather than being swallowed into a
- * cheerful null, because guessing here costs another course's public URL.
- *
- * Exported because this file is 'use server' — every export must be an async
- * function, which is why the pure half lives in the other module.
- */
-export async function checkAliasAvailable(alias, courseId) {
-  const wanted = normaliseAlias(alias);
-  if (!wanted) return null; // no custom URL — always allowed (sparse index)
-
-  await dbConnect();
-
-  /**
-   * TWO QUESTIONS, ONE ROUND TRIP EACH, IN PARALLEL.
-   *
-   *   · does another extension row already hold this alias  (Mongo)
-   *   · does it shadow some course's derived /<id>-training-course  (upstream)
-   *
-   * ── THE UPSTREAM READ IS AN EXTRA CALL, AND WHICH ONE MATTERS ─────────────
-   * The create arm does NOT have a course list in hand when this runs: the one
-   * `createCourse` fetches lives inside `findCourseCodeInsensitive`, runs AFTER
-   * this check, and is deliberately `revalidate: 0` — a fresh network read every
-   * time, because a stale duplicate-CODE answer costs another course's data.
-   *
-   * This uses the ISR-CACHED `listPublicCourses()` (tag `public-courses`)
-   * instead, so on the create path it is a cache hit rather than a second
-   * uncached fetch of the same list. The trade, stated rather than buried: a
-   * course created upstream within the cache window is not yet in this list, so
-   * an alias shadowing it would be allowed through. That is acceptable here in
-   * a way it is not for the code guard — the consequence is one course being
-   * reachable at one URL instead of two, recoverable by editing the alias,
-   * against the code guard's silent overwrite of another course's SEO.
-   *
-   * A FAILED UPSTREAM READ IS NOT "NO SHADOW". It cannot be, on the same
-   * reasoning as everywhere else in this flow — but it also must not block an
-   * ordinary alias save during an upstream outage, when the alias-vs-alias
-   * check is still perfectly answerable. So the failure is surfaced as its own
-   * refusal rather than swallowed into a null.
-   */
-  const [owner, courseList] = await Promise.all([
-    CourseExtension.findOne({
-      urlAlias: wanted,
-      // Scoped to OTHER courses: re-saving a course's own alias is not a
-      // collision, and this action is an upsert keyed on courseId, so the
-      // overwhelmingly common save is an edit that leaves the alias untouched.
-      courseId: { $ne: courseId },
-    })
-      .select('courseId')
-      .lean(),
-    listPublicCourses().then(
-      (r) => ({ ok: true, items: r?.items ?? [] }),
-      (err) => ({ ok: false, error: err?.message ?? 'upstream lookup failed' })
-    ),
-  ]);
-
-  // The alias-vs-alias answer is complete on its own — report it before
-  // admitting the upstream half could not be checked.
-  const taken = aliasConflict({ alias: wanted, existingCourseId: owner?.courseId ?? null });
-  if (taken) return taken;
-
-  if (!courseList.ok) {
-    return {
-      field: 'urlAlias',
-      error:
-        'ตรวจสอบ URL ซ้ำกับที่อยู่เดิมของหลักสูตรอื่นไม่สำเร็จ — '
-        + `กรุณาลองใหม่อีกครั้ง (${courseList.error})`,
-    };
-  }
-
-  return aliasConflict({
-    alias: wanted,
-    legacyOwner: legacyPathOwner({
-      alias: wanted,
-      courseIds: courseList.items.map((c) => c?.course_id),
-      exceptCourseId: courseId,
-    }),
-  });
-}
-
 /** Admin-only — create or update by `courseId`. */
 export async function saveCourseExtension(courseId, data) {
   const session = await requireAdmin('courses');
@@ -290,7 +197,13 @@ export async function saveCourseExtension(courseId, data) {
     //
     // null here is meaningful, not missing: this is an upsert, so a null
     // `before` is how the trail says "this created the extension".
-    const before = extensionFields(await CourseExtension.findOne({ courseId }).lean());
+    // The raw document is kept alongside the summary because the visibility
+    // plan must distinguish "the field is absent" from "the field is false",
+    // and `extensionFields` coerces both to false — correct for an audit line
+    // that reports a boolean, wrong for a rule whose whole premise is that an
+    // absent flag means VISIBLE.
+    const beforeDoc = await CourseExtension.findOne({ courseId }).lean();
+    const before = extensionFields(beforeDoc);
 
     const doc = await CourseExtension.findOneAndUpdate({ courseId }, update, {
       upsert: true,
@@ -304,6 +217,36 @@ export async function saveCourseExtension(courseId, data) {
     revalidatePath(`${ADMIN_PATH}/${courseId}`);
     if (cleanAlias) revalidatePath(cleanAlias);
     revalidatePath(`/${courseId.toLowerCase()}-training-course`);
+
+    /**
+     * A VISIBILITY FLIP CHANGES EVERY LISTING, NOT JUST THIS COURSE'S PAGES.
+     *
+     * The four paths above were sufficient while `isPublished` gated only URL
+     * resolution. Hiding a course now also takes it out of the mega menu, the
+     * home page, /training-course, /schedule, every catalog page, the article
+     * related-course rails and every page-builder course_list — all of which
+     * bake their output and none of which is under those four paths. Without
+     * this the course page 404s the instant the toggle is saved while the
+     * listings keep advertising it for up to the ISR window (and, for the two
+     * snapshot surfaces, up to 3h plus that window).
+     *
+     * The plan is a pure function so the DECISION — flip or no flip — is
+     * testable without a request context or a database, the same split
+     * courseRevalidatePlan.js already uses for the webhook path.
+     *
+     * NOT wrapped in try/catch, unlike the sync writers that share this
+     * `('/', 'layout')` scope. Their guard exists because `revalidatePath`
+     * throws outside a request scope and a cron must not fail a write it has
+     * already made. This is a server action: it always has one, the four calls
+     * above are unguarded for the same reason, and adding a catch here would be
+     * copying the shape of that fix rather than its reason.
+     */
+    for (const { path, type } of planVisibilityRevalidation({
+      before: beforeDoc,
+      after: update,
+    }).paths) {
+      revalidatePath(path, type);
+    }
 
     // THE SECOND KEY SPACE. `recordId` is the `course_id` CODE, not an MSDB
     // ObjectId — CourseExtension keys on it (see the model: "matches course_id
@@ -365,6 +308,22 @@ export async function deleteCourseExtension(courseId) {
   const removed = await CourseExtension.findOneAndDelete({ courseId }).lean();
 
   revalidatePath(ADMIN_PATH);
+
+  /**
+   * DELETING A HIDDEN COURSE'S EXTENSION UN-HIDES IT, and that is a visibility
+   * flip like any other. The row carried the only `isPublished: false` there
+   * was; with it gone the course is visible again everywhere — so the listings
+   * that were told to drop it have to be told to put it back.
+   *
+   * `after: null` says exactly that: no extension means visible. Same plan and
+   * same scope as the save path, rather than a second rule about deletion.
+   */
+  for (const { path, type } of planVisibilityRevalidation({
+    before: removed,
+    after: null,
+  }).paths) {
+    revalidatePath(path, type);
+  }
 
   recordAdminActionAfter({
     menu:        'courses',

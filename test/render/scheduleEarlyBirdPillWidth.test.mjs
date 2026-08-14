@@ -279,7 +279,7 @@ test('the chip comes AFTER the status, last in the cell’s column', () => {
   // pass rather than red. Confirmed present in real rendered output at index
   // 107 of the column before this line was changed.
   const dateAt = column.indexOf('text-sm font-bold');
-  const statusAt = column.indexOf('เปิดรับ');
+  const statusAt = column.indexOf('ลงทะเบียน');
   const chipAt = column.indexOf('Early Bird');
   for (const [name, at] of [['dot', dotAt], ['date', dateAt], ['status', statusAt], ['chip', chipAt]]) {
     assert.notEqual(at, -1, `${name} is missing from the column`);
@@ -292,11 +292,11 @@ test('the chip comes AFTER the status, last in the cell’s column', () => {
 test('CONTROL: the order probe DOES catch a chip put back at the top', () => {
   // Without this, the ordering assertions would hold against any markup the
   // extractor happened to return, including one where the chip leads.
-  const topFirst = '<span>Early Bird</span><span>background-color:#00CCFF</span><span>เปิดรับ</span>';
-  assert.ok(topFirst.indexOf('Early Bird') < topFirst.indexOf('เปิดรับ'), 'the probe can see a leading chip');
+  const topFirst = '<span>Early Bird</span><span>background-color:#00CCFF</span><span>ลงทะเบียน</span>';
+  assert.ok(topFirst.indexOf('Early Bird') < topFirst.indexOf('ลงทะเบียน'), 'the probe can see a leading chip');
   const cell = cellById(render())['s-cross'];
   assert.ok(
-    cell.indexOf('เปิดรับ') < cell.indexOf('Early Bird'),
+    cell.indexOf('ลงทะเบียน') < cell.indexOf('Early Bird'),
     'and the live cell puts the status first',
   );
 });
@@ -433,7 +433,7 @@ const CARD_EARLY_BIRD_ROW =
   + '<span class="flex-none rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] '
   + 'font-black leading-none text-9e-navy shadow-sm">Early Bird</span></span>'
   + '<span class="flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold '
-  + 'bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20">เปิดรับ</span>'
+  + 'bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20">ลงทะเบียน</span>'
   + '<span aria-hidden="true" class="flex h-6 w-6 flex-none items-center justify-center rounded-full '
   + 'bg-9e-air/20 text-9e-action dark:text-9e-air">'
   + '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" '

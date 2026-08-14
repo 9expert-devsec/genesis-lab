@@ -10,6 +10,7 @@ import {
   checkAliasAvailable,
 } from '@/lib/actions/course-extensions';
 import { CourseSeoRail } from './CourseSeoRail';
+import { CourseSearchSelect } from './CourseSearchSelect';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
@@ -796,21 +797,19 @@ export function CourseForm({
           label="หลักสูตรก่อนหน้า (previous_course)"
           hint="เลือกหลักสูตรที่เป็นพื้นฐานก่อน — ใช้ใน roadmap"
         >
-          <select
+          {/* Was a 77-option <select>. The picker keeps a hidden named input in
+              the DOM so `new FormData(form)` still sees this field, and
+              dispatches a real bubbling `change` so the unsaved-changes guard
+              still fires — see CourseSearchSelect's header for both. */}
+          <CourseSearchSelect
             name="previous_course"
+            label="หลักสูตรก่อนหน้า"
             value={previousCourse}
-            onChange={(e) => setPreviousCourse(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">— ไม่มี —</option>
-            {allCourses
-              .filter((c) => c?.course_id && c.course_id !== initial?.course_id)
-              .map((c) => (
-                <option key={c.course_id} value={c.course_id}>
-                  {c.course_name_th || c.course_name} ({c.course_id})
-                </option>
-              ))}
-          </select>
+            onChange={setPreviousCourse}
+            options={allCourses}
+            excludeCode={initial?.course_id}
+            inputClassName={inputCls}
+          />
         </Field>
       </Section>
 
@@ -977,26 +976,40 @@ export function CourseForm({
           Section 6 — รายละเอียดคอร์ส (bullets)
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
+        {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
+            วัตถุประสงค์ is numbered there (CourseObjectives.jsx:12 prints
+            `{i + 1}.` from the index) and the other three carry a CheckCircle
+            (CourseTarget / CoursePrerequisites / CourseRequirements). Every
+            marker is drawn by the renderer on both sides — measured, none of
+            the 1118 stored items carries one — so the preview is a preview and
+            the payload is still exactly the lines typed. */}
         <BulletTextarea
           name="course_objectives"
           label="วัตถุประสงค์ (course_objectives)"
-          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์"
+          hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
+          marker="number"
         />
         <BulletTextarea
           name="course_target_audience"
           label="กลุ่มเป้าหมาย (course_target_audience)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
+          marker="check"
         />
         <BulletTextarea
           name="course_prerequisites"
           label="ความรู้พื้นฐาน (course_prerequisites)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
+          marker="check"
         />
         <BulletTextarea
           name="course_system_requirements"
           label="ความต้องการของระบบ (course_system_requirements)"
+          hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
+          marker="check"
         />
         <BulletTextarea
           name="bullets"
@@ -1062,9 +1075,23 @@ export function CourseForm({
   );
 
   // ── THE SHELL — both modes ────────────────────────────────────────
-  const previewHref = urlAlias.trim()
+  /**
+   * Preview opens the REAL public URL. `?preview=1` is appended when the course
+   * is hidden, because that URL now 404s for everyone — including this admin,
+   * who by default sees the same site a visitor does. Previewing is something
+   * you ask for, on one URL, rather than a state you are permanently in.
+   *
+   * The parameter is not a credential and grants nothing on its own; the server
+   * gate is the admin session (see resolveHiddenCourseForAdmin in the catch-all
+   * route). It is appended off the FORM's `isPublished` — the admin's intent,
+   * possibly unsaved — which is safe in both directions: the parameter is inert
+   * on a published course, and the preview arm serves a published one too. So
+   * neither an unsaved toggle nor a stale one produces a broken link.
+   */
+  const previewPath = urlAlias.trim()
     ? `/${urlAlias.trim().replace(/^\//, '')}`
     : `/${String(courseId ?? '').toLowerCase()}-training-course`;
+  const previewHref = isPublished ? previewPath : `${previewPath}?preview=1`;
 
   return (
     /* h-[100dvh] + an inner scroll, NOT `position: sticky`. The header stays

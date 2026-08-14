@@ -7,7 +7,12 @@
  * them returns only genuine leftovers.) The vocabulary is now exactly three
  * states:
  *
- *   open -> เปิดรับ (green)   nearly_full -> ใกล้เต็ม (amber)   full -> เต็ม (red)
+ *   open         green   state เปิดรับ    action ลงทะเบียน
+ *   nearly_full  amber   state ใกล้เต็ม   action ใกล้เต็ม
+ *   full         red     state เต็ม      action เต็ม
+ *
+ * TWO words per state, not one — see the note on SCHEDULE_STATUS below for
+ * which surface reads which, and why the two equalities are deliberate.
  *
  * PRESENTATION ONLY. Nothing here writes, validates, or reinterprets a stored
  * status. The canonical keys below are the vocabulary MSDB actually emits —
@@ -58,23 +63,65 @@ const ALIASES = {
  * #ffc94a / #ff4b55, with #d4a017 as the legible amber for text on light) —
  * deliberately not new values.
  */
+/**
+ * ── TWO WORDS PER STATUS, NOT ONE `label` ──────────────────────────────────
+ *
+ * `state`  — what the round IS. A noun phrase, for anywhere the reader is
+ *            being told a fact: the /schedule filter dropdown, a legend.
+ * `action` — what a visitor can DO about it. The word a BADGE carries, because
+ *            every badge in this codebase sits inside a row that is a
+ *            registration link.
+ *
+ * There was one field, `label`, and it was made to mean both. A design change
+ * renamed open's to 'ลงทะเบียน' for the badges and the filter dropdown followed
+ * it out of the same constant, so the status filter came to offer
+ * `<option value="open">ลงทะเบียน</option>` — an ACTION where a reader is
+ * choosing a STATE to filter by. The invariant that made that happen is right
+ * and is kept: the filter is still driven off this module, so its wording still
+ * cannot drift from the badges'. What was wrong is one constant carrying two
+ * meanings, so there are now two fields and each surface names the one it means.
+ *
+ * ── THE EQUALITY ON nearly_full AND full IS DELIBERATE ─────────────────────
+ *
+ * Both are written out in full rather than defaulting `action` to `state`,
+ * because a silent fallback is indistinguishable from an oversight and the next
+ * reader cannot tell whether the missing word was decided or forgotten. Nor may
+ * they be "tidied up" into one field on the grounds that they are equal today —
+ * this repo has already been bitten by two values that were equal by
+ * coincidence and got collapsed.
+ *
+ * They are equal for a REASON, and it differs per status:
+ *
+ *   nearly_full — still registerable, but 'ใกล้เต็ม' is the urgent thing to say
+ *                 and no separate call to action was designed. If one is ever
+ *                 added it goes here; nothing else changes.
+ *   full        — there IS no action. `scheduleRegistrationHref` returns null
+ *                 for a full round (and for the local `closed` spelling), so
+ *                 the card is not a link at all. A badge reading 'ลงทะเบียน'
+ *                 on an unclickable sold-out round would be the worst wording
+ *                 on the page, so `action` MUST stay the state word here. This
+ *                 equality is load-bearing, not incidental.
+ */
 export const SCHEDULE_STATUS = {
   open: {
-    label: 'ลงทะเบียน',
+    state: 'เปิดรับ',
+    action: 'ลงทะเบียน',
     dot: 'bg-[#39b980]',
     text: 'text-[#39b980]',
     solid: 'bg-[#39b980] text-white',
     soft: 'bg-[#39b980]/10 text-[#39b980] dark:bg-[#39b980]/20',
   },
   nearly_full: {
-    label: 'ใกล้เต็ม',
+    state: 'ใกล้เต็ม',
+    action: 'ใกล้เต็ม', // equal ON PURPOSE — see the note above
     dot: 'bg-[#ffc94a]',
     text: 'text-[#d4a017] dark:text-[#ffc94a]',
     solid: 'bg-[#ffc94a] text-white',
     soft: 'bg-[#ffc94a]/15 text-[#d4a017] dark:bg-[#ffc94a]/20 dark:text-[#ffc94a]',
   },
   full: {
-    label: 'เต็ม',
+    state: 'เต็ม',
+    action: 'เต็ม', // equal ON PURPOSE, and load-bearing — see the note above
     dot: 'bg-[#ff4b55]',
     text: 'text-[#ff4b55]',
     solid: 'bg-[#ff4b55] text-white',
@@ -87,8 +134,10 @@ export const SCHEDULE_STATUS = {
  * status at all.
  *
  * Returning null rather than defaulting to 'open' is deliberate: defaulting to
- * open is how an unrecognised value ends up advertised as green "เปิดรับ".
- * Call sites choose their own fallback explicitly.
+ * open is how an unrecognised value ends up advertised as green — and since
+ * the state/action split it would be advertised with an IMPERATIVE,
+ * "ลงทะเบียน", on a round nothing is known about. Call sites choose their own
+ * fallback explicitly.
  */
 export function normalizeScheduleStatus(raw) {
   if (typeof raw !== 'string') return null;
@@ -126,9 +175,13 @@ export function resolveScheduleBadge(raw) {
   const known = normalizeScheduleStatus(raw);
   if (known) return { ...SCHEDULE_STATUS[known], status: known, isKnown: true };
 
-  const label = typeof raw === 'string' ? raw.trim() : '';
-  if (!label) return null;
-  return { ...NEUTRAL_STATUS, label, status: null, isKnown: false };
+  const verbatim = typeof raw === 'string' ? raw.trim() : '';
+  if (!verbatim) return null;
+  // Both fields carry the raw value. An unrecognised status has no state/action
+  // distinction to make — we do not know what it means, which is the whole
+  // point of showing it verbatim — and giving the shape the same keys either
+  // way means no call site has to branch on `isKnown` just to read a word.
+  return { ...NEUTRAL_STATUS, state: verbatim, action: verbatim, status: null, isKnown: false };
 }
 
 /**
@@ -141,11 +194,23 @@ export function resolveScheduleBadge(raw) {
  * one exported is leaving it loaded.
  */
 export function scheduleStatusLabel(raw) {
-  return resolveScheduleBadge(raw)?.label ?? null;
+  // The STATE word: this answers "what is this round", which is the only
+  // question a bare label-getter can be asking. A caller that wants the badge
+  // wording reads `.action` off resolveScheduleBadge, where the choice is
+  // visible at the call site instead of buried in a helper's name.
+  return resolveScheduleBadge(raw)?.state ?? null;
 }
 
-/** `[{ value, label }]` for the /schedule filter, so it cannot drift from the badges. */
+/**
+ * `[{ value, label }]` for the /schedule filter, so it cannot drift from the
+ * badges — the invariant is unchanged, only the FIELD it reads.
+ *
+ * `state`, never `action`. This is a dropdown of things to filter BY, and the
+ * reader is choosing a fact about a round, not an activity: `<option>เปิดรับ`
+ * is a state to select, `<option>ลงทะเบียน` reads as a command. The key stays
+ * `label` because that is the `<option>`'s label and means nothing else here.
+ */
 export const SCHEDULE_STATUS_OPTIONS = SCHEDULE_STATUSES.map((value) => ({
   value,
-  label: SCHEDULE_STATUS[value].label,
+  label: SCHEDULE_STATUS[value].state,
 }));

@@ -213,7 +213,7 @@ test('the status renders as a tinted pill, in the shared soft tokens', () => {
   const near = rows['s-near'];
 
   assert.ok(open.includes(SCHEDULE_STATUS.open.soft), 'the open pill must use the soft tokens');
-  assert.ok(open.includes('>เปิดรับ<'), 'and say เปิดรับ');
+  assert.ok(open.includes('>ลงทะเบียน<'), 'and say ลงทะเบียน');
   assert.ok(near.includes(SCHEDULE_STATUS.nearly_full.soft), 'and amber for nearly_full');
   assert.ok(near.includes('>ใกล้เต็ม<'));
 
@@ -233,12 +233,14 @@ test('the soft tokens carry their own dark variants', () => {
 test('a blank status renders NO pill — not an empty one, not a default', () => {
   /**
    * The behaviour M3 exists to protect, re-asserted against the new shape: a
-   * pill is more prominent than the old text was, so a default "เปิดรับ" here
-   * would advertise a session as taking bookings more loudly than before.
+   * pill is more prominent than the old text was, so a default "ลงทะเบียน"
+   * here would advertise a session as taking bookings more loudly than
+   * before — and since the state/action split that default would be an
+   * IMPERATIVE on a round we know nothing about.
    */
   const row = rowsById(render())['s-blank'];
   assert.ok(row, 'the blank-status round did not render a row');
-  for (const label of ['เปิดรับ', 'ใกล้เต็ม', 'เต็ม']) {
+  for (const label of ['ลงทะเบียน', 'ใกล้เต็ม', 'เต็ม']) {
     assert.equal(row.includes(label), false, `a blank status must not be labelled ${label}`);
   }
   assert.equal(
@@ -332,9 +334,10 @@ test('the LONG cross-month row still carries everything, overflow staying inside
   assert.match(classes, /\bflex-1\b/, 'and the thing that takes the slack');
 
   // The two neighbours it must never displace, each still unshrinkable.
-  // s-cross is the `open` round, so its pill reads เปิดรับ — matched as
-  // `>label<` because a Thai label is a substring of its own negation.
-  const pill = row.match(/<span class="(flex-none[^"]*)">เปิดรับ<\/span>/);
+  // s-cross is the `open` round, so its pill reads the ACTION word ลงทะเบียน —
+  // badges take `action`, never `state`. Matched as `>label<` because a Thai
+  // label can be a substring of another (เต็ม inside ใกล้เต็ม).
+  const pill = row.match(/<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/);
   assert.ok(pill, 'the status pill left the row');
   assert.match(pill[1], /\bflex-none\b/, 'the pill must not shrink to make room for a date');
   const circle = row.match(/<span aria-hidden="true" class="([^"]*)">/);
@@ -346,15 +349,15 @@ test('CONTROL: the flex-none probes DO distinguish a shrinkable neighbour', () =
   // A pill that lost `flex-none` is exactly the regression the test above
   // guards, and it is invisible until a long date renders on a narrow phone.
   assert.equal(
-    /<span class="(flex-none[^"]*)">เปิดรับ<\/span>/.test(
-      '<span class="whitespace-nowrap rounded-full">เปิดรับ</span>',
+    /<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/.test(
+      '<span class="whitespace-nowrap rounded-full">ลงทะเบียน</span>',
     ),
     false,
     'the probe must not match a pill that dropped flex-none',
   );
   assert.ok(
-    /<span class="(flex-none[^"]*)">เปิดรับ<\/span>/.test(
-      '<span class="flex-none whitespace-nowrap rounded-full">เปิดรับ</span>',
+    /<span class="(flex-none[^"]*)">ลงทะเบียน<\/span>/.test(
+      '<span class="flex-none whitespace-nowrap rounded-full">ลงทะเบียน</span>',
     ),
     '…but it must match one that kept it',
   );
@@ -648,19 +651,47 @@ const CELL_BOX_CLASS =
 const CELL_BOX_STYLE =
   'border-color:#00CCFF;--round-ring:#00CCFF;--round-hover-bg:rgba(0, 204, 255, 0.1)';
 
+/**
+ * ── RE-BASELINED ON TWO AXES, AND ONLY TWO ─────────────────────────────────
+ *
+ * 807f6a0 made two changes to ScheduleCell and re-baselined neither, so this
+ * golden had been failing on a difference that has nothing to do with the
+ * status label it also changed:
+ *
+ *   1. the dot and the date are now wrapped in `<span class="flex items-center
+ *      gap-1">`, so they sit on one line inside the column
+ *   2. the dot gained `flex-none`, so it cannot be squeezed by a long
+ *      cross-month date
+ *
+ * Both are hand-applied from ScheduleClient's source, NOT pasted from the
+ * current render. Pasting is how an unrelated regression gets absorbed into a
+ * golden and stops being visible ever again — the whole point of this file.
+ *
+ * The wrapper is unconditional in the component, so it applies to the
+ * blank-status cell too even though that cell has no status span to separate.
+ *
+ * `flex-none` here is the same property the sibling probe test asserts
+ * independently ("the flex-none probes DO distinguish a shrinkable
+ * neighbour"), which is why that one has been passing throughout: it reads the
+ * live class list rather than a captured string. Two views of one fact, and
+ * only one of them had gone stale.
+ */
 const CELL_EARLY_BIRD_OPEN =
   `<a href="/registration/public?course=power-bi&amp;class=s-cross" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
-  + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
+  + '<span class="flex items-center gap-1">'
+  + '<span class="h-2 w-2 flex-none rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
   + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">'
   + `${CROSS_START} ${monthLabel(WINDOW[0])}, 2 ${monthLabel(WINDOW[1])}</span>`
-  + '<span class="text-[10px] font-bold leading-none text-[#39b980]">เปิดรับ</span>'
+  + '</span>'
+  + '<span class="text-[10px] font-bold leading-none text-[#39b980]">ลงทะเบียน</span>'
   + '<span class="rounded-sm whitespace-nowrap bg-[#D4F73F] px-1.5 py-[2px] text-[0.5rem] font-black leading-none text-9e-navy shadow-sm">Early Bird</span>'
   + '</a>';
 
 const CELL_BLANK_STATUS =
   `<a href="/registration/public?course=power-bi&amp;class=s-blank" class="${CELL_BOX_CLASS}" style="${CELL_BOX_STYLE}">`
-  + '<span class="h-2 w-2 rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
-  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></a>';
+  + '<span class="flex items-center gap-1">'
+  + '<span class="h-2 w-2 flex-none rounded-full" style="background-color:#00CCFF" aria-hidden="true"></span>'
+  + '<span class="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">9</span></span></a>';
 
 /**
  * Every non-empty schedule cell of the desktop table, in document order.

@@ -439,7 +439,7 @@ test('the Classroom / Hybrid legend row survives', () => {
 
 test('the status badge still renders, and a blank status renders none', () => {
   const html = render();
-  assert.ok(html.includes('เปิดรับ'), 'the open badge');
+  assert.ok(html.includes('ลงทะเบียน'), 'the open badge');
   assert.ok(html.includes('ใกล้เต็ม'), 'and the nearly-full one');
 
   const blank = render({ ...COURSE, schedules: [round('b', ['2026-09-16'], 'classroom', '')] });

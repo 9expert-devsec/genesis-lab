@@ -79,6 +79,71 @@
 // So: strip comments by default; read the RAW file for the one assertion whose
 // subject is a comment, and say so at that assertion. Mixing the two inside one
 // test file is fine and is what test/fs/chatWiring.test.mjs does.
+//
+// ── MEASURING ONE COMMIT'S SUITE COUNT, WITHOUT LATER WORK ON DISK ──────────
+//
+// A count taken partway through a round is not that commit's count. This has
+// gone wrong once already: a "baseline" figure was recorded with an uncommitted
+// test file present, and the 19 tests in it were attributed to the commit
+// before. The number a commit is reported at must come from a run in a CLEAN
+// tree at that commit — which means a detached worktree, not a stash.
+//
+//     git worktree add --detach <path> <sha>
+//     # link node_modules; a worktree has none of its own
+//     powershell New-Item -ItemType Junction -Path <path>\node_modules `
+//                         -Target <repo>\node_modules
+//     cd <path> && git status --porcelain   # prove it is clean
+//     node test/run.mjs
+//
+// ── STANDING RULE: NEVER rmdir/rm -rf A WORKTREE PATH ───────────────────────
+//
+// Removing the directory tree directly is how the real node_modules got
+// deleted: `rmdir /s` followed the junction OUT of the worktree and into the
+// repo, taking mongoose and ~290 other packages with it. `npm ci` restored it,
+// but nothing warned at the time — the failure surfaced later as an unrelated
+// module-not-found in the middle of a test run.
+//
+// Tear down with git, and clear the junction FIRST if one was created:
+//
+//     [System.IO.Directory]::Delete('<path>\node_modules', $false)  # link only
+//     git worktree remove --force <path>
+//     git worktree prune
+//     git worktree list                     # prove nothing is left registered
+//
+// `git worktree remove` refuses paths git does not own, which is the property
+// that makes it the safe verb here.
+//
+// ── WHAT THIS SUITE, AND `npm run build`, CANNOT TELL YOU ───────────────────
+//
+// Recorded after 35 catalog pages (27 program + 8 skill `-all-courses` slugs)
+// served a 500 on the deployed dev site while both this suite and the build
+// were green. Three separate things each looked like evidence and were not:
+//
+// 1. A GREEN BUILD PROVES NOTHING ABOUT `/[...slug]`. That route is `ƒ`
+//    Dynamic and has no `generateStaticParams` — no `-all-courses` URL is
+//    prerendered, so `next build` never renders one and exits 0 with the route
+//    permanently broken. `✓ Generating static pages (46/46)` counts the 46 that
+//    ARE static and says nothing about the catch-all. To test a Dynamic route
+//    you have to REQUEST it: `next dev` on a free port and curl the URL.
+//
+// 2. A 500 WITH NO APPLICATION TRACE IS NOT A SECOND BUG. Next's own error
+//    reporter can throw while serialising the first error — observed as
+//    `TypeError: frame.join is not a function` and
+//    `TypeError: chunk.reason.enqueueModel is not a function`, both with their
+//    own digests. Those are React flight/stack-frame internals, not app frames.
+//    Of two requests that failed identically, only the first printed the real
+//    trace; the second printed only the serialiser's own failure. Request one
+//    URL at a time, and do not conclude "different error" from a different
+//    surface message.
+//
+// 3. THE DEV OVERLAY'S "N ISSUES" COUNTER IS NOT A DEFECT COUNT. One exception
+//    is reported twice — once in Console, once in Runtime — with identical
+//    stacks. "2 Issues" was one bug.
+//
+// The guard that came out of it is test/fs/currentYearThreading: source-level,
+// deriving its subject from the import graph, because a render test only covers
+// mounts someone already thought of and the failure mode was a mount nobody had
+// written yet.
 
 process.env.NODE_ENV = 'production'; // match component runtime branches (fail-closed, no dev blocks)
 

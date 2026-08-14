@@ -111,30 +111,40 @@ async function firstCourseCover(listCourse) {
 }
 
 /**
- * Fetch cover preview for a single course by course_id.
+ * Fetch the COVER for a single course by course_id, for Col 4.
  * Called when the user hovers a course row in Col 3.
- * Returns { course_id, course_name, course_cover_url } or null.
+ * Returns { course_id, course_cover_url } or null.
  *
  * course_cover_url is only available on the detail endpoint (getCourseByCode),
- * not on the list endpoint.
+ * not on the list endpoint. That is the whole reason this call exists.
+ *
+ * ── WHY IT RETURNS NO NAME, AND NO ALIAS ───────────────────────────────────
+ * It used to return `course_name` and `urlAlias` as well, and the card rendered
+ * them. Both were free on a response fetched for the image, and neither was
+ * ever the right source: the Col 3 row the user hovered already carries a name
+ * and an alias, out of the nav snapshot, and the card is a preview OF THAT ROW.
+ * Returning a second copy of either is what let the menu show the snapshot's
+ * name in the list and the detail endpoint's name on the card simultaneously
+ * after a rename.
+ *
+ * So the name is not overridden downstream — it is not returned. There is no
+ * second name for a caller to pick up by accident. The shape the card is built
+ * from is owned by lib/navmenu/coursePreview.js#composeCoursePreview, which
+ * reads identity, name and alias from the row and only the image from here.
+ *
+ * Dropping the alias also removes a CourseExtension round-trip from every
+ * course hover. The row's alias is what Col 3's own link already uses, so the
+ * card and the row now resolve to the same href by construction rather than by
+ * two independent lookups happening to agree.
  */
 export async function getCoursePreview(courseId) {
   if (!courseId) return null;
   try {
     const detail = await getCourseByCode(courseId);
     if (!detail) return null;
-    // getCourseByCode hits the upstream API only — urlAlias lives in
-    // CourseExtension, so fetch it here too. Strip the stored leading slash.
-    await dbConnect();
-    const ext = await CourseExtension.findOne(
-      { courseId: detail.course_id ?? courseId },
-      { urlAlias: 1 }
-    ).lean();
     return {
       course_id: detail.course_id ?? courseId,
-      course_name: detail.course_name ?? '',
       course_cover_url: detail.course_cover_url ?? null,
-      urlAlias: ext?.urlAlias ? String(ext.urlAlias).replace(/^\/+/, '') : null,
     };
   } catch {
     return null;

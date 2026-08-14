@@ -81,7 +81,10 @@ test('resolveCourse path 2 uses it too — the detail pages need it as much', ()
   // tolerant helper; the wiring test below pins that default. Asserting the
   // literal helper name at the call site would only re-pin the old shape.
   assert.match(RESOLVE, /getCourseByCodeInsensitive/, 'the helper is in scope');
-  assert.match(RESOLVE, /await fetchCourse\(courseId\)\.catch\(\(\) => null\)/);
+  // The call now forwards `{ includeHidden }` so an admin preview of one of the
+  // five mixed-case courses can still recover it from the fallback list. The
+  // claim is that path 2 goes through the injected dep, which it still does.
+  assert.match(RESOLVE, /await fetchCourse\(courseId, \{ includeHidden \}\)\.catch\(\(\) => null\)/);
 });
 
 test('the registration page no longer calls the raw case-sensitive lookup', () => {
@@ -119,8 +122,11 @@ test('BOTH resolveCourse paths go through the case-tolerant lookup', () => {
   );
   // Both paths reach the injected dep, which defaults to the tolerant helper.
   assert.match(RESOLVE, /fetchCourse = getCourseByCodeInsensitive/, 'the default dep is the tolerant one');
-  assert.match(RESOLVE, /await fetchCourse\(byAlias\.courseId\)/, 'path 1');
-  assert.match(RESOLVE, /await fetchCourse\(courseId\)/, 'path 2');
+  // Trailing comma rather than a closing paren: both calls now forward
+  // `{ includeHidden }`. What is pinned is that each path reaches the DEP, not
+  // its argument list.
+  assert.match(RESOLVE, /await fetchCourse\(byAlias\.courseId,/, 'path 1');
+  assert.match(RESOLVE, /await fetchCourse\(courseId,/, 'path 2');
 });
 
 test('the false claim about path 1 is gone from the source', () => {
@@ -157,9 +163,21 @@ test('CONTROL: every function resolveCourse calls is actually imported', () => {
    * for production callers, who pass no deps — never in a test, which always
    * passes fakes.
    */
+  /**
+   * LITERAL DEFAULTS ARE OPTIONS, NOT DEPS, and must be excluded before the
+   * "its default is imported" rule runs. `includeHidden = false` is an option —
+   * the admin-preview bypass — and the pattern below cannot tell `false` from a
+   * function name by shape alone, so it would demand that resolveCourse.js
+   * import something called `false`. Excluding the JS literals keeps the rule
+   * pointed at what it is for: a dep whose default names a function this module
+   * never imported, which is a ReferenceError hiding behind a `.catch()` that
+   * only production callers — the ones who pass no deps — would ever reach.
+   */
+  const LITERALS = new Set(['true', 'false', 'null', 'undefined']);
   const injected = new Map(
     [...RESOLVE.matchAll(/^\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*),\s*$/gm)]
       .map((m) => [m[1], m[2]])
+      .filter(([, fallback]) => !LITERALS.has(fallback))
   );
   assert.ok(injected.size >= 3, 'the injected deps are no longer being detected');
   for (const [dep, fallback] of injected) {
@@ -201,7 +219,12 @@ test('the helper tries the direct call FIRST and returns it unconditionally', ()
   const body = /export async function getCourseByCodeInsensitive\(([\s\S]*?)\n\}/.exec(ADAPTER);
   assert.ok(body, 'the helper is where it is expected');
   const directAt = body[1].indexOf('const direct = await fetchByCode(courseId)');
-  const listAt = body[1].indexOf('await fetchList()');
+  // `fetchList(` rather than `fetchList()` — the fallback now forwards
+  // `includeHidden` so an admin preview of one of the five mixed-case courses
+  // can still recover it from the list. The claim this test makes is about
+  // ORDER, not about the argument list, and pinning the empty parens made it go
+  // red for a change that left the ordering untouched.
+  const listAt = body[1].indexOf('await fetchList(');
   assert.ok(directAt > -1 && listAt > -1, 'both paths are present');
   assert.ok(directAt < listAt, 'the direct call comes first');
   assert.match(body[1], /if \(direct\) return direct;/, 'and short-circuits on a hit');

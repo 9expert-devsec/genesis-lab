@@ -300,7 +300,7 @@ test('CONTROL: the dot probe distinguishes the two type colours', () => {
 
 test('the status badge renders on a card round', () => {
   const cards = cardRegion(renderBoard());
-  assert.ok(cards.includes('เปิดรับ'), 'open badge missing from the card');
+  assert.ok(cards.includes('ลงทะเบียน'), 'open badge missing from the card');
   assert.ok(cards.includes('ใกล้เต็ม'), 'nearly_full badge missing from the card');
   assert.ok(cards.includes('text-[#39b980]'), 'the open green is not the badge colour');
 });
@@ -308,7 +308,7 @@ test('the status badge renders on a card round', () => {
 test('a BLANK status renders no badge at all — not a default label', () => {
   /**
    * `resolveScheduleBadge` returns null for a missing status and the table omits
-   * the element entirely. Substituting "เปิดรับ" would advertise a session as
+   * the element entirely. Substituting "ลงทะเบียน" would advertise a session as
    * taking bookings on no evidence — the exact defect lib/scheduleStatus exists
    * to prevent — and on a card it would be the most prominent thing in the row.
    *
@@ -318,7 +318,7 @@ test('a BLANK status renders no badge at all — not a default label', () => {
   const rows = cards.match(/<li[\s\S]*?<\/li>/g) ?? [];
   const blankRow = rows.find((r) => r.includes('class=s-blank'));
   assert.ok(blankRow, 'the blank-status round did not render a row');
-  for (const label of ['เปิดรับ', 'ใกล้เต็ม', 'เต็ม']) {
+  for (const label of ['ลงทะเบียน', 'ใกล้เต็ม', 'เต็ม']) {
     assert.equal(blankRow.includes(label), false, `a blank status must not be labelled ${label}`);
   }
 });
@@ -329,7 +329,7 @@ test('CONTROL: the same row-scoped probe DOES see a badge on a real status', () 
   const rows = cards.match(/<li[\s\S]*?<\/li>/g) ?? [];
   const openRow = rows.find((r) => r.includes('class=s-in-1'));
   assert.ok(openRow, 'the open round did not render a row');
-  assert.ok(openRow.includes('เปิดรับ'), 'the row-scoped probe cannot see a badge that is there');
+  assert.ok(openRow.includes('ลงทะเบียน'), 'the row-scoped probe cannot see a badge that is there');
 });
 
 test('Early Bird marks exactly the one schedule the map names', () => {

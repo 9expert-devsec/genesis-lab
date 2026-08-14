@@ -39,7 +39,10 @@ export default async function AdminSchedulesPage() {
       // rather than the explicit public trio is deliberate: this is the one
       // surface where a status MSDB adds later must show up unannounced.
       listSchedules({ from, to, status: ADMIN_SCHEDULE_STATUSES, revalidate: 0 }),
-      listPublicCourses(),
+      // includeHidden — admin picker AND the name column for existing rounds.
+      // A round already scheduled for a course that has since been hidden must
+      // still identify itself by name.
+      listPublicCourses({ includeHidden: true }),
       listPrograms(),
       listInstructorsForAdmin(),
     ]);

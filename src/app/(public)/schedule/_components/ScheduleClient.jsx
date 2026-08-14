@@ -691,7 +691,12 @@ function StatusOptions() {
     <>
       <option value={SCHEDULE_FILTER_ALL}>สถานะทั้งหมด</option>
       {/* Driven off the same source as the badges, so the filter wording
-          cannot drift from what the rows actually say. */}
+          cannot drift from what the rows actually say — unchanged, and still
+          the point. What changed is WHICH WORD it reads: `SCHEDULE_STATUS_OPTIONS`
+          takes each status's `state`, while the badges take its `action`.
+          One field used to serve both, which is how this dropdown came to offer
+          `<option value="open">ลงทะเบียน</option>` — a command where the reader
+          is picking a state to filter by. See lib/scheduleStatus.js. */}
       {SCHEDULE_STATUS_OPTIONS.map(({ value, label }) => (
         <option key={value} value={value}>
           {label}
@@ -1839,7 +1844,7 @@ function RoundRow({ schedule, courseId, isEarlyBird = false, currentYear }) {
         <span
           className={`flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
         >
-          {statusStyle.label}
+          {statusStyle.action}
         </span>
       )}
       {href ? (
@@ -2160,7 +2165,7 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
     {/* Omitted entirely when the status is missing/blank. */}
     {statusStyle && (
     <span className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
-      {statusStyle.label}
+      {statusStyle.action}
     </span>
     )}
     {isEarlyBird && <EarlyBirdPill />}

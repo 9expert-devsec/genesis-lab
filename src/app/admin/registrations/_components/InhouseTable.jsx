@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 import { LastEditedHint } from '@/components/audit/auditRowParts';
+import { INHOUSE_STATUSES } from '@/lib/registrations/inhouseStatuses';
 
 /**
  * THE IN-HOUSE TABLE BODY — a SEPARATE COMPONENT, not a `source ===` branch
@@ -50,13 +51,15 @@ const STATUS_BADGE = {
   'closed-lost': 'bg-slate-100 text-slate-500',
 };
 
-const STATUS_LABEL = {
-  new:           'ใหม่',
-  contacted:     'ติดต่อแล้ว',
-  quoted:        'ส่งใบเสนอราคาแล้ว',
-  'closed-won':  'ปิดงานสำเร็จ',
-  'closed-lost': 'ไม่สำเร็จ',
-};
+// DERIVED from the same array the chips and the cards use, because the comment
+// above is a promise this map cannot keep on its own: relabel a status in
+// lib/registrations/inhouseStatuses.js and a hand-written copy here would go on
+// printing the old wording in the table while the chip you filtered by showed
+// the new one. The COLOURS stay local — they are the detail page's, for the
+// reason given above, and are not a property of the status list.
+const STATUS_LABEL = Object.fromEntries(
+  INHOUSE_STATUSES.map((s) => [s.value, s.label])
+);
 
 // ── Training format ────────────────────────────────────────────────
 //

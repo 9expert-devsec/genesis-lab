@@ -19,6 +19,12 @@ const NavMenuCacheSchema = new mongoose.Schema(
       skills:   { type: mongoose.Schema.Types.Mixed, default: {} },
     },
     syncedAt: { type: Date, default: null },
+    /**
+     * The last downgrade the guard REFUSED to write, or null. Replaced on each
+     * refusal, never appended; cleared by any run that writes. Same contract as
+     * LandingCache.lastRefusal — see lib/cache-console/downgradeGuard.
+     */
+    lastRefusal: { type: mongoose.Schema.Types.Mixed, default: null },
     status:   { type: String, enum: ['ok', 'partial', 'error'], default: 'error' },
   },
   { timestamps: true, collection: 'nav_menu_cache' }

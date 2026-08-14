@@ -553,8 +553,31 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                              our own storage).
  *
  * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
+ *
+ * 164 → 165, and W2-b's depth-0 figure 160 → 161, for cache-console.js:
+ *
+ *   applyMirrorReset      calls Model.deleteMany, so the FILE-LOCAL classifier
+ *                         sees it. It is the only export in this repo whose
+ *                         purpose is to DELETE rows in bulk, which is why it
+ *                         carries three separate refusal gates before the call.
+ *   previewMirrorReset    reads and computes; writes nothing. Correctly
+ *                         classified read-only and absent from both counts —
+ *                         and that absence is load-bearing rather than
+ *                         incidental, since a preview that mutated anything
+ *                         would defeat the preview-before-apply ruling.
+ *   listMirrorResetKeys   returns a constant list. Read-only.
  */
-const MUTATING_EXPORT_COUNT = 164;
+// 165 → 166 for round 4's applySnapshotOverride. It writes the snapshot through
+// syncLandingData, which it imports STATICALLY for exactly this reason: this
+// walk resolves static imports only, so a dynamic one classified a mutating,
+// snapshot-writing export as read-only — and "every mutating export records an
+// audit row" then skipped it in silence. The classification was correct by luck
+// rather than by the guard, which is the state this file exists to prevent.
+//
+// W2-b's depth-0 figure is UNCHANGED at 161: the file-local classifier cannot
+// see through an import, and that difference is what the walk exists to close.
+// previewSnapshotOverride reads the stored refusal and writes nothing.
+const MUTATING_EXPORT_COUNT = 166;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -562,6 +585,12 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
   'src/lib/actions/previewAccess.js': { submitPreviewPassword: 'src/lib/actions/pageBuilder.js#verifyPreviewPassword' },
+  // Round 4. `applySnapshotOverride` writes nothing itself — it re-runs the
+  // landing sync with the downgrade guard bypassed for one call, so the write
+  // is syncLandingData's. The import is STATIC precisely so this walk can see
+  // it; with a dynamic import the export read as read-only and the "every
+  // mutating export records an audit row" check skipped it in silence.
+  'src/lib/actions/cache-console.js': { applySnapshotOverride: 'src/lib/landing/syncLandingData.js#syncLandingData' },
 });
 
 test('the mutating-export count across every action module is pinned', () => {
@@ -721,18 +750,20 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 160,
+    zero, 161,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
     'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
     '(which mutates through a file-local helper), 159 since media.js gained ' +
-    'deleteMediaFile (which writes directly), and 160 since course-outlines.js gained ' +
-    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate). Its sibling ' +
-    'signCourseOutlineUpload writes nothing and is deliberately NOT in this figure'
+    'deleteMediaFile (which writes directly), 160 since course-outlines.js gained ' +
+    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate), and 161 since ' +
+    'cache-console.js gained applyMirrorReset (Model.deleteMany). Its siblings ' +
+    'previewMirrorReset and listMirrorResetKeys write nothing and are deliberately ' +
+    'NOT in this figure — a preview that mutated would defeat its own ruling'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
     MUTATING_EXPORT_COUNT,
-    'and the delta is exactly the four exports named in REACHED_THROUGH_IMPORT'
+    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT'
   );
 });
 

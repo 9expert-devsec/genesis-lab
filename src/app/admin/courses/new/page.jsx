@@ -24,7 +24,11 @@ export default async function NewCoursePage({ searchParams }) {
   const [skillsRes, programsRes, coursesRes] = await Promise.allSettled([
     listSkills(),
     listPrograms(),
-    listPublicCourses(),
+    // includeHidden — this list becomes CourseForm's `allCourses`, which is
+    // what the previous_course picker resolves a STORED prerequisite through.
+    // Filtered, a prerequisite pointing at a hidden course would render as an
+    // empty picker and be dropped on the next save, silently.
+    listPublicCourses({ includeHidden: true }),
   ]);
 
   const skills      = skillsRes.status   === 'fulfilled' ? skillsRes.value.items   ?? [] : [];

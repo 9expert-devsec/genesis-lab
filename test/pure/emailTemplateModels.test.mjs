@@ -4,6 +4,7 @@ import { buildPublicRegistrationModel } from '@/lib/email/models/publicRegistrat
 import { buildPublicPaidReceiptModel } from '@/lib/email/models/publicPaidReceiptModel';
 import { buildInhouseRegistrationModel } from '@/lib/email/models/inhouseRegistrationModel';
 import { paidReceiptEmail } from '@/lib/email/templates/registration-paid';
+import { contentModeLabel } from '@/lib/email/models/labels';
 import { AMBIENT_PROBE, AMBIENT_TZ, withTZ, zoneProbe } from '../withTZ.mjs';
 
 /**
@@ -620,21 +621,48 @@ test('training format labels: the two live values, plus the legacy fail-safe', (
   assert.equal(inhouseModel({ trainingFormat: 'flexible' }).training_format_label, 'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ');
 });
 
-test('schedule label is the month, unconditionally', () => {
+test('schedule label is the month, unconditionally — and BARE', () => {
   // NARROWED with the form: the scheduleMode selector (month / dateRange /
   // notSure) is gone and `preferredMonth` is unconditionally required, so there
   // is no mode to branch on. The three former branch tests were REPLACED by
   // this one plus the legacy case below — deleted claims, not deleted coverage.
-  assert.equal(inhouseModel().schedule_label, 'เดือนที่สนใจ: กันยายน 2569');
+  //
+  // NO 'เดือนที่สนใจ: ' PREFIX. af9833c removed it because the approved Postmark
+  // template's row is already headed "เดือนที่สนใจอบรม", so the mail asked the
+  // question twice and answered it once. The heading belongs to the template;
+  // the value belongs here.
+  assert.equal(inhouseModel().schedule_label, 'กันยายน 2569');
+  assert.ok(
+    !inhouseModel().schedule_label.includes('เดือนที่สนใจ'),
+    'the row heading is the template\'s, not the value\'s — a prefix here prints it twice'
+  );
+});
+
+test('the month arrives DECODED, not as the machine key the form submits', () => {
+  /**
+   * The other half of what af9833c fixed, and the half that was a live defect
+   * rather than a duplication: the form's month <select> carries a Thai label
+   * but submits a `YYYY-MM` value, so what reaches this builder is '2026-09'.
+   * The customer approved 'กันยายน 2569' on the review step and was then sent
+   * '2026-09'.
+   *
+   * Asserted here because the fix lives in this value and nothing else covered
+   * it — the old assertion would have passed on a prefixed raw key.
+   */
+  const label = inhouseModel({ preferredMonth: '2026-09' }).schedule_label;
+  assert.equal(label, 'กันยายน 2569');
+  assert.ok(!label.includes('2026-09'), 'the raw machine key must not reach the customer');
 });
 
 test('schedule label falls back for a document that never had a month', () => {
   // The 'dateRange' and 'notSure' enquiries in the collection carry no
-  // preferredMonth at all. 'เดือนที่สนใจ: ' with nothing after the colon reads
-  // as a bug, so the fallback stays — and a stale preferredDateFrom must NOT
-  // resurrect the removed branch.
+  // preferredMonth at all. The fallback stays — an EMPTY value under a
+  // "เดือนที่สนใจอบรม" heading reads as a broken template rather than as an
+  // absent answer — and a stale preferredDateFrom must NOT resurrect the
+  // removed branch. Bare, like the month itself: the heading is the
+  // template's.
   const m = inhouseModel({ preferredMonth: '', preferredDateFrom: '2026-09-01', preferredDateTo: '2026-09-03' });
-  assert.equal(m.schedule_label, 'เดือนที่สนใจ: ตามที่ทีมขายแนะนำ');
+  assert.equal(m.schedule_label, 'ตามที่ทีมขายแนะนำ');
   assert.equal(JSON.stringify(m).includes('2026-09-01'), false, 'the dead date-range branch is really gone');
 });
 
@@ -652,37 +680,101 @@ test('billing_address is a block when present and false when not', () => {
   );
 });
 
-test('in-house still carries NO admin-only enquiry detail', () => {
+test('the five enquiry details the approved template asks for ARE emitted', () => {
   /**
-   * NARROWED A SECOND TIME, and the claim has changed meaning — recorded here
-   * because that is the sort of thing a green test otherwise hides.
+   * INVERTED, NOT DELETED — and the history is kept because the claim has now
+   * reversed twice and a green test would otherwise hide that.
    *
    * ROUND 1 dropped `coursesInterested` and `message`: they became
    * `course_name` and `billing_notes`, part of the approved design.
    *
-   * ROUND 2 (this change) drops `objective`, `skillLevel` and `onsiteEquipment`
-   * from the list — NOT because the model started carrying them, but because
-   * THE FORM STOPPED ASKING. Asserting their absence from the model would be
-   * vacuous now: they are absent from the submission too, so the assertion
-   * would pass no matter what this builder did with them. The paths survive on
-   * the Mongoose schema for historical documents and nothing more.
+   * ROUND 2 dropped `objective`, `skillLevel` and `onsiteEquipment` — NOT
+   * because the model started carrying them, but because THE FORM STOPPED
+   * ASKING, so asserting their absence had become vacuous.
    *
-   * What is left is the original claim, still live: these fields ARE collected
-   * by the current form, were rendered by the DELETED admin template and by
-   * nothing else, and so do not appear in the BCC copy of the customer's mail —
-   * now the only notification anyone internal receives. A loss on record.
+   * ROUND 3 (af9833c) REVERSED the remaining claim. This test asserted that
+   * `contentMode`, `contentDetails`, `onlineRegion`, `onlineTimezone` and
+   * `scheduleNote` were absent, on the reasoning that the deleted admin
+   * template was their only renderer. THE APPROVED POSTMARK TEMPLATE HAS ROWS
+   * FOR ALL FIVE, so the builder now emits them and the old reasoning was
+   * wrong twice over: it also undercounted who reads the mail, since the BCC
+   * copy is the only notification anyone internal receives, so every field
+   * left out was a detail the sales team had to open the dashboard to find.
+   *
+   * Inverted rather than deleted because the FIELD LIST is the valuable part.
+   * Deleting it would leave nothing asserting that these five reach the
+   * customer at all, and the next person to "simplify" the builder would find
+   * no test in the way.
    */
   const m = inhouseModel({
     contentMode: 'custom',
     contentDetails: 'เน้น Pivot Table',
-    onlineRegion: 'APAC',
-    onlineTimezone: 'ICT 09:00-16:00',
     scheduleNote: 'หลีกเลี่ยงวันศุกร์',
   });
   const serialised = JSON.stringify(m);
-  for (const leaked of ['custom', 'เน้น Pivot Table', 'APAC', 'ICT 09:00-16:00', 'หลีกเลี่ยงวันศุกร์']) {
-    assert.equal(serialised.includes(leaked), false, `${leaked} leaked into the in-house model`);
+  for (const carried of ['เน้น Pivot Table', 'หลีกเลี่ยงวันศุกร์']) {
+    assert.ok(serialised.includes(carried), `${carried} is missing from the in-house model`);
   }
+  // The mode travels as a LABEL, not as its raw key — the template renders the
+  // value verbatim, and 'custom' is not Thai for anything.
+  assert.equal(m.content_mode_label, contentModeLabel('custom'));
+  assert.ok(!serialised.includes('"custom"'), 'the raw mode key must not reach the template');
+
+  /**
+   * The two online fields are gated on the FORMAT, not merely on being
+   * non-empty (onlineField, inhouseRegistrationModel.js:209) — the same rule as
+   * training_venue, for the same reason: a customer who filled them in and then
+   * switched to onsite left stale values behind, and echoing those back tells
+   * them we recorded a preference they cancelled. So they need their own
+   * fixture, and the gate gets asserted in both directions rather than assumed.
+   */
+  const online = inhouseModel({
+    trainingFormat: 'online',
+    onlineRegion: 'APAC',
+    onlineTimezone: 'ICT 09:00-16:00',
+  });
+  assert.deepEqual(online.online_region, { text: 'APAC' });
+  assert.deepEqual(online.online_timezone, { text: 'ICT 09:00-16:00' });
+
+  const onsite = inhouseModel({
+    trainingFormat: 'onsite',
+    onlineRegion: 'APAC',
+    onlineTimezone: 'ICT 09:00-16:00',
+  });
+  assert.equal(onsite.online_region, false, 'a stale online region must not survive a switch to onsite');
+  assert.equal(onsite.online_timezone, false);
+});
+
+test('preferredContact* STAYS OFF — the one exclusion af9833c kept', () => {
+  /**
+   * The half of the original claim that survived, and the reason this test was
+   * inverted rather than deleted. af9833c is explicit: "preferredContact* STAYS
+   * OFF, and for the original reason: the approved template has no row for it."
+   *
+   * Without this, the inversion above would have quietly removed the only
+   * assertion standing between an unrendered field and the customer's mail.
+   */
+  const m = inhouseModel({
+    preferredContactMethod: 'line',
+    preferredContactTime: 'บ่ายสองถึงสี่โมง',
+  });
+
+  /**
+   * Asserted on the KEYS, not by searching the serialised model for 'line'.
+   * That probe passes for the wrong reason: `line` is a substring of
+   * `addressLine`, which this model carries in its billing block, so the naive
+   * form fails on a correct builder. The same substring hazard this file's
+   * sibling documents for Thai status labels, in ASCII.
+   */
+  assert.deepEqual(
+    Object.keys(m).filter((k) => /contact/i.test(k)).sort(),
+    ['contact_department', 'contact_position'],
+    'the only contact_* keys are the two the approved template has rows for'
+  );
+  assert.equal(
+    JSON.stringify(m).includes('บ่ายสองถึงสี่โมง'), false,
+    'the preferred contact TIME leaked — the template has no row for it'
+  );
 });
 
 test('CONTROL: the exclusion sweep above CAN fire', () => {
@@ -859,8 +951,39 @@ test('training_venue is the TRAINING location for an onsite enquiry', () => {
   // address autocomplete fills. It is deliberately not the legacy trio of
   // strings: re-typing `onsiteAddress` as a subdocument would be a cast failure
   // on every historical document.
+  //
+  // WITH THE ADMINISTRATIVE PREFIXES. af9833c extracted formatThaiAddress out of
+  // formatBillingAddress precisely because this flow had been hand-rolling
+  // `[...].filter(Boolean).join(' ')` and mailing customers
+  // `เชียงยืน เมืองอุดรธานี อุดรธานี 41000` — no prefixes, and no way for a
+  // reader to tell the sub-district from the district. This fixture is a
+  // Bangkok address, so it takes แขวง/เขต and the province stays bare.
   assert.deepEqual(inhouseModel({ trainingFormat: 'onsite' }).training_venue, {
-    text: '123 อาคารเอ คลองตัน คลองเตย กรุงเทพฯ 10110',
+    text: '123 อาคารเอ แขวงคลองตัน เขตคลองเตย กรุงเทพฯ 10110',
+  });
+});
+
+test('a PROVINCIAL venue takes ตำบล/อำเภอ/จังหวัด, not Bangkok\'s vocabulary', () => {
+  /**
+   * The branch the Bangkok fixture above cannot reach, and the one the old
+   * hand-rolled join got wrong for every customer outside Bangkok. Asserted
+   * here because this is the surface that mails the string to them.
+   *
+   * Note จังหวัด appears only OUTSIDE Bangkok — "จังหวัดกรุงเทพมหานคร" is wrong,
+   * which is why the Bangkok branch emits the province bare.
+   */
+  const m = inhouseModel({
+    trainingFormat: 'onsite',
+    onsiteVenue: {
+      addressLine: '99 หมู่ 4',
+      subDistrict: 'เชียงยืน',
+      district: 'เมืองอุดรธานี',
+      province: 'อุดรธานี',
+      postalCode: '41000',
+    },
+  });
+  assert.deepEqual(m.training_venue, {
+    text: '99 หมู่ 4 ตำบลเชียงยืน อำเภอเมืองอุดรธานี จังหวัดอุดรธานี 41000',
   });
 });
 

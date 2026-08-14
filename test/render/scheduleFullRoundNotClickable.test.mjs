@@ -96,7 +96,12 @@ const linkedRoundIds = (markup) =>
 
 test('a full round renders เต็ม and carries no navigable href', () => {
   assert.ok(
-    html.includes(SCHEDULE_STATUS.full.label),
+    // `.action`, which is what a BADGE renders. For `full` that is the state
+    // word — deliberately, because scheduleRegistrationHref returns null here
+    // and an unclickable sold-out round must not be labelled with a call to
+    // action. This assertion is therefore also the one that would notice if
+    // `full.action` were ever given a verb of its own.
+    html.includes(SCHEDULE_STATUS.full.action),
     'the round is on the page, labelled เต็ม — it must be SHOWN, not filtered out again',
   );
   assert.ok(

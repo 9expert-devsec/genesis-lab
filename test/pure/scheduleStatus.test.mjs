@@ -27,10 +27,58 @@ test('the vocabulary is exactly three states', () => {
   assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full']);
 });
 
-test('each state has its agreed Thai wording', () => {
-  assert.equal(SCHEDULE_STATUS.open.label, 'เปิดรับ');
-  assert.equal(SCHEDULE_STATUS.nearly_full.label, 'ใกล้เต็ม');
-  assert.equal(SCHEDULE_STATUS.full.label, 'เต็ม');
+test('each state has its agreed Thai wording, in BOTH registers', () => {
+  // `state` = what the round IS (the filter dropdown reads this).
+  assert.equal(SCHEDULE_STATUS.open.state, 'เปิดรับ');
+  assert.equal(SCHEDULE_STATUS.nearly_full.state, 'ใกล้เต็ม');
+  assert.equal(SCHEDULE_STATUS.full.state, 'เต็ม');
+
+  // `action` = what a visitor can DO (every badge reads this).
+  assert.equal(SCHEDULE_STATUS.open.action, 'ลงทะเบียน');
+  assert.equal(SCHEDULE_STATUS.nearly_full.action, 'ใกล้เต็ม');
+  assert.equal(SCHEDULE_STATUS.full.action, 'เต็ม');
+});
+
+test('open is the only status whose two words DIFFER, and the rest are equal on purpose', () => {
+  /**
+   * The pair of claims the module's comment makes, made executable.
+   *
+   * Both directions matter. If open's two words ever became equal, the split
+   * has been undone and the filter is offering an action again. If
+   * nearly_full's or full's diverged, someone gave them a verb — which for
+   * `full` would put 'ลงทะเบียน' on a round whose registration href is null,
+   * i.e. an unclickable card inviting a click.
+   */
+  assert.notEqual(SCHEDULE_STATUS.open.state, SCHEDULE_STATUS.open.action);
+  for (const key of ['nearly_full', 'full']) {
+    assert.equal(
+      SCHEDULE_STATUS[key].state, SCHEDULE_STATUS[key].action,
+      `${key}: the equality is deliberate — if a distinct action word was added, `
+      + 'update lib/scheduleStatus.js\'s note and this assertion together'
+    );
+  }
+});
+
+test('every status carries both fields — no silent fallback', () => {
+  // The shape guard. `action` defaulting to `state` was rejected precisely
+  // because a missing word would then be invisible; this is what makes the
+  // absence loud.
+  for (const key of Object.keys(SCHEDULE_STATUS)) {
+    for (const field of ['state', 'action']) {
+      assert.equal(
+        typeof SCHEDULE_STATUS[key][field], 'string',
+        `${key}.${field} is missing — both words are written out explicitly`
+      );
+      assert.ok(SCHEDULE_STATUS[key][field].length > 0, `${key}.${field} is empty`);
+    }
+  }
+  // And the ambiguous field it replaced must not come back.
+  for (const key of Object.keys(SCHEDULE_STATUS)) {
+    assert.equal(
+      SCHEDULE_STATUS[key].label, undefined,
+      `${key}.label is back — that is the one field that meant two things`
+    );
+  }
 });
 
 /**
@@ -96,8 +144,13 @@ test('resolveScheduleBadge renders an unrecognised status NEUTRALLY, never open'
   const badge = resolveScheduleBadge('bogus');
   assert.ok(badge, 'an unrecognised but non-empty status still gets a badge');
   assert.equal(badge.isKnown, false);
-  assert.equal(badge.label, 'bogus', 'the raw value is shown verbatim, not guessed at');
-  assert.notEqual(badge.label, 'เปิดรับ');
+  // BOTH fields carry the raw value. An unrecognised status has no
+  // state/action distinction to make, and giving the shape the same keys either
+  // way is what lets a call site read a word without branching on `isKnown`.
+  assert.equal(badge.state, 'bogus', 'the raw value is shown verbatim, not guessed at');
+  assert.equal(badge.action, 'bogus', 'and the badge word is the raw value too');
+  assert.notEqual(badge.state, 'เปิดรับ');
+  assert.notEqual(badge.action, 'ลงทะเบียน');
   const tokens = [badge.dot, badge.text, badge.solid, badge.soft].join(' ');
   assert.ok(!tokens.includes('#39b980'), `unrecognised must not be the open green: ${tokens}`);
 });
@@ -110,10 +163,18 @@ test('a missing or blank status yields no badge at all', () => {
 
 test('CONTROL: resolveScheduleBadge still returns the real states', () => {
   // Guards against a "fix" that neutralises everything — the mirror failure.
-  for (const [raw, label] of [['open', 'เปิดรับ'], ['nearly_full', 'ใกล้เต็ม'], ['full', 'เต็ม']]) {
+  // Both registers are checked: neutralising either one would be the same
+  // class of damage, and only checking the badge word would let the filter
+  // vocabulary be blanked without anything noticing.
+  for (const [raw, state, action] of [
+    ['open', 'เปิดรับ', 'ลงทะเบียน'],
+    ['nearly_full', 'ใกล้เต็ม', 'ใกล้เต็ม'],
+    ['full', 'เต็ม', 'เต็ม'],
+  ]) {
     const b = resolveScheduleBadge(raw);
     assert.equal(b.isKnown, true);
-    assert.equal(b.label, label);
+    assert.equal(b.state, state);
+    assert.equal(b.action, action);
   }
   assert.ok(resolveScheduleBadge('open').solid.includes('#39b980'));
 });
@@ -155,8 +216,20 @@ test('filter options are generated from the same source as the badges', () => {
     { value: 'nearly_full', label: 'ใกล้เต็ม' },
     { value: 'full', label: 'เต็ม' },
   ]);
-  // Structural, not just value-equal: each option's label IS the badge label.
+  /**
+   * Structural, not just value-equal: each option's label IS the status's
+   * STATE word — not its action word, and not a hand-written copy.
+   *
+   * This is the assertion that pins the fix. The dropdown offered
+   * `<option value="open">ลงทะเบียน</option>` because one constant served both
+   * registers; reading `.action` here would restore that exactly, while the
+   * deepEqual above still passed for the two statuses whose words are equal.
+   */
   for (const { value, label } of SCHEDULE_STATUS_OPTIONS) {
-    assert.equal(label, SCHEDULE_STATUS[value].label);
+    assert.equal(label, SCHEDULE_STATUS[value].state);
+    assert.notEqual(
+      label, SCHEDULE_STATUS.open.action,
+      'the filter must never carry the open ACTION word'
+    );
   }
 });

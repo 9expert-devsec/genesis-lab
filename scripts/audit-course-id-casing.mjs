@@ -105,7 +105,10 @@ console.log('=== upstream course_id casing audit (READ-ONLY) ===\n');
 
 let list;
 try {
-  list = await listPublicCourses();
+  // includeHidden — this audits UPSTREAM's casing across the whole catalog. A
+  // hidden course's id is exactly as capable of breaking a lookup as a visible
+  // one's, and the audit would silently stop covering it.
+  list = await listPublicCourses({ includeHidden: true });
 } catch (err) {
   console.error('LIST CALL FAILED — cannot proceed:', err?.message ?? err);
   process.exit(1);

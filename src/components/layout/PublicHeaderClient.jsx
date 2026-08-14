@@ -26,6 +26,7 @@ import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
 import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
 import { sortSkillsByAdminOrder } from '@/lib/navmenu/skillOrder';
+import { composeCoursePreview } from '@/lib/navmenu/coursePreview';
 import { DesktopSkillRows, MobileSkillRows } from '@/components/layout/SkillMenuRows';
 import {
   getCoursesByProgram,
@@ -520,16 +521,27 @@ function DesktopMega({
     forceUpdate(); // show count badge now that cache is populated
   }
 
-  async function handleCourseHover(courseId) {
-    const key = `course:${courseId}`;
+  /**
+   * Takes the whole Col 3 ROW, not just its id. The row is where the name and
+   * the alias come from — the lookup below contributes only the cover image.
+   * See lib/navmenu/coursePreview.js for why the name cannot come from the
+   * lookup, and for the accepted consequence (a stale snapshot now makes this
+   * card stale TOO, instead of making it contradict the list it came from).
+   *
+   * `coverCache` therefore holds nameless covers. That is load-bearing: keyed
+   * by course_id and holding no name, a cache hit cannot resurrect a name from
+   * an earlier hover after the snapshot has moved on.
+   */
+  async function handleCourseHover(course) {
+    const key = `course:${course.course_id}`;
     if (coverCache.current.has(key)) {
-      setCol4Preview(coverCache.current.get(key));
+      setCol4Preview(composeCoursePreview(course, coverCache.current.get(key)));
       return;
     }
     setCol4Loading(true);
-    const result = await getCoursePreview(courseId);
-    coverCache.current.set(key, result);
-    setCol4Preview(result);
+    const cover = await getCoursePreview(course.course_id);
+    coverCache.current.set(key, cover);
+    setCol4Preview(composeCoursePreview(course, cover));
     setCol4Loading(false);
   }
 
@@ -965,7 +977,7 @@ function DesktopMega({
                         <a
                           key={course.course_id}
                           href={courseHref(course.urlAlias || course.course_id)}
-                          onMouseEnter={() => handleCourseHover(course.course_id)}
+                          onMouseEnter={() => handleCourseHover(course)}
                           onClick={closeMegaMenu}
                           className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)] no-underline transition-colors hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
                         >

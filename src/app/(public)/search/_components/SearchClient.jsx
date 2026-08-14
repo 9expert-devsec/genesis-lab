@@ -873,7 +873,7 @@ function ScheduleResultRow({ schedule, term }) {
             <span
               className={`flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${status.soft}`}
             >
-              {status.label}
+              {status.action}
             </span>
           )}
           <span className="font-semibold text-[#0D1B2A]">{priceLabel(price)}</span>
@@ -955,7 +955,7 @@ function ScheduleResultRow({ schedule, term }) {
           className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
         >
           <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
-          {status.label}
+          {status.action}
         </span>
       )}
 

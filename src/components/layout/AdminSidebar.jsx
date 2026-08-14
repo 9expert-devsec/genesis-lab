@@ -139,7 +139,7 @@ const NAV_GROUPS = [
       { label: 'การลงทะเบียน',              href: '/admin/registrations',              icon: 'ClipboardList', pageKey: 'registrations' },
       { label: 'Career Path Registrations', href: '/admin/career-path-registrations', icon: 'ClipboardList', pageKey: 'career_path_registrations' },
       { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase', pageKey: 'recruits' },
-      { label: 'Landing Cache', href: '/admin/landing-cache',  icon: 'Database',  pageKey: 'landing_cache' },
+      { label: 'Cache Console', href: '/admin/cache',  icon: 'Database',  pageKey: 'landing_cache' },
       { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook',   pageKey: 'webhook_logs' },
       { label: 'ความปลอดภัย',   href: '/admin/security',       icon: 'Shield',    pageKey: 'security' },
       { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User',      pageKey: 'profile' },
