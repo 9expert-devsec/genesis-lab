@@ -78,6 +78,48 @@ export async function POST(req) {
   }
 
   if (charge.status === 'successful') {
+    /**
+     * ── A SETTLED CHARGE LANDING ON A CANCELLED REGISTRATION ───────────────
+     *
+     * This case did not exist until cancellation became terminal. A customer
+     * opens a PromptPay QR, an admin cancels the registration while it is
+     * still unpaid, and the customer then pays anyway — the bank settles, this
+     * webhook fires, and writing `paid` here would produce a record sitting in
+     * a state the admin transition table has no edge out of. Nobody could
+     * correct it from the screen.
+     *
+     * So the status and the paid fields are NOT written, and no receipt is
+     * sent — a receipt for a cancelled seat is a promise the company cannot
+     * keep. The money is real and is sitting in the Omise account, so this
+     * logs loudly enough to be found: a refund is almost certainly owed, and
+     * only a human can decide that.
+     *
+     * ── THIS ROUTE IS A SYSTEM ACTOR AND IS NOT SUBJECT TO THE ADMIN TABLE ──
+     * lib/registrations/publicStatuses.js governs what an ADMIN may do. This
+     * route and src/app/api/registration/public/charge/route.js are the only
+     * writers of `paid`, precisely because a real charge — not a person — is
+     * the evidence for it. Routing them through the admin table would forbid
+     * the one transition the table deliberately reserves for them and break
+     * payment collection outright. The cancelled check here is a separate,
+     * narrower guard: it is about one terminal state, not about the machine.
+     *
+     * Masterclass is a different collection with its own flow and is out of
+     * scope for this rework, so its behaviour is deliberately unchanged.
+     */
+    if (doc.status === 'cancelled' && !isMasterclass) {
+      console.error(
+        '[webhook] REFUND LIKELY OWED — a settled charge landed on a CANCELLED registration.',
+        '| chargeId:', chargeId,
+        '| registrationId:', String(doc._id),
+        '| amount:', charge.amount, charge.currency,
+        '| status NOT written, paid fields NOT written, no receipt sent.'
+      );
+      // Still ack, and still forward: returning an error would make Omise
+      // retry this event forever, and Academy still needs to see it.
+      await forwardToLegacy(rawBody, omiseHeaders);
+      return NextResponse.json({ ok: true, cancelled: true, refundLikelyOwed: true });
+    }
+
     doc.status = 'paid';
     doc.payment.omiseStatus = 'successful';
     doc.payment.paidAt = new Date();
