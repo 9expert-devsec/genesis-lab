@@ -14,6 +14,7 @@ import {
   orderedCodesForGroup,
   REORDER_BLOCKED,
 } from '@/lib/courses/courseOrderEditing';
+import { programAccentOf } from '@/lib/courses/programAccent';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
 
@@ -66,6 +67,9 @@ export function CoursesAdminClient({
   // could not be read or nothing is seeded — every row is then unlisted.
   programCourseOrder = null,
   programNames = {},
+  // program_id → its upstream `programcolor`. Built server-side from the same
+  // listPrograms() call that supplies the names — see lib/courses/programAccent.
+  programColors = {},
   q = '',
   program = '',
   type = '',
@@ -345,6 +349,7 @@ export function CoursesAdminClient({
                  */
                 key={`${group.programId || '(none)'}:${group.rows.map((r) => r.course.course_id).join(',')}`}
                 group={group}
+                programColors={programColors}
                 extensions={extensions}
                 listQuery={listQuery}
                 busyId={busyId}
@@ -384,6 +389,7 @@ export function CoursesAdminClient({
  */
 function ProgramGroupBody({
   group,
+  programColors,
   extensions,
   listQuery,
   busyId,
@@ -427,13 +433,48 @@ function ProgramGroupBody({
     }
   };
 
+  /**
+   * THE PROGRAMME'S OWN COLOUR, resolved PER GROUP.
+   *
+   * Computed inside this component, from this group's id, so there is nothing
+   * to carry: a group with no colour cannot pick up its neighbour's, because no
+   * value survives between two of them. In a grouped table a stale carry is the
+   * bug that survives a screenshot — the header looks coloured, and it is the
+   * wrong colour — so it is asserted rather than reasoned about.
+   */
+  const accent = programAccentOf(programColors, group.programId);
+
   return (
     <tbody className="border-b border-[var(--surface-border)] last:border-b-0">
       <tr className="bg-[var(--surface-muted)]">
         <th
           colSpan={8}
           scope="colgroup"
-          className="px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)]"
+          /**
+           * A 4px LEFT ACCENT BAR, not a tinted background. A tint has to sit
+           * behind the group name, so it would have to be alpha-blended to keep
+           * the text readable — and at a readable alpha the darkest of these
+           * colours is invisible in dark mode and the lightest is invisible in
+           * light mode. A bar carries no text and is legible as a shape either
+           * way. It is also the smaller intervention in a dense working table.
+           *
+           * SOLID for a real colour, DASHED + neutral for none. The difference
+           * is structural rather than a second hue on purpose: several real
+           * colours have low contrast against this surface in one theme or the
+           * other (measured — see the commit), and a neutral distinguished only
+           * by ITS colour would be confusable with one of them exactly when the
+           * contrast is poor. A dashed edge is not.
+           */
+          title={
+            accent.matched
+              ? `${group.programName} — ${accent.color}`
+              : `${group.programName} — ไม่ได้กำหนดสีของโปรแกรมนี้`
+          }
+          className={
+            'border-l-4 px-4 py-2 text-left text-xs font-semibold text-[var(--text-secondary)] '
+            + (accent.matched ? 'border-solid' : 'border-dashed')
+          }
+          style={{ borderLeftColor: accent.color }}
         >
           <span className="inline-flex w-full flex-wrap items-center gap-2">
             <span>{group.programName}</span>
