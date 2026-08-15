@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 import { LastEditedHint } from '@/components/audit/auditRowParts';
-import { statusLabel } from '@/lib/registrations/statuses';
+import { statusBadge, statusLabel } from '@/lib/registrations/statuses';
 
 /**
  * THE IN-HOUSE TABLE BODY — a SEPARATE COMPONENT, not a `source ===` branch
@@ -38,35 +38,22 @@ import { statusLabel } from '@/lib/registrations/statuses';
 
 // ── Status ─────────────────────────────────────────────────────────
 //
-// The colours are the in-house detail page's, so one enquiry does not change
-// colour between the list and the record.
+// NO LOCAL COLOUR MAP. Both halves of the chip — the Thai text and the Tailwind
+// classes — now come from lib/registrations/statuses, so one enquiry cannot
+// change colour or wording between this list, the summary card above it and the
+// detail page it links to.
 //
-// ── THE RETIRED VALUES ARE STILL HERE, AND ON PURPOSE ──────────────
-// Round 2 collapsed the stored vocabulary to pending / quoted / cancelled, but
-// there is a WINDOW between this code deploying and the migration's --apply
-// during which real documents still hold `new`, `contacted`, `closed-won` and
-// `closed-lost`. A badge with no colour entry falls back to grey, so dropping
-// them now would turn every unmigrated row grey for the length of that window.
-// They cost four lines and they are deleted with the enum, not before it.
-const STATUS_BADGE = {
-  pending:       'bg-amber-100 text-amber-700',
-  quoted:        'bg-blue-100 text-blue-700',
-  cancelled:     'bg-slate-100 text-slate-500',
-  // retired — see above
-  new:           'bg-violet-100 text-violet-700',
-  contacted:     'bg-blue-100 text-blue-700',
-  'closed-won':  'bg-emerald-100 text-emerald-700',
-  'closed-lost': 'bg-slate-100 text-slate-500',
-};
-
-// The LABEL comes from `statusLabel`, which answers for the live vocabulary AND
-// for the retired values, so an unmigrated row reads 'ติดต่อแล้ว' rather than
-// the raw enum `contacted`. A hand-written copy here would go on printing the
-// old wording in the table while the chip you filtered by showed the new one —
-// which is what this file's own comment used to promise and could not keep.
+// ── THE RETIRED COLOURS ARE GONE, AND THIS IS THE MOMENT FOR IT ────
+// Round 2 kept `new` / `contacted` / `closed-won` / `closed-lost` in a local
+// map for the WINDOW between that code deploying and the migration's --apply,
+// so unmigrated rows would not all render grey. Its comment said they are
+// "deleted with the enum, not before it". The enum was narrowed to the three
+// live values and the migration has since run — the collection now holds
+// pending 5 / quoted 2 / cancelled 1 and nothing else — so no document can
+// carry a retired status and the fallback they existed to avoid is unreachable.
 //
-// The COLOURS stay local: they are the detail page's, for the reason given
-// above, and are not a property of the status list.
+// `statusBadge` returns the neutral grey chip for anything it does not know,
+// which is the right answer for a value that should no longer exist at all.
 
 // ── Training format ────────────────────────────────────────────────
 //
@@ -209,7 +196,7 @@ export function InhouseTable({ items, lastEdited = {}, courseNames = null }) {
                 <td className="px-4 py-3">
                   <span className={cn(
                     'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap',
-                    STATUS_BADGE[row.status] ?? 'bg-slate-100 text-slate-600'
+                    statusBadge(row.status)
                   )}>
                     {statusLabel(row.status)}
                   </span>

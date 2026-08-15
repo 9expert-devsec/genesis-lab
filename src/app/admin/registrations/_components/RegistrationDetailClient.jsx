@@ -15,17 +15,25 @@ import {
 } from '@/lib/actions/registrations';
 import { Button } from '@/components/ui/button';
 import { refNo } from '@/lib/refNo';
-import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/statuses';
+import { allowedTransitions, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const STATUS_BADGE   = { pending: 'bg-amber-100 text-amber-700', confirmed: 'bg-blue-100 text-blue-700', paid: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-slate-100 text-slate-500' };
-
-/**
- * value → Thai label, DERIVED from lib/registrations/statuses.js.
- * `confirmed` reads 'ส่งใบเสนอราคาแล้ว'; the stored value is unchanged.
+/*
+ * NO LOCAL STATUS_BADGE. The chip's colour is vocabulary-shaped — keyed by
+ * status value, exactly like the label — so it lives beside the label in
+ * lib/registrations/statuses and reaches this file as `statusBadge(v)`.
+ *
+ * It was one of FOUR copies (both list clients, both detail clients). A status
+ * added to the module without a matching entry in one of those literals
+ * rendered an unstyled chip, and only on the screen whose copy was missed.
  */
-const STATUS_LABEL   = buildStatusLabels();
+
+/*
+ * The Thai label arrives through `statusLabel(v)` for the same reason as the
+ * badge above — one lookup, one source. `confirmed` reads 'ส่งใบเสนอราคาแล้ว';
+ * the stored value is unchanged.
+ */
 
 /**
  * ── THERE IS NO STATUS-ACTION MAP IN THIS FILE ANY MORE ─────────────────────
@@ -140,7 +148,7 @@ export function RegistrationDetailClient({ doc }) {
     // guessable from the word ยกเลิก alone, so it is stated.
     const message = next === 'cancelled'
       ? 'ยกเลิกใบสมัครนี้?\n\nการยกเลิกไม่สามารถย้อนกลับได้ และหลังจากนี้จะแก้ไขข้อมูลใบสมัครไม่ได้อีก'
-      : `เปลี่ยนสถานะเป็น "${STATUS_LABEL[next]}"?`;
+      : `เปลี่ยนสถานะเป็น "${statusLabel(next)}"?`;
     if (!window.confirm(message)) return;
     setBusy(next); setError(null);
     startTransition(async () => {
@@ -223,8 +231,8 @@ export function RegistrationDetailClient({ doc }) {
           <p className="mt-1 text-xs text-[var(--text-muted)]">สมัครเมื่อ {fmtDate(doc.createdAt)}</p>
         </div>
         <div className="flex flex-col items-end gap-3">
-          <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', STATUS_BADGE[status] ?? 'bg-slate-100 text-slate-600')}>
-            {STATUS_LABEL[status] ?? status}
+          <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', statusBadge(status))}>
+            {statusLabel(status)}
           </span>
           {statusActions.length > 0 && (
             <div className="flex gap-2">

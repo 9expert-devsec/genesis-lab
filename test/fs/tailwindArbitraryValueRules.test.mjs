@@ -575,3 +575,94 @@ test('the config under test is the real one, with its content globs intact', () 
     );
   }
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE STATUS VOCABULARY'S COLOURS — DERIVED, NOT HAND-LISTED
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * EVERY `accent` AND `badge` IN lib/registrations/statuses COMPILES TO A RULE.
+ *
+ * ── WHY THIS IS HERE AND NOT A `.includes('${')` CHECK IN THE PURE TIER ─────
+ * The pure tier already asserts `!s.badge.includes('${')` on the RESOLVED
+ * VALUE, and that check is STRUCTURALLY BLIND to the defect it names. Measured,
+ * not reasoned: a control that rewrote one badge as
+ *
+ *     badge: `bg-${'emerald'}-100 text-emerald-700`
+ *
+ * reddened NOTHING across the whole suite. The template literal evaluates to
+ * the string `bg-emerald-100 text-emerald-700`, which contains no `${` and
+ * matches every shape assertion perfectly.
+ *
+ * That is the point: interpolation produces CORRECT MARKUP. The markup was
+ * never the problem. Tailwind scans SOURCE TEXT, so the class is purged from
+ * the stylesheet and the chip renders with no colour — a runtime value check
+ * cannot see that, and only compiling the source can.
+ *
+ * ── DERIVED FROM THE MODULE, SO A NEW STATUS IS COVERED WITHOUT AN EDIT ─────
+ * The CASES above are hand-listed because each names a specific surface. These
+ * are enumerated from the arrays themselves: add a status and its two classes
+ * are checked here with this file untouched. That matters more than usual —
+ * "a status added without a colour" is the exact defect the fold removed.
+ */
+
+const STATUS_MODULE = 'src/lib/registrations/statuses.js';
+
+test('every declared status accent and badge compiles to a real rule', async () => {
+  const { PUBLIC_STATUSES, INHOUSE_STATUSES } =
+    await import('@/lib/registrations/statuses');
+
+  // ONE compile of the module's scrubbed CODE — comments stripped, for the
+  // reason the header above gives: the real build scans comments, so a class
+  // mentioned only in prose would compile while the code stayed broken.
+  const { code } = readSource(STATUS_MODULE);
+  const css = await compile([{ raw: code, extension: 'js' }]);
+
+  const declared = [...PUBLIC_STATUSES, ...INHOUSE_STATUSES];
+  assert.ok(declared.length >= 7, `only ${declared.length} statuses — the walk is wrong`);
+
+  for (const s of declared) {
+    for (const [prop, className] of [['accent', s.accent], ['badge', s.badge]]) {
+      // `badge` is two classes in one string; each must compile on its own.
+      for (const single of String(className).trim().split(/\s+/)) {
+        const decls = declarationsFor(css, single);
+        assert.ok(
+          decls.length > 0,
+          `Tailwind emitted NO rule for "${single}" (${s.value}.${prop}) while scanning `
+          + `${STATUS_MODULE}. The class is probably assembled from a template literal — `
+          + 'Tailwind matches raw text, so the complete class must appear literally in the CODE.',
+        );
+      }
+    }
+  }
+});
+
+test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
+  // The break that reddened nothing in the pure tier, run through this
+  // instrument instead. Without this, the test above could be passing because
+  // `declarationsFor` finds a rule for anything.
+  const broken = "export const S = [{ value: 'x', badge: `bg-${'emerald'}-100 text-emerald-700` }];";
+  const css = await compile([{ raw: broken, extension: 'js' }]);
+  assert.deepEqual(
+    declarationsFor(css, 'bg-emerald-100'), [],
+    'the control is inert — an interpolated class still compiled, so this guard proves nothing',
+  );
+  // And the same class written literally DOES compile, so the difference is the
+  // interpolation and not the class being unknown to Tailwind.
+  const fixed = "export const S = [{ value: 'x', badge: 'bg-emerald-100 text-emerald-700' }];";
+  assert.ok(
+    declarationsFor(await compile([{ raw: fixed, extension: 'js' }]), 'bg-emerald-100').length > 0,
+    'the literal form does not compile either — the fixture is wrong, not the guard',
+  );
+});
+
+test('CONTROL: the status module is inside the real content globs', async () => {
+  // The compile above replaces `content`, so it cannot see a glob mistake. If
+  // src/lib stopped being scanned, every class in that module would be purged
+  // in the real build while this file stayed green.
+  const config = require_(path.join(ROOT, 'tailwind.config.js'));
+  assert.ok(
+    config.content.some((g) => typeof g === 'string' && g.startsWith('./src/lib/')),
+    'src/lib is not in the real content globs — the status colours would be purged',
+  );
+});

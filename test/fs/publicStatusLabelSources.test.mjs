@@ -133,12 +133,73 @@ test('CONTROL: the CODE view really does strip those imports', () => {
  *
  * What it guards instead is unchanged in substance: the screen's three lists
  * are BUILT, not written out. The cards and chips are covered in
- * fs/registrationsFilterWiring (they take the per-source subset); the LABEL map
- * is here because it is the public-only one, read by the public สถานะ cell.
+ * fs/registrationsFilterWiring (they take the per-source subset); the LABEL and
+ * the CHIP COLOUR are here because they are the two the สถานะ cell reads.
+ *
+ * ── AND THE CACHED LOCAL WENT WITH THE COLOUR FOLD ──────────────────────────
+ * This asserted `const STATUS_LABEL = buildStatusLabels()` — a derived-but-
+ * cached local. Round 3 folded the chip COLOUR into the module beside the
+ * label, and with a `statusBadge(v)` call in the cell it made no sense to keep
+ * the label as a map when `statusLabel(v)` sits next to it. Both are single
+ * calls now.
+ *
+ * NOT WEAKER: the old form permitted a hand-written map to be assigned to the
+ * same name and still match on a `buildStatusLabels()` elsewhere in the file.
+ * These assert the CELL ITSELF reads both lookups, and that no local map of
+ * either kind exists to shadow them — which the old single regex did not say.
  */
-test('the list screen derives its public status labels', () => {
-  assert.match(LIST.code, /const STATUS_LABEL = buildStatusLabels\(\)/,
-    'the public label map is not derived from the module');
+test('the list screen reads BOTH label and colour through the shared lookups', () => {
+  assert.match(LIST.code, /statusLabel\(row\.status\)/,
+    'the public สถานะ cell does not derive its label from the module');
+  assert.match(LIST.code, /statusBadge\(row\.status\)/,
+    'the public สถานะ cell does not derive its chip colour from the module');
+});
+
+test('the list screen holds no local status label OR colour map', () => {
+  // Both halves of the old shape, forbidden by SHAPE rather than by name so a
+  // rename does not evade them.
+  assert.ok(!/STATUS_BADGE\s*=/.test(LIST.code), 'the STATUS_BADGE literal is back');
+  assert.ok(!/STATUS_LABEL\s*=/.test(LIST.code), 'a cached STATUS_LABEL map is back');
+  assert.ok(
+    !/\b(pending|confirmed|paid|cancelled)\s*:\s*'bg-/.test(LIST.code),
+    'a status→colour literal is back under a different name'
+  );
+});
+
+/**
+ * ── SCOPED TO THE STATUS CHIP, BECAUSE ANOTHER VOCABULARY SHARES THE COLOUR ──
+ *
+ * MEASURED. The first version of this forbade the string
+ * `bg-slate-100 text-slate-600` anywhere in the file and went red on correct
+ * code: `SCHEDULE_BADGE` uses the same neutral grey for an unknown
+ * `scheduleType`, and legitimately keeps its own fallback because it is a
+ * DIFFERENT vocabulary — a course-schedule property, not a registration status.
+ *
+ * That distinction is the whole point of the fold, so the guard has to respect
+ * it: what must not come back is a fallback beside the STATUS lookup, not the
+ * colour string itself.
+ */
+test('the status chip has no per-call-site fallback — it lives in the module now', () => {
+  // Every consumer used to write `?? 'bg-slate-100 text-slate-600'`, four copies
+  // of one decision. `statusBadge` owns it, so a caller can neither forget it
+  // nor pick a different neutral.
+  assert.ok(
+    !/statusBadge\([^)]*\)\s*\?\?/.test(LIST.code),
+    'a local fallback is back beside the shared status lookup'
+  );
+  assert.ok(
+    !/statusLabel\([^)]*\)\s*\?\?/.test(LIST.code),
+    'a local fallback is back beside the shared label lookup'
+  );
+});
+
+test('CONTROL: the neutral colour IS still present in this file, for another map', () => {
+  // Proves the narrowing above is describing the real situation rather than a
+  // hypothetical — and that a blanket string ban would have been wrong. If
+  // SCHEDULE_BADGE ever stops using it, this says so rather than leaving the
+  // comment above quietly stale.
+  assert.match(LIST.code, /SCHEDULE_BADGE\[type\]\s*\?\?\s*'bg-slate-100 text-slate-600'/,
+    'SCHEDULE_BADGE no longer carries its own neutral — re-read the scoping note above');
 });
 
 test('the list screen has no hand-written public status list left', () => {

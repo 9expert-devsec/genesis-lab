@@ -31,7 +31,61 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * in this file, not a finding about the suite.
  */
 const BREAKS = {
-  // ── round 3: the import-clobber restore ───────────────────────────────────
+  // ── round 3: the status-badge fold ────────────────────────────────────────
+
+  /**
+   * A status declared in the module with NO badge — the exact defect the fold
+   * removes, now expressible only in one place instead of four.
+   */
+  'status-missing-badge': {
+    file: 'src/lib/registrations/statuses.js',
+    find: "  { value: 'quoted',    label: 'ส่งใบเสนอราคาแล้ว', accent: 'border-l-blue-400',  badge: 'bg-blue-100 text-blue-700' },",
+    replace: "  { value: 'quoted',    label: 'ส่งใบเสนอราคาแล้ว', accent: 'border-l-blue-400' },",
+    expects: [
+      'pure: every declared status of BOTH subsets has a badge',
+      'pure: badge classes are WHOLE class names, never interpolated fragments',
+      'pure: statusBadge answers for every live value of both subsets',
+      'pure: the colour and the label agree about which values are shared',
+      'pure: a value in BOTH subsets carries the SAME badge in both',
+    ],
+  },
+
+  /**
+   * The two subsets drifting apart on a SHARED value — pending renders amber on
+   * one screen and something else on the other, silently, because the flatten
+   * prefers whichever spreads last.
+   */
+  'shared-badge-drift': {
+    file: 'src/lib/registrations/statuses.js',
+    find: "  { value: 'pending',   label: 'รอดำเนินการ',       accent: 'border-l-amber-400', badge: 'bg-amber-100 text-amber-700' },",
+    replace: "  { value: 'pending',   label: 'รอดำเนินการ',       accent: 'border-l-amber-400', badge: 'bg-rose-100 text-rose-700' },",
+    expects: [
+      'pure: a value in BOTH subsets carries the SAME badge in both',
+    ],
+  },
+
+  /** An interpolated badge — correct markup, and no CSS at all. */
+  'badge-interpolated': {
+    file: 'src/lib/registrations/statuses.js',
+    find: "badge: 'bg-emerald-100 text-emerald-700' },",
+    replace: 'badge: `bg-${\'emerald\'}-100 text-emerald-700` },',
+    expects: [
+      'pure: badge classes are WHOLE class names, never interpolated fragments',
+    ],
+  },
+
+  /** The hand-written map coming back to one of the four clients. */
+  'local-badge-map-returns': {
+    file: 'src/app/admin/registrations/_components/RegistrationsClient.jsx',
+    find: '                      statusBadge(row.status)',
+    replace: "                      ({ pending: 'bg-amber-100 text-amber-700' })[row.status] ?? 'bg-slate-100 text-slate-600'",
+    expects: [
+      'fs: the list screen reads BOTH label and colour through the shared lookups',
+      'fs: the list screen holds no local status label OR colour map',
+    ],
+  },
+
+  // ── round 3 (earlier): the import-clobber restore ─────────────────────────
 
   /**
    * THE DEFECT ITSELF, re-created: delete the export keyword so
