@@ -106,7 +106,7 @@ export async function POST(req) {
   /**
    * ── THIS ROUTE IS A SYSTEM ACTOR. IT IS NOT SUBJECT TO THE ADMIN TABLE. ───
    *
-   * lib/registrations/publicStatuses.js holds the transitions an ADMIN may
+   * lib/registrations/statuses.js holds the transitions an ADMIN may
    * make, and it deliberately contains NO edge into `paid` from any state: a
    * person must not be able to assert that money arrived. This route and
    * src/app/api/webhooks/omise/route.js are the only two writers of `paid`,

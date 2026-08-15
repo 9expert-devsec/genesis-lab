@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
-import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
+import { buildStatusLabels } from '@/lib/registrations/statuses';
 
 /**
  * ONE PUBLIC LABEL VOCABULARY — and one deliberate divergence.
@@ -65,7 +65,7 @@ test('no public site hand-writes the new label either — it is derived', () => 
   for (const f of PUBLIC_SITES) {
     assert.ok(
       !asLiteral.test(f.code),
-      `${f.rel} hand-writes the label instead of deriving it from publicStatuses`
+      `${f.rel} hand-writes the label instead of deriving it from the status module`
     );
   }
 });
@@ -84,11 +84,15 @@ test('CONTROL: the quoted match separates the label from the action verb', () =>
 
 test('CONTROL: the label text IS findable this way when it is hand-written', () => {
   // Proves the two assertions above are not passing because `code` cannot see
-  // Thai string literals at all. The in-house module writes its own labels out,
-  // including this exact string, and the same scan finds it there.
-  const INHOUSE = readSource('src/lib/registrations/inhouseStatuses.js');
+  // Thai string literals at all.
+  //
+  // It used to read lib/registrations/inhouseStatuses.js, which wrote this exact
+  // string out and was ABSORBED in round 2. The control now points at the
+  // surviving module, which is the one place the label is legitimately
+  // hand-written — twice, once per source subset — and the same scan finds it.
+  const MODULE = readSource('src/lib/registrations/statuses.js');
   assert.ok(
-    INHOUSE.code.includes('ส่งใบเสนอราคาแล้ว'),
+    MODULE.code.includes('ส่งใบเสนอราคาแล้ว'),
     'the control is inert — a hand-written label is invisible to this scan'
   );
 });
@@ -100,7 +104,7 @@ test('every public site imports the vocabulary from the module', () => {
   for (const f of PUBLIC_SITES) {
     assert.match(
       f.withImports,
-      /from\s*'@\/lib\/registrations\/publicStatuses'/,
+      /from\s*'@\/lib\/registrations\/statuses'/,
       `${f.rel} does not import the shared public status module`
     );
   }
@@ -111,7 +115,7 @@ test('CONTROL: the CODE view really does strip those imports', () => {
   // statements at all, and pass vacuously on any file in the repo.
   for (const f of PUBLIC_SITES) {
     assert.ok(
-      !f.code.includes("from '@/lib/registrations/publicStatuses'"),
+      !f.code.includes("from '@/lib/registrations/statuses'"),
       `the control is inert on ${f.rel} — code did not strip the import`
     );
   }
@@ -119,10 +123,22 @@ test('CONTROL: the CODE view really does strip those imports', () => {
 
 // ── 3. The list screen derives all three of its lists ──────────────────────
 
-test('the list screen derives its public cards, chips and labels', () => {
-  assert.match(LIST.code, /buildPublicStatCards\(\)/);
-  assert.match(LIST.code, /buildPublicStatusChips\(\)/);
-  assert.match(LIST.code, /buildPublicStatusLabels\(\)/);
+/**
+ * THE THREE ALIASES ARE GONE WITH THE SECOND MODULE.
+ *
+ * Round 1 imported the public builders as `buildPublicStatCards` and friends,
+ * because the same three names arrived from a separate in-house module and had
+ * to be told apart. There is one module now, so the aliases are noise — and
+ * this test used to assert their presence, which would have blocked the fold.
+ *
+ * What it guards instead is unchanged in substance: the screen's three lists
+ * are BUILT, not written out. The cards and chips are covered in
+ * fs/registrationsFilterWiring (they take the per-source subset); the LABEL map
+ * is here because it is the public-only one, read by the public สถานะ cell.
+ */
+test('the list screen derives its public status labels', () => {
+  assert.match(LIST.code, /const STATUS_LABEL = buildStatusLabels\(\)/,
+    'the public label map is not derived from the module');
 });
 
 test('the list screen has no hand-written public status list left', () => {
@@ -144,12 +160,42 @@ test('the list screen has no hand-written public status list left', () => {
   );
 });
 
-test('the in-house lists on the same screen still come from THEIR module', () => {
-  // Round 2 owns in-house. The two vocabularies are aliased apart on purpose;
-  // if this reddens, the merge happened early and the screen can now offer a
-  // status the selected collection cannot hold.
-  assert.match(LIST.withImports, /from '@\/lib\/registrations\/inhouseStatuses'/);
-  assert.match(LIST.code, /source === 'inhouse'\s*\?\s*buildStatCards\(\)/);
+/**
+ * THE IN-HOUSE LISTS COME FROM THE SAME MODULE NOW — AND STILL FROM A SUBSET.
+ *
+ * Round 1 left this asserting that the screen imported a SEPARATE
+ * inhouseStatuses module and picked its cards with a `source === 'inhouse' ?`
+ * ternary, on the grounds that folding the two early would let the screen offer
+ * a status the selected collection cannot hold.
+ *
+ * Round 2 did the fold, so the old assertion is retired — but the RISK it named
+ * is not, and this is what replaces it. The screen must still resolve ONE
+ * per-source list and build both consumers from it. What would reintroduce the
+ * danger is not the shared module; it is calling the builders with no argument,
+ * which silently defaults to the PUBLIC list and would put a ชำระแล้ว card over
+ * in-house records.
+ */
+test('the list screen derives ONE per-source vocabulary and builds both lists from it', () => {
+  assert.match(LIST.withImports, /statusesForSource[\s\S]*?from '@\/lib\/registrations\/statuses'/);
+  assert.match(LIST.code, /statusesForSource\(source\)/,
+    'the screen must resolve the subset from `source`, not pick lists with a ternary');
+});
+
+test('neither strip builder is called argument-less — that would default to PUBLIC', () => {
+  // The specific way the fold could go wrong. `buildStatCards()` with no
+  // argument returns the public list, and on an in-house render every
+  // assertion about "one card per status" would still hold — over the wrong
+  // vocabulary, including a `paid` card in-house can never fill.
+  assert.ok(!/buildStatCards\(\s*\)/.test(LIST.code),  'buildStatCards() defaults to the public list');
+  assert.ok(!/buildStatusChips\(\s*\)/.test(LIST.code), 'buildStatusChips() defaults to the public list');
+});
+
+test('CONTROL: the argument-less form is what the default actually does', () => {
+  // Proves the rule above is about a real hazard rather than a style
+  // preference: the module's builders really do fall back to PUBLIC_STATUSES.
+  const MODULE = readSource('src/lib/registrations/statuses.js');
+  assert.match(MODULE.code, /export function buildStatCards\(statuses = PUBLIC_STATUSES\)/);
+  assert.match(MODULE.code, /export function buildStatusChips\(statuses = PUBLIC_STATUSES\)/);
 });
 
 // ── 4. The dashboard's two sites ───────────────────────────────────────────
@@ -184,7 +230,7 @@ test('masterclass still labels `confirmed` as ยืนยันแล้ว', (
 test('masterclass does not import the public status module', () => {
   for (const f of [MC_LIST, MC_DETAIL]) {
     assert.ok(
-      !/from\s*'@\/lib\/registrations\/publicStatuses'/.test(f.withImports),
+      !/from\s*'@\/lib\/registrations\/statuses'/.test(f.withImports),
       `${f.rel} was wired to the public vocabulary — the two are deliberately separate`
     );
   }

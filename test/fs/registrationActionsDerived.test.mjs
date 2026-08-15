@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
-import { PUBLIC_STATUS_TRANSITIONS } from '@/lib/registrations/publicStatuses';
+import { PUBLIC_STATUS_TRANSITIONS } from '@/lib/registrations/statuses';
 
 /**
  * ── THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT ────────
@@ -65,18 +65,18 @@ test('the actions are a lookup into the shared table', () => {
 test('the detail client imports the table and the labels from the module', () => {
   assert.match(
     DETAIL.withImports,
-    /import\s*\{\s*allowedTransitions,\s*buildStatusLabels\s*\}\s*from\s*'@\/lib\/registrations\/publicStatuses'/
+    /import\s*\{\s*allowedTransitions,\s*buildStatusLabels\s*\}\s*from\s*'@\/lib\/registrations\/statuses'/
   );
 });
 
 test('CONTROL: the CODE view really does strip that import', () => {
   // If this is inert, the assertion above proves nothing about this file.
   assert.ok(
-    DETAIL.withImports.includes("from '@/lib/registrations/publicStatuses'"),
+    DETAIL.withImports.includes("from '@/lib/registrations/statuses'"),
     'withImports keeps the import line'
   );
   assert.ok(
-    !DETAIL.code.includes("from '@/lib/registrations/publicStatuses'"),
+    !DETAIL.code.includes("from '@/lib/registrations/statuses'"),
     'the control is inert — code did NOT strip the import'
   );
 });

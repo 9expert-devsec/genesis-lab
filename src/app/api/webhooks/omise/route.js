@@ -95,7 +95,7 @@ export async function POST(req) {
      * only a human can decide that.
      *
      * ── THIS ROUTE IS A SYSTEM ACTOR AND IS NOT SUBJECT TO THE ADMIN TABLE ──
-     * lib/registrations/publicStatuses.js governs what an ADMIN may do. This
+     * lib/registrations/statuses.js governs what an ADMIN may do. This
      * route and src/app/api/registration/public/charge/route.js are the only
      * writers of `paid`, precisely because a real charge — not a person — is
      * the evidence for it. Routing them through the admin table would forbid

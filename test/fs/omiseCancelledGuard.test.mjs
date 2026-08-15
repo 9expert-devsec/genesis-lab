@@ -117,7 +117,7 @@ test('masterclass is excluded — a different collection, out of scope', () => {
 test('both paid-writers carry the note explaining they bypass the admin table', () => {
   for (const f of [HOOK, CHARGE]) {
     assert.match(f.raw, /SYSTEM ACTOR/, `${f.rel} has no system-actor note`);
-    assert.match(f.raw, /publicStatuses/, `${f.rel} does not name the table it bypasses`);
+    assert.match(f.raw, /statuses.js/, `${f.rel} does not name the table it bypasses`);
   }
 });
 
@@ -134,7 +134,7 @@ test('neither paid-writer imports the admin transition table', () => {
   // proves the two views differ on this file.
   for (const f of [HOOK, CHARGE]) {
     assert.ok(
-      !/^\s*import[\s\S]*?from\s*'@\/lib\/registrations\/publicStatuses'/m.test(f.withImports),
+      !/^\s*import[\s\S]*?from\s*'@\/lib\/registrations\/statuses'/m.test(f.withImports),
       `${f.rel} imports the admin transition table — that would break payment collection`
     );
   }
@@ -145,7 +145,7 @@ test('CONTROL: withImports would SEE such an import if one existed', () => {
   // stripped. A real import in a sibling file is visible through the same view.
   const ACTIONS = readSource('src/lib/actions/registrations.js');
   assert.ok(
-    /^\s*import[\s\S]*?from\s*'@\/lib\/registrations\/publicStatuses'/m.test(ACTIONS.withImports),
+    /^\s*import[\s\S]*?from\s*'@\/lib\/registrations\/statuses'/m.test(ACTIONS.withImports),
     'the control is inert — nothing in the repo imports the module through withImports'
   );
 });

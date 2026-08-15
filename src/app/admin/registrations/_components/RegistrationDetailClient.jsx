@@ -15,14 +15,14 @@ import {
 } from '@/lib/actions/registrations';
 import { Button } from '@/components/ui/button';
 import { refNo } from '@/lib/refNo';
-import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/publicStatuses';
+import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/statuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
 const STATUS_BADGE   = { pending: 'bg-amber-100 text-amber-700', confirmed: 'bg-blue-100 text-blue-700', paid: 'bg-emerald-100 text-emerald-700', cancelled: 'bg-slate-100 text-slate-500' };
 
 /**
- * value → Thai label, DERIVED from lib/registrations/publicStatuses.js.
+ * value → Thai label, DERIVED from lib/registrations/statuses.js.
  * `confirmed` reads 'ส่งใบเสนอราคาแล้ว'; the stored value is unchanged.
  */
 const STATUS_LABEL   = buildStatusLabels();

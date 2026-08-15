@@ -82,7 +82,10 @@ test('the counts action enumerates INHOUSE_STATUS_VALUES rather than naming stat
  * a different list on a different collection and has not been consolidated.
  */
 test('no in-house status value appears as a literal in the actions file', () => {
-  for (const value of ['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']) {
+  // The retired five AND the live three. A `status: 'pending'` literal in this
+  // file would be the same defect wearing the new vocabulary.
+  const values = ['new', 'contacted', 'quoted', 'closed-won', 'closed-lost', 'pending', 'cancelled'];
+  for (const value of values) {
     const literal = new RegExp(`status:\\s*'${value}'`);
     assert.ok(!literal.test(ACTIONS), `status: '${value}' is hand-named in registrations.js`);
   }
@@ -95,12 +98,38 @@ test('the write-side Set is derived from the shared values, not respelled', () =
 
 // ── 3. The client's two lists come from the builders ────────────────────────
 
-test('the stat cards are built, not written out', () => {
-  assert.match(CLIENT, /buildStatCards\(\)/, 'statCards is not built from the shared array');
+/**
+ * ── BUILT FROM THE PER-SOURCE SUBSET, NOT ARGUMENT-LESS ─────────────────────
+ *
+ * These matched `buildStatCards()` and `buildStatusChips()` — the argument-less
+ * form — because in round 1 each source had its own module and the bare call
+ * meant "this module's list".
+ *
+ * Round 2 folded both vocabularies into one module where the builders DEFAULT
+ * TO PUBLIC. The bare call is now the bug rather than the fix: on an in-house
+ * render it would build the public strip, ชำระแล้ว card and all, over a
+ * collection that can never hold one — and every "one card per status"
+ * assertion in the render tier would still pass, over the wrong vocabulary.
+ *
+ * So the rule inverted: the builders must be called WITH the resolved subset.
+ */
+test('the stat cards are built from the per-source subset', () => {
+  assert.match(CLIENT, /buildStatCards\(sourceStatuses\)/, 'statCards is not built from the resolved subset');
+  assert.ok(!/buildStatCards\(\s*\)/.test(CLIENT), 'the argument-less form defaults to the PUBLIC list');
 });
 
-test('the filter chips are built, not written out', () => {
-  assert.match(CLIENT, /buildStatusChips\(\)/, 'statusOptions is not built from the shared array');
+test('the filter chips are built from the same subset', () => {
+  assert.match(CLIENT, /buildStatusChips\(sourceStatuses\)/, 'statusOptions is not built from the resolved subset');
+  assert.ok(!/buildStatusChips\(\s*\)/.test(CLIENT), 'the argument-less form defaults to the PUBLIC list');
+});
+
+test('the subset is resolved ONCE, from `source`', () => {
+  // Two `statusesForSource(source)` calls would be two places to get it wrong,
+  // and getting it wrong means a chip whose card is missing — the original
+  // defect, rebuilt from newer parts.
+  assert.match(CLIENT, /const sourceStatuses\s*=\s*statusesForSource\(source\)/);
+  assert.equal((CLIENT.match(/statusesForSource\(/g) ?? []).length, 1,
+    'the per-source list must be resolved exactly once');
 });
 
 /**
@@ -111,7 +140,15 @@ test('the filter chips are built, not written out', () => {
  * hand-written again, whatever it is called.
  */
 test('no in-house status label is hard-coded in the list client', () => {
-  for (const label of ['ใหม่', 'ติดต่อแล้ว', 'ส่งใบเสนอราคาแล้ว', 'ปิดงานสำเร็จ', 'ไม่สำเร็จ']) {
+  // The five original in-house labels PLUS the three the collapse replaced them
+  // with. Keeping the retired five is not dead weight: a well-meaning "restore
+  // the old wording" edit is exactly the shape this guards, and they are the
+  // strings that would be pasted back.
+  const labels = [
+    'ใหม่', 'ติดต่อแล้ว', 'ส่งใบเสนอราคาแล้ว', 'ปิดงานสำเร็จ', 'ไม่สำเร็จ',
+    'รอดำเนินการ', 'ยกเลิก',
+  ];
+  for (const label of labels) {
     assert.ok(!CLIENT.includes(label), `the label ${label} is hard-coded in RegistrationsClient`);
   }
 });

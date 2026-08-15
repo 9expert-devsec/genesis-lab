@@ -29,8 +29,14 @@
  * 19:27 in-house enquiry this screen was recently audited over would land on the
  * previous day.
  *
- * Pure: no db, no env, no imports.
+ * Pure: no db, no env. ONE import, and it is a sibling constant module that is
+ * itself import-free (lib/registrations/statuses.js), so the pure tier still
+ * loads this file with nothing stubbed. That import replaced what would
+ * otherwise have been a THIRD hand-written copy of the status vocabulary — see
+ * `buildRegistrationFilter`.
  */
+
+import { storedValuesForFilter } from '@/lib/registrations/statuses';
 
 /** The ranges the UI offers. `all` is the absence of a date clause. */
 export const RANGE_VALUES = ['all', 'today', 'week', 'month'];
@@ -119,8 +125,36 @@ export function buildRegistrationFilter({
 } = {}) {
   const filter = {};
 
+  /**
+   * ── AN UNRECOGNISED STATUS SHOWS EVERYTHING, NOT NOTHING ────────────────
+   *
+   * This used to be `filter.status = status` for any non-'all' value, so any
+   * status the collection does not hold produced `{status: 'whatever'}` — a
+   * clause matching no document, rendering an EMPTY LIST. An empty list is
+   * indistinguishable from "all your records are gone".
+   *
+   * That stopped being hypothetical in round 2. In-house collapsed from five
+   * stored values to three, so every bookmark and every still-open tab holding
+   * `?status=new` or `?status=closed-won` now names a status that no longer
+   * exists. Those are ordinary URLs that ordinary people kept, and the honest
+   * answer to one is the unfiltered list — the same shape `rangeToDateFilter`
+   * above already applies to an unknown `range`, and the same shape page.jsx
+   * applies to `source`.
+   *
+   * `storedValuesForFilter` returns [] for anything outside the source's LIVE
+   * vocabulary, which is the signal to add no clause at all. For a recognised
+   * in-house status it also widens to the retired values that migrate onto it,
+   * so the list agrees with the summary cards during the window before the
+   * migration runs — see its own docstring.
+   *
+   * `$in` unconditionally rather than a scalar for the single-member case:
+   * `{status: {$in: ['pending']}}` and `{status: 'pending'}` are the same query
+   * to Mongo and use the same index, and one shape means one thing for a
+   * reader of this function to check.
+   */
   if (status && status !== 'all') {
-    filter.status = status;
+    const values = storedValuesForFilter(status, source);
+    if (values.length) filter.status = { $in: values };
   }
 
   const term = String(q ?? '').trim();

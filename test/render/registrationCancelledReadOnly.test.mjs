@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
-import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/publicStatuses';
+import { allowedTransitions, buildStatusLabels } from '@/lib/registrations/statuses';
 
 /**
  * WHAT THE ADMIN CAN ACT ON, AS RENDERED, FOR EACH STORED STATUS.

@@ -168,10 +168,10 @@ test('deleteRegistration is NOT gated — delete stays available when cancelled'
  * 'cancelled'])`, a second spelling of the enum sitting on the server where no
  * screen could contradict it. It must now come from the module.
  */
-test('the public status set is derived from lib/registrations/publicStatuses', () => {
+test('the public status set is derived from lib/registrations/statuses', () => {
   assert.match(
     ACTIONS.withImports,
-    /import\s*\{[\s\S]*?PUBLIC_STATUS_VALUES[\s\S]*?\}\s*from\s*'@\/lib\/registrations\/publicStatuses'/,
+    /import\s*\{[\s\S]*?PUBLIC_STATUS_VALUES[\s\S]*?\}\s*from\s*'@\/lib\/registrations\/statuses'/,
     'the values must be imported, not written out again'
   );
   assert.match(ACTIONS.code, /new Set\(PUBLIC_STATUS_VALUES\)/);
@@ -182,11 +182,11 @@ test('CONTROL: the CODE view really does strip imports', () => {
   // import statements at all, and pass vacuously on any file. This proves the
   // two views differ in exactly the way the rule above depends on.
   assert.ok(
-    ACTIONS.withImports.includes("from '@/lib/registrations/publicStatuses'"),
+    ACTIONS.withImports.includes("from '@/lib/registrations/statuses'"),
     'withImports keeps the import line'
   );
   assert.ok(
-    !ACTIONS.code.includes("from '@/lib/registrations/publicStatuses'"),
+    !ACTIONS.code.includes("from '@/lib/registrations/statuses'"),
     'the control is inert — code did NOT strip the import, so the guard above proves nothing'
   );
 });
@@ -221,5 +221,5 @@ test('the in-house branch is untouched this round', () => {
     STATUS_BODY.includes('findByIdAndUpdate(id, { status }'),
     'the in-house path keeps its unconditional by-id update'
   );
-  assert.match(ACTIONS.withImports, /INHOUSE_STATUS_VALUES[\s\S]*?from '@\/lib\/registrations\/inhouseStatuses'/);
+  assert.match(ACTIONS.withImports, /INHOUSE_STATUS_VALUES[\s\S]*?from '@\/lib\/registrations\/statuses'/);
 });

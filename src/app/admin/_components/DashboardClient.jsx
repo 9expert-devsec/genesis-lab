@@ -4,7 +4,7 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
+import { buildStatusLabels, INHOUSE_STATUSES } from '@/lib/registrations/statuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -20,6 +20,16 @@ import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
  * two-or-three character abbreviation chosen to fit the card, not a label.
  */
 const PUBLIC_STATUS_LABEL = buildStatusLabels();
+
+/**
+ * The IN-HOUSE labels, from the in-house SUBSET of the same module.
+ *
+ * Passed explicitly rather than taking the default: buildStatusLabels defaults
+ * to the PUBLIC list, so an argument-less call here would silently label the
+ * in-house cards with the public vocabulary and no card would render blank to
+ * say so — pending and cancelled are in both.
+ */
+const INHOUSE_STATUS_LABEL = buildStatusLabels(INHOUSE_STATUSES);
 
 const RANGE_OPTIONS = [
   { value: 'today', label: 'วันนี้' },
@@ -142,17 +152,29 @@ export function DashboardClient({ data, openSchedulesCount, initialRange, isSupe
             href="/admin/registrations?source=inhouse"
             accent="border-l-4 border-l-violet-400"
           />
+          {/*
+            THE TWO IN-HOUSE CARDS FOLLOW THE COLLAPSED VOCABULARY.
+
+            They were รอติดต่อ (`?status=new`) and ปิดงานสำเร็จ
+            (`?status=closed-won`). Both statuses are retired, so both links
+            would have pointed at a filter the list can no longer offer — and
+            the second card counted a sales outcome the system never observed
+            (see the ruling in lib/registrations/statuses.js).
+
+            The labels come from the shared vocabulary rather than being typed
+            here, for the same reason the four public cards above derive theirs.
+          */}
           <StatCard
-            label="รอติดต่อ"
-            value={data.inhouse.new}
-            href="/admin/registrations?source=inhouse&status=new"
-            badge={{ text: 'ใหม่', cls: 'bg-violet-100 text-violet-700' }}
+            label={INHOUSE_STATUS_LABEL.pending}
+            value={data.inhouse.pending}
+            href="/admin/registrations?source=inhouse&status=pending"
+            badge={{ text: INHOUSE_STATUS_LABEL.pending, cls: 'bg-amber-100 text-amber-700' }}
           />
           <StatCard
-            label="ปิดงานสำเร็จ"
-            value={data.inhouse.closedWon}
-            href="/admin/registrations?source=inhouse&status=closed-won"
-            badge={{ text: 'สำเร็จ', cls: 'bg-emerald-100 text-emerald-700' }}
+            label={INHOUSE_STATUS_LABEL.quoted}
+            value={data.inhouse.quoted}
+            href="/admin/registrations?source=inhouse&status=quoted"
+            badge={{ text: INHOUSE_STATUS_LABEL.quoted, cls: 'bg-blue-100 text-blue-700' }}
           />
         </div>
       </section>
