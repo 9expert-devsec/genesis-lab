@@ -98,6 +98,16 @@ const nextConfig = {
         destination: '/automation-all-courses',
         permanent: true,
       },
+      // The legal centre's refund page is served at /refund-policy. The Figma
+      // frame — and the wording throughout the policy itself — calls it the
+      // Cancellation & Refund Policy, so the longer URL is the one a person
+      // guesses and the one a future document is liable to link to. Reserve it
+      // rather than let it fall through to [...slug] and answer with a course.
+      {
+        source: '/cancellation-refund-policy',
+        destination: '/refund-policy',
+        permanent: true,
+      },
     ];
   },
 

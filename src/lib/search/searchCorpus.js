@@ -30,13 +30,28 @@
  * hits, not a cold fan-out.
  *
  * ── WHY THE ONLINE FEED NEEDS NO ENRICHMENT ─────────────────────────────────
- * READ THIS BEFORE ADDING A FAN-OUT FOR IT. `/public-course`'s LIST response
- * omits `course_teaser`, `course_objectives` and `training_topics` — they exist
- * only on the detail response, which is why public courses cost an
- * enrich-courses pass here. `/online-course`'s list response ALREADY CARRIES
- * `o_course_teaser`, so online courses are searchable to the same depth for
- * one request. There is no second fan-out to add; adding one would buy nothing
- * and cost a request per course.
+ * READ THIS BEFORE ADDING A FAN-OUT FOR IT. `/online-course`'s list response
+ * ALREADY CARRIES `o_course_teaser`, so online courses are searchable to the
+ * same depth for one request. There is no second fan-out to add; adding one
+ * would buy nothing and cost a request per course.
+ *
+ * ── A CORRECTION, MEASURED 2026-08-09 ───────────────────────────────────────
+ * This block used to claim that `/public-course`'s LIST response OMITS
+ * `course_teaser`, `course_objectives` and `training_topics`, and that they
+ * exist only on the detail response. THAT IS NOT TRUE, and it was never
+ * measured — it was reasoning about the API written as if it were an
+ * observation.
+ *
+ * Probed directly against the live API: all three fields are present AND
+ * populated on 77 of 77 LIST rows, and the LIST row is byte-equivalent to the
+ * detail row for the same course — same sorted key set, same values. The two
+ * responses did not differ in any field examined.
+ *
+ * What follows from that is NOT recorded here as fact, because it has not been
+ * measured: whether the enrich-courses pass over public courses is therefore
+ * redundant depends on what else that pass does, and nobody has checked. The
+ * claim above is corrected; the conclusion someone might draw from it is left
+ * open deliberately rather than swapped for a second unverified one.
  */
 
 import { listPublicCourses } from '@/lib/api/public-courses';
@@ -98,20 +113,37 @@ async function buildSearchCorpus() {
   // courseMap lookup on the client. The card needs the name, the code and the
   // price; nothing else about the course travels with a schedule row.
   const courseById = new Map(courses.map((c) => [String(c._id), c]));
-  const schedules = (schedulesResult.items ?? []).map((s) => {
-    const c = courseById.get(String(s.course?._id ?? s.course ?? ''));
-    return {
-      ...s,
-      course_ref: c
-        ? {
-            _id: String(c._id),
-            course_id: c.course_id ?? null,
-            course_name: c.course_name ?? null,
-            course_price: c.course_price ?? null,
-          }
-        : null,
-    };
-  });
+  /**
+   * ── A ROUND FOR A HIDDEN COURSE IS DROPPED, NOT LEFT UNRESOLVED ────────────
+   * `listPublicCourses` above already filtered hidden courses out of the
+   * COURSES tab, but /schedules is a separate upstream domain and still returns
+   * their rounds. Leaving them in would keep a hidden course in the SCHEDULES
+   * tab under its own name: `scheduleHaystack` falls back to the row's raw
+   * `course_name` when `course_ref` is null, so the round stays matchable, and
+   * it would render as a result whose only link is the 404 the course now is.
+   *
+   * This is the one place the join is lossy on purpose. A round whose course
+   * did not resolve for any OTHER reason (decommissioned upstream, a genuine
+   * /schedules ↔ /public-course drift) was already unrenderable — the card
+   * reads its title straight off `course_ref` — so nothing that used to display
+   * stops displaying here.
+   */
+  const schedules = (schedulesResult.items ?? [])
+    .map((s) => {
+      const c = courseById.get(String(s.course?._id ?? s.course ?? ''));
+      return {
+        ...s,
+        course_ref: c
+          ? {
+              _id: String(c._id),
+              course_id: c.course_id ?? null,
+              course_name: c.course_name ?? null,
+              course_price: c.course_price ?? null,
+            }
+          : null,
+      };
+    })
+    .filter((s) => s.course_ref !== null);
 
   await dbConnect();
   /**

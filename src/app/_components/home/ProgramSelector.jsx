@@ -29,6 +29,12 @@ export function ProgramSelector({
   skills = [],
   programSlugs = {},
   skillSlugs = {},
+  /**
+   * False when getLandingData could not serve a snapshot at all. Distinguishes
+   * "there is nothing here" from "we could not find out" — see EmptyState.
+   * Defaults true so an empty list reads as empty, never as broken.
+   */
+  snapshotAvailable = true,
 }) {
   const [tab, setTab] = useState("program");
   const [page, setPage] = useState(0);
@@ -123,7 +129,7 @@ export function ProgramSelector({
         {tab === "program" && (
           <div className="flex flex-col h-[450px]  md:h-[410px] rounded-2xl bg-[#f8fafd] dark:bg-9e-border">
             {programs.length === 0 ? (
-              <EmptyState />
+              <EmptyState snapshotAvailable={snapshotAvailable} />
             ) : (
               <>
                 <div className="relative h-[400px] md:h-[320px]">
@@ -163,7 +169,7 @@ export function ProgramSelector({
           <div className="overflow-hidden rounded-2xl bg-white shadow-9e-sm dark:bg-9e-navy">
             {skills.length === 0 ? (
               <div className="p-8">
-                <EmptyState />
+                <EmptyState snapshotAvailable={snapshotAvailable} />
               </div>
             ) : (
               <>
@@ -390,10 +396,26 @@ function PageDots({ total, current, onChange, className }) {
   );
 }
 
-function EmptyState() {
+/**
+ * NOTHING TO SHOW vs COULD NOT LOAD — two different sentences, because they
+ * are two different facts and only one of them is anybody's fault.
+ *
+ * These were one string ("ไม่สามารถโหลดรายการได้ในขณะนี้") shown whenever the
+ * list was empty, which meant a correctly-empty tab accused the site of being
+ * broken and a genuinely broken one was indistinguishable from a quiet day.
+ *
+ * BOTH ARE REACHABLE, and the failure branch is wired to a real signal rather
+ * than invented: `snapshotAvailable` is false when `getLandingData()` could not
+ * serve a snapshot at all — the cache document is absent, its schemaVersion is
+ * stale, or the read threw (getLandingData.js:38/50/73). An empty `programs`
+ * array with a snapshot present is the other case, and it is the ordinary one.
+ */
+function EmptyState({ snapshotAvailable = true }) {
   return (
     <p className="py-8 text-center text-sm text-9e-slate-dp-50">
-      ไม่สามารถโหลดรายการได้ในขณะนี้
+      {snapshotAvailable
+        ? 'ยังไม่มีรายการในขณะนี้'
+        : 'ไม่สามารถโหลดรายการได้ในขณะนี้'}
     </p>
   );
 }

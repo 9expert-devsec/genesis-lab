@@ -1,3 +1,5 @@
+import { monthLongLabel } from '@/lib/schedule/monthWindow';
+
 /**
  * Confirmation email sent to the prospect who submitted the In-house
  * training request. Returns { html, text }.
@@ -19,7 +21,28 @@ export function inhouseUserConfirmationEmail({
     data.trainingFormat === 'online'   ? 'Online' :
     'ยังไม่ระบุ — ทีมขายจะช่วยแนะนำ';
 
-  const scheduleLabel = `เดือนที่สนใจ: ${data.preferredMonth || 'ตามที่ทีมขายแนะนำ'}`;
+  // `preferredMonth` is the `YYYY-MM` VALUE of the form's month <select>
+  // (InhouseForm.jsx:67-74 builds the options, :531 submits the value), not the
+  // Thai label shown beside it — so this line used to put '2026-09' in front of
+  // a customer who had just approved 'กันยายน 2569' on the review step.
+  // Decoded through the same formatter the Postmark model uses.
+  //
+  // THE PREFIX STAYS HERE FOR NOW, unlike in the model — but ONE const cannot
+  // actually serve both consumers, and that is a real defect this change does
+  // NOT fix. Measured:
+  //
+  //   · the plain-text part renders it on a BARE LINE, and every sibling there
+  //     is `label: value` (`เลขอ้างอิง:`, `จำนวนผู้เข้าอบรม:`,
+  //     `รูปแบบการอบรม:`). It NEEDS the prefix.
+  //   · the HTML part already prints a row heading `ช่วงเวลา` immediately
+  //     above it, and every sibling row there is a heading over a BARE value.
+  //     It renders `ช่วงเวลา` / `เดือนที่สนใจ: กันยายน 2569` — two labels
+  //     stacked, and the only row in that block carrying its own.
+  //
+  // The correct answer is two values, not one compromise. Left as a follow-up
+  // rather than restructured here: this file is the unset-alias fallback and
+  // the round that touched it was scoped to the month FORMAT only.
+  const scheduleLabel = `เดือนที่สนใจ: ${data.preferredMonth ? monthLongLabel(data.preferredMonth) : 'ตามที่ทีมขายแนะนำ'}`;
 
   const html = `<!DOCTYPE html>
 <html lang="th">

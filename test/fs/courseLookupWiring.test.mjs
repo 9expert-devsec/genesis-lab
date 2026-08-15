@@ -77,10 +77,14 @@ test('the registration page looks up through the case-tolerant helper', () => {
 });
 
 test('resolveCourse path 2 uses it too — the detail pages need it as much', () => {
-  // Import shape is asserted by the alias-path test below, which pins that BOTH
-  // lookups are imported; this one pins the call.
+  // The call is now through the injected `fetchCourse`, which DEFAULTS to the
+  // tolerant helper; the wiring test below pins that default. Asserting the
+  // literal helper name at the call site would only re-pin the old shape.
   assert.match(RESOLVE, /getCourseByCodeInsensitive/, 'the helper is in scope');
-  assert.match(RESOLVE, /await getCourseByCodeInsensitive\(courseId\)\.catch\(\(\) => null\)/);
+  // The call now forwards `{ includeHidden }` so an admin preview of one of the
+  // five mixed-case courses can still recover it from the fallback list. The
+  // claim is that path 2 goes through the injected dep, which it still does.
+  assert.match(RESOLVE, /await fetchCourse\(courseId, \{ includeHidden \}\)\.catch\(\(\) => null\)/);
 });
 
 test('the registration page no longer calls the raw case-sensitive lookup', () => {
@@ -89,19 +93,53 @@ test('the registration page no longer calls the raw case-sensitive lookup', () =
   assert.ok(!/getCourseByCode\(/.test(PAGE), 'no direct exact-match call remains');
 });
 
-test('resolveCourse keeps the raw lookup for the ALIAS path only', () => {
-  // Path 1 resolves from CourseExtension.courseId — the upstream id as stored,
-  // never a lowercased URL fragment — so it has no casing to recover and stays
-  // on the exact lookup. Path 2 derives its id from the URL and must not.
-  //
-  // This is also a live-wire guard: an earlier version of this change swapped
-  // the import to the helper alone, leaving path 1 calling an undefined
-  // `getCourseByCode`. The `.catch(() => null)` around it swallowed the
-  // ReferenceError, so every aliased course page would have 404'd silently.
-  assert.match(RESOLVE, /import \{\s*getCourseByCode,\s*getCourseByCodeInsensitive,\s*\} from '@\/lib\/api\/public-courses'/,
-    'BOTH are imported');
-  assert.match(RESOLVE, /await getCourseByCode\(byAlias\.courseId\)/, 'path 1: exact');
-  assert.match(RESOLVE, /await getCourseByCodeInsensitive\(courseId\)/, 'path 2: tolerant');
+test('BOTH resolveCourse paths go through the case-tolerant lookup', () => {
+  /**
+   * ── THIS TEST USED TO ASSERT THE BUG ────────────────────────────────────────
+   * It was "resolveCourse keeps the raw lookup for the ALIAS path only", and it
+   * pinned `await getCourseByCode(byAlias.courseId)` as correct, on the
+   * reasoning that path 1's id is "the upstream id as stored, never a lowercased
+   * URL fragment — so it has no casing to recover".
+   *
+   * That reasoning had a hole, and the hole cost a live 404. The stored id is a
+   * COPY, frozen when an admin last saved the extension row; upstream can rename
+   * afterwards and nothing propagates it. So path 1's casing is not lost, it is
+   * STALE — and an exact match cannot recover it either. `Power-Apps` →
+   * `POWER-APPS` took /power-apps-for-business-training-course down while
+   * /POWER-APPS-training-course served fine.
+   *
+   * The assertion is INVERTED rather than deleted, because the wiring claim
+   * underneath is still worth pinning — it just points the other way now.
+   */
+  assert.match(
+    RESOLVE,
+    /import \{ getCourseByCodeInsensitive \} from '@\/lib\/api\/public-courses'/,
+    'the tolerant lookup is imported'
+  );
+  assert.ok(
+    !/\bgetCourseByCode\((?!.*Insensitive)/.test(RESOLVE),
+    'the exact lookup is back on one of the paths'
+  );
+  // Both paths reach the injected dep, which defaults to the tolerant helper.
+  assert.match(RESOLVE, /fetchCourse = getCourseByCodeInsensitive/, 'the default dep is the tolerant one');
+  // Trailing comma rather than a closing paren: both calls now forward
+  // `{ includeHidden }`. What is pinned is that each path reaches the DEP, not
+  // its argument list.
+  assert.match(RESOLVE, /await fetchCourse\(byAlias\.courseId,/, 'path 1');
+  assert.match(RESOLVE, /await fetchCourse\(courseId,/, 'path 2');
+});
+
+test('the false claim about path 1 is gone from the source', () => {
+  // A comment stating a wrong fact is worse than no comment: this repo has
+  // already lost a round to one (searchCorpus.js claiming the list API omitted
+  // detail fields, which was false). This guard is cheap insurance against the
+  // old wording being restored by a revert or a merge.
+  assert.ok(
+    !/has never lost its casing and needs no fallback/.test(RESOLVE),
+    'the false comment is back'
+  );
+  assert.match(RESOLVE, /STALE/, 'the true reason is stated');
+  assert.match(RESOLVE, /POWER-APPS/, 'and the case that proved it is named');
 });
 
 test('CONTROL: every function resolveCourse calls is actually imported', () => {
@@ -115,12 +153,46 @@ test('CONTROL: every function resolveCourse calls is actually imported', () => {
   const declared = new Set(
     [...RESOLVE.matchAll(/(?:function|const|let)\s+([A-Za-z_$][\w$]*)/g)].map((m) => m[1])
   );
+
+  /**
+   * Injected deps — `fetchCourse = getCourseByCodeInsensitive` in the parameter
+   * destructure — are a THIRD way a name gets bound, and the checked property is
+   * stronger here than "is it in scope": each dep's DEFAULT must itself be
+   * imported. A default naming something this module never imported is the same
+   * ReferenceError behind the same `.catch(() => null)`, and it would only fire
+   * for production callers, who pass no deps — never in a test, which always
+   * passes fakes.
+   */
+  /**
+   * LITERAL DEFAULTS ARE OPTIONS, NOT DEPS, and must be excluded before the
+   * "its default is imported" rule runs. `includeHidden = false` is an option —
+   * the admin-preview bypass — and the pattern below cannot tell `false` from a
+   * function name by shape alone, so it would demand that resolveCourse.js
+   * import something called `false`. Excluding the JS literals keeps the rule
+   * pointed at what it is for: a dep whose default names a function this module
+   * never imported, which is a ReferenceError hiding behind a `.catch()` that
+   * only production callers — the ones who pass no deps — would ever reach.
+   */
+  const LITERALS = new Set(['true', 'false', 'null', 'undefined']);
+  const injected = new Map(
+    [...RESOLVE.matchAll(/^\s*([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*),\s*$/gm)]
+      .map((m) => [m[1], m[2]])
+      .filter(([, fallback]) => !LITERALS.has(fallback))
+  );
+  assert.ok(injected.size >= 3, 'the injected deps are no longer being detected');
+  for (const [dep, fallback] of injected) {
+    assert.ok(
+      imported.has(fallback),
+      `dep ${dep} defaults to ${fallback}(), which resolveCourse.js never imports`
+    );
+  }
+
   const called = [...RESOLVE.matchAll(/\bawait ([A-Za-z_$][\w$]*)\(/g)].map((m) => m[1]);
   assert.ok(called.length >= 3, 'there are awaited calls to check');
   for (const fn of called) {
     assert.ok(
-      imported.has(fn) || declared.has(fn),
-      `${fn}() is called but neither imported nor declared in resolveCourse.js`
+      imported.has(fn) || declared.has(fn) || injected.has(fn),
+      `${fn}() is called but is neither imported, declared, nor an injected dep in resolveCourse.js`
     );
   }
 });
@@ -147,7 +219,12 @@ test('the helper tries the direct call FIRST and returns it unconditionally', ()
   const body = /export async function getCourseByCodeInsensitive\(([\s\S]*?)\n\}/.exec(ADAPTER);
   assert.ok(body, 'the helper is where it is expected');
   const directAt = body[1].indexOf('const direct = await fetchByCode(courseId)');
-  const listAt = body[1].indexOf('await fetchList()');
+  // `fetchList(` rather than `fetchList()` — the fallback now forwards
+  // `includeHidden` so an admin preview of one of the five mixed-case courses
+  // can still recover it from the list. The claim this test makes is about
+  // ORDER, not about the argument list, and pinning the empty parens made it go
+  // red for a change that left the ordering untouched.
+  const listAt = body[1].indexOf('await fetchList(');
   assert.ok(directAt > -1 && listAt > -1, 'both paths are present');
   assert.ok(directAt < listAt, 'the direct call comes first');
   assert.match(body[1], /if \(direct\) return direct;/, 'and short-circuits on a hit');

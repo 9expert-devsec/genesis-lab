@@ -13,6 +13,7 @@ import { ChevronLeft } from 'lucide-react';
 import { requirePage } from '@/lib/rbac/guard';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
+import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
 import {
   getAllCoursePromoLinks,
   getEarlyBirdAdminByCourse,
@@ -33,11 +34,12 @@ export async function generateMetadata({ params }) {
   };
 }
 
-export default async function AdminCourseExtensionPage({ params }) {
+export default async function AdminCourseExtensionPage({ params, searchParams }) {
   await requirePage('courses');
 
   const { courseId: rawCourseId } = await params;
   const courseId = decodeURIComponent(rawCourseId);
+  const listQuery = courseListQuery(await searchParams);
 
   // Don't 404 if the upstream call fails — let the editor still work
   // so admins can fix data even when the API is down. We just won't
@@ -69,13 +71,28 @@ export default async function AdminCourseExtensionPage({ params }) {
 
   return (
     <div className="mx-auto max-w-3xl">
+      {/* BACK TO THE EDIT PAGE, which is where the only link here comes from.
+          The target is derived from the FETCHED COURSE's `_id`, never from this
+          route's param: this page is keyed by the course_id CODE and /edit is
+          keyed by the MSDB ObjectId (the trap recorded in 1da69ce), so treating
+          them as interchangeable produces a 404 that looks like a missing
+          course.
+
+          Upstream can be down — this page deliberately still renders when
+          `getCourseByCode` fails, and then there is no `_id` to build an edit
+          URL from. Rather than emit a link that 404s, it falls back to the list
+          and says so, which is also the right target for someone who arrived
+          here by typed URL or bookmark rather than from the editor. */}
       <div className="mb-6">
         <Link
-          href="/admin/courses"
+          href={withListQuery(
+            courseResult?._id ? `/admin/courses/${courseResult._id}/edit` : '/admin/courses',
+            listQuery
+          )}
           className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-9e-action"
         >
           <ChevronLeft className="h-4 w-4" />
-          กลับไปยังรายการหลักสูตร
+          {courseResult?._id ? 'กลับไปยังหน้าแก้ไขหลักสูตร' : 'กลับไปยังรายการหลักสูตร'}
         </Link>
       </div>
 

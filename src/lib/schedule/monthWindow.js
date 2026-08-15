@@ -52,20 +52,37 @@
 export const PUBLIC_SCHEDULE_DEFAULT_MONTHS = 6;
 
 /**
- * How far ahead the two filter dropdowns let a visitor look.
+ * How far ahead the two filter dropdowns let a visitor look. TWELVE months,
+ * i.e. offsets 0..11 from the current month inclusive.
  *
- * 18 = 12 + 6, and both terms are the reason:
- *   · 12 — a full year ahead, so the SAME MONTH NEXT YEAR is always selectable
- *     no matter which month you visit in. Anything less and the horizon
- *     shrinks as the year goes on, which is the defect this module removes.
- *   · 6  — the default window's length, so the default's last column is never
- *     also the last option: there is always somewhere further to extend to.
+ * ── WHAT THE 18 WAS, AND WHY THAT ARGUMENT NO LONGER APPLIES ────────────────
+ * It was 18, derived as `12 + 6`, and the 12 term was justified by a specific
+ * property: "the SAME MONTH NEXT YEAR is always selectable, no matter which
+ * month you visit in". THAT PROPERTY IS GONE at a horizon of 12, and it is
+ * important to say so rather than quietly keep the sentence: reaching the same
+ * month next year needs THIRTEEN options (offsets 0..12), not twelve. From
+ * August, the last option is now next July.
  *
- * It is a UI horizon, not a fetch bound. `getAllSchedules()` is unbounded and
- * stays that way; if upstream ever publishes a round beyond 18 months it is
- * fetched, and it is unreachable from the filter until this number moves.
+ * It was given up deliberately, because it was buying nothing. Measured against
+ * the live feed on 2026-08-12: of 104 future rounds, ZERO sat at offset >= 12,
+ * and the furthest was at +5 — the data does not reach even halfway to the old
+ * horizon. Twelve months of options is already more than upstream publishes,
+ * and a dropdown of 18 mostly-empty months is a longer list to scroll for
+ * months that cannot contain anything. If upstream ever starts publishing
+ * further out, this number is the one place to change.
+ *
+ * ── THE PROPERTY THAT SURVIVES, AND IS STILL LOAD-BEARING ───────────────────
+ * 12 > PUBLIC_SCHEDULE_DEFAULT_MONTHS (6), so the DEFAULT WINDOW'S LAST COLUMN
+ * IS NEVER ALSO THE LAST OPTION: a visitor who opens the page and wants to look
+ * further always has somewhere to go. That is what would break if this were
+ * ever set to 6 or below, and it is what the test pins.
+ *
+ * It remains a UI horizon, not a fetch bound. `getAllSchedules()` is unbounded
+ * and stays that way; a round beyond 12 months is still FETCHED and still
+ * rendered if the window reaches it — it is merely unreachable through the
+ * dropdown until this number moves.
  */
-export const PUBLIC_SCHEDULE_FILTER_HORIZON = 18;
+export const PUBLIC_SCHEDULE_FILTER_HORIZON = 12;
 
 /**
  * `YYYY-MM` for a Date, in LOCAL time.
@@ -183,6 +200,7 @@ export function windowBetween(fromKey, toKey) {
 const SHORT_MONTH = new Intl.DateTimeFormat('th-TH', { month: 'short' });
 const SHORT_MONTH_YEAR = new Intl.DateTimeFormat('th-TH', { month: 'short', year: '2-digit' });
 const YEAR_ONLY = new Intl.DateTimeFormat('th-TH', { year: '2-digit' });
+const LONG_MONTH_YEAR = new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' });
 
 const dateOf = (key) => {
   const p = parseMonthKey(key);
@@ -221,6 +239,54 @@ export function monthYearLabel(key) {
   const d = dateOf(key);
   if (!d) return '';
   return YEAR_ONLY.formatToParts(d).find((p) => p.type === 'year')?.value ?? '';
+}
+
+/**
+ * `'2026-09'` → `'กันยายน 2569'` — the LONG form, for prose rather than a table.
+ *
+ * ── IT IS THE SAME `YYYY-MM`, NOT AN `ADMIN_SCHEDULE_MONTHS`-STYLE FALSE FRIEND
+ * The module docstring warns against borrowing something that merely LOOKS like
+ * a month here, so the check is spelled out: this key is byte-identical to the
+ * one `monthKey` produces — `${getFullYear()}-${String(getMonth()+1).padStart(2,
+ * '0')}` — and the two producers it now serves both emit exactly that. They are
+ * one vocabulary, not two that coincide.
+ *
+ *   · the public /schedule window, via `monthKey` above;
+ *   · the in-house enquiry form's month select, which builds its option VALUES
+ *     with that same expression (src/components/registration/InhouseForm.jsx:67-74)
+ *     and submits them as `preferredMonth`.
+ *
+ * ── WHY LONG, AND WHY HERE ──────────────────────────────────────────────────
+ * The in-house form shows the customer `toLocaleDateString('th-TH', { month:
+ * 'long', year: 'numeric' })` at review time, so this reproduces the string
+ * they approved rather than a shorter one they never saw. The siblings above
+ * are sized for a table column and a dropdown; an email sentence has room.
+ *
+ * It lives in this module and not in the email label file ON PURPOSE. A second
+ * private Intl formatter is a second place for `+ 543` to grow back, and
+ * test/fs/scheduleThaiYearSource only inspects the files it is pointed at —
+ * a formatter written elsewhere is a formatter nobody is guarding.
+ *
+ * ── THE FALLBACK DIFFERS FROM ITS SIBLINGS, DELIBERATELY ────────────────────
+ * `monthLabel` / `monthLabelWithYear` / `monthYearLabel` return `''` for an
+ * unparseable key, which is right for a table: a column head with no month is
+ * blank, and the row beneath still identifies the data. This one returns the
+ * RAW VALUE instead, because its output lands in a sentence in a customer's
+ * email. A customer reading `2026-09` is confused; a customer reading nothing
+ * cannot tell which enquiry the mail is answering. Same reasoning as the
+ * `courseName || code` fallback in inhouseRegistrationModel.js — an ugly but
+ * actionable value beats a hole.
+ *
+ * The only input that yields `''` is one that was already empty.
+ *
+ * @param {string} key
+ * @returns {string} the formatted label, else `key` unchanged
+ */
+export function monthLongLabel(key) {
+  // Through `dateOf`, i.e. through `parseMonthKey` — the module's one place
+  // where the key vocabulary is decoded.
+  const d = dateOf(key);
+  return d ? LONG_MONTH_YEAR.format(d) : String(key ?? '');
 }
 
 /**

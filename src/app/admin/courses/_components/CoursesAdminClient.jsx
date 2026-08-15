@@ -1,10 +1,12 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { deleteCourse } from '@/lib/actions/courses';
+import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
+import { resolveCourseStatusBadge } from '@/lib/courses/courseStatusBadge';
 
 const TYPE_OPTIONS = [
   { value: '',         label: 'ทุกประเภท' },
@@ -22,9 +24,36 @@ export function CoursesAdminClient({
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
 
-  const [search, setSearch]               = useState('');
-  const [filterProgram, setFilterProgram] = useState('');
-  const [filterType, setFilterType]       = useState('');
+  /**
+   * SEEDED FROM THE URL, and mirrored back into it.
+   *
+   * These were plain `useState`, so editing a course and coming back reset the
+   * search and both filters — the admin re-typed them every time. Component
+   * state cannot survive the App Router unmounting this list.
+   */
+  const searchParams = useSearchParams();
+  const [search, setSearch]               = useState(() => searchParams.get('q') ?? '');
+  const [filterProgram, setFilterProgram] = useState(() => searchParams.get('program') ?? '');
+  const [filterType, setFilterType]       = useState(() => searchParams.get('type') ?? '');
+
+  const listQuery = courseListQuery({ q: search, program: filterProgram, type: filterType });
+
+  /**
+   * `history.replaceState`, NOT `router.replace`.
+   *
+   * The URL has to be real so a reload or a browser back reproduces the filter,
+   * but `router.replace` re-runs the server component on every keystroke in the
+   * search box — a round-trip per character for a list that is already filtered
+   * entirely on the client. replaceState updates the address bar and nothing
+   * else, which is exactly the amount of work this needs.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const next = window.location.pathname + (listQuery ? `?${listQuery}` : '');
+    if (next !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, '', next);
+    }
+  }, [listQuery]);
 
   // Match against program either as a populated object (`program._id`)
   // or as a bare ObjectId string. Genesis sees both depending on the
@@ -139,12 +168,18 @@ export function CoursesAdminClient({
 
       <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
         <div className="max-h-[70vh] overflow-x-auto overflow-y-auto">
-          <table className="w-full text-sm">
+          {/* min-w so the seventh column cannot squeeze the others instead of
+              scrolling. The wrapper is already overflow-x-auto; without a floor
+              `w-full` compresses every cell to fit, which is how the admin
+              ARTICLES list clipped its rightmost column before it was given the
+              same floor (ArticlesAdminClient.jsx:322). */}
+          <table className="w-full min-w-[900px] text-sm">
             <thead className="sticky top-0 bg-[var(--surface-muted)]">
               <tr className="border-b border-[var(--surface-border)] text-left">
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">Course ID</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">ชื่อหลักสูตร</th>
                 <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">URL Alias</th>
+                <th className="px-4 py-3 font-medium text-[var(--text-secondary)]">สถานะ</th>
                 <th className="px-4 py-3 text-right font-medium text-[var(--text-secondary)]">Tags</th>
                 <th className="px-4 py-3 text-right font-medium text-[var(--text-secondary)]">Gallery</th>
                 <th className="px-4 py-3 text-right font-medium text-[var(--text-secondary)]">จัดการ</th>
@@ -153,7 +188,7 @@ export function CoursesAdminClient({
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-muted)]">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-muted)]">
                     {courses.length === 0
                       ? 'ไม่สามารถโหลดรายการหลักสูตรได้ — ลองรีเฟรช หรือดู console log'
                       : 'ไม่พบหลักสูตรที่ตรงกับตัวกรอง'}
@@ -162,6 +197,7 @@ export function CoursesAdminClient({
               )}
               {filtered.map((course) => {
                 const ext = extensions[course.course_id];
+                const status = resolveCourseStatusBadge(ext);
                 const busy = busyId === course._id;
                 return (
                   <tr
@@ -179,6 +215,25 @@ export function CoursesAdminClient({
                         <span className="text-[var(--text-muted)]">—</span>
                       )}
                     </td>
+                    {/* Publication state. Read from the SAME `extensions` map
+                        the alias above uses — the server component already
+                        batches that in one query, so this column adds no read
+                        and nothing per-row. The mapping is total, so this cell
+                        can never be blank; see lib/courses/courseStatusBadge. */}
+                    <td className="whitespace-nowrap px-4 py-3">
+                      <span
+                        className={
+                          'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium '
+                          + status.badge
+                        }
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={'h-1.5 w-1.5 rounded-full ' + status.dot}
+                        />
+                        {status.label}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-right tabular-nums text-[var(--text-primary)]">
                       {ext?.tags?.length ?? 0}
                     </td>
@@ -188,16 +243,15 @@ export function CoursesAdminClient({
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex gap-1">
                         <Link
-                          href={`/admin/courses/${encodeURIComponent(course._id)}/edit`}
+                          // Carries the filter so the editor's ← can bring it
+                          // back. Miss this link and the filter dies here.
+                          href={withListQuery(
+                            `/admin/courses/${encodeURIComponent(course._id)}/edit`,
+                            listQuery
+                          )}
                           className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
                         >
                           แก้ไข
-                        </Link>
-                        <Link
-                          href={`/admin/courses/${encodeURIComponent(course.course_id)}`}
-                          className="rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-action hover:bg-9e-ice"
-                        >
-                          SEO/Gallery
                         </Link>
                         <button
                           type="button"

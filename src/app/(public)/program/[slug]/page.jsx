@@ -6,6 +6,7 @@ import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug } from '@/lib/resolvePageSlug';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { ProgramPageClient } from './_components/ProgramPageClient';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 export const revalidate = 3600;
 
@@ -61,6 +62,7 @@ export default async function ProgramPage({ params }) {
       courses={courses}
       earlyBirdMap={earlyBirdMap}
       faqs={faqs}
+      currentYear={siteCurrentYear()}
     />
   );
 }

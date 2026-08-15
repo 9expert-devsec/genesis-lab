@@ -15,6 +15,7 @@
  * browser, so an empty program has nothing to show and must not appear.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import NavMenuCache from '@/models/NavMenuCache';
 import CourseExtension from '@/models/CourseExtension';
@@ -23,6 +24,12 @@ import { listPrograms } from '@/lib/api/programs';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { bustUpstream, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
 import { skills as SKILLS_CONFIG } from '@/config/site';
+import {
+  assessNavDowngrade,
+  sectionCountsOf,
+  leafCountsOf,
+  permitsSnapshotWrite,
+} from '@/lib/cache-console/downgradeGuard';
 
 const CACHE_KEY = 'navmenu_v1';
 
@@ -31,7 +38,19 @@ const CACHE_KEY = 'navmenu_v1';
  * Returns { items, firstCover } — never throws (caller handles via allSettled).
  */
 async function buildEntry(filter) {
-  const { items } = await listPublicCourses(filter);
+  /**
+   * includeHidden — THE SNAPSHOT STORES THE SUPERSET, getNavMenuData FILTERS.
+   *
+   * Not an oversight and not a leak. This job runs as a Vercel Cron on the
+   * PRODUCTION deployment, which builds `main`; the site under test is served
+   * from `dev`. A filter here would therefore not reach the UAT mega menu until
+   * main shipped — on the very surface the defect was found on. Worse, it would
+   * make un-hiding asymmetric: a write-time filter DELETES the row, so
+   * re-publishing a course would leave it missing from the menu for up to three
+   * hours until the next sync re-added it, while the read-time filter restores
+   * it on the next request.
+   */
+  const { items } = await listPublicCourses({ ...filter, includeHidden: true });
   const courseList = (items ?? []).map((c) => ({
     course_id: c.course_id,
     course_name: c.course_name ?? '',
@@ -73,7 +92,14 @@ async function buildEntry(filter) {
   return { items: courseListWithAlias, firstCover };
 }
 
-export async function syncNavMenuData() {
+/**
+ * @param {object} [options]
+ * @param {boolean} [options.allowShrink] bypass the downgrade guard for THIS
+ *   run only — set by an admin override, never persisted.
+ * @param {string} [options.actor] who a refusal is attributed to; defaults to
+ *   the reserved system:cron id.
+ */
+export async function syncNavMenuData({ allowShrink = false, actor = 'system:cron' } = {}) {
   await dbConnect();
   const errors = [];
 
@@ -140,6 +166,91 @@ export async function syncNavMenuData() {
 
   // ── Upsert ────────────────────────────────────────────────────────
   const status = errors.length === 0 ? 'ok' : 'partial';
+
+  /**
+   * ── THE DOWNGRADE GUARD, ON THIS WRITE TOO ──────────────────────────────
+   *
+   * Same invariant, same place: in the writer, not in its callers. This job has
+   * two — the cron route and the admin resync route — and neither should have
+   * to remember.
+   *
+   * The previous document is read HERE and only here; this sync did not read it
+   * before, because it had no reason to. The counts come from `data`, which for
+   * nav is two maps of groups — `sectionCountsOf` handles both shapes, so there
+   * is one guard rather than a second implementation that could drift.
+   *
+   * NAV_SECTION_SHRINK_RATIO, not landing's. Measured: `skills` holds SIX
+   * groups, so at landing's 50% it would have to lose four before anything
+   * stopped it — two-thirds of the mega menu, on every public page. The
+   * constant's own docstring carries the arithmetic.
+   */
+  const previousDoc = await NavMenuCache.findOne({ key: CACHE_KEY }).lean().exec();
+  const incomingData = { programs: programsData, skills: skillsData };
+  const storedCounts = sectionCountsOf(previousDoc?.data);
+  const incomingCounts = sectionCountsOf(incomingData);
+
+  /**
+   * TWO MEASURES AND ONE BOOLEAN — see assessNavDowngrade.
+   *
+   * Group count alone cannot see the failure this sync produces most readily:
+   * the skills arm above KEEPS a failed group with `items: []`, so six groups
+   * stay six while a mega-menu column renders blank on every public page. The
+   * programs arm drops a failed group instead, so only skills has the hole —
+   * which is precisely why the leaf measure is not optional.
+   */
+  const downgrade = assessNavDowngrade({
+    storedData: previousDoc?.data,
+    incomingData,
+    allowShrink,
+  });
+
+  if (!permitsSnapshotWrite(downgrade.verdict)) {
+    // Only the refusal record is written — `data`, `syncedAt` and `status` are
+    // left exactly as they were, so the mega menu keeps serving what it has.
+    await NavMenuCache.updateOne(
+      { key: CACHE_KEY },
+      {
+        $set: {
+          lastRefusal: {
+            at: new Date(),
+            actor,
+            storedSections: storedCounts,
+            incomingSections: incomingCounts,
+            // Both measures are recorded, so the console can show an admin
+            // WHICH one objected — "6 groups became 6, but 107 courses became
+            // 78" is the sentence that makes an emptied group legible.
+            storedLeaves: leafCountsOf(previousDoc?.data),
+            incomingLeaves: leafCountsOf(incomingData),
+            shrunk: downgrade.shrunk,
+            vanished: downgrade.vanished,
+            emptied: downgrade.emptied,
+            reason: downgrade.reason,
+            syncStatus: status,
+            syncErrors: errors,
+          },
+        },
+      }
+    );
+
+    // eslint-disable-next-line no-console
+    console.warn(`[syncNavMenuData] ${downgrade.reason}`);
+
+    // No revalidatePath: nothing was published, so there is nothing to
+    // regenerate — and `('/', 'layout')` is the widest bust in the codebase to
+    // spend on a write that did not happen.
+    return {
+      ok: false,
+      refused: true,
+      verdict: downgrade.verdict,
+      reason: downgrade.reason,
+      shrunk: downgrade.shrunk,
+      storedSections: storedCounts,
+      incomingSections: incomingCounts,
+      status,
+      errors,
+    };
+  }
+
   await NavMenuCache.findOneAndUpdate(
     { key: CACHE_KEY },
     {
@@ -148,10 +259,66 @@ export async function syncNavMenuData() {
         'data.skills':   skillsData,
         syncedAt: new Date(),
         status,
+        // Writing clears the refusal: whatever was blocked has either been
+        // repaired by a healthy run or deliberately overridden.
+        lastRefusal: null,
       },
     },
     { upsert: true, new: true }
   );
+
+  /**
+   * REGENERATE THE PAGES THAT BAKED THE OLD MENU. Writing the cache is only
+   * half the job — the same half syncLandingData used to stop at.
+   *
+   * getNavMenuData() reads Mongo through mongoose, NOT through `fetch`. That
+   * means it carries no Next cache tag and there is nothing to `revalidateTag`:
+   * its result is captured into the statically rendered output and can only be
+   * released by a path revalidation. Measured on this branch: `/` is ○ Static
+   * (Revalidate 1h), `/training-course` ○ Static (30m), `/policies` ○ Static
+   * (1h). So a snapshot written here reached a visitor only when an unrelated
+   * ISR timer happened to expire.
+   *
+   * MEASURED, and why the scope is 'layout' rather than a bare path. Three
+   * surfaces mount PublicHeader, and they do not share one URL prefix:
+   *
+   *   src/app/(public)/layout.jsx:15   every route in the (public) group
+   *   src/app/page.jsx:122             the home page, mounted INLINE because
+   *                                    it sits outside the group and does not
+   *                                    inherit that layout
+   *   src/app/not-found.jsx:9          the 404 page
+   *
+   * `revalidatePath('/')` alone covers only the home page — a visitor on
+   * /training-course would still be served the stale menu, which is most of the
+   * site. `(public)` is a route GROUP, so it contributes no path segment and
+   * there is no expression that selects exactly its routes; the alternative is
+   * enumerating ~30 paths that rot the moment a route is added.
+   *
+   * 'layout' at '/' is also the idiom this repo already uses for precisely
+   * "the header changed" — eight existing call sites, including
+   * page-configs.js:86 which busts the nav slug maps that this same menu reads,
+   * and site-notifications.js:48. Home's own comment (page.jsx:63) names it as
+   * the mechanism that keeps the inline header and the group layout in step.
+   * Copying it keeps one pattern rather than adding a second.
+   *
+   * Here rather than in the two callers because the invariant belongs to the
+   * WRITE: whoever rewrites the snapshot has, by definition, made the rendered
+   * menu stale. Both callers forgetting it is what that looks like when it is
+   * spread across call sites.
+   *
+   * Guarded exactly as syncLandingData is: `revalidatePath` throws outside a
+   * request/render scope, and failing to regenerate must not fail a sync that
+   * has already written successfully — the next write tries again.
+   */
+  try {
+    revalidatePath('/', 'layout');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[syncNavMenuData] revalidatePath("/", "layout") skipped:',
+      err?.message ?? err
+    );
+  }
 
   return {
     status,

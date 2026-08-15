@@ -19,6 +19,7 @@ import {
 } from "@/lib/schemas/register-public";
 import { computePricing, formatTHB } from "@/lib/pricing";
 import { ScheduleCarousel } from "@/components/registration/ScheduleCarousel";
+import { normalizeScheduleStatus } from "@/lib/scheduleStatus";
 import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
@@ -81,6 +82,10 @@ export function RegisterWizard({
   omisePaymentEnabled = false,
   coursePrice = null,
   priceByScheduleId = {},
+  // The Bangkok year, from the server page. NO DEFAULT — the round cards run
+  // showYear:'auto', which throws rather than reading a clock this component
+  // cannot read consistently across SSR and hydration.
+  currentYear,
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -323,6 +328,7 @@ export function RegisterWizard({
           onSubmit={handleFormSubmit}
           earlyBirdScheduleId={earlyBirdScheduleId}
           courseDetailHref={courseDetailHref}
+          currentYear={currentYear}
         />
       )}
 
@@ -411,6 +417,8 @@ export function StepForm({
   onSubmit,
   earlyBirdScheduleId = null,
   courseDetailHref = "/training-course",
+  // The Bangkok year for the round cards. NO DEFAULT — see RegisterWizard.
+  currentYear,
 }) {
   const restoredClassId = initialValues?.classId;
   const router = useRouter();
@@ -478,10 +486,42 @@ export function StepForm({
   // the moment the user picks a live round.
   //
   // Inline rather than via `scheduleById` — that useMemo is declared below.
-  const roundExists = (id) =>
-    Boolean(id) && (schedules ?? []).some((s) => s._id === id);
+  const roundOf = (id) =>
+    (id && (schedules ?? []).find((s) => s._id === id)) || null;
+
+  /**
+   * ── THE THIRD OUTCOME ───────────────────────────────────────────────────────
+   * `roundExists` used to answer a yes/no question because only two answers
+   * were reachable: upstream withheld `full` rounds from this page's fetch, so
+   * a sold-out round was indistinguishable from a deleted one — both simply
+   * were not in `schedules`. A deep link to either revealed nothing, said
+   * nothing, and left the user staring at an empty carousel.
+   *
+   * The registration page now requests all three statuses, so there are three
+   * outcomes and they must NOT be collapsed into one message:
+   *
+   *   not in `schedules`  → the id is bogus, finished, or outside the fetch
+   *                         window. FAIL CLOSED, exactly as before: no reveal.
+   *                         We genuinely do not know what to tell the user, and
+   *                         the carousel is the screen that can fix it.
+   *   in `schedules`, full → we know precisely what happened and can say so.
+   *                         Still no reveal — the form must not open on a round
+   *                         that cannot take a booking — but the round renders
+   *                         as เต็ม in the carousel and FULL_ROUND_NOTICE below
+   *                         explains why nothing opened.
+   *   in `schedules`, open → reveal, as before.
+   *
+   * Reusing `normalizeScheduleStatus` keeps this in agreement with the card's
+   * own disabling in ScheduleCarousel; if the two ever disagreed, the form
+   * would open on a card the user could not have clicked.
+   */
+  const roundSelectable = (id) => {
+    const round = roundOf(id);
+    return Boolean(round) && normalizeScheduleStatus(round.status) !== "full";
+  };
+
   const [formRevealed, setFormRevealed] = useState(
-    roundExists(initialClassId) || roundExists(initialValues?.classId),
+    roundSelectable(initialClassId) || roundSelectable(initialValues?.classId),
   );
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't
@@ -499,6 +539,17 @@ export function StepForm({
   const activeDateLabel = activeSchedule
     ? formatClassDates(activeSchedule.dates)
     : "";
+
+  /**
+   * The round is here on screen, correctly badged เต็ม — and unbookable.
+   *
+   * Only reachable via `?class=<full round>`, because the carousel refuses to
+   * select one: this is the deep-link case, arriving from a link that was live
+   * when it was shared. Naming the state is the whole point of the change —
+   * the previous behaviour was an empty step 1 with no explanation at all.
+   */
+  const activeRoundIsFull =
+    normalizeScheduleStatus(activeSchedule?.status) === "full";
 
   const {
     register,
@@ -613,6 +664,11 @@ export function StepForm({
 
   const handleReveal = () => {
     if (!selectedScheduleId) return;
+    // Second gate, not a redundant one. The confirm button is hidden for a full
+    // round below, but `selectedScheduleId` is seeded from the URL before any
+    // of that renders — so this is the guard that holds if the button is ever
+    // re-shown, or reached by anything other than a click.
+    if (!roundSelectable(selectedScheduleId)) return;
     setFormRevealed(true);
   };
 
@@ -646,6 +702,7 @@ export function StepForm({
           selectedId={selectedScheduleId}
           onSelect={handleSelectSchedule}
           earlyBirdScheduleId={earlyBirdScheduleId}
+          currentYear={currentYear}
         />
 
         {activeSchedule && (
@@ -660,7 +717,7 @@ export function StepForm({
                   : "Classroom"}
               </div>
             </div>
-            {!formRevealed && (
+            {!formRevealed && !activeRoundIsFull && (
               <Button
                 type="button"
                 variant="cta"
@@ -672,6 +729,23 @@ export function StepForm({
               </Button>
             )}
           </div>
+        )}
+
+        {/* The one line that turns a dead-end into an explanation. Rendered
+            ONLY for the round-is-full case — a `?class=` id that resolves to
+            nothing at all still fails closed silently, because the two states
+            have genuinely different remedies (pick another round vs. this link
+            is stale) and one shared message would be wrong for both.
+
+            Red, matching the เต็ม badge the carousel is drawing a few pixels
+            above, so the sentence reads as that badge explained rather than as
+            an unrelated form error. `role="status"` and not an alert: nothing
+            has failed and nothing was submitted — the user has simply landed
+            somewhere that cannot proceed. */}
+        {activeRoundIsFull && (
+          <p role="status" className="mt-3 text-sm font-medium text-[#ff4b55]">
+            รอบอบรมนี้เต็มแล้ว กรุณาเลือกรอบอื่นจากรายการด้านบน
+          </p>
         )}
 
         {errors.classId && (

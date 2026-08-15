@@ -1,6 +1,13 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { CheckCircle } from 'lucide-react';
+import {
+  parseBulletLines,
+  formatBulletLines,
+  isBulletMarkerKind,
+  numberLabel,
+} from '@/lib/courses/bulletLines';
 
 /**
  * BulletTextarea — newline-separated list editor.
@@ -27,9 +34,28 @@ import { useEffect, useRef, useState } from 'react';
  * `hasUserEditedRef` flag stops the effect from clobbering live input.
  */
 function normaliseDefault(v) {
-  return Array.isArray(v) ? v.join('\n') : String(v ?? '');
+  return formatBulletLines(v);
 }
 
+/**
+ * `marker` — OPTIONAL, and opt-in on purpose.
+ *
+ * When set to 'number' or 'check' the component renders a small PREVIEW under
+ * the textarea, showing each line the way the public page will: วัตถุประสงค์
+ * numbered like CourseObjectives.jsx:12, the other three check-marked like
+ * CourseTarget / CoursePrerequisites / CourseRequirements.
+ *
+ * THE PREVIEW IS PRESENTATION AND TOUCHES NOTHING. The <textarea> remains the
+ * only named control, its value is still exactly the lines the admin typed, and
+ * the payload still goes through `linesOf`. No marker is ever written into the
+ * value — measured: zero of the 1118 stored items across those four fields
+ * carries one, and the public page adds its own, so a stored marker would make
+ * the live page read "1. 1. …".
+ *
+ * Defaulting to undefined keeps every other consumer byte-identical: this
+ * component is shared with the career-path and masterclass forms, which pass no
+ * marker and render exactly as before.
+ */
 export function BulletTextarea({
   name,
   defaultValue = '',
@@ -39,6 +65,7 @@ export function BulletTextarea({
   rows = 5,
   urls = false,
   onChange = null,
+  marker = null,
 }) {
   const seed = normaliseDefault(defaultValue);
   const [value, setValueState] = useState(seed);
@@ -58,10 +85,10 @@ export function BulletTextarea({
     if (typeof onChange === 'function') onChange(next);
   }
 
-  const lines = value
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  // Exactly what `linesOf` will produce on submit — the count below and the
+  // preview must describe the payload, not an approximation of it.
+  const lines = parseBulletLines(value);
+  const showPreview = isBulletMarkerKind(marker) && lines.length > 0;
 
   let invalidUrlCount = 0;
   if (urls) {
@@ -99,6 +126,43 @@ export function BulletTextarea({
           (urls ? 'font-mono text-xs' : '')
         }
       />
+      {showPreview && (
+        <div
+          aria-hidden="true"
+          className="mt-2 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] px-3 py-2"
+        >
+          <p className="mb-1.5 text-[11px] font-medium text-[var(--text-muted)]">
+            ตัวอย่างการแสดงผลบนหน้าเว็บ
+          </p>
+          {/* aria-hidden above: this duplicates the textarea's content, and a
+              screen reader announcing every item twice is worse than not
+              announcing the preview at all. The textarea is the control. */}
+          {marker === 'number' ? (
+            <ol className="space-y-1">
+              {lines.map((line, i) => (
+                <li key={i} className="flex gap-2 text-[13px] text-[var(--text-primary)]">
+                  <span className="shrink-0 font-bold text-9e-action dark:text-[#48B0FF]">
+                    {numberLabel(i)}
+                  </span>
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <ul className="space-y-1">
+              {lines.map((line, i) => (
+                <li key={i} className="flex items-start gap-2 text-[13px] text-[var(--text-primary)]">
+                  <CheckCircle
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-9e-action dark:text-[#48B0FF]"
+                    strokeWidth={2}
+                  />
+                  <span>{line}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       <div className="mt-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
         <span>รวม {lines.length} รายการ</span>
         {urls && invalidUrlCount > 0 && (

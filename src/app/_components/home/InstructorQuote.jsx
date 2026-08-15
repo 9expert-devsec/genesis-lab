@@ -143,7 +143,7 @@ export function InstructorQuote() {
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
             <p className="text-sm text-9e-lime">
-              ผู้อำนวยการฝ่ายฝึกอบรม
+              ประธานเจ้าหน้าที่บริหาร
             </p>
             <p className="text-sm text-9e-slate-dp-600">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI
@@ -167,7 +167,7 @@ export function InstructorQuote() {
               อ.ชไลเวท พิพัฒพรรณวงศ์
             </p>
             <p className="text-sm text-9e-lime">
-              ผู้อำนวยการฝ่ายฝึกอบรม
+              ประธานเจ้าหน้าที่บริหาร
             </p>
             <p className="text-sm text-9e-slate-dp-600">
               บริษัท นายน์เอ็กซ์เพิร์ท จำกัด Microsoft MVP 365 Copilot & Power BI

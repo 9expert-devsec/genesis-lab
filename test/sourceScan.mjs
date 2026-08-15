@@ -209,6 +209,74 @@ export function walkSources(relDir = 'src') {
 }
 
 /**
+ * Blank the CONTENTS of string and template literals, keeping the quotes, the
+ * line count and any `${…}` expressions (which are code, not text).
+ *
+ * scrubSource deliberately PRESERVES string bodies — defect 4 in its header is
+ * a guard that corrupted every URL it matched by stripping them. That is right
+ * for a guard asking "does this file mention this path", and wrong for one
+ * asking "does this file USE this identifier": a log line reading
+ * `"[mc-receipt] ✅ sendMasterclassReceipt complete"` names a function it does
+ * not call, and `ARTICLE_SORT_SOURCE = 'actions/articles.js → getArticles()'`
+ * names one on purpose. Both read as uses to a plain identifier match — they
+ * were the only two false positives the unimported-binding guard produced
+ * across all of src/lib, and this is what removes them.
+ *
+ * Not a replacement for scrubSource. Layer it on top when the subject is an
+ * identifier rather than text.
+ */
+export function blankStringBodies(text) {
+  const src = String(text ?? '');
+  let out = '';
+  let i = 0;
+
+  while (i < src.length) {
+    const c = src[i];
+    if (c !== "'" && c !== '"' && c !== '`') {
+      out += c;
+      i += 1;
+      continue;
+    }
+
+    const quote = c;
+    out += quote;
+    i += 1;
+
+    while (i < src.length) {
+      if (src[i] === '\\') {
+        // Two spaces: the escape and its escapee, so offsets do not shift.
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      if (src[i] === quote) {
+        out += quote;
+        i += 1;
+        break;
+      }
+      // `${…}` inside a template is real code — copy it through, balanced.
+      if (quote === '`' && src[i] === '$' && src[i + 1] === '{') {
+        let depth = 1;
+        out += '${';
+        i += 2;
+        while (i < src.length && depth > 0) {
+          if (src[i] === '{') depth += 1;
+          if (src[i] === '}') depth -= 1;
+          out += depth === 0 ? '}' : src[i];
+          i += 1;
+        }
+        continue;
+      }
+      // Newlines survive so reported line numbers stay meaningful.
+      out += src[i] === '\n' ? '\n' : ' ';
+      i += 1;
+    }
+  }
+
+  return out;
+}
+
+/**
  * How many times `name` is CALLED in already-scrubbed text.
  *
  * COUNTS, rather than detects. A "this path sends exactly one email" claim

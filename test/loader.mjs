@@ -32,7 +32,13 @@ const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const SRC = path.join(ROOT, 'src');
 const EXTS = ['.js', '.jsx'];
 
-const STUBS = {
+/**
+ * EXPORTED so test/fs/stubExportParity can compare each stub's export set
+ * against the module it stands in for, reading the mapping from the one place
+ * that defines it. A second copy of this list in the test would be the drift it
+ * exists to catch.
+ */
+export const STUBS = {
   'next/link': path.join(ROOT, 'test', 'stub-next-link.mjs'),
   'next/image': path.join(ROOT, 'test', 'stub-next-image.mjs'),
   // Client components in the render tier call useRouter/useSearchParams during
@@ -54,6 +60,18 @@ const STUBS = {
   // save/delete handlers; that chain reaches next-auth → next/headers. Same
   // reasoning as the two lines above.
   '@/lib/actions/registrations': path.join(ROOT, 'test', 'stub-registration-actions.mjs'),
+  // CourseForm imports the course + extension server actions for its save
+  // handler; both chains reach next-auth → next/headers (and mongoose). Same
+  // reasoning as the three lines above.
+  '@/lib/actions/courses': path.join(ROOT, 'test', 'stub-course-actions.mjs'),
+  '@/lib/actions/course-extensions': path.join(ROOT, 'test', 'stub-course-extension-actions.mjs'),
+  // Reached indirectly, via CourseOutlineUpload inside CourseForm.
+  '@/lib/actions/course-outlines': path.join(ROOT, 'test', 'stub-course-outline-actions.mjs'),
+  // MirrorResetClient imports the cache-console actions for its preview/apply
+  // handlers; that chain reaches next-auth → next/headers. Same reasoning as
+  // the lines above — and see the stub's own note on why it throws rather than
+  // returning a benign result.
+  '@/lib/actions/cache-console': path.join(ROOT, 'test', 'stub-cache-console-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);
@@ -83,6 +101,29 @@ export async function resolve(specifier, context, nextResolve) {
 }
 
 export async function load(url, context, nextLoad) {
+  // 3. Node requires `with { type: 'json' }` on a JSON import; webpack and every
+  //    other bundler take a bare one, so that is what the app code writes
+  //    (src/lib/address/postcodeIndex.js imports the derived postcode index).
+  //    Adding the attribute to the app module to satisfy Node would be the tail
+  //    wagging the dog — and its support across bundlers is still uneven — so
+  //    the bridge goes here, next to the alias and JSX bridges, for the same
+  //    reason those do. Serving it as a module means the app file stays exactly
+  //    what it would be in any other Next codebase.
+  if (url.startsWith('file:') && url.endsWith('.json')) {
+    const file = fileURLToPath(url);
+    if (file.startsWith(SRC)) {
+      // JSON.parse of a string literal, not an inlined object literal: it is the
+      // faster path for a payload this size and it cannot be mangled by the
+      // source text ever being read as code.
+      const json = readFileSync(file, 'utf8');
+      return {
+        format: 'module',
+        source: `export default JSON.parse(${JSON.stringify(json)});`,
+        shortCircuit: true,
+      };
+    }
+  }
+
   if (url.startsWith('file:') && /\.(jsx|js)$/.test(url)) {
     const file = fileURLToPath(url);
     if (file.startsWith(SRC)) {

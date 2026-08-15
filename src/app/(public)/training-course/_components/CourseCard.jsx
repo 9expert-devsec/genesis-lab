@@ -5,14 +5,25 @@ import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, Clock, MonitorPlay } from "lucide-react";
 import { cn, courseHref } from "@/lib/utils";
+import { coursePriceLabel } from "@/lib/coursePriceLabel";
 import ScheduleCard from "@/components/ScheduleCard";
 import { EarlyBirdRibbon } from "@/components/ui/EarlyBirdRibbon";
-import {
-  formatScheduleDate,
-  formatStatusFromAPI,
-} from "@/lib/formatScheduleDate";
+import { formatStatusFromAPI } from "@/lib/formatScheduleDate";
+import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
+import { scheduleRegistrationHref } from "@/lib/schedule/scheduleRegistrationHref";
+import { trainingTypeColor } from "@/lib/schedule/trainingTypeColor";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
+
+/**
+ * How many rounds the expand panel shows.
+ *
+ * TWO, side by side, and named rather than inlined because the number and the
+ * grid have to agree: `grid-cols-2` below is the same decision written in
+ * Tailwind, and a bump to three here without touching that class would silently
+ * wrap the third box onto a second row.
+ */
+const MAX_CARD_ROUNDS = 2;
 
 /**
  * Course card for both the home-page carousels and /training-course.
@@ -24,7 +35,21 @@ const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
  * `course.schedules` is optional; when present (pre-fetched server-side)
  * the expand panel shows up to 3 upcoming sessions as signup pills.
  */
-function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) {
+/**
+ * `currentYear` HAS NO DEFAULT, DELIBERATELY.
+ *
+ * It is the Gregorian year in Asia/Bangkok, computed on the SERVER page that
+ * fetches the schedules (via `siteCurrentYear`) and passed down. Defaulting it
+ * to `new Date().getFullYear()` here would be the b-001 defect: this component
+ * renders during SSR as well, and on Vercel (UTC) that expression gives a
+ * different answer on the server than in the visitor's browser for the seven
+ * hours before midnight Bangkok on 31 December.
+ *
+ * Left undefined, `formatRoundDays(..., { showYear: 'auto' })` THROWS rather
+ * than guessing — so a call site that forgets to pass it fails loudly, and only
+ * on a card that actually has rounds to draw. That is the intended failure mode.
+ */
+function CourseCardComponent({ course, className, earlyBirdScheduleId = null, currentYear }) {
   const [expanded, setExpanded] = useState(false);
 
   if (!course) return null;
@@ -141,10 +166,13 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
           ) : (
             <span />
           )}
-          <span className="text-base font-bold text-9e-navy dark:text-white">
-            {!price || Number(price) === 0
-              ? "Call .-"
-              : `${Number(price).toLocaleString("th-TH")} .-`}
+          {/* whitespace-nowrap: "Inhouse Only" is two words where "Call" was
+              one, and a break between them reads as a layout bug rather than as
+              a label. The row above is `flex-wrap`, so when the card is too
+              narrow to hold duration and price side by side the ROW wraps —
+              which is legible — instead of the label splitting. */}
+          <span className="whitespace-nowrap text-base font-bold text-9e-navy dark:text-white">
+            {coursePriceLabel(price, { suffix: ".-" })}
           </span>
         </div>
 
@@ -195,51 +223,138 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null }) 
           )}
         >
           <div className="border-t border-9e-air/30 bg-[#ffffff] px-4 pt-3 dark:bg-9e-navy">
+            {/*
+              A SIXTH COPY OF THE PALETTE LIVED HERE, and it was missed when the
+              other five were consolidated: this legend sat in the same file as
+              the round boxes it describes, so repointing the boxes left it
+              naming `bg-9e-action` / `bg-purple-500` for rounds that had just
+              been repainted #00CCFF / #8B5CF6 — a legend contradicting the thing
+              it labels, two lines below it.
+
+              Inline `backgroundColor` rather than a `bg-[…]` class, for the
+              reason lib/schedule/trainingTypeColor and every other consumer
+              does it: Tailwind scans source TEXT and never evaluates it, so a
+              class built from a value compiles to nothing and fails silently.
+              (The /schedule round hover shipped dead exactly that way.)
+            */}
             <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">
               <span>รอบการอบรม</span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-9e-action shadow-9e-sm" />
-                Classroom
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-3 w-3 rounded-full border-2 border-white bg-purple-500 shadow-9e-sm" />
-                Hybrid
-              </span>
+              {[
+                { type: "classroom", label: "Classroom" },
+                { type: "hybrid", label: "Hybrid" },
+              ].map(({ type, label }) => (
+                <span key={type} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-3 w-3 rounded-full border-2 border-white shadow-9e-sm"
+                    style={{ backgroundColor: trainingTypeColor(type) }}
+                  />
+                  {label}
+                </span>
+              ))}
             </div>
-            <div className="@container">
-              <div className="scrollbar-hide flex flex-nowrap items-start justify-start gap-1 @[280px]:gap-[15px] overflow-x-auto  pt-2">
-                {schedules.slice(0, 3).map((s, idx) => {
-                  const isEarlyBird = !!earlyBirdScheduleId && s._id === earlyBirdScheduleId;
-                  const card = (
-                    <ScheduleCard
-                      key={s._id ?? idx}
-                      dateLabel={formatScheduleDate(s)}
-                      type={s.type || "classroom"}
-                      status={formatStatusFromAPI(s.status)}
-                    />
-                  );
+            {/*
+              AT MOST TWO ROUNDS, SIDE BY SIDE.
 
-                  // Prefer the internal registration page with the schedule's
-                  // _id pre-selected. Fall back to the upstream signup_url
-                  // (external) only when the schedule has no _id.
-                  const registrationHref = s._id
-                    ? `/registration/public?course=${String(id).toLowerCase()}&class=${s._id}`
-                    : s.signup_url ?? null;
+              This replaced a `flex flex-nowrap overflow-x-auto` strip showing
+              `schedules.slice(0, 3)`. Two reasons the strip had to go: a third
+              card was only reachable by discovering a horizontal scroll inside a
+              card that is itself inside a grid, and — the measurable one — the
+              boxes had a fixed 83px width that a Thai round label overflows.
 
-                  return registrationHref ? (
-                    <a
-                      key={s._id ?? idx}
-                      href={registrationHref}
-                      className="relative overflow-hidden transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
-                    >
-                      {isEarlyBird && <EarlyBirdRibbon />}
-                      {card}
-                    </a>
-                  ) : (
-                    card
-                  );
-                })}
-              </div>
+              `items-stretch` plus `h-full` on each box is what keeps the two
+              cells the same height when one label wraps to two lines and the
+              other does not. `grid-cols-2` regardless of round count, so a
+              course with ONE round shows a half-width box rather than a
+              stretched one — the shape stays constant across the grid.
+
+              There is deliberately no "+N รอบ" indicator for courses with more
+              than two rounds; it was not asked for. See the report — its absence
+              is a real, if small, information loss.
+            */}
+            <div className="grid grid-cols-2 items-stretch gap-2 pt-2">
+              {schedules.slice(0, MAX_CARD_ROUNDS).map((s, idx) => {
+                const isEarlyBird = !!earlyBirdScheduleId && s._id === earlyBirdScheduleId;
+                /*
+                  The card always carries its month AND, under `'auto'`, its year
+                  when the round is not in `currentYear`.
+
+                  THIS SURFACE NEEDS `auto` MORE THAN ANY OTHER, and the reason is
+                  a measurement. These rounds come from `enrichCoursesWithDetails`
+                  → `listSchedulesByCourse`, which takes `limit: 3` with NO `to`
+                  bound and no horizon at all — it is "the next N rounds", not
+                  "the next N months". A course running twice a year, viewed in
+                  November, shows rounds in February and May of the FOLLOWING
+                  year, and a bare `16-17 ก.พ.` on a bookable card reads as a date
+                  that has already passed.
+
+                  `currentYear` is a PROP, computed on the server. This is a
+                  client component that also renders during SSR, and on Vercel
+                  (UTC) the server's year and the visitor's Bangkok year disagree
+                  for the seven hours before midnight on 31 December — a
+                  hydration mismatch on the one night the year matters most.
+                */
+                const card = (
+                  <ScheduleCard
+                    key={s._id ?? idx}
+                    dateLabel={formatRoundDays(s?.dates, {
+                      showMonth: true,
+                      showYear: "auto",
+                      currentYear,
+                    })}
+                    type={s.type || "classroom"}
+                    status={formatStatusFromAPI(s.status)}
+                  />
+                );
+
+                /*
+                  THE SHARED BUILDER, not a fourth copy of the template.
+
+                  This was built inline here — `/registration/public?course=…
+                  &class=…` with a `signup_url` fallback — and it NEVER ASKED THE
+                  STATUS. `scheduleRegistrationHref` returns null for a round
+                  that is `full` (and for the local override collection's
+                  `closed` spelling of the same state), and deliberately shadows
+                  the `signup_url` fallback in that case too: a sold-out round
+                  with a live upstream signup link is the worst version of this,
+                  a working form that will take a booking for a round with no
+                  seats.
+
+                  ── THE HOLE IS LATENT, NOT LIVE, AND THAT IS WHY IT IS WORTH
+                     CLOSING NOW ─────────────────────────────────────────────
+                  Measured against the real feed: enrichCoursesWithDetails calls
+                  listSchedulesByCourse with NO `status`, so upstream applies its
+                  own registerable-only filter and a `full` round does not arrive
+                  here today (verified against a course that HAS one — the
+                  no-status call returns [open, open, open], the same call with
+                  PUBLIC_SCHEDULE_STATUSES returns [full, open, open, open]).
+                  Local `closed` overrides do not reach this path either;
+                  resolveScheduleStatusBatch runs only in RegisterPageContent.
+
+                  So this is hardening, not a live bug fix. It matters because
+                  /schedule, /search and the course detail page have EACH already
+                  widened their own fetch to PUBLIC_SCHEDULE_STATUSES so a
+                  sold-out round can be shown — and the day anyone does the same
+                  here, this card would be the one surface still linking it.
+                */
+                const registrationHref = scheduleRegistrationHref(s, id);
+
+                return registrationHref ? (
+                  <a
+                    key={s._id ?? idx}
+                    href={registrationHref}
+                    className="relative block overflow-hidden transition-transform duration-9e-micro ease-9e hover:-translate-y-0.5"
+                  >
+                    {isEarlyBird && <EarlyBirdRibbon />}
+                    {card}
+                  </a>
+                ) : (
+                  // No anchor: nothing to click, nothing to focus. The cursor
+                  // says so for a pointer user.
+                  <div key={s._id ?? idx} className="cursor-not-allowed">
+                    {card}
+                  </div>
+                );
+              })}
             </div>
           </div>
           {/* Collapse-only control — small triangle centered at the panel bottom */}

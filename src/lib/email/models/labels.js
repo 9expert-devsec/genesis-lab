@@ -54,6 +54,43 @@ export function attendanceModeBlock({ attendanceMode, scheduleType }) {
     : false;
 }
 
+/**
+ * รูปแบบเนื้อหา — the in-house content mode, as a plain string, ALWAYS present.
+ *
+ * The schema is `z.enum(['standard', 'custom']).default('standard')`, so there
+ * is no absent case to hide and no block to gate: every enquiry has a mode and
+ * the mail states it.
+ *
+ * ── THIS IS KNOWINGLY THE THIRD COPY OF THIS WORDING ────────────────────────
+ * Two others already exist and they DISAGREE with each other:
+ *
+ *   · `CONTENT_MODES` — src/components/registration/InhouseForm.jsx:40
+ *     'ใช้ Outline มาตรฐาน' / 'ปรับเนื้อหาบางส่วน'
+ *   · `CONTENT_MODE_LABEL` — src/app/admin/registrations/inhouse/
+ *     _components/InhouseDetailClient.jsx:61
+ *     'Outline มาตรฐาน' / 'ปรับเนื้อหา' / 'ให้แนะนำ'
+ *
+ * This copy follows THE FORM's wording, because that is the text the customer
+ * read on the card they clicked and on the review step before they submitted.
+ * An acknowledgement that renames their choice reads as a different choice.
+ * It therefore diverges from the ADMIN map, which is shorter on both values —
+ * fine, since that screen is read by the sales team and not by the customer.
+ *
+ * The admin map also carries a third entry, `consult: 'ให้แนะนำ'`, which is
+ * DEAD: the enum has no such value, so nothing can be written with it. Its
+ * comment there claims it is for historical enquiries. That claim is not
+ * verified here and is not this function's business; it is recorded so the
+ * next person comparing the three does not read the difference as a gap.
+ *
+ * The other two are NOT refactored into this one. The form's list carries
+ * `desc` and `icon` alongside the label and drives the card UI; the admin map
+ * is a lookup over historical values. Collapsing three shapes into one is a
+ * separate change with its own blast radius.
+ */
+export function contentModeLabel(contentMode) {
+  return contentMode === 'custom' ? 'ปรับเนื้อหาบางส่วน' : 'ใช้ Outline มาตรฐาน';
+}
+
 /** Invoice/quotation recipient kind. Non-corporate is an individual. */
 export function invoiceTypeLabel(type) {
   return type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป';

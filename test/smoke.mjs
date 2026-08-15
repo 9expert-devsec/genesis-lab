@@ -19,7 +19,12 @@ let failed = false;
 const check = (name, cond) => { if (!cond) failed = true; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}`); };
 
 try {
-  const { items } = await listPublicCourses();
+  // includeHidden — this tier proves the UPSTREAM fetch-hoist resolves, and it
+  // is deliberately a network-only check. Without the flag the adapter would
+  // also open a Mongo connection to read the hidden-course set, putting a
+  // second dependency behind a smoke run whose whole point is to isolate the
+  // first. The hidden filter is covered in the gated tiers.
+  const { items } = await listPublicCourses({ includeHidden: true });
   const realId = items?.[0]?.course_id;
   check(`catalog returned courses (${items?.length ?? 0})`, Boolean(realId));
 

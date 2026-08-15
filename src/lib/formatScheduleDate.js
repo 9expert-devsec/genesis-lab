@@ -1,53 +1,24 @@
 import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 
 /**
- * แปลง schedule object จาก API → dateLabel string สำหรับ <ScheduleCard />
+ * ── `formatScheduleDate` HAS BEEN RETIRED ───────────────────────────────────
  *
- * Input shape (verified against /schedules adapter):
- *   { dates: string[], type: "classroom"|"hybrid", status: "open"|"nearly_full"|"full" }
+ * It formatted a round's `dates` into a two-line `"17\nOCT"` label for
+ * <ScheduleCard />, and it had exactly one consumer (training-course/CourseCard).
+ * It is replaced by `formatRoundDays` from @/lib/schedule/roundDateLabel.
  *
- * Output: string ใช้ "\n" คั่นระหว่างบรรทัด เช่น
- *   "17\nOCT"           — วันเดียว
- *   "17-18\nOCT"        — วันต่อเนื่อง เดือนเดียว
- *   "17 & 19\nOCT"      — วันไม่ต่อเนื่อง เดือนเดียว
- *   "30 APR\n- 2 MAY"   — ข้ามเดือน
+ * WHY IT COULD NOT SIMPLY BE FIXED IN PLACE: it did not merely disagree with
+ * the other four round formatters, it LOST DAYS. Its same-month branch printed
+ * `${startDay} & ${endDay}` for anything non-consecutive, so a round on 8, 10
+ * and 12 ต.ค. rendered as `8 & 12` — the 10th, a day the customer is paying to
+ * attend, simply absent from the card they book from. Its sibling formatters
+ * erred the other way and INVENTED days (`8-12`). One shared implementation is
+ * the only arrangement in which neither can happen.
+ *
+ * `formatStatusFromAPI` stays. It is a separate concern (status vocabulary, not
+ * dates), it is imported by test/pure/scheduleStatus, and it is already a thin
+ * delegation to the one status policy.
  */
-
-const MONTHS = [
-  "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-  "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
-];
-
-export function formatScheduleDate(schedule) {
-  const dates = schedule?.dates;
-  if (!Array.isArray(dates) || dates.length === 0) return "TBD\n-";
-
-  const sorted = dates
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b);
-
-  if (sorted.length === 0) return "TBD\n-";
-
-  const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  const startDay = first.getDate();
-  const startMonth = MONTHS[first.getMonth()];
-  const endDay = last.getDate();
-  const endMonth = MONTHS[last.getMonth()];
-
-  if (sorted.length === 1) {
-    return `${startDay}\n${startMonth}`;
-  }
-
-  if (startMonth === endMonth) {
-    const isConsecutive = endDay - startDay === sorted.length - 1;
-    const separator = isConsecutive ? "-" : "&";
-    return `${startDay}${separator === "-" ? "-" : " & "}${endDay}\n${startMonth}`;
-  }
-
-  return `${startDay} ${startMonth}\n- ${endDay} ${endMonth}`;
-}
 
 /**
  * Canonicalise an upstream status for <ScheduleCard />.

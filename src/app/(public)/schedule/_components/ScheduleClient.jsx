@@ -21,6 +21,12 @@ import {
   X,
 } from "lucide-react";
 import { courseHref } from "@/lib/utils";
+import { siteDateParts } from "@/lib/articlePublishTime";
+import {
+  INHOUSE_ONLY_LABEL,
+  coursePriceLabel,
+  isInhouseOnlyPrice,
+} from "@/lib/coursePriceLabel";
 import {
   SCHEDULE_STATUS_OPTIONS,
   resolveScheduleBadge,
@@ -29,12 +35,17 @@ import {
   PUBLIC_SCHEDULE_DEFAULT_MONTHS,
   PUBLIC_SCHEDULE_FILTER_HORIZON,
   monthColumns,
-  monthKey,
+  monthLabel,
   monthLabelWithYear,
   rollingWindow,
-  scheduleMonthKey,
   windowBetween,
 } from "@/lib/schedule/monthWindow";
+import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
+import { laneLayout, roundInWindow } from "@/lib/schedule/monthLanes";
+import {
+  TRAINING_TYPE_COLOR,
+  trainingTypeTint,
+} from "@/lib/schedule/trainingTypeColor";
 import {
   SCHEDULE_FILTER_ALL,
   activeScheduleFilterCount,
@@ -48,33 +59,25 @@ import {
 } from "@/lib/schedule/scheduleTableLayout";
 import { scheduleRegistrationHref } from "@/lib/schedule/scheduleRegistrationHref";
 
-const MONTH_TH = [
-  "ม.ค.",
-  "ก.พ.",
-  "มี.ค.",
-  "เม.ย.",
-  "พ.ค.",
-  "มิ.ย.",
-  "ก.ค.",
-  "ส.ค.",
-  "ก.ย.",
-  "ต.ค.",
-  "พ.ย.",
-  "ธ.ค.",
-];
-
 /**
- * The dot colour per delivery type — ONE definition, read by the desktop table
- * cell, the mobile round row, the filter-bar legend and the sheet legend.
+ * The dot colour per delivery type.
  *
- * The legend is what makes the dot mean anything, so a second copy here is a
- * legend that can start describing colours the rows do not use.
+ * ── THE DEFINITION LEFT THIS FILE ───────────────────────────────────────────
+ * It used to be declared here, and the docstring claimed it was "ONE definition"
+ * — true of this page and false of the site. There were FOUR: a byte-identical
+ * copy in /search, a disagreeing one in components/ScheduleCard (`#005eff` /
+ * `#a854f7`), a Tailwind-class one in ScheduleCarousel, and a fifth spelling in
+ * the course-detail legend. The same round was a different colour depending on
+ * which page you found it on.
+ *
+ * These were the correct values, so /schedule's rendering does not change; only
+ * the ownership does. See lib/schedule/trainingTypeColor for why that module has
+ * to export a tint as well as a hex.
+ *
+ * The legend is what makes the dot mean anything, so a second copy here would be
+ * a legend that can start describing colours the rows do not use.
  */
-const TYPE_COLOR = {
-  classroom: "#00CCFF",
-  hybrid: "#8B5CF6",
-  online: "#22C55E",
-};
+const TYPE_COLOR = TRAINING_TYPE_COLOR;
 
 /**
  * The legend's rows, as DATA.
@@ -111,7 +114,7 @@ const TYPE_LEGEND = [
  */
 const ROUND_COLLAPSE_THRESHOLD = PUBLIC_SCHEDULE_DEFAULT_MONTHS;
 
-/** A schedule's valid dates, ascending. The shared basis for every date label. */
+/** A schedule's valid dates, ascending. Used to ORDER rounds, not to label them. */
 function sortedScheduleDates(scheduleItem) {
   return (scheduleItem?.dates ?? [])
     .map((d) => new Date(d))
@@ -120,48 +123,31 @@ function sortedScheduleDates(scheduleItem) {
 }
 
 /**
- * The TABLE's date label: day numbers only, because the column header already
- * supplies the month.
+ * ── THE TWO DATE LABELS ARE NOW ONE FUNCTION AND TWO OPTION OBJECTS ─────────
  *
- * The one exception is a range crossing a month boundary — `30 ต.ค. - 2` —
- * where the bare pair would be unreadable under a single month heading.
+ * `formatDateLabel` and `formatCardDateLabel` used to live here. Both are gone,
+ * replaced by `formatRoundDays` from @/lib/schedule/roundDateLabel (imported
+ * above), called directly at the two sites that need it:
+ *
+ *   ScheduleCell  formatRoundDays(schedule.dates)
+ *                 — no month, no year. Every column header carries both, on
+ *                   every column, so the cell has neither to supply.
+ *
+ *   RoundRow      formatRoundDays(schedule.dates, { showMonth: true,
+ *                                    showYear: 'auto', currentYear })
+ *                 — a card has no header to lean on.
+ *
+ * WHY THEY HAD TO GO RATHER THAN BE REWRITTEN: the old table label was
+ * first-date-to-last-date, so a round on 8, 10 and 12 ต.ค. rendered `8-12` and
+ * advertised training on the 9th and the 11th — on a page where the visitor can
+ * then book. That was one of five formatters making the same class of claim in
+ * five different wordings. See the module for the full list.
+ *
+ * The card label is also no longer SPECIAL-CASED into showing a year. Under
+ * `'auto'` it shows one exactly when the round is not in `currentYear`, so in
+ * the default six-month window the year disappears, and a visitor who filters
+ * to ม.ค.–มี.ค. of next year gets it back on every row without a second rule.
  */
-function formatDateLabel(scheduleItem) {
-  const dates = sortedScheduleDates(scheduleItem);
-  if (dates.length === 0) return "-";
-  const first = dates[0];
-  const last = dates[dates.length - 1];
-  if (dates.length === 1) return String(first.getDate());
-  if (first.getMonth() === last.getMonth()) {
-    return `${first.getDate()}-${last.getDate()}`;
-  }
-  return `${first.getDate()} ${MONTH_TH[first.getMonth()]} - ${last.getDate()}`;
-}
-
-/**
- * The CARD's date label — `formatDateLabel` plus the month and Buddhist year of
- * the round's LAST day.
- *
- * A card has no column header to lean on, so the month has to travel with the
- * row. Appending the END month rather than the bucket month is what makes both
- * shapes read correctly off the ONE table formatter:
- *
- *     same month   "3-4"          + " ก.ย. 69"  →  3-4 ก.ย. 69
- *     single day   "3"            + " ก.ย. 69"  →  3 ก.ย. 69
- *     cross month  "30 ต.ค. - 2"  + " พ.ย. 69"  →  30 ต.ค. - 2 พ.ย. 69
- *
- * Appending the bucket's month instead — the month the row is FILED under, which
- * is its first date — would render the crossing case as "30 ต.ค. - 2 ต.ค. 69"
- * and quietly move a November round into October.
- */
-function formatCardDateLabel(scheduleItem) {
-  const dates = sortedScheduleDates(scheduleItem);
-  if (dates.length === 0) return "-";
-  const endMonth = monthLabelWithYear(monthKey(dates[dates.length - 1]));
-  return endMonth
-    ? `${formatDateLabel(scheduleItem)} ${endMonth}`
-    : formatDateLabel(scheduleItem);
-}
 
 /**
  * The registration link for a round now lives in
@@ -172,13 +158,19 @@ function formatCardDateLabel(scheduleItem) {
  * private function of this file. See that module for why `&class=` matters.
  */
 
-/** `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows. */
+/**
+ * `'8,500'`, or `'8,500 ฿'` with the unit the mobile card shows.
+ *
+ * The wording and the no-price branch now come from lib/coursePriceLabel; this
+ * stays as the course→price adapter (the shared helper takes a price, not a
+ * course) and as the one place that knows this page's unit is `฿`. Note the
+ * unit is passed as `suffix` and therefore reaches numbers only — "Inhouse
+ * Only ฿" is not a string this function can produce.
+ */
 function formatCoursePrice(course, { withUnit = false } = {}) {
-  const raw = course?.course_price;
-  const n = Number(raw);
-  if (!raw || Number.isNaN(n)) return "Call";
-  const text = n.toLocaleString("th-TH");
-  return withUnit ? `${text} ฿` : text;
+  return coursePriceLabel(course?.course_price, {
+    suffix: withUnit ? "฿" : "",
+  });
 }
 
 /** `'2'`, or `'2 วัน'` with the unit the mobile card shows. */
@@ -201,23 +193,31 @@ function isEarlyBirdSchedule(ebScheduleId, schedule) {
 /**
  * Every round of one course that the CURRENT VIEW shows, in date order.
  *
- * THE AGREEMENT POINT BETWEEN THE TWO LAYOUTS. The table renders one cell per
- * visible month and filters each cell through `sessionMatches`; a card that
- * walked `course.schedules` directly would show rounds outside the month window
- * and rounds the type/status filters excluded — and nobody would see the
+ * THE AGREEMENT POINT BETWEEN THE TWO LAYOUTS. The table packs the same rounds
+ * into lanes and filters each through `sessionMatches`; a card that walked
+ * `course.schedules` directly would show rounds outside the month window and
+ * rounds the type/status filters excluded — and nobody would see the
  * disagreement, because no viewport renders both layouts at once.
  *
- * So the card is built from the SAME buckets, the SAME `visibleMonths` and the
- * SAME matcher, just flattened. Exported so a test can assert the flattening
- * equals the table's own cell contents.
+ * So the card is built from the SAME list, the SAME `visibleMonths` and the
+ * SAME matcher. Exported so a test can assert it equals the table's own cell
+ * contents.
  *
- * `visibleMonths` is already chronological, so the sort only orders rounds
- * WITHIN a month — the buckets keep upstream order, which is not date order.
+ * ── IT TAKES A FLAT LIST NOW, AND THAT IS THE DEDUPE ────────────────────────
+ * This used to walk per-month buckets and `flatMap` them. That was safe only
+ * because a round lived in exactly ONE bucket — the month of its first date —
+ * which is precisely the bucketing defect this commit removes. Under a
+ * SPAN-based rule a cross-month round is visible from either of its months, so
+ * a bucket walk would emit it once per visible month it touches and the card
+ * would list the same round twice.
+ *
+ * Filtering a flat list makes double-counting unrepresentable rather than
+ * merely avoided. A test pins it with a cross-month round.
  */
-export function courseRounds(buckets, visibleMonths, matches) {
+export function courseRounds(schedules, visibleMonths, matches) {
   const startTime = (s) => sortedScheduleDates(s)[0]?.getTime() ?? Infinity;
-  return (visibleMonths ?? [])
-    .flatMap((key) => (buckets?.[key] ?? []).filter(matches))
+  return (schedules ?? [])
+    .filter((s) => matches(s) && roundInWindow(s?.dates, visibleMonths))
     .sort((a, b) => startTime(a) - startTime(b));
 }
 
@@ -231,10 +231,11 @@ export function courseRounds(buckets, visibleMonths, matches) {
  * the sheet from props alone, so "the sheet shows something the list does not
  * yet reflect" is not a state it can represent.
  *
- * The clock is read ONCE, into `now`, and the three things derived from it —
- * the initial window, the reset target, and the dropdown horizon — all come off
- * that single instant. Previously three separate `new Date()` calls agreed only
- * because nothing crossed a month boundary between them.
+ * The clock is read ONCE, into `now`, and the FOUR things derived from it — the
+ * initial window, the reset target, the dropdown horizon, and now the year the
+ * mobile card measures "is this round in the current year" against — all come
+ * off that single instant. Previously three separate `new Date()` calls agreed
+ * only because nothing crossed a month boundary between them.
  */
 export function ScheduleClient({
   courses,
@@ -243,6 +244,27 @@ export function ScheduleClient({
   earlyBirdMap = {},
 }) {
   const [now] = useState(() => new Date());
+
+  /**
+   * The current year IN ASIA/BANGKOK, threaded down to the mobile card.
+   *
+   * ── WHY IT IS DERIVED HERE AND PASSED DOWN ──────────────────────────────
+   * `formatRoundDays(..., { showYear: 'auto' })` refuses to read the clock
+   * itself, deliberately (see that module). The read has to happen somewhere,
+   * and it happens HERE because this is where the clock is already read — a
+   * `new Date()` inside `RoundRow` would be a second answer to "what year is
+   * it" on a page that has already been burned by three of them disagreeing.
+   *
+   * ── AND WHY IN BANGKOK RATHER THAN THE RUNTIME'S ZONE ───────────────────
+   * `now.getFullYear()` is the SERVER's year during SSR and the VISITOR's year
+   * after hydration. Vercel runs in UTC, so between 17:00 and 24:00 Bangkok on
+   * 31 December those are different numbers, and every card holding a
+   * next-year round would render without its year on the server and with it in
+   * the browser — a hydration mismatch on the one night of the year when the
+   * year is the thing being asked about. `siteDateParts` pins the zone; it is
+   * the same module /articles uses for exactly this reason.
+   */
+  const currentYear = useMemo(() => siteDateParts(now).year, [now]);
 
   /**
    * The defaults are STATE, not a memo, for one reason: ล้างตัวกรอง has to
@@ -276,6 +298,7 @@ export function ScheduleClient({
       earlyBirdMap={earlyBirdMap}
       filters={filters}
       defaults={defaults}
+      currentYear={currentYear}
       monthOptions={monthOptions}
       onFilterChange={changeFilters}
       onReset={resetFilters}
@@ -311,6 +334,7 @@ export function ScheduleBoard({
   earlyBirdMap = {},
   filters,
   defaults,
+  currentYear,
   monthOptions,
   onFilterChange,
   onReset,
@@ -334,19 +358,26 @@ export function ScheduleBoard({
   // bare label would be ambiguous. See monthColumns' docstring for the rule.
   const monthHeaders = useMemo(() => monthColumns(visibleMonths), [visibleMonths]);
 
-  // course._id → { 'YYYY-MM' → schedules[] }
-  const scheduleMap = useMemo(() => {
+  /**
+   * course._id → the course's rounds, as a FLAT list.
+   *
+   * ── IT USED TO BE `{ 'YYYY-MM' → schedules[] }`, AND THAT WAS THE DEFECT ──
+   * Every round was filed under `scheduleMonthKey`, the month of its FIRST DATE
+   * ONLY, and both the per-cell filter and `filteredCourses` asked whether that
+   * one bucket was visible. So a 30 ก.ย. – 1 ต.ค. round was an entry in the
+   * September bucket and nothing else: filter the window down to "เฉพาะ ต.ค."
+   * and the round VANISHED — along with the whole course row, because
+   * `visibleMonths.some(...)` found nothing in any visible bucket. A course that
+   * really is running on the 1st of October disappeared from the October view.
+   *
+   * A month key cannot express a round that occupies two months, so the buckets
+   * are gone rather than patched. Which columns a round occupies is now asked of
+   * `roundSpanIndices` (lib/schedule/monthLanes) at the point of use, and it is
+   * the ONE answer shared by the table's lanes, `filteredCourses` and the card.
+   */
+  const roundsByCourse = useMemo(() => {
     const map = {};
-    for (const c of courses) {
-      const buckets = {};
-      for (const s of c.schedules ?? []) {
-        const key = scheduleMonthKey(s);
-        if (key === null) continue;
-        if (!buckets[key]) buckets[key] = [];
-        buckets[key].push(s);
-      }
-      map[c._id] = buckets;
-    }
+    for (const c of courses) map[c._id] = c.schedules ?? [];
     return map;
   }, [courses]);
 
@@ -365,12 +396,14 @@ export function ScheduleBoard({
       ) {
         return false;
       }
-      // Course is visible if it has at least one matching schedule in
-      // the visible-month range.
-      const buckets = scheduleMap[c._id] ?? {};
-      return visibleMonths.some((m) => (buckets[m] ?? []).some(sessionMatches));
+      // Course is visible if at least one matching round has ANY month of its
+      // span inside the window — not merely its first date's month, which is
+      // what dropped whole course rows out of a single-month view.
+      return (roundsByCourse[c._id] ?? []).some(
+        (s) => sessionMatches(s) && roundInWindow(s?.dates, visibleMonths),
+      );
     });
-  }, [courses, scheduleMap, visibleMonths, filters.program, sessionMatches]);
+  }, [courses, roundsByCourse, visibleMonths, filters.program, sessionMatches]);
 
   const activeCount = activeScheduleFilterCount(filters, defaults);
 
@@ -491,6 +524,44 @@ export function ScheduleBoard({
             </FilterSelect>
           </div>
 
+          {/*
+            ล้างตัวกรอง on DESKTOP. The behaviour already existed — `onReset` is
+            the same `resetFilters` the mobile sheet has called all along — and
+            only this row never got a control for it. Reused, not reimplemented:
+            a second reset path is a second thing to drift from `defaults`.
+
+            DISABLED, NOT HIDDEN, when nothing is filtered. Hiding it would
+            reflow this wrapped row every time the first filter changes, sliding
+            the selects and the legend sideways, and would keep the affordance
+            undiscoverable until a user had already worked out how to filter.
+            Disabled says "there is nothing to clear" and holds the geometry.
+
+            THE GATE READS `activeCount`, which is `activeScheduleFilterCount(
+            filters, defaults)` computed once above — the SAME number the "N"
+            badge shows on both surfaces, and it compares against the `defaults`
+            STATE. Recomputing defaults here would reintroduce exactly the bug
+            that comment guards against: a page left open across the 1st of the
+            month would compare to a window it never showed. It also means the
+            badge and this button can never disagree.
+
+            Whole class string per state — twMerge does not merge the custom
+            `9e-*` scales, so a layered override would be decided by emission
+            order rather than by intent.
+          */}
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={activeCount === 0}
+            className={
+              "rounded-xl border px-4 py-2 text-sm font-medium transition-colors duration-9e-micro ease-9e " +
+              (activeCount === 0
+                ? "cursor-not-allowed border-gray-100 text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                : "border-gray-200 text-9e-navy hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white")
+            }
+          >
+            ล้างตัวกรอง
+          </button>
+
           <TypeLegend />
         </div>
 
@@ -541,9 +612,10 @@ export function ScheduleBoard({
             courses={groupCourses}
             monthHeaders={monthHeaders}
             visibleMonths={visibleMonths}
-            scheduleMap={scheduleMap}
+            roundsByCourse={roundsByCourse}
             sessionMatches={sessionMatches}
             earlyBirdMap={earlyBirdMap}
+            currentYear={currentYear}
           />
         ))}
       </div>
@@ -619,7 +691,12 @@ function StatusOptions() {
     <>
       <option value={SCHEDULE_FILTER_ALL}>สถานะทั้งหมด</option>
       {/* Driven off the same source as the badges, so the filter wording
-          cannot drift from what the rows actually say. */}
+          cannot drift from what the rows actually say — unchanged, and still
+          the point. What changed is WHICH WORD it reads: `SCHEDULE_STATUS_OPTIONS`
+          takes each status's `state`, while the badges take its `action`.
+          One field used to serve both, which is how this dropdown came to offer
+          `<option value="open">ลงทะเบียน</option>` — a command where the reader
+          is picking a state to filter by. See lib/scheduleStatus.js. */}
       {SCHEDULE_STATUS_OPTIONS.map(({ value, label }) => (
         <option key={value} value={value}>
           {label}
@@ -1013,7 +1090,48 @@ const FROZEN_CELLS = {
     thClass: "px-3 text-center",
     tdClass:
       "px-3 py-2 text-center align-middle text-xs font-medium text-9e-navy dark:text-white",
-    cell: (c) => formatCoursePrice(c),
+    /**
+     * THE ONE CELL WHERE THE LABEL IS BROKEN ON PURPOSE.
+     *
+     * This column is frozen at 100px (FROZEN_COLUMNS in
+     * lib/schedule/scheduleTableLayout) and spends 24 of them on `px-3`, so the
+     * text box is 76px — and "Inhouse Only" at text-xs measures ~75. Left to
+     * `white-space: normal` the browser is free to fit it on one line or break
+     * it, and which one you get depends on the resolved font metrics: the same
+     * table renders one line on one machine and two on the next, and flips
+     * mid-session when a webfont finishes loading.
+     *
+     * Two block children make the break a fact of the markup instead of an
+     * accident of measurement. Same words, same order, centred by the cell's
+     * own `text-center`, and `leading-tight` keeps the two lines inside the
+     * row's existing rhythm rather than growing it.
+     *
+     * SPLIT FROM THE CONSTANT, NOT RETYPED — the words still live in exactly
+     * one place (lib/coursePriceLabel), which is the property the whole label
+     * refactor exists to hold. Retyping "Inhouse" and "Only" here would put an
+     * eighth copy back three commits after seven were removed.
+     *
+     * NUMBERS ARE UNTOUCHED and stay on one line: the widest realistic price
+     * ("199,000" at 7 glyphs, ~44px) is comfortably inside 76px, and the cell
+     * has no fixed height — only `py-2` — so nothing is clipped either way.
+     *
+     * Geometry is deliberately NOT the fix here. Widening the column to 130
+     * would also work and is a one-number edit by design, but it moves
+     * FROZEN_TOTAL 640 → 670 and the sticky offsets with it, which is a
+     * different change with its own guards.
+     */
+    cell: (c) =>
+      isInhouseOnlyPrice(c?.course_price) ? (
+        <span className="block leading-tight">
+          {INHOUSE_ONLY_LABEL.split(" ").map((word) => (
+            <span key={word} className="block">
+              {word}
+            </span>
+          ))}
+        </span>
+      ) : (
+        formatCoursePrice(c)
+      ),
   },
 };
 
@@ -1045,9 +1163,10 @@ function ProgramGroup({
   courses,
   monthHeaders,
   visibleMonths,
-  scheduleMap,
+  roundsByCourse,
   sessionMatches,
   earlyBirdMap = {},
+  currentYear,
 }) {
   return (
     <div>
@@ -1074,7 +1193,8 @@ function ProgramGroup({
         <ProgramTable
           courses={courses}
           monthHeaders={monthHeaders}
-          scheduleMap={scheduleMap}
+          visibleMonths={visibleMonths}
+          roundsByCourse={roundsByCourse}
           sessionMatches={sessionMatches}
           earlyBirdMap={earlyBirdMap}
         />
@@ -1086,11 +1206,12 @@ function ProgramGroup({
             key={c._id ?? c.course_id}
             course={c}
             rounds={courseRounds(
-              scheduleMap[c._id] ?? {},
+              roundsByCourse[c._id] ?? [],
               visibleMonths,
               sessionMatches,
             )}
             ebScheduleId={earlyBirdIdFor(earlyBirdMap, c)}
+            currentYear={currentYear}
           />
         ))}
       </div>
@@ -1098,10 +1219,118 @@ function ProgramGroup({
   );
 }
 
+/**
+ * One lane's `<td>`s, walked left to right across every month column.
+ *
+ * ── WHY IT WALKS COLUMNS RATHER THAN MAPPING CELLS ──────────────────────────
+ * A `colSpan` cell CONSUMES the columns it covers, so the columns a lane emits
+ * and the cells it holds are not the same list. Mapping `lane.map(...)` would
+ * emit one `<td>` per cell and leave every gap unfilled, shearing the row left.
+ * The cursor is the whole mechanism: it advances past a spanned cell and emits
+ * an empty `<td>` for anything the lane does not cover.
+ *
+ * THE TOTAL COLSPAN OF THE RETURNED CELLS IS EXACTLY `columnCount`. An
+ * off-by-one here shears the table and no visual check catches it reliably, so
+ * a render test asserts the arithmetic directly.
+ *
+ * ── THE DASH IS LANE 1 ONLY ─────────────────────────────────────────────────
+ * An empty column in the first lane means "no round this month" and renders the
+ * `—` it always did. An empty column in lanes 2+ means "this course's other
+ * rounds are elsewhere in this row", and a wall of dashes under a spanned round
+ * reads as missing data rather than as empty space. So lanes 2+ render nothing.
+ */
+function laneCells({ lane, laneIndex, columnCount, course, ebScheduleId }) {
+  const out = [];
+  let col = 0;
+
+  const gap = (key) => (
+    <td key={key} className="px-2 py-2 text-center align-middle">
+      {laneIndex === 0 ? (
+        <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
+          —
+        </span>
+      ) : null}
+    </td>
+  );
+
+  for (const cell of lane) {
+    while (col < cell.startIdx) {
+      out.push(gap(`gap-${col}`));
+      col += 1;
+    }
+    out.push(
+      <td
+        key={`cell-${cell.startIdx}`}
+        // Omitted rather than set to 1 for a single-month cell — `colspan="1"`
+        // is a no-op that would change the markup of every cell on the page.
+        colSpan={cell.span > 1 ? cell.span : undefined}
+        className="px-2 py-2 text-center align-middle"
+      >
+        {/*
+          NO `items-center`, and that absence is the whole fix for a real
+          defect: the Early Bird pill rendered as `arly Bir`, clipped on BOTH
+          sides.
+
+          `items-center` on a column flex container is a CROSS-AXIS rule, so it
+          shrink-wrapped each child to its content width — and `ScheduleCell`'s
+          <a> had no content but the date, because the pill inside it was
+          absolutely positioned and therefore contributed nothing to intrinsic
+          width. The anchor came out ~35px wide; the ~49px chip was laid out in
+          it and the anchor's own `overflow-hidden` cropped both ends.
+
+          With the default `stretch` the anchor fills the cell and the chip fits.
+          The date and status stay centred because the box centres them itself.
+          Two rounds in one month still stack on `gap-2`.
+        */}
+        <div className="flex flex-col gap-2">
+          {cell.rounds.map((s, si) => (
+            <ScheduleCell
+              key={s._id ?? si}
+              schedule={s}
+              courseId={course.course_id}
+              isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
+            />
+          ))}
+          <ContinuationNote cell={cell} />
+        </div>
+      </td>,
+    );
+    col = cell.endIdx + 1;
+  }
+
+  while (col < columnCount) {
+    out.push(gap(`gap-${col}`));
+    col += 1;
+  }
+  return out;
+}
+
+/**
+ * `← ต่อจาก ส.ค.` / `ต่อ ม.ค. →` — a round that continues outside the window.
+ *
+ * A round whose real span reaches past the visible months is still SHOWN, in
+ * whatever space is visible, and its LABEL is not shortened: `formatRoundDays`
+ * prints every day of the round including the days in the invisible month. What
+ * would otherwise be missing is any sign that the cell is a fragment, so this
+ * says so — deliberately smaller and muted, because the date is the thing being
+ * read and this is a footnote to it.
+ */
+function ContinuationNote({ cell }) {
+  if (!cell.clippedBefore && !cell.clippedAfter) return null;
+  return (
+    <span className="text-[10px] leading-none text-9e-slate-dp-50 dark:text-[#94a3b8]">
+      {cell.clippedBefore ? `← ต่อจาก ${monthLabel(cell.beforeKey)}` : null}
+      {cell.clippedBefore && cell.clippedAfter ? " " : null}
+      {cell.clippedAfter ? `ต่อ ${monthLabel(cell.afterKey)} →` : null}
+    </span>
+  );
+}
+
 function ProgramTable({
   courses,
   monthHeaders,
-  scheduleMap,
+  visibleMonths,
+  roundsByCourse,
   sessionMatches,
   earlyBirdMap = {},
 }) {
@@ -1201,8 +1430,23 @@ function ProgramTable({
     window.addEventListener("mouseup", onUp);
   };
 
+  /*
+   * LIGHT-MODE CONTRAST. `border-gray-200` rather than `border-gray-100`:
+   * the card sits on `bg-9e-ice` (#F8FAFD) and its own fill is #FFFFFF, so the
+   * only thing separating the two is this border plus `shadow-sm`. At gray-100
+   * (#F3F4F6) that edge is nearly the same value as the page and the card had
+   * no perceptible boundary. gray-200 (#E5E7EB) is one step up the SAME scale
+   * — already used by this file's selects and buttons — not a new token.
+   *
+   * INTERNAL dividers stay at gray-100: they separate rows from each other
+   * INSIDE the card, where the surrounding value is #FFFFFF and a heavier line
+   * would read as a grid rather than as rows. Only the outer edge moved.
+   *
+   * Dark mode is untouched — `#111d2c` card on `#0D1B2A` page with a `#1e3a5f`
+   * border is already three distinct values and works.
+   */
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
       <div ref={scrollRef} className="no-native-scrollbar overflow-x-auto">
         {/*
             `width: 100%` + a COMPUTED `minWidth`, replacing the old fixed
@@ -1228,7 +1472,25 @@ function ProgramTable({
             ))}
           </colgroup>
           <thead>
-            <tr className="border-b border-gray-100 bg-9e-ice dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
+            {/*
+              THE HEADER WAS THE SAME TOKEN AS THE PAGE. `bg-9e-ice` here is
+              #F8FAFD and so is the page background at the top of this file —
+              literally the same class — so the header row read as a hole in the
+              card rather than as part of it, which is most of why this table
+              looked flat.
+
+              `bg-gray-100` (#F3F4F6) is one step darker than the card's
+              #FFFFFF, giving page / card / header three distinct values in
+              light mode the way dark mode already has them (#0D1B2A / #111d2c /
+              #0f1e30). It also puts the header DARKER than its card, which is
+              the direction dark mode already uses.
+
+              The `<th>` below carries the same fill and must stay in step: the
+              frozen columns are sticky, so it is the TH's own background — not
+              this row's — that covers the month cells scrolling underneath.
+              Two places, one value, deliberately.
+            */}
+            <tr className="border-b border-gray-100 bg-gray-100 dark:border-[#1e3a5f] dark:bg-[#0f1e30]">
               {FROZEN.map((col) => (
                 <th
                   key={col.key}
@@ -1238,7 +1500,10 @@ function ProgramTable({
                   // silently as an unstyled (unstuck) column.
                   style={{ left: col.left }}
                   className={
-                    "sticky z-10 bg-9e-ice py-3 font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white " +
+                    // Same fill as the <tr> above, and it has to be: this cell
+                    // is sticky, so its OWN background is what the month
+                    // columns scroll under.
+                    "sticky z-10 bg-gray-100 py-3 font-bold text-9e-navy dark:bg-[#0f1e30] dark:text-white " +
                     col.thClass +
                     (col.isLast
                       ? " border-r border-gray-100 dark:border-[#1e3a5f]"
@@ -1275,89 +1540,75 @@ function ProgramTable({
                 ? "bg-white dark:bg-[#111d2c]"
                 : "bg-[#FAFBFC] dark:bg-[#0a1424]/40";
               const ebScheduleId = earlyBirdIdFor(earlyBirdMap, c);
-              return (
+
+              /*
+                ONE OR MORE LANES per course, packed like a Gantt chart.
+
+                A round crossing months has to SPAN them, and a round inside one
+                month has to stay ALIGNED under it — and when those two overlap
+                a single <tr> cannot do both: there is nowhere to put a <td> at
+                ต.ค. in a row that already has a colSpan=2 covering ก.ย.+ต.ค.
+                So the row becomes lanes and the frozen columns rowSpan across
+                them. See lib/schedule/monthLanes for the packing.
+
+                `|| [[]]` is defensive only: `filteredCourses` guarantees every
+                course here has at least one visible round, so an empty result
+                is not reachable — but a course rendering NO <tr> at all would
+                silently drop its frozen columns too, which is worth one line to
+                make impossible.
+              */
+              const rounds = (roundsByCourse[c._id] ?? []).filter(sessionMatches);
+              const packed = laneLayout(rounds, visibleMonths).lanes;
+              const lanes = packed.length ? packed : [[]];
+
+              return lanes.map((lane, li) => (
                 <tr
-                  key={c._id ?? c.course_id}
+                  key={`${c._id ?? c.course_id}-${li}`}
+                  /*
+                    Only the LAST lane of a course carries the row's bottom
+                    border — an internal lane boundary is not a row boundary.
+                    The single-lane case (almost every row on the page) produces
+                    exactly the class string it always did.
+                  */
                   className={
-                    "border-b border-gray-100 last:border-0 dark:border-[#1e3a5f] " +
-                    stickyBg
+                    (li === lanes.length - 1
+                      ? "border-b border-gray-100 last:border-0 dark:border-[#1e3a5f] "
+                      : "dark:border-[#1e3a5f] ") + stickyBg
                   }
                 >
-                  {FROZEN.map((col) => (
-                    <td
-                      key={col.key}
-                      style={{ left: col.left }}
-                      className={
-                        "sticky z-10 " +
-                        col.tdClass +
-                        (col.isLast
-                          ? " border-r border-gray-100 dark:border-[#1e3a5f]"
-                          : "") +
-                        " " +
-                        stickyBg
-                      }
-                    >
-                      {col.cell(c)}
-                    </td>
-                  ))}
-                  {monthHeaders.map((m) => {
-                    const cellSchedules = (
-                      scheduleMap[c._id]?.[m.key] ?? []
-                    ).filter(sessionMatches);
-                    return (
+                  {/* The frozen block belongs to the COURSE, not to a lane, so
+                      it is rendered once and spans them. `rowSpan` is omitted
+                      rather than set to 1 when there is a single lane: React
+                      would emit `rowspan="1"`, which is a no-op that would
+                      change the markup of every row on the page. */}
+                  {li === 0 &&
+                    FROZEN.map((col) => (
                       <td
-                        key={m.key}
-                        className="px-2 py-2 text-center align-middle"
+                        key={col.key}
+                        rowSpan={lanes.length > 1 ? lanes.length : undefined}
+                        style={{ left: col.left }}
+                        className={
+                          "sticky z-10 " +
+                          col.tdClass +
+                          (col.isLast
+                            ? " border-r border-gray-100 dark:border-[#1e3a5f]"
+                            : "") +
+                          " " +
+                          stickyBg
+                        }
                       >
-                        {cellSchedules.length === 0 ? (
-                          <span className="text-xs text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
-                            —
-                          </span>
-                        ) : (
-                          /*
-                            NO `items-center`, and that absence is the whole
-                            fix for a real defect: the Early Bird pill rendered
-                            as `arly Bir`, clipped on BOTH sides.
-
-                            `items-center` on a column flex container is a
-                            CROSS-AXIS rule, so it shrink-wrapped each child to
-                            its content width — and `ScheduleCell`'s <a> has no
-                            content but the date, because the pill inside it is
-                            absolutely positioned and therefore contributes
-                            nothing to intrinsic width. The anchor came out
-                            ~35px wide; `EarlyBirdPill` is `left-0 right-0`
-                            against that anchor, so a ~49px chip was laid out in
-                            a ~35px box and the anchor's own `overflow-hidden`
-                            cropped the overflow at each end.
-
-                            The pill was being measured against the DATE. With
-                            the default `stretch` the anchor fills the cell —
-                            ~74px at the MONTH_MIN_WIDTH floor, minus the <td>'s
-                            px-2 — and the chip fits with room to spare. The
-                            date and status stay centred because the inner
-                            <span> centres them itself; they never depended on
-                            this rule. Two rounds in one month still stack on
-                            `gap-2`, now as two full-width rows.
-                          */
-                          <div className="flex flex-col gap-2">
-                            {cellSchedules.map((s, si) => (
-                              <ScheduleCell
-                                key={s._id ?? si}
-                                schedule={s}
-                                courseId={c.course_id}
-                                isEarlyBird={isEarlyBirdSchedule(
-                                  ebScheduleId,
-                                  s,
-                                )}
-                              />
-                            ))}
-                          </div>
-                        )}
+                        {col.cell(c)}
                       </td>
-                    );
+                    ))}
+                  {laneCells({
+                    lane,
+                    laneIndex: li,
+                    columnCount: monthHeaders.length,
+                    course: c,
+                    ebScheduleId,
                   })}
                 </tr>
-              );
+              ));
             })}
           </tbody>
         </table>
@@ -1397,7 +1648,7 @@ function ProgramTable({
  * — the card does no selection of its own, because a second selection rule is
  * a second answer to "which rounds are there".
  */
-function CourseCard({ course, rounds, ebScheduleId }) {
+function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const href = courseHref(
@@ -1408,8 +1659,18 @@ function CourseCard({ course, rounds, ebScheduleId }) {
   const shown =
     collapsible && !expanded ? rounds.slice(0, ROUND_COLLAPSE_THRESHOLD) : rounds;
 
+  /*
+   * gray-200 for the same reason as the desktop table card: identical
+   * treatment (#FFFFFF fill, shadow-sm) on the identical #F8FAFD page, so
+   * leaving it at gray-100 would make the same card separate from the same
+   * background differently depending on the viewport. The two are never on
+   * screen together — `lg:hidden` against `hidden lg:block` — but a resize
+   * crosses between them.
+   *
+   * The ROW fill inside this card is a separate decision; see MOBILE_ROW.
+   */
   return (
-    <article className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
+    <article className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:shadow-none">
       <div className="px-4 pt-4">
         <p className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {course.course_id ?? "-"}
@@ -1443,6 +1704,7 @@ function CourseCard({ course, rounds, ebScheduleId }) {
               schedule={s}
               courseId={course.course_id}
               isEarlyBird={isEarlyBirdSchedule(ebScheduleId, s)}
+              currentYear={currentYear}
             />
           ))}
         </ul>
@@ -1494,10 +1756,22 @@ function CourseCard({ course, rounds, ebScheduleId }) {
  * the next round directly beneath it — so a mis-tap did not miss, it registered
  * on the wrong round and took the visitor to the wrong registration page.
  *
- * Tokens are all already in this file: `bg-9e-ice` is the page background and
- * the table header's light fill, `#0f1e30` is the table header's dark fill (the
- * card is `#111d2c`, so the row reads as a step off it in dark too), and
- * `--surface-border` is the one hairline that needs no dark variant.
+ * Tokens are all already in this file: `bg-9e-ice` is the page background,
+ * `#0f1e30` is the table header's dark fill (the card is `#111d2c`, so the row
+ * reads as a step off it in dark too), and `--surface-border` is the one
+ * hairline that needs no dark variant.
+ *
+ * ── THIS ROW KEEPS `bg-9e-ice` WHILE THE TABLE HEADER LEFT IT ───────────────
+ * That sentence used to also say `bg-9e-ice` was "the table header's light
+ * fill". It no longer is: the header moved to `bg-gray-100` because sharing a
+ * token with the PAGE made it read as a hole in the card.
+ *
+ * This row has no such collision and is deliberately left alone. It sits INSIDE
+ * the white card, never adjacent to the page — the card is always between them
+ * — so #F8FAFD against the card's #FFFFFF is exactly the one-step lift it wants,
+ * and three assertions in test/render/scheduleRoundRowAffordance pin it as
+ * "a fill a step off the white card". The header's problem was WHICH surface it
+ * was next to, not the value itself.
  */
 const ROUND_ROW_SURFACE =
   "flex min-h-[44px] w-full items-center gap-3 rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2 dark:bg-[#0f1e30]";
@@ -1540,7 +1814,7 @@ const ROUND_ROW_PRESS =
  * the link, because the row already IS the link and a second focusable element
  * inside it would be a second stop announcing the same destination.
  */
-function RoundRow({ schedule, courseId, isEarlyBird = false }) {
+function RoundRow({ schedule, courseId, isEarlyBird = false, currentYear }) {
   const statusStyle = resolveScheduleBadge(schedule.status);
   const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
   const href = scheduleRegistrationHref(schedule, courseId);
@@ -1554,7 +1828,11 @@ function RoundRow({ schedule, courseId, isEarlyBird = false }) {
       />
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
         <span className="text-sm font-medium text-9e-navy dark:text-white">
-          {formatCardDateLabel(schedule)}
+          {formatRoundDays(schedule.dates, {
+            showMonth: true,
+            showYear: "auto",
+            currentYear,
+          })}
         </span>
         {isEarlyBird ? <EarlyBirdTag /> : null}
       </span>
@@ -1566,7 +1844,7 @@ function RoundRow({ schedule, courseId, isEarlyBird = false }) {
         <span
           className={`flex-none whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold ${statusStyle.soft}`}
         >
-          {statusStyle.label}
+          {statusStyle.action}
         </span>
       )}
       {href ? (
@@ -1587,16 +1865,261 @@ function RoundRow({ schedule, courseId, isEarlyBird = false }) {
           {inner}
         </a>
       ) : (
-        <span className={ROUND_ROW_SURFACE}>{inner}</span>
+        /* No anchor at all, so there is nothing to tap and nothing to focus —
+           the row is inert in fact, not merely in appearance. `aria-disabled`
+           says so out loud for a screen reader, which would otherwise read a
+           plain <span> as ordinary text and give no hint why this round reads
+           differently from its neighbours. The `active:` press state and the
+           chevron are both absent above for the same reason: nothing should
+           promise a destination that does not exist.
+
+           `cursor-not-allowed` is here even though this layout is the TOUCH one
+           and touch has no cursor. It costs nothing, and the breakpoint is a
+           VIEWPORT WIDTH, not an input device: a narrow desktop window renders
+           these rows to a mouse user. Leaving it off would make the pointer the
+           one thing that still behaved as if the round were live. */
+        <span aria-disabled="true" className={`cursor-not-allowed ${ROUND_ROW_SURFACE}`}>
+          {inner}
+        </span>
       )}
     </li>
   );
 }
 
+/**
+ * The desktop round, as a bordered box rather than a bare stack of text.
+ *
+ * ── THE BORDER IS THE DELIVERY TYPE ─────────────────────────────────────────
+ * Its colour comes from `TYPE_COLOR` — the SAME map the dot, the mobile row and
+ * both legends read. Applied inline rather than as a class, because those are
+ * hex values and Tailwind never evaluates a template literal: `border-[${color}]`
+ * compiles to no class at all and fails silently as an unbordered box. (The
+ * frozen columns' sticky `left` is inline for exactly this reason; see the
+ * comment there.)
+ *
+ * The dot stays. The border says the same thing more quietly, but the dot is
+ * what the two legends point at, and the internal order — type colour, dates,
+ * status — is unchanged.
+ *
+ * ── NO `whitespace-nowrap`, NO TRUNCATION, NO SMALLER TYPE ──────────────────
+ * A four-day non-consecutive round is `8, 10, 12, 14` and that is the widest
+ * label this cell has to hold. In a 90px column it WILL wrap to two lines, and
+ * that is accepted: every day of the round is shown. The box has no fixed
+ * height — only `py-1.5` — so a second line grows the cell rather than being
+ * clipped, and `overflow-hidden` is deliberately absent for the same reason.
+ *
+ * ── 1px, AND THE SECOND PIXEL MOVED TO A HOVER RING ─────────────────────────
+ * This was briefly `border-2`. The thickness is back to 1px and the emphasis it
+ * was reaching for now arrives on HOVER, as a ring — see CELL_BOX_HOVER.
+ *
+ * The reason is layout, not taste. A border is part of the box: the second pixel
+ * came out of the 90px column's CONTENT width on every cell at rest, including
+ * the ones nobody is pointing at, and this is the box whose whole design note
+ * above is about a label that already wraps to two lines at that width. A ring
+ * is a box-shadow, drawn OUTSIDE the box and outside layout entirely, so it
+ * costs no content width, triggers no reflow, and the question of what a
+ * thicker edge does to a wrapping date never has to be asked.
+ *
+ * ── THE TRANSITION LIST IS WIDENED, NOT SWAPPED FOR `transition-all` ─────────
+ * `transition-colors` does NOT cover `box-shadow`, so the hover tint would fade
+ * over 200ms while the ring appeared and vanished instantly — one hover state
+ * coming apart into two, most visibly on the way OUT, where the ring is gone
+ * while the tint is still visibly draining.
+ *
+ * The list below is `transition-colors`'s own property list VERBATIM — `color,
+ * background-color, border-color, text-decoration-color, fill, stroke` — plus
+ * `box-shadow`. Purely additive, so nothing that animated before stops. Not
+ * `transition-all`, which on a flex box with padding, a radius and a wrapping
+ * label would animate layout properties too and make every re-layout a 200ms
+ * slide. (If a Tailwind upgrade ever changes what `transition-colors` covers,
+ * this list is the thing that silently falls out of step with it — the quoted
+ * list above is what it was when this was written.)
+ *
+ * It is a COMPLETE LITERAL, for the same reason everything else here is: see
+ * ROUND_HOVER_VAR. Tailwind emits the comma as the CSS escape `\2c ` in the
+ * selector, which is worth knowing before writing a matcher against it.
+ */
+const CELL_BOX =
+  "flex flex-col items-center gap-0.5 rounded-9e-md border px-1 py-1.5 " +
+  "transition-[color,background-color,border-color,text-decoration-color,fill,stroke,box-shadow] " +
+  "duration-9e-micro ease-9e";
+
+/**
+ * The CSS custom property the hover background reads.
+ *
+ * ── WHY A VARIABLE AND NOT `hover:bg-[${color}]/10` ─────────────────────────
+ * Tailwind SCANS SOURCE TEXT and never evaluates it, so a template literal in a
+ * class name compiles to no class at all. `hover:bg-[${color}]/10` is not a
+ * broken colour — it is nothing, and it fails SILENTLY as a box that simply does
+ * not react to the pointer. The same reason `borderColor` is already inline and
+ * the frozen columns' sticky `left` is inline.
+ *
+ * A custom property splits the problem in two: the VALUE is computed per round
+ * and set inline (which is fine, inline styles are not scanned), and the CLASS
+ * is a COMPLETE LITERAL, which the JIT can see.
+ *
+ * ── THIS CONSTANT IS FOR THE STYLE KEY ONLY. NEVER BUILD THE CLASS FROM IT ──
+ * The first version shipped DEAD, and it shipped dead by interpolating this very
+ * constant into the hover class with a template literal instead of writing the
+ * class out in full — the exact trap the paragraph above describes, two lines
+ * below where it describes it.
+ *
+ * The rendered markup was perfect. The class attribute really did read
+ * `hover:bg-[var(--round-hover-bg)]`, so all 3325 tests passed. What was missing
+ * was the CSS RULE: Tailwind read the SOURCE text, took the uninterpolated
+ * candidate, and emitted a selector containing a literal dollar-brace — one
+ * nothing can ever match. The string `round-hover-bg` appeared ZERO times in the
+ * 284KB stylesheet, so the element had no background-color declaration at all,
+ * which is exactly how it looked in the browser: no hover, not even the old one.
+ *
+ * (The wrong form is deliberately NOT written out here. Tailwind scans comments
+ * too — this docstring would put the junk candidate straight back into the
+ * stylesheet, which is how the dead selector outlived the code that caused it.)
+ *
+ * The name therefore lives in TWO places on purpose — here, and spelled out in
+ * the class literal below — and test/fs/tailwindArbitraryValueRules COMPILES
+ * Tailwind to assert they agree and that the class really emits a
+ * `background-color`.
+ */
+const ROUND_HOVER_VAR = "--round-hover-bg";
+
+/**
+ * Hover, on the linked round only.
+ *
+ * ── THE BACKGROUND, NOT THE BORDER ──────────────────────────────────────────
+ * The border carries the DELIVERY TYPE. A hover that repainted it would trade
+ * information for feedback, so the background is what lifts.
+ *
+ * It lifts in the round's OWN type colour at 10%, replacing a flat
+ * `bg-9e-air/10` that was the same pale blue for every type — so hovering a
+ * hybrid round tinted it classroom-blue, quietly contradicting the border two
+ * pixels away.
+ *
+ * ── 10% IS NOT THE 12% ON THE CAROUSEL'S TYPE PILL ──────────────────────────
+ * Different numbers for different reasons, and they must not be unified. This
+ * one is a TRANSIENT hover and was specified at 10%; that one is a PERMANENT
+ * pill on a white card, where 10% nearly vanishes. If anyone ever makes them
+ * equal, the equality is a coincidence and needs a comment saying so — the same
+ * trap as the four `4`s in adminScheduleHorizon, where a cleanup that unified
+ * numbers equal by accident broke a working surface.
+ *
+ * ── ONE DECLARATION, BOTH THEMES ────────────────────────────────────────────
+ * The `dark:hover:bg-9e-air/10` duplicate is dropped rather than translated. It
+ * only existed because the old token needed restating; an rgba at 10% composites
+ * over whatever is beneath it, so it reads as a light wash on the light card and
+ * a subtle glow on the dark one without a second rule. Verified in both themes
+ * by rendering — the value is identical, only the surface under it differs.
+ */
+/*
+  A COMPLETE LITERAL. Not a template, not a concatenation, not built from
+  ROUND_HOVER_VAR — see that constant's docstring for what happened when it was.
+
+  NO `[color:var(…)]` DATA-TYPE HINT, and that is MEASURED rather than assumed:
+  the shipped stylesheet already contains
+
+      .hover\:bg-\[var\(--surface-hover\)\]:hover { background-color: var(--surface-hover); }
+
+  so a bare `var()` inside `bg-[…]`, under a `hover:` variant, already resolves
+  to a background-COLOR in this config. Adding a hint here would change nothing
+  and would misattribute the cause — the class was never emitted at all, it was
+  not emitted as the wrong property.
+
+  ── AND THE RING, IN TWO CLASSES ────────────────────────────────────────────
+  `hover:ring-2` paints; `hover:ring-[color:var(--round-ring)]` colours it. Both
+  COMPLETE LITERALS, and the `color:` data-type hint is MANDATORY — see below.
+
+  Measured, not assumed. The pair compiles under this config to
+
+      .hover\:ring-2:hover {
+        --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+        --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+        box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+      }
+      .hover\:ring-\[color\:var\(--round-ring\)\]:hover {
+        --tw-ring-color: var(--round-ring);
+      }
+
+  so the WIDTH utility is what draws and the COLOUR utility only feeds it. That
+  split is worth knowing: a ring-colour class shipped on its own emits a
+  perfectly valid declaration and paints nothing at all, which is why
+  test/fs/tailwindArbitraryValueRules asserts a `box-shadow`, not merely that a
+  rule exists.
+
+  Preflight sets `--tw-ring-offset-width: 0px` and `--tw-ring-offset-color: #fff`
+  on `*, ::before, ::after`, which makes the offset shadow ` 0 0 0 0px #fff` —
+  zero blur, zero spread, zero offset, so it paints NOTHING. No ring-offset
+  utility is used here and none should be added: that is what would turn the
+  white offset colour into a visible halo between the border and the ring.
+
+  ── WHY NOT SET `--tw-ring-color` INLINE AND DROP THE SECOND CLASS ──────────
+  Because it breaks this element's KEYBOARD FOCUS RING — the app-wide one, which
+  this cell is supposed to inherit unchanged.
+
+  It is the tempting route: `hover:ring-2` alone reads `--tw-ring-color`, so
+  writing that variable in the inline style would colour the ring with no
+  arbitrary value in any class. It compiles, it renders, and it looks right
+  under a mouse.
+
+  What it also does is outrank globals.css's
+
+      *:focus-visible { @apply outline-none ring-2 ring-9e-brand ring-offset-2; … }
+
+  An inline custom property beats any author rule regardless of selector
+  specificity, so `--tw-ring-color` set inline wins on :focus-visible too, and
+  the brand-blue focus indicator silently becomes the round's own type colour.
+  Measured against `--tw-ring-offset-color: var(--page-bg)` on the LIGHT theme:
+
+      #2486FF brand      3.54:1   passes WCAG 1.4.11 (floor 3:1)
+      #00CCFF classroom  1.90:1   FAILS
+      #22C55E online     2.28:1   FAILS
+      #8B5CF6 hybrid     4.23:1   passes
+
+  Classroom is also the fallback for a round with no `type`, so the common case
+  is the failing one. (The dark theme passes on all four — it would have been
+  invisible to anyone testing there.)
+
+  A variable of OUR OWN has none of that reach: `--round-ring` is read by
+  exactly one selector, under `:hover`, so :focus-visible keeps the brand ring.
+  The extra class is the price, and it buys back the focus indicator.
+
+  (Hover AND focus at once resolves to the type colour — the hover rule is
+  (0,2,0) against the universal rule's (0,1,0). That is a mouse resting on a
+  keyboard-focused cell, and the ring is visible either way.)
+*/
+const CELL_BOX_HOVER =
+  "hover:bg-[var(--round-hover-bg)] hover:ring-2 hover:ring-[color:var(--round-ring)]";
+
+/**
+ * The CSS custom property the hover RING reads.
+ *
+ * Same contract as ROUND_HOVER_VAR, for the same reason, with one addition: the
+ * `color:` DATA-TYPE HINT in the class above is mandatory here, and unlike the
+ * background's missing hint that is not a judgement call.
+ *
+ * An arbitrary `ring-` utility is ambiguous in a way an arbitrary background
+ * one is not: Tailwind has both a ring-WIDTH and a ring-COLOUR utility
+ * competing for the same brackets, so a bare `var()` has to be guessed at. It
+ * happens to guess colour in 3.4.19, but the guess is the config's to change
+ * and nothing would announce it — a value re-read as a width would produce a
+ * `calc()` over a hex, which is invalid, and the ring would simply stop
+ * drawing. The hint removes the question rather than betting on it.
+ *
+ * (The bracketed forms are described rather than written out. Tailwind scans
+ * comments, so a bracket shape spelled in prose becomes a real selector nothing
+ * can ever match — this file already carries a handful of those from older
+ * docstrings, and there is no reason to add more.)
+ *
+ * THIS CONSTANT IS FOR THE STYLE KEY ONLY. NEVER BUILD THE CLASS FROM IT — see
+ * ROUND_HOVER_VAR's docstring for what shipped when that rule was broken two
+ * lines below where it was written down.
+ */
+const ROUND_RING_VAR = "--round-ring";
+
 function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
   const statusStyle = resolveScheduleBadge(schedule.status);
   const color = TYPE_COLOR[schedule.type] ?? TYPE_COLOR.classroom;
-  const dateLabel = formatDateLabel(schedule);
+  // No month and no year: every column header carries both, on every column.
+  const dateLabel = formatRoundDays(schedule.dates);
   const href = scheduleRegistrationHref(schedule, courseId);
 
   /**
@@ -1622,41 +2145,82 @@ function ScheduleCell({ schedule, courseId, isEarlyBird = false }) {
    *     clipping symmetrical and therefore hard to read as a width problem;
    *   · the anchor's reliance on `overflow-hidden` to crop the overflow.
    *
-   * `relative` and `overflow-hidden` remain on the anchor and are now INERT:
-   * nothing inside is positioned and nothing paints to the anchor's edge. They
-   * are left in place deliberately rather than swept up here, so this change's
-   * diff is the pill move and nothing else; removing them is a separate,
-   * behaviour-free cleanup.
+   * `relative` and `overflow-hidden` used to remain on the anchor as inert
+   * leftovers. They are gone now: the round is a bordered box, so `rounded-sm`
+   * became `rounded-9e-md`, and `overflow-hidden` on a box that may WRAP TO TWO
+   * LINES is a clipping question nobody should have to think about.
    */
   const inner = (
-    <span className="flex flex-col items-center gap-0.5">
+  <>
+    <span className="flex items-center gap-1">
       <span
-        className="h-2 w-2 rounded-full"
+        className="h-2 w-2 flex-none rounded-full"
         style={{ backgroundColor: color }}
         aria-hidden
       />
-      <span className="text-[11px] font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
+      <span className="text-sm font-bold leading-none text-9e-navy transition-colors group-hover:text-9e-action dark:text-white dark:group-hover:text-9e-air">
         {dateLabel}
       </span>
-      {/* Omitted entirely when the status is missing/blank. */}
-      {statusStyle && (
-      <span className={`text-[9px] font-bold leading-none ${statusStyle.text}`}>
-        {statusStyle.label}
-      </span>
-      )}
-      {isEarlyBird && <EarlyBirdPill />}
     </span>
-  );
+    {/* Omitted entirely when the status is missing/blank. */}
+    {statusStyle && (
+    <span className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
+      {statusStyle.action}
+    </span>
+    )}
+    {isEarlyBird && <EarlyBirdPill />}
+  </>
+);
 
   if (!href) {
+    /*
+      THE FULL ROUND. Same contract as RoundRow's inert branch and UNCHANGED by
+      the box: no anchor, so no navigation and no focus stop, and `aria-disabled`
+      to say why. It also has no `group`, which is what the date's
+      `group-hover:text-9e-action` hangs off, and none of the hover classes — so
+      a round nobody can book does not light up, does not lift, and shows no
+      pointer cursor.
+
+      That distinction is the point of drawing this as a button at all. A button
+      APPEARANCE must not become a button AFFORDANCE for a round that cannot be
+      registered for; the box still identifies the delivery type by its border,
+      which is information, while promising nothing it cannot deliver.
+    */
     return (
-      <span className="relative block overflow-hidden rounded-sm">{inner}</span>
+      <span
+        aria-disabled="true"
+        className={`cursor-not-allowed ${CELL_BOX}`}
+        style={{ borderColor: color }}
+      >
+        {inner}
+      </span>
     );
   }
   return (
     <a
       href={href}
-      className="group relative block cursor-pointer overflow-hidden rounded-sm"
+      className={`group cursor-pointer ${CELL_BOX} ${CELL_BOX_HOVER}`}
+      /* The hover tint travels as a custom property in the SAME inline style
+         that already carries the border colour — see ROUND_HOVER_VAR for why it
+         cannot be a class. The inert branch above sets none of the three: a
+         round nobody can book does not light up.
+
+         NOTE WHICH VARIABLE THE RING USES. It is `--round-ring`, a name of our
+         own, and deliberately NOT Tailwind's `--tw-ring-color`. Setting the
+         latter inline would colour the ring with one fewer class and would also
+         outrank the app-wide `*:focus-visible` rule, turning the brand-blue
+         keyboard focus indicator into the round's type colour — 1.90:1 on a
+         classroom round against a white page, under the 3:1 floor. The full
+         reasoning and the measurements are at CELL_BOX_HOVER.
+
+         The FULL type colour, not a tint: the ring restates the border it sits
+         against, so it takes the same value `borderColor` does. The 10% tint
+         belongs to the background alone. */
+      style={{
+        borderColor: color,
+        [ROUND_RING_VAR]: color,
+        [ROUND_HOVER_VAR]: trainingTypeTint(schedule.type, 0.1),
+      }}
     >
       {inner}
     </a>

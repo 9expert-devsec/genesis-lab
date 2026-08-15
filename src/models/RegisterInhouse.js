@@ -103,8 +103,10 @@ const RegisterInhouseSchema = new mongoose.Schema(
      * NOT A FORM FIELD ANY MORE — a legacy-compat MIRROR of `quotationCompany`.
      *
      * Three live readers still need it: the admin list projection and its
-     * $regex search (src/lib/actions/inhouse-registrations.js), the admin
-     * detail row บริษัท / องค์กร, and the confirmation email. Dropping the path
+     * $regex search (listRegistrations in src/lib/actions/registrations.js —
+     * this pointed at inhouse-registrations.js until that file's unused list
+     * action was deleted), the admin detail row บริษัท / องค์กร, and the
+     * confirmation email. Dropping the path
      * would blank all three for every historical document, so it stays
      * required — and it is written in EXACTLY ONE PLACE, the API route. See
      * src/app/api/registration/inhouse/route.js.

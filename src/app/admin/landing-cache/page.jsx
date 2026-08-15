@@ -1,18 +1,29 @@
 /**
- * /admin/landing-cache
+ * /admin/landing-cache — REDIRECT to /admin/cache.
  *
- * Status dashboard for the landing-page MongoDB cache. Shows last sync
- * time, per-section counts, and any errors from the most recent
- * sync run. The "Sync now" button posts to /api/admin/landing/sync.
+ * This page's status read and its "Sync now" button were absorbed into the
+ * cache console, which covers landing_cache alongside the five other cache
+ * surfaces the inventory found. The URL is kept as a redirect rather than
+ * deleted because it is the href every existing bookmark, every older role
+ * description and the previous sidebar entry point at.
  *
- * Access is already gated by the global admin middleware
- * (`matcher: ['/admin/:path*']` in src/middleware.js).
+ * ── THE GUARD RUNS BEFORE THE REDIRECT, AND THAT ORDER MATTERS ──────────────
+ * `requirePage` first, `redirect` second. Reversed, this URL would bounce
+ * anyone — including a signed-out visitor — to /admin/cache and let THAT page
+ * do the refusing, which turns a clean 403 into a redirect chain and leaks the
+ * existence of the console to someone who cannot open it.
+ *
+ * The key is still `landing_cache`: it is what `Role.pages` holds in Mongo, and
+ * the console guards on the same one.
+ *
+ * `_components/LandingCacheClient.jsx` is deliberately NOT deleted this round.
+ * It is the component the console's sync button was ported from, and removing
+ * it belongs with round 3's write actions rather than with a read-only screen —
+ * a deletion here would make this commit's diff span two unrelated concerns.
  */
 
+import { redirect } from 'next/navigation';
 import { requirePage } from '@/lib/rbac/guard';
-import { dbConnect } from '@/lib/db/connect';
-import LandingCache from '@/models/LandingCache';
-import { LandingCacheClient } from './_components/LandingCacheClient';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -22,30 +33,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function LandingCachePage() {
+export default async function LandingCacheRedirectPage() {
   await requirePage('landing_cache');
-
-  await dbConnect();
-
-  // Strip the heavy `data` payload — the page only needs status meta.
-  // Keep the stringified path through `JSON.parse(JSON.stringify(...))`
-  // so Mongoose ObjectIds / Dates serialize cleanly to client props.
-  const raw = await LandingCache.findOne({ key: 'homepage_v1' })
-    .select('-data')
-    .lean()
-    .exec();
-  const cache = raw ? JSON.parse(JSON.stringify(raw)) : null;
-
-  return (
-    <div>
-      <h1 className="mb-2 text-xl font-bold text-[var(--text-primary)]">
-        Landing Cache
-      </h1>
-      <p className="mb-6 text-sm text-[var(--text-secondary)]">
-        Snapshot ที่หน้า Home ใช้แทนการเรียก API ปลายทางตอน render.
-        ถ้าข้อมูลไม่อัพเดต กดปุ่มด้านล่างเพื่อ sync ใหม่
-      </p>
-      <LandingCacheClient initialCache={cache} />
-    </div>
-  );
+  redirect('/admin/cache');
 }

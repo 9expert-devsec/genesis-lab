@@ -13,7 +13,10 @@ export default async function Page() {
 
   const [featured, publicCourses] = await Promise.all([
     getFeaturedCourses(),
-    listPublicCourses().catch(() => ({ items: [] })),
+    // includeHidden — admin picker. A featured slot may already hold a course
+    // that has since been hidden, and the admin has to be able to see and
+    // remove it; the public home page filters it out at read time regardless.
+    listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
   ]);
 
   // Minimal shape for the autocomplete: anything the dropdown renders.

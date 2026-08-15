@@ -41,13 +41,41 @@ export const MONTH_MIN_WIDTH = 90;
  *
  * Labels live here too so the `<colgroup>` and the `<th>` row cannot fall out
  * of order with one another — an off-by-one there puts the course name under
- * the "วัน" heading, which no width guard would catch.
+ * the "จำนวนวัน" heading, which no width guard would catch.
+ *
+ * ── THE TWO LONGER LABELS DID NOT MOVE THE WIDTHS, AND THAT WAS MEASURED ────
+ * `วัน` -> `จำนวนวัน` and `ราคา` -> `ราคา / ท่าน`. Both were measured against
+ * the shipped font binary (LINESeedSansTH_W_Bd.woff2) at the header's real type
+ * — 14px from the table's `text-sm`, weight 700 from the th's `font-bold` —
+ * by summing glyph advance widths out of `hmtx`. Character counting is wrong
+ * for Thai: the above/below vowels and tone marks are ZERO-ADVANCE, so
+ * `จำนวนวัน` is 8 codepoints but only 7 of them move the pen.
+ *
+ *   ราคา / ท่าน  66.4px  in a 76px content box (100 - px-3 x2)  -> fits outright
+ *   จำนวนวัน     58.0px  in a 36px content box (60  - px-3 x2)  -> wraps
+ *
+ * The widths STILL DID NOT CHANGE, deliberately. `จำนวนวัน` wraps inside the
+ * 60px column instead, which costs nothing: the header row is ALREADY two lines
+ * tall because every month column renders its label and its year as two block
+ * spans. The frozen `<th>`s carry no `whitespace-nowrap` and no `truncate`, and
+ * their stickiness is `left` only — never `top` — so a taller header row cannot
+ * shear the frozen block; all cells in a row share its height by table layout
+ * and `left` is unaffected by it. Worst case, an engine with no Thai
+ * line-breaking dictionary leaves it on one line at 58px, which the 60px column
+ * still contains — tight, but never overflowing.
+ *
+ * Widening `days` was the alternative and was rejected: it moves FROZEN_TOTAL
+ * off 640, which is pinned in roughly eight assertions in
+ * test/pure/scheduleTableLayout.test.mjs and in the literal sweep at
+ * test/fs/scheduleFrozenColumnWidths.test.mjs, and it would worsen the
+ * still-unverified sub-900px frozen-column alignment item. That is a lot of
+ * blast radius for a header that had room to wrap.
  */
 export const FROZEN_COLUMNS = [
   { key: 'code',  width: 120, label: 'รหัสหลักสูตร' },
   { key: 'name',  width: 360, label: 'ชื่อหลักสูตร' },
-  { key: 'days',  width: 60,  label: 'วัน' },
-  { key: 'price', width: 100, label: 'ราคา' },
+  { key: 'days',  width: 60,  label: 'จำนวนวัน' },
+  { key: 'price', width: 100, label: 'ราคา / ท่าน' },
 ];
 
 /** Total frozen width — DERIVED, so it cannot disagree with the array. */

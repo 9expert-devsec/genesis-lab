@@ -103,6 +103,22 @@ export async function POST(req) {
     'payment.omiseStatus': charge.status,
   };
 
+  /**
+   * ── THIS ROUTE IS A SYSTEM ACTOR. IT IS NOT SUBJECT TO THE ADMIN TABLE. ───
+   *
+   * lib/registrations/publicStatuses.js holds the transitions an ADMIN may
+   * make, and it deliberately contains NO edge into `paid` from any state: a
+   * person must not be able to assert that money arrived. This route and
+   * src/app/api/webhooks/omise/route.js are the only two writers of `paid`,
+   * because a settled Omise charge — not a click — is the evidence for it.
+   * Gating either of them on that table would forbid the one transition the
+   * table reserves for them and break payment collection outright.
+   *
+   * The cancelled-registration guard in the webhook is a separate, narrower
+   * thing and is not duplicated here: this route runs from the customer's own
+   * checkout on a registration they are in the middle of creating, so there is
+   * no window in which an admin cancels between the charge and this write.
+   */
   // Card may succeed synchronously.
   if (method === 'credit_card' && charge.status === 'successful' && charge.paid) {
     update['payment.paidAt'] = new Date();

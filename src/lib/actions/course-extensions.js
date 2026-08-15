@@ -17,7 +17,12 @@
 import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import CourseExtension from '@/models/CourseExtension';
+import { duplicateKeyMessage, duplicateKeyField } from '@/lib/db/duplicateKeyMessage';
+import { aliasConflict, normaliseAlias, legacyPathOwner } from '@/lib/courses/aliasAvailability';
+import { listPublicCourses } from '@/lib/api/public-courses';
+import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { requireAdmin } from '@/lib/actions/auth';
+import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_PATH = '/admin/courses';
 
@@ -26,12 +31,12 @@ function serialize(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
 
-function normalizeAlias(input) {
-  if (!input) return null;
-  const trimmed = String(input).trim();
-  if (!trimmed) return null;
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-}
+// The local `normalizeAlias` is GONE, replaced by `normaliseAlias` from
+// lib/courses/aliasAvailability. They were byte-identical, and two copies of
+// the rule that decides what a stored alias LOOKS like is precisely how the
+// create arm and the save action would come to disagree about whether "/x" and
+// "x" are the same URL — the check would find no conflict and the unique index
+// would then reject the write, which is the failure this whole round removed.
 
 /** Fetch a single extension by upstream `course_id`. */
 export async function getCourseExtension(courseId) {
@@ -41,11 +46,36 @@ export async function getCourseExtension(courseId) {
   return serialize(doc);
 }
 
+/**
+ * The stored `courseId` matching this code IGNORING CASE, or null.
+ *
+ * Used by the create flow's duplicate guard. `getCourseExtension` is an exact
+ * match, which would let a new "MSE-L1" be created next to an existing "mse-l1"
+ * — two courses one keystroke apart sharing one extension row, where saving
+ * either overwrites the other's SEO and gallery.
+ *
+ * Returns the STORED spelling, not the queried one, so the caller can show the
+ * admin the casing they actually collided with. Anchored and escaped: a code
+ * is user input and `.` is a live regex metacharacter.
+ */
+export async function findCourseExtensionCodeInsensitive(code) {
+  const wanted = String(code ?? '').trim();
+  if (!wanted) return null;
+  await dbConnect();
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const doc = await CourseExtension.findOne({
+    courseId: { $regex: `^${escaped}$`, $options: 'i' },
+  })
+    .select('courseId')
+    .lean();
+  return doc?.courseId ?? null;
+}
+
 /** Fetch a single extension by its `urlAlias` (with or without leading slash). */
 export async function getCourseExtensionByAlias(alias) {
   if (!alias) return null;
   await dbConnect();
-  const normalized = normalizeAlias(alias);
+  const normalized = normaliseAlias(alias);
   if (!normalized) return null;
   const doc = await CourseExtension.findOne({ urlAlias: normalized }).lean();
   return serialize(doc);
@@ -92,7 +122,7 @@ export async function saveCourseExtension(courseId, data) {
     return { ok: false, error: 'Missing courseId' };
   }
 
-  const cleanAlias = normalizeAlias(data?.urlAlias);
+  const cleanAlias = normaliseAlias(data?.urlAlias);
 
   // Normalize gallery — drop empty rows, re-number `order`.
   const galleryRaw = Array.isArray(data?.gallery) ? data.gallery : [];
@@ -129,6 +159,36 @@ export async function saveCourseExtension(courseId, data) {
       typeof data?.omisePaymentEnabled === 'boolean' ? data.omisePaymentEnabled : false,
   };
 
+  /**
+   * ── THE APP-LEVEL ALIAS CHECK — BELT, WITH THE INDEX AS BRACES ────────────
+   * This does NOT replace the unique index on `urlAlias`, and must not be read
+   * as making it optional. The two do different jobs:
+   *
+   *   the INDEX is the guarantee. It is the only thing that holds under
+   *     concurrency — two admins saving the same alias at the same moment both
+   *     pass the check below, because between this read and the write there is
+   *     a window in which neither has committed. The index closes it; nothing
+   *     at application level can.
+   *
+   *   this CHECK is the message. It names the course that already owns the
+   *     alias, which the E11000 cannot — the driver reports the key, not the
+   *     owner — and it produces that message on the normal return path instead
+   *     of through an exception, so the caller gets `{ ok: false }` rather than
+   *     a rejected write it has to interpret.
+   *
+   * Delete the index and this becomes a race with a nice error. Delete this and
+   * the admin gets a correct but unhelpful "alias already used" with no idea by
+   * what. Both, deliberately.
+   *
+   * SAME CHECK THE CREATE ARM RUNS, via the same `checkAliasAvailable`. It is
+   * still needed here even though create now asks first: this action is also
+   * the EDIT path and the create arm's RETRY path, neither of which goes
+   * through that pre-flight, and it is the last thing between the alias and the
+   * write.
+   */
+  const clash = await checkAliasAvailable(cleanAlias, courseId);
+  if (clash) return { ok: false, ...clash };
+
   try {
     // `before` from an explicit read rather than `new: false`, because this
     // action RETURNS the post-update document to its caller — flipping the flag
@@ -137,7 +197,13 @@ export async function saveCourseExtension(courseId, data) {
     //
     // null here is meaningful, not missing: this is an upsert, so a null
     // `before` is how the trail says "this created the extension".
-    const before = extensionFields(await CourseExtension.findOne({ courseId }).lean());
+    // The raw document is kept alongside the summary because the visibility
+    // plan must distinguish "the field is absent" from "the field is false",
+    // and `extensionFields` coerces both to false — correct for an audit line
+    // that reports a boolean, wrong for a rule whose whole premise is that an
+    // absent flag means VISIBLE.
+    const beforeDoc = await CourseExtension.findOne({ courseId }).lean();
+    const before = extensionFields(beforeDoc);
 
     const doc = await CourseExtension.findOneAndUpdate({ courseId }, update, {
       upsert: true,
@@ -151,6 +217,36 @@ export async function saveCourseExtension(courseId, data) {
     revalidatePath(`${ADMIN_PATH}/${courseId}`);
     if (cleanAlias) revalidatePath(cleanAlias);
     revalidatePath(`/${courseId.toLowerCase()}-training-course`);
+
+    /**
+     * A VISIBILITY FLIP CHANGES EVERY LISTING, NOT JUST THIS COURSE'S PAGES.
+     *
+     * The four paths above were sufficient while `isPublished` gated only URL
+     * resolution. Hiding a course now also takes it out of the mega menu, the
+     * home page, /training-course, /schedule, every catalog page, the article
+     * related-course rails and every page-builder course_list — all of which
+     * bake their output and none of which is under those four paths. Without
+     * this the course page 404s the instant the toggle is saved while the
+     * listings keep advertising it for up to the ISR window (and, for the two
+     * snapshot surfaces, up to 3h plus that window).
+     *
+     * The plan is a pure function so the DECISION — flip or no flip — is
+     * testable without a request context or a database, the same split
+     * courseRevalidatePlan.js already uses for the webhook path.
+     *
+     * NOT wrapped in try/catch, unlike the sync writers that share this
+     * `('/', 'layout')` scope. Their guard exists because `revalidatePath`
+     * throws outside a request scope and a cron must not fail a write it has
+     * already made. This is a server action: it always has one, the four calls
+     * above are unguarded for the same reason, and adding a catch here would be
+     * copying the shape of that fix rather than its reason.
+     */
+    for (const { path, type } of planVisibilityRevalidation({
+      before: beforeDoc,
+      after: update,
+    }).paths) {
+      revalidatePath(path, type);
+    }
 
     // THE SECOND KEY SPACE. `recordId` is the `course_id` CODE, not an MSDB
     // ObjectId — CourseExtension keys on it (see the model: "matches course_id
@@ -170,10 +266,27 @@ export async function saveCourseExtension(courseId, data) {
 
     return { ok: true, data: serialize(doc) };
   } catch (err) {
-    // Mongo's E11000 on unique alias collisions is the most likely
-    // expected error — surface it cleanly.
-    if (err?.code === 11000) {
-      return { ok: false, error: 'URL Alias นี้ถูกใช้แล้วโดยหลักสูตรอื่น' };
+    /**
+     * TWO unique indexes now, so an E11000 no longer identifies itself.
+     *
+     * This used to return the alias message for ANY 11000. While `urlAlias` was
+     * not unique that branch could only ever be reached by a `courseId`
+     * collision — so the single error it could receive was the one it described
+     * wrongly. `duplicateKeyMessage` reads the failing index off the error and
+     * says the right thing for each, falling back to a generic message rather
+     * than guessing.
+     *
+     * Reaching here for an alias means the pre-check above lost the race, which
+     * is exactly the case the index exists to catch.
+     */
+    const duplicate = duplicateKeyMessage(err);
+    if (duplicate) {
+      // `field` so the CALLER can put the refusal on the input that caused it,
+      // and so the pre-check path and this race path are indistinguishable to
+      // it — an alias refusal must land under the alias box whether the
+      // application check caught it or the unique index did.
+      const field = duplicateKeyField(err);
+      return { ok: false, error: duplicate, ...(field ? { field } : {}) };
     }
     return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
   }
@@ -195,6 +308,22 @@ export async function deleteCourseExtension(courseId) {
   const removed = await CourseExtension.findOneAndDelete({ courseId }).lean();
 
   revalidatePath(ADMIN_PATH);
+
+  /**
+   * DELETING A HIDDEN COURSE'S EXTENSION UN-HIDES IT, and that is a visibility
+   * flip like any other. The row carried the only `isPublished: false` there
+   * was; with it gone the course is visible again everywhere — so the listings
+   * that were told to drop it have to be told to put it back.
+   *
+   * `after: null` says exactly that: no extension means visible. Same plan and
+   * same scope as the save path, rather than a second rule about deletion.
+   */
+  for (const { path, type } of planVisibilityRevalidation({
+    before: removed,
+    after: null,
+  }).paths) {
+    revalidatePath(path, type);
+  }
 
   recordAdminActionAfter({
     menu:        'courses',

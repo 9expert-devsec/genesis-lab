@@ -26,19 +26,35 @@ const ROUND_SPECIFIC = [
   // /schedule's table + round row AND /search's schedule section, which used to
   // hold two byte-identical copies of this template, now share one builder.
   ['src/lib/schedule/scheduleRegistrationHref.js', 'the shared round-registration builder'],
-  ['src/app/(public)/training-course/_components/CourseCard.jsx', 'catalog card rounds'],
   ['src/components/pageBuilder/sections/course_schedule.jsx', 'page-builder schedule section'],
 ];
 
 /**
- * The two surfaces that gave the template up. Each must now CALL the builder and
+ * The surfaces that gave the template up. Each must now CALL the builder and
  * hold no copy of the URL — otherwise the entry above is guarding a module that
- * nothing reaches, and the &class= invariant would rest on nothing for the two
+ * nothing reaches, and the &class= invariant would rest on nothing for the
  * highest-traffic round lists in the app.
+ *
+ * ── CourseCard MOVED HERE FROM `ROUND_SPECIFIC` ─────────────────────────────
+ * It used to build the URL inline, so it belonged in the list above: it held a
+ * template, and that template had to carry `&class=`. It delegates now, which
+ * means it holds no template for that test to inspect — and the reason it moved
+ * is not tidiness. The inline version never consulted the STATUS, so a sold-out
+ * round would have been a live link into the wizard. The shared builder returns
+ * null for `full`, so routing through it is what closes that.
+ *
+ * The call EXPRESSION is per-file because the argument names are local: the
+ * /schedule and /search rows call `(schedule, courseId)`, the catalog card calls
+ * `(s, id)`. Asserting the call rather than a bare import is what distinguishes
+ * "imports the builder" from "uses it".
  */
 const DELEGATES = [
-  ['src/app/(public)/schedule/_components/ScheduleClient.jsx', '/schedule rows'],
-  ['src/app/(public)/search/_components/SearchClient.jsx', 'search results'],
+  ['src/app/(public)/schedule/_components/ScheduleClient.jsx', '/schedule rows',
+    'scheduleRegistrationHref(schedule, courseId)'],
+  ['src/app/(public)/search/_components/SearchClient.jsx', 'search results',
+    'scheduleRegistrationHref(schedule, courseId)'],
+  ['src/app/(public)/training-course/_components/CourseCard.jsx', 'catalog card rounds',
+    'scheduleRegistrationHref(s, id)'],
 ];
 
 const GENERIC = [
@@ -58,7 +74,7 @@ for (const [file, what] of ROUND_SPECIFIC) {
   });
 }
 
-for (const [file, what] of DELEGATES) {
+for (const [file, what, call] of DELEGATES) {
   test(`${what} delegates to the shared builder instead of holding a copy`, () => {
     const src = read(file);
     assert.equal(
@@ -70,9 +86,9 @@ for (const [file, what] of DELEGATES) {
       /import \{ scheduleRegistrationHref \} from ["']@\/lib\/schedule\/scheduleRegistrationHref["']/,
       `${what} must import the one builder`,
     );
-    assert.match(
-      src, /scheduleRegistrationHref\(schedule, courseId\)/,
-      `${what} must actually call it`,
+    assert.ok(
+      src.includes(call),
+      `${what} must actually CALL it as ${call} — importing is not using`,
     );
   });
 }
@@ -114,15 +130,26 @@ test('CONTROL: the matcher finds real links, and tells the two shapes apart', ()
 });
 
 test('the reveal gate checks BOTH arrival signals for membership', () => {
+  // `roundExists` became `roundSelectable` when upstream started releasing
+  // `full` rounds to this page: membership is no longer sufficient, because a
+  // sold-out round now DOES arrive in `schedules` and must not open the form.
+  // The invariant this test exists for is unchanged — both arrival signals are
+  // still resolved against the fetched rounds rather than merely tested for
+  // presence — so the probes follow the rename instead of pinning the old name.
   const src = read('src/components/registration/RegisterWizard.jsx');
   assert.match(
     src,
-    /const roundExists = \(id\) =>\s*Boolean\(id\) && \(schedules \?\? \[\]\)\.some\(\(s\) => s\._id === id\);/,
+    /const roundOf = \(id\) =>\s*\(id && \(schedules \?\? \[\]\)\.find\(\(s\) => s\._id === id\)\) \|\| null;/,
     'membership, not mere presence'
   );
   assert.match(
     src,
-    /useState\(\s*roundExists\(initialClassId\) \|\| roundExists\(initialValues\?\.classId\),\s*\)/,
+    /const roundSelectable = \(id\) => \{[\s\S]*?normalizeScheduleStatus\(round\.status\) !== "full";/,
+    'and membership alone is not enough — a full round is not selectable'
+  );
+  assert.match(
+    src,
+    /useState\(\s*roundSelectable\(initialClassId\) \|\| roundSelectable\(initialValues\?\.classId\),\s*\)/,
     'URL round or draft round, either resolving is enough'
   );
 });

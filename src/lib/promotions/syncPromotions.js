@@ -15,6 +15,7 @@
  * Intentionally NOT marked "use server" — server-internal helper.
  */
 
+import { revalidatePath } from 'next/cache';
 import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import { listPromotions } from '@/lib/api/promotions';
@@ -140,6 +141,37 @@ export async function syncPromotions() {
         `upsert ${shaped.filter.promotion_id}: ${err?.message ?? 'failed'}`
       );
     }
+  }
+
+  /**
+   * REGENERATE THE PAGE THAT BAKED THE OLD LIST — same invariant as
+   * syncLandingData:436.
+   *
+   * triggerPromotionSync:16 already revalidates, but it is ONE of four callers.
+   * The cron (every 6h, the main path), the admin resync route and
+   * lib/actions/promotions call syncPromotions directly and bypass it.
+   *
+   * Scope measured, and NARROW. Promotions reach exactly one statically cached
+   * public surface:
+   *
+   *   /promotions            ○ Static (1h)   ← getActivePromotions
+   *   /promotions/[slug]     ƒ Dynamic       ← no cache to bust
+   *   /search                ƒ Dynamic       ← searchCorpus
+   *
+   * So `revalidatePath('/promotions')` covers it. Promotions are not in the
+   * header, so this does not widen to '/' + 'layout' — see syncNavMenuData for
+   * the case where widening IS justified.
+   *
+   * Guarded like syncLandingData.
+   */
+  try {
+    revalidatePath('/promotions');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[syncPromotions] revalidatePath("/promotions") skipped:',
+      err?.message ?? err
+    );
   }
 
   // eslint-disable-next-line no-console

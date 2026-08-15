@@ -8,6 +8,7 @@ import { resolveScheduleStatus } from '@/lib/schedule-status';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { buildAttendees, buildQuoteRegistration } from '@/lib/registration/build-public';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
+import { refNo } from '@/lib/refNo';
 
 /**
  * The course cover for the confirmation email, or '' — NEVER a throw.

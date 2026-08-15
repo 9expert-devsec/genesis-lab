@@ -40,14 +40,20 @@ export default async function MasterclassRegistrationsPage({ searchParams }) {
           </p>
         </div>
       </div>
+      {/*
+        PLAIN NAMES, not `initial*`. These are derived from searchParams above on
+        every render and the client renders straight from them — see the header
+        of MasterclassRegistrationsClient for what the prefix cost when they were
+        seeded into useState.
+      */}
       <MasterclassRegistrationsClient
         initialData={data}
-        initialStatus={status}
-        initialQ={q}
-        initialRange={range}
-        initialCourseId={courseId}
-        initialBatchId={batchId}
-        initialLicenseScope={licenseScope}
+        status={status}
+        q={q}
+        range={range}
+        courseId={courseId}
+        batchId={batchId}
+        licenseScope={licenseScope}
         counts={counts}
         courseOptions={courseOptions}
       />

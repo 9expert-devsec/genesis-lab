@@ -34,6 +34,20 @@ const landingCacheSchema = new mongoose.Schema(
     // for ValidationError accumulation, which collides with this field.
     syncErrors:    { type: [String], default: [] },
 
+    /**
+     * The last downgrade the guard REFUSED to write, or null.
+     *
+     * REPLACED on each refusal, never appended: a run that would still shrink
+     * refuses again and overwrites this, so the console shows one current
+     * refusal rather than a growing list and a 3-hourly cron cannot flood it.
+     *
+     * Cleared by any run that writes — either because the world recovered on
+     * its own, or because an admin overrode. Its presence is therefore exactly
+     * "the stored snapshot is older than upstream, on purpose, and someone
+     * should look". See lib/cache-console/downgradeGuard.
+     */
+    lastRefusal: { type: mongoose.Schema.Types.Mixed, default: null },
+
     sections: {
       banners:       { type: Number, default: 0 },
       programs:      { type: Number, default: 0 },

@@ -65,8 +65,14 @@ test('frozenLayout attaches the offset and flags the last column', () => {
   assert.deepEqual(layout.map((c) => c.isLast), [false, false, false, true]);
   // The labels ride along so the colgroup and the header row cannot fall out of
   // order with each other — an off-by-one there puts the course name under the
-  // "วัน" heading, which no width check would catch.
-  assert.deepEqual(layout.map((c) => c.label), ['รหัสหลักสูตร', 'ชื่อหลักสูตร', 'วัน', 'ราคา']);
+  // "จำนวนวัน" heading, which no width check would catch.
+  //
+  // EQUALITY, NOT SUBSTRING, and that is load-bearing: `จำนวนวัน` CONTAINS
+  // `วัน`, so a guard written as /วัน/ would have stayed green straight through
+  // the rename while asserting nothing about it. deepEqual is what caught it.
+  // (Checked the other direction too — no /วัน/ or /ราคา/ regex guard exists
+  // anywhere in test/ or src/, so this is the only assertion on these labels.)
+  assert.deepEqual(layout.map((c) => c.label), ['รหัสหลักสูตร', 'ชื่อหลักสูตร', 'จำนวนวัน', 'ราคา / ท่าน']);
 });
 
 // ── tableMinWidth ───────────────────────────────────────────────────────────

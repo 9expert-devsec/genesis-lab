@@ -518,10 +518,49 @@ test('CONTROL: the container probes reject a viewport-gated rail', () => {
   assert.equal(/\B@container\b/.test('mx-auto container flex'), false);
 });
 
-test('CONTROL: the container query is the codebase vocabulary, not a one-off', () => {
+test('CONTROL: the container-query utilities are REAL, not dead class strings', () => {
+  /**
+   * ── THIS CONTROL CHANGED ITS EVIDENCE, AND THE REASON IS WORTH RECORDING ───
+   * It used to prove "not a one-off" by pointing at two other files that also
+   * used `@[Npx]:` — training-course/CourseCard and components/ScheduleCard.
+   * NEITHER DOES ANY MORE, and this section is now the only container-query user
+   * in src/. That is stated plainly rather than papered over.
+   *
+   * They stopped for a good reason, not by drift. ScheduleCard drew its border
+   * as a fixed `viewBox="0 0 90 80"` SVG path in a fixed `h-[70px] w-[83px]`
+   * box, and `@[280px]:h-[80px] @[280px]:w-[88px]` was how it reached for a
+   * second hardcoded size when its container got wider. The box now sizes to its
+   * CONTENT — which is what a Thai round label required, and which is strictly
+   * better than querying a container to pick between two fixed sizes. There is
+   * nothing left for the query to do there.
+   *
+   * So the claim is re-pointed at something stronger than a second witness: that
+   * these utilities COMPILE AT ALL. `@container` and `@[520px]:` are provided by
+   * a plugin; without it registered they are not Tailwind classes, they are
+   * inert text in a class attribute — and every assertion above would still pass
+   * while the rail silently reverted to always-on. That is the failure this
+   * control now guards, and no count of sibling files could ever have caught it.
+   *
+   * If a second file adopts container queries, the "vocabulary" claim becomes
+   * available again and this is the place to restore it.
+   */
+  const config = readSource('tailwind.config.js').code;
+  assert.match(
+    config,
+    /@tailwindcss\/container-queries/,
+    'the container-query plugin is not registered — @container compiles to nothing',
+  );
+  assert.match(config, /plugins:\s*\[/, 'and it is registered as a plugin');
+
+  // The former witnesses, asserted as ABSENT so this note cannot go stale
+  // silently: if either grows a container query back, come and re-read the above.
   for (const file of ['src/app/(public)/training-course/_components/CourseCard.jsx',
                       'src/components/ScheduleCard.jsx']) {
-    assert.match(readSource(file).code, /@\[\d+px\]:/, `${file} already queries its container`);
+    assert.equal(
+      /@\[\d+px\]:/.test(readSource(file).code),
+      false,
+      `${file} queries its container again — the note above needs updating`,
+    );
   }
 });
 

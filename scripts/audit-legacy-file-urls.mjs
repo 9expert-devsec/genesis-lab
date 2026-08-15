@@ -227,7 +227,7 @@ import {
 // body the audit had already called safe.
 import {
   LEGACY_HOST,
-  LEGACY_ORIGIN,
+  LEGACY_PROBE_ORIGIN,
   WEBROOT_DOC_EXTENSIONS,
   MAX_DEPTH,
   mightContainLegacy,
@@ -251,7 +251,7 @@ const argOf = (flag, fallback = null) => {
 
 // ── configuration ───────────────────────────────────────────────────────────
 
-// LEGACY_HOST, LEGACY_ORIGIN and WEBROOT_DOC_EXTENSIONS are imported from
+// LEGACY_HOST, LEGACY_PROBE_ORIGIN and WEBROOT_DOC_EXTENSIONS are imported from
 // ./lib/legacy-url-extract.mjs — see the import block above.
 
 /** Per-URL reference sites retained. Overflow is counted, never silently cut. */
@@ -532,7 +532,7 @@ async function runChecks(entries) {
       try {
         // The URL constructor re-encodes Thai, spaces and parentheses correctly,
         // which is exactly what the browser would send for this stored value.
-        url = new URL(t.path, LEGACY_ORIGIN).href;
+        url = new URL(t.path, LEGACY_PROBE_ORIGIN).href;
       } catch (err) {
         if (t.kind === 'stored') t.entry.check = UNBUILDABLE(err);
         else sourceChecks.set(t.path, UNBUILDABLE(err));
@@ -720,7 +720,7 @@ async function main() {
   // ── optional reachability pass ───────────────────────────────────────────
   if (check && entries.length) {
     const sourceTargets = new Set(derivatives.map((e) => e.derivative.sourcePath)).size;
-    console.log(`── CHECKING ${entries.length} stored URL(s) + ${sourceTargets} computed source(s) against ${LEGACY_ORIGIN} ──`);
+    console.log(`── CHECKING ${entries.length} stored URL(s) + ${sourceTargets} computed source(s) against ${LEGACY_PROBE_ORIGIN} ──`);
     console.log(`   HEAD, ${CHECK_CONCURRENCY} at a time, ${CHECK_DELAY_MS}ms apart, ${CHECK_TIMEOUT_MS / 1000}s timeout, redirects followed.`);
     console.log('   Both are probed because a 200 on a derivative proves nothing: Drupal');
     console.log('   regenerates a missing one on demand. The SOURCE result is the evidence.');

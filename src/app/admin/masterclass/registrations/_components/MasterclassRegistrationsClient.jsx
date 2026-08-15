@@ -94,14 +94,42 @@ function fmtDate(iso) {
 
 // ── Main Component ─────────────────────────────────────────────────
 
+/**
+ * ── THE SIX FILTERS ARE PROPS. NO FILTER STATE LIVES HERE. ──────────────────
+ *
+ * Same conversion as RegistrationsClient, and the same rule: the URL is the one
+ * place a filter lives, derived on every render by page.jsx and rendered
+ * straight from the prop. Conformance with AuditLogClient, WebhookLogsClient and
+ * DashboardClient, which have always worked this way.
+ *
+ * ── WHY THIS SCREEN'S VERSION WAS WORSE THAN CHROME ─────────────────────────
+ * All six were `useState(initialX)`. React preserves the component instance
+ * across a navigation to the same route, so the props updated and the state did
+ * not — and unlike the registrations list, one of these stale values FEEDS A
+ * FETCH. `batchOptions` is loaded from `courseId` by the effect below. Follow one
+ * `?courseId=A&batchId=…` deep link from a batch page, then a second for course
+ * B, and the table showed B's registrations while the รุ่น dropdown was still
+ * listing A's batches — an admin picking a batch that does not belong to the
+ * course on screen.
+ *
+ * Making `courseId` a prop is what fixes the dropdown: the effect's dependency
+ * is now the URL's value, so it re-fetches on every navigation rather than once
+ * per mount.
+ *
+ * The three `<select>`s stay `value={prop}` + `onChange={navigate}`. That is a
+ * controlled input whose state lives in the URL — the correct shape here, not a
+ * local mirror of it. The search box is uncontrolled (`defaultValue` + `key`)
+ * because in-progress typing genuinely is local; the `key` means it cannot go on
+ * showing a term the list is not filtered by.
+ */
 export function MasterclassRegistrationsClient({
   initialData,
-  initialStatus,
-  initialQ,
-  initialRange    = 'all',
-  initialCourseId = '',
-  initialBatchId  = '',
-  initialLicenseScope = '',
+  status = 'all',
+  q      = '',
+  range  = 'all',
+  courseId = '',
+  batchId  = '',
+  licenseScope = '',
   counts,
   courseOptions = [],
 }) {
@@ -110,12 +138,6 @@ export function MasterclassRegistrationsClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const [q,        setQ]        = useState(initialQ);
-  const [status,   setStatus]   = useState(initialStatus);
-  const [range,    setRange]    = useState(initialRange);
-  const [courseId, setCourseId] = useState(initialCourseId);
-  const [batchId,  setBatchId]  = useState(initialBatchId);
-  const [licenseScope, setLicenseScope] = useState(initialLicenseScope);
   const [batchOptions, setBatchOptions] = useState([]);
   const [openMenuId, setOpenMenuId] = useState(null);
   // For inline status update
@@ -179,9 +201,11 @@ export function MasterclassRegistrationsClient({
     return () => { clearTimeout(t); window.removeEventListener('resize', onResize); };
   }, [pathname, searchParams, router]);
 
+  // The term is read out of the form, not out of state — see the header.
   const handleSearch = (e) => {
     e.preventDefault();
-    navigate({ q, page: '1' });
+    const term = String(new FormData(e.currentTarget).get('q') ?? '');
+    navigate({ q: term, page: '1' });
   };
 
   async function handleStatusChange(id, newStatus) {
@@ -249,7 +273,7 @@ export function MasterclassRegistrationsClient({
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => { setRange(opt.value); navigate({ range: opt.value, page: '1' }); }}
+                onClick={() => navigate({ range: opt.value, page: '1' })}
                 className={cn(
                   'rounded-9e-md px-2.5 py-1 text-[11px] font-semibold transition-colors',
                   range === opt.value
@@ -268,7 +292,7 @@ export function MasterclassRegistrationsClient({
             <button
               key={key}
               type="button"
-              onClick={() => { setStatus(filterVal); navigate({ status: filterVal, page: '1' }); }}
+              onClick={() => navigate({ status: filterVal, page: '1' })}
               className={cn(
                 'rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-4 text-left transition-shadow hover:shadow-9e-sm',
                 status === filterVal && 'ring-2 ring-9e-brand ring-offset-1',
@@ -292,8 +316,11 @@ export function MasterclassRegistrationsClient({
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+              name="q"
+              // Uncontrolled, keyed on the term the list is filtered by — see
+              // the component header.
+              defaultValue={q}
+              key={q}
               placeholder="ค้นหาชื่อ / อีเมล / เบอร์โทร"
               className={cn(
                 'h-9 w-64 rounded-9e-md border bg-[var(--surface)] pl-9 pr-3 text-sm',
@@ -316,10 +343,10 @@ export function MasterclassRegistrationsClient({
           <select
             value={courseId}
             onChange={(e) => {
-              const next = e.target.value;
-              setCourseId(next);
-              setBatchId('');
-              navigate({ courseId: next, batchId: '', page: '1' });
+              // `batchId: ''` in the SAME navigation, because a batch belongs to
+              // one course: carrying the old one over would filter the new
+              // course by a batch it does not contain, and return nothing.
+              navigate({ courseId: e.target.value, batchId: '', page: '1' });
             }}
             className={selectCls()}
           >
@@ -336,11 +363,7 @@ export function MasterclassRegistrationsClient({
           <select
             value={batchId}
             disabled={!courseId}
-            onChange={(e) => {
-              const next = e.target.value;
-              setBatchId(next);
-              navigate({ batchId: next, page: '1' });
-            }}
+            onChange={(e) => navigate({ batchId: e.target.value, page: '1' })}
             className={cn(selectCls(), !courseId && 'opacity-50')}
           >
             <option value="">ทุกรุ่น</option>
@@ -357,11 +380,7 @@ export function MasterclassRegistrationsClient({
           <label className="mb-1 block text-[11px] font-medium text-[var(--text-muted)]">License</label>
           <select
             value={licenseScope}
-            onChange={(e) => {
-              const next = e.target.value;
-              setLicenseScope(next);
-              navigate({ licenseScope: next, page: '1' });
-            }}
+            onChange={(e) => navigate({ licenseScope: e.target.value, page: '1' })}
             className={selectCls()}
           >
             {LICENSE_SCOPE_OPTIONS.map((o) => (
@@ -376,7 +395,7 @@ export function MasterclassRegistrationsClient({
             <button
               key={opt.value}
               type="button"
-              onClick={() => { setStatus(opt.value); navigate({ status: opt.value, page: '1' }); }}
+              onClick={() => navigate({ status: opt.value, page: '1' })}
               className={cn(
                 'rounded-full px-3 py-1 text-xs font-semibold transition-colors',
                 status === opt.value

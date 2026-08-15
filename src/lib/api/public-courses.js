@@ -9,19 +9,120 @@
  */
 
 import { aiFetch, unwrap } from './client';
+import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
+import { orderCoursesInCategory, orderCoursesGlobally } from '@/lib/courses/courseOrder';
+import { dropHiddenCourses, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
 
 const PATH = '/public-course';
 
 /**
  * List all active public courses.
  * Optional filters: skill (skill ID), program (program ID).
+ *
+ * ── COURSES HIDDEN BY AN ADMIN ARE REMOVED BY DEFAULT ───────────────────────
+ * Upstream has never heard of `CourseExtension.isPublished`, so this is the one
+ * place a hidden course can be taken out of every listing at once. It is opt-OUT
+ * rather than opt-in on purpose: the failure mode of the old arrangement was a
+ * surface that had simply never been told about the flag, and a default that
+ * filters means the next listing surface anyone adds is correct without its
+ * author knowing this rule exists.
+ *
+ * `includeHidden: true` is for the callers that MUST still see everything, and
+ * it is stated at each call site rather than inherited:
+ *
+ *   · every /admin picker and table — including the previous_course picker,
+ *     whose `allCourses` prop is how a STORED prerequisite is resolved. Filter
+ *     it and a course whose prerequisite is hidden silently loses it on the next
+ *     save;
+ *   · the sync writers — snapshots store the superset and their READ paths
+ *     filter (see lib/courses/hiddenCourses for why that split, and what it
+ *     buys on a UAT deploy that main has not caught up with);
+ *   · checkAliasAvailable — a hidden course still owns its legacy
+ *     /<code>-training-course path, so the shadow check has to keep seeing it;
+ *   · buildCourseNameMap — a registration taken for a course that has since
+ *     been hidden must still render the course's NAME, not its bare code.
+ *
+ * NOT in that list, and deliberately: the create page's duplicate-code guard,
+ * `findCourseCodeInsensitive`. It does its own uncached
+ * `aiFetch('/public-course', { revalidate: 0 })` and never comes through here,
+ * so it is unaffected by construction rather than by remembering — which
+ * matters, because a guard that stopped seeing hidden courses would let an
+ * admin create a colliding code and overwrite a hidden course's SEO, gallery
+ * and omisePaymentEnabled (saveCourseExtension upserts a whole document keyed
+ * by the code). test/fs pins that it stays on its own read.
  */
-export async function listPublicCourses({ skill, program } = {}) {
-  const raw = await aiFetch(PATH, {
+export async function listPublicCourses(
+  { skill, program, includeHidden = false } = {},
+  /**
+   * `deps`, for exactly the reason getCourseByCodeInsensitive below carries its
+   * own: what this function now does is decide WHICH list comes back, and that
+   * is not observable from source text — an fs guard asserting "the filter is
+   * called" is what let the original gate sit here, green, covering one surface
+   * out of twelve. Production callers pass nothing.
+   */
+  { fetchUpstream = aiFetch, loadHidden = loadHiddenCourseIds, loadOrder = loadCourseOrder } = {}
+) {
+  const raw = await fetchUpstream(PATH, {
     params: { skill, program },
     tags: ['public-courses'],
   });
-  return unwrap(raw);
+  let result = unwrap(raw);
+
+  /**
+   * ── THE ORDER IS APPLIED HERE, AT THE ORIGIN, AND ABOVE THE EARLY RETURN ──
+   *
+   * Every course list in this codebase comes from this function — there is no
+   * second origin. Ordering here rather than at the surfaces means two whole
+   * classes of mistake cannot occur: there is no separate call whose result a
+   * caller could compute and then drop, and a filtered call cannot be ordered
+   * by the wrong category, because the rank map is derived from THE SAME
+   * ARGUMENT that selected the courses.
+   *
+   * ABOVE `if (includeHidden) return result` ON PURPOSE. Thirteen of the
+   * twenty-five call sites take that path — including syncNavMenuData, which
+   * builds the entire mega menu, and syncLandingData. Ordering below it would
+   * leave the highest-traffic surface on upstream's order, and because the seed
+   * captures the order the site already renders, that mistake looks CORRECT on
+   * the day it ships and only appears the first time an admin rearranges
+   * something. There is an assertion pinned to this specifically.
+   *
+   * NO OPT-OUT PARAMETER, ruled and deliberate. The order is a property of the
+   * origin, not a request a caller may decline. A surface that one day needs a
+   * different order — a "sort by price" control, say — is a deliberate decision
+   * that gets its own guard, not a quiet argument threaded through here; adding
+   * one re-opens exactly the hole this closes, because "did this caller opt
+   * out, and should it have?" is unanswerable from source.
+   *
+   * `loadOrder` returns null when the order must not be applied — the read
+   * failed, or nothing is seeded yet. Both leave the array exactly as upstream
+   * sent it. See lib/courses/courseOrderStore.js for why that is the safe
+   * direction and "order nothing" is not.
+   */
+  const order = await loadOrder();
+  if (order) {
+    const items = result.items ?? [];
+    if (program) {
+      result = { ...result, items: orderCoursesInCategory(items, order.programCourseOrder.get(String(program))) };
+    } else if (skill) {
+      result = { ...result, items: orderCoursesInCategory(items, order.skillCourseOrder.get(String(skill))) };
+    } else {
+      result = { ...result, items: orderCoursesGlobally(items, {
+        programRank: order.programRank,
+        courseOrderByProgram: order.programCourseOrder,
+      }) };
+    }
+  }
+
+  if (includeHidden) return result;
+
+  const hidden = await loadHidden();
+  if (hidden.size === 0) return result;
+
+  const items = dropHiddenCourses(result.items, hidden);
+  // `total` is re-derived rather than carried through: it is upstream's count of
+  // the UNFILTERED list, and a caller rendering "N courses" above a grid of
+  // fewer than N is the same class of quiet wrongness this change is removing.
+  return { ...result, items, total: items.length };
 }
 
 /**
@@ -113,6 +214,16 @@ export async function getCourseByCodeInsensitive(
     fetchByCode = getCourseByCode,
     fetchList = listPublicCourses,
     info = console.info,
+    /**
+     * Passed straight to the fallback list read. The DIRECT `?course_id=` fetch
+     * above is an upstream lookup and never saw the hidden flag, so without this
+     * a hidden course with a mixed-case id would be unreachable even to an
+     * authenticated admin preview — the direct fetch misses on casing, and the
+     * list that would have recovered it has had the course filtered out. The two
+     * paths must agree about what exists, or hiding a course would silently
+     * un-preview exactly five of them.
+     */
+    includeHidden = false,
   } = {}
 ) {
   if (!courseId) return null;
@@ -120,7 +231,7 @@ export async function getCourseByCodeInsensitive(
   const direct = await fetchByCode(courseId);
   if (direct) return direct;
 
-  const { items } = await fetchList();
+  const { items } = await fetchList({ includeHidden });
   const wanted = String(courseId).toLowerCase();
   const match = (items ?? []).find(
     (c) => String(c?.course_id ?? '').toLowerCase() === wanted

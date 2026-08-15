@@ -38,11 +38,81 @@
 
 import { pathOnly } from './legacy-source-manifest.mjs';
 
-/** The box being shut down. Apex and www only. */
-export const LEGACY_HOST = '9experttraining.com';
+/**
+ * THE HOSTNAME WRITTEN IN THE DATABASE. FROZEN. NOT CONFIGURABLE.
+ *
+ * ══ WHY THIS IS A LITERAL AND MUST STAY ONE ═════════════════════════════════
+ *
+ * This value does not describe where the old box lives. It describes the TEXT
+ * stored inside references in Mongo — `https://www.9experttraining.com/…`,
+ * written years ago and unchanged by anything that happens to DNS. The old box
+ * is being repointed to a holding domain; not one stored string changes when
+ * that happens.
+ *
+ * So making this env-derived would create a way to SILENTLY STOP MATCHING. The
+ * failure has no symptom: every scan still runs, every gate still passes, and
+ * the report says zero references found. A full-green run that rewrites nothing
+ * looks exactly like a job already done.
+ *
+ * It changes only if the stored DATA changes — i.e. after a migration that
+ * rewrites those strings — and then it changes in the same commit as that
+ * migration, deliberately, in a diff someone reads.
+ *
+ * Contrast LEGACY_PROBE_ORIGIN below, which is the opposite kind of value.
+ */
+export const LEGACY_MATCH_HOST = 'www.9experttraining.com';
 
-/** Where a liveness check sends its requests. */
-export const LEGACY_ORIGIN = `https://www.${LEGACY_HOST}`;
+/**
+ * The apex form. References are stored on BOTH `www.` and the bare apex, so
+ * both must match; deriving the apex here keeps one literal rather than two
+ * that have to agree.
+ */
+const LEGACY_MATCH_APEX = LEGACY_MATCH_HOST.replace(/^www\./i, '');
+
+/** Escape a literal for embedding in a regex source string. */
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The host fragment BOTH matchers are built from — this module's extraction
+ * regexes and legacy-reference-rewrite.mjs's host-stripping regex.
+ *
+ * Exported as a builder rather than as a regex so the two consumers cannot come
+ * to depend on each other's flags, and so they cannot drift: before this, the
+ * pattern was written out twice, in two files, with nothing forcing agreement.
+ * That is the shape of defect this repo has been bitten by repeatedly.
+ */
+export function legacyHostPattern() {
+  return String.raw`(?:www\.)?${escapeRe(LEGACY_MATCH_APEX)}(?::\d+)?`;
+}
+
+/**
+ * The box being shut down. Apex and www only.
+ *
+ * Kept as the apex spelling because it is a LABEL — it names what was scanned,
+ * in report metadata and console banners, and nothing matches or probes with it.
+ */
+export const LEGACY_HOST = LEGACY_MATCH_APEX;
+
+/**
+ * WHERE A LIVENESS CHECK SENDS ITS REQUESTS. Env-overridable, on purpose.
+ *
+ * ══ WHY THIS ONE IS CONFIGURABLE AND THE MATCH HOST IS NOT ══════════════════
+ *
+ * This names a MACHINE. The old Drupal box keeps serving for 1–3 months after
+ * its domain is repointed, so "where do I HEAD to ask whether this file is
+ * still there" is about to become a different address from the one written in
+ * the data. When that happens the repoint is one environment variable:
+ *
+ *     LEGACY_PROBE_ORIGIN=https://<holding-domain>
+ *
+ * The default is TODAY'S value, so setting nothing changes nothing.
+ *
+ * DO NOT collapse this back into LEGACY_MATCH_HOST. They read alike and they
+ * are opposites: one follows the hardware, one describes the data. They were
+ * one constant until this split, and the whole point is that they diverge.
+ */
+export const LEGACY_PROBE_ORIGIN = process.env.LEGACY_PROBE_ORIGIN
+  || 'https://www.9experttraining.com';
 
 /**
  * Root-relative bare-webroot files are matched only for these extensions.
@@ -58,7 +128,7 @@ export const WEBROOT_DOC_EXTENSIONS = [
 /** Recursion guard. BSON cannot cycle, but it can nest absurdly. */
 export const MAX_DEPTH = 40;
 
-const HOST_RE = String.raw`(?:www\.)?9experttraining\.com(?::\d+)?`;
+const HOST_RE = legacyHostPattern();
 
 /** Longest first, so `/files/` never gets classified through `/file`. */
 const LEGACY_DIRS = String.raw`(?:sites/default/files|download|images|files|file)`;
@@ -120,7 +190,9 @@ const CSS_URL_RE = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)'"]*))\s*\)/gi;
  * in the database is the expensive part; almost no string contains any of these
  * needles, and `indexOf` is far cheaper than a regex.
  */
-const NEEDLES = ['9experttraining.com', '/sites/default/files', '/download/', '/files/', '/file/', '/images/'];
+// Lowercased because the gate below tests against `s.toLowerCase()`; the
+// literal it replaced was already lowercase, so this is the same needle.
+const NEEDLES = [LEGACY_MATCH_APEX.toLowerCase(), '/sites/default/files', '/download/', '/files/', '/file/', '/images/'];
 
 export function mightContainLegacy(s) {
   if (s.length < 6) return false;
