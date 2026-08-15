@@ -15,47 +15,61 @@ import { refNo } from '@/lib/refNo';
 import { monthLongLabel } from '@/lib/schedule/monthWindow';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
+import {
+  INHOUSE_STATUS_TRANSITIONS,
+  allowedTransitions,
+  effectiveStatus,
+  statusLabel,
+} from '@/lib/registrations/statuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
 const STATUS_BADGE = {
+  pending:       'bg-amber-100 text-amber-700',
+  quoted:        'bg-blue-100 text-blue-700',
+  cancelled:     'bg-slate-100 text-slate-500',
+  // RETIRED, and kept until the enum is narrowed. Real documents still hold
+  // these for the window between this deploying and the migration's --apply,
+  // and a badge with no entry falls back to grey — which would turn the whole
+  // unmigrated backlog grey rather than showing what each record says.
   new:           'bg-violet-100 text-violet-700',
   contacted:     'bg-blue-100 text-blue-700',
-  quoted:        'bg-amber-100 text-amber-700',
   'closed-won':  'bg-emerald-100 text-emerald-700',
   'closed-lost': 'bg-slate-100 text-slate-500',
 };
 
-const STATUS_LABEL = {
-  new:           'ใหม่ — รอติดต่อ',
-  contacted:     'ติดต่อแล้ว',
-  quoted:        'ส่งใบเสนอราคาแล้ว',
-  'closed-won':  'ปิดงานสำเร็จ',
-  'closed-lost': 'ปิดงาน — ไม่สำเร็จ',
-};
-
-const STATUS_ACTIONS = {
-  new:           ['contacted', 'closed-lost'],
-  contacted:     ['quoted', 'closed-lost'],
-  quoted:        ['closed-won', 'closed-lost'],
-  'closed-won':  ['contacted'],
-  'closed-lost': ['new'],
-};
-
+/**
+ * ── THERE IS NO STATUS-ACTION MAP IN THIS FILE ANY MORE ─────────────────────
+ *
+ * It used to be a hand-written literal here:
+ *
+ *   { new: ['contacted','closed-lost'], contacted: ['quoted','closed-lost'],
+ *     quoted: ['closed-won','closed-lost'], 'closed-won': ['contacted'],
+ *     'closed-lost': ['new'] }
+ *
+ * and it was the ONLY place the in-house rules existed — `updateInhouseStatus`
+ * checked that the target was a member of the status set and nothing else. In a
+ * Next app every `'use server'` export is a POST endpoint, so that literal was
+ * load-bearing security in a client component. This is the same defect round 1
+ * removed from the public detail screen, in the file next door.
+ *
+ * Note what the old table permitted and the new one does not: `closed-lost →
+ * new` un-cancelled a record. Cancellation is TERMINAL now, on both sides.
+ *
+ * ACTION_LABEL / ACTION_VARIANT are keyed by TARGET, not by from-state, and
+ * carry only the two targets an admin can still choose. They are presentation,
+ * not rules: a target with no entry renders NO BUTTON, so a new edge added to
+ * the table and forgotten here is a missing affordance rather than an
+ * unlabelled trap. The fs tier pins the two lists against each other.
+ */
 const ACTION_LABEL = {
-  contacted:     'บันทึกว่าติดต่อแล้ว',
-  quoted:        'ส่งใบเสนอราคา',
-  'closed-won':  'ปิดงานสำเร็จ',
-  'closed-lost': 'ปิดงาน — ไม่สำเร็จ',
-  new:           'คืนสถานะ "ใหม่"',
+  quoted:    'ส่งใบเสนอราคา',
+  cancelled: 'ยกเลิกคำขอ',
 };
 
 const ACTION_VARIANT = {
-  contacted:     'primary',
-  quoted:        'primary',
-  'closed-won':  'cta',
-  'closed-lost': 'outline',
-  new:           'outline',
+  quoted:    'primary',
+  cancelled: 'outline',
 };
 
 // 'consult' and 'flexible' are LEGACY VALUES — both cards were removed from the
@@ -178,10 +192,52 @@ export function InhouseDetailClient({ doc, courses = [] }) {
   const [error,       setError]       = useState(null);
   const [, startTransition] = useTransition();
 
-  const statusActions = STATUS_ACTIONS[status] ?? [];
+  /**
+   * THE BUTTONS ARE A PROJECTION OF THE SHARED TABLE.
+   *
+   * `effectiveStatus` first, because a document the migration has not reached
+   * yet holds a RETIRED value which has no row in the three-value table.
+   * `allowedTransitions('new')` is [], so without this every unmigrated
+   * enquiry would render a toolbar with nothing in it — at the time of writing,
+   * six of the eight documents in the collection.
+   *
+   * The BADGE below deliberately does NOT go through `effectiveStatus`: it
+   * renders `statusLabel(status)`, the value the record actually holds. What
+   * the record says and what an admin may do to it are different questions.
+   *
+   * The `.filter` on ACTION_LABEL means an unlabelled edge degrades to no
+   * button rather than to a button with no text — see the note on the maps.
+   */
+  const liveStatus    = effectiveStatus(status, 'inhouse');
+  const statusActions = allowedTransitions(liveStatus, INHOUSE_STATUS_TRANSITIONS)
+    .filter((next) => ACTION_LABEL[next]);
+
+  /**
+   * A CANCELLED REQUEST IS READ-ONLY, AND THE SCREEN SAYS SO.
+   *
+   * `updateInhouseAdminNotes` refuses the write regardless of what renders here
+   * — the lock is in the query filter, not in this flag. What this flag does is
+   * stop the screen OFFERING an edit that would be refused: a แก้ไข button that
+   * opens a textarea, accepts typing and then fails on save is a worse
+   * experience than no button at all.
+   *
+   * `statusActions` is already empty for `cancelled` (the table has no outgoing
+   * edges), so the status buttons need no separate flag. DELETE IS DELIBERATELY
+   * STILL AVAILABLE; see the ruling in lib/actions/inhouse-registrations.js.
+   */
+  const readOnly = liveStatus === 'cancelled';
 
   const handleStatusAction = (next) => {
-    if (!window.confirm(`เปลี่ยนสถานะเป็น "${STATUS_LABEL[next]}"?`)) return;
+    /**
+     * CANCELLATION IS IRREVERSIBLE AND THE DIALOG HAS TO SAY SO. The table has
+     * no edge out of `cancelled`, so an admin who confirms this by reflex —
+     * expecting to be able to undo it, as the old `closed-lost → new` edge
+     * allowed — has no way back except delete.
+     */
+    const message = next === 'cancelled'
+      ? `ยกเลิกคำขอนี้?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้ (ยังลบได้)`
+      : `เปลี่ยนสถานะเป็น "${statusLabel(next)}"?`;
+    if (!window.confirm(message)) return;
     setBusy(next); setError(null);
     startTransition(async () => {
       const res = await updateInhouseStatus(doc._id, next);
@@ -262,7 +318,7 @@ export function InhouseDetailClient({ doc, courses = [] }) {
         </div>
         <div className="flex flex-col items-end gap-3">
           <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', STATUS_BADGE[status] ?? 'bg-slate-100 text-slate-600')}>
-            {STATUS_LABEL[status] ?? status}
+            {statusLabel(status)}
           </span>
           {statusActions.length > 0 && (
             <div className="flex flex-wrap justify-end gap-2">
@@ -273,6 +329,16 @@ export function InhouseDetailClient({ doc, courses = [] }) {
                 </Button>
               ))}
             </div>
+          )}
+          {/* Without this line the missing แก้ไข button reads as a bug. It says
+              the rule, and says delete is still available, because that is the
+              next question anyone asks when a screen goes read-only. The same
+              copy as the public client, one word apart: this is a คำขอ, not a
+              ใบสมัคร. */}
+          {readOnly && (
+            <p className="max-w-[16rem] text-right text-xs text-[var(--text-muted)]">
+              คำขอนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้ (ยังลบได้)
+            </p>
           )}
           <button type="button" onClick={handleDelete} disabled={busy !== null}
             className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-9e-accent transition-colors disabled:opacity-40">
@@ -370,6 +436,7 @@ export function InhouseDetailClient({ doc, courses = [] }) {
       {/* ── Admin notes (editable) ── */}
       <CardEditable
         title="บันทึกภายในของทีมขาย"
+        readOnly={readOnly}
         isEditing={editingNotes}
         isSaving={busy === 'save-notes'}
         onEdit={() => setEditingNotes(true)}
@@ -529,16 +596,30 @@ function CopyButton({ value, label }) {
   );
 }
 
-function CardEditable({ title, children, isEditing, isSaving, onEdit, onSave, onCancel }) {
+/**
+ * `readOnly` renders NO edit affordance at all — not a disabled one.
+ *
+ * A greyed-out แก้ไข button still invites the click and still has to explain
+ * itself on every hover. On a cancelled request the honest surface is a card
+ * with no control, plus the one line in the header saying why. Same shape as
+ * the public client's CardEditable.
+ *
+ * The prop DEFAULTS TO FALSE so a card that is never passed it stays editable
+ * — which is why the fs tier counts CardEditable uses against gated ones rather
+ * than trusting this default.
+ */
+function CardEditable({ title, children, isEditing, isSaving, onEdit, onSave, onCancel, readOnly = false }) {
   return (
     <section className={cn('rounded-9e-lg border bg-[var(--surface)] p-6 transition-colors', isEditing ? 'border-9e-brand/40' : 'border-[var(--surface-border)]')}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-base font-bold text-[var(--text-primary)]">{title}</h2>
         {!isEditing ? (
+          readOnly ? null : (
           <button type="button" onClick={onEdit}
             className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-9e-action transition-colors">
             <Pencil className="h-3.5 w-3.5" />แก้ไข
           </button>
+          )
         ) : (
           <div className="flex items-center gap-2">
             <button type="button" onClick={onCancel} disabled={isSaving}

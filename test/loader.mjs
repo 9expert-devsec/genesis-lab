@@ -60,6 +60,12 @@ export const STUBS = {
   // save/delete handlers; that chain reaches next-auth → next/headers. Same
   // reasoning as the two lines above.
   '@/lib/actions/registrations': path.join(ROOT, 'test', 'stub-registration-actions.mjs'),
+  // InhouseDetailClient imports the IN-HOUSE actions, which are a separate
+  // module reaching the same next-auth → next/headers chain. Added in round 2
+  // with the in-house cancellation lock: without it the whole
+  // render/inhouseCancelledReadOnly file threw at import and contributed zero
+  // tests, which the runner's per-file meta-control is what caught.
+  '@/lib/actions/inhouse-registrations': path.join(ROOT, 'test', 'stub-inhouse-registration-actions.mjs'),
   // CourseForm imports the course + extension server actions for its save
   // handler; both chains reach next-auth → next/headers (and mongoose). Same
   // reasoning as the three lines above.

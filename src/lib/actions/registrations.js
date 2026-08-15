@@ -10,8 +10,9 @@ import {
   PUBLIC_STATUS_VALUES,
   INHOUSE_STATUS_VALUES,
   storedValuesForFilter,
+  transitionsForSource,
   allowedFromStates,
-  buildStatusLabels,
+  statusLabel,
 } from '@/lib/registrations/statuses';
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 
@@ -160,7 +161,11 @@ export async function getRegistrationById(id, source = 'public') {
 const PUBLIC_STATUSES  = new Set(PUBLIC_STATUS_VALUES);
 const INHOUSE_STATUSES = new Set(INHOUSE_STATUS_VALUES);
 
-const PUBLIC_STATUS_LABEL = buildStatusLabels();
+// The refusal message reads through `statusLabel` instead of a per-source label
+// map. It has to: the from-state may be a RETIRED value, which no live map
+// knows, and a public-only map would have rendered an in-house refusal as
+// 'จาก "contacted"' — half Thai, half raw enum, explaining a rule the admin did
+// not expect in the least helpful way available.
 
 /**
  * ── THE TRANSITION IS ENFORCED HERE, NOT BY WHICH BUTTONS RENDER ────────────
@@ -195,45 +200,69 @@ export async function updateRegistrationStatus(id, status, source = 'public') {
   await dbConnect();
   const Model = getModel(source);
 
-  let previous;
-  if (source === 'inhouse') {
-    // UNCHANGED THIS ROUND. In-house has its own vocabulary and no agreed
-    // transition table yet; inventing one here would be a guess enforced on
-    // the sales team. It gets the same treatment in its own round.
-    //
-    // `new: false` returns the PRE-update document, which is the only place the
-    // previous status exists. The existence check below is unchanged (a missing
-    // id returns null either way) and `doc` is not returned to the caller, so
-    // this costs nothing and adds no query.
-    const doc = await Model.findByIdAndUpdate(id, { status }, { new: false, runValidators: false });
-    if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
-    previous = doc.status;
-  } else {
-    /**
-     * ATOMIC. The filter names both the id AND the states permitted to reach
-     * `status`, so a document in any other state is not matched and not
-     * written.
-     *
-     * A NULL RESULT IS AMBIGUOUS — it means EITHER no such id OR an id whose
-     * stored status may not make this move, and the two deserve different
-     * messages ("ไม่พบรายการ" sends the admin looking for a deleted record;
-     * the refusal tells them the rule). One extra read resolves which, and it
-     * runs ONLY on this path — the successful path is still a single write.
-     */
-    const doc = await Model.findOneAndUpdate(
-      { _id: id, status: { $in: allowedFromStates(status) } },
-      { $set: { status } },
-      { new: false, runValidators: false }
-    );
-    if (!doc) {
-      const existing = await Model.findById(id).select('status').lean();
-      if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
-      const from = PUBLIC_STATUS_LABEL[existing.status] ?? existing.status;
-      const to   = PUBLIC_STATUS_LABEL[status] ?? status;
-      return { ok: false, error: `ไม่สามารถเปลี่ยนสถานะจาก "${from}" เป็น "${to}" ได้` };
-    }
-    previous = doc.status;
+  /**
+   * ATOMIC, FOR BOTH SOURCES. The filter names both the id AND the states
+   * permitted to reach `status`, so a document in any other state is not
+   * matched and not written.
+   *
+   * ── THE IN-HOUSE BRANCH IS GONE, NOT MIRRORED ───────────────────────────
+   * Round 1 left in-house on an unconditional `findByIdAndUpdate` with the
+   * note "in-house has its own vocabulary and no agreed transition table yet;
+   * inventing one here would be a guess enforced on the sales team". The table
+   * is agreed now, so the guess is no longer a guess — and keeping a separate
+   * branch would mean the atomicity argument below applied to one collection
+   * and not the other, for no reason anyone could state.
+   *
+   * `transitionsForSource` is the ONLY thing that differs between them, and it
+   * is a lookup rather than a control-flow fork.
+   *
+   * ── WHY A CONDITIONAL UPDATE AND NOT A READ-THEN-WRITE ──────────────────
+   * A read-then-write leaves a window in which a concurrent call — a second
+   * admin, a double-clicked button, the Omise webhook settling a charge —
+   * changes the status between the read and the write, and the write then
+   * lands on a state nobody checked.
+   *
+   * ── A NULL RESULT IS AMBIGUOUS ──────────────────────────────────────────
+   * It means EITHER no such id OR an id whose stored status may not make this
+   * move, and the two deserve different messages ("ไม่พบรายการ" sends the
+   * admin looking for a deleted record; the refusal tells them the rule). One
+   * extra read resolves which, and it runs ONLY on that path — the successful
+   * path is still a single write.
+   *
+   * ── THE REFUSAL MESSAGE USES `statusLabel`, NOT THE PUBLIC MAP ──────────
+   * The from-state may be a RETIRED value — every unmigrated in-house document
+   * holds one — and the public label map has no entry for `contacted`, so the
+   * message would have read 'ไม่สามารถเปลี่ยนสถานะจาก "contacted"'. Telling an
+   * admin the rule in half Thai and half English is a poor way to explain a
+   * refusal they did not expect.
+   */
+  /**
+   * The permitted from-states, WIDENED to the stored values that behave as
+   * them. `quoted` is reachable from `pending`, and therefore also from the
+   * unmigrated `new` and `contacted` that are about to become `pending`.
+   *
+   * Without the widening the atomic filter would refuse every in-house
+   * transition until the migration ran — the whole backlog frozen, because a
+   * retired value has no row in the three-value table. After --apply the extra
+   * members match nothing.
+   */
+  const table = transitionsForSource(source);
+  const fromStates = allowedFromStates(status, table)
+    .flatMap((from) => storedValuesForFilter(from, source));
+
+  const doc = await Model.findOneAndUpdate(
+    { _id: id, status: { $in: fromStates } },
+    { $set: { status } },
+    { new: false, runValidators: false }
+  );
+  if (!doc) {
+    const existing = await Model.findById(id).select('status').lean();
+    if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+    const from = statusLabel(existing.status);
+    const to   = statusLabel(status);
+    return { ok: false, error: `ไม่สามารถเปลี่ยนสถานะจาก "${from}" เป็น "${to}" ได้` };
   }
+  const previous = doc.status;
 
   revalidatePath(ADMIN_PATH);
   revalidatePath(`${ADMIN_PATH}/${id}`);
@@ -407,12 +436,20 @@ export async function updateRegistration(id, data, source = 'public') {
    *     since cancellation itself is terminal. Nothing here should be
    *     "completed" by gating deleteRegistration.
    *
-   * In-house is not gated: it has no `cancelled` in its vocabulary, so the
-   * filter would be inert, and its own rules land in its own round.
+   * ── IT COVERS BOTH COLLECTIONS NOW, AND IT DID NOT BEFORE ───────────────
+   *
+   * Round 1 wrote this as `source === 'inhouse' ? { _id: id } : …` with the
+   * note "in-house is not gated: it has no `cancelled` in its vocabulary, so
+   * the filter would be inert". That was true then and is FALSE now — round 2
+   * gave in-house a `cancelled`, and the branch would have left a cancelled
+   * in-house request fully editable while the public one beside it was frozen.
+   *
+   * So the branch is gone rather than mirrored. The rule follows the VALUE, not
+   * the collection: a record holding `cancelled` is read-only, and there is one
+   * filter saying so. A per-source ternary here would be a second place for the
+   * rule to live and a second place for it to fall behind.
    */
-  const filter = source === 'inhouse'
-    ? { _id: id }
-    : { _id: id, status: { $ne: 'cancelled' } };
+  const filter = { _id: id, status: { $ne: 'cancelled' } };
 
   const doc = await Model.findOneAndUpdate(filter, { $set: update }, { new: true, runValidators: false });
   if (!doc) {
