@@ -33,6 +33,29 @@ const CourseExtensionSchema = new mongoose.Schema(
     },
 
     /**
+     * Codes this course USED TO HAVE, appended by the rename action.
+     *
+     * ── WHY THE OLD CODE HAS TO SURVIVE SOMEWHERE ──────────────────────────
+     * The code is CUSTOMER-FACING — it is the first column of /schedule, and
+     * customers quote courses by it because the names are long. After a rename
+     * the code on somebody's quotation matches nothing: `urlAlias` saves the
+     * URL, but nothing saved the CODE. This is where it lives.
+     *
+     * CONSULTED BY EXACTLY TWO SITES, ruled: `/search`'s course haystack and
+     * `resolveCourse`'s fallthrough. NOT the client-side catalogue filters —
+     * those would need the extension payload widened for a case their users do
+     * not hit. Anything else reading this is scope creep, and there is a guard.
+     *
+     * Also load-bearing for the COLLISION check: a new code must not collide
+     * with a live code OR a retired one, or a rename resurrects an ambiguity
+     * that an old link or an old quotation can still reach.
+     *
+     * Upper-cased on write through normalizeCourseCode, matching the key
+     * discipline the order lists and the rank map already use.
+     */
+    formerCodes: { type: [String], default: [] },
+
+    /**
      * Stored with a leading slash, e.g. "/excel-ai-business-training-course".
      * Falsy → falls back to "/{course_id}-training-course" via resolveCourse.
      *

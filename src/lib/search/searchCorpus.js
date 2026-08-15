@@ -62,6 +62,7 @@ import { getActiveCareerPaths } from '@/lib/career-paths/getCareerPaths';
 import { getActivePromotions } from '@/lib/promotions/getPromotions';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
+import { CourseExtension } from '@/models/CourseExtension';
 
 /**
  * How long a built corpus is reused. Matches /search's own `revalidate = 1800`
@@ -105,9 +106,48 @@ async function buildSearchCorpus() {
    * `course_teaser` still arrives — it is in enrich-courses' default mapping,
    * and it is both matched and rendered.
    */
-  const courses = await enrichCoursesWithDetails(listItems, {
+  const enriched = await enrichCoursesWithDetails(listItems, {
     withSchedules: false,
   }).catch(() => listItems);
+
+  /**
+   * ── RETIRED CODES, ATTACHED SO AN OLD QUOTATION STILL FINDS THE COURSE ────
+   *
+   * `CourseExtension.formerCodes` is appended by the rename action. The code is
+   * customer-facing — it is the first column of /schedule and customers quote
+   * courses by it — so after a rename the code on somebody's quotation matches
+   * nothing unless it is searchable. `urlAlias` saves the URL; this saves the
+   * CODE.
+   *
+   * ONE query for the whole corpus, not one per course, and only for rows that
+   * actually have a former code: the projection is two fields and the filter
+   * excludes the empty default, so on a catalogue where nothing has ever been
+   * renamed this reads nothing. It is attached rather than fetched at match
+   * time because the corpus is built once per TTL and matched per keystroke.
+   *
+   * Failure is non-fatal: search without retired codes is the behaviour that
+   * existed before renaming did, and a search page that 500s because an
+   * extension read failed is worse than one that misses an old code.
+   */
+  let formerByCode = new Map();
+  try {
+    const rows = await CourseExtension.find(
+      { formerCodes: { $exists: true, $ne: [] } },
+      { courseId: 1, formerCodes: 1, _id: 0 }
+    ).lean();
+    formerByCode = new Map(
+      rows.map((r) => [String(r.courseId).toUpperCase(), r.formerCodes ?? []])
+    );
+  } catch {
+    formerByCode = new Map();
+  }
+
+  const courses = formerByCode.size === 0
+    ? enriched
+    : enriched.map((c) => {
+        const former = formerByCode.get(String(c?.course_id ?? '').toUpperCase());
+        return former?.length ? { ...c, formerCodes: former } : c;
+      });
 
   // Resolve each round's course ONCE, here, rather than per keystroke in a
   // courseMap lookup on the client. The card needs the name, the code and the

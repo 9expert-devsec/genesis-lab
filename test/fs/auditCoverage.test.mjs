@@ -581,7 +581,13 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // drag-reorder write (ProgramOrder.findOneAndUpdate, $set of courseOrder +
 // courseOrderSource). File-local and direct, so it lands in W2-b's depth-0
 // figure too and the delta between the two figures is unchanged.
-const MUTATING_EXPORT_COUNT = 167;
+// 168 since course-rename.js gained renameCourseCodePhase1 — the genesis-side
+// half of a course-code rename (twelve Mongo stores, no MSDB write, which is
+// asserted in test/fs/renameNoUpstreamWrite). Its sibling `inspectRenameState`
+// only re-runs the read-only preview and stays out of this figure. File-local
+// and direct, so it lands in W2-b's depth-0 count too and the delta between the
+// two figures is unchanged.
+const MUTATING_EXPORT_COUNT = 168;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -754,7 +760,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 162,
+    zero, 163,
     'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
     'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
     '(which mutates through a file-local helper), 159 since media.js gained ' +
@@ -764,7 +770,8 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'previewMirrorReset and listMirrorResetKeys write nothing and are deliberately ' +
     'NOT in this figure — a preview that mutated would defeat its own ruling. ' +
     '162 since program-order.js gained saveProgramCourseOrder, which writes ' +
-    'ProgramOrder directly and so is visible without the walk'
+    'ProgramOrder directly and so is visible without the walk, and 163 since ' +
+    'course-rename.js gained renameCourseCodePhase1'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

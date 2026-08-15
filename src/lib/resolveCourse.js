@@ -27,6 +27,7 @@
 import {
   getCourseExtension,
   getCourseExtensionByAlias,
+  getCourseExtensionByFormerCode,
 } from '@/lib/actions/course-extensions';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
 
@@ -45,6 +46,7 @@ export async function resolveCourse(
   {
     fetchExtensionByAlias = getCourseExtensionByAlias,
     fetchExtension = getCourseExtension,
+    fetchExtensionByFormerCode = getCourseExtensionByFormerCode,
     fetchCourse = getCourseByCodeInsensitive,
     /**
      * ── THE ADMIN PREVIEW BYPASS, AND THE ONLY THING THAT OPENS IT ───────────
@@ -109,6 +111,31 @@ export async function resolveCourse(
     if (course) {
       return { course, extension: byAlias, mode: 'alias' };
     }
+
+    /**
+     * ── FORMER CODES: THE OTHER WAY THE STORED KEY CAN BE AHEAD ────────────
+     *
+     * The stale-casing case above is the extension LAGGING upstream. This is
+     * the reverse and it is deliberate rather than accidental: phase 1 of a
+     * course-code rename rewrites every genesis store to the NEW code while
+     * MSDB still carries the OLD one, so `byAlias.courseId` resolves to nothing
+     * upstream until the tech lead makes the second change.
+     *
+     * Without this branch the aliased URL 404s for the whole interval — the
+     * alias row is found, its courseId misses upstream, path 2 then uppercases
+     * the ALIAS (not a code) and misses too. A pretty URL that dies between two
+     * halves of a planned migration is exactly the failure the alias exists to
+     * prevent.
+     *
+     * One of exactly two sites that consult `formerCodes`; the other is
+     * `/search`'s course haystack. Tried in order, most recent last, and only
+     * on a miss — a course whose current code resolves never reaches here.
+     */
+    for (const former of Array.isArray(byAlias.formerCodes) ? byAlias.formerCodes : []) {
+      if (!former) continue;
+      const legacy = await fetchCourse(former, { includeHidden }).catch(() => null);
+      if (legacy) return { course: legacy, extension: byAlias, mode: 'alias-former-code' };
+    }
   }
 
   // 2) Legacy "<code>-training-course" pattern.
@@ -124,9 +151,19 @@ export async function resolveCourse(
     if (!course) return null;
     // Look up extension by the upstream's canonical course_id (which
     // may differ in case from the URL fragment).
-    const extension = await fetchExtension(course.course_id).catch(
-      () => null
-    );
+    let extension = await fetchExtension(course.course_id).catch(() => null);
+    /**
+     * ── THE RENAME INTERVAL, ON THE DERIVED URL ────────────────────────────
+     * Phase 1 moves the extension to the NEW code while upstream still serves
+     * the OLD one, so this exact lookup misses for the whole window. Without
+     * the fallback the page renders with NO extension — losing its SEO, its
+     * gallery, and (the one that matters) the `isPublished` gate below, so a
+     * HIDDEN course would become publicly visible mid-migration. That is a
+     * safety regression, not a cosmetic one.
+     */
+    if (!extension) {
+      extension = await fetchExtensionByFormerCode(course.course_id).catch(() => null);
+    }
     /**
      * ── PATH 2 HAD NO isPublished GATE AT ALL, AND THAT WAS HALF THE DEFECT ──
      * Un-publishing a course removed only its PRETTY url. The derived

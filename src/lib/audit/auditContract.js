@@ -138,6 +138,17 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
    * space on a menu already documented as dual. See DUAL_KEY_SPACE_MENUS.
    */
   entry('courses', 'course_order', 'ลำดับหลักสูตรในโปรแกรม', ORDERED_IDS_POLICY),
+  /**
+   * A course-code rename. `full` because the payload IS the small thing —
+   * `{ code }` before and after — while the twelve per-store counts belong in
+   * `meta`, which is outside the diff scale entirely.
+   *
+   * recordId is the NEW code, so the row is findable from the course that
+   * exists now; the old one lives in `meta.from`. That is the third key space
+   * on this menu (see DUAL_KEY_SPACE_MENUS) and it is the RIGHT one: a reader
+   * holding today's catalogue has the new code, not the retired one.
+   */
+  entry('courses', 'course_code', 'รหัสหลักสูตร', 'full'),
 
   entry('schedules',   'schedule',   'รอบอบรม', 'full'),
   entry('instructors', 'instructor', 'วิทยากร', 'full'),

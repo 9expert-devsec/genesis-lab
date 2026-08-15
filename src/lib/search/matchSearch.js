@@ -100,6 +100,20 @@ export function courseHaystack(c) {
   return haystack([
     c?.course_name,
     c?.course_id,
+    /**
+     * CODES THIS COURSE USED TO HAVE — one of exactly two sites that consult
+     * `CourseExtension.formerCodes`, the other being `resolveCourse`.
+     *
+     * The code is customer-facing: it is the first column of /schedule, and
+     * customers quote courses by it. After a rename the code on somebody's
+     * quotation matches nothing — `urlAlias` saves the URL and nothing saved
+     * the CODE. This is what makes an old quotation still findable.
+     *
+     * Searchable but NOT displayed, like `program.program_name` above: the
+     * card shows the current code, because showing a retired one would read as
+     * the course having two codes rather than as a redirect.
+     */
+    ...(Array.isArray(c?.formerCodes) ? c.formerCodes : []),
     c?.program?.program_name,
     c?.course_teaser,
   ]);
