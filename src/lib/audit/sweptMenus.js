@@ -73,6 +73,27 @@ export const SWEPT = Object.freeze([
   // the render tier can drive them with renderToStaticMarkup, which cannot
   // await a child.
   { file: 'src/lib/actions/cache-console.js', menus: ['landing_cache'] },
+
+  // ── Ordering round — the gap the course-rename work walked into ──────────
+  //
+  // program-order.js owns EVERY ordering write in the product: the programme
+  // order, the skill order, the programmes inside a skill, the courses inside a
+  // programme, and the two visibility toggles. None of it was audited, so "who
+  // reordered this" had no answer — and the file sits partly on `courses`,
+  // which was already swept, so the history widget showed course edits and
+  // silently omitted every ordering change beside them. That is worse than an
+  // uninstrumented menu: the trail looked complete.
+  //
+  // TWO menus, because the file genuinely spans two screens: seven exports are
+  // /admin/programs (`programs`) and saveProgramCourseOrder is the drag on
+  // /admin/courses (`courses`). Each row carries the menu its own requireAdmin
+  // guards on, which the coverage guard checks pair by pair.
+  //
+  // `programs` becomes swept by this line. RecordHistory is NOT mounted on
+  // /admin/programs — reported rather than silently accepted: rows will exist
+  // and the screen has nowhere to show them, so the definition-of-done above is
+  // met for `courses` and OWED for `programs`.
+  { file: 'src/lib/actions/program-order.js', menus: ['programs', 'courses'] },
 ]);
 
 /**
