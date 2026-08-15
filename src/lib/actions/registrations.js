@@ -6,12 +6,13 @@ import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
-import { INHOUSE_STATUS_VALUES } from '@/lib/registrations/inhouseStatuses';
 import {
   PUBLIC_STATUS_VALUES,
+  INHOUSE_STATUS_VALUES,
+  storedValuesForFilter,
   allowedFromStates,
   buildStatusLabels,
-} from '@/lib/registrations/publicStatuses';
+} from '@/lib/registrations/statuses';
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 
 const ADMIN_PATH = '/admin/registrations';
@@ -147,9 +148,14 @@ export async function getRegistrationById(id, source = 'public') {
  * DERIVED, both of them, not written out again. These Sets are the write-side
  * membership gate on `updateRegistrationStatus`; the cards and the chips on the
  * list screen are built from the same two arrays in
- * lib/registrations/publicStatuses.js and lib/registrations/inhouseStatuses.js.
- * Spelling the values here a second time is how the screen came to offer a
- * `quoted` chip that no card could display.
+ * lib/registrations/statuses.js. Spelling the values here a second time is how
+ * the screen came to offer a `quoted` chip that no card could display.
+ *
+ * The in-house set is now the THREE-VALUE vocabulary. A retired value arriving
+ * here — `contacted` from a stale open tab — is rejected as "สถานะไม่ถูกต้อง",
+ * which is the correct answer: it is no longer a state an admin may choose.
+ * Documents that still HOLD one are a separate question, handled by the
+ * transition table, which returns [] for an unknown from-state.
  */
 const PUBLIC_STATUSES  = new Set(PUBLIC_STATUS_VALUES);
 const INHOUSE_STATUSES = new Set(INHOUSE_STATUS_VALUES);
@@ -165,7 +171,7 @@ const PUBLIC_STATUS_LABEL = buildStatusLabels();
  * action protocol can call this with any pair of states. This repo has already
  * paid for that exact shape once, in applyArticlePositionPlan.
  *
- * So the rule lives in lib/registrations/publicStatuses.js and is applied
+ * So the rule lives in lib/registrations/statuses.js and is applied
  * against the STORED value, by the database:
  *
  *   · the membership check below rejects a target that is not a declared
@@ -487,14 +493,22 @@ export async function getRegistrationStatusCounts({ range = 'all', source = 'pub
      * Counting `INHOUSE_STATUS_VALUES` means a status added to that array is
      * counted here without this file being edited.
      *
-     * Keys are the STORED VALUE (`closed-won`, not `closedWon`), which is also
-     * the card key and the filter value, so no consumer has to map between
-     * spellings.
+     * Keys are the STORED VALUE, which is also the card key and the filter
+     * value, so no consumer has to map between spellings.
+     *
+     * ── EACH COUNT MATCHES ITS LEGACY VALUES TOO ────────────────────────────
+     * `storedValuesForFilter` widens `pending` to `['pending','new',
+     * 'contacted']` and `cancelled` to `['cancelled','closed-lost']` for the
+     * window between this deploying and the migration's --apply. Without that
+     * the strip would read ทั้งหมด 8 over cards summing to 2 — the ORIGINAL
+     * defect this module exists to prevent, arriving from the other direction,
+     * because `total` counts every document while a per-value count would only
+     * find the migrated ones. After --apply the extra members match nothing.
      */
     const [total, ...perStatus] = await Promise.all([
       Model.countDocuments(dateFilter),
       ...INHOUSE_STATUS_VALUES.map((value) =>
-        Model.countDocuments({ ...dateFilter, status: value })
+        Model.countDocuments({ ...dateFilter, status: { $in: storedValuesForFilter(value, 'inhouse') } })
       ),
     ]);
 

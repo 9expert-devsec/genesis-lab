@@ -154,10 +154,42 @@ const RegisterInhouseSchema = new mongoose.Schema(
     message: { type: String, trim: true, maxlength: 2000 },
 
     // ── Status & meta ──────────────────────────────────────────
+    /**
+     * ── WIDENED, NOT NARROWED, AND THE ORDER IS THE WHOLE POINT ────────────
+     *
+     * Round 2 collapses this vocabulary from five values to the three public
+     * uses (pending / quoted / cancelled — see
+     * src/lib/registrations/statuses.js for the mapping and what it destroys).
+     * This enum is the UNION of both vocabularies for the duration of that
+     * migration, and it is the union DELIBERATELY.
+     *
+     * NARROWING THIS LIST WHILE DOCUMENTS STILL HOLD `new` OR `contacted` IS
+     * THE TRAP OF THIS ROUND. Mongoose `enum` is a VALIDATOR: it runs on
+     * create/save/validate, and on updates only with `runValidators: true`.
+     * Reads never validate — so a narrowed enum would not break reading, which
+     * is what makes it look safe. What it WOULD break is every write that
+     * validates (the create in src/app/api/registration/inhouse/route.js) and,
+     * more quietly, any status-filtered query written against the new
+     * vocabulary while the documents still hold the old one.
+     *
+     * So the order is fixed and is not a preference:
+     *   1. widen to the union + point every writer at the new values (here);
+     *   2. the USER runs scripts/migrate-inhouse-status-vocabulary.mjs --apply;
+     *   3. only then, narrow this list to the three — its own commit, alone.
+     *
+     * `default: 'pending'`. The default and the API route's explicit `status`
+     * must agree; they are two spellings of the entry state and the route is
+     * the only real writer.
+     */
     status: {
       type: String,
-      enum: ['new', 'contacted', 'quoted', 'closed-won', 'closed-lost'],
-      default: 'new',
+      enum: [
+        // live
+        'pending', 'quoted', 'cancelled',
+        // retired — removed in the final commit of round 2, after --apply
+        'new', 'contacted', 'closed-won', 'closed-lost',
+      ],
+      default: 'pending',
     },
     adminNotes: { type: String, trim: true },
     source:     { type: String, default: 'web' },

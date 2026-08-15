@@ -4,6 +4,7 @@ import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
 import { RegistrationsClient } from './_components/RegistrationsClient';
+import { normaliseStatusParam } from '@/lib/registrations/statuses';
 
 export const metadata = { title: 'การลงทะเบียน' };
 export const dynamic = 'force-dynamic';
@@ -13,10 +14,29 @@ export default async function Page({ searchParams }) {
 
   const sp     = (await searchParams) ?? {};
   const page   = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
-  const status = sp.status ?? 'all';
   const q      = sp.q      ?? '';
   const source = ['public', 'inhouse'].includes(sp.source) ? sp.source : 'public';
   const range  = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
+  /**
+   * THE SAME TREATMENT `source` AND `range` ALREADY GET, and it was the one
+   * param not getting it.
+   *
+   * `status` went straight through, so `?status=closed-won` — a value round 2
+   * retired, sitting in bookmarks and still-open tabs — reached the query as a
+   * clause matching nothing and rendered an EMPTY LIST. Empty reads as lost
+   * data, not as a stale bookmark.
+   *
+   * Normalising to 'all' here is the SCREEN half: it makes the ทั้งหมด chip and
+   * the total card render as the selected one, so the controls agree with the
+   * rows. `buildRegistrationFilter` degrades the QUERY independently, because
+   * `listRegistrations` is a `'use server'` export and can be called without
+   * ever passing through this page.
+   *
+   * It is normalised AFTER `source`, and must be: the two vocabularies are
+   * different subsets, so `?status=paid&source=inhouse` is unrecognised while
+   * `?status=paid` alone is fine.
+   */
+  const status = normaliseStatusParam(sp.status ?? 'all', source);
 
   // The course map is only wanted by the in-house body, so a public render does
   // not ask for it at all — and it joins the existing Promise.all rather than

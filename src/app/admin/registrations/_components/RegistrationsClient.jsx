@@ -7,24 +7,30 @@ import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { refNo } from '@/lib/refNo';
 import { LastEditedHint } from '@/components/audit/auditRowParts';
-import { buildStatCards, buildStatusChips } from '@/lib/registrations/inhouseStatuses';
 import {
-  buildStatCards  as buildPublicStatCards,
-  buildStatusChips as buildPublicStatusChips,
-  buildStatusLabels as buildPublicStatusLabels,
-} from '@/lib/registrations/publicStatuses';
+  buildStatCards,
+  buildStatusChips,
+  buildStatusLabels,
+  statusesForSource,
+} from '@/lib/registrations/statuses';
 import { InhouseTable } from './InhouseTable';
 
 // ── Constants ──────────────────────────────────────────────────────
 
 /**
- * BOTH VOCABULARIES ARE IMPORTED, NEITHER IS WRITTEN HERE.
+ * ONE MODULE, TWO SUBSETS — NEITHER WRITTEN HERE.
  *
- * The two modules are aliased apart rather than merged: in-house stores
- * new / contacted / quoted / closed-won / closed-lost and public stores
- * pending / confirmed / paid / cancelled. They are different enums for
- * different collections and folding them into one list would produce a screen
- * that can offer a status the selected collection cannot hold.
+ * The two vocabularies used to be two modules aliased apart in this file,
+ * because in-house stored new / contacted / quoted / closed-won / closed-lost
+ * and public stored pending / confirmed / paid / cancelled. Round 2 collapsed
+ * in-house onto the same three values public already uses, so there is now one
+ * module with a per-source SUBSET — and `statusesForSource` is the only place
+ * `source` turns into a list.
+ *
+ * The subsets stay distinct even though the module is shared: `paid` is PUBLIC
+ * ONLY, and merging the two lists is how a `ชำระแล้ว` card would appear over a
+ * collection that can never hold one. That is the same rule this screen already
+ * had to learn — no branch may render a value the data does not hold.
  *
  * The public side used to be three hand-written lists in this file — the filter
  * options, the label map and the stat-card literal — which is the same shape
@@ -53,9 +59,9 @@ const STATUS_BADGE = {
  * changing in five places.
  *
  * The in-house rows do not read this map: InhouseTable derives its own labels
- * from INHOUSE_STATUSES.
+ * from the in-house subset.
  */
-const STATUS_LABEL = buildPublicStatusLabels();
+const STATUS_LABEL = buildStatusLabels();
 
 const SCHEDULE_BADGE = {
   hybrid:    'bg-violet-100 text-violet-700',
@@ -181,9 +187,8 @@ export function RegistrationsClient({
   const rangeLabel = RANGE_OPTIONS.find((r) => r.value === range)?.label ?? 'ทั้งหมด';
 
   /**
-   * EVERY LIST ON THIS SCREEN COMES FROM ONE ARRAY PER COLLECTION — see
-   * src/lib/registrations/inhouseStatuses.js and
-   * src/lib/registrations/publicStatuses.js.
+   * EVERY LIST ON THIS SCREEN COMES FROM ONE ARRAY — see
+   * src/lib/registrations/statuses.js.
    *
    * The in-house cards and chips were two hand-written lists fifteen lines
    * apart and they had drifted: the cards had five entries and no
@@ -193,14 +198,15 @@ export function RegistrationsClient({
    *
    * Public had the identical shape and had not yet been bitten. Deriving both
    * sides makes a card-without-a-chip unrepresentable in either.
+   *
+   * ONE `statusesForSource` CALL FEEDS BOTH BUILDERS, rather than a ternary per
+   * list. Two ternaries reading the same `source` is two places to get it
+   * wrong, and getting it wrong means a chip whose card is missing — which is
+   * the original defect, rebuilt from newer parts.
    */
-  const statCards = source === 'inhouse'
-    ? buildStatCards()
-    : buildPublicStatCards();
-
-  const statusOptions = source === 'inhouse'
-    ? buildStatusChips()
-    : buildPublicStatusChips();
+  const sourceStatuses = statusesForSource(source);
+  const statCards      = buildStatCards(sourceStatuses);
+  const statusOptions  = buildStatusChips(sourceStatuses);
 
   return (
     <div className="space-y-5">

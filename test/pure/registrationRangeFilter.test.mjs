@@ -115,9 +115,54 @@ test('a default call filters on nothing — no status, no search, no date', () =
   assert.deepEqual(buildRegistrationFilter({ status: 'all', q: '', range: 'all' }), {});
 });
 
-test('status `all` adds no status clause; a real status does', () => {
+/**
+ * ── THE STATUS CLAUSE IS NOW `$in`, AND UNRECOGNISED MEANS "NO CLAUSE" ──────
+ *
+ * This used to assert `filter.status === 'quoted'`, a scalar. Round 2 changed
+ * the shape for two reasons and both are load-bearing:
+ *
+ *   · an in-house status must also match the RETIRED values that migrate onto
+ *     it, for the window between the code deploying and the migration running,
+ *     so a single status can name several stored values;
+ *   · a status outside the source's live vocabulary must add NO clause at all
+ *     rather than a clause matching nothing — `?status=closed-won` is a real
+ *     bookmark, and an empty list reads as lost data.
+ *
+ * `$in` is used even for the one-member case, so there is one shape to check.
+ */
+test('status `all` adds no status clause; a live status adds an $in', () => {
   assert.ok(!('status' in buildRegistrationFilter({ status: 'all' })));
-  assert.equal(buildRegistrationFilter({ status: 'quoted' }).status, 'quoted');
+  assert.deepEqual(
+    buildRegistrationFilter({ status: 'quoted', source: 'inhouse' }).status,
+    { $in: ['quoted', 'closed-won'] }
+  );
+  assert.deepEqual(
+    buildRegistrationFilter({ status: 'confirmed', source: 'public' }).status,
+    { $in: ['confirmed'] }
+  );
+});
+
+test('a RETIRED status adds no clause — the list shows everything, not nothing', () => {
+  for (const stale of ['new', 'contacted', 'closed-won', 'closed-lost']) {
+    const filter = buildRegistrationFilter({ status: stale, source: 'inhouse' });
+    assert.ok(!('status' in filter),
+      `?status=${stale} produced a clause; a stale bookmark must degrade to show-all`);
+  }
+});
+
+test('a status from the OTHER source adds no clause either', () => {
+  // `paid` is real, but not for in-house — it must not be filterable there.
+  assert.ok(!('status' in buildRegistrationFilter({ status: 'paid', source: 'inhouse' })));
+  assert.ok(!('status' in buildRegistrationFilter({ status: 'quoted', source: 'public' })));
+});
+
+test('CONTROL: the degrade is not simply "no status clause ever"', () => {
+  // Every assertion above is of the form "no status key". If the builder had
+  // stopped emitting the clause altogether they would all pass. This is the
+  // positive case on the same source.
+  const filter = buildRegistrationFilter({ status: 'pending', source: 'inhouse' });
+  assert.ok('status' in filter, 'a live status must still produce a clause');
+  assert.deepEqual(filter.status.$in.sort(), ['contacted', 'new', 'pending']);
 });
 
 test('a whitespace-only search is not a search', () => {
@@ -156,10 +201,12 @@ test('in-house search does NOT match coursesInterested — it holds codes, not n
 });
 
 test('status, search and range compose into one filter', () => {
+  // `contacted` was the status here and is now retired, so it would compose to
+  // nothing and this test would be checking two clauses instead of three.
   const filter = buildRegistrationFilter({
-    status: 'contacted', q: 'cpn', source: 'inhouse', range: 'month', now: NOW,
+    status: 'pending', q: 'cpn', source: 'inhouse', range: 'month', now: NOW,
   });
-  assert.equal(filter.status, 'contacted');
+  assert.deepEqual(filter.status.$in.sort(), ['contacted', 'new', 'pending']);
   assert.equal(filter.$or.length, 4);
   assert.equal(filter.createdAt.$gte.getDate(), 1);
 });

@@ -79,7 +79,28 @@ export async function POST(req) {
      * guard pins that this is the only one.
      */
     companyName: data.quotationCompany,
-    status: 'new',
+    /**
+     * THE ENTRY STATE, AND WHY IT MOVED FROM `new` TO `pending`.
+     *
+     * Round 2 collapsed the in-house vocabulary onto the three values public
+     * already uses. `new` is retired, so a new enquiry must not create another
+     * document holding it — otherwise the migration would be chasing a
+     * collection that keeps growing behind it, and every enquiry submitted
+     * after --apply would need a second pass.
+     *
+     * ── THIS IS ALSO THE ONE WRITE THAT VALIDATES ──────────────────────────
+     * `RegisterInhouse.create` runs the Mongoose validators; every admin write
+     * goes through `findByIdAndUpdate(..., { runValidators: false })`. So this
+     * line is the only place the model's `status` enum can reject anything —
+     * which is exactly why the enum was WIDENED to the union of both
+     * vocabularies in this commit rather than narrowed. Writing 'pending'
+     * against the old five-value enum would throw here and break the public
+     * in-house form outright.
+     *
+     * The narrowing to three is the LAST commit of the round and lands only
+     * after the migration has run. See the model.
+     */
+    status: 'pending',
     source: 'inhouse',
     ipAddress,
   });

@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { INHOUSE_STATUS_VALUES } from '@/lib/registrations/statuses';
 
 const ADMIN_LIST_PATH   = '/admin/registrations';
 const ADMIN_DETAIL_PATH = '/admin/registrations/inhouse';
@@ -58,7 +59,15 @@ export async function getInhouseRegistrationById(id) {
 
 // ── Status update ──────────────────────────────────────────────────
 
-const VALID_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
+/**
+ * DERIVED, not written out again. This was
+ * `new Set(['new','contacted','quoted','closed-won','closed-lost'])` — a
+ * SECOND hand-written spelling of the in-house enum, sitting on the server
+ * where no screen could contradict it, and a THIRD lived in
+ * lib/actions/registrations.js. Round 2 collapses all of them onto
+ * lib/registrations/statuses.js.
+ */
+const VALID_STATUSES = new Set(INHOUSE_STATUS_VALUES);
 
 export async function updateInhouseStatus(id, status) {
   const session = await requireAdmin('registrations');

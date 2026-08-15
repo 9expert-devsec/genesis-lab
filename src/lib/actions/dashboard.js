@@ -9,7 +9,11 @@ import Article         from '@/models/Article';
 import FeaturedReview  from '@/models/FeaturedReview';
 import Recruit         from '@/models/Recruit';
 import { requireAdmin } from '@/lib/actions/auth';
-import { buildStatusLabels } from '@/lib/registrations/publicStatuses';
+import {
+  buildStatusLabels,
+  INHOUSE_STATUS_VALUES,
+  storedValuesForFilter,
+} from '@/lib/registrations/statuses';
 
 function serialize(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
 
@@ -71,9 +75,9 @@ export async function getDashboardMetrics(range = 'today') {
     publicPaid,
     publicCancelled,
     inhouseTotal,
-    inhouseNew,
-    inhouseContacted,
-    inhouseClosedWon,
+    inhousePending,
+    inhouseQuoted,
+    inhouseCancelled,
   ] = await Promise.all([
     RegisterPublic.countDocuments(dateFilter),
     RegisterPublic.countDocuments({ ...dateFilter, status: 'pending' }),
@@ -81,9 +85,22 @@ export async function getDashboardMetrics(range = 'today') {
     RegisterPublic.countDocuments({ ...dateFilter, status: 'paid' }),
     RegisterPublic.countDocuments({ ...dateFilter, status: 'cancelled' }),
     RegisterInhouse.countDocuments(dateFilter),
-    RegisterInhouse.countDocuments({ ...dateFilter, status: 'new' }),
-    RegisterInhouse.countDocuments({ ...dateFilter, status: 'contacted' }),
-    RegisterInhouse.countDocuments({ ...dateFilter, status: 'closed-won' }),
+    /**
+     * THE THREE LIVE IN-HOUSE STATUSES, matched through `storedValuesForFilter`.
+     *
+     * These were `status: 'new'`, `'contacted'` and `'closed-won'` — three
+     * values round 2 retired. Left as they were, all three cards would read 0
+     * against a non-zero total the moment the migration ran, and the two cards
+     * `new`/`closed-won` link to would filter to nothing.
+     *
+     * The widening handles the OTHER side of the same window: before --apply
+     * the documents still hold the retired values, and a bare `status:
+     * 'pending'` would find none of them. Either way the cards agree with the
+     * total. See storedValuesForFilter in lib/registrations/statuses.js.
+     */
+    ...INHOUSE_STATUS_VALUES.map((value) =>
+      RegisterInhouse.countDocuments({ ...dateFilter, status: { $in: storedValuesForFilter(value, 'inhouse') } })
+    ),
   ]);
 
   // ── Content counts (live/active — not date-filtered) ──────────
@@ -146,11 +163,18 @@ export async function getDashboardMetrics(range = 'today') {
       paid: publicPaid,
       cancelled: publicCancelled,
     },
+    /**
+     * KEYED BY THE STORED VALUE, like the public block above and like the
+     * summary strip. The old keys were `new` / `contacted` / `closedWon` — one
+     * of them camelCase against a hyphenated filter value, which is exactly the
+     * bridge-spelling that once made a card render 0 forever on the list
+     * screen. There is one spelling now, and it is the one in the URL.
+     */
     inhouse: {
       total: inhouseTotal,
-      new: inhouseNew,
-      contacted: inhouseContacted,
-      closedWon: inhouseClosedWon,
+      pending: inhousePending,
+      quoted: inhouseQuoted,
+      cancelled: inhouseCancelled,
     },
     content: {
       banners: activeBanners,

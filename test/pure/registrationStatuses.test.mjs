@@ -4,6 +4,11 @@ import {
   PUBLIC_STATUSES,
   PUBLIC_STATUS_VALUES,
   PUBLIC_STATUS_TRANSITIONS,
+  INHOUSE_STATUSES,
+  INHOUSE_STATUS_VALUES,
+  INHOUSE_STATUS_TRANSITIONS,
+  INHOUSE_LEGACY_STATUS_MAP,
+  LEGACY_STATUS_LABELS,
   ALL_FILTER,
   allowedFromStates,
   allowedTransitions,
@@ -11,7 +16,13 @@ import {
   buildStatusLabels,
   buildStatCards,
   buildStatusChips,
-} from '@/lib/registrations/publicStatuses';
+  statusesForSource,
+  statusValuesForSource,
+  transitionsForSource,
+  statusLabel,
+  storedValuesForFilter,
+  normaliseStatusParam,
+} from '@/lib/registrations/statuses';
 
 /**
  * THE PUBLIC STATUS MACHINE — one array, one table, every consumer derived.
