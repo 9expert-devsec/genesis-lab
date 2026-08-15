@@ -692,6 +692,23 @@ export function CourseForm({
               {fieldError}
             </p>
           )}
+          {/* WHERE THE QUESTION IS ASKED, ANSWERED. The field says the code
+              cannot be edited and, until now, stopped there — leaving "then how
+              do I change it" to be answered by asking the tech lead. This links
+              to the DRY RUN, which writes nothing and offers no rename control;
+              a rename is a two-phase migration and deliberately does not belong
+              on this form. */}
+          {mode === 'edit' && (
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              ต้องเปลี่ยนรหัส?{' '}
+              <Link
+                href="/admin/courses/rename"
+                className="font-semibold text-9e-action hover:underline"
+              >
+                ตรวจสอบผลกระทบก่อน
+              </Link>
+            </p>
+          )}
           </Field>
 
         <Field
