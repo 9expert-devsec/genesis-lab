@@ -26,7 +26,11 @@ const ENTRIES = [
   'src/app/admin/courses/rename/page.jsx',
   'src/app/admin/courses/rename/_components/RenamePreviewClient.jsx',
   'src/app/admin/courses/rename/_components/RenamePreviewReport.jsx',
+  'src/app/admin/courses/rename/_components/RenameExecutePanel.jsx',
 ];
+
+/** The one module in the screen that is allowed to reach the rename. */
+const EXECUTOR = 'src/app/admin/courses/rename/_components/RenameExecutePanel.jsx';
 
 function closure(entries) {
   const byRel = new Map(walkSources('src').map((f) => [f.rel, f]));
@@ -49,24 +53,67 @@ function closure(entries) {
   return [...seen].map((rel) => byRel.get(rel));
 }
 
-test('the rename WRITE action is not reachable from the screen', () => {
-  const offenders = closure(ENTRIES)
-    .filter((f) => /renameCourseCodePhase1/.test(f.withImports))
+/**
+ * ══ THIS ASSERTION WAS DELIBERATELY NARROWED ═══════════════════════════════
+ *
+ * 884655b asserted that NO write path was reachable from this screen. That was
+ * true and correct while the screen was read-only; the execute panel makes it
+ * false on purpose, so the blanket claim is replaced rather than deleted.
+ *
+ * WHAT IS GUARANTEED NOW: the rename is reachable from EXACTLY ONE module —
+ * the execute panel. The page, the client shell and the report cannot perform
+ * it, so a preview screen still cannot rename by accident and the write has one
+ * place to review.
+ *
+ * WHAT IS NO LONGER GUARANTEED, said plainly: that the screen cannot write.
+ * It can. Whether it writes only behind the typed confirmation and the
+ * acknowledgement is a question about a click handler, which no source scan
+ * answers — that is `canExecuteRename`'s job, driven for real in
+ * test/pure/renameExecuteGate, and the wiring between the two is pinned in
+ * test/fs/renameExecuteWiring. Between them they cover what this test used to
+ * cover by forbidding the whole thing.
+ */
+test('the rename is reachable from EXACTLY ONE module — the execute panel', () => {
+  const importers = closure(ENTRIES)
+    .filter((f) => f.withImports.includes("from '@/lib/actions/course-rename'"))
     .map((f) => f.rel);
   assert.deepEqual(
-    offenders, [],
-    'the preview screen can reach the rename — there is meant to be nothing to enable:\n  '
-    + offenders.join('\n  ')
+    importers, [EXECUTOR],
+    'the rename action is imported somewhere other than the execute panel — '
+    + 'the preview half of this screen must not be able to write'
   );
 });
 
-test('the rename action MODULE is not imported anywhere in the screen', () => {
-  // Even importing it for a type or a constant would put the write one edit
-  // away, and the point of the split is that it is not.
-  const offenders = closure(ENTRIES)
-    .filter((f) => f.withImports.includes("from '@/lib/actions/course-rename'"))
-    .map((f) => f.rel);
-  assert.deepEqual(offenders, [], 'course-rename.js is in the screen closure');
+test('the report and the page cannot reach the rename', () => {
+  // Named individually, because the set-equality above would also pass if the
+  // executor were renamed to one of these.
+  for (const rel of ENTRIES.filter((e) => e !== EXECUTOR)) {
+    const { withImports } = readSource(rel);
+    assert.ok(
+      !/renameCourseCodePhase1/.test(withImports),
+      `${rel} can reach the rename — only the execute panel may`
+    );
+  }
+});
+
+/**
+ * THE PROPERTY THAT STILL HOLDS ABSOLUTELY, and the one this round was scoped
+ * against: phase 1 writes Mongo, and nothing on this screen reaches MSDB. The
+ * two-phase split exists so a HUMAN makes that change.
+ */
+test('NO UPSTREAM WRITE is reachable from the screen', () => {
+  const offenders = [];
+  for (const f of closure(ENTRIES)) {
+    for (const verb of ['msdbCreate', 'msdbUpdate', 'msdbDelete']) {
+      if (new RegExp(String.raw`(?<![\w$])${verb}\s*\(`).test(f.code)) {
+        offenders.push(`${f.rel}: ${verb}(`);
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders, [],
+    'the screen can reach an MSDB write — phase 2 is a human step:\n  ' + offenders.join('\n  ')
+  );
 });
 
 test('no component in the rename screen writes to Mongo or upstream directly', () => {
@@ -121,7 +168,10 @@ test('the course form links to the preview from the non-editable code field', ()
    * no answer on the page where it is asked.
    */
   const { code } = readSource('src/app/admin/courses/_components/CourseForm.jsx');
-  assert.match(code, /href="\/admin\/courses\/rename"/, 'the form does not link to the preview');
+  // The href now CARRIES the course — asserted in full in
+  // test/fs/renameExecuteWiring; here it is enough that a link exists and is
+  // edit-only.
+  assert.match(code, /\/admin\/courses\/rename\?course=/, 'the form does not link to the preview');
   assert.match(code, /mode === 'edit' &&/, 'the link shows on the create form too, where there is nothing to rename');
 });
 
