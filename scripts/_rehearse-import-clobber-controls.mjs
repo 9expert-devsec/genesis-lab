@@ -31,6 +31,71 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  * in this file, not a finding about the suite.
  */
 const BREAKS = {
+  // ── round 3: the import-clobber restore ───────────────────────────────────
+
+  /**
+   * THE DEFECT ITSELF, re-created: delete the export keyword so
+   * `checkAliasAvailable` becomes a module-local function again. The two
+   * callers survive untouched, which is exactly the state the merge left.
+   */
+  'alias-check-unexported': {
+    file: 'src/lib/actions/course-extensions.js',
+    find: 'export async function checkAliasAvailable(alias, courseId) {',
+    replace: 'async function checkAliasAvailable(alias, courseId) {',
+    expects: [
+      'fs: every named import of @/lib/actions/course-extensions resolves to an export',
+      'fs: checkAliasAvailable specifically is exported and imported by the create form',
+      'fs: every named import under src resolves to a real export of its target',
+      'fs: @/lib/actions/course-extensions — stub exports match ...',
+    ],
+  },
+
+  /** The whole function gone again — the exact merge-resolution outcome. */
+  'alias-check-deleted': {
+    file: 'src/lib/actions/course-extensions.js',
+    find: '  const clash = await checkAliasAvailable(cleanAlias, courseId);',
+    replace: '  const clash = null;',
+    expects: [
+      'fs: the save action checks for a clashing alias before writing',
+      'fs: the pre-check runs BEFORE the write, or it is not a pre-check',
+      'fs: CONTROL: the check does not replace the index — both must be present',
+    ],
+  },
+
+  /** The hidden-course opt-in, which a "tidy up" would drop. */
+  'alias-check-filters-hidden': {
+    file: 'src/lib/actions/course-extensions.js',
+    find: "    listPublicCourses({ includeHidden: true }).then(",
+    replace: '    listPublicCourses().then(',
+    expects: [
+      'fs: src/lib/actions/course-extensions.js opts in to hidden courses',
+    ],
+  },
+
+  /** Self-exclusion removed — re-saving a course would clash with itself. */
+  'alias-check-no-self-exclusion': {
+    file: 'src/lib/actions/course-extensions.js',
+    find: '      courseId: { $ne: courseId },',
+    replace: '',
+    expects: [
+      'fs: the save action checks for a clashing alias before writing',
+      'fs: the pre-check runs BEFORE the write, or it is not a pre-check',
+      'fs: CONTROL: the check does not replace the index — both must be present',
+    ],
+  },
+
+  /** The regressed masterclass import, commented out again. */
+  'masterclass-import-clobbered': {
+    file: 'src/lib/actions/masterclass-registrations.js',
+    find: "import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';",
+    replace: "// import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';",
+    expects: [
+      'fs: no file under src/app, src/components or src/lib uses a src/lib export it never imported',
+    ],
+  },
+
+  // ── round 2: the in-house status collapse ─────────────────────────────────
+
   'paid-reachable-inhouse': {
     file: 'src/lib/registrations/statuses.js',
     find: "  { value: 'cancelled', label: 'ยกเลิก',            accent: 'border-l-slate-300' },\n];",
