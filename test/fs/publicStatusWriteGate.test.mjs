@@ -56,22 +56,39 @@ test('updateRegistrationStatus filters on the stored status, atomically', () => 
   // CODE view: this is about the query the function issues, not its imports.
   assert.match(
     STATUS_BODY,
-    /findOneAndUpdate\(\s*\{\s*_id:\s*id,\s*status:\s*\{\s*\$in:\s*allowedFromStates\(status\)\s*\}/,
+    /findOneAndUpdate\(\s*\{\s*_id:\s*id,\s*status:\s*\{\s*\$in:\s*fromStates\s*\}/,
     'the permitted from-states must be in the FILTER, so Mongo checks them in one operation'
   );
+  // `fromStates` is `allowedFromStates(status, table)` widened through
+  // `storedValuesForFilter`. Naming the variable in the filter and the
+  // derivation separately keeps this readable as the list grew a second step.
+  assert.match(STATUS_BODY, /allowedFromStates\(status,\s*table\)/,
+    'the from-states must still come from the transition table');
 });
 
-test('updateRegistrationStatus does NOT read the status and then write it', () => {
-  // The read-then-write shape is `findById(...)` followed by an unconditional
-  // `findByIdAndUpdate` on the public path. `findByIdAndUpdate` survives in the
-  // in-house branch, which is unchanged this round — so this asserts the PUBLIC
-  // filter exists rather than that the old call is gone everywhere.
-  const publicBranch = STATUS_BODY.slice(STATUS_BODY.indexOf('} else {'));
+/**
+ * ── REWRITTEN: THE PUBLIC/IN-HOUSE BRANCH IS GONE ───────────────────────────
+ *
+ * Round 1 sliced this body at `} else {` and asserted only that the PUBLIC half
+ * had no `findByIdAndUpdate`, explicitly allowing the call to survive in the
+ * in-house branch "which is unchanged this round".
+ *
+ * Round 2 removed the branch entirely — one conditional update serves both
+ * sources, differing only in which table `transitionsForSource` returns. So the
+ * slice has nothing to cut on, and the assertion is now the stronger one it
+ * could not be before: the unconditional by-id update is gone from the WHOLE
+ * action, not from one half of it.
+ */
+test('updateRegistrationStatus does NOT read the status and then write it, on EITHER source', () => {
   assert.ok(
-    !publicBranch.includes('findByIdAndUpdate('),
-    'the public path must not use an unconditional by-id update'
+    !STATUS_BODY.includes('findByIdAndUpdate('),
+    'an unconditional by-id update is back — a concurrent cancel could be raced'
   );
-  assert.ok(publicBranch.includes('findOneAndUpdate('), 'the public path issues the conditional update');
+  assert.ok(STATUS_BODY.includes('findOneAndUpdate('), 'the conditional update is gone');
+  assert.ok(
+    !STATUS_BODY.includes("if (source === 'inhouse')"),
+    'the per-source branch is back — the two paths must differ only by table'
+  );
 });
 
 test('a null result is disambiguated by ONE extra read, on the refusal path only', () => {
@@ -213,13 +230,32 @@ test('the public counts are one countDocuments per declared value', () => {
   );
 });
 
-test('the in-house branch is untouched this round', () => {
-  // Round 2 owns in-house. If this reddens, in-house behaviour changed while
-  // its own transition table was still undecided.
-  assert.match(STATUS_BODY, /if\s*\(source === 'inhouse'\)/);
-  assert.ok(
-    STATUS_BODY.includes('findByIdAndUpdate(id, { status }'),
-    'the in-house path keeps its unconditional by-id update'
-  );
+/**
+ * ── REWRITTEN: IN-HOUSE IS NO LONGER "UNTOUCHED" ────────────────────────────
+ *
+ * This test used to assert the OPPOSITE of what the code should now do —
+ * that `if (source === 'inhouse')` was present and kept its unconditional
+ * `findByIdAndUpdate`. It was correct for round 1, where the in-house
+ * transition table was still undecided and enforcing a guess on the sales team
+ * would have been worse than enforcing nothing.
+ *
+ * The table is agreed now, so the assertion is inverted rather than deleted:
+ * what it guarded was "do not enforce a rule nobody has agreed", and the
+ * successor guard is "the rule that WAS agreed is enforced for both sources
+ * from one place". The in-house-specific gates live in fs/inhouseWriteGate.
+ */
+test('the shared vocabulary is imported for both sources, not respelled', () => {
   assert.match(ACTIONS.withImports, /INHOUSE_STATUS_VALUES[\s\S]*?from '@\/lib\/registrations\/statuses'/);
+  assert.match(ACTIONS.withImports, /PUBLIC_STATUS_VALUES[\s\S]*?from '@\/lib\/registrations\/statuses'/);
+  assert.match(ACTIONS.code, /new Set\(INHOUSE_STATUS_VALUES\)/);
+  assert.match(ACTIONS.code, /new Set\(PUBLIC_STATUS_VALUES\)/);
+});
+
+test('the transition table is chosen by source, and there is no second branch', () => {
+  assert.match(STATUS_BODY, /const table = transitionsForSource\(source\)/,
+    'the per-source table must be a lookup');
+  // Exactly one conditional update in the action: two would mean the branch
+  // came back wearing a different shape.
+  assert.equal((STATUS_BODY.match(/findOneAndUpdate\(/g) ?? []).length, 1,
+    'there must be exactly one status write in this action');
 });

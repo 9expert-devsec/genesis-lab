@@ -386,6 +386,46 @@ export function storedValuesForFilter(status, source = 'public') {
 }
 
 /**
+ * A STORED value → the LIVE value it behaves as.
+ *
+ * Identity for anything already live. For a RETIRED in-house value it returns
+ * the status that value migrates to, so a document the migration has not
+ * reached yet acts exactly like the document it is about to become.
+ *
+ * ── WHY THIS IS NEEDED AND `storedValuesForFilter` IS NOT ENOUGH ────────────
+ * That function widens a QUERY: "which stored values does this live filter
+ * match". This is the inverse and it answers a different question: "given this
+ * one document, what may be done to it".
+ *
+ * Without it the window between deploying and `--apply` is not merely cosmetic,
+ * it is BROKEN. `allowedTransitions('new')` is [] — `new` has no row in the
+ * three-value table — so the detail screen would render no status buttons and
+ * the write gate would refuse every move, for EVERY in-house document that has
+ * not been migrated. At the time this was written that was six of the eight
+ * documents in the collection: the whole backlog, frozen, until someone ran a
+ * script. "Tolerate both vocabularies" has to mean the product keeps working,
+ * not just that it does not crash.
+ *
+ * ── WHAT THIS MUST NOT BE USED FOR ──────────────────────────────────────────
+ * DISPLAY. The badge on the detail screen and the cell in the list both render
+ * `statusLabel(doc.status)` — the value the document ACTUALLY holds. Showing a
+ * `new` enquiry as 'รอดำเนินการ' would be the screen quietly asserting the
+ * migration had run. What the record says and what an admin may do to it are
+ * two questions, and only the second one is this.
+ *
+ * Once `--apply` has run this is the identity function for every stored value.
+ * It costs one lookup and is what makes the ordering safe, so it stays.
+ *
+ * @param {string} value a stored status
+ * @param {string} [source]
+ * @returns {string}
+ */
+export function effectiveStatus(value, source = 'public') {
+  if (source !== 'inhouse') return value;
+  return INHOUSE_LEGACY_STATUS_MAP[value] ?? value;
+}
+
+/**
  * A `status` search param → the value the screen should behave as.
  *
  * Returns `'all'` for anything the source's live vocabulary does not contain,
