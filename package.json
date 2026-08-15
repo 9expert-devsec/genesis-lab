@@ -25,7 +25,8 @@
     "backfill:extension-anchor": "node --env-file=.env.local scripts/backfill-extension-upstream-id.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
     "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs",
-    "migrate:skill-code": "node --env-file=.env.local scripts/migrate-skill-code.mjs"
+    "migrate:skill-code": "node --env-file=.env.local scripts/migrate-skill-code.mjs",
+    "migrate:inhouse-status": "node --env-file=.env.local scripts/migrate-inhouse-status-vocabulary.mjs"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.7.2",
