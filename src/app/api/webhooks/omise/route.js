@@ -148,9 +148,35 @@ export async function POST(req) {
     return NextResponse.json({ ok: true, failed: true });
   }
 
+  /**
+   * ── AN EXPIRED CHARGE TOUCHES `payment.omiseStatus` AND NOTHING ELSE ───────
+   *
+   * This branch used to also write `doc.status = 'cancelled'`. It no longer
+   * does, and it now has exactly the shape of the `failed` branch directly
+   * above — which is the same class of event and has always done only this.
+   *
+   *   · AN ABANDONED PROMPTPAY QR IS A FAILED PAYMENT ATTEMPT, NOT A
+   *     CANCELLATION. Now that cancellation is TERMINAL (round 1), writing it
+   *     here permanently killed a registration because a customer walked away
+   *     from a QR code. Nothing could revive it; the record could only be
+   *     deleted.
+   *
+   *   · THAT CANCELLATION WROTE NO AUDIT ROW. It produced a terminal state with
+   *     no author — which is the one thing the terminal rule depends on. Every
+   *     other route into `cancelled` is an admin action that files who did it.
+   *
+   *   · THERE IS NO DUPLICATE GUARD ON THE PUBLIC REGISTRATION PATH, so a
+   *     lingering `pending` row does not block the customer from registering
+   *     again. The reason the old behaviour looked necessary does not hold.
+   *
+   *   · AN ABANDONED ATTEMPT NOW LEAVES A PENDING ROW, which is exactly what a
+   *     failed card charge already leaves today. If those rows ever need
+   *     clearing, an admin cancels them by hand and the trail records who did
+   *     it. That is a known, measured population — see
+   *     scripts/audit-orphan-registrations.mjs, which exists to count it.
+   */
   if (charge.status === 'expired') {
     doc.payment.omiseStatus = 'expired';
-    doc.status = 'cancelled';
     await doc.save();
     await forwardToLegacy(rawBody, omiseHeaders);
     return NextResponse.json({ ok: true, expired: true });

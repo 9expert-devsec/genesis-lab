@@ -150,13 +150,140 @@ test('CONTROL: withImports would SEE such an import if one existed', () => {
   );
 });
 
-// ── The expired branch, deliberately unchanged ──────────────────────────────
+// ── The expired branch — REWRITTEN to pin the NEW behaviour ────────────────
 
-test('an expired charge still cancels, exactly as before', () => {
-  // NOT changed this round, and worth a note: an expired PromptPay QR sets
-  // `cancelled`, which is now TERMINAL. That is a real behaviour change arriving
-  // from the transition table rather than from this file — an abandoned QR now
-  // kills the registration permanently. Flagged to the user; unchanged here so
-  // the ruling stays theirs.
-  assert.match(HOOK.code, /if \(charge\.status === 'expired'\)[\s\S]*?doc\.status = 'cancelled'/);
+/**
+ * ── THIS TEST USED TO ASSERT THE OPPOSITE, AND WHY IT WAS INVERTED ──────────
+ *
+ * Round 1 left it reading:
+ *
+ *   test('an expired charge still cancels, exactly as before', () => {
+ *     assert.match(HOOK.code,
+ *       /if \(charge\.status === 'expired'\)[\s\S]*?doc\.status = 'cancelled'/);
+ *   });
+ *
+ * with a note saying an abandoned QR now killed a registration permanently, that
+ * this was a real behaviour change arriving from the transition table rather
+ * than from the webhook, and that it was flagged to the user so the ruling
+ * stayed theirs.
+ *
+ * The ruling came back: the branch writes only `payment.omiseStatus`. So the
+ * test is INVERTED rather than deleted — the subject is the same line of code
+ * and the same question, and deleting it would leave the new behaviour
+ * unguarded while the old reasoning vanished from the file that recorded it.
+ *
+ * ── THE SLICE HAS TO BE BOUNDED, AND THE BOUND IS ASSERTED ─────────────────
+ * `doc.status = 'cancelled'` appears elsewhere in this file — the successful
+ * branch reads `doc.status === 'cancelled'`, and a slice running to EOF would
+ * pick up the next branch's writes. So the branch is cut at its own closing
+ * `return`, and both ends are asserted present: `indexOf` returns -1 for a
+ * missing marker, and a slice built from -1 is a different string than intended
+ * while still looking like a pass.
+ */
+function expiredBranch(code) {
+  const start = code.indexOf("if (charge.status === 'expired')");
+  assert.notEqual(start, -1, 'the expired branch is gone');
+  const end = code.indexOf('return NextResponse.json(', start);
+  assert.notEqual(end, -1, 'the expired branch does not return — the slice would run to EOF');
+  return code.slice(start, end);
+}
+
+const EXPIRED = expiredBranch(HOOK.code);
+
+test('the expired branch does NOT assign doc.status', () => {
+  // The whole ruling in one line. An abandoned PromptPay QR is a failed payment
+  // attempt, not a cancellation — and cancellation is terminal now, so writing
+  // it here permanently killed a registration over a customer walking away.
+  assert.ok(
+    !/doc\.status\s*=/.test(EXPIRED),
+    'the expired branch writes the registration status — an abandoned QR must not cancel'
+  );
+});
+
+test('the expired branch writes ONLY the omise status', () => {
+  // Stronger than the absence above: it says what the branch may do, so a
+  // different field creeping in is caught too.
+  assert.match(EXPIRED, /doc\.payment\.omiseStatus = 'expired'/, 'the omise status is not recorded');
+  assert.ok(!EXPIRED.includes('paidAt'), 'the expired branch writes paidAt');
+  assert.ok(!EXPIRED.includes('sendPaidReceipt'), 'the expired branch sends a receipt');
+});
+
+test('the expired branch has the same shape as the failed branch beside it', () => {
+  // They are the same class of event and the `failed` branch has always done
+  // only this. If the two ever diverge again, one of them is wrong.
+  const failedStart = HOOK.code.indexOf("if (charge.status === 'failed')");
+  assert.notEqual(failedStart, -1, 'the failed branch is gone');
+  const failed = HOOK.code.slice(failedStart, HOOK.code.indexOf('return NextResponse.json(', failedStart));
+  assert.ok(!/doc\.status\s*=/.test(failed), 'the failed branch now writes the status too');
+  assert.match(failed, /doc\.payment\.omiseStatus = 'failed'/);
+});
+
+test('CONTROL: the slice CAN see a status write — it is not simply blind', () => {
+  // Proves the two absence assertions above are doing real work. The same
+  // matcher, run over the branch that legitimately DOES write the status, must
+  // find it. Without this, a slice that had silently become empty would satisfy
+  // every "does not contain" assertion in this section.
+  assert.ok(EXPIRED.length > 40, 'the expired slice collapsed to near-nothing');
+  assert.ok(/doc\.status\s*=/.test(SUCCESS), 'the control is inert — no branch writes doc.status at all');
+  assert.match(SUCCESS, /doc\.status = 'paid'/);
+});
+
+/**
+ * ── MATCHING PROSE INSIDE A BLOCK COMMENT NEEDS THE WRAPPING REMOVED ────────
+ *
+ * MEASURED. The first version of this test searched the raw preamble for "NOT A
+ * CANCELLATION" and failed on a comment that says exactly that — because the
+ * phrase is line-wrapped, so the stored text is `NOT A\n *     CANCELLATION`.
+ * A matcher for a sentence has to see a sentence, which means stripping the
+ * leading ` * ` of each line and collapsing the newlines first.
+ *
+ * This is the same lesson as sourceScan's header, applied to the one case that
+ * header does not cover: there, matching text that is not code. Here, matching
+ * PROSE that is genuinely the subject — and prose is wrapped.
+ */
+function commentProse(raw, from, back = 2000) {
+  return raw
+    .slice(Math.max(0, from - back), from)
+    .split('\n')
+    .map((line) => line.replace(/^\s*\*ic?\s?/, '').replace(/^\s*\*\s?/, ''))
+    .join(' ')
+    .replace(/\s+/g, ' ');
+}
+
+test('the reasons for the change are recorded AT the branch', () => {
+  // Reads `raw`, NOT `code`: the subject IS a comment, and the scrubber deletes
+  // comments before any matcher runs. This is the documented exception in
+  // test/run.mjs. The next reader's instinct will be to "restore" the
+  // cancellation, and the four reasons are what answers them.
+  const rawStart = HOOK.raw.indexOf("if (charge.status === 'expired')");
+  assert.notEqual(rawStart, -1, 'the expired branch is gone from the raw source');
+  const prose = commentProse(HOOK.raw, rawStart);
+
+  assert.match(prose, /FAILED PAYMENT ATTEMPT, NOT A CANCELLATION/,
+    'the branch does not say why it stopped cancelling');
+  assert.match(prose, /WROTE NO AUDIT ROW/,
+    'the branch does not record that the old write had no author');
+  assert.match(prose, /NO DUPLICATE GUARD/,
+    'the branch does not say why a lingering pending row is harmless');
+});
+
+test('CONTROL: the prose helper is what makes those matches possible', () => {
+  // Proves the unwrapping does real work rather than being decoration: the same
+  // phrase must NOT be findable in the raw slice, because it is wrapped there.
+  const rawStart = HOOK.raw.indexOf("if (charge.status === 'expired')");
+  const rawSlice = HOOK.raw.slice(Math.max(0, rawStart - 2000), rawStart);
+  assert.ok(
+    !rawSlice.includes('FAILED PAYMENT ATTEMPT, NOT A CANCELLATION'),
+    'the control is inert — the phrase is not actually wrapped, so the helper proves nothing'
+  );
+  assert.ok(
+    commentProse(HOOK.raw, rawStart).includes('FAILED PAYMENT ATTEMPT, NOT A CANCELLATION'),
+    'the helper failed to unwrap it'
+  );
+});
+
+test('CONTROL: that reasoning really is a comment, invisible to the CODE view', () => {
+  // If this fails, the note leaked into a string literal (or the scrubber
+  // stopped stripping) and the test above is no longer testing what it says.
+  assert.ok(!HOOK.code.includes('NO AUDIT ROW'), 'the note survives scrubbing — it is not a comment');
 });

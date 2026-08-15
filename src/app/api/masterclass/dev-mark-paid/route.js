@@ -21,6 +21,31 @@ export async function POST(req) {
   const doc = await MasterclassRegistration.findById(id);
   if (!doc) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
+  /**
+   * ── THE SAME CANCELLED GUARD AS THE PUBLIC ENDPOINT ────────────────────────
+   *
+   * IT HAS THE IDENTICAL SHAPE and therefore the identical defect:
+   * `doc.status !== 'paid'` matches a CANCELLED document and writes `paid` over
+   * it. `masterclass_registrations` has `cancelled` in its own status enum, so
+   * this is reachable here too, and `PAYMENT_TEST_MODE=true` is documented as
+   * settable on production for testing with test keys.
+   *
+   * ── WHAT IS DELIBERATELY *NOT* CARRIED OVER ────────────────────────────────
+   * Masterclass is a different collection with its own flow and is out of scope
+   * for this rework — the Omise webhook's cancelled guard excludes it by an
+   * explicit `&& !isMasterclass` for exactly that reason, and that exclusion
+   * stands. This is narrower than that guard: it is not a claim about how
+   * masterclass should handle a settled charge landing on a cancelled seat. It
+   * only refuses to CREATE the unreachable state by hand, from a test
+   * endpoint, which needs no ruling from the masterclass owners.
+   */
+  if (doc.status === 'cancelled') {
+    return NextResponse.json(
+      { error: 'cancelled', message: 'a cancelled registration cannot be marked paid' },
+      { status: 409 }
+    );
+  }
+
   console.log('[dev-mark-paid] Marking registration as paid | id:', id, '| current status:', doc.status);
 
   if (doc.status !== 'paid') {
