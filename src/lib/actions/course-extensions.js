@@ -113,6 +113,106 @@ function extensionFields(doc) {
   };
 }
 
+/**
+ * Is `alias` free for `courseId` to take? `{ field, error }` or null.
+ *
+ * ── ONE RULE, TWO CALLERS, AND THAT IS THE POINT ────────────────────────────
+ * Called by `saveCourseExtension` just before its write, and by the CREATE arm
+ * of CourseForm BEFORE `createCourse` touches MSDB. Both must answer
+ * identically or the create flow refuses on a rule the save flow does not, and
+ * the admin learns the difference by hitting it.
+ *
+ * The decision itself is pure and lives in lib/courses/aliasAvailability; this
+ * is only the lookup, exactly as `courseIdConflict` is pure while
+ * `findCourseExtensionCodeInsensitive` does its reading.
+ *
+ * ── A FAILED LOOKUP IS NOT "FREE" ───────────────────────────────────────────
+ * Same ruling as the duplicate-code guard: refusing to answer is not the same
+ * as answering no. The error propagates rather than being swallowed into a
+ * cheerful null, because guessing here costs another course's public URL.
+ *
+ * Exported because this file is 'use server' — every export must be an async
+ * function, which is why the pure half lives in the other module.
+ */
+export async function checkAliasAvailable(alias, courseId) {
+  const wanted = normaliseAlias(alias);
+  if (!wanted) return null; // no custom URL — always allowed (sparse index)
+
+  await dbConnect();
+
+  /**
+   * TWO QUESTIONS, ONE ROUND TRIP EACH, IN PARALLEL.
+   *
+   *   · does another extension row already hold this alias  (Mongo)
+   *   · does it shadow some course's derived /<id>-training-course  (upstream)
+   *
+   * ── THE UPSTREAM READ IS AN EXTRA CALL, AND WHICH ONE MATTERS ─────────────
+   * The create arm does NOT have a course list in hand when this runs: the one
+   * `createCourse` fetches lives inside `findCourseCodeInsensitive`, runs AFTER
+   * this check, and is deliberately `revalidate: 0` — a fresh network read every
+   * time, because a stale duplicate-CODE answer costs another course's data.
+   *
+   * This uses the ISR-CACHED `listPublicCourses()` (tag `public-courses`)
+   * instead, so on the create path it is a cache hit rather than a second
+   * uncached fetch of the same list. The trade, stated rather than buried: a
+   * course created upstream within the cache window is not yet in this list, so
+   * an alias shadowing it would be allowed through. That is acceptable here in
+   * a way it is not for the code guard — the consequence is one course being
+   * reachable at one URL instead of two, recoverable by editing the alias,
+   * against the code guard's silent overwrite of another course's SEO.
+   *
+   * A FAILED UPSTREAM READ IS NOT "NO SHADOW". It cannot be, on the same
+   * reasoning as everywhere else in this flow — but it also must not block an
+   * ordinary alias save during an upstream outage, when the alias-vs-alias
+   * check is still perfectly answerable. So the failure is surfaced as its own
+   * refusal rather than swallowed into a null.
+   */
+  const [owner, courseList] = await Promise.all([
+    CourseExtension.findOne({
+      urlAlias: wanted,
+      // Scoped to OTHER courses: re-saving a course's own alias is not a
+      // collision, and this action is an upsert keyed on courseId, so the
+      // overwhelmingly common save is an edit that leaves the alias untouched.
+      courseId: { $ne: courseId },
+    })
+      .select('courseId')
+      .lean(),
+    // includeHidden — a HIDDEN course still owns its derived
+    // /<code>-training-course path. Filtering here would let an admin take an
+    // alias that shadows it, and the collision would only surface the day that
+    // course is re-published — at which point two rows point at one URL and
+    // `findOne({urlAlias})` decides which page the public sees. That is the
+    // exact failure the unique index and this check were added for.
+    listPublicCourses({ includeHidden: true }).then(
+      (r) => ({ ok: true, items: r?.items ?? [] }),
+      (err) => ({ ok: false, error: err?.message ?? 'upstream lookup failed' })
+    ),
+  ]);
+
+  // The alias-vs-alias answer is complete on its own — report it before
+  // admitting the upstream half could not be checked.
+  const taken = aliasConflict({ alias: wanted, existingCourseId: owner?.courseId ?? null });
+  if (taken) return taken;
+
+  if (!courseList.ok) {
+    return {
+      field: 'urlAlias',
+      error:
+        'ตรวจสอบ URL ซ้ำกับที่อยู่เดิมของหลักสูตรอื่นไม่สำเร็จ — '
+        + `กรุณาลองใหม่อีกครั้ง (${courseList.error})`,
+    };
+  }
+
+  return aliasConflict({
+    alias: wanted,
+    legacyOwner: legacyPathOwner({
+      alias: wanted,
+      courseIds: courseList.items.map((c) => c?.course_id),
+      exceptCourseId: courseId,
+    }),
+  });
+}
+
 /** Admin-only — create or update by `courseId`. */
 export async function saveCourseExtension(courseId, data) {
   const session = await requireAdmin('courses');
