@@ -130,6 +130,14 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // `menu` is the RESOLVED page key (pageKeyForType), so a FAQ edited under a
   // course is filed under `courses`. Without this pair a real row is rejected.
   entry('courses', 'local_faq',  'FAQ (เฉพาะหลักสูตร)', 'full'),
+  /**
+   * The order of COURSES INSIDE ONE PROGRAMME, dragged on /admin/courses.
+   *
+   * On the `courses` menu because that is the screen and therefore the
+   * requireAdmin key — but note it keys on a programId, which is a THIRD key
+   * space on a menu already documented as dual. See DUAL_KEY_SPACE_MENUS.
+   */
+  entry('courses', 'course_order', 'ลำดับหลักสูตรในโปรแกรม', ORDERED_IDS_POLICY),
 
   entry('schedules',   'schedule',   'รอบอบรม', 'full'),
   entry('instructors', 'instructor', 'วิทยากร', 'full'),
@@ -140,6 +148,10 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // ordering — hence ordered_ids rather than a reorder of `program`.
   entry('programs', 'program_order', 'ลำดับโปรแกรม', ORDERED_IDS_POLICY),
   entry('programs', 'skill_order',   'ลำดับ Skill', ORDERED_IDS_POLICY),
+  // The order of PROGRAMMES INSIDE ONE SKILL — SkillOrder.programOrder. A
+  // different question from `skill_order` (the order OF the skills), so a
+  // different pair: sharing one would merge two series onto one record id.
+  entry('programs', 'skill_program_order', 'ลำดับโปรแกรมใน Skill', ORDERED_IDS_POLICY),
   entry('programs', 'program_sync',  'ซิงก์โปรแกรมจาก API', 'count_only'),
   entry('programs', 'skill_sync',    'ซิงก์ Skill จาก API', 'count_only'),
 
