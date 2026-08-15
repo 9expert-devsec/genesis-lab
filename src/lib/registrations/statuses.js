@@ -49,11 +49,26 @@
  * and the chips read left to right as progress. Neither is alphabetical and
  * neither should be sorted.
  *
- * ── `accent` IS A COMPLETE TAILWIND CLASS ───────────────────────────────────
- * Never an interpolated fragment. Tailwind scans source text for whole class
+ * ── `accent` AND `badge` ARE COMPLETE TAILWIND CLASSES ──────────────────────
+ * Never interpolated fragments. Tailwind scans source text for whole class
  * names, so `border-l-${color}-400` is purged and the card renders with no
  * colour at all. Comments are scanned too, which is why no fragment of that
  * shape is written anywhere in this file.
+ *
+ * `accent` is the summary card's left edge; `badge` is the status CHIP in the
+ * table cell and on the detail header.
+ *
+ * ── WHY `badge` LIVES HERE AND NOT IN THE SCREENS ───────────────────────────
+ * It was a hand-written `STATUS_BADGE` literal in FOUR files — both list
+ * clients and both detail clients — and it is keyed by status value, which
+ * makes it vocabulary-shaped: the same shape as the label map, which is already
+ * here, and as the card list, which is already here. A status added to the
+ * arrays above without a matching entry in one of those four literals rendered
+ * an UNSTYLED chip, and only on the one screen whose copy was missed.
+ *
+ * That is the identical class of defect as the drift recorded at the top of
+ * this file, one property further along: a value with no colour is a value with
+ * no card wearing different clothes. Colour travels with the value now.
  *
  * ── NO IMPORTS, ON PURPOSE ──────────────────────────────────────────────────
  * A `'use server'` module may only export async functions, so a shared constant
@@ -66,14 +81,14 @@
 // ── PUBLIC ──────────────────────────────────────────────────────────────────
 
 export const PUBLIC_STATUSES = [
-  { value: 'pending',   label: 'รอดำเนินการ',        accent: 'border-l-amber-400' },
+  { value: 'pending',   label: 'รอดำเนินการ',        accent: 'border-l-amber-400',   badge: 'bg-amber-100 text-amber-700' },
   // RELABELLED in round 1. The stored value is still `confirmed` — this is a
   // label change with no migration. What the admin actually does at this step
   // is send the quotation, and 'ยืนยันแล้ว' read as though money had changed
   // hands.
-  { value: 'confirmed', label: 'ส่งใบเสนอราคาแล้ว',  accent: 'border-l-blue-400' },
-  { value: 'paid',      label: 'ชำระแล้ว',           accent: 'border-l-emerald-400' },
-  { value: 'cancelled', label: 'ยกเลิก',             accent: 'border-l-slate-300' },
+  { value: 'confirmed', label: 'ส่งใบเสนอราคาแล้ว',  accent: 'border-l-blue-400',    badge: 'bg-blue-100 text-blue-700' },
+  { value: 'paid',      label: 'ชำระแล้ว',           accent: 'border-l-emerald-400', badge: 'bg-emerald-100 text-emerald-700' },
+  { value: 'cancelled', label: 'ยกเลิก',             accent: 'border-l-slate-300',   badge: 'bg-slate-100 text-slate-500' },
 ];
 
 // ── IN-HOUSE ────────────────────────────────────────────────────────────────
@@ -88,16 +103,16 @@ export const PUBLIC_STATUSES = [
  * keeps `paid` out of the PUBLIC transition table, applied one step earlier by
  * keeping it out of the in-house VOCABULARY altogether.
  *
- * The labels and accents are the same strings as the public entries for the
- * same values, and that is the point of the collapse rather than a copy: the
- * two strips describe the same three real-world states and must read alike.
+ * The labels, accents and badges are the same strings as the public entries for
+ * the same values, and that is the point of the collapse rather than a copy:
+ * the two strips describe the same three real-world states and must read alike.
  * `pending` and `cancelled` are literally the same rows as above; a test pins
  * that they have not been allowed to drift apart.
  */
 export const INHOUSE_STATUSES = [
-  { value: 'pending',   label: 'รอดำเนินการ',       accent: 'border-l-amber-400' },
-  { value: 'quoted',    label: 'ส่งใบเสนอราคาแล้ว', accent: 'border-l-blue-400' },
-  { value: 'cancelled', label: 'ยกเลิก',            accent: 'border-l-slate-300' },
+  { value: 'pending',   label: 'รอดำเนินการ',       accent: 'border-l-amber-400', badge: 'bg-amber-100 text-amber-700' },
+  { value: 'quoted',    label: 'ส่งใบเสนอราคาแล้ว', accent: 'border-l-blue-400',  badge: 'bg-blue-100 text-blue-700' },
+  { value: 'cancelled', label: 'ยกเลิก',            accent: 'border-l-slate-300', badge: 'bg-slate-100 text-slate-500' },
 ];
 
 /** The stored enum values, in pipeline order. */
@@ -340,6 +355,55 @@ const LIVE_STATUS_LABELS = {
  */
 export function statusLabel(value) {
   return LIVE_STATUS_LABELS[value] ?? LEGACY_STATUS_LABELS[value] ?? String(value);
+}
+
+/**
+ * The chip colour for a status — merged across both subsets, exactly as
+ * `LIVE_STATUS_LABELS` is, and safe for the same measured reason: the two
+ * subsets share `pending` and `cancelled` and give them IDENTICAL classes, so
+ * no value maps to two different colours. A test pins that.
+ */
+const LIVE_STATUS_BADGES = Object.fromEntries(
+  [...PUBLIC_STATUSES, ...INHOUSE_STATUSES].map((s) => [s.value, s.badge])
+);
+
+/**
+ * The NEUTRAL chip, used for any value the live vocabulary does not know.
+ *
+ * A named constant rather than a literal repeated at four call sites, because
+ * that repetition is what this whole fold removes. It is deliberately a real
+ * colour rather than '' — a chip with no background is invisible against the
+ * row, so an unrecognised status would look like an EMPTY CELL rather than like
+ * a status nobody has styled. Grey says "unknown", blank says "nothing here",
+ * and only one of those is true.
+ */
+export const NEUTRAL_STATUS_BADGE = 'bg-slate-100 text-slate-600';
+
+/**
+ * One status value → the complete Tailwind classes for its chip.
+ *
+ * ── THE FALLBACK IS INSIDE, NOT AT THE CALL SITE ────────────────────────────
+ * Every consumer used to write `STATUS_BADGE[x] ?? 'bg-slate-100
+ * text-slate-600'`, which is four copies of a decision. Folding the `??` in
+ * here means a caller cannot forget it, and cannot pick a different neutral.
+ *
+ * ── RETIRED VALUES GET THE NEUTRAL CHIP, AND THAT IS CORRECT NOW ────────────
+ * Unlike `statusLabel`, this does NOT consult the legacy map. During the
+ * round-2 migration window the two list clients carried retired colours so
+ * unmigrated rows would not all turn grey; that window is closed — the
+ * migration has run and the enum is narrowed to the three live values, so no
+ * document can hold a retired status any more. A retired value reaching this
+ * function today would be a genuine anomaly, and grey is the honest way to
+ * render an anomaly.
+ *
+ * The audit trail is unaffected: it renders retired statuses as TEXT through
+ * `statusLabel` and draws no chip, so nothing there needs a colour.
+ *
+ * @param {string} value
+ * @returns {string} complete Tailwind classes, never a fragment
+ */
+export function statusBadge(value) {
+  return LIVE_STATUS_BADGES[value] ?? NEUTRAL_STATUS_BADGE;
 }
 
 // ── FILTERING ───────────────────────────────────────────────────────────────

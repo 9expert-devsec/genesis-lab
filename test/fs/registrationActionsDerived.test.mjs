@@ -61,11 +61,55 @@ test('the actions are a lookup into the shared table', () => {
  *
  * sourceScan's CODE view strips imports, so a rule about what a file imports
  * read from `code` sees no import statements at all and passes on any file.
+ *
+ * ── WIDENED, NOT WEAKENED, WHEN THE COLOUR JOINED THE MODULE ────────────────
+ *
+ * This named the exact two-binding import
+ * `{ allowedTransitions, buildStatusLabels }`. Round 3 folded the status CHIP
+ * COLOUR into the module too, so the detail client now takes three bindings
+ * (`allowedTransitions, statusBadge, statusLabel`) and holds no local map of
+ * any kind.
+ *
+ * Pinning the literal spelling of an import list means every future addition
+ * reddens a test that has no opinion about additions. So the rule is restated
+ * over what it was actually protecting — that each of these THREE things comes
+ * from the module — and it is now STRICTER than the original: it names three
+ * bindings where the old one named two, and the two `no local map` assertions
+ * below close the other half.
  */
-test('the detail client imports the table and the labels from the module', () => {
-  assert.match(
-    DETAIL.withImports,
-    /import\s*\{\s*allowedTransitions,\s*buildStatusLabels\s*\}\s*from\s*'@\/lib\/registrations\/statuses'/
+test('the detail client takes its table, labels AND chip colours from the module', () => {
+  for (const binding of ['allowedTransitions', 'statusLabel', 'statusBadge']) {
+    assert.match(
+      DETAIL.withImports,
+      new RegExp(String.raw`import\s*\{[^}]*\b${binding}\b[^}]*\}\s*from\s*'@/lib/registrations/statuses'`),
+      `${binding} is not imported from the shared status module`
+    );
+  }
+});
+
+test('the detail client holds no local status colour map', () => {
+  // The literal this fold removed. It was one of FOUR copies; a status added to
+  // the module without an entry here rendered an unstyled chip on this screen
+  // only. Matched on the SHAPE — a status key mapped to a Tailwind colour pair —
+  // so renaming the constant does not evade it.
+  assert.ok(
+    !/STATUS_BADGE\s*=/.test(DETAIL.code),
+    'the STATUS_BADGE literal is back in the detail client'
+  );
+  assert.ok(
+    !/\b(pending|confirmed|paid|cancelled)\s*:\s*'bg-/.test(DETAIL.code),
+    'a status→colour literal is back under a different name'
+  );
+});
+
+test('the chip reads its colour through the shared lookup', () => {
+  assert.match(DETAIL.code, /statusBadge\(status\)/,
+    'the badge is not derived from the module');
+  // And the per-call-site fallback is gone with it: the `??` now lives inside
+  // `statusBadge`, so a caller cannot forget it or choose a different neutral.
+  assert.ok(
+    !/statusBadge\(status\)\s*\?\?/.test(DETAIL.code),
+    'a local fallback is back beside the shared lookup'
   );
 });
 

@@ -10,7 +10,8 @@ import { LastEditedHint } from '@/components/audit/auditRowParts';
 import {
   buildStatCards,
   buildStatusChips,
-  buildStatusLabels,
+  statusBadge,
+  statusLabel,
   statusesForSource,
 } from '@/lib/registrations/statuses';
 import { InhouseTable } from './InhouseTable';
@@ -43,25 +44,22 @@ const RANGE_OPTIONS = [
   { value: 'month', label: 'เดือนนี้' },
 ];
 
-const STATUS_BADGE = {
-  pending:   'bg-amber-100 text-amber-700',
-  confirmed: 'bg-blue-100 text-blue-700',
-  paid:      'bg-emerald-100 text-emerald-700',
-  cancelled: 'bg-slate-100 text-slate-500',
-};
-
-/**
- * value → Thai label, for the public สถานะ cell.
+/*
+ * NO STATUS_LABEL AND NO STATUS_BADGE MAP IN THIS FILE ANY MORE.
  *
- * DERIVED. A status with no entry here renders its raw enum value in the table,
- * which is the same class of bug as a status with no card — and it is how
- * `confirmed` came to be labelled 'ยืนยันแล้ว' in five places and needed
- * changing in five places.
+ * Both were derived-then-cached locals: `buildStatusLabels()` for the text and
+ * a hand-written literal for the colour. The label map was already derived; the
+ * COLOUR was not, and it was the last hand-written status list on this screen.
  *
- * The in-house rows do not read this map: InhouseTable derives its own labels
- * from the in-house subset.
+ * Both are now single function calls — `statusLabel(v)` and `statusBadge(v)` —
+ * which also folds the `?? 'bg-slate-100 text-slate-600'` fallback that used to
+ * sit at every call site into the module, where there is one of it.
+ *
+ * SCHEDULE_BADGE below is NOT the same shape and deliberately stays: it is
+ * keyed by `scheduleType`, which is a course-schedule property with its own
+ * vocabulary, not a registration status. It has no entry in the status module
+ * and must not acquire one.
  */
-const STATUS_LABEL = buildStatusLabels();
 
 const SCHEDULE_BADGE = {
   hybrid:    'bg-violet-100 text-violet-700',
@@ -444,9 +442,9 @@ export function RegistrationsClient({
                   <td className="px-4 py-3">
                     <span className={cn(
                       'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                      STATUS_BADGE[row.status] ?? 'bg-slate-100 text-slate-600'
+                      statusBadge(row.status)
                     )}>
-                      {STATUS_LABEL[row.status] ?? row.status}
+                      {statusLabel(row.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">

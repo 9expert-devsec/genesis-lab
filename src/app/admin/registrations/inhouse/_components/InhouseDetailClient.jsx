@@ -19,24 +19,23 @@ import {
   INHOUSE_STATUS_TRANSITIONS,
   allowedTransitions,
   effectiveStatus,
+  statusBadge,
   statusLabel,
 } from '@/lib/registrations/statuses';
 
 // ── Constants ──────────────────────────────────────────────────────
 
-const STATUS_BADGE = {
-  pending:       'bg-amber-100 text-amber-700',
-  quoted:        'bg-blue-100 text-blue-700',
-  cancelled:     'bg-slate-100 text-slate-500',
-  // RETIRED, and kept until the enum is narrowed. Real documents still hold
-  // these for the window between this deploying and the migration's --apply,
-  // and a badge with no entry falls back to grey — which would turn the whole
-  // unmigrated backlog grey rather than showing what each record says.
-  new:           'bg-violet-100 text-violet-700',
-  contacted:     'bg-blue-100 text-blue-700',
-  'closed-won':  'bg-emerald-100 text-emerald-700',
-  'closed-lost': 'bg-slate-100 text-slate-500',
-};
+/*
+ * NO LOCAL STATUS_BADGE. Colour is keyed by status value, which makes it
+ * vocabulary-shaped, so it lives beside the label in lib/registrations/statuses
+ * and arrives as `statusBadge(v)`.
+ *
+ * THE RETIRED COLOURS ARE GONE WITH IT, on the schedule this file's own comment
+ * set: they were kept "until the enum is narrowed", for the window in which real
+ * documents still held `new` / `contacted` / `closed-won` / `closed-lost`. The
+ * enum was narrowed to the three live values and the migration has since run, so
+ * that window is closed and no document can carry a retired status.
+ */
 
 /**
  * ── THERE IS NO STATUS-ACTION MAP IN THIS FILE ANY MORE ─────────────────────
@@ -317,7 +316,7 @@ export function InhouseDetailClient({ doc, courses = [] }) {
           <p className="mt-1 text-xs text-[var(--text-muted)]">ส่งคำขอเมื่อ {fmtDate(doc.createdAt)}</p>
         </div>
         <div className="flex flex-col items-end gap-3">
-          <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', STATUS_BADGE[status] ?? 'bg-slate-100 text-slate-600')}>
+          <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', statusBadge(status))}>
             {statusLabel(status)}
           </span>
           {statusActions.length > 0 && (
