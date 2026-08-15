@@ -18,6 +18,7 @@ import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HEALTH_LEVEL, HEALTH_LABEL } from '@/lib/audit/auditHealth';
 import { displayRecordId } from '@/lib/refNo';
+import { statusLabel } from '@/lib/registrations/statuses';
 
 const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
@@ -51,12 +52,42 @@ export function fmtRelative(iso) {
   return fmtWhen(iso).slice(0, -6); // drop the clock time, keep the date
 }
 
-/** Compact one payload for a single line. The full object lives in the detail. */
+/**
+ * Compact one payload for a single line. The full object lives in the detail.
+ *
+ * ── A `{status}` PAYLOAD RENDERS ITS THAI LABEL, LIVE OR RETIRED ────────────
+ *
+ * `{status}` is the ONE payload this trail is allowed to carry (see the PII
+ * note in lib/actions/registrations.js), so it is also the one a human actually
+ * reads on the line: `รอดำเนินการ → ส่งใบเสนอราคาแล้ว`. It used to print the
+ * raw enum, which was tolerable while the values were the only vocabulary
+ * anyone saw.
+ *
+ * ROUND 2 MADE IT INTOLERABLE. admin_audit_logs holds in-house rows carrying
+ * `new`, `contacted`, `closed-won` and `closed-lost` — values that no longer
+ * exist anywhere else in the product. Those rows are HISTORICAL FACT and are
+ * deliberately NOT migrated (the trail is only evidence because nothing in it
+ * is ever rewritten), so without a legacy lookup they would sit in the history
+ * as bare English enum strings that nothing else on any screen can explain.
+ *
+ * `statusLabel` answers for the live vocabulary AND for the four retired
+ * values, from two DELIBERATELY SEPARATE maps — live statuses drive the filters
+ * and the buttons, legacy labels only ever decorate history, and merging them
+ * would make a retired value selectable again. It returns an unknown value
+ * UNCHANGED, so a payload from a collection this module has never heard of
+ * still shows what it holds rather than being hidden behind a dash.
+ *
+ * ── THE `Payload` BLOCKS BELOW ARE DELIBERATELY LEFT RAW ────────────────────
+ * They are `JSON.stringify` of the stored object, and that is their job: the
+ * expanded detail is the evidence exactly as recorded. Labelling it there would
+ * mean the compact line and the detail disagreed about what the row SAYS, and
+ * the detail is the half that has to be literal.
+ */
 export function preview(value) {
   if (value == null) return '—';
   if (typeof value !== 'object') return String(value);
   const keys = Object.keys(value);
-  if (keys.length === 1 && keys[0] === 'status') return String(value.status);
+  if (keys.length === 1 && keys[0] === 'status') return statusLabel(value.status);
   return `{${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}}`;
 }
 
