@@ -67,6 +67,9 @@ export const STUBS = {
   // CoursesAdminClient imports saveProgramCourseOrder for the reorder save;
   // same chain, same reasoning as the line above.
   '@/lib/actions/program-order': path.join(ROOT, 'test', 'stub-program-order-actions.mjs'),
+  // RenameExecutePanel imports the rename + the state inspector for its click
+  // handler; same chain, same reasoning as the line above.
+  '@/lib/actions/course-rename': path.join(ROOT, 'test', 'stub-course-rename-actions.mjs'),
   '@/lib/actions/course-extensions': path.join(ROOT, 'test', 'stub-course-extension-actions.mjs'),
   // Reached indirectly, via CourseOutlineUpload inside CourseForm.
   '@/lib/actions/course-outlines': path.join(ROOT, 'test', 'stub-course-outline-actions.mjs'),

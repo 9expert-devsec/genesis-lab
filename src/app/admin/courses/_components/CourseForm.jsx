@@ -701,8 +701,12 @@ export function CourseForm({
           {mode === 'edit' && (
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               ต้องเปลี่ยนรหัส?{' '}
+              {/* CARRIES THE CODE, so the admin who was just looking at this
+                  course does not have to find it again on the next screen. The
+                  code and not the _id: the picker there is keyed on course_id
+                  and the preview action takes a code. */}
               <Link
-                href="/admin/courses/rename"
+                href={`/admin/courses/rename?course=${encodeURIComponent(courseId)}`}
                 className="font-semibold text-9e-action hover:underline"
               >
                 ตรวจสอบผลกระทบก่อน

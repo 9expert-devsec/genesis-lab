@@ -30,8 +30,29 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CourseRenamePreviewPage() {
+export default async function CourseRenamePreviewPage({ searchParams }) {
   await requirePage('courses');
+
+  /**
+   * THE DEEP-LINKED COURSE, READ HERE AND PASSED DOWN.
+   *
+   * The course edit form links here as `?course=<course_id>`, so an admin who
+   * was already looking at a course arrives with it selected instead of having
+   * to find it again.
+   *
+   * Read from `searchParams` on EVERY render and handed over as a prop — never
+   * copied into `useState` in the client. That is the rule the register in
+   * test/fs/urlFilterNoState exists for: a URL value seeded once into state
+   * goes stale the moment a navigation keeps the component instance, and this
+   * screen is not going to be the next entry on it.
+   *
+   * The CODE and not the ObjectId: the picker is keyed on `course_id`, the
+   * preview action takes a code, and the code is the thing being renamed. An
+   * `_id` would need a second lookup to become any of those.
+   */
+  const sp = await searchParams;
+  const raw = sp?.course;
+  const course = (Array.isArray(raw) ? raw[0] : raw ?? '').toString().trim();
 
   // includeHidden — the picker must offer every course the admin can manage,
   // for the same reason the management table does: a hidden course is exactly
@@ -56,7 +77,7 @@ export default async function CourseRenamePreviewPage() {
         </p>
       </div>
 
-      <RenamePreviewClient courses={courses} />
+      <RenamePreviewClient courses={courses} course={course} />
     </div>
   );
 }

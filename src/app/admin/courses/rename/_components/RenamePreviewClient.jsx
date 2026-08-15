@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { previewCourseCodeRename } from '@/lib/actions/course-rename-preview';
 import { CourseSearchSelect } from '@/app/admin/courses/_components/CourseSearchSelect';
 import { RenamePreviewReport } from './RenamePreviewReport';
+import { RenameExecutePanel } from './RenameExecutePanel';
 
 /**
  * Run a course-code rename PREVIEW. Nothing on this screen writes anything.
@@ -23,8 +25,36 @@ import { RenamePreviewReport } from './RenamePreviewReport';
  * a collision and a case-only rename from fixtures — neither of which exists
  * in production to look at.
  */
-export function RenamePreviewClient({ courses = [] }) {
-  const [oldCode, setOldCode] = useState('');
+export function RenamePreviewClient({ courses = [], course = '' }) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  /**
+   * THE SELECTED COURSE LIVES IN THE URL, and is read from the prop every
+   * render. It is never copied into `useState` — that is the shape the register
+   * in test/fs/urlFilterNoState records as a defect, and it goes stale on any
+   * navigation that keeps this component instance.
+   *
+   * The picker therefore WRITES the URL rather than local state, which also
+   * makes a half-filled rename screen shareable: `?course=ZZTEST-EXCEL-01` is
+   * what the edit form links to, and what the admin's address bar shows after
+   * they pick something else.
+   *
+   * `newCode` below is genuinely local: it is typed, not URL-derived, and it
+   * has no business in the address bar on every keystroke.
+   */
+  const oldCode = course;
+  const setOldCode = useCallback(
+    (next) => {
+      const params = new URLSearchParams();
+      const value = String(next ?? '').trim();
+      if (value) params.set('course', value);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    },
+    [router, pathname]
+  );
+
   const [newCode, setNewCode] = useState('');
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
@@ -32,8 +62,10 @@ export function RenamePreviewClient({ courses = [] }) {
 
   const canRun = Boolean(oldCode.trim() && newCode.trim()) && !loading;
 
+  // `e` is optional: the execute panel calls this with no argument when a stale
+  // refusal sends the admin back for a fresh preview.
   async function run(e) {
-    e.preventDefault();
+    e?.preventDefault?.();
     if (!canRun) return;
     setLoading(true);
     setError(null);
@@ -112,6 +144,10 @@ export function RenamePreviewClient({ courses = [] }) {
       )}
 
       <RenamePreviewReport preview={preview} />
+
+      {/* The write. Acts on the preview object rendered above — see
+          tokenForPreview — so the admin consents to what they can see. */}
+      <RenameExecutePanel preview={preview} onPreviewReplaced={() => run()} />
     </div>
   );
 }
