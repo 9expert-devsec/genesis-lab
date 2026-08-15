@@ -21,6 +21,12 @@ import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
 import { courseEditorSignature, isCourseEditorDirty } from '@/lib/courses/courseFormDirty';
 import { withListQuery } from '@/lib/courses/adminListQuery';
+/**
+ * THE PUBLIC PAGE'S OWN SECTION NAMES. The form does not invent labels for
+ * content the public page already names — see COURSE_SECTION_LABELS. Pulls
+ * lucide icons and nothing else, so it is safe in this client bundle.
+ */
+import { COURSE_SECTION_LABELS } from '@/lib/courseSectionNav';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
 
 /**
@@ -911,7 +917,7 @@ export function CourseForm({
           Section 5 — Related courses (max 5)
       ─────────────────────────────────────────────────────────── */}
       <Section
-        title="5. หลักสูตรที่เกี่ยวข้อง"
+        title={`5. ${COURSE_SECTION_LABELS.related}`}
         hint="พิมพ์เพื่อค้นหา แล้วคลิกเพื่อเพิ่ม (สูงสุด 5 หลักสูตร)"
       >
         {relatedCodes.length > 0 && (
@@ -985,28 +991,28 @@ export function CourseForm({
             the payload is still exactly the lines typed. */}
         <BulletTextarea
           name="course_objectives"
-          label="วัตถุประสงค์ (course_objectives)"
+          label={`${COURSE_SECTION_LABELS.objective} (course_objectives)`}
           hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
           marker="number"
         />
         <BulletTextarea
           name="course_target_audience"
-          label="กลุ่มเป้าหมาย (course_target_audience)"
+          label={`${COURSE_SECTION_LABELS.target} (course_target_audience)`}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
           marker="check"
         />
         <BulletTextarea
           name="course_prerequisites"
-          label="ความรู้พื้นฐาน (course_prerequisites)"
+          label={`${COURSE_SECTION_LABELS.prerequisite} (course_prerequisites)`}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
           marker="check"
         />
         <BulletTextarea
           name="course_system_requirements"
-          label="ความต้องการของระบบ (course_system_requirements)"
+          label={`${COURSE_SECTION_LABELS.requirement} (course_system_requirements)`}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
           marker="check"
@@ -1023,7 +1029,7 @@ export function CourseForm({
           Section 7 — Training Topics
       ─────────────────────────────────────────────────────────── */}
       <Section
-        title="7. หัวข้ออบรม (training_topics)"
+        title={`7. ${COURSE_SECTION_LABELS.outline} (training_topics)`}
         hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — 1 บรรทัด = 1 หัวข้อย่อย"
       >
         <TrainingTopicsEditor

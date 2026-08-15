@@ -61,6 +61,47 @@ import {
 export const SECTION_ANCHOR_CLASS = 'scroll-mt-36 lg:scroll-mt-24';
 
 /**
+ * WHAT THE PUBLIC PAGE CALLS EACH SECTION — the one spelling, for both the
+ * page and the admin form that edits it.
+ *
+ * ── WHY THE ADMIN FORM IMPORTS THIS ────────────────────────────────────────
+ * /admin/courses' form is used by people who look at the public page all day.
+ * When the form said ความรู้พื้นฐาน and the page said พื้นฐานของผู้เข้าอบรม for the
+ * same `course_prerequisites`, every edit cost them a translation step — and
+ * the two could drift further with nobody noticing, because no code connected
+ * them. THE PUBLIC PAGE IS AUTHORITATIVE: these values are what the page
+ * already rendered, copied here unchanged, and the form was brought to them.
+ *
+ * Keyed by SECTION ID, which is also the anchor id and the key
+ * `courseSectionLinks` returns — so the label, the jump target and the heading
+ * cannot disagree about which section they mean.
+ *
+ * ── WHAT THIS MODULE CAN AND CANNOT UNIFY ──────────────────────────────────
+ * `courseSectionLinks` below now reads from here, so the nav is provably the
+ * same string. The four `ContentSection title="…"` props in
+ * (public)/[...slug]/_components are NOT re-sourced from here — that would mean
+ * editing four public components in a round scoped to the admin labels, on the
+ * authoritative side. They are instead PINNED to this map by
+ * test/fs/courseLabelParity, which reads their literal titles out of source and
+ * compares. A heading changed there without changing this reddens.
+ *
+ * Safe to import from a client component: this module pulls lucide icons and
+ * nothing else — no server config, no upstream client.
+ */
+export const COURSE_SECTION_LABELS = Object.freeze({
+  schedule:     'ตารางฝึกอบรม',
+  description:  'รายละเอียดหลักสูตร',
+  objective:    'วัตถุประสงค์',
+  target:       'หลักสูตรนี้เหมาะสำหรับ',
+  prerequisite: 'พื้นฐานของผู้เข้าอบรม',
+  requirement:  'ความต้องการของระบบ',
+  outline:      'หัวข้อการฝึกอบรม',
+  roadmap:      'Road Map',
+  faq:          'คำถามที่พบบ่อย',
+  related:      'หลักสูตรที่เกี่ยวข้อง',
+});
+
+/**
  * The jump links for one course, already filtered to the sections that render.
  *
  * Returns entries of `{ id, label, icon }` — `id` matches the target section's
@@ -74,49 +115,49 @@ export function courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs }
   return [
     {
       id: 'schedule',
-      label: 'ตารางฝึกอบรม',
+      label: COURSE_SECTION_LABELS.schedule,
       icon: CalendarDays,
       show: hasSchedules,
     },
     {
       id: 'description',
-      label: 'รายละเอียดหลักสูตร',
+      label: COURSE_SECTION_LABELS.description,
       icon: FileText,
       show: !!course?.course_teaser,
     },
     {
       id: 'objective',
-      label: 'วัตถุประสงค์',
+      label: COURSE_SECTION_LABELS.objective,
       icon: Target,
       show: !!course?.course_objectives?.length,
     },
     {
       id: 'target',
-      label: 'หลักสูตรนี้เหมาะสำหรับ',
+      label: COURSE_SECTION_LABELS.target,
       icon: Users,
       show: !!course?.course_target_audience?.length,
     },
     {
       id: 'prerequisite',
-      label: 'พื้นฐานของผู้เข้าอบรม',
+      label: COURSE_SECTION_LABELS.prerequisite,
       icon: GraduationCap,
       show: !!course?.course_prerequisites?.length,
     },
     {
       id: 'requirement',
-      label: 'ความต้องการของระบบ',
+      label: COURSE_SECTION_LABELS.requirement,
       icon: Monitor,
       show: !!course?.course_system_requirements?.length,
     },
     {
       id: 'outline',
-      label: 'หัวข้อการฝึกอบรม',
+      label: COURSE_SECTION_LABELS.outline,
       icon: ListChecks,
       show: !!course?.training_topics?.length,
     },
     {
       id: 'roadmap',
-      label: 'Road Map',
+      label: COURSE_SECTION_LABELS.roadmap,
       icon: Map,
       show: !!(
         course?.course_roadmap_desktop_url || course?.course_roadmap_mobile_url
@@ -124,13 +165,13 @@ export function courseSectionLinks({ course, hasSchedules, hasRelated, hasFaqs }
     },
     {
       id: 'faq',
-      label: 'คำถามที่พบบ่อย',
+      label: COURSE_SECTION_LABELS.faq,
       icon: CircleHelp,
       show: Boolean(hasFaqs),
     },
     {
       id: 'related',
-      label: 'หลักสูตรที่เกี่ยวข้อง',
+      label: COURSE_SECTION_LABELS.related,
       icon: BookOpen,
       show: hasRelated,
     },
