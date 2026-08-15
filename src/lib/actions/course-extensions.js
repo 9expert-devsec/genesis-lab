@@ -47,6 +47,34 @@ export async function getCourseExtension(courseId) {
 }
 
 /**
+ * The extension whose `formerCodes` contains this code, or null.
+ *
+ * ── WHY THIS IS A SEPARATE FUNCTION AND NOT A FALLBACK INSIDE THE ONE ABOVE ─
+ * `getCourseExtension` is the EXACT lookup, and a great deal already depends on
+ * it being exact — the save path, the duplicate guard's sibling, the admin
+ * form. Folding a former-code fallback into it would make every one of those
+ * silently resolve a retired code to a live row, which is the opposite of what
+ * a rename is for.
+ *
+ * Only `resolveCourse` calls this, and only after the exact lookup has missed.
+ * That keeps `formerCodes` at the two consulting sites it was ruled to have.
+ *
+ * Case-insensitive on the stored side because codes go in upper-cased through
+ * normalizeCourseCode while a URL fragment arrives however the visitor typed
+ * it. Anchored and escaped — a code is user input and `.` is a metacharacter.
+ */
+export async function getCourseExtensionByFormerCode(code) {
+  const wanted = String(code ?? '').trim();
+  if (!wanted) return null;
+  await dbConnect();
+  const escaped = wanted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const doc = await CourseExtension.findOne({
+    formerCodes: { $elemMatch: { $regex: `^${escaped}$`, $options: 'i' } },
+  }).lean();
+  return serialize(doc);
+}
+
+/**
  * The stored `courseId` matching this code IGNORING CASE, or null.
  *
  * Used by the create flow's duplicate guard. `getCourseExtension` is an exact

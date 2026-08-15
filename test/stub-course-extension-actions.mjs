@@ -38,3 +38,15 @@ export async function deleteCourseExtension() {
 export async function findCourseExtensionCodeInsensitive() {
   throw new Error('stub-course-extension-actions: findCourseExtensionCodeInsensitive must not be called');
 }
+
+/**
+ * `resolveCourse` imports this for its rename-interval fallback, so the stub
+ * must export it or that module fails to LINK — and a link failure contributes
+ * zero tests rather than a red one, which is the trap the note above records.
+ *
+ * Tests that exercise the fallback pass their own `fetchExtensionByFormerCode`
+ * through the resolver's `deps` seam and never reach this.
+ */
+export async function getCourseExtensionByFormerCode() {
+  throw new Error('stub-course-extension-actions: getCourseExtensionByFormerCode must not be called');
+}
