@@ -98,16 +98,38 @@ const BARE = {
   createdAt: '2026-05-13T09:00:00.000Z',
 };
 
-const ROWS = [FULL, MULTI, UNRESOLVED, NO_NAME_NO_MONTH, FOREIGN, BARE];
+/**
+ * A course that DOES resolve, with no preferred month.
+ *
+ * ── NEWLY REACHABLE, AND THAT IS THE POINT ────────────────────────────────
+ * While the course cell's second row also held the CODE, a resolved course
+ * always had something to put in it — so "resolved, no month" could not produce
+ * an empty row and no fixture covered it. Removing the code line makes the month
+ * that row's only content, so this branch exists for the first time.
+ *
+ * The same lesson as the public table's coordinator cell one round ago: a guard
+ * is only real if a fixture can reach the branch it guards.
+ */
+const RESOLVED_NO_MONTH = {
+  ...FULL,
+  _id: 'aaaaaaaaaaaaaaaaaaaa1007',
+  preferredMonth: '',
+};
 
+const ROWS = [FULL, MULTI, UNRESOLVED, NO_NAME_NO_MONTH, RESOLVED_NO_MONTH, FOREIGN, BARE];
+
+/**
+ * NO `lastEdited` — the table no longer accepts one. The audit hint was ruled
+ * out for this table; the both-directions guard below renders the PUBLIC table
+ * with a real entry to prove the ruling did not sweep across both.
+ */
 const html = renderToStaticMarkup(createElement(InhouseTable, {
   items: ROWS,
-  lastEdited: { [FULL._id]: { createdAt: '2026-08-13T09:00:00.000Z', actorName: 'ฝ่ายขาย' } },
   courseNames: COURSE_NAMES,
 }));
 
 const empty = renderToStaticMarkup(createElement(InhouseTable, {
-  items: [], lastEdited: {}, courseNames: {},
+  items: [], courseNames: {},
 }));
 
 /** Sliced from AFTER the opening tag — `<thead>` itself starts with `<th`. */
@@ -160,7 +182,7 @@ test('the in-house table emits none of the public headings', () => {
 
 test('the public table emits none of the in-house headings', () => {
   const publik = renderToStaticMarkup(createElement(PublicTable, {
-    items: [], lastEdited: {}, detailHref: (id) => `/admin/registrations/${id}`,
+    items: [], detailHref: (id) => `/admin/registrations/${id}`,
   }));
   const cells = headerCells(publik).join('|');
   for (const h of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'รูปแบบ / จำนวน']) {
@@ -228,21 +250,82 @@ test('an unresolved code with NO month drops the second row entirely', () => {
   assert.ok(row.includes('>ALSO-GONE<'), 'the code did not become the headline');
 });
 
-test('an unresolved code WITH a month keeps the row, showing the month alone', () => {
-  // The other half of the same fork. The code is the headline and is NOT
-  // repeated underneath — repeating it under itself says nothing.
+/**
+ * ── AN UNRESOLVED COURSE SHOWS ITS CODE, AND THAT IS THE CHOSEN FALLBACK ───
+ *
+ * The lookup can miss — upstream down, a course withdrawn, an id that no longer
+ * exists — and in-house requests reference courses by code, so this is a real
+ * data state rather than a hypothetical. The CODE takes the name slot.
+ *
+ * Chosen over a placeholder because the record genuinely holds the code and
+ * nothing else identifies the course; "—" would replace the only identifying
+ * string on the row with a word.
+ */
+test('an unresolved course renders its CODE in the name slot, never empty', () => {
   const row = rowFor(html, UNRESOLVED._id);
   assert.ok(row.includes('>GONE-FROM-UPSTREAM<'), 'the code did not become the headline');
   assert.ok(row.includes('>พ.ย. 2569<'), 'the preferred month did not render');
-  assert.equal(row.split('>GONE-FROM-UPSTREAM<').length - 1, 1,
-    'the code is repeated under itself');
+
+  // The cell is not empty and not a dash — the fallback is the code itself.
+  const cell = row.split('<td').slice(1)[2];
+  assert.ok(cell.includes('>GONE-FROM-UPSTREAM<'), 'the course cell does not hold the code');
+  assert.equal(EMPTY_ELEMENT.exec(cell), null, 'the course cell emitted an empty element');
 });
 
-test('a resolved course shows the NAME over the code, with the month beside it', () => {
+/**
+ * ── NO COURSE CODE LINE ANYWHERE, AND THIS REPLACES A GUARD THAT WENT VACUOUS
+ *
+ * This slot used to hold `the code is repeated under itself` — an assertion that
+ * the headline code did not ALSO appear as the second line. Removing the code
+ * line made that unfalsifiable: with no code element left, no row can duplicate
+ * one, so it would have passed forever while asserting nothing.
+ *
+ * The claim that is still worth making is the inverse and it is stronger: a
+ * RESOLVED course shows no code at all. Element boundaries, not substrings —
+ * the code is deliberately still in the cell's `title` attribute so a reader can
+ * hover for it, and a bare `includes()` would match that and pass for the wrong
+ * reason.
+ */
+test('a resolved course shows NO code element — the code line is gone', () => {
   const row = rowFor(html, FULL._id);
   assert.ok(row.includes('>SQL Performance Query Tuning<'), 'the course name did not resolve');
-  assert.ok(row.includes('>SQL-PG-Query<'), 'the code line is missing under the name');
+  assert.equal(row.includes('>SQL-PG-Query<'), false, 'the course code line is back');
   assert.ok(row.includes('>พ.ย. 2569<'), 'the preferred month did not render');
+
+  // …and it IS still reachable on hover, which is why the assertion above has to
+  // be element-bounded rather than a substring scan.
+  assert.ok(row.includes('SQL-PG-Query'), 'the code left the title attribute too');
+});
+
+test('the course cell is bold name over the month — two lines, not one shared line', () => {
+  /**
+   * WHAT THE MARKUP ACTUALLY DID BEFORE: the code and the month sat SIDE BY SIDE
+   * in one `flex … gap-[7px]` row, which is what the screenshot showed and is not
+   * the two-line shape the round-3 brief described. Verified in the markup rather
+   * than taken from the commit message.
+   *
+   * AFTER: the second row holds one element. Asserted as a COUNT, because "the
+   * month renders" is equally true of the old shape.
+   */
+  const cell = rowFor(html, FULL._id).split('<td').slice(1)[2];
+  const rows = cell.match(/<div class="flex h-\[32px\][^"]*"/g) ?? [];
+  assert.equal(rows.length, 1, `expected one 32px row in the course cell, found ${rows.length}`);
+
+  const second = cell.slice(cell.indexOf('h-[32px]'));
+  const spans = second.match(/<span\b/g) ?? [];
+  assert.equal(spans.length, 1,
+    `the course cell's second row holds ${spans.length} elements, expected only the month`);
+  assert.ok(second.includes('>พ.ย. 2569<'), 'the one element is not the month');
+});
+
+test('a resolved course with NO month drops the second row entirely', () => {
+  // NEWLY REACHABLE. While the code line existed, a resolved course always had
+  // something for that row; now the month is its only content, so this branch
+  // exists for the first time and must be absent rather than empty.
+  const row = rowFor(html, RESOLVED_NO_MONTH._id);
+  assert.ok(row.includes('>SQL Performance Query Tuning<'), 'the course name did not resolve');
+  assert.equal(EMPTY_ELEMENT.exec(row), null, 'the missing month left an empty 32px row');
+  assert.equal(row.includes('h-[32px]'), false, 'the second row rendered with nothing in it');
 });
 
 test('เดือนที่สนใจ has a home — it did not leave with its column', () => {
@@ -276,9 +359,63 @@ test('the bare row renders dashes, not blanks, and still no empty element', () =
   assert.ok(row.includes('>13 พ.ค. 2569<'), 'the bare row lost its request date');
 });
 
-test('the audit hint renders on the row that has one and NOT on the rows that do not', () => {
-  assert.ok(rowFor(html, FULL._id).includes('ฝ่ายขาย'), 'the audit hint did not render where there is an entry');
-  assert.ok(!rowFor(html, BARE._id).includes('ฝ่ายขาย'), 'the hint leaked onto a row with no entry');
+/**
+ * ── THE AUDIT HINT IS IN-HOUSE-OUT AND PUBLIC-IN, BOTH DIRECTIONS ──────────
+ *
+ * Round 3 moved `LastEditedHint` INTO the in-house วันที่ส่งคำขอ cell to mirror
+ * public. Seen in place, it was ruled back out — "13 ชม. ที่แล้ว · Yanisa P."
+ * under every request date is a second timestamp competing with the one the
+ * column exists for. PUBLIC KEEPS IT.
+ *
+ * Asserted in BOTH directions on purpose. A one-sided test ("in-house has no
+ * hint") is satisfied by a sweep that deleted it from both tables, which is the
+ * likelier mistake here than a re-add: the two tables share `DateCell`, so the
+ * hint lives one call site away from a change that looks table-agnostic.
+ *
+ * The fixture DOES carry an audit entry for the public row, so the public half
+ * cannot pass merely because no entry was supplied.
+ */
+test('the in-house row carries NO audit hint, and the public row still does', () => {
+  const entry = { createdAt: '2026-08-13T09:00:00.000Z', actorName: 'ฝ่ายขาย' };
+
+  /**
+   * ── THE IN-HOUSE HALF IS RENDERED *WITH* AN AUDIT MAP, DELIBERATELY ───────
+   *
+   * MEASURED: the first version of this asserted against the module-level
+   * `html`, which supplies no `lastEdited` at all. Restoring the prop AND the
+   * `entry={…}` argument to DateCell left it GREEN — the component was wired to
+   * render the hint again and there was simply no data to render, so the absence
+   * proved nothing about the component.
+   *
+   * It also carried `assert.equal(/lastEdited/.test(html), false)`, which was
+   * pure decoration: `lastEdited` is a PROP NAME and can never appear in markup,
+   * so that line was true of every possible render.
+   *
+   * Handing the table a map it does not accept is the point. React drops unknown
+   * props on a component, so this is harmless — and it turns the claim from
+   * "no hint rendered" into "no hint rendered EVEN WHEN THE DATA IS THERE",
+   * which is the one a re-add can fail.
+   */
+  const withMap = renderToStaticMarkup(createElement(InhouseTable, {
+    items: [FULL],
+    courseNames: COURSE_NAMES,
+    lastEdited: { [FULL._id]: entry },
+  }));
+  assert.equal(withMap.includes('ฝ่ายขาย'), false,
+    'the audit hint is back on the in-house table — it renders when handed an entry');
+  assert.equal(html.includes('ฝ่ายขาย'), false, 'the audit hint is back on the in-house table');
+
+  // Public: still renders, from the same shared DateCell.
+  const publik = renderToStaticMarkup(createElement(PublicTable, {
+    items: [{
+      _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed',
+      createdAt: '2026-08-01T00:00:00.000Z', coordinator: {},
+    }],
+    lastEdited: { aaaaaaaaaaaaaaaaaaaa0001: entry },
+    detailHref: (id) => `/admin/registrations/${id}`,
+  }));
+  assert.ok(publik.includes('ฝ่ายขาย'),
+    'the PUBLIC table lost its audit hint too — this was an in-house-only ruling');
 });
 
 // ── 4. รูปแบบ / จำนวน, and contactPhone ─────────────────────────────────────
@@ -298,7 +435,7 @@ test('an unknown training format renders ITSELF, never a substituted default', (
    */
   const odd = renderToStaticMarkup(createElement(InhouseTable, {
     items: [{ ...FULL, _id: 'aaaaaaaaaaaaaaaaaaaa9999', trainingFormat: 'hologram' }],
-    lastEdited: {}, courseNames: COURSE_NAMES,
+    courseNames: COURSE_NAMES,
   }));
   assert.ok(odd.includes('>hologram<'), 'an unrecognised format was replaced rather than shown');
   assert.ok(!odd.includes('Classroom'), 'the in-house table invented a schedule type');

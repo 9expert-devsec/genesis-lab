@@ -150,7 +150,23 @@ const COLUMNS = [
 
 const { widths, chevronWidth } = columnWidths({ columns: COLUMNS, gap: COLUMN_GAP });
 
-export function InhouseTable({ items, lastEdited = {}, courseNames = null, detailHref }) {
+/**
+ * ── NO `lastEdited` PROP ANY MORE — THE HINT IS RULED OUT ON THIS TABLE ────
+ *
+ * The round-3 ruling moved `LastEditedHint` INTO the วันที่ส่งคำขอ cell to mirror
+ * public. Seen in place, it was ruled back out: "13 ชม. ที่แล้ว · Yanisa P."
+ * under every request date is a second timestamp competing with the one the
+ * column is for.
+ *
+ * THE REVERSAL IS IN-HOUSE ONLY. Public keeps its hint, deliberately — see the
+ * both-directions guard in test/render/registrationsInhouseTable, which reddens
+ * if anybody sweeps this across both tables in either direction.
+ *
+ * The prop is DELETED rather than left unused and ignored, so the whole chain
+ * goes with it: RegistrationsClient stops threading it here, and page.jsx stops
+ * running the audit query for an in-house render at all.
+ */
+export function InhouseTable({ items, courseNames = null, detailHref }) {
   /**
    * The route is fixed for this body, and that is not the same claim the public
    * side makes.
@@ -200,10 +216,16 @@ export function InhouseTable({ items, lastEdited = {}, courseNames = null, detai
               key={row._id}
               className="border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)]"
             >
-              {/* วันที่ส่งคำขอ — with the audit hint beneath, mirroring public. */}
+              {/*
+                วันที่ส่งคำขอ — the date alone.
+
+                NO `entry`, and that omission is the whole opt-out: `DateCell` is
+                shared with the public table and renders the hint only when it is
+                given one. Public passes it; this does not.
+              */}
               <td className="p-0 align-top">
                 <CellLink href={to} first style={pad(0)}>
-                  <DateCell iso={row.createdAt} entry={lastEdited[String(row._id)]} />
+                  <DateCell iso={row.createdAt} />
                 </CellLink>
               </td>
 
@@ -381,14 +403,27 @@ function CourseCell({ codes, courseNames, month }) {
     })
     .join('\n');
 
-  // The second row carries the code ONLY when the code is not already the
-  // headline, and the month whenever there is one.
-  const showCode = Boolean(name);
-  const hasSecondRow = showCode || Boolean(month);
-
   return (
     <div title={title}>
       <div className="flex items-center gap-[6px]">
+        {/*
+          ── THE UNRESOLVED COURSE STILL SHOWS ITS CODE, IN THE NAME SLOT ─────
+
+          `name ?? first` — when the lookup misses, the CODE takes the headline.
+          That is a real state, not a hypothetical: in-house requests reference
+          courses by code and the name comes from a lookup that can miss (upstream
+          down, a course withdrawn, an id that no longer exists), which is exactly
+          what ZZTEST-EXCEL-01 was doing in the screenshot.
+
+          CHOSEN OVER A PLACEHOLDER because the record genuinely holds the code
+          and nothing else identifies the course. A "—" or "ไม่พบหลักสูตร" would
+          replace the only identifying string on the row with a word, and this
+          screen exists to be scanned. Removing the code LINE therefore costs an
+          unresolved row nothing — the code simply moves up.
+
+          The mono/semibold styling is kept so a code is still visibly a code
+          rather than a suspiciously short course name.
+        */}
         <p className={cn(
           'truncate leading-[20px] text-[var(--text-primary)]',
           name ? 'text-[15px] font-bold' : 'font-mono text-[13px] font-semibold'
@@ -401,18 +436,28 @@ function CourseCell({ codes, courseNames, month }) {
           </span>
         )}
       </div>
-      {hasSecondRow ? (
-        <div className="flex h-[32px] items-center gap-[7px]">
-          {showCode ? (
-            <span className="truncate font-mono text-[12px] leading-[15px] text-[var(--text-muted)]">
-              {first}
-            </span>
-          ) : null}
-          {month ? (
-            <span className="truncate text-[13px] leading-[15px] text-[var(--text-secondary)]">
-              {month}
-            </span>
-          ) : null}
+      {/*
+        ── THE SECOND LINE IS THE MONTH, ALONE ─────────────────────────────────
+
+        The course CODE used to share this row with the month — side by side in a
+        flex line with a 7px gap, which is what the screenshot showed and is NOT
+        the two-line shape the round-3 brief asked for. Verified in the markup
+        before changing it rather than assumed from the commit message.
+
+        The code line is now gone entirely, so the row holds one thing and the
+        cell really is `bold name` over `เดือนที่สนใจ`.
+
+        STILL CONDITIONAL, and it has to be: with the code gone the month is the
+        row's ONLY content, so a request with no preferred month would render an
+        empty 32px div. The guard is stronger than it was, not weaker — it used
+        to be `showCode || month`, which a resolved course satisfied through the
+        code alone.
+      */}
+      {month ? (
+        <div className="flex h-[32px] items-center">
+          <span className="truncate text-[13px] leading-[15px] text-[var(--text-secondary)]">
+            {month}
+          </span>
         </div>
       ) : null}
     </div>

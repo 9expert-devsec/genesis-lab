@@ -67,18 +67,33 @@ export default async function Page({ searchParams }) {
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
 
-  // ONE audit query for the whole page, never one per row. It has to follow the
-  // list because it needs the ids the list actually returned — a page of 20 is
-  // one $in of 20, served by {recordId:1, createdAt:-1} with no sort stage.
-  //
-  // `entity` mirrors `source`, which is why this page adds exactly ONE query
-  // and not two: it renders one entity at a time.
-  const lastEdited = await readLastEditedMap({
-    user: session?.user ?? null,
-    menu: 'registrations',
-    entity: source === 'inhouse' ? 'inhouse' : 'public',
-    recordIds: data.items.map((r) => String(r._id)),
-  });
+  /**
+   * ONE audit query for the whole page, never one per row — and NONE AT ALL on
+   * an in-house render.
+   *
+   * It has to follow the list because it needs the ids the list actually
+   * returned: a page of 20 is one `$in` of 20, served by
+   * `{recordId:1, createdAt:-1}` with no sort stage. That makes it the page's
+   * only SERIAL query, which is why not running it is worth something.
+   *
+   * ── WHY IT IS SKIPPED FOR IN-HOUSE ──────────────────────────────────────
+   * The in-house table no longer renders `LastEditedHint` — ruled out after it
+   * was seen in place. Fetching it anyway would be a round trip per page load
+   * for data nothing displays, which is the same rule this screen already
+   * applies to its PROJECTIONS: a superset of what the render needs is dead
+   * weight over the wire, and a test asserts that equality for both tables.
+   *
+   * Expressed as the same shape `buildCourseNameMap` already uses two blocks
+   * up — a per-source ternary — rather than as a new kind of conditional.
+   */
+  const lastEdited = source === 'inhouse'
+    ? {}
+    : await readLastEditedMap({
+        user: session?.user ?? null,
+        menu: 'registrations',
+        entity: 'public',
+        recordIds: data.items.map((r) => String(r._id)),
+      });
 
   return (
     /*
