@@ -119,7 +119,36 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(PAGE_SIZE)
-      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount requestInvoice status createdAt payment pricing')
+      /**
+       * THE PROJECTION IS THE RENDER LIST, field for field — the same rule the
+       * in-house branch above is held to.
+       *
+       * ── THREE FIELDS LEFT IN ROUND 3, WITH THE COLUMNS THAT READ THEM ─────
+       * `requestInvoice`, `payment` and `pricing` are gone. They fed the two
+       * tick columns and the payment chip, all three of which were removed by
+       * ruling: they were single-glyph answers to questions the detail page
+       * answers properly, and the chip additionally asserted a payment method
+       * for rows that hold no payment record at all.
+       *
+       * `payment` and `pricing` are whole SUBDOCUMENTS, so this is not a
+       * cosmetic saving on a page of twenty rows.
+       *
+       * ── AND WHAT DELIBERATELY STAYED ──────────────────────────────────────
+       * `scheduleType` AND `attendanceMode` both remain, because ScheduleBadge
+       * is kept whole by ruling — without the mode a hybrid round cannot say
+       * whether it runs on Teams or in the classroom, and two arrangements
+       * collapse into one chip.
+       *
+       * `classDate` stays although its own column is gone: it moved INTO the
+       * course cell as the รอบอบรม line, which is what that column heading now
+       * means. A field losing its column is not a field losing its home.
+       *
+       * NOT WIDENED, either: the design puts a ครบ / ยังไม่ครบ / แจ้งภายหลัง chip
+       * under the attendee count. Ruled out, and deriving one would have meant
+       * adding `attendeesListProvided` and the `attendees` ARRAY — personal data
+       * — to a list query, to render a three-way chip.
+       */
+      .select('courseName classDate scheduleType attendanceMode coordinator attendeesCount status createdAt')
       .lean();
   }
 

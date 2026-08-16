@@ -51,9 +51,20 @@ import {
  * actually is, and which no schedule or training-format map can trip.
  */
 
+/**
+ * EVERY FILE THE LIST SCREEN IS BUILT FROM.
+ *
+ * Enumerated by path, and the enumeration is updated in the SAME commit as any
+ * move — round 3 added PublicTable and tableParts when the public body was
+ * extracted and the status chip was folded into a shared cell. A rule of this
+ * shape is only worth what its file list covers: a status literal in a file
+ * nobody scans is a status literal.
+ */
 const CLIENTS = [
   'src/app/admin/registrations/_components/RegistrationsClient.jsx',
+  'src/app/admin/registrations/_components/PublicTable.jsx',
   'src/app/admin/registrations/_components/InhouseTable.jsx',
+  'src/app/admin/registrations/_components/tableParts.jsx',
   'src/app/admin/registrations/_components/ListPanel.jsx',
 ].map((rel) => readSource(rel));
 
@@ -264,8 +275,16 @@ test('CONTROL: the scanned clients are real, non-empty code', () => {
   for (const src of CLIENTS) {
     assert.ok(src.code.length > 400, `${src.rel} scrubbed to ${src.code.length} chars — the scan is inert`);
   }
-  // And each really is the file it claims to be.
-  assert.match(CLIENTS[0].code, /export function RegistrationsClient/);
-  assert.match(CLIENTS[1].code, /export function InhouseTable/);
-  assert.match(CLIENTS[2].code, /export function ListPanel/);
+  // And each really is the file it claims to be — checked by the export it must
+  // carry, so a path that silently started resolving to a different module does
+  // not go unnoticed.
+  const exports = [
+    /export function RegistrationsClient/,
+    /export function PublicTable/,
+    /export function InhouseTable/,
+    /export function StatusCell/,
+    /export function ListPanel/,
+  ];
+  assert.equal(CLIENTS.length, exports.length, 'the file list and the export list have drifted apart');
+  CLIENTS.forEach((src, i) => assert.match(src.code, exports[i], `${src.rel} is not the file it is listed as`));
 });

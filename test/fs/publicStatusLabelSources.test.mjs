@@ -26,6 +26,24 @@ import { buildStatusLabels } from '@/lib/registrations/statuses';
 
 const LIST      = readSource('src/app/admin/registrations/_components/RegistrationsClient.jsx');
 const DETAIL    = readSource('src/app/admin/registrations/_components/RegistrationDetailClient.jsx');
+
+/**
+ * ── THE สถานะ CELL MOVED, AND SO DID THE ASSERTIONS ABOUT IT ────────────────
+ *
+ * Round 3 rebuilt the two tables. The status chip is now ONE shared cell in
+ * tableParts.jsx — the public and in-house bodies had identical copies of it —
+ * and `SCHEDULE_BADGE` went with the public columns into PublicTable.jsx.
+ *
+ * These are enumerated by path so the guards follow the code rather than
+ * quietly passing over a file that no longer contains the subject. That is not
+ * hypothetical here: `LIST` still exists and is still a real, large file, so
+ * every "the cell reads the shared lookup" assertion pointed at it would have
+ * gone on failing loudly — which is the right direction — while a negative
+ * assertion ("no local colour map in LIST") would have started passing for the
+ * wrong reason, because the map moved rather than went away.
+ */
+const CELLS     = readSource('src/app/admin/registrations/_components/tableParts.jsx');
+const PUB_TABLE = readSource('src/app/admin/registrations/_components/PublicTable.jsx');
 const DASH_ACT  = readSource('src/lib/actions/dashboard.js');
 const DASH_CLI  = readSource('src/app/admin/_components/DashboardClient.jsx');
 
@@ -148,22 +166,61 @@ test('CONTROL: the CODE view really does strip those imports', () => {
  * These assert the CELL ITSELF reads both lookups, and that no local map of
  * either kind exists to shadow them — which the old single regex did not say.
  */
-test('the list screen reads BOTH label and colour through the shared lookups', () => {
-  assert.match(LIST.code, /statusLabel\(row\.status\)/,
-    'the public สถานะ cell does not derive its label from the module');
-  assert.match(LIST.code, /statusBadge\(row\.status\)/,
-    'the public สถานะ cell does not derive its chip colour from the module');
+test('the shared สถานะ cell reads BOTH label and colour through the module', () => {
+  // ONE cell for both tables now, so there is one place this can be got wrong
+  // instead of two — which is the same fold, one level down from the module.
+  assert.match(CELLS.code, /statusLabel\(status\)/,
+    'the สถานะ cell does not derive its label from the module');
+  assert.match(CELLS.code, /statusBadge\(status\)/,
+    'the สถานะ cell does not derive its chip colour from the module');
 });
 
-test('the list screen holds no local status label OR colour map', () => {
-  // Both halves of the old shape, forbidden by SHAPE rather than by name so a
-  // rename does not evade them.
-  assert.ok(!/STATUS_BADGE\s*=/.test(LIST.code), 'the STATUS_BADGE literal is back');
-  assert.ok(!/STATUS_LABEL\s*=/.test(LIST.code), 'a cached STATUS_LABEL map is back');
-  assert.ok(
-    !/\b(pending|confirmed|paid|cancelled)\s*:\s*'bg-/.test(LIST.code),
-    'a status→colour literal is back under a different name'
+test('the public table body holds no สถานะ cell of its own', () => {
+  // The positive claim above is only worth something if the table actually
+  // delegates. A private copy would satisfy every other assertion in this file
+  // while drifting from the shared one.
+  assert.ok(!/statusBadge\(/.test(PUB_TABLE.code),
+    'PublicTable draws its own status chip instead of using StatusCell');
+  assert.ok(/StatusCell/.test(PUB_TABLE.code), 'PublicTable does not render the shared StatusCell');
+});
+
+/**
+ * ── OUTSTANDING: IN-HOUSE STILL DRAWS ITS OWN CHIP ──────────────────────────
+ *
+ * The in-house table is rebuilt in the NEXT commit; this one is the public
+ * table alone, so that its diff is the public columns and nothing else. Until
+ * then InhouseTable keeps the inline chip it has had since round 2.
+ *
+ * SELF-INVALIDATING, following the register in test/fs/urlFilterNoState. This
+ * asserts the copy is STILL THERE, so folding it breaks this test and tells
+ * whoever did the fold to widen the assertion above rather than leaving a stale
+ * exemption behind. A plain "not yet" comment would have rotted silently; an
+ * allowlist entry would have outlived the thing it excuses.
+ */
+test('OUTSTANDING InhouseTable: still draws its own status chip (rebuilt next commit)', () => {
+  const inhouse = readSource('src/app/admin/registrations/_components/InhouseTable.jsx');
+  assert.match(
+    inhouse.code, /statusBadge\(row\.status\)/,
+    'InhouseTable no longer draws its own chip.\n\n'
+    + 'If you FOLDED it onto the shared StatusCell: delete this test and add PUB_TABLE\'s\n'
+    + 'sibling assertion for InhouseTable to the test above, so both bodies are guarded.\n'
+    + 'This register records work that is still outstanding — it is not an allowlist,\n'
+    + 'and it is designed to fail the moment it becomes stale.'
   );
+});
+
+test('no registrations surface holds a local status label OR colour map', () => {
+  // Both halves of the old shape, forbidden by SHAPE rather than by name so a
+  // rename does not evade them — and applied to every file the cell could have
+  // moved into, not just the one it started in.
+  for (const f of [LIST, CELLS, PUB_TABLE]) {
+    assert.ok(!/STATUS_BADGE\s*=/.test(f.code), `the STATUS_BADGE literal is back in ${f.rel}`);
+    assert.ok(!/STATUS_LABEL\s*=/.test(f.code), `a cached STATUS_LABEL map is back in ${f.rel}`);
+    assert.ok(
+      !/\b(pending|confirmed|paid|cancelled)\s*:\s*'bg-/.test(f.code),
+      `a status→colour literal is back under a different name in ${f.rel}`
+    );
+  }
 });
 
 /**
@@ -183,23 +240,32 @@ test('the status chip has no per-call-site fallback — it lives in the module n
   // Every consumer used to write `?? 'bg-slate-100 text-slate-600'`, four copies
   // of one decision. `statusBadge` owns it, so a caller can neither forget it
   // nor pick a different neutral.
-  assert.ok(
-    !/statusBadge\([^)]*\)\s*\?\?/.test(LIST.code),
-    'a local fallback is back beside the shared status lookup'
-  );
-  assert.ok(
-    !/statusLabel\([^)]*\)\s*\?\?/.test(LIST.code),
-    'a local fallback is back beside the shared label lookup'
-  );
+  for (const f of [LIST, CELLS, PUB_TABLE]) {
+    assert.ok(
+      !/statusBadge\([^)]*\)\s*\?\?/.test(f.code),
+      `a local fallback is back beside the shared status lookup in ${f.rel}`
+    );
+    assert.ok(
+      !/statusLabel\([^)]*\)\s*\?\?/.test(f.code),
+      `a local fallback is back beside the shared label lookup in ${f.rel}`
+    );
+  }
 });
 
-test('CONTROL: the neutral colour IS still present in this file, for another map', () => {
+test('CONTROL: the neutral colour IS still present, for another vocabulary', () => {
   // Proves the narrowing above is describing the real situation rather than a
   // hypothetical — and that a blanket string ban would have been wrong. If
   // SCHEDULE_BADGE ever stops using it, this says so rather than leaving the
   // comment above quietly stale.
-  assert.match(LIST.code, /SCHEDULE_BADGE\[type\]\s*\?\?\s*'bg-slate-100 text-slate-600'/,
+  //
+  // IT MOVED WITH THE PUBLIC COLUMNS. SCHEDULE_BADGE is keyed by `scheduleType`
+  // and belongs to the public table alone — in-house has no schedule at all,
+  // which is the finding that split the two bodies in the first place — so it
+  // now lives in PublicTable.jsx rather than in the shared client.
+  assert.match(PUB_TABLE.code, /SCHEDULE_BADGE\[type\]\s*\?\?\s*'bg-slate-100 text-slate-600'/,
     'SCHEDULE_BADGE no longer carries its own neutral — re-read the scoping note above');
+  // And it did not leave a copy behind in the file it came from.
+  assert.ok(!/SCHEDULE_BADGE/.test(LIST.code), 'a SCHEDULE_BADGE copy survives in RegistrationsClient');
 });
 
 test('the list screen has no hand-written public status list left', () => {

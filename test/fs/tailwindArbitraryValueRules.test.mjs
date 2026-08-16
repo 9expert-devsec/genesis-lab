@@ -739,7 +739,10 @@ test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
 const REGISTRATION_LAYOUT_FILES = [
   'src/app/admin/registrations/_components/RegistrationsClient.jsx',
   'src/app/admin/registrations/_components/ListPanel.jsx',
+  'src/app/admin/registrations/_components/PublicTable.jsx',
   'src/app/admin/registrations/_components/InhouseTable.jsx',
+  // The shared cell atoms — the status chip, the date cell, the chevron.
+  'src/app/admin/registrations/_components/tableParts.jsx',
   // The summary cards' accent classes are declared here, not in the screens.
   'src/lib/registrations/statuses.js',
 ];
