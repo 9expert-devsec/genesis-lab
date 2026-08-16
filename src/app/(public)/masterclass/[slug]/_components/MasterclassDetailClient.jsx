@@ -292,7 +292,7 @@ export function MasterclassDetailClient({
               className={`relative isolate mb-4 w-full overflow-hidden rounded-2xl transition-shadow hover:shadow-md [-webkit-mask-image:-webkit-radial-gradient(white,black)] ${
                 batch.is_early_bird
                   ? "border-2 border-9e-lime bg-9e-navy dark:bg-9e-card"
-                  : "border border-gray-200 bg-white dark:border-gray-700 dark:bg-9e-card"
+                  : "border-2 border-9e-brand bg-white dark:border-gray-700 dark:bg-9e-card"
               }`}
             >
               {batch.status === "closed" && (
