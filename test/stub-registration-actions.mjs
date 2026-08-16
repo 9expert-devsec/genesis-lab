@@ -22,3 +22,4 @@ export async function updateRegistrationStatus()     { return { ok: false, error
 export async function updateRegistration()           { return { ok: false, error: 'stubbed' }; }
 export async function deleteRegistration()           { return { ok: false, error: 'stubbed' }; }
 export async function getRegistrationStatusCounts()  { return { total: 0, range: 'all', source: 'public' }; }
+export async function getRegistrationTotal()         { return 0; }

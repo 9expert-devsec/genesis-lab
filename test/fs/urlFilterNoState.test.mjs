@@ -91,6 +91,75 @@ const FILTER_SCREENS = [
 ];
 
 /**
+ * ── PRESENTATIONAL COMPONENTS THAT HOLD A FILTER VALUE ──────────────────────
+ *
+ * A third list, because the rule has to follow the VALUE and the value has
+ * moved. The registrations search box no longer lives in RegistrationsClient —
+ * it is in ListPanel, which receives `q` as a prop and renders it as an
+ * uncontrolled `defaultValue` + `key`. Everything the rule forbids is forbidden
+ * there for exactly the same reason, and nothing above this line would have
+ * noticed: FILTER_SCREENS matches on `export function <Component>({…})` and
+ * would go on passing over a `useState(q)` sitting one file away.
+ *
+ * That is the failure mode the brief names — an enumeration that stops reaching
+ * the file the code moved into — so the enumeration moved with it, in the same
+ * commit.
+ *
+ * These entries assert LESS than FILTER_SCREENS does, deliberately: a
+ * presentational component has no `navigate` to serialise from and no page.jsx
+ * behind it, so only the two claims that still mean something are made — the
+ * filter arrives as a prop, and it is never copied into state.
+ */
+const FILTER_BEARING_COMPONENTS = [
+  {
+    rel: 'src/app/admin/registrations/_components/ListPanel.jsx',
+    component: 'ListPanel',
+    filters: ['q'],
+  },
+];
+
+for (const { rel, component, filters } of FILTER_BEARING_COMPONENTS) {
+  const src = readSource(rel).code;
+
+  test(`${component}: the filter arrives as a prop`, () => {
+    const sig = new RegExp(`export function ${component}\\(\\{([\\s\\S]*?)\\}\\)`);
+    const m = sig.exec(src);
+    assert.ok(m, `${component} signature not found`);
+    for (const f of filters) {
+      assert.match(m[1], new RegExp(`\\b${f}\\b`), `${f} is not a prop of ${component}`);
+    }
+  });
+
+  test(`${component}: no filter is copied into useState`, () => {
+    for (const arg of useStateArgs(src)) {
+      for (const f of filters) {
+        assert.ok(
+          !new RegExp(`\\b${f}\\b`).test(arg),
+          `useState(${arg}) seeds the ${f} filter into state — it will survive a navigation`
+        );
+      }
+      assert.ok(!/\binitial/i.test(arg), `useState(${arg}) seeds state from an "initial" prop`);
+    }
+  });
+
+  /**
+   * The input stays UNCONTROLLED and stays `key`ed.
+   *
+   * This is the half a `useState` scan cannot see. An input that becomes
+   * `value={q}` with no state behind it is not stale — it is FROZEN, and the box
+   * stops accepting keystrokes entirely. And dropping the `key` while keeping
+   * `defaultValue` reintroduces staleness without any state at all: React reuses
+   * the element across a navigation, so the box goes on showing a term the list
+   * is no longer filtered by.
+   */
+  test(`${component}: the search input is uncontrolled and re-keyed on the term`, () => {
+    assert.match(src, /defaultValue=\{q\}/, 'the search input is not seeded from the q prop');
+    assert.match(src, /key=\{q\}/, 'the search input is not re-keyed on q — it will show a stale term');
+    assert.ok(!/<input[^>]*\svalue=\{/.test(src), 'the search input became controlled');
+  });
+}
+
+/**
  * Screens that derive their filters from `useSearchParams` DIRECTLY, rather than
  * from server props.
  *

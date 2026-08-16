@@ -46,6 +46,59 @@ test('the page passes `range` into listRegistrations, not only into the counts',
   assert.match(call[1], /\brange\b/, 'page.jsx drops `range` on the way to the list query');
 });
 
+/**
+ * ── THE TOGGLE'S OTHER-SOURCE BADGE: PARALLEL, AND RANGE-FILTERED ───────────
+ *
+ * Two separate claims, and the second is the one that matters for the reader.
+ *
+ * PARALLEL: the brief was explicit that this joins the existing `Promise.all`
+ * rather than becoming a sequential `await`. A serial round-trip added to a page
+ * that already does three is a measurable cost for one integer, and "add it to
+ * the Promise.all" is the kind of instruction that is followed on the day and
+ * quietly undone by the next edit. Asserted by finding the call INSIDE the
+ * array literal, not merely somewhere in the file.
+ *
+ * RANGE-FILTERED: the mockup shows raw totals. A badge reading 8 beside a
+ * ทั้งหมด card reading 1 under "7 วัน" is one screen answering one question two
+ * ways — which is the exact defect class this file was created for, when the
+ * date chips filtered the cards and not the table. So the call must pass
+ * `range`, and the action must apply it.
+ */
+test('the other source’s total is fetched IN the Promise.all, not awaited after it', () => {
+  const all = /Promise\.all\(\[([\s\S]*?)\]\)/.exec(PAGE);
+  assert.ok(all, 'page.jsx no longer has a Promise.all to join');
+  assert.match(all[1], /getRegistrationTotal\(/,
+    'the toggle badge query is not inside the Promise.all — it is a serial await');
+});
+
+test('the toggle badge follows the SAME range filter as everything else', () => {
+  const call = /getRegistrationTotal\(\{([^}]*)\}\)/.exec(PAGE);
+  assert.ok(call, 'getRegistrationTotal call not found in page.jsx');
+  assert.match(call[1], /\brange\b/,
+    'the toggle badge is fetched without `range` — it would show a raw total beside range-filtered cards');
+  assert.match(call[1], /source:\s*otherSource/,
+    'the badge query does not ask for the OTHER source — it would duplicate counts.total');
+});
+
+test('getRegistrationTotal applies the shared date derivation', () => {
+  const body = /export async function getRegistrationTotal\([\s\S]*?\n\}/.exec(ACTIONS);
+  assert.ok(body, 'getRegistrationTotal not found in the actions file');
+  assert.match(body[0], /rangeToDateFilter\(\s*range\s*\)/,
+    'the total action hand-rolls its window instead of sharing the list query’s');
+});
+
+test('CONTROL: the Promise.all extractor really reads the array, not the file', () => {
+  // Every assertion above is a `match` inside a slice. If the slice were the
+  // whole file they would all pass on a sequential await sitting below the
+  // Promise.all — which is the exact thing the first test claims to forbid.
+  const all = /Promise\.all\(\[([\s\S]*?)\]\)/.exec(PAGE);
+  assert.ok(all[1].length < PAGE.length / 2, 'the extracted array is most of the file — the bound is wrong');
+  assert.ok(!/const lastEdited/.test(all[1]),
+    'the slice reaches past the Promise.all into the serial audit query below it');
+  // And it can see something that IS in there, so it is not empty.
+  assert.match(all[1], /listRegistrations\(/);
+});
+
 test('getRegistrationStatusCounts derives its window from the SAME helper', () => {
   assert.match(ACTIONS, /rangeToDateFilter\(\s*range\s*\)/,
     'the counts action no longer shares the list query’s date derivation');
@@ -118,9 +171,61 @@ test('the stat cards are built from the per-source subset', () => {
   assert.ok(!/buildStatCards\(\s*\)/.test(CLIENT), 'the argument-less form defaults to the PUBLIC list');
 });
 
-test('the filter chips are built from the same subset', () => {
-  assert.match(CLIENT, /buildStatusChips\(sourceStatuses\)/, 'statusOptions is not built from the resolved subset');
-  assert.ok(!/buildStatusChips\(\s*\)/.test(CLIENT), 'the argument-less form defaults to the PUBLIC list');
+/**
+ * ── THE CHIP ROW IS GONE, AND THIS TEST IS ITS REPLACEMENT ──────────────────
+ *
+ * This asserted `buildStatusChips(sourceStatuses)`. There are no chips any more:
+ * the row duplicated the overview CARDS one for one — same statuses, same
+ * navigate targets, same selected state, ทั้งหมด doing exactly what the ทั้งหมด
+ * chip did — so it was deleted and the cards are the only status filter.
+ *
+ * THE ASSERTION IS INVERTED RATHER THAN DELETED. A removed test leaves the
+ * screen free to grow a second status control again, which is the drift this
+ * file exists for; an inverted one reddens the moment somebody adds one back and
+ * says, in its message, where the filter lives now.
+ *
+ * `buildStatusChips` itself is deliberately NOT deleted from the status module.
+ * It is a pure builder with its own tests, it is the shape the masterclass and
+ * career-path screens would derive from if they are ever folded onto this
+ * module, and deleting it would mean deleting coverage to remove four lines. It
+ * simply has no caller on this screen, and the assertion below is what says so.
+ */
+test('no status chip row survives — the cards are the only status filter', () => {
+  assert.ok(
+    !/buildStatusChips/.test(CLIENT),
+    'the status chip row is back in RegistrationsClient. It duplicates the overview '
+    + 'cards one for one — same statuses, same targets, same selected state. If a '
+    + 'SECOND status control is genuinely wanted, say so deliberately rather than '
+    + 'letting one reappear beside the cards.',
+  );
+  // …and the cards, which are what it delegates to, are still built and still
+  // built from the subset. Without this the assertion above would pass on a
+  // screen that had lost BOTH controls.
+  assert.match(CLIENT, /buildStatCards\(sourceStatuses\)/,
+    'the cards are gone too — there is now no status filter on the screen at all');
+});
+
+/**
+ * NO ตัวกรอง BUTTON EITHER.
+ *
+ * The mockup's panel header is a 390px search field, an 8px gap and a 79px
+ * filter button. With the chips gone the button has nothing to disclose, and a
+ * control that opens nothing is the dead-control defect this suite caught twice
+ * by asserting on ELEMENTS rather than on text. The search field takes the whole
+ * 477px instead.
+ *
+ * Asserted on the panel, not the client, because that is where the header lives.
+ */
+test('the panel header builds no filter button', () => {
+  const panel = readSource('src/app/admin/registrations/_components/ListPanel.jsx');
+  assert.ok(
+    !panel.code.includes('ตัวกรอง'),
+    'a ตัวกรอง control is in the panel header code. With the status chips gone there '
+    + 'is nothing for it to open — build it when a non-status filter exists to attach it to.',
+  );
+  // The search field really does take the full group width, so this is not
+  // passing because the whole right-hand group vanished.
+  assert.match(panel.code, /w-\[477px\]/, 'the search group is not the full 477px');
 });
 
 test('the subset is resolved ONCE, from `source`', () => {

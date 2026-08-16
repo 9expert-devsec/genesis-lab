@@ -295,6 +295,57 @@ export function transitionsForSource(source) {
   return source === 'inhouse' ? INHOUSE_STATUS_TRANSITIONS : PUBLIC_STATUS_TRANSITIONS;
 }
 
+// ── WHICH STATUSES THE SYSTEM SETS, RATHER THAN AN ADMIN ────────────────────
+
+/**
+ * The state a record is CREATED in, on both collections.
+ *
+ * `default: 'pending'` on RegisterPublic and on RegisterInhouse, and the
+ * in-house API route additionally writes it explicitly. Three spellings of one
+ * fact; this is the fourth, and it is the one the SCREENS read, so that no list
+ * client has to write a status value by hand to ask "is this the entry state".
+ *
+ * If the entry state ever moves, it moves in the two models, the route and
+ * here — the model comment already says as much.
+ */
+export const INITIAL_STATUS = 'pending';
+
+/**
+ * Is `value` a status no admin can choose — one only the SYSTEM ever writes?
+ *
+ * ── DERIVED FROM THE TRANSITION TABLE, NOT A LIST OF NAMES ──────────────────
+ * A status is system-set exactly when nothing may transition INTO it and it is
+ * not the state records start in. Read that against the public table and it
+ * resolves to `paid` and to nothing else: `paid` has no incoming admin edge
+ * because it is written only by Omise settling a real charge (see
+ * PUBLIC_STATUS_TRANSITIONS note (a)), while `pending` also has no incoming
+ * edge for the entirely different reason that it is where records BEGIN.
+ * `INITIAL_STATUS` is what separates those two cases.
+ *
+ * In-house resolves to NOTHING, which is correct rather than a gap: `paid` is
+ * not in its vocabulary at all, so there is no state its admins are locked out
+ * of.
+ *
+ * ── WHY THIS IS HERE AND NOT AN `isPaid` TEST ON THE SCREEN ─────────────────
+ * The overview card for a system-set status carries a lock affordance and a
+ * sub-line saying the value cannot be chosen. Writing that as
+ * `value === 'paid'` would put a hand-written status value back into a list
+ * client — the exact shape rounds 1 and 2 spent four commits removing, and the
+ * one a test now forbids outright. Asking the transition table instead means a
+ * future status with the same property is locked without either screen being
+ * edited, and a status that GAINS an admin edge unlocks itself.
+ *
+ * @param {string} value
+ * @param {string} [source]
+ * @returns {boolean}
+ */
+export function isSystemSet(value, source = 'public') {
+  const table = transitionsForSource(source);
+  if (!Object.prototype.hasOwnProperty.call(table, value)) return false;
+  if (value === INITIAL_STATUS) return false;
+  return allowedFromStates(value, table).length === 0;
+}
+
 // ── LABELS ──────────────────────────────────────────────────────────────────
 
 /**

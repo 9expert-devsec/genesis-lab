@@ -99,11 +99,17 @@ function fmtMonth(value) {
   return `${THAI_MONTHS[monthIndex]} ${Number(m[1]) + 543}`;
 }
 
+/*
+ * ── NO OUTER CARD IN THIS FILE ──────────────────────────────────────────────
+ * The bordered box and the horizontal-scroll wrapper this table used to draw
+ * for itself now belong to ListPanel, which draws them ONCE for whichever body
+ * is showing. They were duplicated here and in the public block, which is two
+ * places for the panel chrome to drift apart — and while both were rendering,
+ * an in-house page drew a card inside a card and painted two borders.
+ */
 export function InhouseTable({ items, lastEdited = {}, courseNames = null }) {
   return (
-    <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)]">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+    <table className="w-full text-sm">
           <thead className="border-b border-[var(--surface-border)] bg-[var(--surface-muted)]">
             <tr>
               <Th>เลขอ้างอิง</Th>
@@ -223,9 +229,7 @@ export function InhouseTable({ items, lastEdited = {}, courseNames = null }) {
               </tr>
             ))}
           </tbody>
-        </table>
-      </div>
-    </div>
+    </table>
   );
 }
 

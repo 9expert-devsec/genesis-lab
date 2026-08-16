@@ -1,5 +1,5 @@
 import { requirePage } from '@/lib/rbac/guard';
-import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
+import { listRegistrations, getRegistrationStatusCounts, getRegistrationTotal } from '@/lib/actions/registrations';
 import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
@@ -38,16 +38,32 @@ export default async function Page({ searchParams }) {
    */
   const status = normaliseStatusParam(sp.status ?? 'all', source);
 
+  /**
+   * THE SOURCE THAT IS NOT SELECTED, so its toggle tab can carry a count too.
+   *
+   * `getRegistrationStatusCounts` already answers this for the SELECTED source
+   * — the toggle reads `counts.total` — so only the other one needs asking, and
+   * it needs exactly one number rather than a per-status breakdown.
+   *
+   * IT TAKES THE SAME `range`. The mockup shows raw totals in the toggle, and a
+   * badge reading 8 beside a ทั้งหมด card reading 1 under "7 วัน" is the screen
+   * giving two answers to one question — the defect class this page has shipped
+   * twice already. See getRegistrationTotal's own note.
+   */
+  const otherSource = source === 'inhouse' ? 'public' : 'inhouse';
+
   // The course map is only wanted by the in-house body, so a public render does
   // not ask for it at all — and it joins the existing Promise.all rather than
-  // adding a serial await.
-  const [data, counts, courseNames] = await Promise.all([
+  // adding a serial await. So does the other source's total: it is a fourth
+  // PARALLEL query, never a sequential await tacked on after the list resolves.
+  const [data, counts, otherTotal, courseNames] = await Promise.all([
     // `range` goes to BOTH queries. It used to reach only the counts, so the
     // date chips filtered the summary cards and left the table below them
     // showing everything — see buildRegistrationFilter in
     // src/lib/registrations/listFilter.js.
     listRegistrations({ page, status, q, source, range }),
     getRegistrationStatusCounts({ range, source }),
+    getRegistrationTotal({ range, source: otherSource }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
 
@@ -65,7 +81,7 @@ export default async function Page({ searchParams }) {
   });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl">
       {/*
         `dynamic = 'force-dynamic'` above keeps the SERVER fresh; it does not
         reach the client Router Cache, which is what served a list missing a
@@ -73,14 +89,34 @@ export default async function Page({ searchParams }) {
         the no-flash reasoning in the component.
       */}
       <RefreshOnNavigate />
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">การลงทะเบียน</h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {source === 'inhouse' ? 'In-house' : 'Public'} — {data.total} รายการทั้งหมด
-          </p>
-        </div>
-      </div>
+
+      {/*
+        ── THE PAGE HEADER, AT THE MEASURED RHYTHM ─────────────────────────────
+        34px below the top of the container, then a block exactly 100px tall:
+        an eyebrow line of 15px, the H1 block of 42px and the subtitle block of
+        21px, with the remaining 22px split as two 11px gaps. 15+11+42+11+21.
+
+        The three heights are ABSOLUTE because vertical rhythm does not reflow —
+        only the COLUMN widths further down are proportional, so the page keeps
+        its measure when the admin sidebar collapses.
+
+        Every value is written out as a complete Tailwind class. None is
+        assembled, because an assembled arbitrary value produces correct markup
+        and no CSS at all — see the compile-through-Tailwind guard in
+        test/fs/tailwindArbitraryValueRules.test.mjs, which now harvests these
+        classes out of the RENDERED markup and asserts each one emits a rule.
+      */}
+      <header className="pt-[34px]">
+        <p className="h-[15px] text-[11px] font-semibold uppercase leading-[15px] tracking-[0.08em] text-[var(--text-muted)]">
+          ระบบจัดการ
+        </p>
+        <h1 className="mt-[11px] h-[42px] text-[28px] font-bold leading-[42px] text-[var(--text-primary)]">
+          การลงทะเบียน
+        </h1>
+        <p className="mt-[11px] h-[21px] text-[14px] leading-[21px] text-[var(--text-secondary)]">
+          {source === 'inhouse' ? 'In-house' : 'Public'} — {data.total} รายการทั้งหมด
+        </p>
+      </header>
 
       {/*
         The filters go down as PLAIN NAMES, not `initial*`. They are derived
@@ -95,6 +131,14 @@ export default async function Page({ searchParams }) {
         source={source}
         range={range}
         counts={counts}
+        /*
+          Both tabs' numbers, keyed by the value the tab navigates to, so the
+          toggle reads one map rather than deciding which of two props belongs
+          to which tab. The selected tab's number is the SAME `counts.total` the
+          ทั้งหมด card renders — one query, two consumers, so the two cannot
+          disagree.
+        */
+        sourceTotals={{ [source]: counts?.total ?? 0, [otherSource]: otherTotal }}
         lastEdited={lastEdited}
         courseNames={courseNames}
       />

@@ -509,6 +509,44 @@ export async function deleteRegistration(id, source = 'public') {
   return { ok: true };
 }
 
+// ── One number, for the source toggle's badge ─────────────────────
+
+/**
+ * How many records one source holds, under the SAME range window everything
+ * else on the screen is under.
+ *
+ * ── WHY THIS EXISTS RATHER THAN A SECOND getRegistrationStatusCounts CALL ───
+ * The toggle needs ONE number for the source that is NOT selected — the badge
+ * beside "In-house" while Public is showing. `getRegistrationStatusCounts`
+ * would answer it, but it issues one `countDocuments` per declared status plus
+ * a total (five queries for public) to produce a number the toggle takes one of.
+ * This is that one query.
+ *
+ * ── THE RANGE IS NOT OPTIONAL HERE, AND THE MOCKUP DISAGREES ────────────────
+ * The design shows the toggle carrying RAW TOTALS while the cards beneath it are
+ * range-filtered. That is the screen contradicting itself: under "7 วัน" the
+ * In-house badge would read 8 while the ทั้งหมด card three centimetres below it
+ * reads 1, and a reader has no way to know which number answers which question.
+ *
+ * This screen has shipped exactly that class of defect before — twice. The date
+ * chips once filtered the summary cards and not the table (fixed by moving the
+ * window into lib/registrations/listFilter.js), and the in-house strip once read
+ * ทั้งหมด 6 over cards summing to 5. Both were one surface answering a question
+ * a neighbouring surface was answering differently. A raw total in the toggle
+ * would be the third.
+ *
+ * So the badge follows `range` like everything else, and "how many in-house
+ * enquiries exist in total" is answered by selecting In-house with ทั้งหมด —
+ * which is what the ทั้งหมด chip is for.
+ */
+export async function getRegistrationTotal({ range = 'all', source = 'public' } = {}) {
+  await requireAdmin('registrations');
+  await dbConnect();
+
+  // The SAME derivation the list query and the counts use — see listRegistrations.
+  return getModel(source).countDocuments(rangeToDateFilter(range));
+}
+
 // ── Status counts for stat strip ──────────────────────────────────
 
 export async function getRegistrationStatusCounts({ range = 'all', source = 'public' } = {}) {
