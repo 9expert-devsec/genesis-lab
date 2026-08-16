@@ -12,6 +12,7 @@ import {
   DERIVATIVE_APPENDED_PATTERN,
 } from './src/lib/legacyTransforms.mjs';
 import { LEGACY_BLOB_FILES } from './src/lib/legacyBlobFiles.mjs';
+import { webrootRewrites } from './src/lib/webrootDocuments.mjs';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -294,17 +295,12 @@ const nextConfig = {
     // Inert until BLOB_PUBLIC_BASE is set: with no store provisioned there is
     // nothing to point at, and emitting rules to an undefined origin would
     // turn three working legacy URLs into three broken ones.
+    // The list and the destination shape both come from src/lib/webrootDocuments
+    // .mjs, so the delivery harness cannot drift from what is actually served.
+    // Still THREE EXPLICIT RULES: webrootRewrites() maps a frozen literal list
+    // and emits nothing when there is no store — it is not a pattern.
     const blobBase = process.env.BLOB_PUBLIC_BASE;
-    const webrootDocuments = blobBase
-      ? [
-        'how-to-create-chatgpt-account.pdf',
-        '9expert-company-profile.pdf',
-        '9expert-training-course-catalog.pdf',
-      ].map((file) => ({
-        source: `/${file}`,
-        destination: `${blobBase}/webroot-documents/${file}`,
-      }))
-      : [];
+    const webrootDocuments = webrootRewrites(blobBase);
 
     // ── FILES SERVED FROM VERCEL BLOB, NOT CLOUDINARY ─────────────────────
     //

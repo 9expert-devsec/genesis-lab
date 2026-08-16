@@ -552,9 +552,26 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                              event worth logging whether or not it mutates
  *                              our own storage).
  *
+ * ── 164 → 165: webroot-documents.js ────────────────────────────────────────
+ * The site-root PDF replacement module adds THREE exports, and again only ONE
+ * moves the number:
+ *
+ *   recordWebrootReplacement   WebrootDocumentFile.create() — append-only, one
+ *                              row per replacement → +1 here, and +1 in W2-b's
+ *                              depth-0 figure, 160 → 161.
+ *   prepareWebrootReplacement  archives the previous bytes to Blob and returns
+ *                              authorisation. It writes to the BLOB STORE, not
+ *                              to Mongo or MSDB, so the classifier does not see
+ *                              it — correctly, since the classifier is about
+ *                              OUR databases. It records an audit row anyway,
+ *                              because destroying-then-replacing a public
+ *                              document is an event regardless of where the
+ *                              bytes live.
+ *   listWebrootReplacements    read-only.
+ *
  * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
  *
- * 164 → 165, and W2-b's depth-0 figure 160 → 161, for cache-console.js:
+ * ── 164 → 165, and W2-b's depth-0 figure 160 → 161, for cache-console.js ───
  *
  *   applyMirrorReset      calls Model.deleteMany, so the FILE-LOCAL classifier
  *                         sees it. It is the only export in this repo whose
@@ -566,6 +583,27 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  *                         incidental, since a preview that mutated anything
  *                         would defeat the preview-before-apply ruling.
  *   listMirrorResetKeys   returns a constant list. Read-only.
+ *
+ * ── prepareWebrootReplacement gains a Mongo write ──────────────────────────
+ * The upload route refuses to mint a Blob token without a single-use receipt,
+ * and `prepareWebrootReplacement` is what issues one — so the export that
+ * previously touched only the Blob store now writes to Mongo as well.
+ *
+ * IT MOVES THE DEPTH-1 TOTAL AND NOT THE DEPTH-0 FIGURE, which is the whole
+ * reason the walk exists. The write is `WebrootUploadReceipt.create(...)` inside
+ * `issueWebrootReceipt`, in src/lib/webroot/receiptStore.js — an IMPORTED
+ * helper. The file-local classifier sees `issueWebrootReceipt(doc)` and reads it
+ * as an ordinary call, exactly as it read `syncFaqsAction` before the walk.
+ *
+ * That this entry is a live one matters: the four before it were all found
+ * during the walk's own construction, so none of them tested whether the walk
+ * still works on code written afterwards. This one was.
+ *
+ * (receiptStore.js is deliberately `.js` and not `.mjs`. resolveSpec below only
+ * follows `.js`/`.jsx`, so a `.mjs` helper would be invisible to the walk and
+ * this export would keep reading as non-mutating while writing to Mongo — a hole
+ * in the guard, dressed as a file-extension preference. The store's own header
+ * says so too.)
  */
 // 165 → 166 for round 4's applySnapshotOverride. It writes the snapshot through
 // syncLandingData, which it imports STATICALLY for exactly this reason: this
@@ -573,21 +611,29 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // snapshot-writing export as read-only — and "every mutating export records an
 // audit row" then skipped it in silence. The classification was correct by luck
 // rather than by the guard, which is the state this file exists to prevent.
-//
-// W2-b's depth-0 figure is UNCHANGED at 161: the file-local classifier cannot
-// see through an import, and that difference is what the walk exists to close.
 // previewSnapshotOverride reads the stored refusal and writes nothing.
-// 167 since program-order.js gained saveProgramCourseOrder — the /admin/courses
-// drag-reorder write (ProgramOrder.findOneAndUpdate, $set of courseOrder +
-// courseOrderSource). File-local and direct, so it lands in W2-b's depth-0
-// figure too and the delta between the two figures is unchanged.
-// 168 since course-rename.js gained renameCourseCodePhase1 — the genesis-side
-// half of a course-code rename (twelve Mongo stores, no MSDB write, which is
-// asserted in test/fs/renameNoUpstreamWrite). Its sibling `inspectRenameState`
-// only re-runs the read-only preview and stays out of this figure. File-local
-// and direct, so it lands in W2-b's depth-0 count too and the delta between the
-// two figures is unchanged.
-const MUTATING_EXPORT_COUNT = 168;
+//
+// Then saveProgramCourseOrder (program-order.js — the /admin/courses
+// drag-reorder write, ProgramOrder.findOneAndUpdate) and renameCourseCodePhase1
+// (course-rename.js — the genesis-side half of a course-code rename across
+// twelve Mongo stores). Both are file-local and direct, so each lands in W2-b's
+// depth-0 figure too and neither changes the delta between the two figures.
+// `inspectRenameState` only re-runs the read-only preview and stays out.
+//
+// ══ MERGED 2026-08-17: dev + wip/root-files ═══════════════════════════════
+// Both branches moved this pin (dev to 168, wip/root-files to 166), so neither
+// side's number describes the merged tree and the conflict could not be
+// resolved by taking a side.
+//
+// IT IS ALSO NOT THE SUM, and that was demonstrated rather than assumed: the
+// obvious arithmetic gives 171, and the walk run against the merged tree
+// reports 170. The two lines of work overlap — recordWebrootReplacement is
+// counted in both branches' figures — so adding the deltas double-counts it.
+// A pin is a measurement, not a sum: 170 and the depth-0 figure 164 were both
+// read back off the mechanism with the pins set to deliberately-wrong
+// placeholders. 170 − 164 = 6, which is exactly the six entries now in
+// REACHED_THROUGH_IMPORT.
+const MUTATING_EXPORT_COUNT = 170;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -601,6 +647,14 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   // it; with a dynamic import the export read as read-only and the "every
   // mutating export records an audit row" check skipped it in silence.
   'src/lib/actions/cache-console.js': { applySnapshotOverride: 'src/lib/landing/syncLandingData.js#syncLandingData' },
+  // ══ MERGED: this is a UNION, not a choice ═══════════════════════════════
+  // Each branch added a different entry and BOTH are true of the merged tree —
+  // `applySnapshotOverride` reaches syncLandingData, `prepareWebrootReplacement`
+  // reaches issueWebrootReceipt, and each is a real import-crossing write that
+  // the file-local classifier cannot see. Taking either side alone would delete
+  // a live entry and the delta assertion below would then disagree with the
+  // measured counts by construction.
+  'src/lib/actions/webroot-documents.js': { prepareWebrootReplacement: 'src/lib/webroot/receiptStore.js#issueWebrootReceipt' },
 });
 
 test('the mutating-export count across every action module is pinned', () => {
@@ -760,23 +814,30 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 163,
-    'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
-    'count before this walk existed, 158 since articles.js gained moveArticleToRank ' +
-    '(which mutates through a file-local helper), 159 since media.js gained ' +
-    'deleteMediaFile (which writes directly), 160 since course-outlines.js gained ' +
-    'recordCourseOutlineUpload (CourseOutlineFile.findOneAndUpdate), and 161 since ' +
-    'cache-console.js gained applyMirrorReset (Model.deleteMany). Its siblings ' +
-    'previewMirrorReset and listMirrorResetKeys write nothing and are deliberately ' +
-    'NOT in this figure — a preview that mutated would defeat its own ruling. ' +
-    '162 since program-order.js gained saveProgramCourseOrder, which writes ' +
-    'ProgramOrder directly and so is visible without the walk, and 163 since ' +
-    'course-rename.js gained renameCourseCodePhase1'
+    zero, 164,
+    'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
+    'count before this walk existed; it then moved for moveArticleToRank ' +
+    '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
+    '(media.js, writes directly), recordCourseOutlineUpload (course-outlines.js, ' +
+    'CourseOutlineFile.findOneAndUpdate), applyMirrorReset (cache-console.js, ' +
+    'Model.deleteMany), recordWebrootReplacement (webroot-documents.js, ' +
+    'WebrootDocumentFile.create), saveProgramCourseOrder (program-order.js, ' +
+    'ProgramOrder.findOneAndUpdate) and renameCourseCodePhase1 (course-rename.js). ' +
+    'Deliberately NOT in this figure: previewMirrorReset and listMirrorResetKeys ' +
+    '(a preview that mutated would defeat its own ruling), signCourseOutlineUpload, ' +
+    'and prepareWebrootReplacement — the last writes Mongo only through an ' +
+    'IMPORTED helper, which is precisely what depth 0 cannot see. ' +
+    'MERGED 2026-08-17: both branches moved this pin, so the value below was ' +
+    'MEASURED against the merged tree rather than summed'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
     MUTATING_EXPORT_COUNT,
-    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT'
+    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT. '
+    + 'Both applySnapshotOverride (→ syncLandingData) and prepareWebrootReplacement '
+    + '(→ receiptStore.js#issueWebrootReceipt) reach their write across an import, '
+    + 'so both are in that map and neither is in the depth-0 figure. If only one of '
+    + 'the two numbers moved, they now disagree by construction and one is wrong'
   );
 });
 
