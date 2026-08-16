@@ -118,6 +118,48 @@ export function buildRenamePreviewView(preview) {
   }
 
   /**
+   * ── THE DETACHED CODES, SHOWN ON EVERY VERDICT INCLUDING A BLOCKED ONE ────
+   *
+   * This is the warning the screen did not have, and its absence is what let
+   * the upstream-only state be reported as "nothing to change". It is rendered
+   * on the BLOCKED path too — deliberately, because blocked is exactly where
+   * that state lands: the only code the picker can offer is the one upstream
+   * moved to, so the admin's honest attempt produces `from === to`.
+   *
+   * Two different things to say, and they are not interchangeable:
+   *   fromIsOne  the admin IS previewing the genesis-only code — they have the
+   *              right question in front of them, and what follows is a real
+   *              blast radius rather than a dead end.
+   *   otherwise  a genesis-only code exists SOMEWHERE. That is a fact about the
+   *              catalogue and it is named, because nothing else on this screen
+   *              can see it.
+   */
+  const detached = preview.detached ?? { codes: [], fromIsOne: false };
+  if (detached.codes.length > 0) {
+    warnings.push(
+      detached.fromIsOne
+        ? {
+            kind: 'detached',
+            title: `รหัส "${preview.oldCode}" มีอยู่เฉพาะฝั่งระบบนี้ — MSDB ไม่มีรหัสนี้แล้ว`,
+            body:
+              'แปลว่า course_id ที่ MSDB ถูกเปลี่ยนไปแล้ว แต่ฝั่งระบบนี้ยังค้างอยู่ที่รหัสเดิม '
+              + 'จำนวนแถวด้านล่างคือของจริงที่ยังรออยู่ ไม่ใช่ศูนย์ '
+              + 'เลือกได้สองทาง: เปลี่ยน course_id ที่ MSDB กลับเป็นรหัสนี้ (ยกเลิกได้ทั้งหมด) '
+              + 'หรือสั่งเปลี่ยนฝั่งระบบนี้ให้ตามทัน',
+          }
+        : {
+            kind: 'detached',
+            title: 'มีรหัสที่ค้างอยู่ฝั่งระบบนี้ และไม่มีอยู่ที่ MSDB',
+            body:
+              `${detached.codes.join(', ')} — รหัสเหล่านี้ถูกถือไว้ที่ CourseExtension `
+              + 'แต่ต้นทางไม่มีแล้ว ซึ่งเป็นร่องรอยของการเปลี่ยน course_id ที่ MSDB '
+              + 'โดยที่ฝั่งระบบนี้ยังไม่ได้ตามไป — เลือกรหัสนั้นเป็นรหัสเดิมเพื่อดูผลกระทบที่แท้จริง '
+              + '(ตรวจจากแถว CourseExtension เท่านั้น หลักสูตรที่หลุดเฉพาะในลำดับ/ตาราง จะไม่ถูกนับที่นี่)',
+          }
+    );
+  }
+
+  /**
    * THE INTERVAL, phrased as an instruction rather than a fact.
    *
    * The action returns these warnings after the write; the person reading the
@@ -153,6 +195,7 @@ export function buildRenamePreviewView(preview) {
     newCode: preview.newCode,
     blocked: preview.blocked ?? [],
     collision: preview.collision ?? null,
+    detached,
     url,
     stores,
     historical,

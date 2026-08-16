@@ -78,10 +78,12 @@ test('inspectRenameState RUNS ON SUCCESS AND ON FAILURE', () => {
    * have been told everything worked.
    */
   const code = panel();
-  assert.equal(countCallSites(code, 'inspectRenameState'), 2,
-    'the state inspector must run on both the success path and the throw path');
+  assert.equal(countCallSites(code, 'inspectRenameState'), 3,
+    'the state inspector must run on the success path, the throw path, and before any attempt');
 
-  // The success-path call is NOT inside the catch block.
+  // The success-path call is NOT inside the catch block. `run` is written above
+  // the pre-run effect for exactly this reason — the FIRST occurrence is the
+  // one that has to straddle the try.
   const tryAt = code.indexOf('try {');
   const catchAt = code.indexOf('} catch (err) {');
   const firstInspect = code.indexOf('inspectRenameState');
@@ -90,6 +92,35 @@ test('inspectRenameState RUNS ON SUCCESS AND ON FAILURE', () => {
     firstInspect > tryAt && firstInspect < catchAt,
     'the state inspector only runs in the error branch'
   );
+});
+
+/**
+ * THE STATE IS ASKED FOR BEFORE THE BUTTON IS OFFERED, AND ON A REFUSED
+ * PREVIEW TOO.
+ *
+ * The inspector's own docstring has said since 79b04ca that it exists "so the
+ * screen can ask BEFORE offering the button". Nothing wired it: the state was
+ * fetched only inside `run`, and the panel returned null on a refused preview —
+ * so the upstream-only state, which IS refused, could not appear anywhere.
+ *
+ * Shape guard, and stated as one: it proves the effect is written and that the
+ * refused branch renders the report, not that either runs.
+ */
+test('the state is fetched from an EFFECT, and refused previews still report it', () => {
+  const code = panel();
+  assert.match(code, /useEffect\(\(\) => \{[\s\S]*?inspectRenameState\(/,
+    'the state is never fetched outside a click handler');
+  // The identical-codes case is deliberately NOT asked — the detector reads the
+  // upstream axis as two codes and calls one row counted twice a conflict.
+  assert.match(code, /if \(!from \|\| !to \|\| from === to\)/,
+    'the effect asks the two-sided detector about a single code');
+  // The refused branch returns the report rather than null.
+  const refusedAt = code.indexOf('preview.ok === false');
+  assert.ok(refusedAt !== -1, 'the refused branch is gone');
+  const after = code.slice(refusedAt, refusedAt + 400);
+  assert.match(after, /<RenameStateReport/, 'a refused preview reports nothing about the two sides');
+  assert.ok(!/return null;\s*\}\s*$/.test(after.split('\n').slice(0, 3).join('\n')),
+    'the refused branch still returns null');
 });
 
 test('the partial state names the stores and offers the re-run as SAFE', () => {
@@ -128,6 +159,30 @@ test('the picker WRITES the url, through one writer', () => {
   const writes = [...code.matchAll(/router\.(push|replace)\(/g)].length;
   assert.equal(writes, 1, `expected a single URL writer, found ${writes}`);
   assert.match(code, /params\.set\('course', value\)/, 'the picker does not put the course in the URL');
+});
+
+/**
+ * THE PICKER CAN OFFER A CODE UPSTREAM NO LONGER HAS.
+ *
+ * Every option on this screen came from `listPublicCourses`, i.e. from
+ * upstream — the side that MOVES when the tech lead renames `course_id` by
+ * hand. So the code genesis was left holding was offered nowhere, the admin's
+ * only reachable attempt was `from === to`, and the screen answered "nothing to
+ * change". Making the state reachable at all starts here.
+ */
+test('the picker is fed from BOTH sides, not upstream alone', () => {
+  const code = readSource(PAGE).code;
+  assert.match(code, /CourseExtension\.distinct\('courseId'\)/,
+    'the page never asks genesis which codes it holds');
+  assert.match(code, /detachedGenesisCodes\(/, 'the two lists are never diffed');
+  // The genesis-only codes are OPTIONS, not merely computed and dropped.
+  assert.match(
+    code,
+    /const courses = \[\s*\.\.\.detached\.map\(/,
+    'the detached codes are computed but never reach the picker'
+  );
+  // and the page still offers the upstream catalogue as well
+  assert.match(code, /listPublicCourses\(\{ includeHidden: true \}\)/);
 });
 
 test('the page reads ?course= and passes it down', () => {

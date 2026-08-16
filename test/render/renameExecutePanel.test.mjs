@@ -45,10 +45,43 @@ test('no preview → no execute panel', () => {
   assert.equal(render(null), '');
 });
 
-test('A BLOCKED preview offers no execute panel at all', () => {
-  // Not a disabled button on a collision — nothing. A refused rename has no
-  // "are you sure".
-  assert.equal(render(preview({ newCode: 'MSE-L2' })), '');
+/**
+ * ══ THIS ASSERTION WAS DELIBERATELY NARROWED ═══════════════════════════════
+ *
+ * It used to read `assert.equal(render(blocked), '')` — no execute panel AND no
+ * output whatsoever. The first half is the property that was wanted; the second
+ * came free and turned out to be the defect. Returning nothing on a refused
+ * preview took the two-sided state report down with it, and the upstream-only
+ * state is REFUSED (the code upstream now holds is the code being renamed to),
+ * so the one screen built to report that state was the one place it could not
+ * appear.
+ *
+ * WHAT IS GUARANTEED NOW: a refused preview offers no execute affordance — no
+ * button, no typed confirmation, no acknowledgement. Not a disabled button: the
+ * controls are absent.
+ *
+ * WHAT IS NO LONGER GUARANTEED, said plainly: that the panel renders nothing.
+ * It renders the state report, which cannot write.
+ */
+test('A BLOCKED preview offers no execute AFFORDANCE', () => {
+  const html = render(preview({ newCode: 'MSE-L2' }));
+  assert.ok(!/<button/.test(html), 'a refused rename rendered a button');
+  assert.ok(!/id="confirm-code"/.test(html), 'a refused rename rendered the typed confirmation');
+  assert.ok(!/type="checkbox"/.test(html), 'a refused rename rendered the acknowledgement');
+  assert.ok(!/data-testid="rename-execute"/.test(html), 'the execute panel rendered on a refused preview');
+});
+
+test('a refused preview still renders somewhere for the two-sided state to land', () => {
+  /**
+   * The state itself arrives from an effect, which `renderToStaticMarkup` never
+   * runs — so what this tier can show is that the branch EXISTS and is not the
+   * old `return null`. That the report is mounted into it is a source fact
+   * (test/fs/renameExecuteWiring); that it renders each state distinctly is
+   * driven from fixtures in test/render/renameStateReport.
+   */
+  const html = render(preview({ newCode: 'MSE-L2' }));
+  assert.notEqual(html, '', 'a refused preview reports nothing at all — the state has nowhere to go');
+  assert.match(html, /data-testid="rename-execute-blocked"/);
 });
 
 // ── The confirmation ────────────────────────────────────────────────────────
@@ -136,6 +169,12 @@ test('CONTROL: the panel renders something substantial for a runnable preview', 
 });
 
 test('CONTROL: a runnable and a blocked preview differ completely', () => {
-  assert.notEqual(render(preview()), render(preview({ newCode: 'MSE-L2' })));
-  assert.equal(render(preview({ newCode: 'MSE-L2' })), '');
+  const runnable = render(preview());
+  const refused = render(preview({ newCode: 'MSE-L2' }));
+  assert.notEqual(runnable, refused);
+  // The runnable one carries every affordance the refused one is checked for
+  // above — so those four negatives are measurements, not vacuous truths.
+  for (const probe of [/<button/, /id="confirm-code"/, /type="checkbox"/, /data-testid="rename-execute"/]) {
+    assert.match(runnable, probe, `${probe} never appears even on a runnable preview`);
+  }
 });

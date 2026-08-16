@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { renameCourseCodePhase1, inspectRenameState } from '@/lib/actions/course-rename';
 import { canExecuteRename, aliasStepFor, GATE } from '@/lib/courses/renameExecuteGate';
 import { RENAME_STATE } from '@/lib/courses/renameCoursePlan';
@@ -20,6 +20,27 @@ import { RENAME_STATE } from '@/lib/courses/renameCoursePlan';
  * request that appeared to fail, so surfacing it only in the error branch would
  * surface it in the one case the admin already distrusts — and hide it in the
  * case where they have been told everything worked.
+ *
+ * ── AND BEFOREHAND, ON EVERY PREVIEW INCLUDING A REFUSED ONE ───────────────
+ * The panel used to `return null` the moment `preview.ok === false`, which took
+ * the two-sided state report down with it. That is backwards: a REFUSED preview
+ * is where the divergent states live. The upstream-only state — MSDB renamed,
+ * genesis left behind — is refused by the collision guard, because the code
+ * upstream now holds is the code the admin is renaming TO. So the one screen
+ * built to report that state hid it, and the report the admin got instead was
+ * "nothing to change" over eleven waiting rows.
+ *
+ * The state is therefore fetched whenever the displayed preview changes, and
+ * rendered whatever the verdict. The EXECUTE half — the confirmation, the typed
+ * code, the button — stays behind `preview.ok` exactly as before: this widens
+ * what is REPORTED, not what can be written.
+ *
+ * NOT fetched when the two codes are identical. `detectRenameState` reads the
+ * upstream axis as two independent codes; asked about one code twice it sees
+ * `hasOldCode && hasNewCode` — one row, counted twice — and calls it a conflict
+ * between two different courses, which is false. That case has its own honest
+ * verdict from the preview itself (see the identical-codes branch in
+ * buildRenamePreview), so the state report stays quiet rather than wrong.
  */
 
 const CARD = 'rounded-9e-lg border p-4';
@@ -232,7 +253,45 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
     }
   }
 
-  if (!preview || preview.ok === false) return null;
+  /**
+   * THE STATE, BEFORE ANY BUTTON IS PRESSED — see the header.
+   *
+   * Declared below `run` on purpose: `run`'s two calls are the ones that must
+   * straddle the try/catch, and keeping them first makes that readable in the
+   * file as well as assertable in test/fs/renameExecuteWiring.
+   *
+   * Keyed on the two codes and the preview's row total, so a re-check that
+   * changed the numbers refetches while an unrelated re-render does not.
+   * `alive` guards the late resolve that would otherwise overwrite a newer
+   * answer with an older one.
+   */
+  const totalRows = preview?.totalRows ?? null;
+  useEffect(() => {
+    if (!from || !to || from === to) {
+      setState(null);
+      return undefined;
+    }
+    let alive = true;
+    inspectRenameState({ oldCode: from, newCode: to })
+      .then((s) => { if (alive) setState(s); })
+      .catch(() => { if (alive) setState(null); });
+    return () => { alive = false; };
+  }, [from, to, totalRows]);
+
+  if (!preview) return null;
+
+  /**
+   * A REFUSED PREVIEW STILL REPORTS WHERE THE TWO SIDES ARE. Only the write
+   * affordances are withheld — see the header for why the old early return was
+   * the bug rather than the safeguard.
+   */
+  if (preview.ok === false) {
+    return (
+      <div className="space-y-4" data-testid="rename-execute-blocked">
+        <RenameStateReport state={state} from={from} to={to} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4" data-testid="rename-execute">
