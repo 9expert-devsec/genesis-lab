@@ -109,6 +109,51 @@ function findInsensitive(codes, wanted) {
 }
 
 /**
+ * Codes GENESIS HOLDS THAT UPSTREAM DOES NOT — the fingerprint of a course that
+ * was renamed at MSDB while genesis was left behind.
+ *
+ * ── WHY THIS IS THE ONLY WAY THAT STATE IS VISIBLE AT ALL ──────────────────
+ * Every picker, every listing and every code the rename screen can offer comes
+ * from upstream `/public-course`. When the tech lead renames `course_id` by
+ * hand, upstream is the side that MOVED — so the only selectable code is the
+ * new one and the code genesis still holds is offered nowhere. Measured
+ * 2026-08-16: ZZTEST-EXCEL-01 → EXCEL-HR-01 in MSDB alone left eleven genesis
+ * rows on a code that had become unreachable through the UI, and the screen
+ * reported "nothing to change" over the top of them.
+ *
+ * This diff is the signal that makes it reachable, and it is FREE: both arrays
+ * are already in hand for the collision check.
+ *
+ * ── WHAT IT SEES, AND WHAT IT DOES NOT ─────────────────────────────────────
+ * It sees `CourseExtension.courseId`, because that is the one store whose FULL
+ * key set is read (`distinct`) rather than queried for a single code. It is
+ * also the store whose orphaning is worst — SEO, alias, gallery and the publish
+ * flag all hang off that row.
+ *
+ * It does NOT see a course detached only in ProgramOrder / SkillOrder /
+ * ScheduleLocal / the featured lists. Those are read by code, never enumerated,
+ * so a course with no extension row would be invisible here. Naming the gap
+ * rather than implying coverage: closing it costs one `distinct` per store and
+ * is a separate decision.
+ *
+ * Case-insensitive on both sides — upstream `course_id` has no canonical
+ * casing, and a case difference is NOT a detachment.
+ */
+export function detachedGenesisCodes(extensionCodes = [], msdbCodes = []) {
+  const upstream = new Set((msdbCodes ?? []).map((c) => clean(c).toLowerCase()).filter(Boolean));
+  const found = [];
+  const seen = new Set();
+  for (const raw of extensionCodes ?? []) {
+    const code = clean(raw);
+    const key = code.toLowerCase();
+    if (!key || upstream.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    found.push(code);
+  }
+  return found;
+}
+
+/**
  * The dry run.
  *
  * @param {object} input
@@ -134,10 +179,60 @@ export function buildRenamePreview({
   const from = clean(oldCode);
   const to = clean(newCode);
 
+  /**
+   * ── THE GENESIS-ONLY CODES, COMPUTED BEFORE ANY VERDICT ────────────────────
+   * Above the blocked list on purpose: the identical-codes verdict below is a
+   * CLAIM ABOUT THE WORLD, and it cannot be made without this.
+   */
+  const detachedCodes = detachedGenesisCodes(extensionCodes, msdbCodes);
+  const detached = {
+    codes: detachedCodes,
+    // The admin picked a code that exists only in genesis — i.e. they are
+    // asking the right question, the one the picker could not previously offer.
+    fromIsOne: Boolean(from) && detachedCodes.some((c) => c.toLowerCase() === from.toLowerCase()),
+  };
+
+  /**
+   * How many genesis rows the reader actually FOUND on `from`, over the stores
+   * it read. A store absent from `matches` was not read and contributes
+   * nothing — the same three-state discipline the per-store block below uses.
+   */
+  const readWriteStores = RENAME_STORES.filter(
+    (s) => !s.historical && Object.prototype.hasOwnProperty.call(matches, s.key)
+  );
+  const rowsOnFrom = readWriteStores.reduce((n, s) => n + (matches[s.key]?.length ?? 0), 0);
+
   const blocked = [];
   if (!from) blocked.push('ไม่ได้ระบุรหัสเดิม');
   if (!to) blocked.push('ไม่ได้ระบุรหัสใหม่');
-  if (from && to && from === to) blocked.push('รหัสใหม่เหมือนรหัสเดิมทุกประการ — ไม่มีอะไรต้องเปลี่ยน');
+  if (from && to && from === to) {
+    /**
+     * ── "NOTHING TO CHANGE" IS A CLAIM, AND IT WAS BEING MADE BLIND ─────────
+     *
+     * Identical codes always block — there is no rename to perform either way.
+     * But the REASON is a statement about the two sides, and it was asserted
+     * unconditionally. In the upstream-only state it is false, and it is false
+     * in the loudest possible way: the picker can only offer the code upstream
+     * moved TO, so an admin who selects this course and types the code they
+     * want genesis to reach lands here, and the screen answers "nothing to
+     * change" while eleven genesis rows sit on the code upstream left behind.
+     * Observed exactly that way on 2026-08-16.
+     *
+     * So the reassuring message now requires the evidence for it: either
+     * genesis has rows on this very code (the two sides agree), or there is no
+     * genesis-only code anywhere for them to disagree about. Otherwise the
+     * refusal says what is actually true and NAMES the code to start from.
+     */
+    const disagrees = readWriteStores.length > 0 && rowsOnFrom === 0 && detachedCodes.length > 0;
+    blocked.push(
+      disagrees
+        ? `ฝั่งระบบนี้ไม่มีข้อมูลใดใช้รหัส "${from}" เลย — แต่มีรหัสที่ค้างอยู่ฝั่งระบบนี้`
+          + ` และไม่มีอยู่ที่ MSDB: ${detachedCodes.map((c) => `"${c}"`).join(', ')}`
+          + ' หากหลักสูตรนี้เพิ่งถูกเปลี่ยน course_id ที่ MSDB'
+          + ' ให้เลือกรหัสเดิมข้างต้นเป็น "หลักสูตรที่ต้องการเปลี่ยนรหัส" แล้วใส่รหัสปัจจุบันเป็นรหัสใหม่'
+        : 'รหัสใหม่เหมือนรหัสเดิมทุกประการ — ไม่มีอะไรต้องเปลี่ยน'
+    );
+  }
 
   // ── Collision ─────────────────────────────────────────────────────────────
   // Checked against BOTH stores. Upstream alone is not enough: CourseExtension
@@ -149,16 +244,44 @@ export function buildRenamePreview({
   // is not a collision, it is the thing being renamed.
   const selfMsdb = inMsdb && inMsdb.toLowerCase() === from.toLowerCase();
   const selfExt = inExtension && inExtension.toLowerCase() === from.toLowerCase();
+  /**
+   * ── THE UPSTREAM HIT MAY BE THIS VERY COURSE, AND THE REFUSAL SAYS SO ─────
+   *
+   * `selfMsdb` only recognises the course being renamed when upstream still
+   * holds the OLD code — the case-only rename. In the upstream-only state the
+   * hit is on the NEW code because upstream is the side that already moved, so
+   * it reads as a foreign course and the refusal says "already taken" about
+   * what is most likely this course's own row.
+   *
+   * That is not enough to unblock the write: from what this screen can see,
+   * "renamed at MSDB" and "old course deleted upstream, unrelated new course
+   * created" produce the SAME observation, and nothing here can separate them.
+   * Deciding between them is the self-vs-collision question, and it stays open.
+   *
+   * What it IS enough for is to stop the refusal asserting the wrong one. The
+   * flag is set when all three hold: upstream has the new code, upstream does
+   * NOT have the old code, and genesis still has rows on the old code.
+   */
+  const fromInMsdb = findInsensitive(msdbCodes, from);
+  const mayBeSelfUpstream = Boolean(
+    inMsdb && !selfMsdb && !fromInMsdb && rowsOnFrom > 0
+  );
   const collision = {
     blocked: Boolean((inMsdb && !selfMsdb) || (inExtension && !selfExt)),
     inMsdb: selfMsdb ? null : inMsdb,
     inExtension: selfExt ? null : inExtension,
+    mayBeSelfUpstream,
   };
   if (collision.blocked) {
     blocked.push(
-      `รหัส "${to}" ถูกใช้แล้ว` +
-      (collision.inMsdb ? ` — MSDB: "${collision.inMsdb}"` : '') +
-      (collision.inExtension ? ` — CourseExtension: "${collision.inExtension}"` : '')
+      mayBeSelfUpstream
+        ? `MSDB มีรหัส "${collision.inMsdb}" อยู่แล้ว และไม่มีรหัส "${from}" — `
+          + 'อาจเป็นหลักสูตรเดียวกันนี้ที่ถูกเปลี่ยน course_id ที่ต้นทางไปแล้ว '
+          + 'หรืออาจเป็นคนละหลักสูตร — จากข้อมูลที่หน้านี้เห็น แยกสองกรณีนี้ไม่ได้ '
+          + 'จึงยังสั่งเปลี่ยนจากที่นี่ไม่ได้ แต่จำนวนแถวด้านล่างคือของจริงที่ยังค้างอยู่'
+        : `รหัส "${to}" ถูกใช้แล้ว`
+          + (collision.inMsdb ? ` — MSDB: "${collision.inMsdb}"` : '')
+          + (collision.inExtension ? ` — CourseExtension: "${collision.inExtension}"` : '')
     );
   }
 
@@ -284,6 +407,13 @@ export function buildRenamePreview({
     caseOnly,
     collision,
     upstream,
+    /**
+     * Genesis-held codes with no upstream row. Returned rather than folded into
+     * the blocked message so the screen can show them on EVERY verdict — a
+     * detached course is a fact about the catalogue, not a property of the
+     * rename the admin happens to be previewing.
+     */
+    detached,
     url,
     stores,
     historical,

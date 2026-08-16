@@ -20,6 +20,9 @@
 
 import { requirePage } from '@/lib/rbac/guard';
 import { listPublicCourses } from '@/lib/api/public-courses';
+import { dbConnect } from '@/lib/db/connect';
+import { CourseExtension } from '@/models/CourseExtension';
+import { detachedGenesisCodes } from '@/lib/courses/renameCoursePreview';
 import { RenamePreviewClient } from './_components/RenamePreviewClient';
 
 export const runtime = 'nodejs';
@@ -57,12 +60,51 @@ export default async function CourseRenamePreviewPage({ searchParams }) {
   // includeHidden — the picker must offer every course the admin can manage,
   // for the same reason the management table does: a hidden course is exactly
   // the kind whose code nobody has looked at in a while.
-  const res = await listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] }));
-  const courses = (res.items ?? []).map((c) => ({
+  const [res, extensionCodes] = await Promise.all([
+    listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
+    dbConnect()
+      .then(() => CourseExtension.distinct('courseId'))
+      .catch(() => []),
+  ]);
+  const upstreamCourses = (res.items ?? []).map((c) => ({
     course_id: c.course_id,
     course_name: c.course_name,
     course_name_th: c.course_name_th ?? '',
   }));
+
+  /**
+   * ── THE PICKER ALSO OFFERS CODES GENESIS HOLDS AND UPSTREAM DOES NOT ───────
+   *
+   * `includeHidden` widened this list past `CourseExtension.isPublished`, but
+   * every ROW in it is still an upstream row — so a course whose `course_id`
+   * was changed at MSDB while genesis was left behind had its genesis-held code
+   * offered NOWHERE. Measured 2026-08-16: ZZTEST-EXCEL-01 → EXCEL-HR-01 at MSDB
+   * alone, eleven genesis rows still on the old code, and the only code this
+   * picker could offer for that course was the new one. The admin's honest
+   * attempt therefore produced `from === to`, and the screen answered "nothing
+   * to change".
+   *
+   * ── WHY THE PICKER AND NOT AN `_id` LOOKUP ────────────────────────────────
+   * Resolving the course by ObjectId so the preview could hold both codes at
+   * once sounds like the deeper fix and is not: upstream has NO row under the
+   * old code, so an `_id` yields the NEW code and the old one still has to be
+   * found by searching genesis — which is this diff. It would add a second
+   * identifier axis to buy the half that was already free.
+   *
+   * The rows carry an explicit Thai label rather than a bare code, because
+   * `courseOptionLabel` renders "name (CODE)" and a nameless entry in a list of
+   * named ones reads as a rendering fault. The label is also part of the search
+   * haystack, so typing "ค้าง" finds them.
+   */
+  const detached = detachedGenesisCodes(extensionCodes, upstreamCourses.map((c) => c.course_id));
+  const courses = [
+    ...detached.map((code) => ({
+      course_id: code,
+      course_name: 'genesis-only code — no longer in MSDB',
+      course_name_th: 'รหัสที่ค้างอยู่ฝั่งระบบนี้ — MSDB ไม่มีแล้ว',
+    })),
+    ...upstreamCourses,
+  ];
 
   return (
     <div>
