@@ -1184,3 +1184,144 @@ test('CONTROL: the status module is inside the real content globs', async () => 
     'src/lib is not in the real content globs — the status colours would be purged',
   );
 });
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE REGISTRATION DETAIL SCREENS — HARVESTED FROM THE RENDER, COMPILED FROM
+// THE SOURCE
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The same instrument as the list screens above, pointed at the two DETAIL
+ * screens and the shell they share.
+ *
+ * It is not optional here. Round 4 is a presentation round: the detail screens
+ * are now built almost entirely from measured arbitrary values — h-[87px],
+ * h-[93px], pt-[14px], leading-[23.5px], w-[100px], w-[39px] and several dozen
+ * more — and every one of them is a class that can reach the markup while the
+ * stylesheet has no rule for it. That is the /schedule round-hover defect:
+ * perfect markup, no CSS, a green suite.
+ *
+ * The two halves come from different places, which is the whole point — the
+ * CLASSES from the RENDERED MARKUP, the CSS from COMPILING THE SOURCE with
+ * comments stripped. A class assembled from a template literal never appears in
+ * the code in the form the browser receives, so a source-to-source check would
+ * compare the broken text with itself and pass.
+ */
+const DETAIL_LAYOUT_FILES = [
+  'src/app/admin/registrations/_components/detailShell.jsx',
+  'src/app/admin/registrations/_components/RegistrationDetailClient.jsx',
+  // The status dot and the chip take their colour from the vocabulary, so the
+  // module's own classes are part of what these screens render.
+  'src/lib/registrations/statuses.js',
+];
+
+/** The two documents, full enough that every optional branch is on screen. */
+const DETAIL_PUBLIC_DOC = {
+  _id: 'aaaaaaaaaaaaaaaaaaaa0001',
+  status: 'pending',
+  courseName: 'Power BI Advanced',
+  courseCode: 'PBI-301',
+  classId: 'class-9',
+  classDate: '12 - 13 ส.ค. 2569',
+  scheduleType: 'hybrid',
+  attendanceMode: 'teams',
+  coordinator: { firstName: 'สมชาย', lastName: 'ใจดี', email: 'a@b.c', phone: '08', isAttending: true },
+  attendeesListProvided: true,
+  attendeesCount: 2,
+  attendees: [{ firstName: 'ส', lastName: 'ช', email: 'a@b.c', phone: '08' }],
+  requestInvoice: true,
+  invoice: { type: 'corporate', country: 'TH', companyName: 'บ.', branchType: 'head_office', taxId: '0105551234567', thaiAddress: { addressLine: 'x', subDistrict: 'y', district: 'z', province: 'w', postalCode: '10110' } },
+  notes: 'โทรยืนยันแล้ว',
+  pricing: { pricePerSeat: 10000, seats: 2, subtotal: 20000, vatAmount: 1400, total: 21400 },
+  payment: { method: 'promptpay', omiseStatus: 'successful', omiseChargeId: 'chrg_1', paidAt: '2026-08-02T03:00:00.000Z' },
+  consent: { dataChecked: true, noRefund: true, changePolicy: true, termsAccepted: true, acceptedAt: '2026-08-01T03:00:00.000Z', ipAddress: '1.2.3.4' },
+  createdAt: '2026-08-01T03:00:00.000Z',
+  updatedAt: '2026-08-02T03:00:00.000Z',
+};
+
+test('every arbitrary-value class the DETAIL screen RENDERS compiles to a rule', async () => {
+  const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
+  const { createElement: h } = await import('react');
+
+  const slot = h('p', null, 'ประวัติ');
+
+  /**
+   * EVERY STATUS OF BOTH DOCUMENTS, because the status decides which controls
+   * exist: a cancelled record has no primary button and a pending one does, and
+   * a class that only appears on one of those branches is invisible to a render
+   * of the other. The list screens' harvest learned this the same way — a
+   * fixture carrying only `hybrid` exercised one of ScheduleBadge's two
+   * branches and the other's `w-fit` could be deleted with nothing going red.
+   */
+  const markup = ['pending', 'confirmed', 'paid', 'cancelled']
+    .map((status) => renderToStaticMarkup(
+      h(RegistrationDetailClient, { doc: { ...DETAIL_PUBLIC_DOC, status }, history: slot })))
+    .join('\n');
+
+  const classes = arbitraryClassesIn(markup);
+  assert.ok(classes.length >= 40,
+    `only ${classes.length} arbitrary-value classes harvested from the detail screens — the extractor is not reading the render`);
+
+  const css = await compile(
+    DETAIL_LAYOUT_FILES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })),
+  );
+
+  const dead = classes.filter((c) => declarationsFor(css, c).length === 0);
+  assert.deepEqual(
+    dead, [],
+    'these classes are RENDERED by the detail screens but Tailwind emits no rule for them while '
+    + `scanning ${DETAIL_LAYOUT_FILES.length} source files:\n    ${dead.join('\n    ')}\n\n`
+    + 'Each is almost certainly assembled from a template literal or a concatenation. Tailwind '
+    + 'matches raw text, so the complete class must appear LITERALLY in the code — an interpolated '
+    + 'one produces correct markup and no CSS at all, which no markup assertion anywhere in this '
+    + 'suite can see.',
+  );
+});
+
+test('the measured geometry really is in the harvest, not merely a large count', async () => {
+  /**
+   * The count floor above says the extractor read SOMETHING. This says it read
+   * the numbers the geometry actually specifies — so a screen that quietly
+   * dropped the status bar, the strip or the tab list, and still rendered forty
+   * other arbitrary values, does not pass on the floor alone.
+   *
+   * Each of these is a measurement from the Figma read: the status card, the
+   * dark strip, the tab list, the tabs, the primary button, the overflow button,
+   * the count badge, the section-card header row and the DL column gap.
+   */
+  const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
+  const { createElement: h } = await import('react');
+  const markup = renderToStaticMarkup(
+    h(RegistrationDetailClient, { doc: DETAIL_PUBLIC_DOC, history: h('p', null, 'x') }));
+  const classes = new Set(arbitraryClassesIn(markup));
+
+  for (const measured of [
+    'h-[87px]',   // the status bar
+    'h-[93px]',   // the dark strip
+    'h-[49px]',   // the tab list
+    'h-[39px]',   // one tab
+    'w-[100px]',  // the primary action
+    'w-[39px]',   // the overflow button
+    'w-[21px]',   // the count badge
+    'h-[43px]',   // the section-card header row
+    'gap-x-[36px]', // the two 500px DL columns
+  ]) {
+    assert.ok(classes.has(measured), `the render carries no ${measured} — a measured element is missing`);
+  }
+});
+
+test('CONTROL: the detail file list is the one the render can draw from', async () => {
+  // Each file must be inside the real content globs, or compiling it here proves
+  // nothing about the real build. (The compile replaces `content`, so it is
+  // blind to a glob mistake by construction.)
+  const config = require_(path.join(ROOT, 'tailwind.config.js'));
+  for (const rel of DETAIL_LAYOUT_FILES) {
+    assert.ok(
+      rel.startsWith('src/app/') || rel.startsWith('src/components/') || rel.startsWith('src/lib/'),
+      `${rel} is outside the scanned roots`,
+    );
+    assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing — the compile input is empty`);
+  }
+  assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
+});
