@@ -26,6 +26,7 @@
 
 import { normalizeCourseCode } from './courseOrder';
 import { outlinePublicPath } from './courseOutline';
+import { proveSelfUpstream, SELF_UPSTREAM } from './renameUpstreamPlan';
 
 /**
  * ── THE THREE CASE REGIMES ─────────────────────────────────────────────────
@@ -166,11 +167,18 @@ export function detachedGenesisCodes(extensionCodes = [], msdbCodes = []) {
  *        reader found holding the OLD code. A store absent from this object is
  *        reported as NOT READ rather than as zero; see `undetermined`.
  * @param {string[]} [input.outlineLangs] which outline PDFs exist ('th'/'en')
+ * @param {Array<{course_id: string, _id: any}>} [input.msdbCourses] the upstream
+ *        ROWS, so a hit can be identified by `_id` and not only by its code.
+ *        When omitted, `msdbCodes` is used and identity cannot be proved.
+ * @param {string} [input.anchor] `CourseExtension.upstreamId` for the OLD code —
+ *        the MSDB `_id` this row was recorded against while both sides agreed.
  */
 export function buildRenamePreview({
   oldCode,
   newCode,
   msdbCodes = [],
+  msdbCourses = null,
+  anchor = '',
   extensionCodes = [],
   urlAlias = '',
   matches = {},
@@ -180,11 +188,21 @@ export function buildRenamePreview({
   const to = clean(newCode);
 
   /**
+   * `msdbCourses` carries the `_id`; `msdbCodes` carries only the spelling.
+   * Both are accepted so every existing fixture keeps working — and when the
+   * rows ARE supplied the codes are DERIVED from them rather than taken from a
+   * second argument, because two independently passed lists that can disagree
+   * is a defect waiting to be written.
+   */
+  const upstreamRows = Array.isArray(msdbCourses) ? msdbCourses : null;
+  const codes = upstreamRows ? upstreamRows.map((c) => clean(c?.course_id)).filter(Boolean) : msdbCodes;
+
+  /**
    * ── THE GENESIS-ONLY CODES, COMPUTED BEFORE ANY VERDICT ────────────────────
    * Above the blocked list on purpose: the identical-codes verdict below is a
    * CLAIM ABOUT THE WORLD, and it cannot be made without this.
    */
-  const detachedCodes = detachedGenesisCodes(extensionCodes, msdbCodes);
+  const detachedCodes = detachedGenesisCodes(extensionCodes, codes);
   const detached = {
     codes: detachedCodes,
     // The admin picked a code that exists only in genesis — i.e. they are
@@ -238,7 +256,7 @@ export function buildRenamePreview({
   // Checked against BOTH stores. Upstream alone is not enough: CourseExtension
   // is upserted by code, so a collision there would silently overwrite another
   // course's SEO and gallery — which is why createCourse already guards both.
-  const inMsdb = findInsensitive(msdbCodes, to);
+  const inMsdb = findInsensitive(codes, to);
   const inExtension = findInsensitive(extensionCodes, to);
   // A case-only rename necessarily "collides" with the course's own row. That
   // is not a collision, it is the thing being renamed.
@@ -253,32 +271,51 @@ export function buildRenamePreview({
    * it reads as a foreign course and the refusal says "already taken" about
    * what is most likely this course's own row.
    *
-   * That is not enough to unblock the write: from what this screen can see,
-   * "renamed at MSDB" and "old course deleted upstream, unrelated new course
-   * created" produce the SAME observation, and nothing here can separate them.
-   * Deciding between them is the self-vs-collision question, and it stays open.
+   * ── AND THE ANCHOR NOW SETTLES IT ────────────────────────────────────────
+   * It used to stop there, as a suspicion: "renamed at MSDB" and "old course
+   * deleted upstream, unrelated one created under the new code" were the same
+   * observation from the code alone.
    *
-   * What it IS enough for is to stop the refusal asserting the wrong one. The
-   * flag is set when all three hold: upstream has the new code, upstream does
-   * NOT have the old code, and genesis still has rows on the old code.
+   * `CourseExtension.upstreamId` — the MSDB `_id`, recorded while both sides
+   * still agreed, and unchanged by any rename — answers it. If the row that now
+   * holds the NEW code carries the `_id` this course was anchored to, it IS
+   * this course, and the "collision" is the rename already half-done. That is
+   * `proveSelfUpstream`, and when it returns proven the write is UNBLOCKED:
+   * this is the resume path.
+   *
+   * WHERE THERE IS NO ANCHOR IT REFUSES AND SAYS SO. An empty anchor is not
+   * "no objection", it is "identity unknown", and falling back to comparing
+   * codes would reinstate the old suspicion wearing the appearance of a proof.
    */
-  const fromInMsdb = findInsensitive(msdbCodes, from);
-  const mayBeSelfUpstream = Boolean(
-    inMsdb && !selfMsdb && !fromInMsdb && rowsOnFrom > 0
-  );
+  const fromInMsdb = findInsensitive(codes, from);
+  const upstreamRowForNew = upstreamRows
+    ? upstreamRows.find((c) => clean(c?.course_id).toLowerCase() === to.toLowerCase()) ?? null
+    : null;
+  const looksSelfUpstream = Boolean(inMsdb && !selfMsdb && !fromInMsdb && rowsOnFrom > 0);
+  const selfProof = looksSelfUpstream
+    ? proveSelfUpstream({ anchor, upstreamRow: upstreamRowForNew })
+    : { proven: false, reason: null, anchor: clean(anchor) || null, upstreamId: null };
+
+  const selfUpstream = { ...selfProof, looksLikeIt: looksSelfUpstream };
   const collision = {
-    blocked: Boolean((inMsdb && !selfMsdb) || (inExtension && !selfExt)),
+    // A PROVEN self-upstream is not a collision — it is this course's own row.
+    blocked: Boolean(((inMsdb && !selfMsdb) || (inExtension && !selfExt)) && !selfProof.proven),
     inMsdb: selfMsdb ? null : inMsdb,
     inExtension: selfExt ? null : inExtension,
-    mayBeSelfUpstream,
+    mayBeSelfUpstream: looksSelfUpstream,
+    selfUpstream,
   };
   if (collision.blocked) {
     blocked.push(
-      mayBeSelfUpstream
-        ? `MSDB มีรหัส "${collision.inMsdb}" อยู่แล้ว และไม่มีรหัส "${from}" — `
-          + 'อาจเป็นหลักสูตรเดียวกันนี้ที่ถูกเปลี่ยน course_id ที่ต้นทางไปแล้ว '
-          + 'หรืออาจเป็นคนละหลักสูตร — จากข้อมูลที่หน้านี้เห็น แยกสองกรณีนี้ไม่ได้ '
-          + 'จึงยังสั่งเปลี่ยนจากที่นี่ไม่ได้ แต่จำนวนแถวด้านล่างคือของจริงที่ยังค้างอยู่'
+      looksSelfUpstream
+        ? (selfProof.reason === SELF_UPSTREAM.NO_ANCHOR
+          ? `แถว CourseExtension ของ "${from}" ไม่มี upstreamId บันทึกไว้ — `
+            + 'จึงพิสูจน์ไม่ได้ว่าหลักสูตรที่ถือรหัสใหม่อยู่คือหลักสูตรเดียวกันนี้ '
+            + 'ระบบจะไม่เดาจากรหัส ให้รัน npm run backfill:extension-anchor '
+            + 'หรือแก้ค่า upstreamId ของแถวนี้ก่อน'
+          : `MSDB มีรหัส "${collision.inMsdb}" อยู่แล้ว และไม่มีรหัส "${from}" — `
+            + `แต่ upstreamId ที่บันทึกไว้ (${selfProof.anchor}) ไม่ตรงกับ _id ของหลักสูตรนั้น `
+            + `(${selfProof.upstreamId ?? 'ไม่พบ'}) จึงเป็นคนละหลักสูตร ไม่ใช่การเปลี่ยนรหัสที่ค้างอยู่`)
         : `รหัส "${to}" ถูกใช้แล้ว`
           + (collision.inMsdb ? ` — MSDB: "${collision.inMsdb}"` : '')
           + (collision.inExtension ? ` — CourseExtension: "${collision.inExtension}"` : '')
@@ -304,10 +341,10 @@ export function buildRenamePreview({
    * no read.
    */
   const upstream = {
-    hasOldCode: findInsensitive(msdbCodes, from) !== null,
-    hasNewCode: findInsensitive(msdbCodes, to) !== null,
-    oldSpelling: findInsensitive(msdbCodes, from),
-    newSpelling: findInsensitive(msdbCodes, to),
+    hasOldCode: findInsensitive(codes, from) !== null,
+    hasNewCode: findInsensitive(codes, to) !== null,
+    oldSpelling: findInsensitive(codes, from),
+    newSpelling: findInsensitive(codes, to),
   };
 
   // ── Case regime ───────────────────────────────────────────────────────────
@@ -414,6 +451,18 @@ export function buildRenamePreview({
      * rename the admin happens to be previewing.
      */
     detached,
+    /**
+     * The identity proof, hoisted out of `collision` so a caller does not have
+     * to read a refusal to learn that the rename is RESUMABLE. It carries the
+     * anchor and the `_id` it was compared against, so a refusal can name both.
+     */
+    selfUpstream,
+    /**
+     * The anchor the write must target. The upstream PUT is addressed BY `_id`,
+     * never by a code lookup — a lookup is the very thing that cannot tell a
+     * renamed course from a recreated one.
+     */
+    anchor: clean(anchor) || null,
     url,
     stores,
     historical,

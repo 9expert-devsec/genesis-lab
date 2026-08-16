@@ -91,7 +91,10 @@ export async function previewCourseCodeRename({ oldCode, newCode } = {}) {
     careerRegCount,
   ] = await Promise.all([
     listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
-    CourseExtension.find(exact('courseId', from), { courseId: 1, urlAlias: 1, isPublished: 1 }).lean(),
+    // `upstreamId` — the anchor. Read here rather than in a second query
+    // because the row is already being fetched, and the rename's upstream write
+    // is addressed by it.
+    CourseExtension.find(exact('courseId', from), { courseId: 1, urlAlias: 1, isPublished: 1, upstreamId: 1 }).lean(),
     CourseExtension.distinct('courseId'),
     // `legacyPath` is the stored root-relative path and `publicId` the blob key
     // — both derived from the code, which is why the objects have to move and
@@ -114,12 +117,24 @@ export async function previewCourseCodeRename({ oldCode, newCode } = {}) {
     CareerPathRegistration.countDocuments({ courseCode: from }),
   ]);
 
-  const msdbCodes = (upstream.items ?? []).map((c) => String(c?.course_id ?? '')).filter(Boolean);
+  /**
+   * The upstream ROWS, not just their codes.
+   *
+   * `_id` is what makes the self-vs-collision question answerable: compared
+   * against `CourseExtension.upstreamId` it proves whether the course now
+   * holding the new code is this same course, without trusting the code at all.
+   * The codes are derived from these rows inside the planner rather than passed
+   * alongside them, so the two cannot drift apart.
+   */
+  const msdbCourses = (upstream.items ?? [])
+    .map((c) => ({ course_id: String(c?.course_id ?? ''), _id: String(c?._id ?? '') }))
+    .filter((c) => c.course_id);
 
   const preview = buildRenamePreview({
     oldCode: from,
     newCode: to,
-    msdbCodes,
+    msdbCourses,
+    anchor: extensionRows?.[0]?.upstreamId ?? '',
     extensionCodes: (extensionAll ?? []).map(String),
     urlAlias: extensionRows?.[0]?.urlAlias ?? '',
     outlineLangs: (outlineRows ?? []).map((r) => r.lang).filter(Boolean),

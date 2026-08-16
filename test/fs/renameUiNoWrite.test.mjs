@@ -9,7 +9,7 @@ import { readSource, walkSources } from '../sourceScan.mjs';
  * "No rename control" rendered as a disabled button is a promise about a click
  * handler: someone removes the `disabled` attribute in a hurry and the write is
  * one line away. The property wanted here is that THE WRITE IS NOT REACHABLE —
- * `renameCourseCodePhase1` is not imported anywhere in the screen's module
+ * `renameCourseCode` is not imported anywhere in the screen's module
  * graph, so there is nothing to enable.
  *
  * The walk is transitive for the same reason the preview's read-only guard is:
@@ -90,30 +90,49 @@ test('the report and the page cannot reach the rename', () => {
   for (const rel of ENTRIES.filter((e) => e !== EXECUTOR)) {
     const { withImports } = readSource(rel);
     assert.ok(
-      !/renameCourseCodePhase1/.test(withImports),
+      !/renameCourseCode/.test(withImports),
       `${rel} can reach the rename — only the execute panel may`
     );
   }
 });
 
 /**
- * THE PROPERTY THAT STILL HOLDS ABSOLUTELY, and the one this round was scoped
- * against: phase 1 writes Mongo, and nothing on this screen reaches MSDB. The
- * two-phase split exists so a HUMAN makes that change.
+ * ══ THIS ASSERTION WAS DELIBERATELY NARROWED ═══════════════════════════════
+ *
+ * It used to be "NO UPSTREAM WRITE is reachable from the screen" — true and
+ * correct while a HUMAN was supposed to change `course_id` in MSDB. That is
+ * retired: the rename writes upstream itself, so the blanket ban would now
+ * forbid the feature.
+ *
+ * WHAT IS GUARANTEED NOW, and it is the same shape the rename-action ban took
+ * when the execute panel was added: the upstream write is reachable from
+ * EXACTLY ONE module in this screen — the same one the genesis write is
+ * reachable from — and it gets there through the rename action rather than by
+ * importing `msdb-write` directly.
+ *
+ * WHAT IS NO LONGER GUARANTEED, said plainly: that this screen cannot change
+ * MSDB. It can, and that is the point of the round. Whether it does so only
+ * once, only with one key, only after the anchor check and only before genesis
+ * is asserted in test/fs/renameUpstreamWrite, over the action itself.
  */
-test('NO UPSTREAM WRITE is reachable from the screen', () => {
-  const offenders = [];
-  for (const f of closure(ENTRIES)) {
+test('the upstream write is reachable from EXACTLY ONE module, and only via the action', () => {
+  const direct = closure(ENTRIES)
+    .filter((f) => f.withImports.includes("from '@/lib/api/msdb-write'"))
+    .map((f) => f.rel);
+  assert.deepEqual(
+    direct, ['src/lib/actions/course-rename.js'],
+    'msdb-write is imported somewhere other than the rename action:\n  ' + direct.join('\n  ')
+  );
+
+  // No COMPONENT may call an upstream verb, whatever it imports.
+  const inComponents = [];
+  for (const rel of ENTRIES) {
+    const { code } = readSource(rel);
     for (const verb of ['msdbCreate', 'msdbUpdate', 'msdbDelete']) {
-      if (new RegExp(String.raw`(?<![\w$])${verb}\s*\(`).test(f.code)) {
-        offenders.push(`${f.rel}: ${verb}(`);
-      }
+      if (new RegExp(String.raw`(?<![\w$])${verb}\s*\(`).test(code)) inComponents.push(`${rel}: ${verb}(`);
     }
   }
-  assert.deepEqual(
-    offenders, [],
-    'the screen can reach an MSDB write — phase 2 is a human step:\n  ' + offenders.join('\n  ')
-  );
+  assert.deepEqual(inComponents, [], 'a component calls MSDB directly:\n  ' + inComponents.join('\n  '));
 });
 
 test('no component in the rename screen writes to Mongo or upstream directly', () => {
@@ -154,7 +173,7 @@ test('CONTROL: the closure is real and would catch the import it bans', () => {
   // And the ban would fire: the rename action really does export that symbol.
   assert.match(
     readSource('src/lib/actions/course-rename.js').code,
-    /export async function renameCourseCodePhase1/,
+    /export async function renameCourseCode/,
     'the banned symbol no longer exists — the ban is checking for nothing'
   );
 });

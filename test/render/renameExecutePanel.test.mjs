@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { RenameExecutePanel } from '@/app/admin/courses/rename/_components/RenameExecutePanel';
+import { RenameExecutePanel, RenameOutcomeReport, RenameStateReport } from '@/app/admin/courses/rename/_components/RenameExecutePanel';
 import { buildRenamePreview, RENAME_STORES } from '@/lib/courses/renameCoursePreview';
 
 /**
@@ -104,18 +104,46 @@ test('THE CONFIRMATION IS TYPED — a text input expecting the new code', () => 
   assert.match(text(html), /เลือกหลักสูตรถูกตัว/);
 });
 
-test('THE MSDB ACKNOWLEDGEMENT IS A SEPARATE CONTROL', () => {
+/**
+ * ══ WHAT THE ACKNOWLEDGEMENT IS FOR CHANGED ════════════════════════════════
+ *
+ * It used to be consent to an OBLIGATION — "I will go and change course_id in
+ * MSDB myself, and I know a hidden course may resurface meanwhile". There is no
+ * second step and no interval, so both of those sentences are now false and
+ * asserting them would pin a lie.
+ *
+ * It is consent to REACH instead: this button edits the live upstream
+ * catalogue, immediately, and this tool cannot undo it. That is a bigger thing
+ * to agree to than the obligation was — so the control stays, separate, for a
+ * better reason than before.
+ */
+test('THE UPSTREAM-REACH ACKNOWLEDGEMENT IS A SEPARATE CONTROL', () => {
   const html = render(preview());
   assert.match(html, /<input[^>]*type="checkbox"/, 'there is no separate acknowledgement');
   // Two controls, not one: a typed field AND a checkbox.
   assert.equal((html.match(/<input/g) ?? []).length, 2, 'expected exactly two confirmation controls');
-  assert.match(text(html), /แก้ course_id ที่ MSDB ด้วยตนเองทันที/);
+  /**
+   * SCOPED TO THE LABEL, not the page. An earlier draft asserted the whole
+   * rendered text contained no "ด้วยตนเอง" and went red on the REACH card's
+   * "ไม่ต้องไปแก้ MSDB ด้วยตนเองอีกแล้ว" — which is the sentence saying the
+   * manual step is gone, i.e. exactly what this round wanted. The claim is
+   * about what the admin is CONSENTING to, so it is asked of the consent.
+   */
+  const label = /<label[^>]*>[\s\S]*?type="checkbox"[\s\S]*?<\/label>/.exec(html)?.[0];
+  assert.ok(label, 'the acknowledgement is not inside a label');
+  const labelText = text(label);
+  assert.match(labelText, /จะเปลี่ยน course_id ที่ MSDB/, 'the consent does not name what it reaches');
+  assert.match(labelText, /ย้อนกลับให้ไม่ได้/, 'the consent does not say it cannot be undone');
+  assert.ok(
+    !/ด้วยตนเอง/.test(labelText),
+    'the acknowledgement still asks the admin to do the MSDB step themselves'
+  );
 });
 
-test('the acknowledgement names the hidden-course consequence', () => {
-  // The specific thing an admin would not guess: this interval can un-hide a
-  // course that was deliberately hidden.
-  assert.match(text(render(preview())), /ซ่อนไว้อาจกลับมาแสดงต่อสาธารณะ/);
+test('the acknowledgement names the consequence that cannot be undone', () => {
+  // The specific thing an admin would not guess: this reaches live public data
+  // and this screen has no way back.
+  assert.match(text(render(preview())), /ย้อนกลับให้ไม่ได้/);
 });
 
 // ── The alias as step one ───────────────────────────────────────────────────
@@ -127,28 +155,46 @@ test('A DERIVED url renders the alias as STEP ONE, before the write', () => {
   assert.match(step, /ขั้นที่ 1/, 'the alias is not step one');
   assert.match(step, /zztest-excel-01-training-course/);
   assert.match(step, /404/, 'the consequence of skipping it is not stated');
-  // and the write is step two
-  assert.match(text(html), /ขั้นที่ 2 — เปลี่ยนรหัสในระบบนี้/);
+  // and the MSDB write is step two
+  assert.match(text(html), /ขั้นที่ 2 — เปลี่ยน course_id ที่ MSDB/);
 });
 
-test('an ALIASED url has no alias step, and the write becomes step one', () => {
+test('an ALIASED url has no alias step, and the MSDB write becomes step one', () => {
   const html = render(preview({ urlAlias: '/excel-hr' }));
   assert.ok(!/data-testid="alias-step"/.test(html), 'an aliased course was told an alias will be created');
-  assert.match(text(html), /ขั้นที่ 1 — เปลี่ยนรหัสในระบบนี้/);
+  assert.match(text(html), /ขั้นที่ 1 — เปลี่ยน course_id ที่ MSDB/);
 });
 
-test('the MSDB step is always the LAST step, and is attributed to the admin', () => {
-  assert.match(text(render(preview())), /คุณแก้ course_id ที่ MSDB เอง/);
+/**
+ * ══ THE STEP ORDER INVERTED, AND THE LIST HAS TO SHOW IT ═══════════════════
+ *
+ * The MSDB step used to be LAST and attributed to the admin — "คุณแก้ ... เอง".
+ * It is now the action's own step and it goes FIRST, because a refusal before
+ * any genesis mutation is the clean failure this order exists to buy. An admin
+ * who reads this list and then reads a failure needs it to say which half can
+ * possibly have moved.
+ */
+test('MSDB is the FIRST write step, performed by the system, and genesis follows it', () => {
+  const t = text(render(preview()));
+  const msdbAt = t.indexOf('เปลี่ยน course_id ที่ MSDB');
+  const genesisAt = t.indexOf('จึงเขียนฝั่งระบบนี้');
+  assert.ok(msdbAt !== -1, 'the MSDB step is gone from the list');
+  assert.ok(genesisAt !== -1, 'the genesis step is gone from the list');
+  assert.ok(msdbAt < genesisAt, 'the list still shows genesis before MSDB');
+  assert.match(t, /แล้วอ่านกลับมายืนยัน/, 'the list does not say the write is confirmed by read-back');
+  assert.ok(!/คุณแก้ course_id ที่ MSDB เอง/.test(t), 'the MSDB step is still attributed to the admin');
 });
 
-// ── The obligation is on screen before anything is clicked ──────────────────
+// ── The reach is disclosed before anything is clicked ──────────────────────
 
-test('the MSDB obligation renders BEFORE any write, with both codes', () => {
+test('THE REACH renders BEFORE any write, with both codes', () => {
   const html = render(preview());
-  assert.match(html, /data-testid="msdb-obligation"/, 'the obligation is only shown after the write');
+  assert.match(html, /data-testid="upstream-reach"/, 'the reach is only disclosed after the write');
+  assert.ok(!/data-testid="msdb-obligation"/.test(html), 'the retired obligation card is still rendered');
   const t = text(html);
   assert.match(t, /ZZTEST-EXCEL-01/);
   assert.match(t, /EXCEL-HR-01/);
+  assert.match(t, /ไม่ต้องไปแก้ MSDB ด้วยตนเองอีกแล้ว/, 'nothing says the manual step is gone');
 });
 
 // ── Nothing has run yet ─────────────────────────────────────────────────────
@@ -177,4 +223,98 @@ test('CONTROL: a runnable and a blocked preview differ completely', () => {
   for (const probe of [/<button/, /id="confirm-code"/, /type="checkbox"/, /data-testid="rename-execute"/]) {
     assert.match(runnable, probe, `${probe} never appears even on a runnable preview`);
   }
+});
+
+// ══ THE FOUR OUTCOMES, KEPT APART ═════════════════════════════════════════
+
+/**
+ * Three of these cannot be produced for real: MSDB cannot be made to time out,
+ * to answer 2xx without applying, or to refuse on demand. They are exactly the
+ * states an admin most needs told apart, so they are driven from fixtures.
+ *
+ * The distinction that matters in every case is WHAT WAS WRITTEN.
+ */
+const outcome = (result) =>
+  renderToStaticMarkup(createElement(RenameOutcomeReport, { result }));
+const outcomeAttr = (html) => /data-outcome="([^"]*)"/.exec(html)?.[1] ?? null;
+
+test('no result → the outcome report renders nothing', () => {
+  assert.equal(outcome(null), '');
+});
+
+test('COMPLETE says both sides moved and that nothing is owed', () => {
+  const html = outcome({
+    ok: true, outcome: 'applied', wroteUpstream: true, wroteGenesis: true,
+    from: 'ZZTEST-EXCEL-01', to: 'EXCEL-HR-01',
+    counts: { courseExtension: 1, scheduleLocal: 3 },
+    followUps: ['แคชสาธารณะถูกล้างแล้ว'],
+  });
+  assert.equal(outcomeAttr(html), 'applied');
+  const t = text(html);
+  assert.match(t, /เรียบร้อยทั้งสองฝั่ง/);
+  assert.match(t, /อ่านกลับมายืนยันแล้ว/, 'success does not say it was confirmed by read-back');
+  assert.match(t, /ไม่ต้องไปแก้ MSDB เองแล้ว/, 'success does not say the manual step is gone');
+  assert.match(t, /4 แถว/, 'the genesis row count is not reported');
+});
+
+test('A CLEAN REFUSAL says nothing was written ANYWHERE, and a retry is safe', () => {
+  const html = outcome({
+    ok: false, outcome: 'refused', wroteUpstream: false, wroteGenesis: false,
+    error: 'เปลี่ยนรหัสที่ MSDB ไม่สำเร็จ — 400 Bad Request',
+  });
+  assert.equal(outcomeAttr(html), 'refused');
+  const t = text(html);
+  assert.match(t, /ยังไม่มีอะไรถูกเขียนเลย/, 'a refusal does not say the systems are untouched');
+  assert.match(t, /ลองใหม่ได้อย่างปลอดภัย/, 'a refusal does not say a retry is safe');
+});
+
+test('UNKNOWN says do not press again, and OFFERS NO RETRY', () => {
+  /**
+   * The one outcome where a retry is actively dangerous: the write may have
+   * landed, so a second attempt could rename a course that is already renamed.
+   * The absence of a control is the assertion.
+   */
+  const html = outcome({
+    ok: false, outcome: 'unknown', wroteUpstream: null, wroteGenesis: false,
+    error: 'ยังไม่ทราบผล — คำสั่งถูกส่งไปแล้วแต่ไม่ได้รับคำตอบยืนยัน',
+  });
+  assert.equal(outcomeAttr(html), 'unknown');
+  const t = text(html);
+  assert.match(t, /ห้ามกดซ้ำ/, 'an unknown outcome does not forbid a retry');
+  assert.match(t, /ยังไม่ได้เขียนอะไรเลย/, 'it does not say genesis is untouched');
+  assert.match(t, /ตรวจสอบผลกระทบ/, 'it does not say what to do instead');
+  assert.ok(!/<button/.test(html), 'an unknown outcome offers a retry control');
+});
+
+test('A DIVERGENCE names the store and the two numbers', () => {
+  const html = outcome({
+    ok: false, outcome: 'applied', error: 'จำนวนแถวที่เขียนไม่ตรงกับผลตรวจสอบ',
+    divergences: [{ store: 'scheduleLocal', expected: 3, actual: 2 }],
+  });
+  const t = text(html);
+  assert.match(t, /scheduleLocal/);
+  assert.match(t, /คาดไว้ 3 เขียนจริง 2/);
+});
+
+test('CONTROL: the four outcomes render distinguishably', () => {
+  const seen = new Set([
+    outcomeAttr(outcome({ ok: true, counts: {} })),
+    outcomeAttr(outcome({ ok: false, outcome: 'refused', error: 'x' })),
+    outcomeAttr(outcome({ ok: false, outcome: 'unknown', error: 'x' })),
+    outcomeAttr(outcome({ ok: false, outcome: 'not-applied', error: 'x' })),
+  ]);
+  assert.equal(seen.size, 4, `outcomes collapsed together: ${[...seen].join(', ')}`);
+  assert.equal(outcomeAttr('<div></div>'), null);
+});
+
+test('CONTROL: only the UNKNOWN branch withholds a retry control', () => {
+  // The negative above is only meaningful if some other branch could have one.
+  const partial = renderToStaticMarkup(createElement(RenameStateReport, {
+    state: {
+      partial: true, stillOnOldCode: ['article'], alreadyOnNewCode: ['courseExtension'],
+      state: 'genesis-partial', reversible: false,
+    },
+    from: 'A', to: 'B', onRerun: () => {},
+  }));
+  assert.match(partial, /<button/, 'no branch anywhere renders a re-run control');
 });

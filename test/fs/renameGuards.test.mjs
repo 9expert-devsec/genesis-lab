@@ -111,10 +111,25 @@ test('a half-finished rename is DETECTABLE, and the detector is exported', () =>
     'the reverse preview — the half that finds rows already on the new code — is missing');
 });
 
-test('the result reports what phase 1 deliberately did NOT do', () => {
+/**
+ * ══ THIS ASSERTION WAS DELIBERATELY REPLACED ═══════════════════════════════
+ *
+ * It pinned `intervalWarnings` and the word MSDB — "nothing says the upstream
+ * change is still owed". Nothing is owed: the action writes upstream and
+ * confirms it by read-back, so an `intervalWarnings` list would be describing a
+ * window that no longer exists.
+ *
+ * What still has to be reported are the things a code change genuinely does NOT
+ * carry with it, and those are now `followUps`.
+ */
+test('the result reports what the rename deliberately did NOT do', () => {
   const code = src();
-  assert.match(code, /intervalWarnings/, 'the interval is not reported to the admin');
-  assert.match(code, /MSDB/, 'nothing says the upstream change is still owed');
+  assert.match(code, /const followUps = \[/, 'the leftovers are not reported to the admin');
+  assert.ok(!/intervalWarnings/.test(code), 'the retired two-phase interval warnings are still here');
+  // The PDF objects are the real leftover: the row moves, the blob does not.
+  assert.match(code, /outlineRes\.modifiedCount > 0/, 'the un-moved PDF path is no longer reported');
+  // and the admin is told the caches were handled rather than left guessing
+  assert.match(code, /แคชสาธารณะถูกล้างแล้ว/, 'nothing says the public cache was flushed');
 });
 
 test('CONTROL: the write-index helper finds real writes', () => {

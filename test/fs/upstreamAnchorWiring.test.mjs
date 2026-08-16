@@ -188,23 +188,42 @@ test('CONTROL: the sources were read and the matchers are live', () => {
   assert.ok(found.length >= 2, `the ban list found only ${found.length} write verbs in a known writer`);
 });
 
-test('CONTROL: nothing CONSUMES the anchor this round', () => {
-  /**
-   * The scope line for this round, asserted rather than remembered. The rename
-   * guards, the collision check and the preview's verdicts must not have
-   * started reading it — a field that is half-consumed while it is being
-   * backfilled is the worst of both.
-   */
-  const READERS = [
-    'src/lib/courses/renameCoursePreview.js',
-    'src/lib/courses/renameCoursePlan.js',
-    'src/lib/courses/renamePreviewView.js',
-    'src/lib/actions/course-rename.js',
-    'src/lib/actions/course-rename-preview.js',
-    'src/lib/resolveCourse.js',
+/**
+ * ══ THIS CONTROL WAS DELIBERATELY INVERTED ═════════════════════════════════
+ *
+ * It used to assert that NOTHING consumed the anchor — the scope line of the
+ * round that backfilled it, and correct while the field was being made true
+ * ahead of its readers. That round is over: the anchor is now the identity
+ * proof the rename write is addressed by.
+ *
+ * The property that replaces it is the one that still matters — the anchor is
+ * consumed in the SANCTIONED places and nowhere else. `resolveCourse` and the
+ * public read path in particular must not start routing on it: it is an
+ * identity signal for the admin write path, not a lookup key, and a public
+ * reader that fell back to it would be resolving courses by a field with no
+ * uniqueness constraint.
+ */
+test('the anchor is consumed ONLY where the rename needs it', () => {
+  const SANCTIONED = [
+    'src/lib/actions/course-rename-preview.js',   // reads it onto the preview
+    'src/lib/actions/course-rename.js',           // addresses the upstream write by it
+    'src/lib/courses/upstreamAnchorPlan.js',      // the backfill decisions
+    'src/lib/actions/course-extensions.js',       // writes it
+    'src/models/CourseExtension.js',              // declares it
+    'src/app/admin/courses/_components/CourseForm.jsx',
   ];
-  for (const rel of READERS) {
+  const FORBIDDEN = [
+    // Public resolution must never route on the anchor.
+    'src/lib/resolveCourse.js',
+    'src/lib/search/searchCorpus.js',
+    'src/lib/api/public-courses.js',
+  ];
+  for (const rel of FORBIDDEN) {
     const { code } = readSource(rel);
-    assert.ok(!/upstreamId/.test(code), `${rel} already consumes the anchor — that is a later round`);
+    assert.ok(!/upstreamId/.test(code), `${rel} reads the anchor — it is not a public lookup key`);
   }
+  // and the sanctioned set really does use it, so the ban above is a boundary
+  // rather than a description of a field nobody touches.
+  const users = SANCTIONED.filter((rel) => /upstreamId/.test(readSource(rel).code));
+  assert.ok(users.length >= 5, `only ${users.length} sanctioned modules use the anchor: ${users.join(', ')}`);
 });
