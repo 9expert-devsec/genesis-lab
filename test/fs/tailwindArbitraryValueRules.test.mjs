@@ -882,6 +882,290 @@ test('CONTROL: the compiled file list is the one the render can draw from', asyn
   assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// TWO CLICK-TEST DEFECTS, AND THE ONLY INSTRUMENT THAT CAN REACH THEM
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ── WHY THESE ARE COMPILED-CSS ASSERTIONS AND NOT SOURCE OR MARKUP ONES ────
+ *
+ * Both defects below shipped past a green suite, and both are invisible to the
+ * two instruments this suite reaches for first:
+ *
+ *   · A SOURCE SCAN cannot see either. The status chip's class list already read
+ *     `inline-flex` while it rendered as a full-width block, so "does the source
+ *     say inline-flex" was true before and after the fix. That is precisely the
+ *     shape this round has now caught three times — an assertion named after
+ *     something it cannot see.
+ *
+ *   · A MARKUP ASSERTION cannot see either. The chip is one element either way,
+ *     which is why `the สถานะ cell contains exactly one element` stayed green: a
+ *     full-width chip is still exactly one element. The accent bar is one span
+ *     either way too.
+ *
+ * What CAN be asked is what the STYLESHEET actually declares for the classes the
+ * component actually renders. That is this file's existing instrument, pointed at
+ * a different question.
+ *
+ * ── AND WHAT THESE STILL DO NOT PROVE, STATED PLAINLY ──────────────────────
+ * NEITHER ASSERTION PROVES THE RENDERED RESULT. "The chip is 117px and not 155px"
+ * and "the bar's corners follow the card's" are LAYOUT facts: they need a layout
+ * engine, and this suite has none (no createRoot, and jsdom does not lay out).
+ *
+ * What they prove is that the MECHANISM which produces the correct result is
+ * present and compiles to the declaration it is named for. That is a real claim —
+ * it reddens on the exact edit that reintroduces each defect, which is measured
+ * in scripts/_rehearse-chip-and-bar-controls.mjs — and it is a strictly smaller
+ * claim than "it looks right". The looking is on the click-test list.
+ */
+
+const LAYOUT_SOURCES = [
+  'src/app/admin/registrations/_components/RegistrationsClient.jsx',
+  'src/app/admin/registrations/_components/PublicTable.jsx',
+  'src/app/admin/registrations/_components/InhouseTable.jsx',
+  'src/app/admin/registrations/_components/tableParts.jsx',
+  'src/lib/registrations/statuses.js',
+];
+
+/** Compile every file the two screens are built from, once. */
+async function layoutCss() {
+  return compile(LAYOUT_SOURCES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })));
+}
+
+/**
+ * The class list of the first element whose `class` attribute contains `marker`.
+ *
+ * Keyed on a class the element already carries rather than on its text, so it
+ * works for the accent bar, which has no text at all.
+ */
+function classesOfElementWith(markup, marker) {
+  for (const m of markup.matchAll(/\sclass="([^"]*)"/g)) {
+    const classes = m[1].split(/\s+/).filter(Boolean);
+    if (classes.includes(marker)) return classes;
+  }
+  return null;
+}
+
+/** Every declaration the stylesheet emits for any of `classes`. */
+function declarationsForAll(css, classes) {
+  return classes.flatMap((c) => declarationsFor(css, c));
+}
+
+// ── DEFECT 1: the status chip stretched to fill its cell ────────────────────
+
+test('the status chip’s compiled CSS constrains its width to its content', async () => {
+  /**
+   * THE DEFECT: the chip rendered as a full-width block across the whole สถานะ
+   * column, on both tables.
+   *
+   * THE CAUSE WAS THE PARENT. `CellLink` is `flex flex-col`, so every direct
+   * child is a flex item — a flex item's `display` is BLOCKIFIED (`inline-flex`
+   * computes to `flex`) and the column container's default `align-items: stretch`
+   * then sizes it across the full cross axis. Writing `inline-flex` does not
+   * survive that, which is why the class list looked correct throughout.
+   *
+   * So the assertion is not "is it inline" — that class is there either way and
+   * means nothing here. It is: does the stylesheet give this element an explicit
+   * CONTENT-BASED WIDTH, which is the one thing that defeats the stretch.
+   */
+  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
+  const markup = renderToStaticMarkup(createElement(PublicTable, {
+    items: [{ _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z', coordinator: {} }],
+    lastEdited: {},
+    detailHref: (id) => `/admin/registrations/${id}`,
+  }));
+
+  const classes = classesOfElementWith(markup, 'h-[26px]');
+  assert.ok(classes, 'no status chip found in the render — the marker class has changed');
+
+  const decls = declarationsForAll(await layoutCss(), classes);
+  assert.ok(
+    decls.some((d) => d === 'width: fit-content'),
+    'the status chip has no compiled width constraint, so the flex-column parent will '
+    + `stretch it across the whole column. Got [${decls.join(', ')}]. `
+    + '`inline-flex` alone does NOT do this — a flex item is blockified.',
+  );
+});
+
+test('CellLink stretches its children by default — which is why the chip must constrain itself', async () => {
+  /**
+   * The other half of the interaction, asserted so the fix cannot be removed as
+   * "redundant". If CellLink ever gains `items-start`, the chip's `w-fit` really
+   * would become redundant — and this is what says so, by failing and making
+   * somebody re-read the pair together.
+   *
+   * ── THE CLASS LIST IS HARVESTED, NOT HAND-WRITTEN, AND THAT WAS MEASURED ──
+   * The first version of this named CellLink's four classes as a literal array.
+   * The control added `items-start` to the component and the test STAYED GREEN —
+   * because a hand-written list cannot contain the class that was just added, so
+   * `declarationsForAll` never looked it up. An enumeration that does not follow
+   * the code is the exact failure this round has now hit in three different
+   * files, and here it made the assertion structurally unable to fail.
+   *
+   * It reads the RENDERED element instead. `flex-col` is the marker because only
+   * CellLink uses it, and the FIRST match is a data cell's link — the chevron
+   * cell's link deliberately adds `items-center` of its own and is not the
+   * subject of this claim.
+   */
+  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
+  const markup = renderToStaticMarkup(createElement(PublicTable, {
+    items: [{ _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z', coordinator: {} }],
+    lastEdited: {},
+    detailHref: (id) => `/admin/registrations/${id}`,
+  }));
+
+  const classes = classesOfElementWith(markup, 'flex-col');
+  assert.ok(classes, 'no CellLink found in the render — the marker class has changed');
+
+  const decls = declarationsForAll(await layoutCss(), classes);
+  assert.ok(decls.includes('display: flex'), `CellLink is not a flex container: [${decls.join(', ')}]`);
+  assert.ok(decls.includes('flex-direction: column'), 'CellLink is not a column — the stretch axis has changed');
+  assert.equal(
+    decls.some((d) => d.startsWith('align-items:')), false,
+    `CellLink now sets align-items: [${decls.join(', ')}]. If it is flex-start, the chip no longer `
+    + 'needs w-fit AND the truncating paragraphs may have stopped being given a width to '
+    + 'ellipsis against — re-read both before relaxing anything.',
+  );
+});
+
+test('the in-house mode chip uses the SAME mechanism, so "match the others" stays true', async () => {
+  // The claim the fix was chosen by. If ModeCell's chip ever stops using `w-fit`
+  // the status chip is no longer matching anything and the comment goes stale.
+  const parts = readSource('src/app/admin/registrations/_components/InhouseTable.jsx').code;
+  assert.match(parts, /'inline-flex h-\[23px\] w-fit shrink-0 items-center/,
+    'the in-house mode chip no longer sizes itself with w-fit');
+});
+
+test('CONTROL: `w-fit` is what emits the constraint, and removing it emits nothing', async () => {
+  // Without this, the assertion above could be satisfied by some other class in
+  // the chip's list, or by `w-fit` compiling to something else entirely.
+  const withFit = declarationsFor(await compile([{ raw: 'const X = "w-fit";', extension: 'js' }]), 'w-fit');
+  assert.deepEqual(withFit, ['width: fit-content'], `w-fit compiles to [${withFit.join(', ')}]`);
+
+  const without = 'const X = "inline-flex h-[26px] items-center rounded-full px-[9px] text-[12px] font-semibold";';
+  const css = await compile([{ raw: without, extension: 'js' }]);
+  const decls = declarationsForAll(css, without.match(/"([^"]*)"/)[1].split(' '));
+  assert.equal(
+    decls.some((d) => d.startsWith('width:')), false,
+    'the pre-fix class list already emitted a width — then the defect was something else',
+  );
+  // …and it DOES emit the display the class list advertises, which is exactly why
+  // reading the class list was misleading: the CSS was never wrong, the cascade was.
+  assert.ok(decls.includes('display: inline-flex'), 'inline-flex did not compile — the fixture is wrong');
+});
+
+// ── DEFECT 2: the accent bar escaped the card's rounded corner ──────────────
+
+test('the summary card clips its accent bar to its own radius', async () => {
+  /**
+   * THE DEFECT: the 4px bar drew outside the card's rounded corners.
+   *
+   * THE CAUSE: nothing clipped it. The bar is absolutely positioned at
+   * left/top/bottom 1px — a straight rectangle — while the card's corner is a
+   * 16px arc, so for the first and last ~15px of its height the bar sits where
+   * the card is not. With no `overflow-hidden` there was nothing to cut it off.
+   *
+   * Both halves are asserted because either alone is satisfiable: `overflow`
+   * without a radius clips to a square, and a radius without `overflow` is the
+   * defect itself.
+   */
+  const css = await layoutCss();
+  const card = ['relative', 'h-[82px]', 'w-full', 'overflow-hidden', 'rounded-9e-lg', 'border'];
+  const decls = declarationsForAll(css, card);
+
+  assert.ok(decls.includes('overflow: hidden'),
+    `the card does not clip its children, so the accent bar escapes the corner: [${decls.join(', ')}]`);
+  // Any radius property, per-corner or shorthand — see the note on the bar below
+  // for why matching only the shorthand is how a matcher goes blind.
+  assert.ok(decls.some((d) => /^border-[a-z-]*radius\s*:\s*16px/.test(d)),
+    `the card has no 16px radius to clip TO — overflow alone would clip to a square: [${decls.join(', ')}]`);
+});
+
+test('the accent bar sets no radius of its own', async () => {
+  /**
+   * The bar used to carry `rounded-l-9e-lg`, and it could never work: on a
+   * 4px-wide box CSS reduces both horizontal radii to fit, scaling 16px down to
+   * ~2px. A 2px curve cannot follow a 16px one, which is why the defect looked
+   * almost-right rather than obviously broken.
+   *
+   * Deleted rather than tuned. A hand-picked radius on the bar would have to be
+   * re-picked every time the card's changes; clipping means the bar's corners ARE
+   * the card's corners, by construction.
+   */
+  const { RegistrationsClient } = await import('@/app/admin/registrations/_components/RegistrationsClient');
+  const markup = renderToStaticMarkup(createElement(RegistrationsClient, {
+    initialData: { items: [], page: 1, pageCount: 1, total: 0, pageSize: 20 },
+    status: 'all', q: '', range: 'all', source: 'public', counts: { total: 1 }, lastEdited: {},
+  }));
+
+  const bar = classesOfElementWith(markup, 'w-0');
+  assert.ok(bar, 'no accent bar found in the render — the marker class has changed');
+
+  const decls = declarationsForAll(await layoutCss(), bar);
+  /**
+   * ── ANY RADIUS PROPERTY, NOT JUST THE SHORTHAND — ALSO MEASURED ───────────
+   * The first version matched `border-radius:` alone. The control put
+   * `rounded-l-9e-lg` back and the test STAYED GREEN, because a per-corner
+   * utility does not emit the shorthand at all — it emits
+   * `border-top-left-radius` and `border-bottom-left-radius`. The class the bar
+   * actually used was the one shape the matcher could not see, which is the
+   * narrowest possible way for a guard to be wrong.
+   */
+  assert.equal(
+    decls.some((d) => /^border-[a-z-]*radius\s*:/.test(d)), false,
+    `the accent bar sets its own radius: [${decls.join(', ')}]. On a 4px-wide box CSS scales `
+    + 'a 16px radius down to ~2px, which cannot follow the card. The card clips it instead.',
+  );
+  // It IS still the 4px coloured bar, so this is not passing because the bar went away.
+  assert.ok(decls.includes('border-left-width: 4px'), 'the accent bar is no longer 4px wide');
+});
+
+test('the selected card’s ring survives the clip — it is a shadow, not a child', async () => {
+  /**
+   * The risk `overflow-hidden` introduces, checked rather than assumed. `overflow`
+   * clips an element's DESCENDANTS and content; it does not clip the element's own
+   * box-shadow. The ring is a box-shadow, so the selected card keeps its outline.
+   *
+   * If Tailwind ever implemented rings as a pseudo-element or a child, this would
+   * fail — and it would fail in the right direction, because that IS the version
+   * `overflow-hidden` would silently eat.
+   */
+  const css = await layoutCss();
+  const ring = declarationsForAll(css, ['ring-2', 'ring-offset-1']);
+  assert.ok(ring.length > 0, 'the ring classes compile to nothing — the selected card has no outline at all');
+  assert.ok(
+    ring.some((d) => d.startsWith('box-shadow:')),
+    `the ring is not drawn with a box-shadow: [${ring.join(', ')}]. If it is drawn with a child `
+    + 'or a pseudo-element, `overflow-hidden` on the card now clips it away.',
+  );
+});
+
+test('CONTROL: a card WITHOUT overflow-hidden emits no clip', async () => {
+  // The negative form of the first assertion, so "the card clips" cannot be
+  // passing because `declarationsForAll` finds `overflow: hidden` in something
+  // else on the page.
+  const before = 'const X = "relative h-[82px] w-full rounded-9e-lg border";';
+  const css = await compile([{ raw: before, extension: 'js' }]);
+  const decls = declarationsForAll(css, before.match(/"([^"]*)"/)[1].split(' '));
+  assert.equal(decls.some((d) => d === 'overflow: hidden'), false,
+    'the pre-fix class list already clipped — then the defect was something else');
+  // …but it DID already have the radius, which is what the bar was escaping.
+  assert.ok(decls.includes('border-radius: 16px'), 'the fixture lost the radius — it proves nothing');
+});
+
+test('CONTROL: the element extractor finds the right elements, and reports a miss', async () => {
+  /**
+   * Both defect tests locate their subject by a marker class. A extractor that
+   * silently returned the WRONG element would assert the wrong thing green; one
+   * that returned null is caught by the `assert.ok` at each call site, and this
+   * pins that it really does return null rather than something empty.
+   */
+  assert.deepEqual(classesOfElementWith('<span class="a b c"></span>', 'b'), ['a', 'b', 'c']);
+  assert.equal(classesOfElementWith('<span class="a b c"></span>', 'zzz'), null);
+  // Whole-token matching, not substring: `w-0` must not match `w-0.5`.
+  assert.equal(classesOfElementWith('<span class="w-0.5"></span>', 'w-0'), null);
+});
+
 test('CONTROL: the status module is inside the real content globs', async () => {
   // The compile above replaces `content`, so it cannot see a glob mistake. If
   // src/lib stopped being scanned, every class in that module would be purged
