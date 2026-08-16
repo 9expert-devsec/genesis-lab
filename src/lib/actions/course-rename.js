@@ -52,7 +52,7 @@ import {
   countsFromPreview,
   diffAgainstPreview,
   codeTaken,
-  detectPartialRename,
+  detectRenameState,
 } from '@/lib/courses/renameCoursePlan';
 import { outlinePublicPath } from '@/lib/courses/courseOutline';
 
@@ -83,9 +83,16 @@ export async function inspectRenameState({ oldCode, newCode } = {}) {
     previewCourseCodeRename({ oldCode, newCode }),
     previewCourseCodeRename({ oldCode: newCode, newCode: oldCode }),
   ]);
-  return detectPartialRename({
+  /**
+   * `asOld.upstream` and not a third fetch: the forward preview already read
+   * the upstream catalogue for its collision check, and its `upstream` block
+   * is the unfiltered answer for BOTH codes. Taken from the forward call
+   * because its `oldCode`/`newCode` are the right way round.
+   */
+  return detectRenameState({
     oldCounts: countsFromPreview(asOld),
     newCounts: countsFromPreview(asNew),
+    upstream: asOld.upstream,
   });
 }
 

@@ -5,7 +5,8 @@ import {
   countsFromPreview,
   diffAgainstPreview,
   codeTaken,
-  detectPartialRename,
+  detectRenameState,
+  RENAME_STATE,
   RENAME_WRITE_STORES,
 } from '@/lib/courses/renameCoursePlan';
 
@@ -144,51 +145,150 @@ test('a blank code is not "taken" — that is a different error', () => {
   assert.equal(codeTaken(null, { liveCodes: ['MSE-L1'] }).taken, false);
 });
 
-// ── Half-finished detection ─────────────────────────────────────────────────
+// ── The two-sided state model ───────────────────────────────────────────────
 
-test('rows only on the OLD code → not started', () => {
-  const d = detectPartialRename({ oldCounts: counts({ article: 3 }), newCounts: counts() });
-  assert.equal(d.state, 'not-started');
-  assert.equal(d.partial, false);
-});
+/**
+ * `detectPartialRename` became `detectRenameState` when upstream joined the
+ * inputs, because the old name described one of six answers. The rename is not
+ * cosmetic: before this, `complete` was returned for a rename whose MSDB half
+ * had never happened — the screen reporting success on exactly the failure it
+ * exists to catch.
+ */
 
-test('rows only on the NEW code → complete', () => {
-  const d = detectPartialRename({ oldCounts: counts(), newCounts: counts({ article: 3 }) });
-  assert.equal(d.state, 'complete');
-  assert.equal(d.partial, false);
+const up = (hasOldCode, hasNewCode) => ({ hasOldCode, hasNewCode });
+const at = (o = {}, n = {}, upstream = up(true, false)) =>
+  detectRenameState({ oldCounts: counts(o), newCounts: counts(n), upstream });
+
+test('neither side moved → not started', () => {
+  const d = at({ article: 3 }, {}, up(true, false));
+  assert.equal(d.state, RENAME_STATE.NOT_STARTED);
+  assert.equal(d.genesis, 'old');
 });
 
 /**
- * THE CASE THAT MAKES RESUMABILITY REAL.
+ * THE NORMAL INTERVAL, and the state that used to be called `complete`.
  *
- * Idempotent steps are worth nothing if an interruption is invisible: the admin
- * sees a failed request and cannot tell whether it wrote nothing, everything,
- * or the first four stores. Naming the stores still on the old code is what
- * turns "re-run it" into an instruction rather than a hope.
+ * Genesis rows are all on the new code and MSDB is not. Everything looks
+ * finished from the genesis side, which is precisely why upstream has to be
+ * consulted before the word `complete` is used.
  */
-test('rows on BOTH → partial, and the unfinished stores are NAMED', () => {
-  const d = detectPartialRename({
-    oldCounts: counts({ scheduleLocal: 4, article: 18 }),
-    newCounts: counts({ courseExtension: 1, programOrder: 1 }),
-  });
-  assert.equal(d.state, 'partial');
+test('genesis done, upstream NOT → the interval, and it is NOT complete', () => {
+  const d = at({}, { article: 3 }, up(true, false));
+  assert.equal(d.state, RENAME_STATE.UPSTREAM_PENDING);
+  assert.notEqual(d.state, RENAME_STATE.COMPLETE);
+  assert.equal(d.genesis, 'new');
+});
+
+test('BOTH sides on the new code → complete', () => {
+  const d = at({}, { article: 3 }, up(false, true));
+  assert.equal(d.state, RENAME_STATE.COMPLETE);
+});
+
+/**
+ * THE STATE OBSERVED ON THE REAL SITE, 2026-08-16.
+ *
+ * MSDB was renamed with genesis untouched. Not a half-finished phase 1 — the
+ * reverse — and it needs its own name because the advice is the opposite: this
+ * one can be undone by renaming MSDB back.
+ */
+test('upstream moved, genesis did NOT → upstream-only, and it is not partial', () => {
+  const d = at({ article: 3 }, {}, up(false, true));
+  assert.equal(d.state, RENAME_STATE.UPSTREAM_ONLY);
+  assert.equal(d.partial, false, 'the reverse divergence must not read as an interrupted phase 1');
+  assert.equal(d.genesis, 'old');
+});
+
+test('genesis rows on BOTH codes → genesis-partial, with the unfinished stores NAMED', () => {
+  const d = at({ scheduleLocal: 4, article: 18 }, { courseExtension: 1, programOrder: 1 }, up(true, false));
+  assert.equal(d.state, RENAME_STATE.GENESIS_PARTIAL);
   assert.equal(d.partial, true);
   assert.deepEqual(d.stillOnOldCode.sort(), ['article', 'scheduleLocal'].sort());
   assert.deepEqual(d.alreadyOnNewCode.sort(), ['courseExtension', 'programOrder'].sort());
 });
 
-test('rows on neither → empty, which is not a partial', () => {
-  const d = detectPartialRename({ oldCounts: counts(), newCounts: counts() });
-  assert.equal(d.state, 'empty');
-  assert.equal(d.partial, false);
+test('an interrupted phase 1 stays partial even once upstream has moved', () => {
+  // The fix is the same either way — re-run phase 1 — so the most actionable
+  // state wins over the upstream axis.
+  const d = at({ article: 1 }, { courseExtension: 1 }, up(false, true));
+  assert.equal(d.state, RENAME_STATE.GENESIS_PARTIAL);
 });
 
-test('CONTROL: the four states are genuinely distinct', () => {
+test('upstream holding BOTH codes is a conflict, not a rename in progress', () => {
+  const d = at({ article: 3 }, {}, up(true, true));
+  assert.equal(d.state, RENAME_STATE.UPSTREAM_CONFLICT);
+});
+
+test('upstream holding NEITHER code is unknown, not "not started"', () => {
+  const d = at({ article: 3 }, {}, up(false, false));
+  assert.equal(d.state, RENAME_STATE.UNKNOWN);
+});
+
+// ── Reversibility ───────────────────────────────────────────────────────────
+
+/**
+ * THE ONE FACT THAT TELLS AN ADMIN WHETHER TO GO FORWARD OR BACK.
+ *
+ * Established by experiment: an upstream-only divergence undoes COMPLETELY by
+ * renaming MSDB back, because genesis never moved. Once genesis has written it
+ * does not — the reverse rename is refused by its own collision and formerCodes
+ * guards.
+ */
+test('REVERSIBLE exactly while genesis has not written', () => {
+  assert.equal(at({ article: 3 }, {}, up(false, true)).reversible, true, 'upstream-only must be reversible');
+  assert.equal(at({ article: 3 }, {}, up(true, false)).reversible, true, 'not-started has nothing to undo');
+  assert.equal(at({}, {}, up(true, false)).reversible, true, 'no genesis rows at all');
+
+  assert.equal(at({}, { article: 3 }, up(true, false)).reversible, false, 'the interval is NOT reversible');
+  assert.equal(at({}, { article: 3 }, up(false, true)).reversible, false, 'a completed rename is not reversible');
+  assert.equal(at({ article: 1 }, { promotion: 1 }, up(true, false)).reversible, false, 'a partial wrote something');
+});
+
+test('reversibility tracks the GENESIS side, not the upstream one', () => {
+  // Same genesis position, both upstream positions → same answer.
+  assert.equal(at({ article: 1 }, {}, up(true, false)).reversible, at({ article: 1 }, {}, up(false, true)).reversible);
+  assert.equal(at({}, { article: 1 }, up(true, false)).reversible, at({}, { article: 1 }, up(false, true)).reversible);
+});
+
+// ── Upstream not read ───────────────────────────────────────────────────────
+
+test('with NO upstream reading, the state is unknown rather than guessed', () => {
+  // Absent is not the same as "upstream has neither" — a caller that forgot to
+  // pass it must not receive a confident answer.
+  const d = detectRenameState({ oldCounts: counts({ article: 1 }), newCounts: counts() });
+  assert.equal(d.state, RENAME_STATE.UNKNOWN);
+  assert.equal(d.upstream.read, false);
+});
+
+test('a reading is marked as read, even when both answers are false', () => {
+  const d = at({ article: 1 }, {}, up(false, false));
+  assert.equal(d.upstream.read, true);
+  assert.deepEqual(
+    { hasOldCode: d.upstream.hasOldCode, hasNewCode: d.upstream.hasNewCode },
+    { hasOldCode: false, hasNewCode: false }
+  );
+});
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+test('CONTROL: every declared state is reachable', () => {
   const seen = new Set([
-    detectPartialRename({ oldCounts: counts({ article: 1 }), newCounts: counts() }).state,
-    detectPartialRename({ oldCounts: counts(), newCounts: counts({ article: 1 }) }).state,
-    detectPartialRename({ oldCounts: counts({ article: 1 }), newCounts: counts({ promotion: 1 }) }).state,
-    detectPartialRename({ oldCounts: counts(), newCounts: counts() }).state,
+    at({ article: 1 }, {}, up(true, false)).state,
+    at({}, { article: 1 }, up(true, false)).state,
+    at({}, { article: 1 }, up(false, true)).state,
+    at({ article: 1 }, {}, up(false, true)).state,
+    at({ article: 1 }, { promotion: 1 }, up(true, false)).state,
+    at({ article: 1 }, {}, up(true, true)).state,
+    at({ article: 1 }, {}, up(false, false)).state,
   ]);
-  assert.equal(seen.size, 4, 'the detector collapses states together');
+  for (const s of Object.values(RENAME_STATE)) {
+    assert.ok(seen.has(s), `${s} is unreachable — it can never be shown`);
+  }
+  assert.equal(seen.size, Object.keys(RENAME_STATE).length, 'the detector collapses states together');
+});
+
+test('CONTROL: the two axes are independent — neither alone decides the state', () => {
+  // Same genesis, different upstream → different state.
+  assert.notEqual(at({}, { article: 1 }, up(true, false)).state, at({}, { article: 1 }, up(false, true)).state);
+  // Same upstream, different genesis → different state.
+  assert.notEqual(at({ article: 1 }, {}, up(false, true)).state, at({}, { article: 1 }, up(false, true)).state);
 });
