@@ -395,9 +395,25 @@ export function CourseForm({
    * document and defaults an omitted flag to false, so relying on that default
    * would mean the field's value depends on which caller happened to omit it —
    * the same class of accident that switched the flag off on edit.
+   *
+   * ── `upstreamId` IS THE SECOND ARGUMENT, AND EVERY CALLER HAS ONE ─────────
+   * The MSDB `_id` of the course this row belongs to. It is what a later
+   * rename guard can use to tell a renamed course from a deleted-and-recreated
+   * one, and this form is the only place the two halves are ever in hand at the
+   * same moment: create has the id `createCourse` just returned, the create
+   * RETRY has the one it held onto, and edit is ROUTED by it.
+   *
+   * Passing it here rather than resolving it inside the action is the point.
+   * The action would have to look the course up BY CODE to find the id — which
+   * is the very lookup the anchor exists to stop depending on, and it would
+   * happily anchor a renamed row to whatever now holds its old code. The
+   * caller's id was not derived from the code at all.
+   *
+   * It is only ever SET INTO AN EMPTY FIELD — `saveCourseExtension` refuses to
+   * overwrite a differing anchor and logs it instead.
    */
   const saveExtensionFor = useCallback(
-    (code) =>
+    (code, upstreamId) =>
       saveCourseExtension(code, {
         urlAlias,
         metaTitle,
@@ -407,6 +423,7 @@ export function CourseForm({
         gallery: gallery.map((item, i) => ({ ...item, order: i })),
         isPublished,
         omisePaymentEnabled,
+        upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished, omisePaymentEnabled]
   );
@@ -466,7 +483,10 @@ export function CourseForm({
         // RETRY PATH: the course already exists from an earlier submit, and
         // only the extension half is outstanding. Never create twice.
         if (createdCourse) {
-          const retryRes = await saveExtensionFor(createdCourse.code);
+          // The id MSDB assigned on the first submit, held since — the retry
+          // must anchor to the course that was actually created, never to
+          // whatever the code resolves to now.
+          const retryRes = await saveExtensionFor(createdCourse.code, createdCourse.id);
           if (retryRes?.ok === true) {
             finishCreate(createdCourse.id);
             return;
@@ -522,7 +542,9 @@ export function CourseForm({
         const newId = courseRes.id ?? courseRes.item?._id ?? null;
         const code = String(courseId ?? '').trim();
 
-        const extRes = await saveExtensionFor(code);
+        // `newId` is what MSDB just returned for THIS create — the anchor is
+        // written from the same response the redirect is built from.
+        const extRes = await saveExtensionFor(code, newId);
         if (extRes?.ok === true) {
           finishCreate(newId);
           return;
@@ -575,7 +597,9 @@ export function CourseForm({
       }));
 
       // Same one definition the create path uses — see saveExtensionFor.
-      const extRes = await saveExtensionFor(courseId);
+      // `initial._id` is the ObjectId THIS ROUTE WAS OPENED WITH, so the edit
+      // save anchors a row that has none without ever consulting the code.
+      const extRes = await saveExtensionFor(courseId, initial?._id);
 
       // The joint condition lives in lib/courses/courseSaveOutcome, so the
       // "never claim success on a half-landed save" rule is one testable

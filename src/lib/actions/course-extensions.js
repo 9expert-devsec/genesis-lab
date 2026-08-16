@@ -21,6 +21,7 @@ import { duplicateKeyMessage, duplicateKeyField } from '@/lib/db/duplicateKeyMes
 import { aliasConflict, normaliseAlias, legacyPathOwner } from '@/lib/courses/aliasAvailability';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
+import { resolveAnchorWrite, ANCHOR } from '@/lib/courses/upstreamAnchorPlan';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -332,6 +333,47 @@ export async function saveCourseExtension(courseId, data) {
     // absent flag means VISIBLE.
     const beforeDoc = await CourseExtension.findOne({ courseId }).lean();
     const before = extensionFields(beforeDoc);
+
+    /**
+     * ── THE UPSTREAM ANCHOR, SET ONLY INTO AN EMPTY FIELD ──────────────────
+     *
+     * `update` above names every field it writes, and a field it names is
+     * written whether or not the caller supplied one — that is the shape that
+     * blanks an omitted value, and it is exactly what must NOT happen to an
+     * identity field. Two of this action's three callers cannot know the
+     * upstream `_id`: the payment tab (ExtensionEditor) is routed by the CODE
+     * and has never seen one. If `upstreamId` sat in `update` unconditionally,
+     * saving the payment toggle would erase the anchor of every course.
+     *
+     * So it is decided here, against what is already stored, and added to the
+     * write only when there is something to add:
+     *
+     *   nothing supplied      → the key is not written at all. Untouched.
+     *   stored is empty       → written.
+     *   stored is the same    → not written; there is nothing to change.
+     *   stored DISAGREES      → NOT WRITTEN, and logged. The stored anchor was
+     *                           recorded while both sides still agreed and is
+     *                           the older, more trustworthy claim; the code is
+     *                           the thing known to drift. Last-write-wins on an
+     *                           identity field is how a merge happens quietly.
+     *
+     * The save itself is about SEO and is not failed over a disagreement — the
+     * admin came here to edit a meta description, and refusing that would not
+     * make the anchor any more correct. The disagreement is a finding for
+     * whoever reads the log, and for the backfill's report.
+     */
+    const anchor = resolveAnchorWrite({
+      stored: beforeDoc?.upstreamId,
+      supplied: data?.upstreamId,
+    });
+    if (anchor.action === ANCHOR.SET) {
+      update.upstreamId = anchor.value;
+    } else if (anchor.action === ANCHOR.CONFLICT) {
+      console.error(
+        `[saveCourseExtension] upstream anchor DISAGREES for courseId=${courseId}: `
+        + `stored=${anchor.stored} supplied=${anchor.value} — keeping stored, writing neither`
+      );
+    }
 
     const doc = await CourseExtension.findOneAndUpdate({ courseId }, update, {
       upsert: true,
