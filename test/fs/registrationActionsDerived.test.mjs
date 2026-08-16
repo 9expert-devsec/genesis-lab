@@ -254,14 +254,66 @@ test('there is exactly ONE producer of an edit affordance, and it is gated', () 
     'the one onEdit is not gated on readOnly');
 });
 
+/**
+ * ── WIDENED IN ROUND 5, NOT RELAXED ────────────────────────────────────────
+ *
+ * A `<SectionCard>` that takes an `onSave` is an editable card and every one of
+ * them must be gated. Round 4 counted `{...editProps(` literally, which was true
+ * while every card spread the call inline.
+ *
+ * The attendee card now takes the gate ONCE into a const, because its
+ * + เพิ่มผู้เข้าอบรม button has to read the same `onEdit` the card header reads —
+ * calling `editProps('attendees')` a second time for that button would have been
+ * a second call site of the gate, which is exactly the shape that lets a future
+ * control be added beside it WITHOUT one.
+ *
+ * So the scan follows the value rather than the spelling: it collects every name
+ * assigned from `editProps(...)` and counts spreads of the call OR of those
+ * names. That is stricter than the literal count — a spread of some OTHER object
+ * would now be counted as ungated, where before it was simply invisible.
+ */
 test('every editable card goes through that gate', () => {
-  // A `<SectionCard>` that takes an `onSave` is an editable card, and every one
-  // of them must spread `editProps`. Counted rather than eyeballed: this is the
-  // arithmetic half the old test had, kept, on top of the uniqueness claim above.
   const editable = (DETAIL.code.match(/onSave=\{/g) ?? []).length;
-  const spread   = (DETAIL.code.match(/\{\.\.\.editProps\(/g) ?? []).length;
   assert.ok(editable > 0, 'no editable card found — the scan is looking at the wrong thing');
-  assert.equal(spread, editable, `${editable} cards can save but only ${spread} take the gate`);
+
+  const aliases = [...DETAIL.code.matchAll(/const (\w+)\s*=\s*editProps\(/g)].map((m) => m[1]);
+  const direct  = (DETAIL.code.match(/\{\.\.\.editProps\(/g) ?? []).length;
+  const viaAlias = aliases.reduce(
+    (sum, name) => sum + (DETAIL.code.match(new RegExp(String.raw`\{\.\.\.${name}\}`, 'g')) ?? []).length,
+    0,
+  );
+
+  assert.equal(direct + viaAlias, editable,
+    `${editable} cards can save but only ${direct + viaAlias} are gated `
+    + `(${direct} spread the call, ${viaAlias} spread one of [${aliases.join(', ')}])`);
+});
+
+test('CONTROL: the alias scan is doing work, not passing on the direct count alone', () => {
+  // If no card ever took the gate into a const, the widening above would be
+  // inert and the literal round-4 count would be doing all the work. This says
+  // the second form is genuinely in use, so the branch that reads it is live.
+  const aliases = [...DETAIL.code.matchAll(/const (\w+)\s*=\s*editProps\(/g)].map((m) => m[1]);
+  assert.ok(aliases.length > 0,
+    'no card takes the gate into a const — the alias branch above is inert');
+  for (const name of aliases) {
+    assert.match(DETAIL.code, new RegExp(String.raw`\{\.\.\.${name}\}`),
+      `${name} is assigned from editProps but never spread — a gate that gates nothing`);
+  }
+});
+
+/**
+ * THE + เพิ่มผู้เข้าอบรม BUTTON IS THE CARD'S GATE, NOT A SECOND ONE.
+ *
+ * It is an edit affordance in a place the card-header scan does not look, and
+ * round 1's ruling is that a cancelled record offers NO edit affordance
+ * anywhere. Asserted at source as well as in the render tier, because a render
+ * assertion can only see the states a fixture reaches.
+ */
+test('the + เพิ่มผู้เข้าอบรม button reads the card’s edit gate', () => {
+  assert.match(DETAIL.code, /attendeeEdit\.onEdit \?/,
+    'the + button does not branch on the card’s own edit gate');
+  assert.match(DETAIL.code, /onClick=\{\(\) => \{ attendeeEdit\.onEdit\(\); addAttendee\(\); \}\}/,
+    'the + button no longer opens the editor through the gate it was given');
 });
 
 test('the shell renders NO control when there is nothing to do, rather than a disabled one', () => {
@@ -407,5 +459,75 @@ test('both detail clients import the shell rather than re-declaring it', () => {
     assert.ok(!/function CardEditable\(/.test(src.code), `${name}: a local CardEditable is back`);
     assert.ok(!/function Card\(/.test(src.code),        `${name}: a local Card is back`);
     assert.ok(!/function Row\(/.test(src.code),         `${name}: a local Row is back`);
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROUND 5, SECTION 0 — TWO THINGS IN THE FRAMES THAT ARE NOT THE PRODUCT
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ── (a) THE MOCKUP'S OWN SAMPLE-SWITCHERS ──────────────────────────────────
+ *
+ * Both round-5 frames put a pair of dropdowns — ตัวอย่างข้อมูล and ตัวอย่างสถานะ
+ * — at the top right of the header. They are the Figma file's controls for
+ * viewing states while designing, not the product's, and building them would put
+ * a "pretend this record is cancelled" selector on a live admin screen.
+ *
+ * A ruling that costs nothing to obey is exactly the kind a future reader
+ * re-derives from the frame and builds anyway, so it is written down as an
+ * assertion rather than only as a decision.
+ */
+test('neither detail screen builds the frame’s sample-data switchers', () => {
+  for (const { name, src } of CLIENTS) {
+    for (const control of ['ตัวอย่างข้อมูล', 'ตัวอย่างสถานะ']) {
+      assert.ok(!src.raw.includes(control),
+        `${name}: the mockup's own sample-switcher "${control}" was built as a product control`);
+    }
+  }
+  // Read locally rather than from a shared const: the shell-purity block above
+  // scopes its own `SHELL` inside a test, and reaching into another test's scope
+  // is how a rename makes an assertion silently stop running.
+  const shell = readSource('src/app/admin/registrations/_components/detailShell.jsx');
+  for (const control of ['ตัวอย่างข้อมูล', 'ตัวอย่างสถานะ']) {
+    assert.ok(!shell.raw.includes(control), `the shell built "${control}"`);
+  }
+});
+
+/**
+ * ── (b) ส่งใบเสนอราคาอีกครั้ง IS NOT A STATUS TRANSITION ───────────────────
+ *
+ * Both frames show it as the primary action on a quoted record. RULED OUT:
+ * re-sending a quotation is a REPEAT ACTION, not a move between states. There is
+ * no implementation behind it, no audit action to record it (the trail carries
+ * `status`, `update`, `notes` and `delete` and nothing else), and no rate limit
+ * on a control that would send customer mail.
+ *
+ * The interesting part is that no code changed to obey this. The primary slot is
+ * DERIVED — it holds the first permitted move that is not terminal — and a
+ * `quoted` record's only permitted move is its cancellation, which is terminal
+ * and therefore already in the menu. So the frame's button has nowhere to come
+ * from, and the guard is that nobody hand-writes one beside the derivation.
+ */
+test('no screen offers a re-send action', () => {
+  for (const { name, src } of CLIENTS) {
+    assert.ok(!src.raw.includes('อีกครั้ง'),
+      `${name}: a repeat-send action was built — it is not a status transition`);
+  }
+});
+
+test('the primary slot is still fed ONLY by the transition table', () => {
+  /**
+   * The other half: a repeat action would have to reach the primary slot from
+   * somewhere, and the only thing that feeds it is `primaryTarget`. If a second
+   * expression ever renders into that slot, this says so — which is what stops
+   * the ruling above being obeyed in the letter and broken in the spirit.
+   */
+  for (const { name, src } of CLIENTS) {
+    const uses = (src.code.match(/primary=\{/g) ?? []).length;
+    assert.equal(uses, 1, `${name}: the status bar's primary slot is fed from ${uses} places`);
+    assert.match(src.code, /primary=\{primaryTarget \? \(/,
+      `${name}: the primary slot no longer branches on the derived target alone`);
   }
 });
