@@ -80,6 +80,74 @@ test('the page is deliberately NOT a sidebar entry, and IS linked from /admin/me
   );
 });
 
+/**
+ * THE ONLY WAY IN HAS TO LOOK LIKE ONE.
+ *
+ * The assertion above proves a link EXISTS. It passed while that link was a
+ * single line of blue text tucked under the page description, above a file
+ * browser that owns the entire visual weight of the screen — so "reachable"
+ * and "findable" came apart, and the test could not tell them apart either.
+ *
+ * This pins the shape: a heading, the three published paths, and a real button
+ * — rendered ABOVE the browser rather than beneath the prose. It is a source
+ * scan, so it proves the markup is written, not that a human notices it; that
+ * limit is the reason the assertions below are about STRUCTURE (an element
+ * carrying the primary-button classes) rather than about prominence, which no
+ * scan can measure.
+ */
+test('the entry point is a CARD above the browser, not a line of text under the prose', () => {
+  const { code } = readSource(MEDIA_PAGE);
+
+  // A section element carrying the card classes this admin already uses.
+  assert.match(
+    code,
+    /<section className="[^"]*rounded-9e-lg border border-\[var\(--surface-border\)\][^"]*">/,
+    'the entry point is not a card — it should use the same card styling as the rest of /admin',
+  );
+
+  // The link is the PRIMARY BUTTON style, not bare underlined text.
+  const link = /<Link\s+href="\/admin\/media\/webroot-documents"[\s\S]{0,400}?<\/Link>/.exec(code)?.[0];
+  assert.ok(link, 'the link to the webroot page is gone');
+  assert.match(link, /bg-9e-action/, 'the way in is not styled as a button');
+  assert.match(link, /font-bold text-white/, 'the button does not use the primary button treatment');
+
+  // It sits ABOVE the file browser.
+  const cardAt = code.indexOf('<section');
+  const browserAt = code.indexOf('<MediaClient');
+  assert.ok(cardAt > -1 && browserAt > -1, 'the page changed shape');
+  assert.ok(cardAt < browserAt, 'the entry section renders below the file browser');
+});
+
+test('the three filenames are SINGLE-SOURCED, never retyped on the media page', () => {
+  /**
+   * Retyping them would be a fourth copy of a list that the rewrites, the
+   * upload target and both models already read — and the copy nobody would
+   * think to update is the one on a screen that only says what exists.
+   */
+  const { code, withImports } = readSource(MEDIA_PAGE);
+  assert.match(
+    withImports, /import \{ WEBROOT_DOCUMENTS, webrootPublicPath \} from '@\/lib\/webrootDocuments\.mjs'/,
+    'the media page does not read the frozen document list',
+  );
+  assert.match(code, /WEBROOT_DOCUMENTS\.map\(/, 'the list is imported but not rendered');
+  for (const literal of ['9expert-company-profile.pdf', 'how-to-create-chatgpt-account.pdf']) {
+    assert.equal(
+      code.includes(literal), false,
+      `"${literal}" is hardcoded on the media page — it must come from WEBROOT_DOCUMENTS`,
+    );
+  }
+});
+
+test('the webroot page carries a back-link to /admin/media', () => {
+  // It is a nested route with no sidebar entry of its own, so the only way back
+  // to where the admin came from is a link on the page.
+  const { code } = readSource(PAGE);
+  assert.match(
+    code, /<Link\s+href="\/admin\/media"/,
+    'the nested page has no way back to /admin/media',
+  );
+});
+
 // ── 2. the page cannot choose a pathname ────────────────────────────────────
 
 test('the client sends a receipt id and NOTHING else in clientPayload', () => {
