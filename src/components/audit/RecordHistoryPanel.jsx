@@ -5,8 +5,8 @@ import { ChevronDown, ChevronRight, History, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { rowHealth } from '@/lib/audit/auditHealth';
 import {
-  fmtWhen, preview, rowSeverity, severityRowClass,
-  SeverityIcon, AuditRowDetail, ActionChip,
+  fmtWhen, rowSeverity, severityRowClass,
+  SeverityIcon, AuditRowDetail, ActionChip, AuditDiff,
 } from '@/components/audit/auditRowParts';
 import { HISTORY_STATE } from '@/lib/audit/auditQuery';
 
@@ -126,9 +126,10 @@ function HistoryLine({ row, isOpen, onToggle }) {
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <ActionChip action={row.action} />
-            <span className="font-mono text-xs text-[var(--text-secondary)]">
-              {preview(row.before)} <span className="text-[var(--text-muted)]">→</span> {preview(row.after)}
-            </span>
+            {/* NOTHING at all when the row records no before/after — see the
+                note on `hasDiff`. A field edit deliberately carries no payload
+                (PII), and `— → —` read as a broken row. */}
+            <AuditDiff row={row} />
           </span>
           <span className="mt-1 block text-xs text-[var(--text-muted)]">
             {fmtWhen(row.createdAt)} · {row.actor?.name || 'ไม่ทราบผู้ดำเนินการ'}

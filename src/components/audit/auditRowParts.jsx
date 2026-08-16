@@ -91,6 +91,69 @@ export function preview(value) {
   return `{${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''}}`;
 }
 
+/**
+ * Does this row actually RECORD a change, as opposed to recording that one
+ * happened?
+ *
+ * ── THE ROW THAT READ `update — → —` ────────────────────────────────────────
+ *
+ * A field edit on a registration renders — rendered — as `update` followed by
+ * `— → —`: an arrow between two dashes, which reads as a broken row. The data is
+ * correct and the emptiness is DELIBERATE. lib/actions/registrations.js records
+ * no before/after for a field edit, and its own comment says why at length:
+ *
+ *     "THE ACT ONLY. This edits the record wholesale — the `update` object can
+ *      carry the customer's name, email, phone, tax id and every attendee's
+ *      contact details. None of it goes in the trail. Which FIELDS changed is
+ *      answerable from a backup; who edited the registration and when is not."
+ *
+ * The audit collection is append-only and presently forever, so a payload copied
+ * into it cannot be redacted when a deletion request arrives. Status transitions
+ * are the ONE exception — `{status}` is a short enum with no personal data in it
+ * — and everything else records the act and the id.
+ *
+ * ── SO THIS IS A DISPLAY FIX AND NOT A DATA ONE ────────────────────────────
+ *
+ * The row is not wrong and it is not missing. What is wrong is that the
+ * PRESENTATION promises a diff and then has none to show. A row with nothing
+ * recorded should read as what it is — an edit was made, by whom, when — which
+ * is what the action chip and the actor line already say.
+ *
+ * Do NOT "complete" this by adding the diff. The reason it is empty is in the
+ * action, in a comment, and it is a privacy decision rather than an oversight.
+ * Do NOT remove the row either: that an edit happened is exactly the fact the
+ * trail exists to hold.
+ *
+ * Status transitions keep their `pending → cancelled` rendering, which is
+ * readable and carries the round-2 legacy label map through `preview`.
+ */
+export function hasDiff(row) {
+  return row?.before != null || row?.after != null;
+}
+
+/**
+ * The compact `before → after` line, or NOTHING.
+ *
+ * ── IT RETURNS `null`, NOT AN EMPTY ELEMENT ────────────────────────────────
+ * A `<span></span>` standing in for the missing diff would satisfy every
+ * assertion that reads for the ABSENCE of a dash while leaving the row exactly
+ * as broken — invisible to text matching, which is why the guard on this is
+ * written against element SHAPE rather than against the string "—".
+ *
+ * Shared by both surfaces on purpose. This module's whole premise is that the
+ * central page and the inline panel differ in their CONTAINER and in nothing
+ * inside it; a diff line fixed on one and left alone on the other is the second
+ * severity scheme that premise exists to prevent.
+ */
+export function AuditDiff({ row }) {
+  if (!hasDiff(row)) return null;
+  return (
+    <span className="font-mono text-xs text-[var(--text-secondary)]">
+      {preview(row.before)} <span className="text-[var(--text-muted)]">→</span> {preview(row.after)}
+    </span>
+  );
+}
+
 /** The worst level among a row's flags, or null when it is clean. */
 export function rowSeverity(flags = []) {
   if (flags.some((f) => HEALTH_LEVEL[f] === 'red')) return 'red';
