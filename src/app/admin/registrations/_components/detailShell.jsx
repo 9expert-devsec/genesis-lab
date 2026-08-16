@@ -241,8 +241,20 @@ export function PrimaryAction({ children, title, onClick, disabled, busy }) {
  * precisely the shape the empty-button guard exists to catch — a real, clickable
  * control that matches no text assertion anywhere. Two rounds of this work have
  * each found one.
+ *
+ * ── `compact` IS THE ROW MENU, AND IT IS THE SAME COMPONENT ON PURPOSE ─────
+ * The attendee table's per-row menu sits in a 32px column, so its trigger is
+ * 28x28 rather than 39x38 and its sheet hangs from a shorter offset. Everything
+ * else about it — the always-in-the-DOM items, the `hidden` attribute, the
+ * screen-reader text on the trigger and the backdrop — is identical, and that is
+ * the reason it is a size variant rather than a second component. Three rounds
+ * of this work have each found an empty-content defect in a menu; a second
+ * implementation would be a second place to find a fourth.
+ *
+ * Both class strings are written out in full rather than composed, because
+ * Tailwind scans source TEXT and an interpolated size compiles to nothing.
  */
-export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, children }) {
+export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, compact = false, children }) {
   return (
     <div className="relative">
       <button
@@ -250,9 +262,14 @@ export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, childre
         onClick={onToggle}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="inline-flex h-[38px] w-[39px] items-center justify-center rounded-9e-md border border-[var(--surface-border)] text-[var(--text-secondary)] transition-colors hover:text-9e-action"
+        className={cn(
+          'inline-flex items-center justify-center rounded-9e-md text-[var(--text-secondary)] transition-colors hover:text-9e-action',
+          compact
+            ? 'h-[28px] w-[28px]'
+            : 'h-[38px] w-[39px] border border-[var(--surface-border)]',
+        )}
       >
-        <MoreHorizontal aria-hidden="true" className="h-[16px] w-[16px]" />
+        <MoreHorizontal aria-hidden="true" className={compact ? 'h-[14px] w-[14px]' : 'h-[16px] w-[16px]'} />
         <span className="sr-only">{triggerLabel}</span>
       </button>
 
@@ -265,9 +282,53 @@ export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, childre
       <div
         role="menu"
         hidden={!open}
-        className="absolute right-0 top-[42px] z-50 w-[200px] overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-[4px] shadow-9e-md"
+        className={cn(
+          'absolute right-0 z-50 w-[200px] overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-[4px] shadow-9e-md',
+          compact ? 'top-[30px]' : 'top-[42px]',
+        )}
       >
         {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The attendee tab's summary row — 75.85px, THREE EQUAL CELLS.
+ *
+ * ── THIS IS NOT THE DARK STRIP, AND THE DIFFERENCE IS THE MEASUREMENT ──────
+ * `SummaryStrip` above has CONTENT-WIDTH cells because its values are a course
+ * name beside "3 ท่าน" and equal fractions would read as a row of tiles. This
+ * row's three values are all short counts, the frame gives them 359.46px each at
+ * 1080 — exactly a third — and equal columns are what make three numbers
+ * comparable at a glance. So `flex-1` here where the strip has none, and a 1px
+ * inset at the ends rather than 4px.
+ *
+ * What the two share is that the cells sit FLUSH and are divided by RULES, not
+ * by gaps. A separate component rather than a flag on the other, because "equal
+ * or content-width" is the whole shape of the thing and a boolean would make one
+ * component answer two different measurements.
+ *
+ * ── ONE STATED DEVIATION FROM THE FRAME ────────────────────────────────────
+ * The frame's value type is ~27px in a 30px block. THAI CLIPS AT THAT RATIO:
+ * `ยังไม่ครบ` carries an upper tone mark and `ครบ 2/2` sits in the same cell, and
+ * 27px of type in a 30px line leaves nothing above the base characters for it.
+ * The type is 24px, which is the ratio the dark strip already ships
+ * (20px in a 23.5px line) and clears the marks at this leading. The BLOCK is
+ * 30px as measured; it is the type inside it that moved.
+ */
+export function EqualSummaryRow({ cells }) {
+  return (
+    <div className="flex h-[75.85px] items-stretch overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] px-[1px] py-[1px]">
+      <div className="flex min-w-0 flex-1 divide-x divide-[var(--surface-border)]">
+        {cells.map((cell) => (
+          <div key={cell.key} className="min-w-0 flex-1 px-[17px] pt-[15px]">
+            <p className="truncate text-[11px] leading-[15px] text-[var(--text-muted)]">{cell.label}</p>
+            <p className="h-[30px] truncate text-[24px] font-bold leading-[30px] text-[var(--text-primary)]">
+              {cell.value}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -1298,7 +1298,22 @@ const DETAIL_PUBLIC_DOC = {
   coordinator: { firstName: 'สมชาย', lastName: 'ใจดี', email: 'a@b.c', phone: '08', isAttending: true },
   attendeesListProvided: true,
   attendeesCount: 2,
-  attendees: [{ firstName: 'ส', lastName: 'ช', email: 'a@b.c', phone: '08' }],
+  /**
+   * THREE ATTENDEES, ONE PER COMPLETENESS STATE — the same reason the list
+   * screens' harvest renders both ScheduleBadge branches. `AttendeeInfoChip`
+   * picks its class from a map keyed by the state, so a fixture carrying only
+   * complete rows exercises one entry and the other two could be interpolated
+   * with nothing going red.
+   *
+   * The blank row is also the one with NO email, which is the branch where the
+   * per-row menu drops its copy item — so the compact menu renders in both its
+   * one-item and two-item shapes here.
+   */
+  attendees: [
+    { firstName: 'ส', lastName: 'ช', email: 'a@b.c', phone: '08' },
+    { firstName: 'ส', lastName: 'ญ', email: 'c@d.e', phone: '' },
+    { firstName: '',  lastName: '',  email: '',      phone: '' },
+  ],
   requestInvoice: true,
   invoice: { type: 'corporate', country: 'TH', companyName: 'บ.', branchType: 'head_office', taxId: '0105551234567', thaiAddress: { addressLine: 'x', subDistrict: 'y', district: 'z', province: 'w', postalCode: '10110' } },
   notes: 'โทรยืนยันแล้ว',
@@ -1409,6 +1424,13 @@ test('the measured geometry really is in the harvest, not merely a large count',
     'w-[21px]',   // the count badge
     'h-[43px]',   // the section-card header row
     'gap-x-[36px]', // the two 500px DL columns
+    // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
+    'h-[75.85px]', // the three-cell summary row
+    'h-[48.3px]',  // one attendee row
+    'h-[21.5px]',  // the สถานะข้อมูล chip
+    'w-[92.6px]',  // the + เพิ่มผู้เข้าอบรม button
+    'h-[32.6px]',  // ...and its height
+    'h-[28px]',    // the compact per-row "•••" trigger
   ]) {
     assert.ok(classes.has(measured), `the render carries no ${measured} — a measured element is missing`);
   }

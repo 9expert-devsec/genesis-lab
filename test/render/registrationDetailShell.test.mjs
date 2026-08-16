@@ -562,22 +562,34 @@ test('a note with no content renders a sentence, not an empty quoted block', () 
  *
  * The attendee table has THE SAME SHAPE and it was read rather than assumed:
  *
- *   <thead>  ATTENDEE_COLUMNS.map(...)   derived
- *   <tbody>  four hand-written <td>s     NOT derived
+ *   <colgroup>  ATTENDEE_COLUMNS.map(...)   derived
+ *   <thead>     ATTENDEE_COLUMNS.map(...)   derived
+ *   <tbody>     FIVE hand-written <td>s     NOT derived
  *
  * so the guard applies unchanged and is ported.
  *
- * ── AND WHAT DIFFERS, SO THE REST IS NOT PORTED UNEXAMINED ─────────────────
- * The list tables are `table-fixed` with a `<colgroup>` carrying measured
- * proportions, and three of their assertions read that colgroup: the `<col>`
- * count, the ratio test, and the สถานะ width floor. THIS TABLE HAS NO COLGROUP
- * AND NO SPECIFIED PROPORTIONS — four columns of ordinary content, sized by the
- * browser — so those three have nothing to read and are deliberately absent
- * rather than adapted into assertions about numbers nobody measured.
+ * ── RE-POINTED FROM FOUR COLUMNS TO FIVE, WHICH IS THE GUARD WORKING ──────
+ * Round 4's table was ท่านที่ / ชื่อ / อีเมล / เบอร์โทร. The measured set is
+ * # / ชื่อ-นามสกุล / ข้อมูลติดต่อ / สถานะข้อมูล / •••, and this assertion is what
+ * went red when the body was rebuilt — which is the whole reason it exists. The
+ * number is exact rather than a floor, for the reason the list tables state: a
+ * floor is satisfied by adding a column back.
  *
- * The empty-state row is absent for the same kind of reason: this table only
- * renders when `attendees.length > 0`, and the two other cases (opted out, no
- * data) are sentences rather than a table with a colSpan.
+ * ── AND WHAT CHANGED ABOUT WHAT IS PORTABLE ──────────────────────────────
+ * Round 4 recorded that this table had NO colgroup and no specified proportions,
+ * so the list tables' `<col>`-count and ratio assertions had nothing to read.
+ * The measured column set gives it a colgroup, so the `<col>` COUNT is now
+ * readable and is asserted below.
+ *
+ * The RATIO test is still NOT ported, and that is a live distinction rather than
+ * an omission: the list tables pin six and seven specified shares against the
+ * design's own total, where this table has three shares (88%) plus two FIXED
+ * columns. That is a different arithmetic and the width assertion below makes
+ * the claim directly instead of borrowing a test written for another shape.
+ *
+ * The empty-state row is absent for the same kind of reason as before: this
+ * table only renders when `attendees.length > 0`, and the two other cases
+ * (opted out, no data) are sentences rather than a table with a colSpan.
  */
 test('the attendee table’s body rows have exactly as many cells as its header', () => {
   const table = PUB_FULL.slice(PUB_FULL.indexOf('<table'), PUB_FULL.indexOf('</table>'));
@@ -585,7 +597,7 @@ test('the attendee table’s body rows have exactly as many cells as its header'
 
   const head = table.slice(table.indexOf('<thead'), table.indexOf('</thead>'));
   const headers = (head.match(/<th\b/g) ?? []).length;
-  assert.equal(headers, 4, `expected 4 header cells, found ${headers}`);
+  assert.equal(headers, 5, `expected 5 header cells, found ${headers}`);
 
   const body = table.slice(table.indexOf('<tbody'), table.indexOf('</tbody>'));
   const rows = body.split('<tr').slice(1);
@@ -594,19 +606,69 @@ test('the attendee table’s body rows have exactly as many cells as its header'
   rows.forEach((row, i) => {
     const cells = (row.match(/<td\b/g) ?? []).length;
     assert.equal(cells, headers,
-      `attendee row ${i} has ${cells} cells against ${headers} header cells. The header is derived from `
-      + 'ATTENDEE_COLUMNS and the body cells are hand-written, so they do not follow.');
+      `attendee row ${i} has ${cells} cells against ${headers} header cells. The colgroup and the header `
+      + 'are derived from ATTENDEE_COLUMNS and the body cells are hand-written, so they do not follow.');
   });
 });
 
-test('an attendee with a name and nothing else renders dashes, not empty cells', () => {
-  // A table CELL may not simply vanish — the column would misalign — so the
-  // attendee table is the one place on these screens where a dash is right, and
-  // this pins that it is a dash rather than a blank.
+test('the colgroup has one <col> per header cell', () => {
+  // The third half of the same disagreement. A column added to ATTENDEE_COLUMNS
+  // grows BOTH of these together, so on its own this proves little — its value
+  // is that it fails LOUDLY if somebody hand-writes a `<col>` to fix a width.
+  const table = PUB_FULL.slice(PUB_FULL.indexOf('<table'), PUB_FULL.indexOf('</table>'));
+  const cols = (table.match(/<col\b/g) ?? []).length;
+  const headers = (table.slice(table.indexOf('<thead'), table.indexOf('</thead>')).match(/<th\b/g) ?? []).length;
+  assert.equal(cols, headers, `${cols} <col> elements against ${headers} header cells`);
+});
+
+test('only the two FIXED columns are px; the three content columns are proportions', () => {
+  /**
+   * The requirement is that the layout survives the admin sidebar collapsing, so
+   * a px width on a CONTENT column is the defect. The row number and the menu
+   * are fixed by the measurement (30px and 32px) and must stay so — a `#` column
+   * that grew with the table would be 100px of nothing.
+   */
+  const table = PUB_FULL.slice(PUB_FULL.indexOf('<table'), PUB_FULL.indexOf('</table>'));
+  const widths = [...table.matchAll(/<col style="width:([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(widths.length, 5, `expected 5 <col> widths, found ${widths.length}`);
+
+  assert.match(widths[0], /^30px$/, `the # column is not fixed at 30px: ${widths[0]}`);
+  assert.match(widths[4], /^32px$/, `the menu column is not fixed at 32px: ${widths[4]}`);
+  for (const w of widths.slice(1, 4)) {
+    assert.ok(w.includes('calc(') && w.includes('100%'),
+      `a content column is not a proportion of the table: ${w}`);
+  }
+
+  // And the three ratios sum to 1, or the content columns do not fill the row.
+  const ratios = widths.slice(1, 4).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
+  assert.ok(Math.abs(ratios.reduce((a, b) => a + b, 0) - 1) < 1e-5,
+    `the content ratios sum to ${ratios.reduce((a, b) => a + b, 0)}, not 1`);
+  // The measured shares, normalised: 30.8 / 35.2 / 22.0 out of 88.
+  [30.8, 35.2, 22.0].forEach((share, i) => {
+    assert.ok(Math.abs(ratios[i] - share / 88) < 1e-5,
+      `column ${i + 1} has ratio ${ratios[i]}, expected ${(share / 88).toFixed(6)}`);
+  });
+});
+
+test('an attendee with a name and no contact details renders ONE dash, not empty cells', () => {
+  /**
+   * A table CELL may not simply vanish — the column would misalign — so the
+   * attendee table is the one place on these screens where a dash is right, and
+   * this pins that it is a dash rather than a blank.
+   *
+   * ── RE-POINTED FROM TWO DASHES TO ONE, AND THAT IS THE COLUMN SET ─────────
+   * Round 4's table had separate อีเมล and เบอร์โทร columns, so a name-only row
+   * showed two dashes. The measured set merges them into ONE ข้อมูลติดต่อ cell
+   * holding the email over the phone, so the same row now shows one. The claim
+   * is unchanged — the cell falls back rather than emptying — and the
+   * empty-element guard over the whole page is what proves the fallback is a
+   * dash rather than a blank element.
+   */
   const table = PUB_SPARSE.slice(PUB_SPARSE.indexOf('<table'), PUB_SPARSE.indexOf('</table>'));
   const body = table.slice(table.indexOf('<tbody'), table.indexOf('</tbody>'));
   assert.ok(body.includes('ปรีชา ตั้งใจ'), 'the attendee name did not render');
-  assert.equal((body.match(/>—</g) ?? []).length, 2, 'the missing email and phone did not render a dash each');
+  assert.equal((body.match(/>—</g) ?? []).length, 1,
+    'the missing contact details did not render exactly one dash');
 });
 
 test('the coordinator marker is a suffix inside the name cell, not a line of its own', () => {

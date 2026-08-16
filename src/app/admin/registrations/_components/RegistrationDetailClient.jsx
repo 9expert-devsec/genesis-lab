@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Trash2, X, Plus, GraduationCap, User, Users, Receipt,
+  Trash2, X, Plus, Pencil, Copy, GraduationCap, User, Users, Receipt,
   CreditCard, StickyNote, Database, ClipboardList, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,8 +19,12 @@ import {
 import { refNo } from '@/lib/refNo';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import {
+  attendeeInfoState, missingAttendeeFields, rosterState,
+} from '@/lib/registrations/attendeeInfo';
+import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
-  SummaryStrip, TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
+  SummaryStrip, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
+  DL, DLRow, QuotedNote, DetailError,
 } from './detailShell';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -125,6 +129,43 @@ function scheduleLabel(scheduleType, attendanceMode) {
 const EMPTY_ATTENDEE = { firstName: '', lastName: '', email: '', phone: '' };
 
 /**
+ * The สถานะข้อมูล chip's colours, keyed by the per-attendee completeness state.
+ *
+ * ── THIS IS NOT THE STATUS VOCABULARY AND MUST NEVER JOIN IT ───────────────
+ * Its keys are `complete` / `partial` / `empty`, which describe ONE ATTENDEE'S
+ * FIELDS. `lib/registrations/statuses` describes what stage a REGISTRATION is
+ * at. They share no value and answer no common question, so an entry for one in
+ * the other would be a category error — the same ruling `SCHEDULE_BADGE` on the
+ * public list table already carries, and a test pins both.
+ *
+ * The fallback is a real colour rather than '': a chip with no background is
+ * invisible against the row, so an unrecognised state would read as an EMPTY
+ * CELL rather than as a state nobody has styled. Grey says "unknown", blank says
+ * "nothing here", and only one of those is true.
+ */
+const INFO_BADGE = {
+  complete: 'bg-emerald-100 text-emerald-700',
+  partial:  'bg-amber-100 text-amber-700',
+  empty:    'bg-slate-100 text-slate-500',
+};
+
+const INFO_LABEL = {
+  complete: 'ข้อมูลครบ',
+  partial:  'ข้อมูลไม่ครบ',
+  empty:    'ยังไม่กรอก',
+};
+
+const INFO_NEUTRAL_BADGE = 'bg-slate-100 text-slate-600';
+
+/** The Thai names of the four attendee fields, for the incomplete row's hint. */
+const FIELD_LABEL = {
+  firstName: 'ชื่อ',
+  lastName:  'นามสกุล',
+  email:     'อีเมล',
+  phone:     'เบอร์โทร',
+};
+
+/**
  * A monospace identifier — or NOTHING, so `DLRow` can drop the row.
  *
  * ── MEASURED, NOT ANTICIPATED ──────────────────────────────────────────────
@@ -201,6 +242,9 @@ export function RegistrationDetailClient({ doc, history = null }) {
   const [editSection,  setEditSection]  = useState(null); // 'course'|'coordinator'|'attendees'|'notes'|'invoice'|null
   const [tab,          setTab]          = useState(TABS[0].key);
   const [menuOpen,     setMenuOpen]     = useState(false);
+  // Which attendee row's "•••" is open, by index. One at a time, like the
+  // status bar's menu — two open sheets on one screen is a state nobody wants.
+  const [openAttendeeRow, setOpenAttendeeRow] = useState(null);
   const [error,        setError]        = useState(null);
   const [busy,         setBusy]         = useState(null);
   const [, startTransition] = useTransition();
@@ -410,15 +454,24 @@ export function RegistrationDetailClient({ doc, history = null }) {
    * derivation is therefore free, and the strip is where "is the roster
    * complete" is actually the question.
    *
-   * A row is counted as filled when it carries a name or an email. An attendee
-   * object created by the editor and left blank is not a name on a roster.
+   * ── THE DERIVATION MOVED OUT IN ROUND 5, AND THAT WAS FORCED ─────────────
+   * The attendee TAB's ความครบถ้วน cell asks this same question three inches
+   * below the strip. Round 4 computed it here in four lines; a second copy in
+   * the tab would be two derivations of one number on one page, which is how a
+   * screen comes to answer one question two ways — the defect this whole branch
+   * keeps removing.
+   *
+   * `rosterState` in lib/registrations/attendeeInfo is now the only place it is
+   * computed. Both surfaces read it and each WORDS it for the room it has: the
+   * strip says `รายชื่อครบ 2/2`, the 359px cell says `ครบ 2/2`. Formatting is the
+   * caller's; the STATE and the two numbers are not.
    */
-  const namedAttendees = attendees.filter((a) => (a.firstName || a.lastName || a.email));
-  const rosterSub = !attendeesListProvided
+  const roster = rosterState({ attendeesListProvided, attendeesCount, attendees });
+  const rosterSub = roster.state === 'not-provided'
     ? 'ยังไม่แจ้งรายชื่อ'
-    : namedAttendees.length >= attendeesCount
-      ? `รายชื่อครบ ${namedAttendees.length}/${attendeesCount}`
-      : `ยังไม่ครบ ${namedAttendees.length}/${attendeesCount}`;
+    : roster.state === 'complete'
+      ? `รายชื่อครบ ${roster.named}/${roster.count}`
+      : `ยังไม่ครบ ${roster.named}/${roster.count}`;
 
   /**
    * The three dark-strip cells.
@@ -464,6 +517,45 @@ export function RegistrationDetailClient({ doc, history = null }) {
    * So the tab follows the slot. A viewer without access simply has two tabs,
    * which asserts nothing about whether the record was ever edited.
    */
+  /**
+   * The attendee card's edit gate, taken ONCE.
+   *
+   * Both the card's แก้ไข and the + เพิ่มผู้เข้าอบรม button read this same
+   * object, so there is still exactly ONE producer of an edit affordance in the
+   * file. Calling `editProps('attendees')` a second time for the + button would
+   * have been a second call site of the gate — harmless today and exactly the
+   * shape that lets a future control be added beside it WITHOUT the gate, which
+   * is the defect the single-producer rule exists to make unrepresentable.
+   */
+  const attendeeEdit = editProps('attendees');
+
+  /**
+   * The three cells of the attendee tab's summary row.
+   *
+   * ความครบถ้วน reads the SAME `rosterState` the dark strip reads, worded for a
+   * 359px cell instead of a 16.5px sub-line. `ยังไม่แจ้ง` rather than a count for
+   * the opted-out case, because there is no denominator to be complete against —
+   * `buildAttendees` writes an empty array in that state.
+   */
+  const attendeeSummaryCells = [
+    { key: 'declared', label: 'จำนวนที่สมัคร',   value: `${roster.count} ท่าน` },
+    { key: 'named',    label: 'แจ้งรายชื่อแล้ว', value: `${roster.named} ท่าน` },
+    {
+      key:   'complete',
+      label: 'ความครบถ้วน',
+      value: roster.state === 'not-provided'
+        ? 'ยังไม่แจ้ง'
+        : `${roster.state === 'complete' ? 'ครบ' : 'ยังไม่ครบ'} ${roster.named}/${roster.count}`,
+    },
+  ];
+
+  /** The same three states as a sentence, for the card's 49.6px second row. */
+  const rosterSentence = roster.state === 'not-provided'
+    ? 'ผู้ประสานงานยังไม่ประสงค์แจ้งรายชื่อ — จะแจ้งภายหลัง'
+    : roster.state === 'complete'
+      ? `แจ้งรายชื่อครบตามจำนวนที่สมัครแล้ว (${roster.named}/${roster.count} ท่าน)`
+      : `ยังขาดอีก ${roster.count - roster.named} ท่าน จากที่สมัครไว้ ${roster.count} ท่าน`;
+
   const tabs = TABS
     .filter((t) => t.key !== 'history' || history)
     .map((t) => (t.key === 'attendees' ? { ...t, count: attendeesCount } : t));
@@ -690,10 +782,20 @@ export function RegistrationDetailClient({ doc, history = null }) {
 
       {/* ── ผู้เข้าอบรม ── */}
       <TabPanel id={idFor('attendees', 'panel')} labelledBy={idFor('attendees', 'tab')} hidden={tab !== 'attendees'}>
+        {/*
+          The 75.85px summary row, three EQUAL cells. The third reads the SAME
+          `rosterState` the dark strip reads, worded for the room it has — see
+          the note on `roster` above for why the derivation had to leave this
+          file.
+        */}
+        <div className="pb-[16px]">
+          <EqualSummaryRow cells={attendeeSummaryCells} />
+        </div>
+
         <SectionCard
           icon={Users}
-          title={`รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน)`}
-          {...editProps('attendees')}
+          title="รายชื่อผู้เข้าอบรม"
+          {...attendeeEdit}
           onSave={() => save({ attendeesListProvided, attendeesCount, attendees }, 'save-attendees')}
         >
           {editSection === 'attendees' ? (
@@ -740,12 +842,48 @@ export function RegistrationDetailClient({ doc, history = null }) {
                 </div>
               )}
             </div>
-          ) : !attendeesListProvided ? (
-            <p className="text-[13px] leading-[22px] text-[var(--text-secondary)]">ยังไม่ได้ระบุรายชื่อ — จะแจ้งภายหลัง</p>
-          ) : attendees.length > 0 ? (
-            <AttendeeTable attendees={attendees} coordinatorAttending={doc.coordinator?.isAttending} />
           ) : (
-            <p className="text-[13px] leading-[22px] text-[var(--text-muted)]">ไม่มีข้อมูลผู้เข้าอบรม</p>
+            <>
+              {/*
+                THE 49.6px SECOND ROW: the completeness in words on the left, the
+                + เพิ่มผู้เข้าอบรม button (92.6x32.6) pinned right.
+
+                THE BUTTON IS AN EDIT AFFORDANCE and is gated on exactly the same
+                thing every แก้ไข is — `editProps('attendees').onEdit`, which is
+                `undefined` on a cancelled record. It is not a second gate: it
+                reads the ONE producer, so a cancelled record cannot grow an edit
+                path through a control that merely looks like a different kind.
+              */}
+              <div className="flex h-[49.6px] items-center justify-between gap-[12px]">
+                <p className="min-w-0 truncate text-[12px] leading-[17px] text-[var(--text-secondary)]">
+                  {rosterSentence}
+                </p>
+                {attendeeEdit.onEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => { attendeeEdit.onEdit(); addAttendee(); }}
+                    className="inline-flex h-[32.6px] w-[92.6px] shrink-0 items-center justify-center gap-[4px] rounded-9e-md border border-9e-brand/40 text-[11px] font-semibold text-9e-action transition-colors hover:bg-9e-brand/5"
+                  >
+                    <Plus aria-hidden="true" className="h-[12px] w-[12px] shrink-0" />
+                    เพิ่มผู้เข้าอบรม
+                  </button>
+                ) : null}
+              </div>
+
+              {!attendeesListProvided ? (
+                <p className="text-[13px] leading-[22px] text-[var(--text-secondary)]">ยังไม่ได้ระบุรายชื่อ — จะแจ้งภายหลัง</p>
+              ) : attendees.length > 0 ? (
+                <AttendeeTable
+                  attendees={attendees}
+                  coordinatorAttending={doc.coordinator?.isAttending}
+                  onEditRow={attendeeEdit.onEdit}
+                  openRow={openAttendeeRow}
+                  onToggleRow={(i) => setOpenAttendeeRow((cur) => (cur === i ? null : i))}
+                />
+              ) : (
+                <p className="text-[13px] leading-[22px] text-[var(--text-muted)]">ไม่มีข้อมูลผู้เข้าอบรม</p>
+              )}
+            </>
           )}
         </SectionCard>
       </TabPanel>
@@ -779,47 +917,162 @@ export function RegistrationDetailClient({ doc, history = null }) {
  * tables and it is why the `<col>`-count and ratio assertions are NOT ported —
  * there is nothing for them to read.
  */
+/**
+ * The measured column set. `share` is the frame's percentage; `px` is a column
+ * whose width is fixed and has no share at all.
+ *
+ * ── THE ARITHMETIC IS tableParts' ARITHMETIC WITH TWO FIXED COLUMNS ────────
+ * The list tables normalise their shares against a fixed CHROME — see
+ * `columnWidths` in _components/tableParts.jsx for the derivation and for how
+ * the reading was confirmed against the design. The idea is identical here and
+ * the shape is not: this table has TWO fixed columns (the row number and the
+ * menu) where those have one trailing chevron, so `columnWidths` is not called
+ * — widening its contract for a single caller would make the list tables' guard
+ * reason about a case they do not have.
+ *
+ * The three content shares total 88.0%, and the remaining 12% is the two fixed
+ * columns plus the 11px of padding at each end. Normalising against whatever the
+ * fixed part actually is means the columns fill exactly 100% and the RATIOS
+ * between them are exactly as specified — which is the requirement, because the
+ * admin sidebar collapses and an absolute px content width would not survive it.
+ */
 const ATTENDEE_COLUMNS = [
-  { key: 'n',     label: 'ท่านที่' },
-  { key: 'name',  label: 'ชื่อ-นามสกุล' },
-  { key: 'email', label: 'อีเมล' },
-  { key: 'phone', label: 'เบอร์โทร' },
+  { key: 'n',       label: '#',              px: 30 },
+  // HYPHEN, not the frame's en dash. Every other "ชื่อ-นามสกุล" on these two
+  // screens — the coordinator row, the invoice row, the in-house contact row —
+  // uses a hyphen, and one table header spelling the same label a second way is
+  // the screen being inconsistent with itself over a character nobody asked for.
+  { key: 'name',    label: 'ชื่อ-นามสกุล',   share: 30.8 },
+  { key: 'contact', label: 'ข้อมูลติดต่อ',    share: 35.2 },
+  { key: 'info',    label: 'สถานะข้อมูล',    share: 22.0 },
+  { key: 'menu',    label: '',               px: 32 },
 ];
 
-function AttendeeTable({ attendees, coordinatorAttending }) {
+const ATTENDEE_EDGE = 11;
+
+const ATTENDEE_WIDTHS = (() => {
+  const fixed = ATTENDEE_COLUMNS.reduce((sum, c) => sum + (c.px ?? 0), 0) + ATTENDEE_EDGE * 2;
+  const total = ATTENDEE_COLUMNS.reduce((sum, c) => sum + (c.share ?? 0), 0);
+  return ATTENDEE_COLUMNS.map((c) => (
+    c.px != null ? `${c.px}px` : `calc((100% - ${fixed}px) * ${(c.share / total).toFixed(6)})`
+  ));
+})();
+
+/**
+ * The roster, as a real table.
+ *
+ * ── THE COLUMN SET IS DERIVED AND THE BODY CELLS ARE NOT ───────────────────
+ * Exactly the shape both list tables have: `<colgroup>` and `<thead>` are
+ * `ATTENDEE_COLUMNS.map(...)` while the body's five `<td>`s are written out by
+ * hand. So a column added here grows the header and the colgroup and leaves
+ * every row one cell short, and the guard the list tables carry — every body row
+ * has as many cells as the header — applies unchanged rather than being ported
+ * on a guess. It is the same defect in the same shape.
+ *
+ * The round-4 version had no `<colgroup>` and said so; the measured column set
+ * gave it one, so the `<col>`-count assertion becomes available here and is
+ * added. The list tables' RATIO assertion is still NOT ported: those pin six and
+ * seven specified shares against a design total, and three shares against 88%
+ * is a different claim that the width test below makes directly.
+ */
+function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, onToggleRow }) {
   return (
-    <table className="w-full">
-      <thead className="border-b border-[var(--surface-border)]">
+    <table className="w-full table-fixed border-collapse">
+      <colgroup>
+        {ATTENDEE_COLUMNS.map((c, i) => <col key={c.key} style={{ width: ATTENDEE_WIDTHS[i] }} />)}
+      </colgroup>
+
+      <thead className="border-b border-[var(--surface-border)] bg-[var(--surface-muted)]">
         <tr>
-          {ATTENDEE_COLUMNS.map((c) => (
-            <th key={c.key} scope="col"
-              className="h-[34px] px-[8px] text-left text-[11px] font-medium leading-[16px] text-[var(--text-secondary)] first:pl-0 last:pr-0">
-              {c.label}
+          {ATTENDEE_COLUMNS.map((c, i) => (
+            <th
+              key={c.key}
+              scope="col"
+              className="h-[34px] text-left align-middle text-[11px] font-medium leading-[16px] text-[var(--text-secondary)]"
+              style={{
+                paddingLeft:  i === 0 ? `${ATTENDEE_EDGE}px` : undefined,
+                paddingRight: i === ATTENDEE_COLUMNS.length - 1 ? `${ATTENDEE_EDGE}px` : '10px',
+              }}
+            >
+              {/*
+                The menu column has no label. `<th>` with screen-reader text
+                rather than a `<td>`, so the header row is a complete row of
+                header cells — an unlabelled column header is announced as
+                nothing at all. Same treatment as the list tables' chevron.
+              */}
+              {c.label || <span className="sr-only">การดำเนินการ</span>}
             </th>
           ))}
         </tr>
       </thead>
+
       <tbody>
         {attendees.map((a, i) => {
           const name = `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim();
           const isCoord = i === 0 && coordinatorAttending;
+          const info = attendeeInfoState(a);
+          const pad = (idx) => ({
+            paddingLeft:  idx === 0 ? `${ATTENDEE_EDGE}px` : undefined,
+            paddingRight: idx === ATTENDEE_COLUMNS.length - 1 ? `${ATTENDEE_EDGE}px` : '10px',
+          });
+
           return (
-            <tr key={i} className="border-b border-[var(--surface-border)] last:border-b-0">
-              <td className="h-[40px] px-[8px] pl-0 text-[13px] tabular-nums leading-[20px] text-[var(--text-muted)]">
+            <tr key={i} className="h-[48.3px] border-b border-[var(--surface-border)] last:border-b-0">
+              <td className="align-middle text-[12px] tabular-nums leading-[17px] text-[var(--text-muted)]" style={pad(0)}>
                 {i + 1}
               </td>
-              <td className="h-[40px] px-[8px] text-[13px] font-semibold leading-[20px] text-[var(--text-primary)]">
-                {name || '—'}
-                {/* The coordinator marker is a SUFFIX inside the same cell, not a
-                    line of its own: a second element would be empty on every row
-                    but one, which is the shape the empty-element guard exists for. */}
-                {isCoord ? <span className="ml-[6px] text-[11px] font-normal text-[var(--text-muted)]">(ผู้ประสานงาน)</span> : null}
+
+              <td className="align-middle" style={pad(1)}>
+                <p className="truncate text-[14px] font-bold leading-[17.25px] text-[var(--text-primary)]">
+                  {name || '—'}
+                  {/* The coordinator marker is a SUFFIX inside the same line, not
+                      an element of its own: a second element would be empty on
+                      every row but one, which is the shape the empty-element
+                      guard exists for. */}
+                  {isCoord ? <span className="ml-[6px] text-[11px] font-normal text-[var(--text-muted)]">(ผู้ประสานงาน)</span> : null}
+                </p>
               </td>
-              <td className="h-[40px] px-[8px] text-[12px] leading-[20px] text-[var(--text-secondary)]">
-                {a.email || '—'}
+
+              {/*
+                ข้อมูลติดต่อ — the email as a mailto link over the phone.
+
+                EVERY LINE IS CONDITIONAL and the whole cell falls back to a
+                dash. A row with an email and no phone must render ONE line, not
+                one line and an empty one — the same rule `CoordinatorCell` on
+                the list tables is held to, and the same reason.
+              */}
+              <td className="align-middle" style={pad(2)}>
+                {a.email || a.phone ? (
+                  <>
+                    {a.email ? (
+                      <a href={`mailto:${a.email}`}
+                        className="block truncate text-[13px] leading-[17.25px] text-9e-action hover:underline">
+                        {a.email}
+                      </a>
+                    ) : null}
+                    {a.phone ? (
+                      <span className="block truncate text-[12px] leading-[17px] text-[var(--text-muted)]">
+                        {a.phone}
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
+                )}
               </td>
-              <td className="h-[40px] px-[8px] pr-0 text-[12px] leading-[20px] text-[var(--text-secondary)]">
-                {a.phone || '—'}
+
+              <td className="align-middle" style={pad(3)}>
+                <AttendeeInfoChip attendee={a} state={info} />
+              </td>
+
+              <td className="align-middle" style={pad(4)}>
+                <AttendeeRowMenu
+                  index={i}
+                  attendee={a}
+                  onEditRow={onEditRow}
+                  open={openRow === i}
+                  onToggle={() => onToggleRow(i)}
+                />
               </td>
             </tr>
           );
@@ -827,6 +1080,109 @@ function AttendeeTable({ attendees, coordinatorAttending }) {
       </tbody>
     </table>
   );
+}
+
+/**
+ * The สถานะข้อมูล chip — 21.5px tall, 8px of left padding.
+ *
+ * ── THE THREE BRANCHES ARE THE DATA'S, NOT THE FRAME'S ────────────────────
+ * The frame draws one state, `✓ ข้อมูลครบ`. `attendeeInfoState` enumerates what
+ * the record can actually hold — complete, partial, empty — and every one is
+ * reachable because the admin save runs with `runValidators: false` and the
+ * editor's `+` appends four empty strings. See the module for the measurement.
+ *
+ * The PARTIAL branch names WHICH fields are missing, in the title attribute
+ * rather than in the chip: the chip is 21.5px in a 22% column and a list of
+ * field names does not fit, while "ข้อมูลไม่ครบ" with no way to learn what is
+ * missing is a chip that reports a problem and hides it. The dashes in the cell
+ * next door say it too, for the two fields that cell shows.
+ */
+function AttendeeInfoChip({ attendee, state }) {
+  const missing = state === 'partial' ? missingAttendeeFields(attendee) : [];
+  return (
+    <span
+      title={missing.length ? `ยังขาด: ${missing.map((f) => FIELD_LABEL[f] ?? f).join(', ')}` : undefined}
+      className={cn(
+        'inline-flex h-[21.5px] w-fit items-center whitespace-nowrap rounded-full pl-[8px] pr-[8px] text-[11px] font-semibold',
+        INFO_BADGE[state] ?? INFO_NEUTRAL_BADGE,
+      )}
+    >
+      {INFO_LABEL[state] ?? state}
+    </span>
+  );
+}
+
+/**
+ * The per-row "•••".
+ *
+ * ── WHAT IS IN IT, AND WHY THE TRIGGER FOLLOWS THE ITEM COUNT ─────────────
+ *
+ *   · แก้ไขรายชื่อ — opens the card's editor. There is no per-attendee server
+ *     action: the array is written wholesale by `updateRegistration`, so a row
+ *     menu cannot offer a per-row write that the card does not already do. It
+ *     reads `onEditRow`, which is the card's ONE edit gate, so on a cancelled
+ *     record this item does not exist.
+ *
+ *   · คัดลอกอีเมล — only when the row HAS an email. Copying is not an edit, so
+ *     it survives the read-only lock.
+ *
+ *   · There is deliberately NO ลบรายชื่อนี้. The editor already gives every row
+ *     a remove control, and a second delete path in the read view would need its
+ *     own confirmation model for the same write — two ways to do one thing, with
+ *     only one of them explained.
+ *
+ * ── THE TRIGGER RENDERS ONLY WHEN THERE IS SOMETHING IN THE SHEET ─────────
+ * Not "the menu is never empty" enforced by hoping every branch keeps one item —
+ * the trigger is a function OF the item list, so an empty menu is
+ * unrepresentable rather than merely avoided. That matters here more than
+ * anywhere: a cancelled record with an attendee row that has no email has NO
+ * items, and every earlier version of this reasoning ended with a "•••" that
+ * opened onto nothing.
+ *
+ * An empty-content menu has been found by a control in rounds 1, 2 and 4 — three
+ * times, never by review — which is why this is structural.
+ */
+function AttendeeRowMenu({ index, attendee, onEditRow, open, onToggle }) {
+  const items = [
+    onEditRow ? { key: 'edit', icon: Pencil, label: 'แก้ไขรายชื่อ', onClick: onEditRow } : null,
+    attendee.email
+      ? { key: 'copy', icon: Copy, label: 'คัดลอกอีเมล', onClick: () => copyText(attendee.email) }
+      : null,
+  ].filter(Boolean);
+
+  if (items.length === 0) return null;
+
+  return (
+    <OverflowMenu
+      compact
+      open={open}
+      onToggle={onToggle}
+      triggerLabel={`การดำเนินการสำหรับผู้เข้าอบรมท่านที่ ${index + 1}`}
+      closeLabel="ปิดเมนู"
+    >
+      {items.map((item) => (
+        <OverflowItem key={item.key} icon={item.icon} onClick={item.onClick}>
+          {item.label}
+        </OverflowItem>
+      ))}
+    </OverflowMenu>
+  );
+}
+
+/**
+ * Copy one value, silently.
+ *
+ * The in-house screen's `CopyButton` shows a visible success/failure state and
+ * argues at length for why an optimistic one would be a lie. THIS one cannot:
+ * it lives inside a menu that closes on click, so there is no element left to
+ * flash. What it does instead is not pretend — no success toast, no state change
+ * — so nothing on screen asserts a copy that may not have happened, and the
+ * value stays on screen and selectable, which is the same fallback.
+ */
+function copyText(value) {
+  try {
+    navigator.clipboard?.writeText?.(value);
+  } catch { /* the value is on screen and selectable */ }
 }
 
 // ── Shared atoms ───────────────────────────────────────────────────

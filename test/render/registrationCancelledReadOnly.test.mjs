@@ -74,8 +74,34 @@ function primaryButton(markup) {
   return m ? m[1] : null;
 }
 
-/** Every overflow-menu item's inner markup, in order. */
+/**
+ * Every item of the STATUS BAR's overflow menu, in order.
+ *
+ * ── SCOPED IN ROUND 5, AND THE SCOPING IS THE POINT ───────────────────────
+ * `role="menuitem"` was unique to the status bar until the attendee table grew a
+ * per-row "•••". It is not any more: a fully-populated attendee renders two more
+ * menu items, so an unscoped probe reported four items for the status bar and
+ * every deepEqual against it went red on correct code.
+ *
+ * That is the measured version of a probe that was right by accident. It is
+ * bounded to the status card — the 87px element — and stops at the summary strip
+ * that follows it, so it reads the menu the claim is about and nothing else.
+ */
+function statusBarRegion(markup) {
+  const start = markup.indexOf('h-[87px]');
+  assert.notEqual(start, -1, 'no status bar in the render — the marker class has changed');
+  const end = markup.indexOf('h-[93px]', start);
+  assert.notEqual(end, -1, 'the status bar is not followed by the summary strip — the probe would over-read');
+  return markup.slice(start, end);
+}
+
 function menuItems(markup) {
+  return [...statusBarRegion(markup).matchAll(/<button[^>]*role="menuitem"[^>]*>([\s\S]*?)<\/button>/g)]
+    .map((m) => m[1]);
+}
+
+/** Every menu item ANYWHERE on the page — the status bar's and the rows'. */
+function allMenuItems(markup) {
   return [...markup.matchAll(/<button[^>]*role="menuitem"[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1]);
 }
 
@@ -273,7 +299,10 @@ test('every control in the action group has TEXT, not just an icon', () => {
     if (primary !== null) {
       assert.ok(textOf(primary).length > 0, `${status}: the primary button rendered with no text`);
     }
-    for (const item of menuItems(markup)) {
+    // EVERY menu on the page, not only the status bar's: the attendee table's
+    // per-row "•••" is a THIRD producer of menu items and the empty-content
+    // defect has now been found by a control in rounds 1, 2 and 4.
+    for (const item of allMenuItems(markup)) {
       assert.ok(textOf(item).length > 0, `${status}: an overflow menu item rendered with no text`);
     }
     // The "•••" trigger has an icon and nothing else visible, so its accessible
