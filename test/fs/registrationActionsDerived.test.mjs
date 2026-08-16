@@ -195,3 +195,57 @@ test('the confirm dialog makes cancellation`s irreversibility explicit', () => {
   assert.match(body, /ไม่สามารถย้อนกลับได้/, 'the dialog does not say the move is irreversible');
   assert.match(body, /window\.confirm\(message\)/, 'the confirm must consume the branched message');
 });
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE SHARED DETAIL SHELL IS PRESENTATIONAL, AND THAT IS ASSERTED
+// ════════════════════════════════════════════════════════════════════════════
+
+const SHELL = readSource('src/app/admin/registrations/_components/detailShell.jsx');
+
+test('the shell takes no `source` prop and knows of no per-source branching', () => {
+  /**
+   * THE DEFECT THIS PREVENTS IS ON RECORD. A single body branching on `source`
+   * per cell is how an in-house document came to be rendered through public
+   * columns on the list screen — ten `source ===` tests inside one row. The fix
+   * was two components, and this is the same constraint applied to the frame
+   * they will share.
+   */
+  assert.ok(!/\bsource\b/.test(SHELL.code), 'the shell mentions `source`');
+  assert.ok(!SHELL.code.includes('inhouse'), 'the shell knows there is an in-house collection');
+  assert.ok(!SHELL.code.includes('Public'),  'the shell knows there is a public collection');
+});
+
+test('the shell imports no status vocabulary', () => {
+  // Colours, labels and transitions arrive as props. A shell that looked a
+  // status up would be a third screen with an opinion about the vocabulary.
+  assert.ok(
+    !SHELL.withImports.includes('@/lib/registrations/statuses'),
+    'the shell imports the status module — the vocabulary must reach it as props'
+  );
+  assert.ok(!/statusLabel|statusBadge|allowedTransitions/.test(SHELL.code),
+    'the shell calls into the status vocabulary');
+});
+
+test('the shell holds no field list for either document', () => {
+  // The line between "shared frame" and "shared body". A card header is a card
+  // header; a card's FIELDS are not, and a field named here would be a field
+  // both screens had to reason about.
+  for (const field of ['courseName', 'attendeesCount', 'coordinator', 'participantsCount', 'quotationCompany', 'omiseStatus']) {
+    assert.ok(!SHELL.code.includes(field), `the shell names a document field: ${field}`);
+  }
+});
+
+test('the shell renders NO control when there is nothing to do, rather than a disabled one', () => {
+  // A greyed-out แก้ไข invites the click and then explains nothing. The shell
+  // branches on whether it was GIVEN a callback, so a card can only render the
+  // button by being handed something for it to do — and the RULE about when that
+  // is stays in the screens.
+  assert.match(SHELL.code, /\)\s*:\s*onEdit\s*\?\s*\(/,
+    'SectionCard no longer branches on whether it was given an onEdit');
+  assert.ok(
+    !/readOnly/.test(SHELL.code),
+    'the shell has learned about `readOnly`. It is presentational: it renders a button when it is '
+    + 'given something to do, and the RULE about when that is lives in the screens.'
+  );
+});
