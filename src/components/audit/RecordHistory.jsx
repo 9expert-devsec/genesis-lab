@@ -26,8 +26,10 @@ import { RecordHistoryPanel } from './RecordHistoryPanel';
  * @param {string} [props.entity] narrows when a menu holds several record kinds
  * @param {string|string[]} props.recordId  one id, or both key spaces for `courses`
  * @param {string} [props.title]
+ * @param {boolean} [props.defaultOpen] for a mount that IS the history — a tab
+ *        of its own, where an accordion asks a question the reader just answered
  */
-export async function RecordHistory({ menu, entity, recordId, title }) {
+export async function RecordHistory({ menu, entity, recordId, title, defaultOpen = false }) {
   const session = await auth();
   const user = session?.user ?? null;
 
@@ -47,6 +49,7 @@ export async function RecordHistory({ menu, entity, recordId, title }) {
       total={total}
       previewCount={RECORD_HISTORY_PREVIEW}
       title={title ?? 'ประวัติการแก้ไข'}
+      defaultOpen={defaultOpen}
     />
   );
 }

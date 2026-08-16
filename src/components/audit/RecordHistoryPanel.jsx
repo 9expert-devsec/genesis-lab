@@ -22,9 +22,19 @@ import { HISTORY_STATE } from '@/lib/audit/auditQuery';
  * read-only panel.
  *
  * Collapsed by default so it never pushes the editing UI down the page.
+ *
+ * ── `defaultOpen` IS FOR THE ONE MOUNT WHERE COLLAPSING IS WRONG ───────────
+ * The registration detail screens give this panel a TAB of its own. A reader who
+ * has just clicked ประวัติการดำเนินการ has already asked for the history, and
+ * an accordion that then asks again is a second click for nothing.
+ *
+ * It defaults to FALSE, so every other mount — where the panel sits below an
+ * editing surface it must not push down — is unchanged. It seeds `useState` and
+ * is not synchronised afterwards: the reader's own open/closed choice must
+ * survive a re-render, which is the same rule the tab state follows.
  */
-export function RecordHistoryPanel({ state, rows, total, previewCount, title }) {
-  const [open, setOpen] = useState(false);
+export function RecordHistoryPanel({ state, rows, total, previewCount, title, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
   const [openRow, setOpenRow] = useState(null);
 
