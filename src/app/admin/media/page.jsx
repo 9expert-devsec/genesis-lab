@@ -1,5 +1,6 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { listMediaCategories } from '@/lib/actions/media';
+import { WEBROOT_DOCUMENTS, webrootPublicPath } from '@/lib/webrootDocuments.mjs';
 import MediaClient from './_components/MediaClient';
 
 export const metadata = { title: 'จัดการไฟล์' };
@@ -37,6 +38,53 @@ export default async function MediaPage() {
           ทันทีหลังอัปโหลด
         </p>
       </div>
+
+      {/*
+        ── THE ONLY WAY IN TO THE SITE-ROOT REPLACE SCREEN ────────────────────
+
+        It is NOT a sidebar entry on purpose: rbacNavParity asserts every
+        NAV_GROUPS link is a REGISTERED page, and that screen deliberately has
+        no page key of its own — it inherits `media` by href prefix. A nav entry
+        would report as `nav-not-registered`; an entry here costs nothing and
+        keeps the registry at 38 == 38.
+
+        It USED TO BE A BARE <Link> under the page description — one line of
+        blue text, below the fold of the eye, on a screen whose whole visual
+        weight is the file browser underneath. The route it leads to is the only
+        way to replace three PDFs whose URLs are printed on external documents,
+        and it read as a footnote. It is a card now, above the browser, so the
+        entry point looks like the thing it opens.
+
+        THE THREE FILENAMES ARE NOT WRITTEN HERE. They come from
+        WEBROOT_DOCUMENTS, the same frozen list the rewrites, the upload target
+        and the models all read, so this panel cannot drift from what is
+        actually published.
+      */}
+      <section className="mt-5 rounded-9e-lg border border-[var(--surface-border)] bg-white p-5 dark:bg-[#111d2c]">
+        <h2 className="text-base font-bold text-9e-navy dark:text-white">
+          เอกสารหน้าเว็บหลัก
+        </h2>
+        <p className="mt-1 text-sm text-9e-slate-dp-50">
+          จัดการไฟล์ PDF ที่เผยแพร่อยู่ที่รากของเว็บไซต์ — แทนที่ตัวไฟล์ได้ โดยชื่อไฟล์และ URL ไม่เปลี่ยน
+        </p>
+
+        <ul className="mt-3 space-y-1">
+          {WEBROOT_DOCUMENTS.map((filename) => (
+            <li key={filename}>
+              <code className="rounded bg-9e-action/10 px-1 py-0.5 text-xs text-9e-action">
+                {webrootPublicPath(filename)}
+              </code>
+            </li>
+          ))}
+        </ul>
+
+        <Link
+          href="/admin/media/webroot-documents"
+          className="mt-4 inline-flex items-center gap-1.5 rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
+        >
+          จัดการเอกสารหน้าเว็บหลัก
+        </Link>
+      </section>
 
       <MediaClient
         initialCategories={categories ?? []}
