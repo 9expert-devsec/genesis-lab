@@ -10,13 +10,7 @@ import {
   deleteMediaFile, listMediaCategories, listMediaFiles, signMediaUpload,
 } from '@/lib/actions/media';
 import { ALLOWED_UPLOAD_EXTENSIONS } from '@/lib/legacyUploadPolicy.mjs';
-
-function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
+import { formatBytes } from '@/lib/formatBytes.mjs';
 
 const ACCEPT = ALLOWED_UPLOAD_EXTENSIONS.map((e) => `.${e}`).join(',');
 

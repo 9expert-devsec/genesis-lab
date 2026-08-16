@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSource, sourceExists } from '../sourceScan.mjs';
+import { readSource, sourceExists, walkSources } from '../sourceScan.mjs';
 import { resolvePageKey, ALL_PAGE_KEYS } from '@/lib/rbac/pages';
 
 /**
@@ -136,6 +136,46 @@ test('the three filenames are SINGLE-SOURCED, never retyped on the media page', 
       `"${literal}" is hardcoded on the media page — it must come from WEBROOT_DOCUMENTS`,
     );
   }
+});
+
+/**
+ * THE HISTORY ROW RENDERS THROUGH THE SHARED FORMATTER.
+ *
+ * Added because reverting the call site to its old `(bytes / 1024 / 1024)
+ * .toFixed(1)` left the whole suite GREEN. test/pure/formatBytes proves the
+ * FUNCTION is right; nothing proved this component CALLS it, so the defect the
+ * extraction exists to fix could have been reinstated in one line without a
+ * single test noticing. This is that missing half.
+ *
+ * The inline-arithmetic ban is the part that actually bites: a fourth
+ * hand-rolled formatter is exactly how the third one got here.
+ */
+test('the history row formats bytes through the shared formatter, not inline arithmetic', () => {
+  const { code, withImports } = readSource(CLIENT);
+  assert.match(
+    withImports, /import \{ formatBytes \} from '@\/lib\/formatBytes\.mjs'/,
+    'the client does not import the shared byte formatter',
+  );
+  assert.match(code, /\{formatBytes\(r\.bytes\)\}/, 'the history row does not use it');
+  assert.equal(
+    /1024\s*\/\s*1024/.test(code), false,
+    'the client computes a size inline again — that is the 0.0 MB defect returning',
+  );
+});
+
+test('NO admin component hand-rolls a byte formatter any more', () => {
+  /**
+   * The extraction removed two byte-identical private copies and one divergent
+   * third. This is what stops a fourth: any admin component that wants a size
+   * has one place to get it from.
+   */
+  const offenders = walkSources('src/app/admin')
+    .filter((f) => /1024\s*\/\s*1024|1024\s*\*\s*1024/.test(f.code))
+    .map((f) => f.rel);
+  assert.deepEqual(
+    offenders, [],
+    'an admin component is computing byte units itself:\n  ' + offenders.join('\n  '),
+  );
 });
 
 test('the webroot page carries a back-link to /admin/media', () => {

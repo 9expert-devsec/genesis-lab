@@ -19,6 +19,7 @@ import {
   sha256Hex,
 } from '@/lib/webroot/propagation.mjs';
 import { WEBROOT_CONTENT_TYPE, refuseWebrootSize } from '@/lib/webrootDocuments.mjs';
+import { formatBytes } from '@/lib/formatBytes.mjs';
 
 /**
  * REPLACE ONE OF THE THREE SITE-ROOT PDFs.
@@ -297,7 +298,7 @@ export default function WebrootDocumentsClient({
           <ul className="space-y-1 text-xs text-9e-slate-dp-50">
             {rows.map((r) => (
               <li key={r._id}>
-                v{r.version} · {r.filename} · {(r.bytes / 1024 / 1024).toFixed(1)} MB ·{' '}
+                v{r.version} · {r.filename} · {formatBytes(r.bytes)} ·{' '}
                 {new Date(r.uploadedAt).toLocaleString('th-TH')} · {r.uploadedBy || '—'}
                 {r.archivePathname ? ` · สำรองไว้ที่ ${r.archivePathname}` : ''}
               </li>
