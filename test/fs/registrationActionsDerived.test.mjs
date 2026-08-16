@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
-import { PUBLIC_STATUS_TRANSITIONS, PUBLIC_STATUS_VALUES } from '@/lib/registrations/statuses';
+import {
+  PUBLIC_STATUS_TRANSITIONS,
+  INHOUSE_STATUS_TRANSITIONS,
+  PUBLIC_STATUS_VALUES,
+  INHOUSE_STATUS_VALUES,
+} from '@/lib/registrations/statuses';
 
 /**
  * ── THIS IS THE ASSERTION THAT WOULD HAVE CAUGHT THE ORIGINAL DEFECT ────────
@@ -296,13 +301,16 @@ test('the confirm dialog makes cancellation`s irreversibility explicit', () => {
 // ROUND 4 — THE TWO-SLOT ACTION GROUP, AND THE SHELL IT LIVES IN
 // ════════════════════════════════════════════════════════════════════════════
 
+const INHOUSE = readSource('src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx');
+
 /**
- * The in-house client joins this loop in the commit that restyles it. Every
- * assertion below is written per-client rather than about the public one, so
- * that is a one-line change there and no assertion has to be re-worded.
+ * BOTH SCREENS, and every assertion below is written per-client rather than
+ * about one of them. The in-house entry arrived as a one-line change with no
+ * assertion re-worded, which is the shape that made the split safe.
  */
 const CLIENTS = [
-  { name: 'public', src: DETAIL, table: PUBLIC_STATUS_TRANSITIONS, values: PUBLIC_STATUS_VALUES },
+  { name: 'public',  src: DETAIL,  table: PUBLIC_STATUS_TRANSITIONS,  values: PUBLIC_STATUS_VALUES },
+  { name: 'inhouse', src: INHOUSE, table: INHOUSE_STATUS_TRANSITIONS, values: INHOUSE_STATUS_VALUES },
 ];
 
 /**
@@ -391,7 +399,7 @@ for (const { name, src, table } of CLIENTS) {
   });
 }
 
-test('the detail client imports the shell rather than re-declaring it', () => {
+test('both detail clients import the shell rather than re-declaring it', () => {
   for (const { name, src } of CLIENTS) {
     assert.ok(/from '\.[./]*(?:_components\/)?detailShell'/.test(src.withImports),
       `${name}: the detail client does not import the shared shell`);

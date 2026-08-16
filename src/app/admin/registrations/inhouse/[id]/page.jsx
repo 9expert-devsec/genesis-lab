@@ -39,10 +39,27 @@ export default async function Page({ params }) {
    */
   const courses = resolveCourseNames(doc.coursesInterested, await buildCourseNameMap());
 
+  /**
+   * THE HISTORY PANEL IS RENDERED HERE AND HANDED IN AS A SLOT — same reason as
+   * the public page: `RecordHistory` is a SERVER component that awaits `auth()`,
+   * so a client tab panel cannot mount one. Rendering it here and passing the
+   * NODE down means switching to ประวัติการดำเนินการ costs no round trip and
+   * needs no server action taking a `menu` the client chose.
+   *
+   * `defaultOpen` because the panel now has a tab of its own.
+   */
   return (
-    <div className="space-y-4">
-      <InhouseDetailClient doc={doc} courses={courses} />
-      <RecordHistory menu="registrations" entity="inhouse" recordId={String(doc._id)} />
-    </div>
+    <InhouseDetailClient
+      doc={doc}
+      courses={courses}
+      history={(
+        <RecordHistory
+          menu="registrations"
+          entity="inhouse"
+          recordId={String(doc._id)}
+          defaultOpen
+        />
+      )}
+    />
   );
 }

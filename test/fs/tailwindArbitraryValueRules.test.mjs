@@ -1211,6 +1211,7 @@ test('CONTROL: the status module is inside the real content globs', async () => 
 const DETAIL_LAYOUT_FILES = [
   'src/app/admin/registrations/_components/detailShell.jsx',
   'src/app/admin/registrations/_components/RegistrationDetailClient.jsx',
+  'src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx',
   // The status dot and the chip take their colour from the vocabulary, so the
   // module's own classes are part of what these screens render.
   'src/lib/registrations/statuses.js',
@@ -1240,8 +1241,36 @@ const DETAIL_PUBLIC_DOC = {
   updatedAt: '2026-08-02T03:00:00.000Z',
 };
 
-test('every arbitrary-value class the DETAIL screen RENDERS compiles to a rule', async () => {
+const DETAIL_INHOUSE_DOC = {
+  _id: 'cccccccccccccccccccc0003',
+  status: 'pending',
+  companyName: 'บริษัท ทดสอบ จำกัด',
+  quotationCompany: 'บริษัท ทดสอบ จำกัด',
+  contactFirstName: 'สมชาย',
+  contactLastName: 'ใจดี',
+  contactEmail: 'a@b.c',
+  contactPhone: '08',
+  coursesInterested: ['EXC-201'],
+  participantsCount: 15,
+  contentMode: 'standard',
+  contentDetails: 'เน้น Power Query',
+  trainingFormat: 'onsite',
+  onsiteVenue: { addressLine: 'x', province: 'y' },
+  preferredMonth: '2026-09',
+  scheduleNote: 'ช่วงบ่าย',
+  quotationCountry: 'TH',
+  branchType: 'head_office',
+  taxId: '0105551234567',
+  adminNotes: 'คุยแล้ว',
+  message: 'อยากได้ workshop',
+  source: 'inhouse',
+  createdAt: '2026-08-01T03:00:00.000Z',
+  updatedAt: '2026-08-02T03:00:00.000Z',
+};
+
+test('every arbitrary-value class the DETAIL screens RENDER compiles to a rule', async () => {
   const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
+  const { InhouseDetailClient } = await import('@/app/admin/registrations/inhouse/_components/InhouseDetailClient');
   const { createElement: h } = await import('react');
 
   const slot = h('p', null, 'ประวัติ');
@@ -1254,10 +1283,16 @@ test('every arbitrary-value class the DETAIL screen RENDERS compiles to a rule',
    * fixture carrying only `hybrid` exercised one of ScheduleBadge's two
    * branches and the other's `w-fit` could be deleted with nothing going red.
    */
-  const markup = ['pending', 'confirmed', 'paid', 'cancelled']
-    .map((status) => renderToStaticMarkup(
-      h(RegistrationDetailClient, { doc: { ...DETAIL_PUBLIC_DOC, status }, history: slot })))
-    .join('\n');
+  const markup = [
+    ...['pending', 'confirmed', 'paid', 'cancelled'].map((status) =>
+      renderToStaticMarkup(h(RegistrationDetailClient, { doc: { ...DETAIL_PUBLIC_DOC, status }, history: slot }))),
+    ...['pending', 'quoted', 'cancelled'].map((status) =>
+      renderToStaticMarkup(h(InhouseDetailClient, {
+        doc: { ...DETAIL_INHOUSE_DOC, status },
+        courses: [{ code: 'EXC-201', name: 'Excel Advanced' }],
+        history: slot,
+      }))),
+  ].join('\n');
 
   const classes = arbitraryClassesIn(markup);
   assert.ok(classes.length >= 40,

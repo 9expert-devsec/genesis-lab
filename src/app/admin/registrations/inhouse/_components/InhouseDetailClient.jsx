@@ -2,7 +2,10 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Pencil, Trash2, Check, X, Copy } from 'lucide-react';
+import {
+  Trash2, Check, X, Copy, Building2, GraduationCap, CalendarClock,
+  Receipt, MessageSquare, StickyNote, Database, ClipboardList, History,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   updateInhouseStatus,
@@ -10,7 +13,6 @@ import {
   deleteInhouseRegistration,
 } from '@/lib/actions/inhouse-registrations';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
-import { Button } from '@/components/ui/button';
 import { refNo } from '@/lib/refNo';
 import { monthLongLabel } from '@/lib/schedule/monthWindow';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
@@ -19,9 +21,14 @@ import {
   INHOUSE_STATUS_TRANSITIONS,
   allowedTransitions,
   effectiveStatus,
+  isSystemSet,
   statusBadge,
   statusLabel,
 } from '@/lib/registrations/statuses';
+import {
+  BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
+  SummaryStrip, TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
+} from '../../_components/detailShell';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -60,6 +67,10 @@ import {
  * not rules: a target with no entry renders NO BUTTON, so a new edge added to
  * the table and forgotten here is a missing affordance rather than an
  * unlabelled trap. The fs tier pins the two lists against each other.
+ *
+ * ── ACTION_VARIANT NOW NAMES A TONE, NOT A SLOT ────────────────────────────
+ * WHICH SLOT a target lands in — the 100x38 primary button or the "•••" menu —
+ * is DERIVED FROM THE TABLE, not from this map. See `primaryTarget` below.
  */
 const ACTION_LABEL = {
   quoted:    'ส่งใบเสนอราคา',
@@ -69,6 +80,21 @@ const ACTION_LABEL = {
 const ACTION_VARIANT = {
   quoted:    'primary',
   cancelled: 'outline',
+};
+
+/**
+ * The SHORT form, for the 100x38 primary button — see the public client's note
+ * at length. The button is 100px and a Thai action label does not fit; the menu
+ * has room and uses ACTION_LABEL unchanged, and the button's `title` carries the
+ * full wording.
+ *
+ * The key set is pinned EQUAL to ACTION_LABEL's and ACTION_VARIANT's by the fs
+ * tier: a target present in one map and missing from another renders a button
+ * with no text, which no text assertion in this suite can see.
+ */
+const ACTION_SHORT = {
+  quoted:    'ส่งใบเสนอฯ',
+  cancelled: 'ยกเลิก',
 };
 
 // 'consult' and 'flexible' are LEGACY VALUES — both cards were removed from the
@@ -106,6 +132,18 @@ const TRAINING_FORMAT_LABEL = {
  * If the form ever asks again, the row comes back WITH the field — not before.
  */
 
+/**
+ * A monospace identifier — or NOTHING, so `DLRow` can drop the row.
+ *
+ * The same helper as the public client, and it exists for a MEASURED reason:
+ * wrapping a value in a `<span>` at the call site makes it a React ELEMENT,
+ * which is always truthy, so `DLRow`'s absent-means-absent rule never fires and
+ * an optional field renders its label over an EMPTY SPAN. The empty-element
+ * guard on the restyled screens found it. The emptiness decision happens BEFORE
+ * the wrapper, in one place.
+ */
+const mono = (value) => (value ? <span className="font-mono text-[11px]">{value}</span> : '');
+
 const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
 function fmtDate(iso) {
@@ -113,8 +151,6 @@ function fmtDate(iso) {
   const d = new Date(iso);
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} น.`;
 }
-
-
 
 /**
  * NO `scheduleMode` BRANCH — the selector is gone and `preferredMonth` is the
@@ -133,7 +169,13 @@ function scheduleSummary(doc) {
   // legacy document holding some other spelling still renders what it holds.
   if (doc.preferredMonth) return `เดือน: ${monthLongLabel(doc.preferredMonth)}`;
   const legacyRange = [doc.preferredDateFrom, doc.preferredDateTo].filter(Boolean).join(' ถึง ');
-  return legacyRange || '—';
+  return legacyRange || '';
+}
+
+/** The same window, without the `เดือน:` prefix — the strip cell has a label. */
+function scheduleStripValue(doc) {
+  if (doc.preferredMonth) return monthLongLabel(doc.preferredMonth);
+  return [doc.preferredDateFrom, doc.preferredDateTo].filter(Boolean).join(' ถึง ') || '—';
 }
 
 /**
@@ -179,14 +221,43 @@ function quotationAddress(doc) {
   });
 }
 
+/**
+ * THE TABS. Local state — see the identical note in RegistrationDetailClient.
+ *
+ * The tab is not derived from the URL at all, so copying it into state is not
+ * the filters-from-props rule being broken; there is nothing to copy FROM. Do
+ * not "fix" it into searchParams. If deep-linking to a tab is ever wanted it
+ * becomes a URL concern then, deliberately, and the rule applies from that
+ * moment.
+ *
+ * TWO tabs, not three: an in-house enquiry has no attendee roster. There is no
+ * empty ผู้เข้าอบรม tab standing in for one, because a tab that opens on
+ * "ไม่มีข้อมูล" is a control that says nothing.
+ */
+const TABS = [
+  { key: 'request', label: 'ข้อมูลการสมัคร',      icon: ClipboardList },
+  { key: 'history', label: 'ประวัติการดำเนินการ', icon: History },
+];
+
 // ── Main Component ─────────────────────────────────────────────────
 
-export function InhouseDetailClient({ doc, courses = [] }) {
+/**
+ * @param {object} props.doc
+ * @param {Array<{code: string, name: string|null}>} [props.courses] resolved
+ *        server-side by page.jsx — see its docstring for why not here.
+ * @param {import('react').ReactNode} [props.history] the RecordHistory panel,
+ *        RENDERED BY page.jsx AND HANDED IN. It is a SERVER component and cannot
+ *        be mounted from a client tab panel, so the page renders it and this
+ *        component only places it. Switching tabs costs no round trip.
+ */
+export function InhouseDetailClient({ doc, courses = [], history = null }) {
   const router = useRouter();
 
   const [status,      setStatus]      = useState(doc.status);
   const [adminNotes,  setAdminNotes]  = useState(doc.adminNotes ?? '');
-  const [editingNotes, setEditingNotes] = useState(false);
+  const [editSection, setEditSection] = useState(null); // 'notes' | null
+  const [tab,         setTab]         = useState(TABS[0].key);
+  const [menuOpen,    setMenuOpen]    = useState(false);
   const [busy,        setBusy]        = useState(null);
   const [error,       setError]       = useState(null);
   const [, startTransition] = useTransition();
@@ -212,6 +283,25 @@ export function InhouseDetailClient({ doc, courses = [] }) {
     .filter((next) => ACTION_LABEL[next]);
 
   /**
+   * WHICH ACTION IS THE PRIMARY BUTTON AND WHICH GO IN THE "•••" MENU.
+   *
+   * Derived exactly as on the public side: a target is demoted to the menu when
+   * it is TERMINAL — when the transition table gives it no outgoing edges of its
+   * own. Against the in-house table that resolves to `cancelled` and to nothing
+   * else. Writing `next === 'cancelled'` would put a hand-written status value
+   * back into a client, which is the shape rounds 1 and 2 spent four commits
+   * removing and a test now forbids.
+   *
+   * A `quoted` request therefore has NO primary button — its only move is the
+   * cancellation, which lives in the menu. An empty 100x38 box reserving the
+   * space would be the screen advertising a control that does not exist.
+   */
+  const isTerminalTarget = (target) =>
+    allowedTransitions(target, INHOUSE_STATUS_TRANSITIONS).length === 0;
+  const primaryTarget = statusActions.find((next) => !isTerminalTarget(next)) ?? null;
+  const menuTargets   = statusActions.filter((next) => next !== primaryTarget);
+
+  /**
    * A CANCELLED REQUEST IS READ-ONLY, AND THE SCREEN SAYS SO.
    *
    * `updateInhouseAdminNotes` refuses the write regardless of what renders here
@@ -222,9 +312,28 @@ export function InhouseDetailClient({ doc, courses = [] }) {
    *
    * `statusActions` is already empty for `cancelled` (the table has no outgoing
    * edges), so the status buttons need no separate flag. DELETE IS DELIBERATELY
-   * STILL AVAILABLE; see the ruling in lib/actions/inhouse-registrations.js.
+   * STILL AVAILABLE; see the ruling in lib/actions/inhouse-registrations.js. It
+   * lives in the "•••" menu, which is therefore never empty on ANY state.
    */
   const readOnly = liveStatus === 'cancelled';
+
+  /**
+   * ONE GATE FOR EVERY EDITABLE CARD — the same helper as the public client,
+   * and stronger than the per-card `readOnly` prop it replaces.
+   *
+   * There is exactly ONE place a card can be given an `onEdit`, and it is
+   * gated. A card that omits the spread has NO edit affordance rather than an
+   * ungated one, so a mistake shows up as a missing button instead of as a
+   * button that appears on a locked record — which is invisible until someone
+   * opens a cancelled request.
+   */
+  const editProps = (section) => ({
+    editLabel: 'แก้ไข',
+    onEdit:    readOnly ? undefined : () => setEditSection(section),
+    editing:   editSection === section,
+    saving:    busy === `save-${section}`,
+    onCancel:  () => cancelEdit(section),
+  });
 
   const handleStatusAction = (next) => {
     /**
@@ -237,6 +346,7 @@ export function InhouseDetailClient({ doc, courses = [] }) {
       ? `ยกเลิกคำขอนี้?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้ (ยังลบได้)`
       : `เปลี่ยนสถานะเป็น "${statusLabel(next)}"?`;
     if (!window.confirm(message)) return;
+    setMenuOpen(false);
     setBusy(next); setError(null);
     startTransition(async () => {
       const res = await updateInhouseStatus(doc._id, next);
@@ -246,29 +356,30 @@ export function InhouseDetailClient({ doc, courses = [] }) {
     });
   };
 
-  const handleSaveNotes = () => {
-    setBusy('save-notes'); setError(null);
-    startTransition(async () => {
-      const res = await updateInhouseAdminNotes(doc._id, adminNotes);
-      if (res.ok) setEditingNotes(false);
-      else setError(res.error || 'บันทึกไม่สำเร็จ');
-      setBusy(null);
-    });
-  };
-
-  const handleCancelNotes = () => {
-    setAdminNotes(doc.adminNotes ?? '');
-    setEditingNotes(false);
-  };
-
   const handleDelete = () => {
     if (!window.confirm(`ลบ Request ${refNo(doc._id)} ถาวร?\n\nการดำเนินการนี้ไม่สามารถย้อนกลับได้`)) return;
+    setMenuOpen(false);
     setBusy('delete'); setError(null);
     startTransition(async () => {
       const res = await deleteInhouseRegistration(doc._id);
       if (res.ok) router.push('/admin/registrations?source=inhouse');
       else { setError(res.error || 'ลบไม่สำเร็จ'); setBusy(null); }
     });
+  };
+
+  const handleSaveNotes = () => {
+    setBusy('save-notes'); setError(null);
+    startTransition(async () => {
+      const res = await updateInhouseAdminNotes(doc._id, adminNotes);
+      if (res.ok) setEditSection(null);
+      else setError(res.error || 'บันทึกไม่สำเร็จ');
+      setBusy(null);
+    });
+  };
+
+  const cancelEdit = () => {
+    setAdminNotes(doc.adminNotes ?? '');
+    setEditSection(null);
   };
 
   const address = quotationAddress(doc);
@@ -300,203 +411,296 @@ export function InhouseDetailClient({ doc, courses = [] }) {
     ? ''
     : formatBranchLabel({ branchType: doc.branchType, branchCode: doc.branchCode, legacyBranch: doc.branch });
 
+  const contactName = `${doc.contactFirstName ?? ''} ${doc.contactLastName ?? ''}`.trim();
+
+  /**
+   * The status bar's one-line description — DERIVED, never a map keyed by
+   * status. See the identical note on the public client: a literal here would be
+   * a hand-written status list in a detail client, which is exactly what this
+   * round's tests forbid.
+   *
+   * `isSystemSet` resolves to NOTHING for in-house and that is correct rather
+   * than a gap — `paid` is not in the in-house vocabulary at all, so there is no
+   * state its admins are locked out of. The branch is kept anyway so the two
+   * screens ask the vocabulary the same three questions; a branch that is
+   * currently unreachable BY THE DATA is not the same as one that is wrong.
+   */
+  const statusDescription = readOnly
+    ? 'คำขอนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้ (ยังลบได้)'
+    : isSystemSet(liveStatus, 'inhouse')
+      ? 'สถานะนี้ระบบเป็นผู้กำหนด ผู้ดูแลกำหนดเองไม่ได้'
+      : primaryTarget
+        ? `ขั้นตอนถัดไป: ${statusLabel(primaryTarget)}`
+        : 'ไม่มีขั้นตอนถัดไปในระบบ — ปิดงานนอกระบบ';
+
+  /**
+   * The four dark-strip cells.
+   *
+   * ── "ประมาณ 15 คน" IS NOT BUILT, AND THAT IS A DECISION RATHER THAN AN
+   *    OVERSIGHT ────────────────────────────────────────────────────────────
+   * The design's รูปแบบการอบรม cell hedges the headcount. A summary strip MAY
+   * hedge where a data table may not — it is summarising, and the width argument
+   * that ruled the word out of the list's 5% จำนวน column does not apply here.
+   *
+   * It is still not built, for the reason that survives the change of surface:
+   * `participantsCount` IS A STORED NUMBER AND NOTHING FLAGS IT AS AN ESTIMATE.
+   * The Mongoose schema gives it a minimum of 15 and no `isEstimate`, no
+   * `min`/`max` pair, nothing. "ประมาณ" would be the screen asserting an
+   * imprecision the record does not record — the same rule the list table keeps
+   * for its format chip and its status chip: no branch may assert something the
+   * document does not hold.
+   *
+   * So the sub-line reads "15 ท่าน", phrased exactly as the list's จำนวน column
+   * phrases it, which is also what the instruction asked for: one admin, one way
+   * of saying a headcount.
+   */
+  const firstCourse = courses[0];
+  const stripCells = [
+    {
+      key:   'courses',
+      label: 'หลักสูตรที่สนใจ',
+      value: firstCourse ? (firstCourse.name || firstCourse.code) : '—',
+      sub:   courses.length > 1 ? `และอีก ${courses.length - 1} หลักสูตร` : (firstCourse?.name ? firstCourse.code : ''),
+    },
+    {
+      key:   'format',
+      label: 'รูปแบบการอบรม',
+      value: TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat ?? '—',
+      sub:   doc.participantsCount == null ? '' : `${doc.participantsCount} ท่าน`,
+    },
+    {
+      key:   'window',
+      label: 'ช่วงเวลาที่ต้องการ',
+      value: scheduleStripValue(doc),
+      sub:   doc.scheduleNote ?? '',
+    },
+    {
+      key:   'contact',
+      label: 'ผู้ติดต่อ',
+      value: contactName || '—',
+      sub:   doc.contactPhone || doc.contactEmail || '',
+    },
+  ];
+
+  /**
+   * A NULL SLOT MEANS NO TAB, NOT AN EMPTY PANEL — see the public client's note
+   * at length. `RecordHistory` renders nothing when the viewer may not read the
+   * audit trail, and a tab that opens onto blank space would confirm the record
+   * has history, which is the thing being withheld.
+   */
+  const tabs = TABS.filter((t) => t.key !== 'history' || history);
+  const idFor = (key, kind) => `inh-${kind}-${key}`;
+
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto w-full max-w-[1080px]">
+      <BackLink label="กลับรายการ" onClick={() => router.back()} />
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <button type="button" onClick={() => router.back()}
-            className="mb-3 flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-9e-action">
-            <ArrowLeft className="h-4 w-4" />กลับรายการ
-          </button>
-          <h1 className="text-xl font-bold text-[var(--text-primary)]">
-            In-house Request <span className="font-mono text-9e-action">{refNo(doc._id)}</span>
-          </h1>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">ส่งคำขอเมื่อ {fmtDate(doc.createdAt)}</p>
-        </div>
-        <div className="flex flex-col items-end gap-3">
-          <span className={cn('inline-block rounded-full px-3 py-1 text-sm font-semibold', statusBadge(status))}>
-            {statusLabel(status)}
-          </span>
-          {statusActions.length > 0 && (
-            <div className="flex flex-wrap justify-end gap-2">
-              {statusActions.map((next) => (
-                <Button key={next} variant={ACTION_VARIANT[next]} size="sm" onClick={() => handleStatusAction(next)} disabled={busy !== null}>
-                  {busy === next && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  {ACTION_LABEL[next]}
-                </Button>
-              ))}
-            </div>
+      <DetailHeader
+        badge={<TypeBadge label="In-house" className="bg-violet-100 text-violet-700" />}
+        timestamp={`ส่งคำขอเมื่อ ${fmtDate(doc.createdAt)}`}
+        title={<>In-house Request <span className="font-mono text-9e-action">{refNo(doc._id)}</span></>}
+        subtitle={displayCompany}
+      />
+
+      {/*
+        THE DOT TAKES THE VOCABULARY'S COLOUR AND NOTHING NEW — see the public
+        client's note. `statusBadge(status)`, not `statusBadge(liveStatus)`: the
+        badge shows what the record HOLDS, and the dot beside it must not
+        disagree with the name it sits next to.
+      */}
+      <StatusBar
+        dotClassName={statusBadge(status)}
+        label="สถานะปัจจุบัน"
+        name={statusLabel(status)}
+        description={statusDescription}
+        primary={primaryTarget ? (
+          <PrimaryAction
+            title={ACTION_LABEL[primaryTarget]}
+            onClick={() => handleStatusAction(primaryTarget)}
+            disabled={busy !== null}
+            busy={busy === primaryTarget}
+          >
+            {ACTION_SHORT[primaryTarget] ?? ACTION_LABEL[primaryTarget]}
+          </PrimaryAction>
+        ) : null}
+        overflow={(
+          <OverflowMenu
+            open={menuOpen}
+            onToggle={() => setMenuOpen((o) => !o)}
+            triggerLabel="การดำเนินการอื่น"
+            closeLabel="ปิดเมนูการดำเนินการ"
+          >
+            {menuTargets.map((next) => (
+              <OverflowItem
+                key={next}
+                icon={X}
+                onClick={() => handleStatusAction(next)}
+                disabled={busy !== null}
+                busy={busy === next}
+                tone={ACTION_VARIANT[next] === 'outline' ? 'text-9e-accent' : undefined}
+              >
+                {ACTION_LABEL[next]}
+              </OverflowItem>
+            ))}
+            {/* DELETE IS NOT GATED ON `readOnly` — the ruling in
+                lib/actions/inhouse-registrations.js. It is also what keeps this
+                menu from ever being empty: a cancelled request has no status
+                actions left and still has exactly one item. */}
+            <OverflowItem
+              icon={Trash2}
+              onClick={handleDelete}
+              disabled={busy !== null}
+              busy={busy === 'delete'}
+              tone="text-9e-accent"
+            >
+              ลบ Request นี้
+            </OverflowItem>
+          </OverflowMenu>
+        )}
+      />
+
+      <SummaryStrip cells={stripCells} />
+
+      <DetailError message={error} />
+
+      <TabList tabs={tabs} active={tab} onSelect={setTab} idFor={idFor} />
+
+      {/* ── ข้อมูลการสมัคร ── */}
+      <TabPanel id={idFor('request', 'panel')} labelledBy={idFor('request', 'tab')} hidden={tab !== 'request'}>
+        <div className="space-y-[16px]">
+
+          <SectionCard icon={Building2} title="ผู้ประสานงาน & บริษัท">
+            <DL>
+              <DLRow
+                label={companyDiverges ? 'บริษัท / องค์กร (ที่ติดต่อ)' : 'บริษัท / องค์กร'}
+                value={displayCompany}
+                action={displayCompany
+                  ? <CopyButton value={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />
+                  : null}
+              />
+              <DLRow label="ชื่อ-นามสกุล" value={contactName} />
+              <DLRow label="ตำแหน่ง / แผนก" value={[doc.contactRole, doc.contactDepartment].filter(Boolean).join(' · ')} />
+              <DLRow label="อีเมล" value={doc.contactEmail
+                ? <a href={`mailto:${doc.contactEmail}`} className="text-9e-action hover:underline">{doc.contactEmail}</a>
+                : ''} />
+              <DLRow label="เบอร์โทร" value={doc.contactPhone
+                ? <a href={`tel:${doc.contactPhone}`} className="text-9e-action hover:underline">{doc.contactPhone}</a>
+                : ''} />
+              <DLRow label="LINE ID" value={doc.contactLine} />
+            </DL>
+          </SectionCard>
+
+          <SectionCard icon={GraduationCap} title="Training Requirement">
+            <DL>
+              {/*
+                NAME over CODE, the same two-line shape the in-house LIST column
+                uses. Resolved server-side and handed in as `courses`; a miss
+                keeps the code as the primary line rather than blanking — see the
+                page's docstring.
+
+                The empty hint stays: an enquiry naming NO course is a data fault
+                a salesperson has to see, not a row to hide.
+              */}
+              <DLRow label="หลักสูตรที่สนใจ" wide emptyHint="ไม่ได้ระบุหลักสูตร"
+                value={courses.length > 0 ? <CourseList courses={courses} /> : ''} />
+              <DLRow label="จำนวนผู้เข้าอบรม" value={doc.participantsCount == null ? '' : `${doc.participantsCount} ท่าน`} />
+              <DLRow label="เนื้อหา" value={CONTENT_MODE_LABEL[doc.contentMode] ?? doc.contentMode} />
+              <DLRow label="รายละเอียดเนื้อหา" wide value={doc.contentDetails} />
+            </DL>
+          </SectionCard>
+
+          <SectionCard icon={CalendarClock} title="ตารางเวลา & รูปแบบการอบรม">
+            <DL>
+              <DLRow label="ช่วงเวลา" value={scheduleSummary(doc)} />
+              <DLRow label="หมายเหตุเวลา" value={doc.scheduleNote} />
+              <DLRow label="รูปแบบ" value={TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat} />
+              {doc.trainingFormat === 'online' && (
+                <>
+                  <DLRow label="พื้นที่ผู้เข้าอบรม" value={doc.onlineRegion} />
+                  <DLRow label="ข้อจำกัดด้านเวลา" value={doc.onlineTimezone} />
+                </>
+              )}
+              {/*
+                THE VENUE KEEPS ITS EMPTY STATE, deliberately, against the
+                general "absent means absent" rule: an ONSITE enquiry with no
+                venue is not a blank field, it is the next phone call. Hiding the
+                row would hide the job.
+              */}
+              {doc.trainingFormat === 'onsite' && (
+                <DLRow label="สถานที่จัดอบรม" wide value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
+                  action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
+              )}
+            </DL>
+          </SectionCard>
+
+          <SectionCard icon={Receipt} title="ข้อมูลใบเสนอราคา">
+            <DL>
+              <DLRow label="ประเทศ" value={countryLabel} />
+              {/* Only when it disagrees with the contact company — see companyDiverges. */}
+              {companyDiverges && (
+                <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
+                  action={<CopyButton value={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
+              )}
+              <DLRow label="เลขผู้เสียภาษี" value={doc.taxId}
+                action={doc.taxId ? <CopyButton value={doc.taxId} label="เลขผู้เสียภาษี" /> : null} />
+              {/* Derived at read time. `branch` is legacy read-only and is the
+                  fallback for pre-split enquiries — see branchLabel.js. */}
+              <DLRow label="สาขา" value={branchLabel} />
+              <DLRow label="ที่อยู่" wide value={address}
+                action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
+            </DL>
+          </SectionCard>
+
+          {doc.message && (
+            <SectionCard icon={MessageSquare} title="หมายเหตุจากลูกค้า">
+              <QuotedNote>{doc.message}</QuotedNote>
+            </SectionCard>
           )}
-          {/* Without this line the missing แก้ไข button reads as a bug. It says
-              the rule, and says delete is still available, because that is the
-              next question anyone asks when a screen goes read-only. The same
-              copy as the public client, one word apart: this is a คำขอ, not a
-              ใบสมัคร. */}
-          {readOnly && (
-            <p className="max-w-[16rem] text-right text-xs text-[var(--text-muted)]">
-              คำขอนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้ (ยังลบได้)
-            </p>
-          )}
-          <button type="button" onClick={handleDelete} disabled={busy !== null}
-            className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] hover:text-9e-accent transition-colors disabled:opacity-40">
-            {busy === 'delete' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-            ลบ Request นี้
-          </button>
-          {error && <p className="text-xs text-9e-accent">{error}</p>}
+
+          <SectionCard
+            icon={StickyNote}
+            title="บันทึกภายในของทีมขาย"
+            {...editProps('notes')}
+            onSave={handleSaveNotes}
+          >
+            {editSection === 'notes' ? (
+              <textarea
+                value={adminNotes}
+                onChange={(e) => setAdminNotes(e.target.value)}
+                maxLength={2000}
+                rows={5}
+                placeholder="บันทึกการติดต่อ ข้อเสนอ การเจรจา ฯลฯ"
+                className="w-full resize-y rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
+              />
+            ) : adminNotes ? (
+              <QuotedNote>{adminNotes}</QuotedNote>
+            ) : (
+              // NOT an empty quoted block — an accent rule beside nothing
+              // asserts there is a quotation there.
+              <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ยังไม่มีบันทึกจากทีมขาย</p>
+            )}
+          </SectionCard>
+
+          <SystemCard icon={Database} title="ข้อมูลระบบ">
+            <DLRow label="Request ID"   value={mono(doc._id)} />
+            <DLRow label="แหล่งที่มา"    value={doc.source ?? 'inhouse'} />
+            <DLRow label="IP Address"   value={doc.ipAddress} />
+            <DLRow label="อัปเดตล่าสุด"  value={fmtDate(doc.updatedAt)} />
+          </SystemCard>
         </div>
-      </div>
+      </TabPanel>
 
-      {/* ── Contact / Company ── */}
-      <Card title="ผู้ประสานงาน & บริษัท">
-        <Row
-          label={companyDiverges ? 'บริษัท / องค์กร (ที่ติดต่อ)' : 'บริษัท / องค์กร'}
-          value={displayCompany}
-          action={displayCompany
-            ? <CopyButton value={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />
-            : null}
-        />
-        <Row label="ชื่อ-นามสกุล" value={`${doc.contactFirstName ?? ''} ${doc.contactLastName ?? ''}`.trim()} />
-        <Row label="ตำแหน่ง / แผนก" value={[doc.contactRole, doc.contactDepartment].filter(Boolean).join(' · ')} />
-        <Row label="อีเมล" value={doc.contactEmail
-          ? <a href={`mailto:${doc.contactEmail}`} className="text-9e-action hover:underline">{doc.contactEmail}</a>
-          : ''} />
-        <Row label="เบอร์โทร" value={doc.contactPhone
-          ? <a href={`tel:${doc.contactPhone}`} className="text-9e-action hover:underline">{doc.contactPhone}</a>
-          : ''} />
-        <Row label="LINE ID" value={doc.contactLine} />
-      </Card>
-
-      {/* ── Training Requirement ── */}
-      <Card title="Training Requirement">
-        {/*
-          NAME over CODE, the same two-line shape the in-house LIST column uses.
-          Resolved server-side and handed in as `courses`; a miss keeps the code
-          as the primary line rather than blanking — see the page's docstring.
-
-          The empty hint stays: an enquiry naming NO course is a data fault a
-          salesperson has to see, not a row to hide.
-        */}
-        <Row label="หลักสูตรที่สนใจ" wide emptyHint="ไม่ได้ระบุหลักสูตร"
-          value={courses.length > 0 ? <CourseList courses={courses} /> : ''} />
-        <Row label="จำนวนผู้เข้าอบรม" value={`${doc.participantsCount} ท่าน`} />
-        <Row label="เนื้อหา" value={CONTENT_MODE_LABEL[doc.contentMode] ?? doc.contentMode} />
-        <Row label="รายละเอียดเนื้อหา" wide value={doc.contentDetails} />
-      </Card>
-
-      {/* ── Schedule & Format ── */}
-      <Card title="ตารางเวลา & รูปแบบการอบรม">
-        <Row label="ช่วงเวลา" value={scheduleSummary(doc)} />
-        <Row label="หมายเหตุเวลา" value={doc.scheduleNote} />
-        <Row label="รูปแบบ" value={TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat} />
-        {doc.trainingFormat === 'online' && (
-          <>
-            <Row label="พื้นที่ผู้เข้าอบรม" value={doc.onlineRegion} />
-            <Row label="ข้อจำกัดด้านเวลา" value={doc.onlineTimezone} />
-          </>
-        )}
-        {/*
-          THE VENUE KEEPS ITS EMPTY STATE, deliberately, against the general
-          "absent means absent" rule: an ONSITE enquiry with no venue is not a
-          blank field, it is the next phone call. Hiding the row would hide the
-          job.
-        */}
-        {doc.trainingFormat === 'onsite' && (
-          <Row label="สถานที่จัดอบรม" wide value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
-            action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
-        )}
-      </Card>
-
-      {/* ── Quotation ── */}
-      <Card title="ข้อมูลใบเสนอราคา">
-        <Row label="ประเทศ" value={countryLabel} />
-        {/* Only when it disagrees with the contact company — see companyDiverges. */}
-        {companyDiverges && (
-          <Row label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
-            action={<CopyButton value={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
-        )}
-        <Row label="เลขผู้เสียภาษี" value={doc.taxId}
-          action={doc.taxId ? <CopyButton value={doc.taxId} label="เลขผู้เสียภาษี" /> : null} />
-        {/* Derived at read time. `branch` is legacy read-only and is the
-            fallback for pre-split enquiries — see branchLabel.js. */}
-        <Row label="สาขา" value={branchLabel} />
-        <Row label="ที่อยู่" wide value={address}
-          action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
-      </Card>
-
-      {/* ── Message ── */}
-      {doc.message && (
-        <Card title="หมายเหตุจากลูกค้า" plain>
-          <p className="whitespace-pre-wrap text-sm text-[var(--text-primary)]">{doc.message}</p>
-        </Card>
-      )}
-
-      {/* ── Admin notes (editable) ── */}
-      <CardEditable
-        title="บันทึกภายในของทีมขาย"
-        readOnly={readOnly}
-        isEditing={editingNotes}
-        isSaving={busy === 'save-notes'}
-        onEdit={() => setEditingNotes(true)}
-        onSave={handleSaveNotes}
-        onCancel={handleCancelNotes}
-      >
-        {editingNotes ? (
-          <textarea
-            value={adminNotes}
-            onChange={(e) => setAdminNotes(e.target.value)}
-            maxLength={2000}
-            rows={5}
-            placeholder="บันทึกการติดต่อ ข้อเสนอ การเจรจา ฯลฯ"
-            className="w-full resize-y rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
-          />
-        ) : (
-          <p className={cn('whitespace-pre-wrap text-sm', adminNotes ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)] italic')}>
-            {adminNotes || 'ยังไม่มีบันทึกจากทีมขาย'}
-          </p>
-        )}
-      </CardEditable>
-
-      {/* ── Meta ── */}
-      <Card title="ข้อมูลระบบ">
-        <Row label="Request ID"   value={<span className="font-mono text-xs">{doc._id}</span>} />
-        <Row label="แหล่งที่มา"    value={doc.source ?? 'inhouse'} />
-        <Row label="IP Address"   value={doc.ipAddress} />
-        <Row label="อัปเดตล่าสุด"  value={fmtDate(doc.updatedAt)} />
-      </Card>
+      {/* ── ประวัติการดำเนินการ ── */}
+      {history ? (
+        <TabPanel id={idFor('history', 'panel')} labelledBy={idFor('history', 'tab')} hidden={tab !== 'history'}>
+          {history}
+        </TabPanel>
+      ) : null}
     </div>
   );
 }
 
 // ── Shared atoms ───────────────────────────────────────────────────
-
-/**
- * A card of label/value rows — TWO COLUMNS from `md` up.
- *
- * The screen was six stacked cards of single-column rows against a 176px label
- * gutter, so a short value like "20 ท่าน" left most of a 4xl container empty
- * and the page read as mostly whitespace. Pairing short rows halves the height
- * and puts related fields side by side; anything long (an address, a course
- * list, free text) opts out with `wide` and spans both.
- *
- * `<dl>` rather than a div, because the rows are dt/dd pairs and always were —
- * they were just sitting in a div, which is invalid. The grid lives on the dl
- * so each Row is a grid ITEM and `wide` can be a plain col-span.
- *
- * `plain` is for the one card whose body is prose, not rows: dt/dd have no
- * meaning there and a paragraph cannot be a child of <dl>.
- */
-function Card({ title, children, plain = false }) {
-  return (
-    <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-      <h2 className="mb-4 text-base font-bold text-[var(--text-primary)]">{title}</h2>
-      {plain
-        ? <div className="space-y-3">{children}</div>
-        : <dl className="grid gap-x-8 gap-y-3.5 md:grid-cols-2">{children}</dl>}
-    </section>
-  );
-}
 
 /**
  * `coursesInterested` resolved to names, with the code kept underneath.
@@ -516,8 +720,8 @@ function CourseList({ courses }) {
     <ul className="space-y-1.5">
       {courses.map(({ code, name }) => (
         <li key={code}>
-          <span className="block text-sm text-[var(--text-primary)]">{name || code}</span>
-          {name && <span className="block font-mono text-xs text-[var(--text-muted)]">{code}</span>}
+          <span className="block text-[13px] text-[var(--text-primary)]">{name || code}</span>
+          {name && <span className="block font-mono text-[11px] text-[var(--text-muted)]">{code}</span>}
         </li>
       ))}
     </ul>
@@ -581,102 +785,16 @@ function CopyButton({ value, label }) {
       onClick={handleCopy}
       aria-label={`คัดลอก${label}`}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-2 py-1 text-xs font-medium transition-colors',
+        'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-2 py-1 text-[11px] font-medium transition-colors',
         state === 'ok'   && 'border-9e-brand/40 text-9e-action',
         state === 'fail' && 'border-9e-accent/40 text-9e-accent',
         state === 'idle' && 'border-[var(--surface-border)] text-[var(--text-muted)] hover:text-9e-action'
       )}
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
       <span aria-live="polite">
         {state === 'ok' ? 'คัดลอกแล้ว' : state === 'fail' ? 'คัดลอกไม่สำเร็จ' : 'คัดลอก'}
       </span>
     </button>
-  );
-}
-
-/**
- * `readOnly` renders NO edit affordance at all — not a disabled one.
- *
- * A greyed-out แก้ไข button still invites the click and still has to explain
- * itself on every hover. On a cancelled request the honest surface is a card
- * with no control, plus the one line in the header saying why. Same shape as
- * the public client's CardEditable.
- *
- * The prop DEFAULTS TO FALSE so a card that is never passed it stays editable
- * — which is why the fs tier counts CardEditable uses against gated ones rather
- * than trusting this default.
- */
-function CardEditable({ title, children, isEditing, isSaving, onEdit, onSave, onCancel, readOnly = false }) {
-  return (
-    <section className={cn('rounded-9e-lg border bg-[var(--surface)] p-6 transition-colors', isEditing ? 'border-9e-brand/40' : 'border-[var(--surface-border)]')}>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-[var(--text-primary)]">{title}</h2>
-        {!isEditing ? (
-          readOnly ? null : (
-          <button type="button" onClick={onEdit}
-            className="flex items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-9e-action transition-colors">
-            <Pencil className="h-3.5 w-3.5" />แก้ไข
-          </button>
-          )
-        ) : (
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onCancel} disabled={isSaving}
-              className="flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] disabled:opacity-40">
-              <X className="h-3.5 w-3.5" />ยกเลิก
-            </button>
-            <button type="button" onClick={onSave} disabled={isSaving}
-              className="flex items-center gap-1 rounded-9e-md bg-9e-navy px-3 py-1.5 text-xs font-semibold text-9e-ice hover:opacity-90 disabled:opacity-40">
-              {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              บันทึก
-            </button>
-          </div>
-        )}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-/**
- * One label/value pair.
- *
- * ── AN ABSENT VALUE MEANS AN ABSENT ROW ─────────────────────────────────────
- * This used to render `value || '—'`, so every optional field the customer
- * skipped printed an em dash. On a typical enquiry that was most of the page:
- * a column of dashes reading as "we hold nothing about this company", when the
- * truth was "these questions were not asked". The row now returns NULL.
- *
- * The check lives here rather than at each call site on purpose — as a `&&`
- * guard per row it was applied to some fields and forgotten on others, which is
- * how the dashes accumulated. A caller cannot emit one by accident now.
- *
- * `emptyHint` is the deliberate exception, for the case where a MISSING value
- * is itself the information: an onsite enquiry with no venue, an enquiry naming
- * no course. Those are work for a salesperson, not blanks to hide, and they
- * render as an explicit muted sentence rather than a dash that says nothing.
- *
- * ── LABEL TYPOGRAPHY ────────────────────────────────────────────────────────
- * `uppercase` is gone: it is a no-op on Thai, which has no letter case, so it
- * only ever affected the handful of Latin labels ("Request ID", "IP Address")
- * and made them the odd ones out. `tracking-wide` is gone too — extra letter
- * spacing on Thai pushes the marks away from their base characters and reads as
- * a rendering fault. The gutter narrows with them: 176px was sized for spaced
- * uppercase Latin and these labels are short.
- */
-function Row({ label, value, wide = false, emptyHint = '', action = null }) {
-  const isEmpty = value === null || value === undefined || value === '' || value === false;
-  if (isEmpty && !emptyHint) return null;
-
-  return (
-    <div className={cn('flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-3', wide && 'md:col-span-2')}>
-      <dt className="w-full text-xs font-medium text-[var(--text-muted)] sm:w-32 sm:flex-none">{label}</dt>
-      <dd className="flex min-w-0 flex-1 items-start justify-between gap-3 text-sm text-[var(--text-primary)]">
-        {isEmpty
-          ? <span className="italic text-[var(--text-muted)]">{emptyHint}</span>
-          : <span className="min-w-0">{value}</span>}
-        {action}
-      </dd>
-    </div>
   );
 }
