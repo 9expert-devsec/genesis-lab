@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { requirePage } from '@/lib/rbac/guard';
 import { listMediaCategories } from '@/lib/actions/media';
 import { WEBROOT_DOCUMENTS, webrootPublicPath } from '@/lib/webrootDocuments.mjs';

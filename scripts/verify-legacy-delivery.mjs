@@ -65,6 +65,10 @@ import {
   VARIANT_PREFIX,
   NO_STORE_DOCUMENT_EXTENSIONS,
 } from '../src/lib/legacyTransforms.mjs';
+// The SAME list next.config.mjs builds its rewrite rules from. Hardcoding it
+// here a second time is how this harness could go green over a document the
+// rewrite had stopped serving.
+import { WEBROOT_DOCUMENTS } from '../src/lib/webrootDocuments.mjs';
 
 const args = process.argv.slice(2);
 const argOf = (k, d) => (args.find((a) => a.startsWith(`--${k}=`)) ?? `=${d}`).split('=').slice(1).join('=');
@@ -639,8 +643,10 @@ for (const row of set.others) {
 }
 
 /* THE THREE WEBROOT PDFs — EXPECTED TO SERVE.
- * BLOB_PUBLIC_BASE is set, so next.config emits the three hand-written webroot
- * rules and these URLs resolve to the Blob store. A 200 whose body begins
+ * BLOB_PUBLIC_BASE is set, so next.config emits one rewrite per entry in
+ * src/lib/webrootDocuments.mjs — the SAME list iterated below, which is what
+ * stops this harness from checking a document the rewrite no longer serves —
+ * and these URLs resolve to the Blob store. A 200 whose body begins
  * %PDF- is the PASS, and the magic-byte check is the point: a 200 carrying an
  * HTML error page would be the worst of both.
  * A 404 is still ACCEPTED rather than failed — not as the expected answer but
@@ -648,7 +654,7 @@ for (const row of set.others) {
  * That is inert, not broken. Anything else means a catch-all rule is matching
  * at the site root, which is the dangerous failure. */
 console.log('\n── WEBROOT PDFs (BLOB_PUBLIC_BASE set — expect 200 %PDF-) ──');
-for (const file of ['how-to-create-chatgpt-account.pdf', '9expert-company-profile.pdf', '9expert-training-course-catalog.pdf']) {
+for (const file of WEBROOT_DOCUMENTS) {
   const url = `${ORIGIN}/${file}`;
   const r = await probe(url);
   /* Two legitimate outcomes, decided by whether the deployment has
