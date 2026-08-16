@@ -476,3 +476,133 @@ test('every other mount of the panel is untouched by the feed', () => {
   const server = readSource('src/components/audit/RecordHistory.jsx');
   assert.match(server.code, /variant = 'accordion'/, 'the server component no longer defaults to the accordion');
 });
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 9. IN-HOUSE — THE SAME FEED, AND THE ONE PLACE THE TWO GENUINELY DIFFER
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Section 4 asked for anything where the in-house audit rows differ IN KIND from
+ * public's, rather than assuming symmetry. There is exactly one, and it is not a
+ * gap to be closed:
+ *
+ *   IN-HOUSE WRITES A DEDICATED `notes` ACTION. PUBLIC DOES NOT.
+ *
+ * `updateInhouseAdminNotes` records `action: 'notes'`; public notes are one
+ * field among many in `updateRegistration`, which records `update`. So the
+ * in-house feed can name what happened and the public feed cannot — and titling
+ * a public `update` "เพิ่มบันทึกภายใน" would assert something the row does not
+ * hold.
+ *
+ * Everything else is symmetric, and these tests say which is which rather than
+ * leaving a reader to infer it.
+ */
+
+const INHOUSE_ROWS = [
+  { _id: 'i-status', action: 'status', before: { status: 'pending' }, after: { status: 'quoted' }, meta: null, createdAt: '2026-08-12T04:00:00.000Z', actor: { name: 'ทีมขาย' } },
+  NOTES_ROW,
+];
+
+const INHOUSE_ORIGIN = {
+  createdAt: '2026-08-01T03:00:00.000Z',
+  source: 'inhouse',
+  label: 'ได้รับคำขออบรม',
+};
+
+const INHOUSE_FEED = renderToStaticMarkup(createElement(HistoryFeed, {
+  state: HISTORY_STATE.OK,
+  rows: INHOUSE_ROWS,
+  total: INHOUSE_ROWS.length,
+  titles: INHOUSE_ACTION_TITLES,
+  origin: INHOUSE_ORIGIN,
+  title: 'ประวัติการดำเนินการ',
+  description: 'บันทึกการดำเนินการของทีมขายกับคำขอนี้',
+}));
+
+test('in-house takes the SAME entry shape as public', () => {
+  // The 82px row, the icon box, the 48px text block, the 150px timestamp. A
+  // second entry shape for the same kind of row is how a reader learns the two
+  // screens are different products.
+  for (const entry of entries(INHOUSE_FEED)) {
+    assert.match(entry.html, /h-\[82px\]/, 'an in-house entry is not 82px');
+    assert.match(entry.html, /left-\[2px\] top-\[13px\] flex h-\[29px\] w-\[29px\]/,
+      'an in-house entry’s icon box moved');
+    assert.match(entry.html, /pl-\[48px\]/, 'an in-house entry’s text block is not inset 48px');
+    assert.match(entry.html, /w-\[150px\]/, 'an in-house entry has no 150px timestamp block');
+  }
+  assert.match(INHOUSE_FEED, /h-\[53\.8px\]/, 'the in-house card header is not the measured 53.8px');
+  assert.ok(!INHOUSE_FEED.includes('>แก้ไข<'), 'the in-house history card grew an edit button');
+});
+
+test('in-house names its notes action; the same row on public could not be', () => {
+  const lines = linesOf(entries(INHOUSE_FEED)[1]);
+  assert.equal(lines[0], 'เพิ่มบันทึกภายใน', 'the in-house notes row is not titled');
+  // THE ASYMMETRY: the identical row rendered with the PUBLIC vocabulary shows
+  // its raw action, because public has no title for an action it never writes.
+  const asPublic = renderToStaticMarkup(createElement(HistoryFeed, {
+    state: HISTORY_STATE.OK, rows: [NOTES_ROW], total: 1,
+    titles: PUBLIC_ACTION_TITLES, origin: null, title: 'x',
+  }));
+  assert.equal(linesOf(entries(asPublic)[0])[0], 'notes',
+    'the public vocabulary titled an action it does not write');
+});
+
+test('in-house synthesises its own creation entry, from its own source', () => {
+  const list = entries(INHOUSE_FEED);
+  const origin = list[list.length - 1];
+  assert.equal(origin.origin, 'document', 'the in-house oldest entry is not marked document-derived');
+  const lines = linesOf(origin);
+  assert.equal(lines[0], 'ได้รับคำขออบรม', 'the in-house origin entry uses the public label');
+  assert.equal(lines[1], 'สร้างรายการจากแบบฟอร์ม In-house', 'the in-house source is not named');
+  assert.equal(lines[2], 'ข้อมูลจากตัวรายการ ไม่ใช่บันทึกการดำเนินการ');
+});
+
+test('a legacy in-house record holding source "web" says so rather than guessing', () => {
+  /**
+   * MEASURED FROM THE SCHEMA, not assumed. RegisterInhouse declares
+   * `source: { default: 'web' }` and api/registration/inhouse/route.js overrides
+   * it explicitly — so a document written before that route did so really does
+   * hold 'web'. Defaulting to 'inhouse' at the mount point would make the screen
+   * assert a provenance the record does not carry.
+   */
+  const legacy = renderToStaticMarkup(createElement(HistoryFeed, {
+    state: HISTORY_STATE.OK, rows: [], total: 0,
+    titles: INHOUSE_ACTION_TITLES,
+    origin: { ...INHOUSE_ORIGIN, source: 'web' },
+    title: 'x',
+  }));
+  const list = entries(legacy);
+  assert.equal(linesOf(list[list.length - 1])[1], 'สร้างรายการจากแบบฟอร์มเว็บไซต์');
+});
+
+test('both mount points pass the feed variant, the title and the origin', () => {
+  /**
+   * The pages are SERVER components and cannot be rendered in this tier, so the
+   * wiring is asserted at source. `variant`, `origin` and the label are props of
+   * the MOUNT POINT — written into the screen's own file, exactly like `menu`
+   * and `entity`, because they come off the document that page already loaded.
+   */
+  for (const [name, rel] of Object.entries({
+    public:  'src/app/admin/registrations/[id]/page.jsx',
+    inhouse: 'src/app/admin/registrations/inhouse/[id]/page.jsx',
+  })) {
+    const src = readSource(rel);
+    assert.match(src.code, /variant="feed"/, `${name}: the page does not ask for the feed`);
+    assert.match(src.code, /title="ประวัติการดำเนินการ"/, `${name}: the card has no heading`);
+    assert.match(src.code, /createdAt: doc\.createdAt/, `${name}: the origin carries no timestamp`);
+    assert.match(src.code, /source: doc\.source \?\? 'web'/,
+      `${name}: the origin's source does not follow the schema default`);
+    assert.match(src.code, /label: 'ได้รับ/, `${name}: the origin entry has no label`);
+  }
+});
+
+test('the two pages label their origin entry DIFFERENTLY', () => {
+  // One is a ใบสมัคร and the other a คำขอ — the same distinction the two screens'
+  // read-only copy already keeps, one word apart. A shared label would make the
+  // in-house feed call the record something it is not.
+  const pub = readSource('src/app/admin/registrations/[id]/page.jsx').code;
+  const inh = readSource('src/app/admin/registrations/inhouse/[id]/page.jsx').code;
+  assert.match(pub, /label: 'ได้รับใบสมัคร'/);
+  assert.match(inh, /label: 'ได้รับคำขออบรม'/);
+});

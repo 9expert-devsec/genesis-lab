@@ -58,6 +58,29 @@ export default async function Page({ params }) {
           entity="inhouse"
           recordId={String(doc._id)}
           defaultOpen
+          variant="feed"
+          title="ประวัติการดำเนินการ"
+          description="บันทึกการดำเนินการของทีมขายกับคำขอนี้"
+          /**
+           * THE DOCUMENT'S OWN CREATION FACTS — same slot as the public page and
+           * the same reason: the audit log records ADMIN actions, and a customer
+           * submitting the in-house form is not one, so the oldest entry cannot
+           * come from the trail. It comes from `createdAt` and `source` on the
+           * record, and the feed marks it as document-derived in both words and
+           * markup.
+           *
+           * `?? 'web'` matches the SCHEMA default rather than guessing
+           * `'inhouse'`: RegisterInhouse declares `source: { default: 'web' }` and
+           * api/registration/inhouse/route.js overrides it explicitly. A legacy
+           * document written before that route did so really does hold 'web', and
+           * defaulting to 'inhouse' here would make the screen assert a
+           * provenance the record does not carry.
+           */
+          origin={{
+            createdAt: doc.createdAt,
+            source: doc.source ?? 'web',
+            label: 'ได้รับคำขออบรม',
+          }}
         />
       )}
     />
