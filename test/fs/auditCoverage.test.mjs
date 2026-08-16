@@ -625,14 +625,28 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // side's number describes the merged tree and the conflict could not be
 // resolved by taking a side.
 //
-// IT IS ALSO NOT THE SUM, and that was demonstrated rather than assumed: the
-// obvious arithmetic gives 171, and the walk run against the merged tree
-// reports 170. The two lines of work overlap — recordWebrootReplacement is
-// counted in both branches' figures — so adding the deltas double-counts it.
-// A pin is a measurement, not a sum: 170 and the depth-0 figure 164 were both
-// read back off the mechanism with the pins set to deliberately-wrong
-// placeholders. 170 − 164 = 6, which is exactly the six entries now in
-// REACHED_THROUGH_IMPORT.
+// 170 and the depth-0 figure 164 were MEASURED: both pins were set to
+// deliberately-wrong placeholders and the walk run against the merged tree, and
+// these are the numbers it reported back. 170 − 164 = 6, exactly the six
+// entries now in REACHED_THROUGH_IMPORT.
+//
+// ── A CORRECTION, KEPT HERE BECAUSE THE FALSE VERSION WAS COMMITTED ────────
+// The first version of this comment, and the message of merge commit 64f7f70,
+// claimed the additive arithmetic gave 171 and that the walk's 170 differed
+// because the two branches "overlap at recordWebrootReplacement". BOTH HALVES
+// WERE FALSE and neither was measured:
+//
+//   · `git grep -n recordWebrootReplacement c4f6303 -- src/` returns NOTHING,
+//     as does `git grep -ln webroot c4f6303 -- src/`. dev had no webroot code
+//     at all, so there was nothing to overlap. The two branches changed
+//     disjoint sets of action modules — dev 11, wip 1, both 0.
+//   · the additive arithmetic gives 170, not 171, on all three pins:
+//     164+4+2 = 170, 160+3+1 = 164, 4+1+1 = 6. There was no discrepancy.
+//
+// 171 was a value typed in before measuring; the "overlap" was then invented to
+// explain a gap that did not exist. The pin is right because it was measured,
+// which is the only reason it was ever safe. The commit message cannot be
+// corrected without rewriting history, so the correction lives here.
 const MUTATING_EXPORT_COUNT = 170;
 
 /** The exports only the import walk can see, and the chain that decides each. */
