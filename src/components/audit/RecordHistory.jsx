@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth/options';
 import { readRecordHistory, HISTORY_STATE, RECORD_HISTORY_PREVIEW } from '@/lib/audit/readAuditLog';
 import { RecordHistoryPanel } from './RecordHistoryPanel';
+import { actionTitlesFor } from '@/lib/audit/registrationHistory';
 
 /**
  * "Before I edit this, who touched it last and what did they change?"
@@ -28,8 +29,19 @@ import { RecordHistoryPanel } from './RecordHistoryPanel';
  * @param {string} [props.title]
  * @param {boolean} [props.defaultOpen] for a mount that IS the history — a tab
  *        of its own, where an accordion asks a question the reader just answered
+ * @param {'accordion'|'feed'} [props.variant] the CONTAINER. `'feed'` is the
+ *        82px-entry card the registration detail tabs use; every other mount
+ *        takes the default and is unchanged.
+ * @param {string} [props.description] the feed card's second header line
+ * @param {{createdAt: string, source: string, label: string}} [props.origin]
+ *        the DOCUMENT's own creation facts, for the synthesised oldest entry.
+ *        Written at the mount point, like `menu` and `entity`, because it comes
+ *        off the document the screen already loaded and nothing here can read it.
  */
-export async function RecordHistory({ menu, entity, recordId, title, defaultOpen = false }) {
+export async function RecordHistory({
+  menu, entity, recordId, title, defaultOpen = false,
+  variant = 'accordion', description, origin,
+}) {
   const session = await auth();
   const user = session?.user ?? null;
 
@@ -42,6 +54,19 @@ export async function RecordHistory({ menu, entity, recordId, title, defaultOpen
   // being withheld.
   if (state === HISTORY_STATE.DENIED) return null;
 
+  /**
+   * THE ACTION VOCABULARY IS CHOSEN HERE, ON THE SERVER, AND CROSSES AS DATA.
+   *
+   * `actionTitlesFor` is a function and a function cannot cross the
+   * server/client boundary; the plain object it returns can. Choosing it here
+   * also keeps the client from having to know that `registrations` holds two
+   * collections with different action sets — it receives the one map that
+   * applies to the record it is showing.
+   *
+   * An entity this module has not been taught returns an EMPTY map, and the feed
+   * then renders raw action names. That is the honest degradation: the row shows
+   * what it actually holds rather than borrowing another menu's wording.
+   */
   return (
     <RecordHistoryPanel
       state={state}
@@ -50,6 +75,10 @@ export async function RecordHistory({ menu, entity, recordId, title, defaultOpen
       previewCount={RECORD_HISTORY_PREVIEW}
       title={title ?? 'ประวัติการแก้ไข'}
       defaultOpen={defaultOpen}
+      variant={variant}
+      description={description}
+      origin={origin}
+      titles={actionTitlesFor(entity)}
     />
   );
 }
