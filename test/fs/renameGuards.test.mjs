@@ -103,7 +103,10 @@ test('a half-finished rename is DETECTABLE, and the detector is exported', () =>
   // Idempotence is worth nothing if the interruption is invisible.
   const code = src();
   assert.match(code, /export async function inspectRenameState/, 'nothing reports a partial rename');
-  assert.match(code, /detectPartialRename\(\{/, 'the detector is not called');
+  // `detectPartialRename` → `detectRenameState` when upstream joined the
+  // inputs: the old name described one of six answers.
+  assert.match(code, /detectRenameState\(\{/, 'the detector is not called');
+  assert.match(code, /upstream: asOld\.upstream/, 'the detector is called without the upstream side');
   assert.match(code, /previewCourseCodeRename\(\{ oldCode: newCode, newCode: oldCode \}\)/,
     'the reverse preview — the half that finds rows already on the new code — is missing');
 });

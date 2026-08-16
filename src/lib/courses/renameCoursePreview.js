@@ -162,6 +162,31 @@ export function buildRenamePreview({
     );
   }
 
+  /**
+   * ── WHAT UPSTREAM HOLDS, UNFILTERED ────────────────────────────────────────
+   *
+   * `collision` above answers "may this rename run", so it nulls a hit that IS
+   * the course being renamed. That filtering makes it useless as a state
+   * signal: "upstream still has the old code" and "upstream has been renamed
+   * already" both reduce to `inMsdb: null` there.
+   *
+   * This block is the raw answer — does the upstream catalogue contain each
+   * code, and under what spelling — and it is what lets `detectRenameState`
+   * tell the normal interval (genesis moved, upstream has not) apart from the
+   * reverse (upstream moved, genesis has not). Measured on the real site
+   * 2026-08-16: the second one is FULLY REVERSIBLE by renaming MSDB back,
+   * because genesis never moved. The first is not.
+   *
+   * Free: `msdbCodes` is already in hand for the collision check, so this adds
+   * no read.
+   */
+  const upstream = {
+    hasOldCode: findInsensitive(msdbCodes, from) !== null,
+    hasNewCode: findInsensitive(msdbCodes, to) !== null,
+    oldSpelling: findInsensitive(msdbCodes, from),
+    newSpelling: findInsensitive(msdbCodes, to),
+  };
+
   // ── Case regime ───────────────────────────────────────────────────────────
   const caseOnly = Boolean(from && to && from !== to && from.toLowerCase() === to.toLowerCase());
 
@@ -258,6 +283,7 @@ export function buildRenamePreview({
     newCode: to,
     caseOnly,
     collision,
+    upstream,
     url,
     stores,
     historical,

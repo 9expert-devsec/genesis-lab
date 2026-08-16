@@ -171,6 +171,27 @@ test('CONTROL: the exemption is still real, and still only Admin', () => {
   }
 });
 
+/**
+ * THE UPSTREAM BLOCK ADDED A READ, NOT A WRITE.
+ *
+ * `buildRenamePreview` now reports what the upstream catalogue holds for both
+ * codes, so `detectRenameState` can tell the interval from its reverse. That
+ * answer is computed from `msdbCodes`, which the collision check already had in
+ * hand — no extra fetch, and certainly no write. Pinned here beside the
+ * read-only guard because "we added an upstream signal" is exactly the change
+ * during which an upstream WRITE would look plausible.
+ */
+test('the upstream state block is derived, not fetched, and writes nothing', () => {
+  const { code } = readSource('src/lib/courses/renameCoursePreview.js');
+  assert.match(code, /const upstream = \{/, 'the preview no longer reports upstream state');
+  assert.match(code, /hasOldCode: findInsensitive\(msdbCodes, from\)/, 'it does not read the codes it already has');
+  assert.match(code, /hasNewCode: findInsensitive\(msdbCodes, to\)/);
+  // The planner is pure — it takes the block, it does not go and get one.
+  const plan = readSource('src/lib/courses/renameCoursePlan.js');
+  assert.ok(!/listPublicCourses|aiFetch|fetch\(/.test(plan.code), 'the planner fetches upstream itself');
+  assert.match(plan.code, /upstream = null/, 'the planner does not take upstream as an argument');
+});
+
 test('the pure planner imports no model, no db and no cache API', () => {
   // It is handed its data. That is what lets every verdict be driven against
   // fixtures, including the ones with no live instance.

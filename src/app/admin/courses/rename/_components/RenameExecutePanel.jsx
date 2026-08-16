@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { renameCourseCodePhase1, inspectRenameState } from '@/lib/actions/course-rename';
 import { canExecuteRename, aliasStepFor, GATE } from '@/lib/courses/renameExecuteGate';
+import { RENAME_STATE } from '@/lib/courses/renameCoursePlan';
 
 /**
  * The write. THE ONLY component in this screen that can perform one.
@@ -60,8 +61,15 @@ function MsdbObligation({ from, to, loud }) {
   );
 }
 
-/** `inspectRenameState`'s answer, rendered whatever it says. */
-function StateReport({ state, from, to, onRerun, busy }) {
+/**
+ * `inspectRenameState`'s answer, rendered whatever it says.
+ *
+ * EXPORTED so the render tier can drive every state from a fixture. The panel's
+ * own copy only exists after a run, which that tier cannot trigger — and the
+ * states worth asserting (the interval, the reverse divergence, a conflict) are
+ * exactly the ones nobody can produce on demand.
+ */
+export function RenameStateReport({ state, from, to, onRerun, busy }) {
   if (!state) return null;
 
   if (state.partial) {
@@ -82,6 +90,12 @@ function StateReport({ state, from, to, onRerun, busy }) {
           สั่งซ้ำได้อย่างปลอดภัย — ทุกขั้นตอนออกแบบให้ทำซ้ำแล้วได้ผลเดิม
           ส่วนที่เขียนไปแล้วจะไม่ถูกเขียนซ้ำ
         </p>
+        {/* Rendered on THIS branch too. A partial rename has written, so it is
+            not reversible — and the branch that returns early is exactly where
+            an "every state says so" rule quietly stops holding. */}
+        <p className="mt-2 text-xs text-red-700 dark:text-red-300" data-testid="rename-reversibility">
+          ฝั่งระบบนี้เขียนไปแล้ว — ย้อนกลับด้วยเครื่องมือนี้ไม่ได้ ต้องเดินหน้าให้ครบ
+        </p>
         <button
           type="button"
           onClick={onRerun}
@@ -94,17 +108,79 @@ function StateReport({ state, from, to, onRerun, busy }) {
     );
   }
 
-  const LABEL = {
-    complete: 'ฝั่ง genesis เปลี่ยนครบแล้ว',
-    'not-started': 'ยังไม่ได้เริ่ม — ไม่มีที่เก็บข้อมูลใดใช้รหัสใหม่',
-    empty: 'ไม่พบข้อมูลที่ผูกกับรหัสใดเลย',
+  /**
+   * ── ONE ENTRY PER STATE, EACH WITH ITS OWN ADVICE ──────────────────────
+   *
+   * The advice is the point. A state name tells the admin where they are; only
+   * the advice tells them whether to go forward or back — and those are
+   * opposite actions in two states that look almost identical from the genesis
+   * side alone.
+   */
+  const STATES = {
+    [RENAME_STATE.NOT_STARTED]: {
+      tone: 'plain',
+      title: 'ยังไม่ได้เริ่ม — ทั้งสองฝั่งยังใช้รหัสเดิม',
+      advice: 'ยังไม่มีอะไรเปลี่ยน เริ่มได้ตามปกติ',
+    },
+    [RENAME_STATE.UPSTREAM_PENDING]: {
+      tone: 'warn',
+      title: 'ฝั่งระบบนี้เปลี่ยนแล้ว — MSDB ยังเป็นรหัสเดิม',
+      advice: 'ไปแก้ course_id ที่ MSDB เดี๋ยวนี้ นี่คือช่วงที่หลักสูตรซ่อนอาจกลับมาแสดง',
+    },
+    [RENAME_STATE.COMPLETE]: {
+      tone: 'ok',
+      title: 'เสร็จแล้ว — ทั้งสองฝั่งตรงกัน',
+      advice: 'ไม่ต้องทำอะไรต่อ',
+    },
+    [RENAME_STATE.UPSTREAM_ONLY]: {
+      tone: 'warn',
+      title: 'MSDB เปลี่ยนแล้ว — ฝั่งระบบนี้ยังไม่ได้เปลี่ยน',
+      advice:
+        'เลือกได้สองทาง: เปลี่ยน course_id ที่ MSDB กลับเป็นรหัสเดิม (ยกเลิกได้ทั้งหมด) '
+        + 'หรือสั่งเปลี่ยนฝั่งระบบนี้ให้ตามทัน',
+    },
+    [RENAME_STATE.UPSTREAM_CONFLICT]: {
+      tone: 'bad',
+      title: 'MSDB มีทั้งสองรหัสอยู่ — เป็นคนละหลักสูตรกัน',
+      advice: 'รหัสใหม่ถูกใช้โดยหลักสูตรอื่นแล้ว ต้องแก้ที่ MSDB ก่อน',
+    },
+    [RENAME_STATE.UNKNOWN]: {
+      tone: 'bad',
+      title: 'MSDB ไม่มีทั้งสองรหัส',
+      advice: 'ตรวจสอบว่าหลักสูตรยังอยู่ที่ต้นทางหรือไม่ ก่อนทำอะไรต่อ',
+    },
   };
+
+  const entry = STATES[state.state] ?? { tone: 'plain', title: state.state, advice: '' };
+  const TONE = {
+    ok:    'border-[var(--surface-border)] bg-[var(--surface)]',
+    plain: 'border-[var(--surface-border)] bg-[var(--surface)]',
+    warn:  'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10',
+    bad:   'border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10',
+  };
+
   return (
-    <div className={`${CARD} border-[var(--surface-border)] bg-[var(--surface)]`} data-testid="rename-state">
-      <p className="text-xs font-semibold text-[var(--text-secondary)]">สถานะหลังทำงาน</p>
-      <p className="mt-1 text-sm text-[var(--text-primary)]">{LABEL[state.state] ?? state.state}</p>
+    <div className={`${CARD} ${TONE[entry.tone]}`} data-testid="rename-state" data-state={state.state}>
+      <p className="text-xs font-semibold text-[var(--text-secondary)]">สถานะทั้งสองฝั่ง</p>
+      <p className="mt-1 text-sm font-bold text-[var(--text-primary)]">{entry.title}</p>
+      <p className="mt-1 text-sm text-[var(--text-primary)]">{entry.advice}</p>
+
+      {/* THE REVERSIBILITY FACT, RENDERED — not left for the reader to infer
+          from the state name. It is the only thing that says whether going
+          BACK is still an option, and it is true exactly while genesis has not
+          written. Measured: an upstream-only divergence undoes completely by
+          renaming MSDB back. */}
+      <p
+        className={'mt-2 text-xs leading-relaxed ' + (state.reversible ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text-muted)]')}
+        data-testid="rename-reversibility"
+      >
+        {state.reversible
+          ? 'ฝั่งระบบนี้ยังไม่ได้เขียนอะไร — ย้อนกลับได้ทั้งหมดโดยแก้ที่ MSDB อย่างเดียว'
+          : 'ฝั่งระบบนี้เขียนไปแล้ว — ย้อนกลับด้วยเครื่องมือนี้ไม่ได้ ต้องเดินหน้าให้ครบ'}
+      </p>
+
       {state.alreadyOnNewCode?.length > 0 && (
-        <p className="mt-1 font-mono text-xs text-[var(--text-muted)]">
+        <p className="mt-2 font-mono text-xs text-[var(--text-muted)]">
           ใช้รหัสใหม่แล้ว: {state.alreadyOnNewCode.join(', ')}
         </p>
       )}
@@ -174,7 +250,7 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
         </div>
       )}
 
-      <StateReport state={state} from={from} to={to} onRerun={run} busy={busy} />
+      <RenameStateReport state={state} from={from} to={to} onRerun={run} busy={busy} />
 
       {stale && (
         <div className={`${CARD} border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10`} data-testid="rename-stale">

@@ -127,19 +127,105 @@ export function codeTaken(code, { liveCodes = [], formerCodes = [], exceptCode =
  * The named list is what makes it resumable in practice: re-running the rename
  * moves exactly those and no-ops the rest.
  */
-export function detectPartialRename({ oldCounts = {}, newCounts = {} } = {}) {
+/**
+ * Every state the two sides can be in together.
+ *
+ * ── WHY THE UPSTREAM AXIS EXISTS ───────────────────────────────────────────
+ * The genesis counts alone cannot tell `complete` from the interval: both look
+ * like "every genesis row is on the new code". Before upstream was consulted
+ * this function returned `complete` for a rename whose MSDB half had never
+ * happened — the screen reporting success on exactly the failure it exists to
+ * catch.
+ */
+export const RENAME_STATE = Object.freeze({
+  /** Nothing has moved. Both sides on the old code. */
+  NOT_STARTED: 'not-started',
+  /** Phase 1 was interrupted — genesis rows on BOTH codes. */
+  GENESIS_PARTIAL: 'genesis-partial',
+  /** THE NORMAL INTERVAL: genesis done, MSDB still on the old code. */
+  UPSTREAM_PENDING: 'genesis-done-upstream-pending',
+  /** Both sides agree. This is the only state that means finished. */
+  COMPLETE: 'complete',
+  /** Upstream renamed, genesis untouched — the reverse of the interval. */
+  UPSTREAM_ONLY: 'upstream-only',
+  /** Upstream holds BOTH codes, as two different courses. The new one is taken. */
+  UPSTREAM_CONFLICT: 'upstream-conflict',
+  /** Upstream holds neither code. Nothing here can be reasoned about. */
+  UNKNOWN: 'unknown',
+});
+
+/**
+ * Which side, if either, has moved — and whether it can still be undone.
+ *
+ * ── THE REVERSIBILITY RULE, ESTABLISHED BY EXPERIMENT ──────────────────────
+ * ZZTEST-EXCEL-01 was renamed to EXCEL-HR-01 in MSDB alone and back again on
+ * 2026-08-16. Every predicted consequence occurred — the extension detached so
+ * URL Alias, Tags and Gallery rendered empty, the course fell to the unlisted
+ * tier and sorted first, and the rest of its group began numbering at 2
+ * because position comes from the stored array, which still held the old code
+ * at index 0 — and renaming MSDB back restored all of it instantly.
+ *
+ * So: WHILE GENESIS HAS NOT MOVED, THE DIVERGENCE IS FULLY REVERSIBLE by
+ * touching MSDB alone. Once genesis has written, it is not — the reverse
+ * rename is refused by its own collision and formerCodes guards.
+ *
+ * That is the single fact an admin needs to decide whether to go forward or
+ * back, so it is part of the RETURN VALUE rather than something the reader is
+ * left to infer from the state name.
+ *
+ * @param {object} input
+ * @param {object} input.oldCounts genesis rows still on the old code, by store
+ * @param {object} input.newCounts genesis rows already on the new code
+ * @param {object} input.upstream  `preview.upstream` — `{hasOldCode, hasNewCode}`
+ */
+export function detectRenameState({ oldCounts = {}, newCounts = {}, upstream = null } = {}) {
   const oldStores = RENAME_WRITE_STORES.filter((k) => (oldCounts[k] ?? 0) > 0);
   const newStores = RENAME_WRITE_STORES.filter((k) => (newCounts[k] ?? 0) > 0);
 
+  /** 'old' | 'new' | 'mixed' | 'none' — where the genesis rows are. */
+  let genesis;
+  if (oldStores.length && newStores.length) genesis = 'mixed';
+  else if (oldStores.length) genesis = 'old';
+  else if (newStores.length) genesis = 'new';
+  else genesis = 'none';
+
+  const hasOld = Boolean(upstream?.hasOldCode);
+  const hasNew = Boolean(upstream?.hasNewCode);
+
   let state;
-  if (oldStores.length && newStores.length) state = 'partial';
-  else if (oldStores.length) state = 'not-started';
-  else if (newStores.length) state = 'complete';
-  else state = 'empty';
+  if (hasOld && hasNew) {
+    // Two different courses. Whatever genesis is doing, the target is taken.
+    state = RENAME_STATE.UPSTREAM_CONFLICT;
+  } else if (!hasOld && !hasNew) {
+    state = RENAME_STATE.UNKNOWN;
+  } else if (genesis === 'mixed') {
+    // Reported ahead of the upstream axis: an interrupted phase 1 is the most
+    // actionable thing on screen, and the fix is the same either way.
+    state = RENAME_STATE.GENESIS_PARTIAL;
+  } else if (hasNew) {
+    // Upstream is already on the new code.
+    state = genesis === 'new' ? RENAME_STATE.COMPLETE : RENAME_STATE.UPSTREAM_ONLY;
+  } else {
+    // Upstream still on the old code.
+    state = genesis === 'new' ? RENAME_STATE.UPSTREAM_PENDING : RENAME_STATE.NOT_STARTED;
+  }
 
   return {
     state,
-    partial: state === 'partial',
+    genesis,
+    upstream: {
+      hasOldCode: hasOld,
+      hasNewCode: hasNew,
+      // `null` and not `false`: nobody asked upstream, which is a different
+      // claim from "upstream does not have it".
+      read: upstream != null,
+    },
+    /**
+     * Undoable by touching MSDB alone. True exactly while genesis has not
+     * written — see the note above.
+     */
+    reversible: genesis === 'old' || genesis === 'none',
+    partial: state === RENAME_STATE.GENESIS_PARTIAL,
     stillOnOldCode: oldStores,
     alreadyOnNewCode: newStores,
   };
