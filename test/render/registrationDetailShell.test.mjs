@@ -85,13 +85,77 @@ const PUBLIC_SPARSE = {
   updatedAt: '2026-08-05T03:00:00.000Z',
 };
 
+const INHOUSE_FULL = {
+  _id: 'cccccccccccccccccccc0003',
+  status: 'pending',
+  companyName: 'บริษัท ทดสอบ จำกัด',
+  quotationCompany: 'บริษัท ทดสอบ จำกัด',
+  contactFirstName: 'สมชาย',
+  contactLastName: 'ใจดี',
+  contactEmail: 'somchai@example.com',
+  contactPhone: '0812345678',
+  coursesInterested: ['EXC-201'],
+  participantsCount: 15,
+  contentMode: 'standard',
+  contentDetails: 'เน้น Power Query',
+  trainingFormat: 'onsite',
+  preferredMonth: '2026-09',
+  scheduleNote: 'ช่วงบ่าย',
+  quotationCountry: 'TH',
+  branchType: 'head_office',
+  branchCode: '',
+  taxId: '0105551234567',
+  adminNotes: 'คุยกับลูกค้าแล้ว',
+  message: 'อยากได้ workshop',
+  source: 'inhouse',
+  createdAt: '2026-08-01T03:00:00.000Z',
+  updatedAt: '2026-08-02T03:00:00.000Z',
+};
+
+/** Everything optional, absent. No note, no message, no schedule note, no tax id. */
+const INHOUSE_SPARSE = {
+  _id: 'dddddddddddddddddddd0004',
+  status: 'pending',
+  companyName: 'บริษัท ว่าง จำกัด',
+  quotationCompany: '',
+  contactFirstName: 'ปรีชา',
+  contactLastName: '',
+  contactEmail: '',
+  contactPhone: '',
+  coursesInterested: [],
+  participantsCount: 15,
+  contentMode: '',
+  contentDetails: '',
+  trainingFormat: 'online',
+  preferredMonth: '',
+  scheduleNote: '',
+  quotationCountry: 'TH',
+  branchType: '',
+  branchCode: '',
+  taxId: '',
+  adminNotes: '',
+  message: '',
+  source: 'inhouse',
+  createdAt: '2026-08-06T03:00:00.000Z',
+  updatedAt: '2026-08-06T03:00:00.000Z',
+};
+
 const pub = (doc, extra = {}) => renderToStaticMarkup(
   createElement(RegistrationDetailClient, { doc, history: HISTORY, ...extra })
 );
+const inh = (doc, extra = {}) => renderToStaticMarkup(
+  createElement(InhouseDetailClient, {
+    doc, courses: doc.coursesInterested?.length ? [{ code: 'EXC-201', name: 'Excel Advanced' }] : [],
+    history: HISTORY, ...extra,
+  })
+);
+
 const PUB_FULL   = pub(PUBLIC_FULL);
 const PUB_SPARSE = pub(PUBLIC_SPARSE);
+const INH_FULL   = inh(INHOUSE_FULL);
+const INH_SPARSE = inh(INHOUSE_SPARSE);
 
-const ALL = { PUB_FULL, PUB_SPARSE };
+const ALL = { PUB_FULL, PUB_SPARSE, INH_FULL, INH_SPARSE };
 
 // ── Probes ──────────────────────────────────────────────────────────────────
 
@@ -138,13 +202,22 @@ function classesOfElementWith(markup, marker) {
 // 1. THE TABS
 // ════════════════════════════════════════════════════════════════════════════
 
-test('the public screen has three tabs, in the specified order', () => {
-  // The in-house screen's two tabs join this assertion when that screen is
-  // restyled, in the commit after this one.
+test('public has three tabs and in-house has two, in the specified order', () => {
   assert.deepEqual(
     tabTriggers(PUB_FULL).map((t) => textOf(t.inner)),
     ['ข้อมูลการสมัคร', 'ผู้เข้าอบรม2', 'ประวัติการดำเนินการ'],
   );
+  assert.deepEqual(
+    tabTriggers(INH_FULL).map((t) => textOf(t.inner)),
+    ['ข้อมูลการสมัคร', 'ประวัติการดำเนินการ'],
+  );
+});
+
+test('there is no ผู้เข้าอบรม tab on the in-house screen', () => {
+  // An in-house enquiry has no roster. A tab that opens on "ไม่มีข้อมูล" is a
+  // control that says nothing, and the count badge would have nothing to count.
+  assert.ok(!tabTriggers(INH_FULL).some((t) => textOf(t.inner).startsWith('ผู้เข้าอบรม')),
+    'the in-house screen grew an attendee tab');
 });
 
 test('the count badge is on ผู้เข้าอบรม and on nothing else', () => {
@@ -153,6 +226,9 @@ test('the count badge is on ผู้เข้าอบรม and on nothing els
   assert.equal(badges(triggers[0]), 0, 'ข้อมูลการสมัคร grew a count badge');
   assert.equal(badges(triggers[1]), 1, 'ผู้เข้าอบรม lost its count badge');
   assert.equal(badges(triggers[2]), 0, 'ประวัติการดำเนินการ grew a count badge');
+  for (const t of tabTriggers(INH_FULL)) {
+    assert.equal(badges(t), 0, 'an in-house tab grew a count badge');
+  }
 });
 
 /**
@@ -164,7 +240,7 @@ test('the count badge is on ผู้เข้าอบรม and on nothing els
  * without `hidden`, and it is the one the selected tab points at.
  */
 test('every screen renders one panel per tab, with exactly one visible', () => {
-  for (const [name, markup] of Object.entries({ PUB_FULL })) {
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
     const tabs = tabTriggers(markup);
     const panels = tabPanels(markup);
     assert.equal(panels.length, tabs.length, `${name}: ${panels.length} panels against ${tabs.length} tabs`);
@@ -174,7 +250,7 @@ test('every screen renders one panel per tab, with exactly one visible', () => {
 });
 
 test('the visible panel is the one the selected tab controls', () => {
-  for (const [name, markup] of Object.entries({ PUB_FULL })) {
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
     const selected = [...markup.matchAll(/<button[^>]*role="tab"[^>]*>/g)]
       .find((m) => m[0].includes('aria-selected="true"'));
     assert.ok(selected, `${name}: no tab is selected`);
@@ -186,7 +262,7 @@ test('the visible panel is the one the selected tab controls', () => {
 });
 
 test('exactly ONE tab is aria-selected', () => {
-  for (const [name, markup] of Object.entries({ PUB_FULL })) {
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
     const selected = (markup.match(/aria-selected="true"/g) ?? []).length;
     assert.equal(selected, 1, `${name}: ${selected} tabs claim to be selected`);
   }
@@ -204,7 +280,7 @@ test('the history panel renders WHAT THE PAGE HANDED IN — the client fetches n
    * client ever grew its own fetch, the sentinel would be gone and this would
    * say so — which no assertion about the panel's CHROME could.
    */
-  for (const [name, markup] of Object.entries({ PUB_FULL })) {
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
     assert.ok(markup.includes('id="history-slot-sentinel"'),
       `${name}: the history slot did not render what the page passed in`);
   }
@@ -221,6 +297,10 @@ test('no history slot means NO history tab, not an empty one', () => {
   const labels = tabTriggers(noHistory).map((t) => textOf(t.inner));
   assert.deepEqual(labels, ['ข้อมูลการสมัคร', 'ผู้เข้าอบรม2']);
   assert.equal(tabPanels(noHistory).length, 2, 'an empty history panel is still in the markup');
+
+  const noHistoryInh = inh(INHOUSE_FULL, { history: null });
+  assert.deepEqual(tabTriggers(noHistoryInh).map((t) => textOf(t.inner)), ['ข้อมูลการสมัคร']);
+  assert.equal(tabPanels(noHistoryInh).length, 1);
 });
 
 test('CONTROL: the panel probe would see a panel that had leaked visible', () => {
@@ -236,9 +316,9 @@ test('CONTROL: the panel probe would see a panel that had leaked visible', () =>
 // 2. THE DARK SUMMARY STRIP
 // ════════════════════════════════════════════════════════════════════════════
 
-test('the public strip has THREE cells', () => {
-  // The in-house strip's four join this assertion when that screen is restyled.
+test('public has THREE strip cells and in-house has FOUR', () => {
   assert.equal(stripCells(PUB_FULL).length, 3);
+  assert.equal(stripCells(INH_FULL).length, 4);
 });
 
 test('the strip cells are CONTENT-WIDTH, divided by rules rather than by gaps', () => {
@@ -252,7 +332,7 @@ test('the strip cells are CONTENT-WIDTH, divided by rules rather than by gaps', 
    * either alone is satisfiable — content-width cells with a gap, or equal cells
    * with a rule.
    */
-  for (const [name, markup] of Object.entries({ PUB_FULL })) {
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
     const region = markup.slice(markup.indexOf('h-[93px]'), markup.indexOf('role="tablist"'));
     for (const m of region.matchAll(/<div class="([^"]*pt-\[14px\][^"]*)"/g)) {
       const classes = m[1].split(/\s+/);
@@ -299,6 +379,27 @@ test('the ยอดสุทธิ sub-line is DROPPED without pricing, not rend
     `the unpriced ยอดสุทธิ cell renders ${(sparse.match(/<p\b/g) ?? []).length} lines; `
     + 'expected the label and the value only — the sub-line must be ABSENT, not blank');
   assert.ok(sparse.includes('>—<'), 'the unpriced cell shows nothing at all where a total would be');
+});
+
+test('the in-house strip says "15 ท่าน" and never "ประมาณ"', () => {
+  /**
+   * THE CALL, STATED. The design's รูปแบบการอบรม cell reads "ประมาณ 15 คน", and
+   * a summary strip MAY hedge where a data table may not — so the width and
+   * scanning arguments that ruled the word out of the list's 5% จำนวน column do
+   * not reach here.
+   *
+   * It is still not built, for the reason that survives the change of surface:
+   * `participantsCount` is a STORED NUMBER and nothing flags it as an estimate.
+   * The schema gives it a minimum of 15 and no `isEstimate`, no min/max pair.
+   * "ประมาณ" would be the screen asserting an imprecision the record does not
+   * record — the same rule the list keeps for its format and status chips.
+   *
+   * Kept consistent with the list's จำนวน column, which was the instruction.
+   */
+  assert.ok(stripCells(INH_FULL)[1].includes('15 ท่าน'), 'the headcount sub-line is gone');
+  for (const [name, markup] of Object.entries({ INH_FULL, INH_SPARSE })) {
+    assert.ok(!markup.includes('ประมาณ'), `${name}: the strip hedges a stored number`);
+  }
 });
 
 test('CONTROL: the strip probe lands on the strip and finds its cells', () => {
@@ -434,7 +535,8 @@ test('the sparse screens still render their REQUIRED content', () => {
   assert.ok(PUB_SPARSE.includes('SQL Fundamentals'), 'the sparse public page lost its course name');
   assert.ok(PUB_SPARSE.includes('>ปรีชา ตั้งใจ<'), 'the sparse public page lost its coordinator');
   assert.ok(PUB_SPARSE.includes('>Classroom<'), 'a falsy scheduleType must still render an arrangement');
-  assert.ok(PUB_SPARSE.length > 4000, 'a sparse page collapsed to near-nothing');
+  assert.ok(INH_SPARSE.includes('บริษัท ว่าง จำกัด'), 'the sparse in-house page lost its company');
+  assert.ok(INH_SPARSE.length > 4000 && PUB_SPARSE.length > 4000, 'a sparse page collapsed to near-nothing');
 });
 
 test('a note with no content renders a sentence, not an empty quoted block', () => {
@@ -442,6 +544,8 @@ test('a note with no content renders a sentence, not an empty quoted block', () 
   assert.ok(PUB_FULL.includes('<blockquote'), 'a note that exists is not quoted');
   assert.ok(!PUB_SPARSE.includes('<blockquote'), 'an absent note still drew a quoted block');
   assert.ok(PUB_SPARSE.includes('ไม่มีหมายเหตุ'), 'an absent note says nothing at all');
+  assert.ok(!INH_SPARSE.includes('<blockquote'), 'an absent in-house note still drew a quoted block');
+  assert.ok(INH_SPARSE.includes('ยังไม่มีบันทึกจากทีมขาย'));
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -540,19 +644,7 @@ test('the public course card carries NO venue', () => {
     assert.ok(!markup.includes('สถานที่'), `${name}: a venue row is back on a public registration`);
     assert.ok(!markup.includes('9Expert Training Center'), `${name}: a hard-coded venue is back`);
   }
-  // The CONTROL renders the in-house client — which this commit has not restyled
-  // yet, deliberately: what it proves is about the DOCUMENT, not about the
-  // chrome. A venue row exists where the record has a venue, and this one does.
-  const onsite = renderToStaticMarkup(createElement(InhouseDetailClient, {
-    doc: {
-      _id: 'eeeeeeeeeeeeeeeeeeee0005', status: 'pending', companyName: 'บ.',
-      contactFirstName: 'ก', contactLastName: 'ข', coursesInterested: [],
-      participantsCount: 15, trainingFormat: 'onsite',
-      onsiteVenue: { addressLine: 'x', province: 'y' },
-      quotationCountry: 'TH', createdAt: '2026-08-01T03:00:00.000Z', updatedAt: '2026-08-01T03:00:00.000Z',
-    },
-    courses: [],
-  }));
+  const onsite = inh(INHOUSE_FULL);
   assert.ok(onsite.includes('สถานที่จัดอบรม'),
     'the in-house venue row is gone — then the assertion above proves nothing about the DOCUMENT');
 });

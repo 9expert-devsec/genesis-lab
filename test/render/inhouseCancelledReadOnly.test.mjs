@@ -43,6 +43,42 @@ function countExactly(markup, text) {
   return markup.split(`>${text}<`).length - 1;
 }
 
+/**
+ * ── ROUND 4: THE ACTION GROUP HAS TWO SLOTS, SO THE PROBES ARE ELEMENTS ────
+ *
+ * A permitted move now renders either as the 100x38 primary button's SHORT label
+ * or as an item of the "•••" menu carrying the canonical one. A `>text<` scan
+ * cannot tell either from the status NAME — for `cancelled` the name and the
+ * button's short label are byte-identical — so the assertions that are about
+ * WHICH MOVES ARE OFFERED read the controls rather than the page.
+ *
+ * That is strictly stronger than the boundary matching it replaces: a boundary
+ * match still finds text anywhere on the page, and this finds text inside the
+ * control the claim is about.
+ */
+const textOf = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+/** Located by `w-[100px]`, the measured width — on no other element here. */
+function primaryButton(markup) {
+  const m = /<button[^>]*w-\[100px\][^>]*>([\s\S]*?)<\/button>/.exec(markup);
+  return m ? m[1] : null;
+}
+
+function menuItems(markup) {
+  return [...markup.matchAll(/<button[^>]*role="menuitem"[^>]*>([\s\S]*?)<\/button>/g)].map((m) => m[1]);
+}
+
+const ACTION_BUTTON = { quoted: 'ส่งใบเสนอฯ',    cancelled: 'ยกเลิก' };
+const ACTION_MENU   = { quoted: 'ส่งใบเสนอราคา', cancelled: 'ยกเลิกคำขอ' };
+
+function offeredTargets(markup) {
+  const primary = primaryButton(markup);
+  const primaryText = primary === null ? null : textOf(primary);
+  const menu = menuItems(markup).map(textOf);
+  return Object.keys(ACTION_MENU).filter((target) =>
+    primaryText === ACTION_BUTTON[target] || menu.includes(ACTION_MENU[target]));
+}
+
 const BASE_DOC = {
   _id: '68a1b2c3d4e5f60718293a4b',
   companyName: 'บริษัท ทดสอบ จำกัด',
@@ -83,7 +119,11 @@ test('a cancelled in-house request renders NO แก้ไข control', () => {
 });
 
 test('a cancelled in-house request renders NO status action button', () => {
-  for (const label of ['ส่งใบเสนอราคา', 'ยกเลิกคำขอ']) {
+  // BOTH SLOTS. The primary is empty and the menu holds no status move — only
+  // delete, which is a different permission and is asserted separately below.
+  assert.equal(primaryButton(cancelled), null, 'a cancelled request must offer no primary action');
+  assert.deepEqual(offeredTargets(cancelled), [], 'a cancelled request must offer no status move at all');
+  for (const label of ['ส่งใบเสนอราคา', 'ส่งใบเสนอฯ', 'ยกเลิกคำขอ']) {
     assert.ok(!showsExactly(cancelled, label), `cancelled must not offer "${label}"`);
   }
 });
@@ -91,7 +131,41 @@ test('a cancelled in-house request renders NO status action button', () => {
 test('a cancelled in-house request still renders the delete control', () => {
   // The ruling: delete is a different permission from edit, and it is the only
   // way to clear a wrongly-cancelled row now that cancellation is terminal.
+  //
+  // RE-POINTED, NOT WEAKENED. Delete has moved into the "•••" menu, so the claim
+  // is that it is an ITEM OF THAT MENU rather than merely a string somewhere on
+  // the page — which is what a reader can actually reach.
+  assert.ok(menuItems(cancelled).map(textOf).includes('ลบ Request นี้'),
+    'delete must survive the read-only state, as a menu item');
   assert.ok(cancelled.includes('ลบ Request นี้'), 'delete must survive the read-only state');
+});
+
+test('the in-house overflow menu is NEVER empty, and every control in it has TEXT', () => {
+  /**
+   * Including `cancelled`, which has no status moves left — delete is what keeps
+   * the menu populated, and a "•••" that opens onto nothing is a control that
+   * lies.
+   *
+   * The TEXT half is the round-1 empty-button defect carried onto a surface with
+   * three new ways to produce one: an unlabelled primary (ACTION_SHORT missing a
+   * target), an unlabelled menu item (ACTION_LABEL missing one), and the "•••"
+   * trigger itself, whose only child is an icon.
+   */
+  for (const status of [...INHOUSE_STATUS_VALUES, ...Object.keys(INHOUSE_LEGACY_STATUS_MAP)]) {
+    const markup = html(status);
+    const items = menuItems(markup);
+    assert.ok(items.length > 0, `${status}: the overflow menu rendered with no items`);
+    for (const item of items) {
+      assert.ok(textOf(item).length > 0, `${status}: an overflow menu item rendered with no text`);
+    }
+    const primary = primaryButton(markup);
+    if (primary !== null) {
+      assert.ok(textOf(primary).length > 0, `${status}: the primary button rendered with no text`);
+    }
+    const trigger = /<button[^>]*aria-haspopup="menu"[^>]*>([\s\S]*?)<\/button>/.exec(markup);
+    assert.ok(trigger, `${status}: the overflow trigger is gone`);
+    assert.ok(textOf(trigger[1]).length > 0, `${status}: the overflow trigger has no accessible text`);
+  }
 });
 
 test('a cancelled in-house request says WHY the controls are gone', () => {
@@ -112,14 +186,19 @@ test('the cancelled badge renders — the page did not simply fail to draw', () 
 // ── 2. The other two states, so the assertions above are about STATUS ───────
 
 test('a pending request offers both of its transitions', () => {
-  assert.equal(countExactly(pending, 'ส่งใบเสนอราคา'), 1);
-  assert.equal(countExactly(pending, 'ยกเลิกคำขอ'), 1);
+  assert.deepEqual(offeredTargets(pending), ['quoted', 'cancelled']);
   assert.deepEqual(allowedTransitions('pending', INHOUSE_STATUS_TRANSITIONS), ['quoted', 'cancelled']);
+  // The forward move is the PRIMARY button and the cancellation is in the menu.
+  // Which slot a target lands in is derived from the table — a target with no
+  // outgoing edges of its own is demoted — see fs/registrationActionsDerived.
+  assert.equal(textOf(primaryButton(pending)), 'ส่งใบเสนอฯ');
+  assert.deepEqual(menuItems(pending).map(textOf), ['ยกเลิกคำขอ', 'ลบ Request นี้']);
 });
 
 test('a quoted request offers only cancel', () => {
-  assert.equal(countExactly(quoted, 'ส่งใบเสนอราคา'), 0, 'quoted → quoted is not a move');
-  assert.equal(countExactly(quoted, 'ยกเลิกคำขอ'), 1);
+  assert.deepEqual(offeredTargets(quoted), ['cancelled'], 'quoted → quoted is not a move');
+  assert.equal(primaryButton(quoted), null, 'cancellation must not be the primary action');
+  assert.ok(menuItems(quoted).map(textOf).includes('ยกเลิกคำขอ'));
 });
 
 test('a pending request keeps its edit control', () => {
@@ -137,15 +216,11 @@ test('a pending request keeps its edit control', () => {
  * disagree for any state.
  */
 test('for EVERY in-house status, the rendered actions match the transition table', () => {
-  const ACTION_TEXT = { quoted: 'ส่งใบเสนอราคา', cancelled: 'ยกเลิกคำขอ' };
   for (const status of INHOUSE_STATUS_VALUES) {
     const markup = html(status);
     const expected = allowedTransitions(status, INHOUSE_STATUS_TRANSITIONS);
-    const rendered = Object.entries(ACTION_TEXT)
-      .filter(([, text]) => showsExactly(markup, text))
-      .map(([target]) => target);
-    assert.deepEqual(rendered, expected,
-      `${status}: the screen offers ${rendered} but the table permits ${expected}`);
+    assert.deepEqual(offeredTargets(markup), expected,
+      `${status}: the screen offers ${offeredTargets(markup)} but the table permits ${expected}`);
   }
 });
 
@@ -233,12 +308,8 @@ test('no in-house button renders with empty content, on any status', () => {
 test('an unmigrated request offers the transitions of the status it becomes', () => {
   for (const [retired, live] of Object.entries(INHOUSE_LEGACY_STATUS_MAP)) {
     const markup = html(retired);
-    const ACTION_TEXT = { quoted: 'ส่งใบเสนอราคา', cancelled: 'ยกเลิกคำขอ' };
     const expected = allowedTransitions(live, INHOUSE_STATUS_TRANSITIONS);
-    const rendered = Object.entries(ACTION_TEXT)
-      .filter(([, text]) => showsExactly(markup, text))
-      .map(([target]) => target);
-    assert.deepEqual(rendered, expected,
+    assert.deepEqual(offeredTargets(markup), expected,
       `a stored ${retired} behaves as ${live}, so it should offer ${expected}`);
   }
 });
