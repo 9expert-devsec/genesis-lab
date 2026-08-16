@@ -21,6 +21,8 @@
     "migrate:legacy-files": "node --env-file=.env.local scripts/migrate-legacy-files.mjs",
     "audit:orphan-registrations": "node --env-file=.env.local scripts/audit-orphan-registrations.mjs",
     "audit:course-id-casing": "node --env-file=.env.local scripts/audit-course-id-casing.mjs",
+    "audit:extension-anchor": "node --env-file=.env.local scripts/audit-extension-upstream-id.mjs",
+    "backfill:extension-anchor": "node --env-file=.env.local scripts/backfill-extension-upstream-id.mjs",
     "normalize:positions": "node --env-file=.env.local scripts/normalize-article-positions.mjs",
     "backfill:sortkey": "node --env-file=.env.local scripts/backfill-article-sortkey.mjs",
     "migrate:skill-code": "node --env-file=.env.local scripts/migrate-skill-code.mjs"

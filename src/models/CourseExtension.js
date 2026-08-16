@@ -33,6 +33,55 @@ const CourseExtensionSchema = new mongoose.Schema(
     },
 
     /**
+     * THE UPSTREAM COURSE THIS ROW BELONGS TO — MSDB's `_id`, as a hex string.
+     *
+     * ── WHY AN IDENTITY FIELD EXISTS BESIDE THE CODE ───────────────────────
+     * `courseId` is a code, and a code MOVES. When the tech lead renames
+     * `course_id` at MSDB, genesis is left holding the old one — and from the
+     * code alone, "this course was renamed" and "this course was deleted
+     * upstream and an unrelated one was created under the new code" are the
+     * same observation. The rename screen reports that honestly today and
+     * refuses to act on it, because acting on the wrong reading merges two
+     * courses' SEO, gallery, early-bird price and schedule overrides with no
+     * reverse — once genesis has written, the undo is refused by its own
+     * collision and formerCodes guards.
+     *
+     * The `_id` is what separates them: it survives a rename, the code does
+     * not.
+     *
+     * ── WHY IT WAS BACKFILLED WHEN IT WAS ──────────────────────────────────
+     * The mapping from code to `_id` is only knowable with certainty while
+     * every genesis code still matches an upstream code. Measured 2026-08-16
+     * (scripts/audit-extension-upstream-id): 79 rows, 79 upstream courses, all
+     * 79 resolving to exactly one `_id`, no duplicate codes, no duplicate ids,
+     * and no upstream identifier already stored under any other name. After the
+     * next rename the row that most needs an anchor is the one that can no
+     * longer be given one.
+     *
+     * ── A STRING, NOT AN ObjectId, AND NOT A ref ───────────────────────────
+     * The referent lives in a DIFFERENT DATABASE reached over HTTP. Declaring
+     * `mongoose.Schema.Types.ObjectId` with a `ref` would invite a `populate()`
+     * that can never resolve, and the audit trail already stores MSDB ids as
+     * strings (`recordId: String(item?._id ?? '')`). Same key space, same
+     * spelling.
+     *
+     * ── INDEXED, DELIBERATELY NOT UNIQUE ───────────────────────────────────
+     * Two rows anchored to one upstream course would be a defect, so `unique`
+     * looks right. It is not, yet, for two reasons that are about THIS round:
+     * with `default: ''` every un-anchored row shares the empty key, so
+     * uniqueness would need `sparse` and no default — which turns "left empty",
+     * the state the backfill deliberately produces and reports, into an absent
+     * key that reads as "never considered". And nothing consumes this field
+     * yet, so a constraint would fire before any reader exists to be protected.
+     * Revisit when the guard that reads it lands; the backfill cannot create a
+     * duplicate by construction, since it writes only 1:1 resolutions.
+     *
+     * '' means NOT ANCHORED, and that is a real state, not a missing one. It is
+     * never guessed at: see lib/courses/upstreamAnchorPlan.
+     */
+    upstreamId: { type: String, default: '', trim: true, index: true },
+
+    /**
      * Codes this course USED TO HAVE, appended by the rename action.
      *
      * ── WHY THE OLD CODE HAS TO SURVIVE SOMEWHERE ──────────────────────────

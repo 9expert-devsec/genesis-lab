@@ -42,7 +42,7 @@ const CREATE_ARM = (() => {
 
 test('the extension is written only AFTER a successful create', () => {
   const created = CREATE_ARM.indexOf('await createCourse(fd)');
-  const ext = CREATE_ARM.indexOf('await saveExtensionFor(code)');
+  const ext = CREATE_ARM.indexOf('await saveExtensionFor(code, newId)');
   assert.notEqual(created, -1, 'createCourse is no longer called');
   assert.notEqual(ext, -1, 'the extension write is gone');
   assert.ok(created < ext, 'the extension is written before the course exists');
@@ -94,7 +94,7 @@ test('once created, a submit retries ONLY the extension', () => {
   // A second createCourse would produce a duplicate course.
   assert.match(
     CREATE_ARM,
-    /if \(createdCourse\) \{[\s\S]{0,400}?saveExtensionFor\(createdCourse\.code\)/,
+    /if \(createdCourse\) \{[\s\S]{0,400}?saveExtensionFor\(createdCourse\.code, createdCourse\.id\)/,
     'the retry path does not exist'
   );
   const retry = CREATE_ARM.slice(
