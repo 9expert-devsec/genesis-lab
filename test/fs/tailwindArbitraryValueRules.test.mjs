@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postcss from 'postcss';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { createElement } from 'react';
 import { readSource } from '../sourceScan.mjs';
 import tailwindcss from 'tailwindcss';
 
@@ -167,18 +169,48 @@ function declarationsFor(css, className) {
     if (at === -1) break;
     from = at + selector.length;
 
-    // What follows must end this selector — `{`, a pseudo, a comma or
-    // whitespace. Anything else means we matched a PREFIX of a longer class
-    // (`bg-[var(--x)]` inside `hover:bg-[var(--x)]` is the real case here).
-    const rest = css.slice(from);
-    const tail = /^((?::[a-z-]+)*)\s*[{,]/.exec(rest);
-    if (!tail) continue;
+    /**
+     * The class name must END here.
+     *
+     * A Tailwind class selector continues with `[A-Za-z0-9_-]` or a backslash
+     * escape, so any of those means we matched a PREFIX of a longer class
+     * (`w-0` inside `w-0\.5`) rather than the class itself. This replaced an
+     * explicit tail pattern that enumerated the shapes a selector may end with
+     * — see the note below for why enumerating was wrong.
+     */
+    if (/[A-Za-z0-9_\\-]/.test(css[from] ?? '')) continue;
 
+    /**
+     * ── WHY THIS NO LONGER ENUMERATES THE ALLOWED TAILS ────────────────────
+     *
+     * It used to require `^((?::[a-z-]+)*)\s*[{,]` — pseudo-classes, then a
+     * brace or a comma. That is not the full grammar of what Tailwind puts
+     * between a class and its rule body, and the gap was MEASURED rather than
+     * reasoned about: `space-y-[22px]` compiles perfectly well and was reported
+     * as producing NO RULE, because Tailwind emits it as
+     *
+     *     .space-y-\[22px\] > :not([hidden]) ~ :not([hidden]) { … }
+     *
+     * and a child combinator is not a pseudo-class. Every `space-y-*`,
+     * `divide-*` and `group-*` utility has this shape, so the enumeration was
+     * about to report a whole family of working classes as dead — a guard that
+     * cries wolf gets relaxed, and the relaxation is what would have cost the
+     * real coverage.
+     *
+     * So the tail is now bounded rather than enumerated: whatever sits between
+     * the class and the `{` is the rest of the selector — pseudo-classes,
+     * combinators, descendants, or a comma joining a selector list — and the
+     * only thing that disqualifies it is a `}`, which would mean the class did
+     * not occur in a selector at all and we are about to read some other rule's
+     * body. The exactness that mattered is preserved by the character check
+     * above, which is where it always belonged.
+     */
     const open = css.indexOf('{', from);
-    const close = css.indexOf('}', open);
-    if (open === -1 || close === -1) continue;
-    // Never read across a rule boundary.
+    if (open === -1) continue;
     if (css.slice(from, open).includes('}')) continue;
+
+    const close = css.indexOf('}', open);
+    if (close === -1) continue;
 
     for (const decl of css.slice(open + 1, close).split(';')) {
       const t = decl.trim();
@@ -586,6 +618,197 @@ test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
     declarationsFor(await compile([{ raw: fixed, extension: 'js' }]), 'bg-emerald-100').length > 0,
     'the literal form does not compile either — the fixture is wrong, not the guard',
   );
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// THE REGISTRATIONS LAYOUT — HARVESTED FROM THE RENDER, COMPILED FROM THE SOURCE
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * EVERY ARBITRARY-VALUE CLASS THE LIST SCREENS ACTUALLY RENDER COMPILES TO A
+ * RULE.
+ *
+ * ── WHY THIS IS HARVESTED FROM MARKUP AND NOT LISTED LIKE `CASES` ───────────
+ * The registrations layout is measured geometry: dozens of `h-[82px]`,
+ * `top-[15.5px]`, `w-[477px]` classes, and more arriving with each of this
+ * round's three commits. Hand-listing them is the shape that goes stale on the
+ * first edit — the guard would cover the classes somebody remembered to add to
+ * this file, which is not the same set as the classes the screen renders.
+ *
+ * ── AND WHY IT IS NOT A SOURCE SWEEP EITHER ────────────────────────────────
+ * Harvesting from the SOURCE and compiling the SOURCE is circular: whatever is
+ * written in the file compiles, and the one shape that matters is invisible.
+ * A class assembled as `` `w-[${W}px]` `` never appears in the source in the form
+ * the browser receives, so a source-to-source check compares the broken text
+ * with itself and passes.
+ *
+ * So the two halves come from different places, which is the whole instrument:
+ *
+ *   · the CLASSES come from the RENDERED MARKUP — what the browser is actually
+ *     asked to paint;
+ *   · the CSS comes from COMPILING THE SOURCE FILES — what the stylesheet
+ *     actually contains.
+ *
+ * A class that reaches the markup but is not literally in the code produces no
+ * rule and reddens here. That is the exact defect the /schedule round hover
+ * shipped with: perfect markup, no CSS, 3325 green tests.
+ *
+ * ── COMMENTS STRIPPED, FOR THE REASON THE CASES ABOVE GIVE ─────────────────
+ * The real build scans comments, so a class mentioned only in prose would
+ * compile while the code stayed broken. `readSource().code` asks the question
+ * that matters: does the CODE produce this class? The asymmetry is deliberately
+ * in the safe direction — this fails on a latent break the real build would
+ * paper over.
+ */
+
+/**
+ * The files whose CODE is compiled. This is the set the rendered markup can draw
+ * its classes from, and it must stay equal to it: a file added to the screen
+ * without being added here would have every one of its classes reported as
+ * uncompilable, which fails LOUDLY rather than silently, and is the right way
+ * round for a list a human maintains.
+ */
+const REGISTRATION_LAYOUT_FILES = [
+  'src/app/admin/registrations/_components/RegistrationsClient.jsx',
+  'src/app/admin/registrations/_components/ListPanel.jsx',
+  'src/app/admin/registrations/_components/InhouseTable.jsx',
+  // The summary cards' accent classes are declared here, not in the screens.
+  'src/lib/registrations/statuses.js',
+];
+
+/**
+ * Arbitrary-value Tailwind classes in a blob of rendered markup.
+ *
+ * Reads `class="…"` attributes only, so nothing in the TEXT of the page can be
+ * mistaken for a class, and keeps tokens containing `-[`. The dash is what
+ * separates a utility from everything else that uses brackets: a rendered page
+ * contains no JavaScript, but it does contain Thai text, `title` attributes and
+ * `style` values, and `-[` occurs in none of them.
+ */
+function arbitraryClassesIn(markup) {
+  const found = new Set();
+  for (const m of markup.matchAll(/\sclass="([^"]*)"/g)) {
+    for (const token of m[1].split(/\s+/)) {
+      if (token.includes('-[') && token.endsWith(']')) found.add(token);
+    }
+  }
+  return [...found].sort();
+}
+
+test('every arbitrary-value class the registrations screens RENDER compiles to a rule', async () => {
+  const { RegistrationsClient } = await import('@/app/admin/registrations/_components/RegistrationsClient');
+
+  const EMPTY = { items: [], page: 1, pageCount: 1, total: 0, pageSize: 20 };
+  const render = (props) => renderToStaticMarkup(createElement(RegistrationsClient, {
+    initialData: EMPTY, status: 'all', q: '', range: 'all', lastEdited: {}, ...props,
+  }));
+
+  const markup = [
+    render({ source: 'public',  counts: { total: 39 }, sourceTotals: { public: 39, inhouse: 9 } }),
+    render({ source: 'inhouse', counts: { total: 9 },  sourceTotals: { inhouse: 9, public: 39 }, courseNames: {} }),
+    // A paged, populated render, so the footer and the pager are on screen too —
+    // their classes exist on no other branch.
+    render({
+      source: 'public',
+      counts: { total: 74 },
+      sourceTotals: { public: 74, inhouse: 9 },
+      initialData: { items: [], page: 2, pageCount: 4, total: 74, pageSize: 20 },
+    }),
+  ].join('\n');
+
+  const classes = arbitraryClassesIn(markup);
+  assert.ok(classes.length >= 30,
+    `only ${classes.length} arbitrary-value classes harvested — the extractor is not reading the render`);
+
+  const css = await compile(
+    REGISTRATION_LAYOUT_FILES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })),
+  );
+
+  const dead = classes.filter((c) => declarationsFor(css, c).length === 0);
+  assert.deepEqual(
+    dead, [],
+    'these classes are RENDERED but Tailwind emits no rule for them while scanning '
+    + `${REGISTRATION_LAYOUT_FILES.length} source files:\n    ${dead.join('\n    ')}\n\n`
+    + 'Each is almost certainly assembled from a template literal or a concatenation. '
+    + 'Tailwind matches raw text, so the complete class must appear LITERALLY in the '
+    + 'code — an interpolated one produces correct markup and no CSS at all, which no '
+    + 'markup assertion anywhere in this suite can see.',
+  );
+});
+
+test('CONTROL: the harvest reddens when a rendered class is not literal in the source', async () => {
+  /**
+   * The instrument measured against the exact defect, in both directions.
+   *
+   * The broken source assembles the class; the markup contains the assembled
+   * RESULT, which is what a browser would receive. The rule must be missing.
+   * Then the same class written out literally must compile — otherwise the
+   * fixture is wrong rather than the guard.
+   */
+  const rendered = '<div class="h-[82px] w-[269px]"></div>';
+  const harvested = arbitraryClassesIn(rendered);
+  assert.deepEqual(harvested, ['h-[82px]', 'w-[269px]'], 'the extractor did not read the class attribute');
+
+  const broken = 'const ROW = `h-[${ROW_H}px] w-[${W}px]`;';
+  const brokenCss = await compile([{ raw: broken, extension: 'js' }]);
+  assert.deepEqual(
+    harvested.filter((c) => declarationsFor(brokenCss, c).length > 0), [],
+    'an interpolated source still produced the rendered classes — the control is inert',
+  );
+
+  const fixed = 'const ROW = "h-[82px] w-[269px]";';
+  const fixedCss = await compile([{ raw: fixed, extension: 'js' }]);
+  assert.deepEqual(
+    harvested.filter((c) => declarationsFor(fixedCss, c).length === 0), [],
+    'the literal form does not compile either — the fixture is wrong, not the guard',
+  );
+});
+
+test('CONTROL: a combinator tail is found, and a longer class is still not', async () => {
+  /**
+   * The two halves of the matcher change above, measured.
+   *
+   * FOUND: `space-y-[22px]` emits `.space-y-\[22px\] > :not([hidden]) ~ …`. The
+   * previous tail pattern accepted only pseudo-classes and reported this class —
+   * which the screen renders and the browser paints — as producing no rule.
+   *
+   * STILL NOT FOUND: a class that is a strict PREFIX of another must not borrow
+   * the longer one's declarations, which is the property the old enumeration was
+   * really there to provide and which now comes from the character check.
+   */
+  const css = await compile([{ raw: 'const X = "space-y-[22px] w-0 w-0.5";', extension: 'js' }]);
+
+  const spaced = declarationsFor(css, 'space-y-[22px]');
+  assert.ok(spaced.length > 0, 'a child-combinator rule is still invisible to the matcher');
+  assert.ok(spaced.some((d) => d.startsWith('margin-top:')), `expected a margin, got [${spaced.join(', ')}]`);
+
+  const w0 = declarationsFor(css, 'w-0');
+  assert.equal(w0.length, 1, `w-0 matched ${w0.length} rules — it is borrowing w-0.5's`);
+  assert.deepEqual(w0, ['width: 0px']);
+  assert.deepEqual(declarationsFor(css, 'w-0.5'), ['width: 0.125rem']);
+});
+
+test('CONTROL: the extractor reads class attributes, not page text', async () => {
+  // The screens render Thai copy, `title` attributes and inline `style` values.
+  // If the harvest scanned the whole markup it could pick up a "class" that is
+  // really content, and then fail on a perfectly correct page.
+  const noise = '<p title="w-[999px]" style="width:12px">ค่าปรับ-[หมายเหตุ]</p><div class="h-[82px]"></div>';
+  assert.deepEqual(arbitraryClassesIn(noise), ['h-[82px]']);
+});
+
+test('CONTROL: the compiled file list is the one the render can draw from', async () => {
+  // Each file must be inside the real content globs, or compiling it here proves
+  // nothing about the real build. (The compile above replaces `content`, so it
+  // is blind to a glob mistake by construction.)
+  const config = require_(path.join(ROOT, 'tailwind.config.js'));
+  for (const rel of REGISTRATION_LAYOUT_FILES) {
+    assert.ok(
+      rel.startsWith('src/app/') || rel.startsWith('src/components/') || rel.startsWith('src/lib/'),
+      `${rel} is outside the scanned roots`,
+    );
+    assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing — the compile input is empty`);
+  }
+  assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
 });
 
 test('CONTROL: the status module is inside the real content globs', async () => {
