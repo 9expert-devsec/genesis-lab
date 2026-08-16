@@ -1212,6 +1212,11 @@ const DETAIL_LAYOUT_FILES = [
   'src/app/admin/registrations/_components/detailShell.jsx',
   'src/app/admin/registrations/_components/RegistrationDetailClient.jsx',
   'src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx',
+  // The ประวัติการดำเนินการ tab's card and its 82px entries. It is mounted from
+  // page.jsx as a SLOT, so nothing the detail clients render can produce its
+  // classes — a harvest that stopped at the clients would report the whole feed
+  // as uncovered while looking complete.
+  'src/components/audit/HistoryFeed.jsx',
   // The status dot and the chip take their colour from the vocabulary, so the
   // module's own classes are part of what these screens render.
   'src/lib/registrations/statuses.js',
@@ -1283,12 +1288,44 @@ const DETAIL_INHOUSE_DOC = {
   updatedAt: '2026-08-02T03:00:00.000Z',
 };
 
+/**
+ * THE HISTORY SLOT IS THE REAL FEED, NOT A STUB.
+ *
+ * The detail screens receive it as a NODE from page.jsx, so a `<p>` stand-in
+ * renders the tab panel perfectly and harvests NOT ONE of the feed's classes —
+ * the whole 82px entry, its icon box and its timestamp block would sit outside
+ * the sweep while the count floor stayed comfortably met. That is the shape this
+ * whole instrument exists to catch, arriving through the props rather than
+ * through a template literal.
+ *
+ * Two rows and an origin, so the entry shapes that differ are all on screen: the
+ * newest (check mark) against an older one (dot), a row WITH a diff against an
+ * act-only row, and the synthesised document entry.
+ */
+async function historySlot() {
+  const { createElement: h } = await import('react');
+  const { HistoryFeed } = await import('@/components/audit/HistoryFeed');
+  const { HISTORY_STATE } = await import('@/lib/audit/auditQuery');
+  const { PUBLIC_ACTION_TITLES } = await import('@/lib/audit/registrationHistory');
+  return h(HistoryFeed, {
+    state: HISTORY_STATE.OK,
+    rows: [
+      { _id: 'h1', action: 'status', before: { status: 'pending' }, after: { status: 'confirmed' }, meta: null, createdAt: '2026-08-12T04:00:00.000Z', actor: { name: 'ก' } },
+      { _id: 'h2', action: 'update', before: null, after: null, meta: null, createdAt: '2026-08-11T04:00:00.000Z', actor: { name: 'ข' } },
+    ],
+    total: 2,
+    titles: PUBLIC_ACTION_TITLES,
+    origin: { createdAt: '2026-08-01T03:00:00.000Z', source: 'web', label: 'ได้รับใบสมัคร' },
+    title: 'ประวัติการดำเนินการ',
+    description: 'บันทึกการดำเนินการของผู้ดูแลระบบ',
+  });
+}
+
 test('every arbitrary-value class the DETAIL screens RENDER compiles to a rule', async () => {
   const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
   const { InhouseDetailClient } = await import('@/app/admin/registrations/inhouse/_components/InhouseDetailClient');
   const { createElement: h } = await import('react');
-
-  const slot = h('p', null, 'ประวัติ');
+  const slot = await historySlot();
 
   /**
    * EVERY STATUS OF BOTH DOCUMENTS, because the status decides which controls
@@ -1342,8 +1379,11 @@ test('the measured geometry really is in the harvest, not merely a large count',
    */
   const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
   const { createElement: h } = await import('react');
+  // The REAL feed as the slot, not a `<p>` stand-in — see the note at the other
+  // render. A stub renders the tab panel perfectly and harvests none of the
+  // feed's geometry, which is exactly the blind spot this assertion is for.
   const markup = renderToStaticMarkup(
-    h(RegistrationDetailClient, { doc: DETAIL_PUBLIC_DOC, history: h('p', null, 'x') }));
+    h(RegistrationDetailClient, { doc: DETAIL_PUBLIC_DOC, history: await historySlot() }));
   const classes = new Set(arbitraryClassesIn(markup));
 
   for (const measured of [
@@ -1363,6 +1403,12 @@ test('the measured geometry really is in the harvest, not merely a large count',
     'w-[92.6px]',  // the + เพิ่มผู้เข้าอบรม button
     'h-[32.6px]',  // ...and its height
     'h-[28px]',    // the compact per-row "•••" trigger
+    // ── the ประวัติการดำเนินการ tab ────────────────────────────────────────
+    'h-[53.8px]',  // the feed card's header row
+    'h-[82px]',    // one history entry
+    'pl-[48px]',   // its text block
+    'w-[150px]',   // its timestamp block
+    'top-[13px]',  // the icon box's measured offset
   ]) {
     assert.ok(classes.has(measured), `the render carries no ${measured} — a measured element is missing`);
   }

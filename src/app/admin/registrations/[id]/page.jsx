@@ -48,6 +48,28 @@ export default async function Page({ params }) {
           entity="public"
           recordId={String(doc._id)}
           defaultOpen
+          variant="feed"
+          title="ประวัติการดำเนินการ"
+          description="บันทึกการดำเนินการของผู้ดูแลระบบกับใบสมัครนี้"
+          /**
+           * THE DOCUMENT'S OWN CREATION FACTS, for the feed's synthesised oldest
+           * entry — written HERE, at the mount point, exactly like `menu` and
+           * `entity`, and for the same reason: they come off the document this
+           * page already loaded and nothing inside RecordHistory can read it.
+           *
+           * NOTHING IN THE AUDIT LOG RECORDS A CREATION. That log records ADMIN
+           * actions and a customer submitting a form is not one, so the entry
+           * cannot come from the trail — it comes from `createdAt` and `source`
+           * on the record itself, which makes it the record stating its own
+           * origin rather than an invented event. The feed marks it as
+           * document-derived in both words and markup, and suppresses it when
+           * the list is truncated.
+           */
+          origin={{
+            createdAt: doc.createdAt,
+            source: doc.source ?? 'web',
+            label: 'ได้รับใบสมัคร',
+          }}
         />
       )}
     />

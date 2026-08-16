@@ -9,6 +9,7 @@ import {
   SeverityIcon, AuditRowDetail, ActionChip, AuditDiff,
 } from '@/components/audit/auditRowParts';
 import { HISTORY_STATE } from '@/lib/audit/auditQuery';
+import { HistoryFeed } from '@/components/audit/HistoryFeed';
 
 /**
  * The client half of RecordHistory. Receives already-authorised rows and makes
@@ -33,8 +34,40 @@ import { HISTORY_STATE } from '@/lib/audit/auditQuery';
  * is not synchronised afterwards: the reader's own open/closed choice must
  * survive a re-render, which is the same rule the tab state follows.
  */
-export function RecordHistoryPanel({ state, rows, total, previewCount, title, defaultOpen = false }) {
+export function RecordHistoryPanel({
+  state, rows, total, previewCount, title, defaultOpen = false,
+  variant = 'accordion', titles, origin, description,
+}) {
   const [open, setOpen] = useState(defaultOpen);
+
+  /**
+   * ── `variant` PICKS THE CONTAINER, AND NOTHING ELSE ────────────────────────
+   *
+   * The registration detail screens give this panel a TAB of its own and the
+   * round-5 frame draws it as a card of 82px entries rather than as a
+   * collapsible list. That is a third CONTAINER for an audit row, which
+   * auditRowParts' own header sanctions — "their containers differ and should" —
+   * as long as everything INSIDE a row stays shared, which it does.
+   *
+   * IT IS A VARIANT RATHER THAN A RESTYLE BECAUSE THIS PANEL HAS EIGHT MOUNT
+   * POINTS: articles, the cache console twice, career-path registrations,
+   * courses, masterclass registrations, and the two registration detail pages.
+   * Restyling in place would have changed six screens this round was not asked
+   * about. `'accordion'` is the default, so all six render byte-identically.
+   */
+  if (variant === 'feed') {
+    return (
+      <HistoryFeed
+        state={state}
+        rows={rows}
+        total={total}
+        titles={titles}
+        origin={origin}
+        title={title}
+        description={description}
+      />
+    );
+  }
   const [showAll, setShowAll] = useState(false);
   const [openRow, setOpenRow] = useState(null);
 
