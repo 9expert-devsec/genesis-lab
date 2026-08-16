@@ -81,7 +81,28 @@ export default async function Page({ searchParams }) {
   });
 
   return (
-    <div className="mx-auto max-w-7xl">
+    /*
+      ── `-mt-6` CANCELS THE ADMIN SHELL'S TOP PADDING ───────────────────────
+
+      THE DEAD BAND ABOVE THE EYEBROW WAS THE SHELL'S `p-6`, NOT AN EMPTY
+      ELEMENT. `AdminContentWrapper` wraps every admin page that is not a
+      full-height editor in `p-6`, so the 24px it contributes stacked with this
+      page's own `pt-[34px]` and put the eyebrow 58px down instead of 34px.
+
+      `RefreshOnNavigate` was the other candidate and is not it: it `return null`s
+      and emits nothing at all.
+
+      ONLY THE TOP IS CANCELLED. The same `p-6` supplies this page's left, right
+      and bottom padding, which it still wants — so this is a negative margin
+      rather than an opt-out from the wrapper, and the geometry's 34px stays
+      stated ONCE, on the header below, where it can be read against the design.
+
+      THE COUPLING IS REAL AND IS PINNED. `-mt-6` only cancels `p-6` while the
+      shell says `p-6`; if that ever changes this silently drifts. A test asserts
+      the wrapper's padding class and this negative margin agree, so the two
+      cannot move apart quietly.
+    */
+    <div className="mx-auto -mt-6 max-w-7xl">
       {/*
         `dynamic = 'force-dynamic'` above keeps the SERVER fresh; it does not
         reach the client Router Cache, which is what served a list missing a

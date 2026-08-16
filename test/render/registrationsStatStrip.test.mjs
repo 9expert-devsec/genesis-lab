@@ -226,9 +226,15 @@ test('source=public renders the public columns', () => {
   }
 });
 
-test('the four removed public columns are gone from the header', () => {
+test('the removed public columns are gone from the header', () => {
+  /**
+   * `รูปแบบ` LEFT THIS LIST after the click-test. It was never removed by
+   * ruling — the round-3 rebuild folded it into the course cell, and it has now
+   * been un-folded into a column of its own, where it also stops competing with
+   * the course name for width. The four that remain went by ruling.
+   */
   const cells = headerCells(publik).join('|');
-  for (const heading of ['เลขอ้างอิง', 'วันอบรม', 'รูปแบบ', 'ใบเสนอราคา', 'ชำระเงิน']) {
+  for (const heading of ['เลขอ้างอิง', 'วันอบรม', 'ใบเสนอราคา', 'ชำระเงิน']) {
     assert.ok(!cells.includes(heading), `a removed column is back on the public table: ${heading}`);
   }
 });

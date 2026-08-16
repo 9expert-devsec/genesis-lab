@@ -367,12 +367,50 @@ test('every content column is a proportion, and only the chevron is fixed', () =
   assert.match(widths[6], /^\d+px$/, `the chevron column is not fixed: ${widths[6]}`);
 });
 
+/**
+ * The in-house สถานะ column, held to the same derived floor as the public one —
+ * and it is the TIGHTER of the two.
+ *
+ * 10.0% of 89.4 against a 151px chrome gives the chip 144.2px, where public's
+ * 10.9% gives 154.8px. Both clear the 135px floor (the widest live label at a
+ * stated 0.65em advance plus 18px of padding), but in-house does so by ~9px.
+ * That margin is recorded in the report and is the first thing to eyeball on the
+ * click-test; if it turns out to overflow, 11.0% here — taking 1.0% back from
+ * หลักสูตรที่สนใจ — gives ~158.6px and clears even a pessimistic 0.75em.
+ */
+test('the สถานะ column clears the widest live label at a stated 0.65em advance', () => {
+  const CONTAINER = 1440;
+  const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
+    .map((c) => /width:([^"]*)/.exec(c)[1]);
+
+  const m = /^calc\(\(100% - ([\d.]+)px\) \* ([\d.]+) \+ ([\d.]+)px\)$/.exec(widths[5]);
+  assert.ok(m, `the สถานะ width is not a calc this test can evaluate: ${widths[5]}`);
+  const [, chrome, ratio] = m.map(Number);
+  const content = (CONTAINER - chrome) * ratio;
+
+  const label = statusLabel('quoted');
+  const advancing = [...label].filter((ch) => !/[ัิ-ฺ็-๎]/.test(ch)).length;
+  const floor = advancing * 12 * 0.65 + 18;
+
+  assert.ok(
+    content >= floor,
+    `the in-house สถานะ column gives the chip ${content.toFixed(1)}px but the widest live label `
+    + `(${JSON.stringify(label)}) needs about ${floor.toFixed(1)}px at a 0.65em advance.`,
+  );
+});
+
 test('the column ratios are the measured in-house shares, normalised', () => {
   const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
     .map((c) => /width:([^"]*)/.exec(c)[1]);
   const ratios = widths.slice(0, 6).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
 
-  const shares = [11.2, 17.2, 20.8, 16.5, 11.5, 12.2];
+  /**
+   * REVISED after the click-test: สถานะ 12.2 → 10.0, and the 2.2% goes to
+   * หลักสูตรที่สนใจ 20.8 → 23.0 — the in-house column most likely to truncate,
+   * since it carries a full course NAME over its code and preferred month. The
+   * total is unchanged at 89.4%, so the chrome stays 151px.
+   */
+  const shares = [11.2, 17.2, 23.0, 16.5, 11.5, 10.0];
   const total  = shares.reduce((a, b) => a + b, 0);
   ratios.forEach((r, i) => {
     assert.ok(Math.abs(r - shares[i] / total) < 1e-5,

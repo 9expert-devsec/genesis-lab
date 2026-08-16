@@ -23,9 +23,11 @@ import {
  *
  * ══ WHAT LEFT THE TABLE, AND WHERE IT WENT ═══════════════════════════════════
  *
- * Eleven columns became six. Four of them were removed by ruling, and none of
- * the information is lost — it is on the detail page, which is one click away
- * and is where a reader goes to answer a question about ONE registration.
+ * Eleven columns became six in the round-3 rebuild, and SEVEN after the
+ * click-test put รูปแบบ back into a column of its own (see the note on COLUMNS).
+ * Four were removed by ruling, and none of that information is lost — it is on
+ * the detail page, which is one click away and is where a reader goes to answer
+ * a question about ONE registration.
  *
  *   · เลขอ้างอิง — GONE ENTIRELY. It still heads the detail page, and search
  *     still cannot reach it: the public `$or` in lib/registrations/listFilter
@@ -44,8 +46,10 @@ import {
  *     what "หลักสูตร / รอบอบรม" means. It was rendering `row.classDate` twice on
  *     every row: once as its own column and once as the course cell's sub-line.
  *
- *   · รูปแบบ — folded into the course cell as the schedule chip, beside the
- *     round date it qualifies.
+ *   · รูปแบบ — folded into the course cell in the rebuild, and UN-FOLDED after
+ *     the click-test: it is a column again, between หลักสูตร and ผู้ประสานงาน.
+ *     Sharing the course cell's 32px line was costing the course NAME enough
+ *     width to truncate it on the first row.
  *
  * `payment`, `pricing` and `requestInvoice` therefore leave the LIST PROJECTION
  * as well, in this commit — see listRegistrations. A projection that is a
@@ -69,12 +73,47 @@ import {
  */
 const COLUMN_GAP = 18;
 
+/**
+ * ── REVISED AFTER THE CLICK-TEST. SIX COLUMNS, NOT FIVE. ───────────────────
+ *
+ * รูปแบบ is its own column now, between หลักสูตร and ผู้ประสานงาน, and three
+ * other shares moved with it. The shares still sum to 89.9% — the design's
+ * total — so the set is a redistribution rather than a widening.
+ *
+ *   วันที่สมัคร        13.3 → 13.0
+ *   หลักสูตร / รอบอบรม  30.0 → 32.0   gains the chip's space, and more
+ *   รูปแบบ             new    8.5
+ *   ผู้ประสานงาน       20.3 → 20.0
+ *   ผู้เข้าอบรม        11.7 →  5.5   it holds ONE number
+ *   สถานะ             14.6 → 10.9
+ *
+ * WHY THE COURSE CELL GAINS MORE THAN THE CHIP TOOK: the course name was
+ * truncating on the very first row — "Data Analysis Expression (D…" — because
+ * the chip competed for that cell's width on the same 32px line as the round
+ * dates. Moving the chip out frees the line; the extra 2% is the name getting
+ * back what it had lost.
+ *
+ * ผู้เข้าอบรม was sized when it still carried the ครบ / ยังไม่ครบ / แจ้งภายหลัง
+ * chip that was ruled out. It has held a single number ever since, and 11.7% of
+ * a 1440 table for two digits was the ruling's leftover, not a measurement.
+ *
+ * ── THE CHROME GREW WITH THE COLUMN, AND THE TWO NO LONGER RECONCILE EXACTLY
+ * A sixth column means a sixth 18px gap, so the fixed chrome goes from 145px to
+ * 163px while the shares still total 89.9%. At 1440 those over-account by ~18px,
+ * where the five-column set reconciled to the pixel. `columnWidths` normalises
+ * the ratios against whatever the chrome actually is, so the columns still fill
+ * exactly 100% and the RATIOS between them are exactly as specified — each
+ * content column simply lands ~1.4% narrower than its bare percentage would
+ * suggest. Stated because the arithmetic in tableParts' docstring is what
+ * confirmed the original reading, and it no longer closes as neatly.
+ */
 const COLUMNS = [
-  { key: 'date',        label: 'วันที่สมัคร',        share: 13.3 },
-  { key: 'course',      label: 'หลักสูตร / รอบอบรม', share: 30.0 },
-  { key: 'coordinator', label: 'ผู้ประสานงาน',       share: 20.3 },
-  { key: 'attendees',   label: 'ผู้เข้าอบรม',        share: 11.7 },
-  { key: 'status',      label: 'สถานะ',             share: 14.6 },
+  { key: 'date',        label: 'วันที่สมัคร',        share: 13.0 },
+  { key: 'course',      label: 'หลักสูตร / รอบอบรม', share: 32.0 },
+  { key: 'format',      label: 'รูปแบบ',            share:  8.5 },
+  { key: 'coordinator', label: 'ผู้ประสานงาน',       share: 20.0 },
+  { key: 'attendees',   label: 'ผู้เข้าอบรม',        share:  5.5 },
+  { key: 'status',      label: 'สถานะ',             share: 10.9 },
 ];
 
 const SCHEDULE_BADGE = {
@@ -145,20 +184,29 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
               </td>
 
               {/* หลักสูตร / รอบอบรม — the title, then a 32px row holding the
-                  round date and the schedule chip 7px after it. */}
+                  round dates. The schedule chip has moved to its own column. */}
               <td className="p-0 align-top">
                 <CellLink href={href} style={pad(1)}>
-                  <CourseCell
-                    name={row.courseName}
-                    classDate={row.classDate}
-                    scheduleType={row.scheduleType}
-                    attendanceMode={row.attendanceMode}
-                  />
+                  <CourseCell name={row.courseName} classDate={row.classDate} />
+                </CellLink>
+              </td>
+
+              {/*
+                รูปแบบ — the chip alone, vertically centred.
+
+                It was inside the course cell, sharing the 32px line with the
+                round dates, and it competed for that width badly enough that the
+                first row's course name truncated. Its own column costs 8.5% and
+                gives 2% of it back to the name.
+              */}
+              <td className="p-0 align-top">
+                <CellLink href={href} className="items-start" style={pad(2)}>
+                  <ScheduleBadge type={row.scheduleType} mode={row.attendanceMode} />
                 </CellLink>
               </td>
 
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(2)}>
+                <CellLink href={href} style={pad(3)}>
                   <CoordinatorCell
                     name={`${row.coordinator?.firstName ?? ''} ${row.coordinator?.lastName ?? ''}`}
                     email={row.coordinator?.email}
@@ -177,7 +225,7 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
                 a three-way chip.
               */}
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(3)}>
+                <CellLink href={href} style={pad(4)}>
                   <p className="text-[14px] font-bold leading-[17px] tabular-nums text-[var(--text-primary)]">
                     {row.attendeesCount ?? '—'}
                   </p>
@@ -186,7 +234,7 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
 
               {/* สถานะ — the chip, and nothing under it. See StatusCell. */}
               <td className="p-0 align-top">
-                <CellLink href={href} style={pad(4)}>
+                <CellLink href={href} style={pad(5)}>
                   <StatusCell status={row.status} />
                 </CellLink>
               </td>
@@ -203,38 +251,38 @@ export function PublicTable({ items, lastEdited = {}, detailHref }) {
 // ── Sub-components ─────────────────────────────────────────────────
 
 /**
- * The course cell: a bold 18px title over a 32px row.
+ * The course cell: a bold 18px title over a 32px row of round dates.
  *
- * ── THE SECOND ROW IS UNCONDITIONAL, AND THAT IS A DERIVED FACT ────────────
- * The row holds the round date and the schedule chip. The DATE is optional and
- * is guarded; the CHIP is not, because ScheduleBadge has no empty branch —
- * a falsy `scheduleType` renders "Classroom", which is the correct default for a
- * public class and is exactly why the ruling keeps that component whole.
+ * ── THE SECOND ROW IS CONDITIONAL AGAIN, AND THAT CHANGED WITH THE CHIP ────
+ * It used to be unconditional, and the previous version of this comment
+ * explained why at length: the row held the round date AND the schedule chip,
+ * the chip has no empty branch (a falsy `scheduleType` renders "Classroom"), so
+ * the row could never be empty and a `hasSecondRow` test would have been vacuous
+ * — a guard that cannot fail.
  *
- * So the row can never be empty, and it is rendered unconditionally rather than
- * wrapped in a `hasSecondRow` test. Writing that test would have LOOKED like the
- * empty-element discipline while being vacuous — the chip is always truthy, so
- * the condition is always true and the guard proves nothing. A guard that cannot
- * fail is worse than no guard, because the next reader believes it.
+ * MOVING THE CHIP OUT INVERTED THAT. The row now holds the round dates and
+ * nothing else, and `classDate` is genuinely optional, so a course with no round
+ * date would render 32px of nothing. The guard is real now and it is measured:
+ * the sparse fixture in the render tests carries `classDate: ''`, and deleting
+ * this condition reddens the empty-element assertion.
  *
- * If ScheduleBadge ever gains a branch that renders nothing, this must gain the
- * test at the same time. The render tier would catch the gap: the empty-element
- * assertion runs over both tables.
+ * The lesson is the reason the old comment was written down rather than the
+ * guard just being added: whether a guard is real depends on what else is in the
+ * box, and that changes when columns move.
  */
-function CourseCell({ name, classDate, scheduleType, attendanceMode }) {
+function CourseCell({ name, classDate }) {
   return (
     <>
       <p className="truncate text-[15px] font-bold leading-[20px] text-[var(--text-primary)]">
         {name || '—'}
       </p>
-      <div className="flex h-[32px] items-center gap-[7px]">
-        {classDate ? (
+      {classDate ? (
+        <div className="flex h-[32px] items-center">
           <span className="truncate text-[13px] leading-[15px] text-[var(--text-secondary)]">
             {classDate}
           </span>
-        ) : null}
-        <ScheduleBadge type={scheduleType} mode={attendanceMode} />
-      </div>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -251,12 +299,23 @@ function CourseCell({ name, classDate, scheduleType, attendanceMode }) {
  * the status module — a test pins that it keeps its own neutral fallback, which
  * happens to be the same grey the neutral status chip uses and is not the same
  * decision.
+ *
+ * ── `w-fit` ARRIVED WHEN THE CHIP MOVED, AND IT IS NOT COSMETIC ────────────
+ * Inside the course cell this chip sat in a `flex items-center` ROW, where there
+ * was no cross-axis stretch and it sized itself. In its own column it is a
+ * DIRECT CHILD of `CellLink`, which is `flex flex-col` — so it inherits exactly
+ * the defect the status chip was just fixed for: a flex item is blockified and
+ * the column's default `align-items: stretch` spreads it across the whole 8.5%.
+ *
+ * Moving an element between boxes can change whether it needs a width
+ * constraint, which is why the compiled-CSS guard sweeps EVERY chip in both
+ * tables rather than naming the one that was broken.
  */
 function ScheduleBadge({ type, mode }) {
   if (!type || type === 'classroom') {
     return (
       <span className={cn(
-        'inline-flex h-[23px] shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
+        'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
         SCHEDULE_BADGE.classroom
       )}>
         Classroom
@@ -265,7 +324,7 @@ function ScheduleBadge({ type, mode }) {
   }
   return (
     <span className={cn(
-      'inline-flex h-[23px] shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
+      'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
       SCHEDULE_BADGE[type] ?? 'bg-slate-100 text-slate-600'
     )}>
       {type === 'hybrid'

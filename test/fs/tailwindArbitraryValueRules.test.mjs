@@ -987,6 +987,82 @@ test('the status chip’s compiled CSS constrains its width to its content', asy
   );
 });
 
+/**
+ * EVERY CHIP IN EITHER TABLE, not just the one that was reported.
+ *
+ * ── WHY A SWEEP AND NOT THREE NAMED ASSERTIONS ─────────────────────────────
+ * MOVING AN ELEMENT BETWEEN BOXES CHANGES WHETHER IT NEEDS A WIDTH CONSTRAINT,
+ * and that is not hypothetical — it happened in the very next commit. The
+ * schedule chip lived inside the course cell's `flex items-center` ROW, where
+ * there is no cross-axis stretch and it sized itself correctly with no `w-fit`
+ * at all. Promoting it to its own column made it a DIRECT CHILD of `CellLink`,
+ * which is `flex flex-col`, and it inherited exactly the defect the status chip
+ * had just been fixed for.
+ *
+ * A named list of "the chips that need this" would have been written before that
+ * move and would not have covered it. A sweep over every chip the two tables
+ * actually render does, and covers the next one too.
+ *
+ * `rounded-full` is the marker because it is what makes a chip a chip here, and
+ * it is not used by anything else in these two components.
+ */
+test('every chip in both tables has a compiled width constraint', async () => {
+  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
+  const { InhouseTable } = await import('@/app/admin/registrations/_components/InhouseTable');
+
+  const publicRow = {
+    _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', classDate: '1 ส.ค. 2569',
+    scheduleType: 'hybrid', attendanceMode: 'teams', coordinator: { email: 'a@b.c' },
+    attendeesCount: 3, status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z',
+  };
+  const inhouseRow = {
+    _id: 'bbbbbbbbbbbbbbbbbbbb0002', companyName: 'c', coursesInterested: ['X-1'],
+    contactFirstName: 'a', contactLastName: 'b', contactEmail: 'a@b.c', contactPhone: '08',
+    participantsCount: 15, trainingFormat: 'onsite', preferredMonth: '2026-11',
+    status: 'quoted', createdAt: '2026-08-01T00:00:00.000Z',
+  };
+
+  /**
+   * BOTH SCHEDULE BRANCHES, and the second row exists because a control found
+   * the gap. `ScheduleBadge` renders one of two `<span>`s — a falsy
+   * `scheduleType` takes the "Classroom" branch, anything else takes the other —
+   * and they are separate class literals. A fixture carrying only `hybrid`
+   * exercises one of them, so deleting `w-fit` from the classroom branch
+   * reddened NOTHING.
+   *
+   * A sweep is only as wide as the markup it is handed. Two rows.
+   */
+  const classroomRow = { ...publicRow, _id: 'cccccccccccccccccccc0003', scheduleType: '', attendanceMode: '' };
+
+  const markup = [
+    renderToStaticMarkup(createElement(PublicTable, {
+      items: [publicRow, classroomRow], lastEdited: {}, detailHref: (id) => `/admin/registrations/${id}`,
+    })),
+    renderToStaticMarkup(createElement(InhouseTable, {
+      items: [inhouseRow], lastEdited: {}, courseNames: {},
+    })),
+  ].join('\n');
+
+  const chips = [...markup.matchAll(/\sclass="([^"]*)"/g)]
+    .map((m) => m[1].split(/\s+/).filter(Boolean))
+    .filter((classes) => classes.includes('rounded-full'));
+
+  assert.ok(chips.length >= 4,
+    `only ${chips.length} chips harvested — expected at least both schedule branches, the mode chip `
+    + 'and the status chips');
+
+  const css = await layoutCss();
+  for (const classes of chips) {
+    const decls = declarationsForAll(css, classes);
+    assert.ok(
+      decls.some((d) => d.startsWith('width:')),
+      `a chip has no compiled width constraint and its parent may stretch it: [${classes.join(' ')}]. `
+      + 'A chip that is a direct child of CellLink (flex flex-col) is blockified and stretched by '
+      + '`align-items: stretch`; `inline-flex` does not prevent that.',
+    );
+  }
+});
+
 test('CellLink stretches its children by default — which is why the chip must constrain itself', async () => {
   /**
    * The other half of the interaction, asserted so the fix cannot be removed as
