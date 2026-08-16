@@ -92,8 +92,15 @@ const FOREIGN = { ...SPARSE, _id: 'cccccccccccccccccccc0003', status: FABRICATED
 
 const href = (id) => `/admin/registrations/${id}`;
 
+/**
+ * Named so the body-vs-header guard below can assert every fixture row rendered,
+ * rather than checking whichever rows happened to survive. The in-house file has
+ * the same const for the same reason.
+ */
+const ROWS = [FULL, SPARSE, NAME_ONLY, FOREIGN];
+
 const html = renderToStaticMarkup(createElement(PublicTable, {
-  items: [FULL, SPARSE, NAME_ONLY, FOREIGN],
+  items: ROWS,
   lastEdited: { [FULL._id]: { createdAt: '2026-08-10T03:00:00.000Z', actorName: 'แอดมิน' } },
   detailHref: href,
 }));
@@ -265,6 +272,53 @@ test('every cell of a row is an anchor pointing at that row’s detail page', ()
   for (const a of anchors) {
     assert.ok(a.includes(`href="${href(FULL._id)}"`), `an anchor points somewhere else: ${a}`);
   }
+});
+
+/**
+ * ── THE BODY HAS AS MANY CELLS AS THE HEADER ────────────────────────────────
+ *
+ * THE HOLE WAS FOUND ON THE IN-HOUSE TABLE AND VERIFIED HERE BEFORE PORTING.
+ * The two tables have the SAME shape, and it is worth stating what was checked
+ * rather than assuming the symmetry:
+ *
+ *   · `<colgroup>` — `COLUMNS.map(...)`, derived
+ *   · `<thead>`    — `COLUMNS.map(...)`, derived
+ *   · empty-state  — `colSpan={COLUMNS.length + 1}`, derived
+ *   · `<tbody>`    — SEVEN hand-written `<td>`s (six cells plus ChevronCell),
+ *                    NOT derived
+ *
+ * So a column added to `COLUMNS` grows the header, the colgroup and the
+ * empty-state span, and leaves the body one cell short — and the three guards
+ * that look adjacent to this all miss it, exactly as they did on in-house:
+ *
+ *   · the anchor count reads ONE BODY ROW and a hard-coded number, so it is
+ *     body-only and never compares against the header;
+ *   · the `<col>` count and the ratio test read the COLGROUP only;
+ *   · the empty-state `colSpan` test compares two numbers that are BOTH derived
+ *     from `COLUMNS`, so they agree with each other while both disagree with
+ *     the body.
+ *
+ * Three assertions in the same file, none of which spans the two halves. That is
+ * why this exists on BOTH tables rather than only where the mutation happened to
+ * be run — a guard present on one table and absent on the other reads as
+ * coverage and is not.
+ *
+ * Every row is checked, not just the first: a per-row conditional could
+ * desynchronise one of them.
+ */
+test('every body row has exactly as many cells as the header', () => {
+  const headers = headerCells(html).length;
+  const body = html.slice(html.indexOf('<tbody'), html.indexOf('</tbody>'));
+  const rows = body.split('<tr').slice(1);
+  assert.equal(rows.length, ROWS.length, `expected ${ROWS.length} body rows, found ${rows.length}`);
+
+  rows.forEach((row, i) => {
+    const cells = (row.match(/<td\b/g) ?? []).length;
+    assert.equal(cells, headers,
+      `body row ${i} has ${cells} cells against ${headers} header cells. The header, the colgroup `
+      + 'and the empty-state colSpan are all derived from COLUMNS; the body cells are hand-written '
+      + 'and do not follow.');
+  });
 });
 
 test('a row has exactly ONE keyboard tab stop', () => {

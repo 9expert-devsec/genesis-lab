@@ -151,6 +151,44 @@ const CASES = [
      */
   },
   {
+    name: '7. a SEVENTH public column is added without a body cell',
+    why: 'COLUMNS drives the header, the colgroup and the empty-state span — the body cells do not follow',
+    edits: [{
+      file: PUBT,
+      find: "  { key: 'status',      label: 'สถานะ',             share: 10.9 },\n];",
+      replace: "  { key: 'status',      label: 'สถานะ',             share: 10.9 },\n"
+        + "  { key: 'extra',       label: 'เพิ่ม',             share:  0.1 },\n];",
+    }],
+    files: [PUBR, STRIP],
+    /**
+     * THE SAME HOLE THE IN-HOUSE TABLE HAD, PROVED ON THIS ONE.
+     *
+     * The hole was found by the in-house rehearsal; the public table was then
+     * READ rather than assumed to match, and it does: colgroup, thead and
+     * `colSpan={COLUMNS.length + 1}` are all derived, while the body's seven
+     * `<td>`s are hand-written.
+     *
+     * What this case measures is that the three ADJACENT guards still miss it
+     * here, which is why the new assertion is not redundant with them:
+     *
+     *   · the anchor count reads one body row and a hard-coded number;
+     *   · the `<col>`/ratio tests read the colgroup;
+     *   · the empty-state colSpan compares two numbers BOTH derived from
+     *     COLUMNS, so they agree with each other and with nothing else.
+     */
+    mustFail: [
+      'every body row has exactly as many cells as the header',
+      'the header has exactly seven columns: six labelled plus the chevron',
+      'every content column is a proportion of the table, and only the chevron is fixed',
+      'the column ratios are the measured shares, normalised',
+    ],
+    mustStillPass: [
+      'every cell of a row is an anchor pointing at that row’s detail page',
+      'the empty-state colSpan matches the header width',
+      'the สถานะ column clears the widest live label at a stated 0.65em advance',
+    ],
+  },
+  {
     name: '6. the page stops cancelling the shell’s top padding',
     why: 'the 24px band above the eyebrow, back — p-6 stacking with pt-[34px]',
     edits: [{
