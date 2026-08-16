@@ -6,8 +6,8 @@ import { ChevronDown, ChevronRight, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { rowHealth, summariseHealth, HEALTH, HEALTH_LEVEL, HEALTH_LABEL } from '@/lib/audit/auditHealth';
 import {
-  fmtWhen, preview, rowSeverity, severityRowClass,
-  LevelDot, SeverityIcon, AuditRowDetail, RecordIdentity, ActionChip,
+  fmtWhen, rowSeverity, severityRowClass,
+  LevelDot, SeverityIcon, AuditRowDetail, RecordIdentity, ActionChip, AuditDiff,
 } from '@/components/audit/auditRowParts';
 
 export function AuditLogClient({
@@ -276,11 +276,16 @@ function RowPair({ row, flags, isOpen, onToggle, menuLabels, entityLabels }) {
         </td>
         <td className="px-4 py-3"><ActionChip action={row.action} /></td>
         <td className="max-w-[220px] px-4 py-3"><RecordIdentity row={row} /></td>
-        <td className="max-w-[200px] px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">
-          <span className="truncate">{preview(row.before)}</span>
-          <span className="mx-1 text-[var(--text-muted)]">→</span>
-          <span className="truncate">{preview(row.after)}</span>
-        </td>
+        {/*
+          THE SAME DIFF LINE THE INLINE PANEL USES, and shared for the reason
+          auditRowParts' own header gives: the two surfaces differ in their
+          CONTAINER and in nothing inside it. A row with no recorded before/after
+          renders an EMPTY CELL here rather than `— → —` — the column header
+          still says what the column is, and a cell holding nothing is the honest
+          rendering of a row that records the act and not the values. See
+          `hasDiff` for why those rows are empty on purpose (PII).
+        */}
+        <td className="max-w-[200px] px-4 py-3"><AuditDiff row={row} /></td>
         <td className="px-4 py-3">
           <p className="text-[var(--text-primary)]">{row.actor?.name || '—'}</p>
           <p className="font-mono text-xs text-[var(--text-muted)]">{row.actor?.id || ''}</p>
