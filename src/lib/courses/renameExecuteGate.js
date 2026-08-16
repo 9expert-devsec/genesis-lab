@@ -46,12 +46,17 @@ export function tokenForPreview(preview) {
  * admin look at the row they are about to act on — a checkbox is satisfied
  * without reading anything.
  *
- * ── AND WHY THE ACKNOWLEDGEMENT IS SEPARATE ────────────────────────────────
- * Two different consents. One is to this write. The other is to an obligation
- * that lands on the admin AFTER it: MSDB still carries the old code, and until
- * they change it the ordering and enrichment stores are detached and a hidden
- * course can become publicly visible. Folding that into the same control would
- * let someone agree to the second by concentrating on the first.
+ * ── AND WHY THE ACKNOWLEDGEMENT IS STILL SEPARATE, FOR A NEW REASON ────────
+ * It used to be consent to an OBLIGATION: MSDB still carried the old code and
+ * the admin had to go and change it. There is no second step any more, so that
+ * consent no longer means anything and asking for it would be theatre.
+ *
+ * What replaces it is consent to REACH: this action now writes the live
+ * upstream catalogue, immediately, and this tool cannot undo it. That is a
+ * bigger thing to agree to than the old obligation was, and it is still a
+ * different thing from "I have selected the right course" — which is what the
+ * typed code establishes. Folding the two together would let someone agree to
+ * the reach by concentrating on the spelling.
  *
  * Comparison is EXACT, not case-insensitive: a rename that differs only by case
  * is a real and dangerous rename (see the case-only warning), so accepting
@@ -61,10 +66,10 @@ export function tokenForPreview(preview) {
  * @param {object} input
  * @param {object|null} input.preview the preview currently ON SCREEN
  * @param {string} input.typedCode    what the admin typed to confirm
- * @param {boolean} input.ackMsdb     the separate MSDB acknowledgement
+ * @param {boolean} input.ackUpstream the separate consent to writing upstream
  * @returns {{allowed: boolean, reasons: string[], token: string}}
  */
-export function canExecuteRename({ preview, typedCode = '', ackMsdb = false } = {}) {
+export function canExecuteRename({ preview, typedCode = '', ackUpstream = false } = {}) {
   const reasons = [];
 
   if (!preview) reasons.push(GATE.NO_PREVIEW);
@@ -73,7 +78,7 @@ export function canExecuteRename({ preview, typedCode = '', ackMsdb = false } = 
   const expected = String(preview?.newCode ?? '');
   if (!expected || String(typedCode) !== expected) reasons.push(GATE.NOT_TYPED);
 
-  if (!ackMsdb) reasons.push(GATE.NOT_ACKED);
+  if (!ackUpstream) reasons.push(GATE.NOT_ACKED);
 
   return {
     allowed: reasons.length === 0,

@@ -32,7 +32,7 @@ const preview = (over = {}) => {
 const ok = (over = {}) => canExecuteRename({
   preview: preview(),
   typedCode: 'EXCEL-HR-01',
-  ackMsdb: true,
+  ackUpstream: true,
   ...over,
 });
 
@@ -69,20 +69,20 @@ test('the typed code must match CASE-EXACTLY', () => {
   assert.ok(g.reasons.includes(GATE.NOT_TYPED));
 });
 
-test('NO MSDB ACKNOWLEDGEMENT refuses, separately from the typed code', () => {
-  const g = ok({ ackMsdb: false });
+test('NO UPSTREAM-REACH ACKNOWLEDGEMENT refuses, separately from the typed code', () => {
+  const g = ok({ ackUpstream: false });
   assert.equal(g.allowed, false);
   assert.ok(g.reasons.includes(GATE.NOT_ACKED));
   assert.ok(!g.reasons.includes(GATE.NOT_TYPED), 'the two consents are not independent');
 });
 
 test('the two consents are BOTH required — neither alone opens the gate', () => {
-  assert.equal(ok({ typedCode: '', ackMsdb: true }).allowed, false);
-  assert.equal(ok({ typedCode: 'EXCEL-HR-01', ackMsdb: false }).allowed, false);
+  assert.equal(ok({ typedCode: '', ackUpstream: true }).allowed, false);
+  assert.equal(ok({ typedCode: 'EXCEL-HR-01', ackUpstream: false }).allowed, false);
 });
 
 test('NO PREVIEW refuses, whatever else is satisfied', () => {
-  const g = canExecuteRename({ preview: null, typedCode: 'EXCEL-HR-01', ackMsdb: true });
+  const g = canExecuteRename({ preview: null, typedCode: 'EXCEL-HR-01', ackUpstream: true });
   assert.equal(g.allowed, false);
   assert.ok(g.reasons.includes(GATE.NO_PREVIEW));
 });
@@ -90,7 +90,7 @@ test('NO PREVIEW refuses, whatever else is satisfied', () => {
 test('A BLOCKED preview refuses — a collision cannot be typed past', () => {
   const collided = preview({ newCode: 'MSE-L2' });
   assert.equal(collided.ok, false);
-  const g = canExecuteRename({ preview: collided, typedCode: 'MSE-L2', ackMsdb: true });
+  const g = canExecuteRename({ preview: collided, typedCode: 'MSE-L2', ackUpstream: true });
   assert.equal(g.allowed, false);
   assert.ok(g.reasons.includes(GATE.BLOCKED));
 });
@@ -135,16 +135,16 @@ test('no preview → no alias step', () => {
 // ── Controls ────────────────────────────────────────────────────────────────
 
 test('CONTROL: the gate is not a constant', () => {
-  assert.notEqual(ok().allowed, ok({ ackMsdb: false }).allowed);
+  assert.notEqual(ok().allowed, ok({ ackUpstream: false }).allowed);
   assert.notEqual(ok().reasons.length, ok({ typedCode: '' }).reasons.length);
 });
 
 test('CONTROL: every GATE reason is reachable', () => {
   const seen = new Set([
     ...canExecuteRename({ preview: null }).reasons,
-    ...canExecuteRename({ preview: preview({ newCode: 'MSE-L2' }), typedCode: 'MSE-L2', ackMsdb: true }).reasons,
+    ...canExecuteRename({ preview: preview({ newCode: 'MSE-L2' }), typedCode: 'MSE-L2', ackUpstream: true }).reasons,
     ...ok({ typedCode: '' }).reasons,
-    ...ok({ ackMsdb: false }).reasons,
+    ...ok({ ackUpstream: false }).reasons,
   ]);
   for (const reason of Object.values(GATE)) {
     assert.ok(seen.has(reason), `${reason} is unreachable — it can never be shown`);

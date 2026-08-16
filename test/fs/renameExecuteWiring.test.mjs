@@ -34,7 +34,7 @@ test('the button is disabled from the GATE, not from a local boolean', () => {
 
 test('both confirmations feed the gate', () => {
   const code = panel();
-  assert.match(code, /canExecuteRename\(\{ preview, typedCode, ackMsdb \}\)/,
+  assert.match(code, /canExecuteRename\(\{ preview, typedCode, ackUpstream \}\)/,
     'the gate is called without one of the two consents');
 });
 
@@ -56,7 +56,7 @@ test('THE TOKEN SENT IS THE ON-SCREEN PREVIEW\'S, not a fresh read', () => {
 
 test('the write is called once, with the codes from the displayed preview', () => {
   const code = panel();
-  assert.equal(countCallSites(code, 'renameCourseCodePhase1'), 1);
+  assert.equal(countCallSites(code, 'renameCourseCode'), 1);
   assert.match(code, /oldCode: from,/);
   assert.match(code, /newCode: to,/);
   assert.match(code, /const from = preview\?\.oldCode/);
@@ -130,12 +130,34 @@ test('the partial state names the stores and offers the re-run as SAFE', () => {
   assert.match(code, /ทำซ้ำแล้วได้ผลเดิม/, 'the re-run is offered without saying it is safe');
 });
 
-test('after a COMPLETE phase 1 the MSDB obligation is the loud one', () => {
+/**
+ * ══ THIS ASSERTION WAS DELIBERATELY REPLACED ═══════════════════════════════
+ *
+ * It used to pin `{done && <MsdbObligation … loud />}` — that after a
+ * successful phase 1 the loudest thing on screen was "go and change MSDB
+ * yourself". There is no second step any more: the action writes upstream and
+ * confirms it by read-back, so an obligation card would be instructing the
+ * admin to redo work that is already done.
+ *
+ * WHAT IS GUARANTEED NOW: the outcome report leads, the success branch says
+ * plainly that nothing is owed, and the write's REACH is disclosed BEFORE the
+ * button rather than an obligation being disclosed after it.
+ */
+test('the outcome leads, and a success says nothing is owed', () => {
   const code = panel();
-  assert.match(code, /\{done && <MsdbObligation from=\{from\} to=\{to\} loud \/>\}/,
-    'the obligation is not escalated after a successful write');
+  assert.match(code, /<RenameOutcomeReport result=\{result\} \/>/,
+    'the outcome is not rendered at the top of the panel');
   assert.match(code, /const done = result\?\.ok === true/);
-  // and it carries both codes so they can be copied
+  assert.match(code, /ไม่ต้องไปแก้ MSDB เองแล้ว/, 'a success does not say the MSDB step is gone');
+  assert.ok(!/MsdbObligation/.test(code), 'the retired MSDB obligation card is still here');
+});
+
+test('the REACH is disclosed before the button, not an obligation after it', () => {
+  const code = panel();
+  assert.match(code, /data-testid="upstream-reach"/, 'nothing discloses that this writes upstream');
+  assert.match(code, /\{!done && <UpstreamReach from=\{from\} to=\{to\} \/>\}/,
+    'the reach card is not shown while there is still something to confirm');
+  // and it carries both codes so they can be read off
   assert.match(code, /<CopyableCode value=\{from\} \/> เป็น <CopyableCode value=\{to\} \/>/);
 });
 

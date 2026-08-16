@@ -19,8 +19,8 @@
  * Export set must match the real module exactly — see test/fs/stubExportParity.
  */
 
-export async function renameCourseCodePhase1() {
-  throw new Error('stub-course-rename-actions: renameCourseCodePhase1 must not be called in a render test');
+export async function renameCourseCode() {
+  throw new Error('stub-course-rename-actions: renameCourseCode must not be called in a render test');
 }
 
 export async function inspectRenameState() {

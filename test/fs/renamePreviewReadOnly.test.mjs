@@ -184,8 +184,14 @@ test('CONTROL: the exemption is still real, and still only Admin', () => {
 test('the upstream state block is derived, not fetched, and writes nothing', () => {
   const { code } = readSource('src/lib/courses/renameCoursePreview.js');
   assert.match(code, /const upstream = \{/, 'the preview no longer reports upstream state');
-  assert.match(code, /hasOldCode: findInsensitive\(msdbCodes, from\)/, 'it does not read the codes it already has');
-  assert.match(code, /hasNewCode: findInsensitive\(msdbCodes, to\)/);
+  /**
+   * `codes`, not `msdbCodes`: the planner now takes the upstream ROWS
+   * (`msdbCourses`) so a hit can be identified by `_id`, and derives the code
+   * list from them. Still derived, still no fetch — which is what this asserts.
+   */
+  assert.match(code, /const codes = upstreamRows \? upstreamRows\.map/, 'the code list is not derived from the rows');
+  assert.match(code, /hasOldCode: findInsensitive\(codes, from\)/, 'it does not read the codes it already has');
+  assert.match(code, /hasNewCode: findInsensitive\(codes, to\)/);
   // The planner is pure — it takes the block, it does not go and get one.
   const plan = readSource('src/lib/courses/renameCoursePlan.js');
   assert.ok(!/listPublicCourses|aiFetch|fetch\(/.test(plan.code), 'the planner fetches upstream itself');

@@ -51,11 +51,21 @@ const ELEVEN = {
   article: [{ slug: 'a' }],
 };
 
-const preview = ({ oldCode, newCode, matches = {}, msdbCodes = MSDB_AFTER, extensionCodes = EXT_AFTER }) =>
+const preview = ({ oldCode, newCode, matches = {}, msdbCodes = MSDB_AFTER, extensionCodes = EXT_AFTER, ...rest }) =>
   buildRenamePreview({
     oldCode, newCode, msdbCodes, extensionCodes, urlAlias: '',
     matches: { ...allEmpty(), ...matches },
+    ...rest,
   });
+
+/** The upstream ROWS, so identity can be proved by `_id`. */
+const ANCHOR = '6a7a97f0b830e289fc383406';
+const OTHER_ID = 'aa11bb22cc33dd44ee55ff66';
+const MSDB_ROWS = [
+  { course_id: 'EXCEL-HR-01', _id: ANCHOR },
+  { course_id: 'MSE-L1', _id: '111111111111111111111111' },
+  { course_id: 'POWER-BI', _id: '222222222222222222222222' },
+];
 
 const NOTHING_TO_CHANGE = 'ไม่มีอะไรต้องเปลี่ยน';
 
@@ -181,21 +191,33 @@ test('an UNREAD store set cannot trigger the disagreement message', () => {
 
 // ── The refusal on the reachable question ──────────────────────────────────
 
-test('the upstream hit is refused WITHOUT calling it another course', () => {
-  /**
-   * The write stays blocked: from what this screen sees, "renamed at MSDB" and
-   * "old course deleted upstream, unrelated new one created" are the same
-   * observation. What changes is the wording — the old message asserted the
-   * code was taken, which names the wrong one of the two.
-   */
+/**
+ * ══ THIS ASSERTION WAS DELIBERATELY REPLACED ═══════════════════════════════
+ *
+ * It used to assert that the upstream hit was refused with the wording
+ * "อาจเป็นหลักสูตรเดียวกัน" — a SUSPICION, correct while nothing could settle
+ * it. The `upstreamId` anchor settles it, so that wording no longer exists and
+ * asserting it would pin a message the code is right to have stopped emitting.
+ *
+ * WHAT IS GUARANTEED NOW, and it is strictly stronger: with NO anchor the
+ * refusal is about the missing anchor and names the row; with a WRONG anchor it
+ * says the two are different courses and prints both ids; with a MATCHING
+ * anchor it is not a refusal at all.
+ */
+test('with NO anchor, the upstream hit refuses and names the missing anchor', () => {
+  // The fixture passes no `anchor`, which is the pre-backfill state.
   const p = preview({ oldCode: GENESIS_CODE, newCode: 'EXCEL-HR-01', matches: ELEVEN });
-  assert.equal(p.ok, false, 'the rename became runnable — that is a separate decision');
+  assert.equal(p.ok, false, 'an unanchored row was allowed to rename');
   assert.equal(p.collision.blocked, true);
-  assert.equal(p.collision.mayBeSelfUpstream, true);
+  assert.equal(p.selfUpstream.looksLikeIt, true, 'the shape was not even recognised');
+  assert.equal(p.selfUpstream.proven, false);
+  assert.equal(p.selfUpstream.reason, 'no-anchor');
   assert.ok(
-    p.blocked.some((b) => b.includes('อาจเป็นหลักสูตรเดียวกัน')),
-    'the refusal still asserts the code belongs to something else:\n  ' + p.blocked.join('\n  ')
+    p.blocked.some((b) => b.includes('upstreamId') && b.includes(GENESIS_CODE)),
+    'the refusal does not name the row or the missing anchor:\n  ' + p.blocked.join('\n  ')
   );
+  // and it points at the fix rather than leaving the operator to guess
+  assert.ok(p.blocked.some((b) => b.includes('backfill:extension-anchor')));
 });
 
 test('a GENUINE collision is still called what it is', () => {
@@ -243,4 +265,76 @@ test('CONTROL: the phrase being banned is one this module really can emit', () =
 test('CONTROL: the eleven-row fixture really carries eleven rows', () => {
   const n = Object.values(ELEVEN).reduce((sum, rows) => sum + rows.length, 0);
   assert.equal(n, 11, `the fixture holds ${n} rows, so the count assertion above proves nothing`);
+});
+
+// ══ THE ANCHOR TURNS THE REFUSAL INTO A RESUME ════════════════════════════
+
+test('A MATCHING ANCHOR UNBLOCKS THE RENAME — this is the resume path', () => {
+  /**
+   * Upstream holds the new code, genesis holds the old, and the `_id` on the
+   * row that holds the new code is the one this extension was anchored to while
+   * both sides still agreed. That is proof of identity, not an inference from
+   * the code — so the "collision" is this course's own half-done rename and the
+   * write is allowed to catch genesis up.
+   */
+  const p = preview({
+    oldCode: GENESIS_CODE, newCode: 'EXCEL-HR-01', matches: ELEVEN,
+    msdbCourses: MSDB_ROWS, anchor: ANCHOR,
+  });
+  assert.equal(p.selfUpstream.proven, true, 'the anchor did not prove identity');
+  assert.equal(p.collision.blocked, false, 'a proven self-upstream is still refused as a collision');
+  assert.equal(p.ok, true, 'the resume is still blocked:\n  ' + p.blocked.join('\n  '));
+  // The write is addressed by the anchor, so the preview has to carry it.
+  assert.equal(p.anchor, ANCHOR, 'the preview does not carry the anchor the write needs');
+  // and the eleven rows are still what will move
+  assert.equal(p.totalRows, 11);
+});
+
+test('A WRONG ANCHOR REFUSES, and names both ids rather than the code', () => {
+  // Upstream's row holding the new code is a DIFFERENT course. This is exactly
+  // the merge the anchor exists to prevent.
+  const rows = [{ course_id: 'EXCEL-HR-01', _id: OTHER_ID }, ...MSDB_ROWS.slice(1)];
+  const p = preview({
+    oldCode: GENESIS_CODE, newCode: 'EXCEL-HR-01', matches: ELEVEN,
+    msdbCourses: rows, anchor: ANCHOR,
+  });
+  assert.equal(p.selfUpstream.proven, false);
+  assert.equal(p.selfUpstream.reason, 'different-course');
+  assert.equal(p.collision.blocked, true, 'a different course was allowed to be merged into');
+  assert.ok(
+    p.blocked.some((b) => b.includes(ANCHOR) && b.includes(OTHER_ID)),
+    'the refusal does not print both ids:\n  ' + p.blocked.join('\n  ')
+  );
+});
+
+test('AN ORDINARY COLLISION IS UNAFFECTED BY THE ANCHOR', () => {
+  /**
+   * The unblock must be narrow. Renaming into a code a genuinely different
+   * course holds — with upstream still holding the old code too, so this is not
+   * the upstream-only shape at all — is refused exactly as before.
+   */
+  const p = preview({
+    oldCode: 'MSE-L1', newCode: 'POWER-BI',
+    matches: { courseExtension: [{ courseId: 'MSE-L1' }] },
+    msdbCourses: [{ course_id: 'MSE-L1', _id: '111111111111111111111111' }, ...MSDB_ROWS.slice(2)],
+    anchor: '111111111111111111111111',
+  });
+  assert.equal(p.selfUpstream.looksLikeIt, false, 'an ordinary collision was read as upstream-only');
+  assert.equal(p.collision.blocked, true);
+  assert.equal(p.ok, false);
+  assert.ok(p.blocked.some((b) => b.includes('ถูกใช้แล้ว')), p.blocked.join(' | '));
+});
+
+test('CONTROL: the same fixture with NO anchor is refused — the anchor is what changed', () => {
+  const withAnchor = preview({
+    oldCode: GENESIS_CODE, newCode: 'EXCEL-HR-01', matches: ELEVEN,
+    msdbCourses: MSDB_ROWS, anchor: ANCHOR,
+  });
+  const without = preview({
+    oldCode: GENESIS_CODE, newCode: 'EXCEL-HR-01', matches: ELEVEN,
+    msdbCourses: MSDB_ROWS,
+  });
+  assert.equal(withAnchor.ok, true);
+  assert.equal(without.ok, false);
+  assert.equal(without.selfUpstream.reason, 'no-anchor');
 });

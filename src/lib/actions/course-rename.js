@@ -1,30 +1,52 @@
 'use server';
 
 /**
- * PHASE 1 of a course-code rename: every GENESIS store, and nothing upstream.
+ * THE COURSE-CODE RENAME. One action, both sides, no manual second step.
  *
- * ── THE TWO PHASES, AND WHY THIS ONE WRITES NO MSDB ────────────────────────
- * Phase 1 (here) rewrites the genesis stores and records the old code in
- * `CourseExtension.formerCodes`. The tech lead then changes `course_id` in
- * MSDB by hand. Phase 2 verifies the two sides agree.
+ * ── THE TWO PHASES ARE RETIRED ─────────────────────────────────────────────
+ * This used to write the genesis stores and stop, leaving the tech lead to
+ * change `course_id` in MSDB by hand. That is over: the requirement is that an
+ * admin renames in genesis and is DONE. The upstream write lives here now.
  *
- * There is NO msdbCreate/msdbUpdate/msdbDelete in this file or anywhere in its
- * import closure, and that is asserted structurally in
- * test/fs/renameNoUpstreamWrite rather than promised in this comment — the
- * same treatment the preview's read-only property gets, and for the same
- * reason: a sentence claiming a property is exactly what a later edit walks
- * past.
+ * ── ORDER: UPSTREAM FIRST, THEN GENESIS ───────────────────────────────────
+ * The single most important line in this file, and it is the reverse of what
+ * came before.
  *
- * ── THE INTERVAL IS NOT FREE, AND THE ACTION SAYS SO ───────────────────────
- * Between the two phases the upstream course still carries the OLD code while
- * every genesis row carries the NEW one. `formerCodes` bridges the two sites
- * that were ruled in — `/search` and `resolveCourse` — so the URL and the
- * search keep working. The ORDERING and ENRICHMENT stores have no such bridge:
- * during the window the live course sorts to the unlisted tier, and its
- * early-bird price, promo links, schedule overrides and featured entries stop
- * matching. That is reported in the result as `intervalWarnings` so the admin
- * who pressed the button is the person who reads it, and it is why phase 2
- * should follow within minutes rather than days.
+ * A non-2xx from MSDB before any genesis mutation is a CLEAN REFUSAL: nothing
+ * anywhere has moved, the caches are untouched, and the admin may retry or walk
+ * away with no debris. The old order had no such state. Both divergences were
+ * measured on 2026-08-16:
+ *
+ *   genesis-done / upstream-pending   NOT reversible. Genesis has written
+ *                                     `formerCodes`, and its own collision and
+ *                                     formerCodes guards then refuse the undo.
+ *   upstream-done / genesis-pending   FULLY reversible while genesis is
+ *                                     untouched — and, since the `upstreamId`
+ *                                     backfill, RESUMABLE with proof.
+ *
+ * So the inversion trades an unrecoverable failure state for a recoverable one.
+ *
+ * ── THE OLD CODE IS BRIEFLY FREE UPSTREAM, AND NOTHING CLAIMS IT ──────────
+ * Between the upstream write and the genesis write the old code belongs to
+ * nobody upstream. Measured shape of that window: two awaited Mongo round trips
+ * plus one uncached upstream read — hundreds of milliseconds, entirely inside
+ * one server action.
+ *
+ * NOTHING IN THIS ACTION CAN CLOSE IT, and pretending otherwise would be worse
+ * than naming it. Closing it would need either a reservation upstream (there is
+ * no such endpoint) or a lock across two systems that do not share a
+ * transaction. What it would take to LOSE the race is another admin creating a
+ * course with exactly the freed code, in that window, through
+ * `createCourse` — whose duplicate guard reads upstream uncached and would find
+ * the code free. It is acceptable because the window is sub-second, course
+ * creation is rare and manual, and the loser is detected rather than silent:
+ * the genesis half would then be renaming into a code a different course holds,
+ * and the next preview reports it as a collision the anchor disproves.
+ *
+ * ── SUCCESS IS A READ-BACK ────────────────────────────────────────────────
+ * `{ok: true}` from the write is the request's view of itself. Every outcome
+ * here is decided by re-reading the row BY `_id`. A timeout is UNKNOWN, never
+ * failure, and nothing is ever rolled back on a guess.
  *
  * ── THE GATE ───────────────────────────────────────────────────────────────
  * `requireAdmin('courses')`, NOT `requirePageAction`. Two reasons, both
@@ -46,7 +68,19 @@ import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { normalizeCourseCode } from '@/lib/courses/courseOrder';
 import { triggerLandingSync } from '@/lib/landing/triggerLandingSync';
+import { triggerNavMenuSync } from '@/lib/navmenu/triggerNavMenuSync';
 import { previewCourseCodeRename } from '@/lib/actions/course-rename-preview';
+import { aiFetch, unwrap } from '@/lib/api/client';
+import { msdbUpdate } from '@/lib/api/msdb-write';
+import { bustUpstream } from '@/lib/api/bustUpstream';
+import { renameCacheTargets } from '@/lib/courses/renameCacheFanout';
+import { isAnchorShaped } from '@/lib/courses/upstreamAnchorPlan';
+import {
+  classifyUpstreamWrite,
+  isTimeoutError,
+  UPSTREAM_OUTCOME,
+  UNKNOWN_ADVICE,
+} from '@/lib/courses/renameUpstreamPlan';
 import {
   previewFingerprint,
   countsFromPreview,
@@ -70,6 +104,28 @@ import Promotion from '@/models/Promotion';
 import Article from '@/models/Article';
 
 const fail = (error, extra = {}) => ({ ok: false, error, ...extra });
+
+/**
+ * Re-read the upstream row BY `_id`.
+ *
+ * ── WHY IT SCANS THE LIST INSTEAD OF FILTERING ─────────────────────────────
+ * `/public-course?_id=<oid>` is SILENTLY IGNORED upstream — it returns the
+ * whole catalogue rather than one row (curl-verified 2026-04-23, recorded in
+ * docs/api-domains.md). So "read by _id" has to be a full uncached read plus a
+ * local find. It is one extra call on a rare admin action, and the alternative
+ * — reading by CODE — is the thing this whole design refuses: after a rename
+ * the code is exactly the value in question, and after a TIMEOUT it is not
+ * known which code the row carries. Only the `_id` is stable across both.
+ *
+ * `revalidate: 0` because a cached read would make the write look applied when
+ * it was not, or the reverse. The read-back is the evidence; it cannot come
+ * from the cache the write just invalidated the meaning of.
+ */
+async function readUpstreamById(id) {
+  const raw = await aiFetch('/public-course', { revalidate: 0 });
+  const { items } = unwrap(raw);
+  return (items ?? []).find((c) => String(c?._id) === String(id)) ?? null;
+}
 
 /**
  * Report what a half-finished rename looks like right now.
@@ -104,7 +160,7 @@ export async function inspectRenameState({ oldCode, newCode } = {}) {
  * @param {string} input.newCode
  * @param {string} input.previewToken the fingerprint returned by the preview
  */
-export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } = {}) {
+export async function renameCourseCode({ oldCode, newCode, previewToken } = {}) {
   const session = await requireAdmin('courses');
   await dbConnect();
 
@@ -153,8 +209,16 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
     { courseId: 1, formerCodes: 1, _id: 0 }
   ).lean();
   const allFormer = formerHolders.flatMap((r) => r.formerCodes ?? []);
+  /**
+   * A PROVEN self-upstream hit is NOT a live code held by somebody else — it is
+   * this course's own row, already carrying the new code because the upstream
+   * half landed and the genesis half did not. Leaving it in `liveCodes` would
+   * make the resume path collide with itself and refuse forever, which is the
+   * one thing the anchor exists to prevent.
+   */
+  const upstreamHit = preview.selfUpstream?.proven ? null : preview.collision.inMsdb;
   const clash = codeTaken(to, {
-    liveCodes: [preview.collision.inMsdb, preview.collision.inExtension].filter(Boolean),
+    liveCodes: [upstreamHit, preview.collision.inExtension].filter(Boolean),
     formerCodes: allFormer,
     exceptCode: from,
   });
@@ -167,6 +231,92 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
     );
   }
 
+  /**
+   * ════ THE UPSTREAM WRITE. FIRST, AND BEFORE ANY GENESIS MUTATION. ════════
+   *
+   * ── THE ANCHOR IS REQUIRED, AND ITS ABSENCE IS A REFUSAL ────────────────
+   * The PUT is addressed by `CourseExtension.upstreamId` — never by looking the
+   * course up by code. A code lookup is precisely what cannot distinguish this
+   * course from whatever else now answers to its code, and it is the lookup the
+   * anchor was backfilled to remove.
+   *
+   * An unanchored row is refused BY NAME rather than falling back. An empty
+   * anchor is "identity unknown", not "no objection".
+   */
+  const anchor = String(preview.anchor ?? '').trim();
+  if (!isAnchorShaped(anchor)) {
+    return fail(
+      `แถว CourseExtension ของ "${from}" ไม่มี upstreamId ที่ใช้อ้างอิงได้ — `
+      + 'ระบบจะไม่ค้นหาหลักสูตรจากรหัสแทน เพราะรหัสคือสิ่งที่กำลังจะเปลี่ยน '
+      + 'ให้รัน npm run backfill:extension-anchor ก่อน แล้วลองใหม่',
+      { outcome: UPSTREAM_OUTCOME.REFUSED, needsAnchor: true, courseId: from, wroteGenesis: false }
+    );
+  }
+
+  /**
+   * ── ONE KEY. MERGE IS ESTABLISHED, SO THE REST OF THE ROW IS NOT SENT ────
+   * Measured 2026-08-16 (scripts/_probe-msdb-put-semantics): a one-key PUT left
+   * 35 of 36 fields untouched. Sending a reconstructed full payload would need
+   * a read-modify-write and would open a lost-update window against any other
+   * admin editing the course; a one-key merge has none.
+   */
+  let writeError = null;
+  try {
+    await msdbUpdate('public-course', anchor, { course_id: to });
+  } catch (err) {
+    writeError = err;
+  }
+
+  /**
+   * ── SUCCESS IS A READ-BACK, NOT A RESPONSE ──────────────────────────────
+   * `{ok: true}` with a 36-key echo is the REQUEST's view of itself. The row is
+   * the authority, and it is re-read by `_id` here — ALWAYS, including after an
+   * error, because a timeout aborts the client and never the server, so the
+   * write may well have landed.
+   */
+  let upstreamRow = null;
+  let readFailed = false;
+  try {
+    upstreamRow = await readUpstreamById(anchor);
+  } catch (err) {
+    readFailed = true;
+    console.error('[renameCourseCode] read-back failed:', err?.message ?? err);
+  }
+
+  const verdict = classifyUpstreamWrite({
+    oldCode: from,
+    newCode: to,
+    error: writeError ? { message: writeError.message, timeout: isTimeoutError(writeError) } : null,
+    row: upstreamRow,
+    readFailed,
+  });
+
+  if (verdict.outcome !== UPSTREAM_OUTCOME.APPLIED) {
+    /**
+     * NOTHING IN GENESIS HAS BEEN TOUCHED, and that is the whole reason the
+     * order was inverted. Every non-applied outcome returns from here with
+     * `wroteGenesis: false`, which the screen renders as "nothing was written".
+     *
+     * UNKNOWN IS NOT FAILURE and nothing is rolled back on it. A rollback would
+     * be a guess, and the guess that loses is the one that renames a course
+     * BACK after the original write actually landed.
+     */
+    return fail(
+      verdict.outcome === UPSTREAM_OUTCOME.UNKNOWN
+        ? UNKNOWN_ADVICE.th
+        : `เปลี่ยนรหัสที่ MSDB ไม่สำเร็จ — ${writeError?.message ?? verdict.reason} `
+          + '(ฝั่งระบบนี้ยังไม่ได้เขียนอะไรเลย)',
+      {
+        outcome: verdict.outcome,
+        upstreamReason: verdict.reason,
+        upstreamCode: verdict.code,
+        wroteUpstream: verdict.wroteUpstream,
+        wroteGenesis: false,
+        from, to, anchor,
+      }
+    );
+  }
+
   const upper = normalizeCourseCode(from);
   const lower = from.toLowerCase();
   const toUpper = normalizeCourseCode(to);
@@ -174,12 +324,19 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
   const actual = {};
 
   /**
-   * ── STEP 1, AND IT IS FIRST FOR A REASON ───────────────────────────────
-   * The alias. With no alias the public URL is DERIVED from the code, so the
-   * moment the code changes the old URL 404s and nothing maps old to new.
-   * Creating an alias pinned to the OLD derived path before anything else is
-   * what makes the URL survive — and it has to precede the rename, which is
-   * precisely why this cannot be a form field's blur handler.
+   * ── THE FIRST GENESIS WRITE, AND IT IS FIRST FOR A REASON ──────────────
+   * The alias. With no alias the public URL is DERIVED from the code, so once
+   * the code changes the old URL has nothing mapping it to the new one. An
+   * alias pinned to the OLD derived path is what makes the URL survive.
+   *
+   * IT USED TO PRECEDE THE RENAME AND NOW FOLLOWS THE UPSTREAM HALF, which is
+   * a real ordering change and not an accident of the inversion. Upstream goes
+   * first so a refusal leaves nothing written anywhere, which means there is a
+   * sub-second window where upstream carries the new code and no alias points
+   * at the old URL. Nobody can observe it: the public page is served from an
+   * hour-long ISR cache and this action does not bust anything until the very
+   * end, by which time the alias exists. Paying a window nobody can see to buy
+   * a failure state that leaves no debris is the right trade.
    *
    * Idempotent: only written when the row has no alias.
    */
@@ -274,7 +431,8 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
     meta:        {
       from, to,
       aliasCreated,
-      phase: 1,
+      anchor,
+      upstream: { outcome: verdict.outcome, reason: verdict.reason },
       counts: actual,
       divergences: diff.divergences,
       // Named for the same reason the nav sync names its refusals: a rename
@@ -284,23 +442,54 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
     actor:       { id: session.user?.id, name: session.user?.name },
   });
 
-  revalidatePath('/');
-  revalidatePath('/training-course');
-  revalidatePath('/admin/courses');
+  /**
+   * ════ THE FAN-OUT. ONLY HERE, AND ONLY ON A CONFIRMED SUCCESS. ══════════
+   *
+   * Reached only after the upstream write was CONFIRMED BY READ-BACK and every
+   * genesis store has been written. Nothing above this line invalidates
+   * anything, which is deliberate twice over: an aborted rename leaves the
+   * caches describing a world that is still true, and the sub-second window in
+   * which upstream has moved and the alias has not is invisible because the
+   * public pages are still being served from the cache nobody has touched yet.
+   *
+   * ── WHY THIS IS NEW, WHEN THE GENESIS-ONLY RENAME NEEDED NONE OF IT ─────
+   * While the action wrote Mongo alone, every cached upstream read was still
+   * CORRECT. Now the upstream row itself has changed, so each one is WRONG —
+   * it names a `course_id` that no longer exists — and it stays wrong for up to
+   * an hour. The catalogue would advertise a code whose page 404s.
+   *
+   * The targets are computed by a pure planner so "both codes, both URLs" is
+   * assertable rather than a list somebody has to keep in their head.
+   */
+  const fanout = renameCacheTargets({
+    oldCode: from,
+    newCode: to,
+    upstreamId: anchor,
+    alias: aliasCreated || preview.url?.aliased ? (aliasCreated || preview.url.current) : '',
+  });
+  bustUpstream(fanout.tags);
+  for (const path of fanout.paths) {
+    try { revalidatePath(path); }
+    catch (err) { console.warn(`[renameCourseCode] revalidatePath(${path}) failed:`, err?.message ?? err); }
+  }
   triggerLandingSync();
+  triggerNavMenuSync();
 
   /**
-   * WHAT PHASE 1 DELIBERATELY DID NOT DO. Reported in the result rather than
-   * left for the admin to discover.
+   * WHAT THIS ACTION DELIBERATELY DID NOT DO. Reported in the result rather
+   * than left for the admin to discover.
+   *
+   * The MSDB obligation is GONE from this list — it is done, and confirmed by
+   * read-back. What remains are the things a code change genuinely does not
+   * carry with it.
    */
-  const intervalWarnings = [
-    'MSDB ยังไม่ถูกแก้ — ต้องเปลี่ยน course_id ที่ต้นทางด้วยตนเอง แล้วจึงตรวจสอบ (phase 2)',
-    'ระหว่างนี้หลักสูตรจะหลุดจากลำดับของโปรแกรม (ไปอยู่กลุ่มยังไม่จัดลำดับ) และ Early Bird / '
-      + 'ลิงก์โปรโมชั่น / ตารางที่แก้ในระบบ / รายการแนะนำ จะยังไม่ผูกกับหลักสูตรนี้',
+  const followUps = [
     'URL และการค้นหาด้วยรหัสเดิมยังใช้ได้ผ่าน formerCodes',
+    'แคชสาธารณะถูกล้างแล้ว และสั่ง sync เมนู/หน้าแรกใหม่ในเบื้องหลัง — '
+      + 'หน้าเว็บอาจใช้เวลาสักครู่จึงจะแสดงรหัสใหม่ครบทุกจุด',
   ];
   if (outlineRes.modifiedCount > 0) {
-    intervalWarnings.push(
+    followUps.push(
       'ไฟล์ PDF ยังอยู่ที่พาธเดิม — แถวถูกเปลี่ยนรหัสแล้วแต่ไฟล์ยังไม่ถูกย้าย: '
       + `${outlinePublicPath(lower, 'th')} → ${outlinePublicPath(toLower, 'th')}`
     );
@@ -309,6 +498,11 @@ export async function renameCourseCodePhase1({ oldCode, newCode, previewToken } 
   return {
     ok: diff.ok,
     ...(diff.ok ? {} : { error: 'จำนวนแถวที่เขียนไม่ตรงกับผลตรวจสอบ', divergences: diff.divergences }),
-    from, to, aliasCreated, counts: actual, intervalWarnings,
+    outcome: UPSTREAM_OUTCOME.APPLIED,
+    wroteUpstream: true,
+    wroteGenesis: true,
+    from, to, anchor, aliasCreated, counts: actual,
+    cacheBusted: fanout,
+    followUps,
   };
 }

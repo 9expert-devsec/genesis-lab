@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { renameCourseCodePhase1, inspectRenameState } from '@/lib/actions/course-rename';
+import { renameCourseCode, inspectRenameState } from '@/lib/actions/course-rename';
 import { canExecuteRename, aliasStepFor, GATE } from '@/lib/courses/renameExecuteGate';
 import { RENAME_STATE } from '@/lib/courses/renameCoursePlan';
 
@@ -53,30 +53,42 @@ function CopyableCode({ value }) {
   return <code className={CODE}>{value}</code>;
 }
 
-/** The MSDB obligation. After a complete phase 1 this is the loudest thing here. */
-function MsdbObligation({ from, to, loud }) {
+/**
+ * WHAT REPLACED THE MSDB OBLIGATION.
+ *
+ * There used to be an amber card here on every render, before and after the
+ * write, telling the admin to go and change `course_id` in MSDB themselves. It
+ * is gone because the obligation is gone — the action writes upstream and
+ * confirms it by read-back, so nothing is owed afterwards.
+ *
+ * Deleting it outright would have left the confirmation with nothing to say
+ * about REACH, and reach is what actually grew: this button now edits the live
+ * public catalogue. So the card is replaced rather than removed, and it says
+ * the one thing an admin has to weigh before pressing — this changes both
+ * systems at once, immediately, and this tool cannot put it back.
+ *
+ * `data-testid` deliberately CHANGED from `msdb-obligation`: a test still
+ * looking for the old id should go red rather than pass against a card that now
+ * says something else entirely.
+ */
+function UpstreamReach({ from, to }) {
   return (
     <div
-      className={
-        CARD + ' ' +
-        (loud
-          ? 'border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/15'
-          : 'border-[var(--surface-border)] bg-[var(--surface-muted)]')
-      }
-      data-testid="msdb-obligation"
+      className={`${CARD} border-[var(--surface-border)] bg-[var(--surface-muted)]`}
+      data-testid="upstream-reach"
     >
-      <p className={loud ? 'text-base font-bold text-amber-900 dark:text-amber-100' : 'text-sm font-semibold text-[var(--text-primary)]'}>
-        {loud ? 'ยังไม่เสร็จ — ต้องแก้ MSDB เดี๋ยวนี้' : 'ขั้นต่อไปหลังเขียนเสร็จ: แก้ MSDB ทันที'}
+      <p className="text-sm font-semibold text-[var(--text-primary)]">
+        การกดปุ่มนี้เปลี่ยนทั้งสองฝั่งพร้อมกัน
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-amber-900 dark:text-amber-100">
-        เปลี่ยน <span className="font-semibold">course_id</span> ที่ MSDB จาก{' '}
-        <CopyableCode value={from} /> เป็น <CopyableCode value={to} />
+      <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+        ระบบจะเปลี่ยน <span className="font-semibold">course_id</span> ที่ MSDB จาก{' '}
+        <CopyableCode value={from} /> เป็น <CopyableCode value={to} /> ให้เอง
+        แล้วอ่านกลับมายืนยันว่าเปลี่ยนจริง จากนั้นจึงเขียนฝั่งระบบนี้
+        — <span className="font-semibold">ไม่ต้องไปแก้ MSDB ด้วยตนเองอีกแล้ว</span>
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-amber-900 dark:text-amber-100">
-        ระหว่างที่ยังไม่แก้: หลักสูตรหลุดจากลำดับของโปรแกรม, Early Bird / ลิงก์โปรโมชั่น /
-        ตารางที่แก้ในระบบ / รายการแนะนำ ยังไม่ผูกกับหลักสูตรนี้
-        และ <span className="font-semibold">หลักสูตรที่ถูกซ่อนไว้อาจกลับมาแสดงต่อสาธารณะ</span> —
-        เป็นนาที ไม่ใช่ชั่วโมง
+      <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+        ถ้า MSDB ปฏิเสธ จะไม่มีอะไรถูกเขียนเลยทั้งสองฝั่ง
+        แต่ถ้าเปลี่ยนสำเร็จแล้ว <span className="font-semibold">เครื่องมือนี้ย้อนกลับให้ไม่ได้</span>
       </p>
     </div>
   );
@@ -153,12 +165,32 @@ export function RenameStateReport({ state, from, to, onRerun, busy }) {
       title: 'เสร็จแล้ว — ทั้งสองฝั่งตรงกัน',
       advice: 'ไม่ต้องทำอะไรต่อ',
     },
+    /**
+     * ── THE RESUMABLE ONE, AND IT IS NOW OFFERED RATHER THAN DESCRIBED ────
+     *
+     * This is the state a failed genesis half leaves behind, and it used to be
+     * a dead end on this screen: the preview refused it as a collision, because
+     * the code upstream now holds is the code being renamed TO and nothing
+     * could tell this course from a different one that had taken the code.
+     *
+     * `CourseExtension.upstreamId` settles it — the `_id` survives a rename, so
+     * matching it against the row holding the new code is a proof of identity
+     * rather than an inference from the code. When it matches, the preview
+     * stops blocking and the ordinary confirmation below IS the resume: it
+     * skips the upstream write (already applied, confirmed by read-back) and
+     * catches genesis up.
+     *
+     * Where the row has NO anchor the preview refuses instead and names it —
+     * see the no-anchor branch in buildRenamePreview. It never falls back to
+     * comparing codes.
+     */
     [RENAME_STATE.UPSTREAM_ONLY]: {
       tone: 'warn',
       title: 'MSDB เปลี่ยนแล้ว — ฝั่งระบบนี้ยังไม่ได้เปลี่ยน',
       advice:
-        'เลือกได้สองทาง: เปลี่ยน course_id ที่ MSDB กลับเป็นรหัสเดิม (ยกเลิกได้ทั้งหมด) '
-        + 'หรือสั่งเปลี่ยนฝั่งระบบนี้ให้ตามทัน',
+        'ทำต่อให้เสร็จได้เลย: กด "ตรวจสอบผลกระทบ" แล้วยืนยัน ระบบจะข้ามขั้น MSDB '
+        + '(เปลี่ยนไปแล้ว) และเขียนเฉพาะฝั่งระบบนี้ให้ตามทัน '
+        + 'หรือถ้ายังไม่ต้องการ ให้เปลี่ยน course_id ที่ MSDB กลับเป็นรหัสเดิม — ยกเลิกได้ทั้งหมดตราบใดที่ฝั่งนี้ยังไม่ได้เขียน',
     },
     [RENAME_STATE.UPSTREAM_CONFLICT]: {
       tone: 'bad',
@@ -209,16 +241,127 @@ export function RenameStateReport({ state, from, to, onRerun, busy }) {
   );
 }
 
+/**
+ * WHAT THE ATTEMPT DID — the four outcomes, kept apart.
+ *
+ * They are not degrees of the same thing and must never render as one. The
+ * distinction an admin acts on is WHAT WAS WRITTEN, and it differs in every
+ * case:
+ *
+ *   complete       both sides moved, confirmed by read-back. Nothing owed.
+ *   clean refusal  MSDB said no BEFORE anything moved. Nothing was written
+ *                  anywhere, so pressing again is safe and is offered.
+ *   unknown        the write was sent and no answer came back. Genesis was NOT
+ *                  touched, but upstream may or may not have moved. A retry
+ *                  here could rename a course that is already renamed, so NO
+ *                  RETRY IS OFFERED — the only safe next move is to look.
+ *   divergence     both sides moved but the row counts did not match the
+ *                  preview. Reported as a failure with the store named.
+ *
+ * EXPORTED so the render tier can drive all four from fixtures: three of them
+ * need an upstream failure to produce, which no test can arrange for real.
+ */
+export function RenameOutcomeReport({ result }) {
+  if (!result) return null;
+
+  const done = result.ok === true;
+  const outcome = done ? 'applied' : (result.outcome ?? 'error');
+  const rows = Object.values(result.counts ?? {}).reduce((n, v) => n + (v ?? 0), 0);
+
+  if (done) {
+    return (
+      <div
+        className={`${CARD} border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10`}
+        data-testid="rename-outcome"
+        data-outcome="applied"
+      >
+        <p className="text-base font-bold text-emerald-900 dark:text-emerald-100">
+          เปลี่ยนรหัสเรียบร้อยทั้งสองฝั่ง
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-emerald-900 dark:text-emerald-100">
+          MSDB เปลี่ยนเป็น <CopyableCode value={result.to} /> แล้ว และอ่านกลับมายืนยันแล้วว่าเปลี่ยนจริง
+          — ฝั่งระบบนี้เขียนไป {rows} แถว
+          {result.aliasCreated && (
+            <> — สร้าง alias <CopyableCode value={result.aliasCreated} /> ให้แล้ว</>
+          )}
+        </p>
+        <p className="mt-2 text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+          ไม่ต้องไปแก้ MSDB เองแล้ว — ไม่มีขั้นตอนค้างอยู่
+        </p>
+        {result.followUps?.length > 0 && (
+          <ul className="mt-2 space-y-1">
+            {result.followUps.map((f) => (
+              <li key={f} className="text-xs leading-relaxed text-emerald-900 dark:text-emerald-100">— {f}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  if (outcome === 'unknown') {
+    return (
+      <div
+        className={`${CARD} border-amber-400 bg-amber-50 dark:border-amber-500/50 dark:bg-amber-500/15`}
+        data-testid="rename-outcome"
+        data-outcome="unknown"
+      >
+        <p className="text-base font-bold text-amber-900 dark:text-amber-100">
+          ยังไม่ทราบผล — ห้ามกดซ้ำ
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-amber-900 dark:text-amber-100">
+          {result.error}
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-amber-900 dark:text-amber-100">
+          ฝั่งระบบนี้<span className="font-semibold">ยังไม่ได้เขียนอะไรเลย</span> แต่ฝั่ง MSDB
+          อาจเปลี่ยนไปแล้วหรือยังไม่เปลี่ยนก็ได้ — กด &ldquo;ตรวจสอบผลกระทบ&rdquo; ใหม่
+          แล้วอ่านสถานะสองฝั่งด้านล่างว่า MSDB ถือรหัสใด ก่อนตัดสินใจทำอะไรต่อ
+        </p>
+        {/* NO RETRY CONTROL, deliberately. A second attempt could rename a
+            course that has already been renamed. */}
+      </div>
+    );
+  }
+
+  const refused = outcome === 'refused' || outcome === 'not-applied';
+  return (
+    <div
+      className={`${CARD} border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10`}
+      data-testid="rename-outcome"
+      data-outcome={outcome}
+    >
+      <p className="text-sm font-bold text-red-700 dark:text-red-300">
+        {refused ? 'ไม่ได้เปลี่ยนรหัส — ยังไม่มีอะไรถูกเขียนเลย' : result.error}
+      </p>
+      {refused && <p className="mt-1 text-sm text-red-700 dark:text-red-300">{result.error}</p>}
+      {refused && (
+        <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+          ทั้ง MSDB และฝั่งระบบนี้ยังเป็นรหัสเดิม แก้ต้นเหตุแล้วลองใหม่ได้อย่างปลอดภัย
+        </p>
+      )}
+      {result.divergences?.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {result.divergences.map((d) => (
+            <li key={d.store} className="font-mono text-xs text-red-700 dark:text-red-300">
+              {d.store}: คาดไว้ {d.expected} เขียนจริง {d.actual}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function RenameExecutePanel({ preview, onPreviewReplaced }) {
   const [typedCode, setTypedCode] = useState('');
-  const [ackMsdb, setAckMsdb] = useState(false);
+  const [ackUpstream, setAckUpstream] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [state, setState] = useState(null);
   const [stale, setStale] = useState(null);
   const [error, setError] = useState(null);
 
-  const gate = canExecuteRename({ preview, typedCode, ackMsdb });
+  const gate = canExecuteRename({ preview, typedCode, ackUpstream });
   const alias = aliasStepFor(preview);
   const from = preview?.oldCode ?? '';
   const to = preview?.newCode ?? '';
@@ -229,7 +372,7 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
     setError(null);
     setStale(null);
     try {
-      const res = await renameCourseCodePhase1({
+      const res = await renameCourseCode({
         oldCode: from,
         newCode: to,
         // The token for the preview ON SCREEN — see tokenForPreview.
@@ -295,19 +438,8 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
 
   return (
     <div className="space-y-4" data-testid="rename-execute">
-      {/* ── After a complete phase 1 the obligation leads ─────────────── */}
-      {done && <MsdbObligation from={from} to={to} loud />}
-
-      {done && (
-        <div className={`${CARD} border-[var(--surface-border)] bg-[var(--surface)]`}>
-          <p className="text-sm text-[var(--text-primary)]">
-            เขียนฝั่ง genesis แล้ว {Object.values(result.counts ?? {}).reduce((n, v) => n + (v ?? 0), 0)} แถว
-            {result.aliasCreated && (
-              <> — สร้าง alias <CopyableCode value={result.aliasCreated} /> ให้แล้ว</>
-            )}
-          </p>
-        </div>
-      )}
+      {/* ── What actually happened, before anything else ──────────────── */}
+      <RenameOutcomeReport result={result} />
 
       <RenameStateReport state={state} from={from} to={to} onRerun={run} busy={busy} />
 
@@ -323,20 +455,9 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
         </div>
       )}
 
-      {result && result.ok === false && !stale && (
-        <div className={`${CARD} border-red-300 bg-red-50 dark:border-red-500/40 dark:bg-red-500/10`}>
-          <p className="text-sm font-bold text-red-700 dark:text-red-300">{result.error}</p>
-          {result.divergences?.length > 0 && (
-            <ul className="mt-2 space-y-1">
-              {result.divergences.map((d) => (
-                <li key={d.store} className="font-mono text-xs text-red-700 dark:text-red-300">
-                  {d.store}: คาดไว้ {d.expected} เขียนจริง {d.actual}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {/* The failure card that used to live here is now RenameOutcomeReport,
+          rendered at the top — it distinguishes refusal from unknown from
+          divergence, which one red box could not. */}
 
       {error && (
         <div className={`${CARD} border-red-300 bg-red-50`}>
@@ -359,12 +480,16 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
                 มิฉะนั้น URL เดิมจะ 404 โดยไม่มีทางเชื่อมกลับ
               </li>
             )}
+            {/* THE ORDER SHOWN IS THE ORDER PERFORMED, and it is upstream
+                first. An admin who reads this list and then reads a failure
+                needs the list to explain which half can possibly have moved. */}
             <li>
-              <span className="font-semibold text-[var(--text-primary)]">ขั้นที่ {alias ? 2 : 1}</span> — เปลี่ยนรหัสในระบบนี้
-              (<CopyableCode value={from} /> → <CopyableCode value={to} />)
+              <span className="font-semibold text-[var(--text-primary)]">ขั้นที่ {alias ? 2 : 1}</span> — เปลี่ยน course_id ที่ MSDB
+              (<CopyableCode value={from} /> → <CopyableCode value={to} />) แล้วอ่านกลับมายืนยัน
             </li>
             <li>
-              <span className="font-semibold text-[var(--text-primary)]">ขั้นที่ {alias ? 3 : 2}</span> — คุณแก้ course_id ที่ MSDB เอง ทันทีหลังจากนั้น
+              <span className="font-semibold text-[var(--text-primary)]">ขั้นที่ {alias ? 3 : 2}</span> — เมื่อยืนยันแล้วเท่านั้น จึงเขียนฝั่งระบบนี้
+              และล้างแคชสาธารณะให้
             </li>
           </ol>
 
@@ -386,13 +511,13 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
           <label className="mt-3 flex items-start gap-2 text-sm text-[var(--text-secondary)]">
             <input
               type="checkbox"
-              checked={ackMsdb}
-              onChange={(e) => setAckMsdb(e.target.checked)}
+              checked={ackUpstream}
+              onChange={(e) => setAckUpstream(e.target.checked)}
               className="mt-0.5 h-4 w-4 shrink-0"
             />
             <span>
-              เข้าใจแล้วว่าต้องไปแก้ course_id ที่ MSDB ด้วยตนเองทันทีหลังจากนี้
-              และระหว่างนั้นหลักสูตรที่ซ่อนไว้อาจกลับมาแสดงต่อสาธารณะ
+              เข้าใจแล้วว่าคำสั่งนี้จะเปลี่ยน course_id ที่ MSDB ซึ่งเป็นข้อมูลจริงที่เผยแพร่อยู่
+              ทันทีและโดยอัตโนมัติ และเมื่อเปลี่ยนสำเร็จแล้วเครื่องมือนี้ย้อนกลับให้ไม่ได้
             </span>
           </label>
 
@@ -402,19 +527,19 @@ export function RenameExecutePanel({ preview, onPreviewReplaced }) {
             disabled={!gate.allowed || busy}
             className="mt-4 rounded-9e-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {busy ? 'กำลังเปลี่ยน…' : 'เปลี่ยนรหัส (ฝั่งระบบนี้)'}
+            {busy ? 'กำลังเปลี่ยน…' : 'เปลี่ยนรหัส (ทั้ง MSDB และระบบนี้)'}
           </button>
 
           {!gate.allowed && (
             <p className="mt-2 text-xs text-[var(--text-muted)]">
               {gate.reasons.includes(GATE.NOT_TYPED) && 'พิมพ์รหัสใหม่ให้ตรงก่อน '}
-              {gate.reasons.includes(GATE.NOT_ACKED) && '· ติ๊กยืนยันเรื่อง MSDB'}
+              {gate.reasons.includes(GATE.NOT_ACKED) && '· ติ๊กยืนยันว่าเข้าใจว่าจะเปลี่ยน MSDB จริง'}
             </p>
           )}
         </div>
       )}
 
-      {!done && <MsdbObligation from={from} to={to} loud={false} />}
+      {!done && <UpstreamReach from={from} to={to} />}
 
       {/* Keeps the parent's re-check reachable from down here, where the admin
           is looking when a stale refusal appears. */}
