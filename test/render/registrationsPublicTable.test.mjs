@@ -136,18 +136,49 @@ function rowFor(markup, id) {
 
 // ── 1. The column set is the public one, and only the public one ────────────
 
-test('the header has exactly six columns: five labelled plus the chevron', () => {
+test('the header has exactly seven columns: six labelled plus the chevron', () => {
   // Exact, not a floor: a floor is satisfied by adding a column back. The empty
   // state's colSpan is derived from the same array and is pinned below.
+  //
+  // WAS 6 (five labelled). รูปแบบ became a column of its own after the
+  // click-test, so this is 7 — re-pointed rather than relaxed to `>= 6`, which
+  // is what would have made the next added column invisible.
   const cells = headerCells(html);
-  assert.equal(cells.length, 6, `expected 6 header cells, found ${cells.length}`);
+  assert.equal(cells.length, 7, `expected 7 header cells, found ${cells.length}`);
 });
 
 test('the public headings are the measured set', () => {
+  // WAS the same five minus รูปแบบ, which was a chip inside the course cell.
   const cells = headerCells(html).join('|');
-  for (const heading of ['วันที่สมัคร', 'หลักสูตร / รอบอบรม', 'ผู้ประสานงาน', 'ผู้เข้าอบรม', 'สถานะ']) {
+  for (const heading of ['วันที่สมัคร', 'หลักสูตร / รอบอบรม', 'รูปแบบ', 'ผู้ประสานงาน', 'ผู้เข้าอบรม', 'สถานะ']) {
     assert.ok(cells.includes(`>${heading}<`), `public header missing: ${heading}`);
   }
+});
+
+/**
+ * รูปแบบ IS A COLUMN, AND THE COURSE CELL NO LONGER HOLDS THE CHIP.
+ *
+ * Both halves, because either alone is satisfiable by a half-done move: a
+ * header with no chip under it, or a chip rendered twice.
+ *
+ * The move is also the fix for a truncation nobody had raised — the course name
+ * clipped on the first row ("Data Analysis Expression (D…") because the chip
+ * competed for that cell's width on the same 32px line as the round dates.
+ */
+test('the schedule chip is in its OWN cell, not in the course cell', () => {
+  const cells = rowFor(html, FULL._id).split('<td').slice(1);
+  // Column order: date, course, format, coordinator, attendees, status, chevron.
+  assert.ok(cells[2].includes('>Hybrid · Teams<'), 'the รูปแบบ cell does not hold the schedule chip');
+  assert.ok(!cells[1].includes('Hybrid'), 'the course cell still holds a schedule chip');
+  // Exactly once in the whole row — not moved-and-also-left-behind.
+  assert.equal(rowFor(html, FULL._id).split('>Hybrid · Teams<').length - 1, 1,
+    'the schedule chip renders more than once in the row');
+});
+
+test('the course cell keeps its two-line shape: bold name over the round dates', () => {
+  const cell = rowFor(html, FULL._id).split('<td').slice(1)[1];
+  assert.ok(cell.includes('>Power BI Advanced<'), 'the course name is gone');
+  assert.ok(cell.includes('>12 - 13 ส.ค. 2569<'), 'the round dates are gone from the course cell');
 });
 
 /**
@@ -183,8 +214,18 @@ test('the in-house table emits none of the public-only headings', () => {
 });
 
 test('the removed columns are gone, header and body', () => {
+  /**
+   * `รูปแบบ` LEFT THIS LIST after the click-test, and that is a real change of
+   * claim rather than a relaxation: it was never removed by ruling, it was
+   * FOLDED into the course cell in the round-3 rebuild and has now been
+   * un-folded into a column of its own. The four that remain were removed by
+   * ruling and are not coming back.
+   *
+   * `วันอบรม` stays removed and is NOT the same thing as รูปแบบ returning:
+   * `classDate` is still the course cell's second line, not a column.
+   */
   const cells = headerCells(html).join('|');
-  for (const heading of ['เลขอ้างอิง', 'วันอบรม', 'รูปแบบ', 'ใบเสนอราคา', 'ชำระเงิน']) {
+  for (const heading of ['เลขอ้างอิง', 'วันอบรม', 'ใบเสนอราคา', 'ชำระเงิน']) {
     assert.ok(!cells.includes(`>${heading}<`), `a removed column is back: ${heading}`);
   }
   // The reference number is not merely unlabelled — it is not rendered at all.
@@ -219,7 +260,8 @@ test('the empty-state colSpan matches the header width', () => {
 test('every cell of a row is an anchor pointing at that row’s detail page', () => {
   const row = rowFor(html, FULL._id);
   const anchors = row.match(/<a\b[^>]*>/g) ?? [];
-  assert.equal(anchors.length, 6, `expected one anchor per cell, found ${anchors.length}`);
+  // WAS 6. Seven cells now that รูปแบบ has its own column.
+  assert.equal(anchors.length, 7, `expected one anchor per cell, found ${anchors.length}`);
   for (const a of anchors) {
     assert.ok(a.includes(`href="${href(FULL._id)}"`), `an anchor points somewhere else: ${a}`);
   }
@@ -341,7 +383,7 @@ test('the status cell is the CHIP ONLY — no second line, and no placeholder fo
 test('the สถานะ cell contains exactly one element: the chip', () => {
   for (const id of [FULL._id, SPARSE._id, NAME_ONLY._id, FOREIGN._id]) {
     // Cells in column order: date, course, coordinator, attendees, status, chevron.
-    const cell = rowFor(html, id).split('<td').slice(1)[4];
+    const cell = rowFor(html, id).split('<td').slice(1)[5];
     assert.ok(cell, 'the status cell did not render');
 
     const elements = cell.match(/<(p|span|div)\b/g) ?? [];
@@ -357,9 +399,9 @@ test('CONTROL: the cell extractor lands on the สถานะ column', () => {
   // Off-by-one here would silently assert the shape of a DIFFERENT cell — and
   // the attendees cell next door also holds exactly one element, so the count
   // above would pass while proving nothing about the status chip.
-  const cell = rowFor(html, FULL._id).split('<td').slice(1)[4];
+  const cell = rowFor(html, FULL._id).split('<td').slice(1)[5];
   assert.ok(cell.includes(statusLabel('confirmed')), 'cell 4 is not the status cell');
-  const attendees = rowFor(html, FULL._id).split('<td').slice(1)[3];
+  const attendees = rowFor(html, FULL._id).split('<td').slice(1)[4];
   assert.ok(attendees.includes('>12<'), 'cell 3 is not the attendees cell — the indices have shifted');
 });
 
@@ -397,26 +439,83 @@ test('every content column is a proportion of the table, and only the chevron is
    * which is where the widths are stated.
    */
   const cols = html.match(/<col style="width:([^"]*)"/g) ?? [];
-  assert.equal(cols.length, 6, `expected 6 <col> elements, found ${cols.length}`);
+  assert.equal(cols.length, 7, `expected 7 <col> elements, found ${cols.length}`);
 
   const widths = cols.map((c) => /width:([^"]*)/.exec(c)[1]);
-  for (const w of widths.slice(0, 5)) {
+  for (const w of widths.slice(0, 6)) {
     assert.ok(w.includes('calc('), `a content column is not a calc(): ${w}`);
     assert.ok(w.includes('100%'), `a content column has no proportional term: ${w}`);
   }
   // The chevron is the ONE fixed column, by design.
-  assert.match(widths[5], /^\d+px$/, `the chevron column is not a fixed px width: ${widths[5]}`);
+  assert.match(widths[6], /^\d+px$/, `the chevron column is not a fixed px width: ${widths[6]}`);
+});
+
+/**
+ * THE สถานะ COLUMN STAYS WIDE ENOUGH FOR ITS WIDEST LIVE LABEL.
+ *
+ * ── THE ASSUMPTION IS STATED, BECAUSE IT CANNOT BE MEASURED HERE ───────────
+ * The chip is `whitespace-nowrap`, so if the column is ever narrowed past the
+ * label the chip OVERFLOWS rather than wraps. Whether it overflows depends on
+ * glyph advances, which need a font and a layout engine — this suite has
+ * neither, and an assertion that pretended to measure text would be exactly the
+ * kind this round has already caught three times.
+ *
+ * So the floor is DERIVED and its assumption is named: the widest live label,
+ * counted in ADVANCING glyphs (Thai combining marks take zero advance), at a
+ * mid-range 0.65em advance, plus the chip's 18px of padding. That is 135px.
+ *
+ * This does not prove the chip fits. It proves nobody has narrowed the column
+ * below the width that assumption requires — which is the regression worth
+ * catching, since สถานะ has now been narrowed once already (14.6% -> 10.9%).
+ * The eyeball is on the click-test list.
+ */
+test('the สถานะ column clears the widest live label at a stated 0.65em advance', () => {
+  const CONTAINER = 1440;
+  const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
+    .map((c) => /width:([^"]*)/.exec(c)[1]);
+
+  const m = /^calc\(\(100% - ([\d.]+)px\) \* ([\d.]+) \+ ([\d.]+)px\)$/.exec(widths[5]);
+  assert.ok(m, `the สถานะ width is not a calc this test can evaluate: ${widths[5]}`);
+  // The `+ pad` term in the calc is the cell's own padding, so the CONTENT the
+  // chip gets is the box minus it — which is just the proportional term.
+  const [, chrome, ratio] = m.map(Number);
+  const content = (CONTAINER - chrome) * ratio;
+
+  const label = statusLabel('confirmed');
+  const advancing = [...label].filter((ch) => !/[ัิ-ฺ็-๎]/.test(ch)).length;
+  const floor = advancing * 12 * 0.65 + 18;
+
+  assert.ok(
+    content >= floor,
+    `the สถานะ column gives the chip ${content.toFixed(1)}px but the widest live label `
+    + `(${JSON.stringify(label)}, ${advancing} advancing glyphs) needs about ${floor.toFixed(1)}px `
+    + 'at a 0.65em advance. The chip is whitespace-nowrap, so it will overflow rather than wrap.',
+  );
 });
 
 test('the column ratios are the measured shares, normalised', () => {
-  // The design's percentages sum to 89.9%, the rest being gaps, edges and the
-  // chevron. What must be preserved is the RATIO between columns — pinned here
-  // so a "tidy up the numbers" edit cannot quietly change the layout.
+  /**
+   * The percentages still sum to 89.9%, the rest being gaps, edges and the
+   * chevron. What must be preserved is the RATIO between columns — pinned here
+   * so a "tidy up the numbers" edit cannot quietly change the layout.
+   *
+   * REVISED after the click-test. WAS [13.3, 30.0, 20.3, 11.7, 14.6] over five
+   * columns; now six, with รูปแบบ inserted at index 2 and the total unchanged:
+   *
+   *   วันที่สมัคร  13.3 → 13.0    ผู้ประสานงาน 20.3 → 20.0
+   *   หลักสูตร     30.0 → 32.0    ผู้เข้าอบรม  11.7 →  5.5
+   *   รูปแบบ       new    8.5     สถานะ       14.6 → 10.9
+   *
+   * This array is one of SIX places the proportions are written down; the others
+   * are the two COLUMNS arrays, the in-house sibling of this test, and the
+   * worked arithmetic in tableParts' columnWidths docstring. All updated
+   * together.
+   */
   const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
     .map((c) => /width:([^"]*)/.exec(c)[1]);
-  const ratios = widths.slice(0, 5).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
+  const ratios = widths.slice(0, 6).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
 
-  const shares = [13.3, 30.0, 20.3, 11.7, 14.6];
+  const shares = [13.0, 32.0, 8.5, 20.0, 5.5, 10.9];
   const total  = shares.reduce((a, b) => a + b, 0);
   ratios.forEach((r, i) => {
     assert.ok(Math.abs(r - shares[i] / total) < 1e-5,

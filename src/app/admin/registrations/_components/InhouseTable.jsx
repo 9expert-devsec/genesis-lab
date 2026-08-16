@@ -126,13 +126,26 @@ function fmtMonth(value) {
  */
 const COLUMN_GAP = 16;
 
+/**
+ * ── REVISED AFTER THE CLICK-TEST: สถานะ 12.2 → 10.0, COURSE 20.8 → 23.0 ────
+ *
+ * The status column was too wide for a chip that sizes to its label, and the
+ * 2.2% goes to หลักสูตรที่สนใจ — the in-house column most likely to truncate,
+ * since it carries a full course NAME over its code and preferred month.
+ *
+ * The STRUCTURE is unchanged. รูปแบบ / จำนวน already stands alone here, so the
+ * public table's chip extraction has no in-house counterpart; this side takes
+ * the chip fix and the status narrowing only. The total is still 89.4% and the
+ * 16px gap is unchanged, so the chrome stays 151px and the arithmetic in
+ * tableParts still reconciles exactly on this side.
+ */
 const COLUMNS = [
   { key: 'requested',   label: 'วันที่ส่งคำขอ',    share: 11.2 },
   { key: 'company',     label: 'บริษัท',           share: 17.2 },
-  { key: 'course',      label: 'หลักสูตรที่สนใจ',  share: 20.8 },
+  { key: 'course',      label: 'หลักสูตรที่สนใจ',  share: 23.0 },
   { key: 'coordinator', label: 'ผู้ประสานงาน',     share: 16.5 },
   { key: 'mode',        label: 'รูปแบบ / จำนวน',   share: 11.5 },
-  { key: 'status',      label: 'สถานะ',            share: 12.2 },
+  { key: 'status',      label: 'สถานะ',            share: 10.0 },
 ];
 
 const { widths, chevronWidth } = columnWidths({ columns: COLUMNS, gap: COLUMN_GAP });

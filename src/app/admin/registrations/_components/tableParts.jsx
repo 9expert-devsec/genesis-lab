@@ -42,16 +42,29 @@ import { statusBadge, statusLabel } from '@/lib/registrations/statuses';
  *
  * ── THE ARITHMETIC IS EXACT, AND THAT IS HOW THE READING WAS CONFIRMED ──────
  * The chrome is a fixed number of pixels: one left edge, one gap after each
- * column, the chevron, and one right edge. For public that is
- * 18 + 18x5 + 22 + 15 = 145px. Checking the reading against the design:
+ * column, the chevron, and one right edge. The reading was confirmed against the
+ * design's ORIGINAL five-column public set, where it closed to the pixel:
  *
+ *     18 + 18x5 + 22 + 15               = 145px
  *     13.3% of 1440                     = 191.5px
  *     (13.3 / 89.9) x (1440 - 145)      = 191.6px
  *
- * They agree to a rounding error, which is what says the percentages really are
- * content widths and the 145px really is everything else. The in-house side has
- * a 16px gap and seven columns — 18 + 16x6 + 22 + 15 = 151px — and lands the
- * same way, so one function serves both.
+ * That agreement is what says the percentages really are CONTENT widths and the
+ * 145px really is everything else. The in-house side — a 16px gap and seven
+ * columns, 18 + 16x6 + 22 + 15 = 151px — lands the same way and still does, so
+ * one function serves both.
+ *
+ * ── IT NO LONGER CLOSES QUITE SO NEATLY ON THE PUBLIC SIDE, BY CONSTRUCTION ─
+ * The click-test round gave รูปแบบ its own column. A sixth column means a sixth
+ * 18px gap, so public chrome is now 163px while the shares still total 89.9% —
+ * at 1440 those over-account by ~18px. Nothing here breaks: the ratios are
+ * normalised against whatever the chrome actually is, so the columns fill
+ * exactly 100% and the proportions BETWEEN them are exactly as specified. Each
+ * public content column simply lands ~1.4% narrower than its bare percentage.
+ *
+ * Said out loud because the numbers above are the evidence for the whole
+ * approach, and a future reader re-deriving them against the six-column set
+ * would find a 18px discrepancy and reasonably wonder which half was wrong.
  *
  * So each column gets `calc((100% - <chrome>px) * <ratio> + <its padding>px)`,
  * and the widths sum to exactly 100% by construction: the ratios sum to 1 and

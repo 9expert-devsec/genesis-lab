@@ -101,6 +101,56 @@ test('CONTROL: an unrelated admin page keeps its padding', () => {
   }
 });
 
+/**
+ * ── THE REGISTRATIONS PAGE CANCELS THE SHELL'S TOP PADDING, AND ONLY THE TOP ─
+ *
+ * REPORTED AS "a large empty band above the ระบบจัดการ eyebrow". The cause was
+ * this wrapper: `/admin/registrations` is not a full-height route, so it gets
+ * `p-6`, and the 24px that contributes STACKED with the page's own `pt-[34px]`
+ * — putting the eyebrow 58px down where the geometry says 34px.
+ *
+ * The page answers with `-mt-6`, which cancels the top and leaves the left,
+ * right and bottom padding it still wants. That makes the geometry's 34px stated
+ * exactly ONCE, on the page's own header, where it can be read against the
+ * design.
+ *
+ * ── THE COUPLING IS THE WHOLE REASON THIS TEST EXISTS ──────────────────────
+ * `-mt-6` only cancels `p-6` while the wrapper says `p-6`. Nothing mechanical
+ * holds them together: they are two numbers in two files, and if this wrapper's
+ * padding ever changes, the registrations page silently acquires a gap or an
+ * overlap that no other guard would notice. Asserting the PAIR here — the
+ * rendered wrapper class and the page's source — is what keeps them in step, and
+ * this file is the right home because it already owns the claim that
+ * `/admin/registrations` is padded at all.
+ */
+test('the registrations page cancels the shell’s top padding, and the two numbers agree', async () => {
+  const { readSource } = await import('../sourceScan.mjs');
+  const page = readSource('src/app/admin/registrations/page.jsx').code;
+
+  // The page cancels the top…
+  assert.match(page, /-mt-6/, 'the registrations page no longer cancels the shell padding — the '
+    + 'eyebrow will sit 24px lower than the geometry says');
+  // …and still states the geometry's 34px exactly once, itself.
+  assert.match(page, /pt-\[34px\]/, 'the page header lost its 34px offset');
+
+  // The wrapper really does supply `p-6` on this route, so `-mt-6` cancels it
+  // exactly. If this ever becomes p-4 or p-8 the negative margin is wrong and
+  // this is the assertion that says so.
+  assert.equal(padded(wrapperFor('/admin/registrations')), true,
+    'the wrapper stopped padding /admin/registrations — the page’s -mt-6 now pulls it off the top');
+});
+
+test('CONTROL: the coupling assertion reads the real pair, not one side twice', () => {
+  // `-mt-6` is Tailwind's 1.5rem, the same scale step as `p-6`. If the wrapper
+  // used a different step the cancellation would be silently partial, so the
+  // control pins that the assertion above is comparing 6 with 6 rather than
+  // merely finding two classes that happen to exist.
+  const wrapper = wrapperFor('/admin/registrations');
+  const step = /class="p-(\d+)"/.exec(wrapper);
+  assert.ok(step, `no padding class found on the wrapper: ${wrapper.slice(0, 120)}`);
+  assert.equal(step[1], '6', `the wrapper pads with p-${step[1]}, but the page cancels -mt-6`);
+});
+
 test('CONTROL: a course id that merely CONTAINS "edit" is not opted out', () => {
   // The pattern is anchored, so a course whose code contains the word does not
   // accidentally lose its padding.
