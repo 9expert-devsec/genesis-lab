@@ -127,24 +127,49 @@ function fmtMonth(value) {
 const COLUMN_GAP = 16;
 
 /**
- * ── REVISED AFTER THE CLICK-TEST: สถานะ 12.2 → 10.0, COURSE 20.8 → 23.0 ────
+ * ── รูปแบบ / จำนวน SPLITS IN TWO, MIRRORING THE PUBLIC TABLE'S รูปแบบ ──────
  *
- * The status column was too wide for a chip that sizes to its label, and the
- * 2.2% goes to หลักสูตรที่สนใจ — the in-house column most likely to truncate,
- * since it carries a full course NAME over its code and preferred month.
+ * The chip and the headcount were stacked in one cell. They are separate
+ * columns now, which is the same move the public table made one commit ago and
+ * for the same reason: a chip and a number stacked in one narrow cell make both
+ * harder to scan than either would be alone.
  *
- * The STRUCTURE is unchanged. รูปแบบ / จำนวน already stands alone here, so the
- * public table's chip extraction has no in-house counterpart; this side takes
- * the chip fix and the status narrowing only. The total is still 89.4% and the
- * 16px gap is unchanged, so the chrome stays 151px and the arithmetic in
- * tableParts still reconciles exactly on this side.
+ *   วันที่ส่งคำขอ  11.2 → 10.0    it no longer carries the audit hint line
+ *   บริษัท         17.2   unchanged
+ *   หลักสูตรที่สนใจ 23.0 → 24.2
+ *   ผู้ประสานงาน   16.5   unchanged
+ *   รูปแบบ         new     6.5    the chip alone
+ *   จำนวน          new     5.0    the count alone
+ *   สถานะ          10.0   unchanged
+ *
+ * Total still 89.4%.
+ *
+ * ── THE CHROME GREW AGAIN, AND THE DRIFT IS WORTH STATING ─────────────────
+ * A seventh column means a seventh 16px gap: chrome 151px → 167px. The shares
+ * still total 89.4%, so at 1440 they over-account by ~14px — 89.4% of 1440 is
+ * 1287px of content where only 1273px is available. `columnWidths` normalises
+ * against the real chrome, so the columns fill exactly 100% and the RATIOS
+ * between them are exact; each content column simply lands ~1.1% narrower than
+ * its bare percentage.
+ *
+ * The public side went through this at its own split (145px → 163px). Both are
+ * now in the same position, and the worked arithmetic in tableParts' docstring
+ * describes the shape rather than either number.
+ *
+ * ── สถานะ RE-MEASURED AT THE NEW CHROME, AND IT STILL CLEARS ──────────────
+ * 10.0% of 89.4 against 167px of chrome gives the chip 142.4px at a 1440
+ * container, down from 144.2px. The derived floor is 135px — the widest live
+ * label at a stated 0.65em advance plus the chip's padding — so the headroom is
+ * 7.4px, down from 9.2px but still positive. It is therefore NOT raised to
+ * 11.0%; that stays the proposal if the click-test shows otherwise.
  */
 const COLUMNS = [
-  { key: 'requested',   label: 'วันที่ส่งคำขอ',    share: 11.2 },
+  { key: 'requested',   label: 'วันที่ส่งคำขอ',    share: 10.0 },
   { key: 'company',     label: 'บริษัท',           share: 17.2 },
-  { key: 'course',      label: 'หลักสูตรที่สนใจ',  share: 23.0 },
+  { key: 'course',      label: 'หลักสูตรที่สนใจ',  share: 24.2 },
   { key: 'coordinator', label: 'ผู้ประสานงาน',     share: 16.5 },
-  { key: 'mode',        label: 'รูปแบบ / จำนวน',   share: 11.5 },
+  { key: 'format',      label: 'รูปแบบ',           share:  6.5 },
+  { key: 'count',       label: 'จำนวน',            share:  5.0 },
   { key: 'status',      label: 'สถานะ',            share: 10.0 },
 ];
 
@@ -270,15 +295,25 @@ export function InhouseTable({ items, courseNames = null, detailHref }) {
                 </CellLink>
               </td>
 
-              {/* รูปแบบ / จำนวน — the chip, then the count bold beneath it. */}
+              {/* รูปแบบ — the chip alone, vertically centred. */}
               <td className="p-0 align-top">
-                <CellLink href={to} style={pad(4)}>
-                  <ModeCell format={row.trainingFormat} count={row.participantsCount} />
+                <CellLink href={to} className="items-start" style={pad(4)}>
+                  <FormatChip value={row.trainingFormat} />
+                </CellLink>
+              </td>
+
+              {/*
+                จำนวน — THE NUMBER ONLY, rendered exactly as the public table's
+                ผู้เข้าอบรม cell renders its own. See CountCell.
+              */}
+              <td className="p-0 align-top">
+                <CellLink href={to} style={pad(5)}>
+                  <CountCell count={row.participantsCount} />
                 </CellLink>
               </td>
 
               <td className="p-0 align-top">
-                <CellLink href={to} style={pad(5)}>
+                <CellLink href={to} style={pad(6)}>
                   <StatusCell status={row.status} />
                 </CellLink>
               </td>
@@ -295,7 +330,7 @@ export function InhouseTable({ items, courseNames = null, detailHref }) {
 // ── Sub-components ─────────────────────────────────────────────────
 
 /**
- * รูปแบบ / จำนวน — two columns merged into one cell.
+ * รูปแบบ — the training-format chip, alone in its column.
  *
  * ── THE CHIP INVENTS NOTHING, WHICH IS WHY IT IS NOT ScheduleBadge ─────────
  * ScheduleBadge treats a falsy type as "Classroom" — a sensible default for a
@@ -305,28 +340,57 @@ export function InhouseTable({ items, courseNames = null, detailHref }) {
  * an unknown value renders ITSELF (a future enum member shows up as its raw
  * string rather than as the wrong chip), and a missing value renders '—'.
  *
- * The COUNT is a participants FLOOR — the model's minimum is 15 — so it is a
- * real number on every stored enquiry, and `?? '—'` is the guard for a document
- * written before that field existed rather than an expected path.
+ * `w-fit` because this is a DIRECT child of `CellLink`, which is `flex
+ * flex-col`: without it the column's default `align-items: stretch` blockifies
+ * the chip and spreads it across the whole 6.5%. It had this already, from when
+ * it was stacked above the count; the public schedule chip had to acquire it
+ * when the same move made it a direct child.
  */
-function ModeCell({ format, count }) {
-  const known = format ? TRAINING_FORMAT[format] : null;
+function FormatChip({ value }) {
+  if (!value) return <span className="text-[12px] text-[var(--text-muted)]">—</span>;
+  const known = TRAINING_FORMAT[value];
   return (
-    <>
-      {format ? (
-        <span className={cn(
-          'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
-          known?.cls ?? 'bg-slate-100 text-slate-600'
-        )}>
-          {known?.label ?? format}
-        </span>
-      ) : (
-        <span className="text-[12px] text-[var(--text-muted)]">—</span>
-      )}
-      <p className="text-[13px] font-bold leading-[18px] tabular-nums text-[var(--text-primary)]">
-        {count ?? '—'}
-      </p>
-    </>
+    <span className={cn(
+      'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',
+      known?.cls ?? 'bg-slate-100 text-slate-600'
+    )}>
+      {known?.label ?? value}
+    </span>
+  );
+}
+
+/**
+ * จำนวน — THE NUMBER ONLY, phrased exactly as the public table phrases its own.
+ *
+ * ── WHY NOT "ประมาณ 15 คน", WHICH THE DESIGN'S DARK STRIP USES ─────────────
+ * Three reasons, in increasing order of how much they matter.
+ *
+ * CONSISTENCY, which was the instruction: the public ผู้เข้าอบรม cell renders a
+ * bare number, and two tables in one admin must not phrase a headcount two ways.
+ * The classes here are the same ones that cell uses, not merely a similar size.
+ *
+ * SCANNING: a column of bare `tabular-nums` is comparable down the page at a
+ * glance. Prefixing every row with the same word destroys that and costs the
+ * width to do it — at 5.0% the cell has ~71px, and "ประมาณ 15 คน" does not fit
+ * in it at any size this table uses.
+ *
+ * AND THE REAL ONE — "ประมาณ" IS A CLAIM ABOUT THE DATA THAT THE FIELD DOES NOT
+ * MAKE. `participantsCount` is a stored number with a schema minimum of 15; it
+ * is not flagged as an estimate anywhere. A hero strip may hedge because it is
+ * summarising; a data table stating "approximately" would be the screen
+ * asserting an imprecision the record does not record. That is the same rule
+ * this table already keeps for its format chip and its status chip: no branch
+ * may assert something the document does not hold.
+ *
+ * The header carries the unit. `?? '—'` guards a document written before the
+ * field existed rather than an expected path — the count is a FLOOR and is
+ * present on every stored enquiry.
+ */
+function CountCell({ count }) {
+  return (
+    <p className="text-[14px] font-bold leading-[17px] tabular-nums text-[var(--text-primary)]">
+      {count ?? '—'}
+    </p>
   );
 }
 

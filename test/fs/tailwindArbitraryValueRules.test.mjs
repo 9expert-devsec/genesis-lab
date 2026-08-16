@@ -1104,7 +1104,7 @@ test('CellLink stretches its children by default — which is why the chip must 
   );
 });
 
-test('the in-house mode chip uses the SAME mechanism, so "match the others" stays true', async () => {
+test('the in-house format chip uses the SAME mechanism, so "match the others" stays true', async () => {
   // The claim the fix was chosen by. If ModeCell's chip ever stops using `w-fit`
   // the status chip is no longer matching anything and the comment goes stale.
   const parts = readSource('src/app/admin/registrations/_components/InhouseTable.jsx').code;

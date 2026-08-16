@@ -153,16 +153,21 @@ const EMPTY_ELEMENT = /<(p|span|div)\b(?![^>]*aria-hidden="true")[^>]*><\/\1>/;
 
 // ── 1. The column set ───────────────────────────────────────────────────────
 
-test('the header has exactly seven columns: six labelled plus the chevron', () => {
+test('the header has exactly eight columns: seven labelled plus the chevron', () => {
+  // WAS 7. รูปแบบ / จำนวน split into two columns, mirroring the public table's
+  // รูปแบบ extraction. Re-pointed, not relaxed to a floor.
   const cells = headerCells(html);
-  assert.equal(cells.length, 7, `expected 7 header cells, found ${cells.length}`);
+  assert.equal(cells.length, 8, `expected 8 header cells, found ${cells.length}`);
 });
 
 test('the in-house headings are the measured set', () => {
+  // WAS one 'รูปแบบ / จำนวน' heading; now two.
   const cells = headerCells(html).join('|');
-  for (const h of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'ผู้ประสานงาน', 'รูปแบบ / จำนวน', 'สถานะ']) {
+  for (const h of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'ผู้ประสานงาน', 'รูปแบบ', 'จำนวน', 'สถานะ']) {
     assert.ok(cells.includes(`>${h}<`), `in-house header missing: ${h}`);
   }
+  // The merged heading is gone, element-bounded so 'รูปแบบ' above cannot satisfy it.
+  assert.equal(cells.includes('>รูปแบบ / จำนวน<'), false, 'the merged heading is back');
 });
 
 /**
@@ -184,15 +189,27 @@ test('the public table emits none of the in-house headings', () => {
   const publik = renderToStaticMarkup(createElement(PublicTable, {
     items: [], detailHref: (id) => `/admin/registrations/${id}`,
   }));
+  /**
+   * `รูปแบบ` IS DELIBERATELY NOT IN THIS LIST — it is now a heading on BOTH
+   * tables, so asserting its absence from public would be red on correct code.
+   * `จำนวน` takes its place as the in-house-only half of the split; public calls
+   * the same quantity ผู้เข้าอบรม.
+   */
   const cells = headerCells(publik).join('|');
-  for (const h of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'รูปแบบ / จำนวน']) {
+  for (const h of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'จำนวน']) {
     assert.ok(!cells.includes(`>${h}<`), `an in-house header leaked onto the public table: ${h}`);
   }
 });
 
 test('the removed in-house columns are gone, header and body', () => {
   const cells = headerCells(html).join('|');
-  for (const h of ['เลขอ้างอิง', 'เดือนที่สนใจ', 'รูปแบบ']) {
+  /**
+   * `รูปแบบ` LEFT THIS LIST. It was "removed" only in the sense that it had been
+   * merged into รูปแบบ / จำนวน; it is a real column now, on both tables. The two
+   * that remain are genuinely folded into cells — the reference number is gone
+   * entirely, and the month is the course cell's second line.
+   */
+  for (const h of ['เลขอ้างอิง', 'เดือนที่สนใจ']) {
     assert.ok(!cells.includes(`>${h}<`), `a removed column is back: ${h}`);
   }
   assert.ok(!html.includes(refNo(FULL._id)), 'the row still prints a reference number');
@@ -216,11 +233,42 @@ test('every cell of a row is an anchor to the IN-HOUSE detail route', () => {
    */
   const row = rowFor(html, FULL._id);
   const anchors = row.match(/<a\b[^>]*>/g) ?? [];
-  assert.equal(anchors.length, 7, `expected one anchor per cell, found ${anchors.length}`);
+  // WAS 7. Eight cells since the รูปแบบ / จำนวน split.
+  assert.equal(anchors.length, 8, `expected one anchor per cell, found ${anchors.length}`);
   for (const a of anchors) {
     assert.ok(a.includes(`href="/admin/registrations/inhouse/${FULL._id}"`),
       `an anchor points somewhere else: ${a}`);
   }
+});
+
+/**
+ * ── THE BODY HAS AS MANY CELLS AS THE HEADER, AND NOTHING ELSE ASSERTED IT ──
+ *
+ * FOUND BY A CONTROL. Adding an entry to `COLUMNS` adds a `<th>` and a `<col>`,
+ * because the header and the colgroup are DERIVED from that array — but the
+ * body's `<td>`s are hand-written one per column in the JSX and do not follow.
+ * So a column can be added to the header with no cell beneath it, and the
+ * existing guards all survive it: the anchor count is about the body alone, the
+ * ratio test about the colgroup alone, and the empty-state `colSpan` is derived
+ * from the same array as the header so those two agree with each other while
+ * both disagree with the body.
+ *
+ * The rehearsal's eighth-column case reddened three structural tests and none of
+ * them was this one, which is how the gap surfaced. Every row is checked, not
+ * just the first, since a per-row conditional could desynchronise one of them.
+ */
+test('every body row has exactly as many cells as the header', () => {
+  const headers = headerCells(html).length;
+  const body = html.slice(html.indexOf('<tbody'), html.indexOf('</tbody>'));
+  const rows = body.split('<tr').slice(1);
+  assert.equal(rows.length, ROWS.length, `expected ${ROWS.length} body rows, found ${rows.length}`);
+
+  rows.forEach((row, i) => {
+    const cells = (row.match(/<td\b/g) ?? []).length;
+    assert.equal(cells, headers,
+      `body row ${i} has ${cells} cells against ${headers} header cells. The header and the `
+      + 'colgroup are derived from COLUMNS; the body cells are hand-written and do not follow.');
+  });
 });
 
 test('a row has exactly ONE keyboard tab stop', () => {
@@ -420,10 +468,69 @@ test('the in-house row carries NO audit hint, and the public row still does', ()
 
 // ── 4. รูปแบบ / จำนวน, and contactPhone ─────────────────────────────────────
 
-test('the mode cell renders the format chip over the participant count', () => {
-  const row = rowFor(html, FULL._id);
-  assert.ok(row.includes('>Onsite<'), 'the training-format chip did not render');
-  assert.ok(row.includes('>25<'), 'the participant count did not render');
+/**
+ * ── รูปแบบ AND จำนวน ARE SEPARATE COLUMNS, EACH HOLDING ONE ELEMENT ────────
+ *
+ * WAS `the mode cell renders the format chip over the participant count`, which
+ * asserted both things were in ONE cell. That test could not tell a stacked pair
+ * from a split pair — both render the chip and the number somewhere in the row —
+ * so it is replaced by a per-CELL claim rather than merely re-pointed.
+ *
+ * Cells in column order: requested, company, course, coordinator, format, count,
+ * status, chevron.
+ */
+test('รูปแบบ and จำนวน are separate cells, each with exactly one element', () => {
+  const cells = rowFor(html, FULL._id).split('<td').slice(1);
+
+  const format = cells[4];
+  assert.ok(format.includes('>Onsite<'), 'the รูปแบบ cell does not hold the format chip');
+  assert.equal(format.includes('>25<'), false, 'the count is still in the รูปแบบ cell');
+  assert.equal((format.match(/<(p|span|div)\b/g) ?? []).length, 1,
+    'the รูปแบบ cell holds more than the chip');
+
+  const count = cells[5];
+  assert.ok(count.includes('>25<'), 'the จำนวน cell does not hold the count');
+  assert.equal(count.includes('Onsite'), false, 'the chip is still in the จำนวน cell');
+  assert.equal((count.match(/<(p|span|div)\b/g) ?? []).length, 1,
+    'the จำนวน cell holds more than the number');
+});
+
+/**
+ * THE HEADCOUNT IS A BARE NUMBER, PHRASED AS THE PUBLIC TABLE PHRASES ITS OWN.
+ *
+ * The design's dark strip elsewhere reads "ประมาณ 15 คน". Not used here, and the
+ * deciding reason is not consistency (though that was the instruction) — it is
+ * that "ประมาณ" is a claim about the DATA which the field does not make.
+ * `participantsCount` is a stored number with a schema minimum of 15 and is not
+ * flagged as an estimate anywhere. A summary strip may hedge; a data table
+ * stating "approximately" would assert an imprecision the record does not
+ * record, which is the rule this table already keeps for its format and status
+ * chips.
+ *
+ * Asserted against the PUBLIC cell's own classes, derived from a real public
+ * render, so the two cannot drift into phrasing a headcount two ways.
+ */
+test('จำนวน renders a bare number, with the same treatment as public ผู้เข้าอบรม', () => {
+  const inhouseCount = rowFor(html, FULL._id).split('<td').slice(1)[5];
+  for (const word of ['ประมาณ', 'คน']) {
+    assert.equal(inhouseCount.includes(word), false,
+      `the จำนวน cell phrases its number with "${word}" — public renders a bare count`);
+  }
+
+  const publik = renderToStaticMarkup(createElement(PublicTable, {
+    items: [{
+      _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed',
+      createdAt: '2026-08-01T00:00:00.000Z', coordinator: {}, attendeesCount: 25,
+    }],
+    lastEdited: {}, detailHref: (id) => `/admin/registrations/${id}`,
+  }));
+  const publicCount = publik.slice(publik.indexOf('<tbody')).split('<td').slice(1)[4];
+  assert.ok(publicCount.includes('>25<'), 'the public attendee cell did not render its number');
+
+  // The same classes on both, read off the two renders rather than typed here.
+  const classOf = (cell) => /<p class="([^"]*)"/.exec(cell)?.[1];
+  assert.equal(classOf(inhouseCount), classOf(publicCount),
+    `the two headcounts are styled differently:\n  in-house: ${classOf(inhouseCount)}\n  public:   ${classOf(publicCount)}`);
 });
 
 test('an unknown training format renders ITSELF, never a substituted default', () => {
@@ -461,7 +568,7 @@ test('contactPhone stays — it is the third line of the coordinator cell', () =
 test('the สถานะ cell contains exactly one element: the chip', () => {
   for (const row of ROWS) {
     // Column order: requested, company, course, coordinator, mode, status, chevron.
-    const cell = rowFor(html, row._id).split('<td').slice(1)[5];
+    const cell = rowFor(html, row._id).split('<td').slice(1)[6];
     assert.ok(cell, 'the status cell did not render');
     const elements = cell.match(/<(p|span|div)\b/g) ?? [];
     assert.equal(elements.length, 1,
@@ -472,8 +579,12 @@ test('the สถานะ cell contains exactly one element: the chip', () => {
 
 test('CONTROL: the cell extractor lands on the สถานะ column', () => {
   const cells = rowFor(html, FULL._id).split('<td').slice(1);
-  assert.ok(cells[5].includes(statusLabel('quoted')), 'cell 5 is not the status cell');
-  assert.ok(cells[4].includes('>25<'), 'cell 4 is not the mode cell — the indices have shifted');
+  // Column order after the split: requested, company, course, coordinator,
+  // format, count, status, chevron. All three anchors, so a shift of any size
+  // is caught rather than only a shift past the status cell.
+  assert.ok(cells[6].includes(statusLabel('quoted')), 'cell 6 is not the status cell');
+  assert.ok(cells[5].includes('>25<'), 'cell 5 is not the จำนวน cell — the indices have shifted');
+  assert.ok(cells[4].includes('>Onsite<'), 'cell 4 is not the รูปแบบ cell — the indices have shifted');
 });
 
 test('an unrecognised status renders its raw value and the NEUTRAL chip', () => {
@@ -496,32 +607,38 @@ test('the in-house table never renders ชำระแล้ว — `paid` is no
 
 test('every content column is a proportion, and only the chevron is fixed', () => {
   const cols = html.match(/<col style="width:([^"]*)"/g) ?? [];
-  assert.equal(cols.length, 7, `expected 7 <col> elements, found ${cols.length}`);
+  assert.equal(cols.length, 8, `expected 8 <col> elements, found ${cols.length}`);
   const widths = cols.map((c) => /width:([^"]*)/.exec(c)[1]);
-  for (const w of widths.slice(0, 6)) {
+  for (const w of widths.slice(0, 7)) {
     assert.ok(w.includes('calc(') && w.includes('100%'), `a content column is not proportional: ${w}`);
   }
-  assert.match(widths[6], /^\d+px$/, `the chevron column is not fixed: ${widths[6]}`);
+  assert.match(widths[7], /^\d+px$/, `the chevron column is not fixed: ${widths[7]}`);
 });
 
 /**
  * The in-house สถานะ column, held to the same derived floor as the public one —
  * and it is the TIGHTER of the two.
  *
- * 10.0% of 89.4 against a 151px chrome gives the chip 144.2px, where public's
- * 10.9% gives 154.8px. Both clear the 135px floor (the widest live label at a
- * stated 0.65em advance plus 18px of padding), but in-house does so by ~9px.
- * That margin is recorded in the report and is the first thing to eyeball on the
- * click-test; if it turns out to overflow, 11.0% here — taking 1.0% back from
- * หลักสูตรที่สนใจ — gives ~158.6px and clears even a pessimistic 0.75em.
+ * RE-MEASURED AFTER THE รูปแบบ / จำนวน SPLIT. The extra column added a seventh
+ * 16px gap, so chrome went 151px → 167px and this cell went 144.2px → 142.4px
+ * WITHOUT its share changing. Against the 135px floor — the widest live label at
+ * a stated 0.65em advance plus 18px of padding — the headroom is 7.4px, down
+ * from 9.2px. Public, at 10.9% and 163px of chrome, has 154.8px and 19.8px.
+ *
+ * Still positive, so สถานะ stays at 10.0%. It was NOT raised to 11.0%: that
+ * remains the standing proposal if the click-test shows the chip overflowing,
+ * taking the 1.0% back from หลักสูตรที่สนใจ for ~158px.
+ *
+ * A column added to this table narrows สถานะ again without anyone editing its
+ * share, which is exactly why this floor is asserted rather than assumed.
  */
 test('the สถานะ column clears the widest live label at a stated 0.65em advance', () => {
   const CONTAINER = 1440;
   const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
     .map((c) => /width:([^"]*)/.exec(c)[1]);
 
-  const m = /^calc\(\(100% - ([\d.]+)px\) \* ([\d.]+) \+ ([\d.]+)px\)$/.exec(widths[5]);
-  assert.ok(m, `the สถานะ width is not a calc this test can evaluate: ${widths[5]}`);
+  const m = /^calc\(\(100% - ([\d.]+)px\) \* ([\d.]+) \+ ([\d.]+)px\)$/.exec(widths[6]);
+  assert.ok(m, `the สถานะ width is not a calc this test can evaluate: ${widths[6]}`);
   const [, chrome, ratio] = m.map(Number);
   const content = (CONTAINER - chrome) * ratio;
 
@@ -539,7 +656,7 @@ test('the สถานะ column clears the widest live label at a stated 0.65em
 test('the column ratios are the measured in-house shares, normalised', () => {
   const widths = (html.match(/<col style="width:([^"]*)"/g) ?? [])
     .map((c) => /width:([^"]*)/.exec(c)[1]);
-  const ratios = widths.slice(0, 6).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
+  const ratios = widths.slice(0, 7).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
 
   /**
    * REVISED after the click-test: สถานะ 12.2 → 10.0, and the 2.2% goes to
@@ -547,7 +664,7 @@ test('the column ratios are the measured in-house shares, normalised', () => {
    * since it carries a full course NAME over its code and preferred month. The
    * total is unchanged at 89.4%, so the chrome stays 151px.
    */
-  const shares = [11.2, 17.2, 23.0, 16.5, 11.5, 10.0];
+  const shares = [10.0, 17.2, 24.2, 16.5, 6.5, 5.0, 10.0];
   const total  = shares.reduce((a, b) => a + b, 0);
   ratios.forEach((r, i) => {
     assert.ok(Math.abs(r - shares[i] / total) < 1e-5,
