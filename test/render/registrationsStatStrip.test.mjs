@@ -164,10 +164,29 @@ test('every in-house card resolves a count — none falls through to a missing k
 
 // ── 2. The chrome follows `source` ──────────────────────────────────────────
 
+/**
+ * ── THE IN-HOUSE COLUMN SET AFTER ROUND 3 ───────────────────────────────────
+ *
+ * เดือนที่สนใจ is no longer a heading and is deliberately not in this list. It did
+ * not go away: `preferredMonth` is the second line of the หลักสูตรที่สนใจ cell
+ * now, beside the course code, mirroring the public course cell where the same
+ * slot holds the round date. That placement was ASKED ABOUT rather than inferred
+ * — the field renders, it was not on the removal list, and the geometry simply
+ * gave it no column.
+ *
+ * รูปแบบ and ผู้เข้าอบรม merged into รูปแบบ / จำนวน.
+ */
 test('source=inhouse renders the in-house columns', () => {
   const cells = headerCells(inhouse).join('|');
-  for (const heading of ['บริษัท', 'หลักสูตรที่สนใจ', 'เดือนที่สนใจ', 'วันที่ส่งคำขอ']) {
+  for (const heading of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'ผู้ประสานงาน', 'รูปแบบ / จำนวน', 'สถานะ']) {
     assert.ok(cells.includes(heading), `in-house header missing: ${heading}`);
+  }
+});
+
+test('the merged and folded in-house columns are gone from the header', () => {
+  const cells = headerCells(inhouse).join('|');
+  for (const heading of ['เลขอ้างอิง', 'เดือนที่สนใจ', 'ผู้เข้าอบรม']) {
+    assert.ok(!cells.includes(`>${heading}<`), `a removed in-house column is back: ${heading}`);
   }
 });
 

@@ -175,38 +175,27 @@ test('the shared สถานะ cell reads BOTH label and colour through the mo
     'the สถานะ cell does not derive its chip colour from the module');
 });
 
-test('the public table body holds no สถานะ cell of its own', () => {
-  // The positive claim above is only worth something if the table actually
-  // delegates. A private copy would satisfy every other assertion in this file
-  // while drifting from the shared one.
-  assert.ok(!/statusBadge\(/.test(PUB_TABLE.code),
-    'PublicTable draws its own status chip instead of using StatusCell');
-  assert.ok(/StatusCell/.test(PUB_TABLE.code), 'PublicTable does not render the shared StatusCell');
-});
-
 /**
- * ── OUTSTANDING: IN-HOUSE STILL DRAWS ITS OWN CHIP ──────────────────────────
+ * NEITHER TABLE BODY DRAWS ITS OWN CHIP.
  *
- * The in-house table is rebuilt in the NEXT commit; this one is the public
- * table alone, so that its diff is the public columns and nothing else. Until
- * then InhouseTable keeps the inline chip it has had since round 2.
+ * ── THIS ASSERTION WAS HALF A COMMIT AGO, AND THE REGISTER SAID SO ─────────
+ * When the public table was rebuilt this covered PublicTable alone, with a
+ * self-invalidating OUTSTANDING entry beside it asserting that InhouseTable
+ * STILL drew its own chip — following the register pattern in
+ * test/fs/urlFilterNoState. Folding the in-house cell broke that entry, which is
+ * exactly what it was for: it failed with instructions to widen this test and
+ * delete itself, rather than sitting there as a stale exemption nobody re-read.
  *
- * SELF-INVALIDATING, following the register in test/fs/urlFilterNoState. This
- * asserts the copy is STILL THERE, so folding it breaks this test and tells
- * whoever did the fold to widen the assertion above rather than leaving a stale
- * exemption behind. A plain "not yet" comment would have rotted silently; an
- * allowlist entry would have outlived the thing it excuses.
+ * The positive claim is only worth something if both tables actually delegate. A
+ * private copy in either would satisfy every other assertion in this file while
+ * drifting from the shared one.
  */
-test('OUTSTANDING InhouseTable: still draws its own status chip (rebuilt next commit)', () => {
-  const inhouse = readSource('src/app/admin/registrations/_components/InhouseTable.jsx');
-  assert.match(
-    inhouse.code, /statusBadge\(row\.status\)/,
-    'InhouseTable no longer draws its own chip.\n\n'
-    + 'If you FOLDED it onto the shared StatusCell: delete this test and add PUB_TABLE\'s\n'
-    + 'sibling assertion for InhouseTable to the test above, so both bodies are guarded.\n'
-    + 'This register records work that is still outstanding — it is not an allowlist,\n'
-    + 'and it is designed to fail the moment it becomes stale.'
-  );
+test('neither table body holds a สถานะ cell of its own', () => {
+  const INH_TABLE = readSource('src/app/admin/registrations/_components/InhouseTable.jsx');
+  for (const f of [PUB_TABLE, INH_TABLE]) {
+    assert.ok(!/statusBadge\(/.test(f.code), `${f.rel} draws its own status chip instead of using StatusCell`);
+    assert.ok(/StatusCell/.test(f.code), `${f.rel} does not render the shared StatusCell`);
+  }
 });
 
 test('no registrations surface holds a local status label OR colour map', () => {

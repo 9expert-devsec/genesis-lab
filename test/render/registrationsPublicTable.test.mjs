@@ -168,21 +168,16 @@ test('the public table emits none of the in-house headings', () => {
 
 test('the in-house table emits none of the public-only headings', () => {
   /**
-   * `ผู้เข้าอบรม` is deliberately NOT in this list, and the reason is worth
-   * stating rather than leaving as an omission: today it is a heading on BOTH
-   * tables, because the in-house body has not been rebuilt yet. The next commit
-   * folds it into `รูปแบบ / จำนวน` and it becomes public-only, at which point it
-   * joins this list — asserted from the other side by the OUTSTANDING register
-   * in test/fs/publicStatusLabelSources, which fails when in-house is rebuilt.
-   *
-   * Adding it here now would make this test red on correct code, which is the
-   * measured trap this suite keeps rediscovering.
+   * `ผู้เข้าอบรม` joined this list when the in-house body was rebuilt and merged
+   * it into `รูปแบบ / จำนวน`. Until then it was a heading on BOTH tables and was
+   * deliberately excluded, because asserting it early would have made this test
+   * red on correct code — the measured trap this suite keeps rediscovering.
    */
   const inhouse = renderToStaticMarkup(createElement(InhouseTable, {
     items: [], lastEdited: {}, courseNames: {},
   }));
   const cells = headerCells(inhouse).join('|');
-  for (const heading of ['หลักสูตร / รอบอบรม', 'วันที่สมัคร']) {
+  for (const heading of ['หลักสูตร / รอบอบรม', 'วันที่สมัคร', 'ผู้เข้าอบรม']) {
     assert.ok(!cells.includes(`>${heading}<`), `a public header leaked onto the in-house table: ${heading}`);
   }
 });
