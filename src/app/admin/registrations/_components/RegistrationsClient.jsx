@@ -456,7 +456,39 @@ function StatCard({ label, count, accentCls, selected, locked, onClick }) {
       onClick={onClick}
       aria-pressed={selected}
       className={cn(
-        'relative h-[82px] w-full rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] text-left transition-shadow hover:shadow-9e-sm',
+        /*
+          ── `overflow-hidden` IS THE ACCENT BAR'S CLIP, AND IT WAS MISSING ────
+
+          MEASURED FROM A CLICK-TEST: the 4px bar drew OUTSIDE the card's rounded
+          corners, top-left and bottom-left.
+
+          The cause is that nothing clipped it. The bar is absolutely positioned
+          at left/top/bottom 1px — a straight rectangle — while the card's corner
+          is a 16px arc (`9e-lg`), so for the first and last ~15px of its height
+          the bar sits where the card is not. With no `overflow-hidden` on the
+          card there was nothing to cut it off.
+
+          The bar's own `rounded-l-9e-lg` was an attempt at the same thing and
+          could never work, which is why this looked almost-right rather than
+          obviously broken: on a 4px-wide box CSS reduces both horizontal radii
+          to fit the box, scaling 16px down to ~2px. A 2px curve cannot follow a
+          16px one. That class is deleted rather than tuned — a hand-picked
+          radius on the bar would have to be re-picked every time the card's is.
+
+          Clipping to the card means the bar's corners ARE the card's corners, by
+          construction. `overflow` clips to the PADDING box with the inner radius,
+          which is exactly the geometry's "inset 1px, inside the border, not over
+          it".
+
+          `overflow-hidden rounded-9e-lg border` is the same combination ListPanel
+          already uses on this screen for the same reason.
+
+          The `ring` below is unaffected: it is a box-shadow on this element, and
+          `overflow` clips descendants, not an element's own shadow. The selected
+          card keeps its outline — pinned by a compiled-CSS control, and on the
+          click-test list.
+        */
+        'relative h-[82px] w-full overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] text-left transition-shadow hover:shadow-9e-sm',
         selected && 'ring-2 ring-9e-brand ring-offset-1'
       )}
     >
@@ -467,7 +499,7 @@ function StatCard({ label, count, accentCls, selected, locked, onClick }) {
         which is exactly what a decorative bar does; declaring it decorative is
         how the two are told apart, and it is the correct markup regardless.
       */}
-      <span aria-hidden="true" className={cn('absolute bottom-[1px] left-[1px] top-[1px] w-0 rounded-l-9e-lg', accentCls)} />
+      <span aria-hidden="true" className={cn('absolute bottom-[1px] left-[1px] top-[1px] w-0', accentCls)} />
 
       <span className="absolute left-[17px] top-[15.5px] flex h-[17px] items-center gap-[4px]">
         <span className="text-[11px] leading-[17px] text-[var(--text-muted)]">{label}</span>

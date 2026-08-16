@@ -260,10 +260,41 @@ export function CoordinatorCell({ name, email, phone }) {
  * from the shared module and stays the label; the lock is an affordance on the
  * overview CARD. See `lockedLabels` in RegistrationsClient.
  */
+/**
+ * ── `w-fit` IS LOAD-BEARING, AND `inline-flex` ALONE IS NOT ────────────────
+ *
+ * MEASURED FROM A CLICK-TEST: the chip rendered as a full-width block across the
+ * whole สถานะ column. The class list already said `inline-flex`, which is exactly
+ * why the existing assertions could not see it.
+ *
+ * The cause is the PARENT, not this element. `CellLink` is `flex flex-col`, so
+ * every direct child is a flex item — and a flex item's `display` is BLOCKIFIED
+ * (`inline-flex` computes to `flex`) while the column container's default
+ * `align-items: stretch` sizes it to the full cross axis. Nothing about writing
+ * `inline-flex` survives that.
+ *
+ * The two chips that were already correct show both ways out, and this takes the
+ * one that matches rather than inventing a third:
+ *
+ *   · PublicTable's ScheduleBadge is NOT a direct child of CellLink — it sits in
+ *     a `flex items-center` ROW, where there is no cross-axis stretch to escape.
+ *   · InhouseTable's ModeCell chip IS a direct child, and carries `w-fit`.
+ *
+ * This is a direct child, so it takes `w-fit`, character for character as
+ * ModeCell has it.
+ *
+ * ── WHAT WAS CONSIDERED AND NOT DONE ──────────────────────────────────────
+ * `items-start` on CellLink would fix the container once and make every future
+ * chip correct without opting in. It is arguably the better fix and it is not
+ * this commit's: it changes the cross-axis sizing of EVERY cell on both tables,
+ * including the `truncate` paragraphs whose ellipsis depends on being given a
+ * width, and this is a presentation-only round with two defects to close. Noted
+ * rather than taken.
+ */
 export function StatusCell({ status }) {
   return (
     <span className={cn(
-      'inline-flex h-[26px] items-center whitespace-nowrap rounded-full px-[9px] text-[12px] font-semibold',
+      'inline-flex h-[26px] w-fit items-center whitespace-nowrap rounded-full px-[9px] text-[12px] font-semibold',
       statusBadge(status)
     )}>
       {statusLabel(status)}
