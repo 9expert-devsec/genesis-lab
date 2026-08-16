@@ -184,10 +184,33 @@ test('source=public renders NONE of the in-house-only columns', () => {
   }
 });
 
+/**
+ * ── THE PUBLIC COLUMN SET AFTER ROUND 3 ─────────────────────────────────────
+ *
+ * Four of the five headings this used to name are gone, and none of them by
+ * accident:
+ *
+ *   · ใบเสนอราคา and ชำระเงิน were the two tick columns, removed by ruling. The
+ *     information is on the detail page and is not relocated into the list.
+ *   · วันอบรม folded INTO the course cell as its round-date line, which is what
+ *     "หลักสูตร / รอบอบรม" means. It had been rendering `classDate` twice per
+ *     row — once as its own column, once as the course cell's sub-line.
+ *   · รูปแบบ folded into the same cell as the schedule chip.
+ *
+ * วันที่สมัคร and ผู้ประสานงาน survive and are still asserted, so this is not
+ * passing because the table stopped rendering headers.
+ */
 test('source=public renders the public columns', () => {
   const cells = headerCells(publik).join('|');
-  for (const heading of ['วันอบรม', 'ผู้ประสานงาน', 'ใบเสนอราคา', 'ชำระเงิน', 'วันที่สมัคร']) {
+  for (const heading of ['วันที่สมัคร', 'หลักสูตร / รอบอบรม', 'ผู้ประสานงาน', 'ผู้เข้าอบรม', 'สถานะ']) {
     assert.ok(cells.includes(heading), `public header missing: ${heading}`);
+  }
+});
+
+test('the four removed public columns are gone from the header', () => {
+  const cells = headerCells(publik).join('|');
+  for (const heading of ['เลขอ้างอิง', 'วันอบรม', 'รูปแบบ', 'ใบเสนอราคา', 'ชำระเงิน']) {
+    assert.ok(!cells.includes(heading), `a removed column is back on the public table: ${heading}`);
   }
 });
 

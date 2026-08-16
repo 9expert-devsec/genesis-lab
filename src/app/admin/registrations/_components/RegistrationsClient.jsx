@@ -2,19 +2,16 @@
 
 import { useTransition, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { refNo } from '@/lib/refNo';
-import { LastEditedHint } from '@/components/audit/auditRowParts';
 import {
   buildStatCards,
   isSystemSet,
-  statusBadge,
   statusLabel,
   statusesForSource,
 } from '@/lib/registrations/statuses';
 import { ListPanel } from './ListPanel';
+import { PublicTable } from './PublicTable';
 import { InhouseTable } from './InhouseTable';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -70,25 +67,17 @@ const SOURCE_TABS = [
  * which also folds the `?? 'bg-slate-100 text-slate-600'` fallback that used to
  * sit at every call site into the module, where there is one of it.
  *
- * SCHEDULE_BADGE below is NOT the same shape and deliberately stays: it is
- * keyed by `scheduleType`, which is a course-schedule property with its own
- * vocabulary, not a registration status. It has no entry in the status module
- * and must not acquire one.
+ * `statusLabel` survives HERE for two reasons and neither of them is a cell: the
+ * lock sub-line under the overview title, and the panel's "filtered by" line.
+ * Both name a status in a SENTENCE, and a sentence is exactly where a
+ * hand-written label would look harmless.
+ *
+ * SCHEDULE_BADGE and `fmtDate` have gone with the table they served —
+ * PublicTable.jsx and tableParts.jsx respectively. Neither was ever a status
+ * map: SCHEDULE_BADGE is keyed by `scheduleType`, a course-schedule property
+ * with its own vocabulary, and it must not acquire an entry in the status
+ * module.
  */
-
-const SCHEDULE_BADGE = {
-  hybrid:    'bg-violet-100 text-violet-700',
-  online:    'bg-emerald-100 text-emerald-700',
-  classroom: 'bg-sky-100 text-sky-700',
-};
-
-const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-
-function fmtDate(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
-}
 
 /**
  * THE DETAIL ROUTE FOR A ROW — and there are two of them, not one.
@@ -425,7 +414,19 @@ export function RegistrationsClient({
         {source === 'inhouse' ? (
           <InhouseTable items={items} lastEdited={lastEdited} courseNames={courseNames} />
         ) : (
-          <PublicTable items={items} lastEdited={lastEdited} detailHref={detailHref} />
+          <PublicTable
+            items={items}
+            lastEdited={lastEdited}
+            /*
+              BOUND TO THIS BRANCH'S SOURCE, so the table takes an id and gets
+              back a route it cannot get wrong. `detailHref` exists to choose
+              BETWEEN the two collections' pages — an in-house `_id` sent to the
+              public route 404s on a record that exists — and the choice is
+              already made by the `source ===` test above. Handing the table the
+              two-argument form would hand it the decision as well.
+            */
+            detailHref={(id) => detailHref('public', id)}
+          />
         )}
       </ListPanel>
     </div>
@@ -488,161 +489,5 @@ function StatCard({ label, count, accentCls, selected, locked, onClick }) {
         {count}
       </span>
     </button>
-  );
-}
-
-/**
- * THE PUBLIC TABLE — CARRIED OVER UNCHANGED IN THIS COMMIT.
- *
- * This is the pre-existing public body, lifted out of the JSX it was inline in
- * and given a name, with its cells untouched: the same eleven columns, the same
- * markup, the same helpers below it. The only difference is that its outer
- * bordered card and its `overflow-x-auto` wrapper are gone, because ListPanel
- * now supplies both — two nested cards would have drawn two borders.
- *
- * IT IS DELIBERATELY NOT REBUILT HERE. The measured column set — six columns,
- * proportional widths, 82px rows, a real per-row link — is the NEXT commit, on
- * its own, so that commit's diff is the table and nothing else and this one can
- * be verified green with the table it already had. `เลขอ้างอิง`, the two tick
- * columns and the payment chip all still render below; they leave in commit 3
- * where their removal is the subject rather than a side effect.
- */
-function PublicTable({ items, lastEdited, detailHref: href }) {
-  return (
-    <table className="w-full text-sm">
-      <thead className="border-b border-[var(--surface-border)] bg-[var(--surface-muted)]">
-        <tr>
-          <Th>เลขอ้างอิง</Th>
-          <Th>หลักสูตร</Th>
-          <Th>วันอบรม</Th>
-          <Th>รูปแบบ</Th>
-          <Th>ผู้ประสานงาน</Th>
-          <Th center>ผู้เข้าอบรม</Th>
-          <Th center>ใบเสนอราคา</Th>
-          <Th center>ชำระเงิน</Th>
-          <Th>สถานะ</Th>
-          <Th>วันที่สมัคร</Th>
-          <Th></Th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.length === 0 && (
-          <tr>
-            <td colSpan={11} className="px-4 py-10 text-center text-[var(--text-muted)]">
-              ไม่พบรายการที่ตรงกับเงื่อนไข
-            </td>
-          </tr>
-        )}
-        {items.map((row) => (
-          <tr
-            key={row._id}
-            className="border-b border-[var(--surface-border)] last:border-b-0 hover:bg-[var(--surface-muted)]"
-          >
-            <td className="px-4 py-3 font-mono text-xs font-bold text-9e-action">
-              {refNo(row._id)}
-              <LastEditedHint entry={lastEdited[String(row._id)]} />
-            </td>
-            <td className="max-w-[180px] px-4 py-3">
-              <p className="truncate font-medium text-[var(--text-primary)]">{row.courseName}</p>
-              <p className="truncate text-xs text-[var(--text-muted)]">{row.classDate}</p>
-            </td>
-            <td className="px-4 py-3 text-xs text-[var(--text-secondary)] whitespace-nowrap">
-              {row.classDate || '—'}
-            </td>
-            <td className="px-4 py-3">
-              <ScheduleBadge type={row.scheduleType} mode={row.attendanceMode} />
-            </td>
-            <td className="px-4 py-3">
-              <p className="font-medium text-[var(--text-primary)]">
-                {row.coordinator?.firstName} {row.coordinator?.lastName}
-              </p>
-              <p className="text-xs text-[var(--text-muted)]">{row.coordinator?.email}</p>
-            </td>
-            <td className="px-4 py-3 text-center tabular-nums text-[var(--text-primary)]">
-              {row.attendeesCount}
-            </td>
-            <td className="px-4 py-3 text-center">
-              {row.requestInvoice
-                ? <span className="text-xs font-semibold text-emerald-600">✓</span>
-                : <span className="text-xs text-[var(--text-muted)]">—</span>}
-            </td>
-            <td className="px-4 py-3 text-center">
-              <PaymentChip payment={row.payment} pricing={row.pricing} />
-            </td>
-            <td className="px-4 py-3">
-              <span className={cn(
-                'inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                statusBadge(row.status)
-              )}>
-                {statusLabel(row.status)}
-              </span>
-            </td>
-            <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">
-              {fmtDate(row.createdAt)}
-            </td>
-            <td className="px-4 py-3 text-right">
-              <Link
-                href={href('public', row._id)}
-                className="text-xs font-semibold text-9e-action hover:underline"
-              >
-                ดูรายละเอียด →
-              </Link>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function Th({ children, center }) {
-  return (
-    <th className={cn(
-      'px-4 py-3 text-xs font-medium text-[var(--text-secondary)]',
-      center ? 'text-center' : 'text-left'
-    )}>
-      {children}
-    </th>
-  );
-}
-
-const PAY_METHOD_CHIP = {
-  credit_card: { label: 'บัตร', cls: 'bg-indigo-100 text-indigo-700' },
-  promptpay:   { label: 'QR',   cls: 'bg-teal-100 text-teal-700' },
-};
-
-function PaymentChip({ payment, pricing }) {
-  const chip = PAY_METHOD_CHIP[payment?.method];
-  // Rows without an online-payment record (or quote method) = ใบเสนอราคา / legacy.
-  if (!chip) {
-    return <span className="text-[10px] text-[var(--text-muted)]">ใบเสนอราคา</span>;
-  }
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <span className={cn('inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold', chip.cls)}>
-        {chip.label}
-      </span>
-      {pricing?.total != null && (
-        <span className="text-[10px] tabular-nums text-[var(--text-muted)]">
-          ฿{Number(pricing.total).toLocaleString('th-TH')}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function ScheduleBadge({ type, mode }) {
-  if (!type || type === 'classroom') {
-    return <span className="text-xs text-[var(--text-muted)]">Classroom</span>;
-  }
-  return (
-    <span className={cn(
-      'inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold',
-      SCHEDULE_BADGE[type] ?? 'bg-slate-100 text-slate-600'
-    )}>
-      {type === 'hybrid'
-        ? (mode === 'teams' ? 'Hybrid · Teams' : 'Hybrid · Class')
-        : 'Online'}
-    </span>
   );
 }
