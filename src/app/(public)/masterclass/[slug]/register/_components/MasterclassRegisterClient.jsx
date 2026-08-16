@@ -16,6 +16,7 @@ import {
   RefreshCw,
   ChevronUp,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
 import { computePricing, formatTHB } from "@/lib/pricing";
@@ -152,6 +153,17 @@ function BatchSummary({ course, batch }) {
       )}
       {batch.is_early_bird && batch.early_bird_deadline && (
         <CountdownTimer deadline={batch.early_bird_deadline} className="mt-3" />
+      )}
+      {course.slug && (
+        <Link
+          href={`/masterclass/${course.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-9e-md border border-9e-action px-4 py-2.5 text-sm font-semibold text-9e-action transition-colors hover:bg-9e-action hover:text-white dark:border-white/40 dark:text-white dark:hover:bg-white/10"
+        >
+          ดูรายละเอียดหลักสูตร
+          <ExternalLink size={16} />
+        </Link>
       )}
     </aside>
   );
