@@ -412,7 +412,9 @@ export function RegistrationsClient({
         onNavigate={navigate}
       >
         {source === 'inhouse' ? (
-          <InhouseTable items={items} lastEdited={lastEdited} courseNames={courseNames} />
+          /* No `lastEdited`: the in-house table does not render the audit hint —
+             see its header. page.jsx does not even fetch it for this source. */
+          <InhouseTable items={items} courseNames={courseNames} />
         ) : (
           <PublicTable
             items={items}
