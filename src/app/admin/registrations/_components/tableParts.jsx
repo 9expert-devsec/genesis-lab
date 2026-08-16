@@ -50,21 +50,30 @@ import { statusBadge, statusLabel } from '@/lib/registrations/statuses';
  *     (13.3 / 89.9) x (1440 - 145)      = 191.6px
  *
  * That agreement is what says the percentages really are CONTENT widths and the
- * 145px really is everything else. The in-house side — a 16px gap and seven
- * columns, 18 + 16x6 + 22 + 15 = 151px — lands the same way and still does, so
- * one function serves both.
+ * 145px really is everything else. The in-house side reconciled the same way at
+ * its own original width (a 16px gap and seven columns: 18 + 16x6 + 22 + 15 =
+ * 151px), so one function serves both.
  *
- * ── IT NO LONGER CLOSES QUITE SO NEATLY ON THE PUBLIC SIDE, BY CONSTRUCTION ─
- * The click-test round gave รูปแบบ its own column. A sixth column means a sixth
- * 18px gap, so public chrome is now 163px while the shares still total 89.9% —
- * at 1440 those over-account by ~18px. Nothing here breaks: the ratios are
- * normalised against whatever the chrome actually is, so the columns fill
- * exactly 100% and the proportions BETWEEN them are exactly as specified. Each
- * public content column simply lands ~1.4% narrower than its bare percentage.
+ * ── NEITHER SIDE CLOSES QUITE SO NEATLY NOW, BY CONSTRUCTION ───────────────
+ * The click-test rounds added a column to each table, and every added column
+ * adds a gap:
  *
- * Said out loud because the numbers above are the evidence for the whole
- * approach, and a future reader re-deriving them against the six-column set
- * would find a 18px discrepancy and reasonably wonder which half was wrong.
+ *     public    5 columns -> 6    chrome 145px -> 163px   drift ~1.4%
+ *     in-house  6 columns -> 7    chrome 151px -> 167px   drift ~1.1%
+ *
+ * The shares still total 89.9% and 89.4%, so at a 1440 container they now
+ * OVER-ACCOUNT — 89.4% of 1440 is 1287px of content where only 1273px is
+ * available.
+ *
+ * Nothing here breaks. The ratios are normalised against whatever the chrome
+ * actually is, so the columns fill exactly 100% and the proportions BETWEEN them
+ * are exactly as specified; each content column simply lands a little narrower
+ * than its bare percentage would suggest.
+ *
+ * Said out loud, and kept up to date, because the arithmetic above is the
+ * evidence for this whole approach — a future reader re-deriving it against the
+ * CURRENT column sets would find a discrepancy and reasonably wonder which half
+ * was wrong. The 145px figure is the historical check, not today's value.
  *
  * So each column gets `calc((100% - <chrome>px) * <ratio> + <its padding>px)`,
  * and the widths sum to exactly 100% by construction: the ratios sum to 1 and

@@ -178,7 +178,9 @@ test('every in-house card resolves a count — none falls through to a missing k
  */
 test('source=inhouse renders the in-house columns', () => {
   const cells = headerCells(inhouse).join('|');
-  for (const heading of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'ผู้ประสานงาน', 'รูปแบบ / จำนวน', 'สถานะ']) {
+  // รูปแบบ / จำนวน split into two columns after the click-test, mirroring what
+  // the public table did with รูปแบบ.
+  for (const heading of ['วันที่ส่งคำขอ', 'บริษัท', 'หลักสูตรที่สนใจ', 'ผู้ประสานงาน', 'รูปแบบ', 'จำนวน', 'สถานะ']) {
     assert.ok(cells.includes(heading), `in-house header missing: ${heading}`);
   }
 });

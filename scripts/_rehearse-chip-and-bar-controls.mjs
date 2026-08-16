@@ -88,7 +88,15 @@ const CASES = [
       replace: "      'inline-flex h-[26px] items-center whitespace-nowrap rounded-full px-[9px] text-[12px] font-semibold',",
     }],
     files: [HARVEST, PUB, INHR],
-    mustFail: ['the status chip’s compiled CSS constrains its width to its content'],
+    mustFail: [
+      'the status chip’s compiled CSS constrains its width to its content',
+      // The SWEEP landed a commit after this script was written and now covers
+      // the status chip as well as the schedule and format ones. Declared rather
+      // than left as a surprise: two guards on one defect is the intent, since
+      // the named one is what a reader greps for and the sweep is what catches
+      // the chip nobody has thought of yet.
+      'every chip in both tables has a compiled width constraint',
+    ],
     /**
      * THE MEASUREMENT THIS SCRIPT EXISTS FOR. This is the defect exactly as it
      * shipped, and the entire render tier stays green: the chip is one element,
@@ -146,15 +154,22 @@ const CASES = [
     mustFail: ['the accent bar sets no radius of its own'],
   },
   {
-    name: '5. the in-house mode chip stops using w-fit',
+    name: '5. the in-house format chip stops using w-fit',
     why: 'the status chip was fixed BY MATCHING it — if it changes, the comment is stale',
     edits: [{
       file: INH,
-      find: "          'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',",
-      replace: "          'inline-flex h-[23px] shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',",
+      // Six spaces, not ten: the chip moved out of `ModeCell` into its own
+      // `FormatChip` when รูปแบบ / จำนวน split, and re-indented with it. The
+      // exactly-once check caught the stale literal rather than silently
+      // matching nothing.
+      find: "      'inline-flex h-[23px] w-fit shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',",
+      replace: "      'inline-flex h-[23px] shrink-0 items-center whitespace-nowrap rounded-full px-[7px] text-[11px] font-semibold',",
     }],
     files: [HARVEST],
-    mustFail: ['the in-house mode chip uses the SAME mechanism, so "match the others" stays true'],
+    mustFail: [
+      'the in-house format chip uses the SAME mechanism, so "match the others" stays true',
+      'every chip in both tables has a compiled width constraint',
+    ],
   },
 ];
 
