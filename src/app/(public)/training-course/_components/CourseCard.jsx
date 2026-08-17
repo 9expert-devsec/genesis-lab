@@ -166,16 +166,46 @@ function CourseCardComponent({
       {/* ── Content ── */}
       <div className="flex flex-1 flex-col p-4">
         {/* Skill tags */}
+        {/*
+          THE TWO CLASS STRINGS ARE WRITTEN OUT IN FULL, TWICE, ON PURPOSE.
+
+          Factoring the shared half into a constant and composing it — with a
+          template literal or through `cn()` — is how the /schedule round hover
+          shipped dead: Tailwind scans source TEXT and never evaluates it, so a
+          class it cannot see written out is a class it never emits, and the
+          markup still looks perfect. `cn()` carries a second hazard here:
+          twMerge does not know the custom `9e-*` scales, so it cannot be
+          trusted to keep `text-xs` alongside `text-9e-slate-dp-50`.
+
+          Duplication is the cheap half of that trade. test/fs/tailwindArbitrary
+          ValueRules COMPILES this file and asserts the hover rules exist.
+
+          FOCUS is deliberately absent from both strings. globals.css carries an
+          app-wide `*:focus-visible { ring-2 ring-9e-brand ring-offset-2 }`, so
+          the anchor is already focus-visible; adding a local ring — or setting
+          `--tw-ring-color` inline, which is a global custom property on the
+          element — would repaint that rule for this one capsule.
+        */}
         {skillLinks.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {skillLinks.map(({ skill: s }) => (
-              <span
-                key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-              >
-                {s.skill_name}
-              </span>
-            ))}
+            {skillLinks.map(({ skill: s, href }) =>
+              href ? (
+                <Link
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  href={href}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
+                >
+                  {s.skill_name}
+                </Link>
+              ) : (
+                <span
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                >
+                  {s.skill_name}
+                </span>
+              )
+            )}
           </div>
         )}
 
