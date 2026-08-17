@@ -67,6 +67,36 @@ const WebrootDocumentFileSchema = new mongoose.Schema(
      */
     restoredFrom: { type: String, default: '' },
 
+    /**
+     * THE NAME OF THE FILE THE ADMIN ACTUALLY PICKED. A LABEL, NOTHING ELSE.
+     *
+     * ══ THE GAP THIS CLOSES ═════════════════════════════════════════════════
+     * Every other identifying field on this row is the DESTINATION — always one
+     * of the frozen three, because that is what was overwritten. So the history
+     * could not answer the first question anybody asks after a bad replacement:
+     * which file did they upload? An admin uploaded `sample5.pdf` and the
+     * history read `how-to-create-chatgpt-account.pdf`, which is true about the
+     * target and useless about the act.
+     *
+     * ══ CLIENT-SUPPLIED AND UNVERIFIED. IT MUST NEVER REACH A PATH. ═════════
+     * `File.name` comes from the browser. It is not validated, not sanitised
+     * into a key, and not constrained to the frozen list — it cannot be, since
+     * its whole purpose is to record a name that is NOT one of the three.
+     *
+     * So it is display-only, and the boundary is structural rather than
+     * remembered: `blobPathname` and `publicPath` on this same row are derived
+     * server-side by `webrootUploadTarget(filename)` from the enum-locked
+     * `filename`, and this value is never an input to that. A guard asserts it
+     * never feeds a pathname — see test/fs/webrootSourceFilename.
+     *
+     * ══ '' MEANS UNKNOWN, AND IS NOT BACKFILLED ════════════════════════════
+     * Rows written before this field existed have no source name and there is
+     * no honest way to invent one. They render as unknown. Rendering the
+     * DESTINATION in its place would recreate the exact confusion above, so the
+     * empty case is asserted rather than left to a template default.
+     */
+    sourceFilename: { type: String, default: '' },
+
     bytes: { type: Number, default: 0 },
     contentType: { type: String, default: 'application/pdf' },
 

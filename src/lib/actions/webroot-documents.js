@@ -175,7 +175,7 @@ export async function prepareWebrootReplacement({ filename, bytes } = {}) {
  * propagation poll waits to see at the public URL.
  */
 export async function recordWebrootReplacement({
-  filename, archivePathname, bytes, contentType, sha256,
+  filename, archivePathname, bytes, contentType, sha256, sourceFilename,
 } = {}) {
   const session = await requireAdmin('media');
 
@@ -195,6 +195,18 @@ export async function recordWebrootReplacement({
       blobPathname: target.blobPathname,
       publicPath: target.publicPath,
       archivePathname: String(archivePathname ?? ''),
+      /**
+       * A LABEL. It is stored beside the derived fields above, never used to
+       * build one: `blobPathname` and `publicPath` come from
+       * `webrootUploadTarget(filename)` on the enum-locked destination, three
+       * lines up, and nothing here reads this value.
+       *
+       * Capped at 255 to bound what an unverified client can write into a row
+       * that a listing renders. Not sanitised beyond that, deliberately — the
+       * point is to record what was picked, and React escapes it on the way
+       * out.
+       */
+      sourceFilename: String(sourceFilename ?? '').slice(0, 255),
       bytes: Number(bytes) || 0,
       contentType: String(contentType || 'application/pdf'),
       sha256: String(sha256 ?? ''),
@@ -264,6 +276,10 @@ export async function listWebrootReplacements({ filename } = {}) {
       .find(query, {
         filename: 1, publicPath: 1, archivePathname: 1, bytes: 1,
         sha256: 1, uploadedAt: 1, uploadedBy: 1, version: 1,
+        // The name the admin picked. Display-only; '' on every row written
+        // before the field existed, and those render as unknown rather than
+        // borrowing the destination.
+        sourceFilename: 1,
         // Empty on an ordinary replacement; the source archive key on a
         // restore. Projected so the history can say which rows are rollbacks.
         restoredFrom: 1,
