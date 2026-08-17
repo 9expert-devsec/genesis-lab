@@ -191,9 +191,20 @@ export default async function HomePage() {
           snapshotAvailable={landing._meta?.snapshotAvailable !== false}
         />
 
-        <NewCoursesSection courses={newCoursesWithSchedules} currentYear={siteCurrentYear()} />
+        {/* `skillSlugs` is the SAME map already fetched above for the
+            Program/Skill selector — one getNavMenuData() call feeds both. The
+            course cards' skill capsules link through it; see
+            lib/skillCapsuleHref. */}
+        <NewCoursesSection
+          courses={newCoursesWithSchedules}
+          currentYear={siteCurrentYear()}
+          skillSlugs={skillSlugs}
+        />
 
-        <OnlineCoursesSection courses={onlineCoursesForSection} />
+        <OnlineCoursesSection
+          courses={onlineCoursesForSection}
+          skillSlugs={skillSlugs}
+        />
 
         {/* <InhouseCTA /> */}
 

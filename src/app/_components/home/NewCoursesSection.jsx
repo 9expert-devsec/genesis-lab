@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { BookOpen, ExternalLink } from 'lucide-react';
 import { CourseCarousel } from './CourseCarousel';
 
-export function NewCoursesSection({ courses = [], currentYear }) {
+export function NewCoursesSection({ courses = [], currentYear, skillSlugs = {} }) {
   return (
     <section className="bg-9e-ice px-4 py-12 lg:px-6 dark:bg-9e-border">
       <div className="mx-auto max-w-[1200px]">
@@ -24,7 +24,7 @@ export function NewCoursesSection({ courses = [], currentYear }) {
           </Link>
         </div>
 
-        <CourseCarousel courses={courses} currentYear={currentYear} />
+        <CourseCarousel courses={courses} currentYear={currentYear} skillSlugs={skillSlugs} />
       </div>
     </section>
   );

@@ -13,7 +13,7 @@ import { OnlineCourseCard } from './OnlineCourseCard';
  * Header CTA links out to 9Expert Academy (`siteConfig.academyUrl`)
  * where these courses actually run.
  */
-export function OnlineCoursesSection({ courses = [] }) {
+export function OnlineCoursesSection({ courses = [], skillSlugs = {} }) {
   if (!courses.length) return null;
 
   return (
@@ -37,7 +37,11 @@ export function OnlineCoursesSection({ courses = [] }) {
           </Link>
         </div>
 
-        <CourseCarousel courses={courses} CardComponent={OnlineCourseCard} />
+        <CourseCarousel
+          courses={courses}
+          CardComponent={OnlineCourseCard}
+          skillSlugs={skillSlugs}
+        />
       </div>
     </section>
   );

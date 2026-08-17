@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Award, BarChart2, BookOpen, Clock, ExternalLink } from "lucide-react";
 import { onlineCourseHref } from "@/lib/onlineCourseHref";
 import { cn } from "@/lib/utils";
+import { skillCapsuleHref } from "@/lib/skillCapsuleHref";
+import { logUnresolvedCapsule } from "@/lib/logUnresolvedCapsule";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
 
@@ -16,7 +18,7 @@ const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
  * at 9Expert Academy via `website_urls[0]`, falling back to the
  * academy root if the course doesn't carry a direct link.
  */
-export function OnlineCourseCard({ course, className }) {
+export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
   if (!course) return null;
 
   const id = typeof course.o_course_id === "string"
@@ -42,6 +44,14 @@ export function OnlineCourseCard({ course, className }) {
   const skillTags = Array.isArray(course.skills)
     ? course.skills.filter((s) => s && typeof s === "object" && s.skill_name)
     : [];
+
+  // Same resolution as the in-class CourseCard, by ID and never by the printed
+  // name. See lib/skillCapsuleHref. A null leaves the capsule a plain <span>.
+  const skillLinks = skillTags.slice(0, 3).map((s) => {
+    const href = skillCapsuleHref(s, skillSlugs);
+    if (!href) logUnresolvedCapsule({ skill: s, where: "OnlineCourseCard", courseId: id });
+    return { skill: s, href };
+  });
 
   // ONE definition, shared with the /search result card — see the module.
   const ctaHref = onlineCourseHref(course);
@@ -87,9 +97,9 @@ export function OnlineCourseCard({ course, className }) {
       </a>
 
       <div className="flex flex-1 flex-col p-4">
-        {skillTags.length > 0 && (
+        {skillLinks.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {skillTags.slice(0, 3).map((s) => (
+            {skillLinks.map(({ skill: s }) => (
               <span
                 key={s._id ?? s.skill_id ?? s.skill_name}
                 className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
