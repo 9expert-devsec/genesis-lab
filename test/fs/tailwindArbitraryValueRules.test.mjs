@@ -166,6 +166,23 @@ const CASES = [
     className: 'hover:border-9e-action',
     property: 'border-color',
   },
+  {
+    /**
+     * The online card's capsule, same substitution, same tokens.
+     *
+     * ONLY THE BORDER IS CASED HERE, deliberately. `hover:text-9e-action` is
+     * masked in this file exactly as it is in CourseCard — the course title's
+     * <h3> carries the identical class — so a text case would be a known-green
+     * assertion, which is worse than no assertion because it reads as coverage.
+     * `hover:border-9e-action` is unique to the capsule in both files and is
+     * what actually fails when the capsule's class stops compiling. The full
+     * reasoning is on the CourseCard text case above.
+     */
+    what: 'the online-card skill capsule hover (border)',
+    file: 'src/app/_components/home/OnlineCourseCard.jsx',
+    className: 'hover:border-9e-action',
+    property: 'border-color',
+  },
 ];
 
 /** Compile Tailwind's utilities over `content` and return the CSS. */

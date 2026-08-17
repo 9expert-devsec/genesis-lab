@@ -97,16 +97,38 @@ export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
       </a>
 
       <div className="flex flex-1 flex-col p-4">
+        {/*
+          Same substitution and same class-literal rule as the in-class
+          CourseCard — both strings written out in full, never composed, because
+          Tailwind scans text and never evaluates it. Focus is left to the
+          app-wide `*:focus-visible` rule in globals.css.
+
+          THE CAPSULE IS AN INTERNAL LINK ON A CARD WHOSE EVERY OTHER LINK IS
+          EXTERNAL. The thumbnail, title and CTA all open 9Expert Academy in a
+          new tab; this one navigates in place, to our own catalogue. That is
+          deliberate — the capsule means "this skill", not "this course" — so it
+          carries neither `target` nor the outbound icon the other three use.
+        */}
         {skillLinks.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {skillLinks.map(({ skill: s }) => (
-              <span
-                key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-              >
-                {s.skill_name}
-              </span>
-            ))}
+            {skillLinks.map(({ skill: s, href }) =>
+              href ? (
+                <Link
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  href={href}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
+                >
+                  {s.skill_name}
+                </Link>
+              ) : (
+                <span
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                >
+                  {s.skill_name}
+                </span>
+              )
+            )}
           </div>
         )}
 
