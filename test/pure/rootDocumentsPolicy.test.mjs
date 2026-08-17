@@ -7,7 +7,7 @@ import {
   rootFileExtension,
 } from '@/lib/rootDocuments.mjs';
 import { NO_STORE_DOCUMENT_EXTENSIONS, RAW_EXTENSION_LIST } from '@/lib/legacyTransforms.mjs';
-import { WEBROOT_DOCUMENTS, WEBROOT_MAX_BYTES } from '@/lib/webrootDocuments.mjs';
+import { WEBROOT_MAX_BYTES } from '@/lib/webrootDocuments.mjs';
 
 /**
  * THE POLICY FOR PUBLISHING A NEW FILE AT THE SITE ROOT.
@@ -87,29 +87,21 @@ test('the cap is 10 MB, and it is NOT the webroot cap', () => {
     'the function path is the tighter one — that is the whole reason it has its own number');
 });
 
-test('the frozen three STRADDLE this cap, and the cap is not why any of them work', () => {
-  // MEASURED against the numbers, because they do NOT all sit on one side: two
-  // are far above the cap and the smallest is comfortably under it. That is the
-  // honest shape and it is the stronger argument — these are served by STATIC
-  // REWRITES and never touch a function, so the cap does not reach them in
-  // either direction. If someone "fixes" the apparent inconsistency by raising
-  // the cap to 42.58 MB, the last assertion here goes red and says why.
-  const FROZEN_MB = [1.80, 21.84, 42.58];
-  const capMb = ROOT_FILE_MAX_BYTES / (1024 * 1024);
-  assert.equal(FROZEN_MB.length, WEBROOT_DOCUMENTS.length,
-    'one size per frozen document, or this fixture has drifted from the list');
-
-  const above = FROZEN_MB.filter((mb) => mb > capMb);
-  const below = FROZEN_MB.filter((mb) => mb <= capMb);
-  assert.deepEqual(above, [21.84, 42.58], 'two of the three are above the cap');
-  assert.deepEqual(below, [1.80],
-    'and one is UNDER it — so "they are all above the cap, and all fine" is not '
-    + 'the reason the cap does not apply to them. The reason is the static rewrite');
-
-  assert.ok(capMb < 42.58,
-    'the cap was raised to swallow the catalog. A file that large belongs on a '
-    + 'static rewrite, which is the escape hatch — not on a bigger cap');
-});
+// THE STRADDLE TEST USED TO BE HERE, AND WAS DELETED ON PURPOSE.
+//
+// It fed a hardcoded [1.80, 21.84, 42.58] through the live cap and asserted two
+// were above it and one below. Its only live input was ROOT_FILE_MAX_BYTES, so
+// its whole content was "the cap sits between 1.80 and 21.84 MB" — which the
+// test above pins EXACTLY, and an equality pin subsumes a range check. The
+// revert that raises the cap reddened both, so it never caught anything alone.
+//
+// What it did add was a false alarm: WEBROOT_DOCUMENTS gaining a fourth entry is
+// an explicitly supported deliberate act, and the length check would have gone
+// red on it for no reason. The reasoning it was really guarding — that the cap
+// does not reach the frozen three in EITHER direction, because they are served
+// by static rewrites and never touch a function — lives in the header of
+// src/lib/rootDocuments.mjs, which is where a rule with no falsifiable content
+// belongs.
 
 test('the refusal names the actual size, the cap, AND the escape hatch', () => {
   const msg = refuseRootFileSize(ROOT_FILE_MAX_BYTES + 1);
