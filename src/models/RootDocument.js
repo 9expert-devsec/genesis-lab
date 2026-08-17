@@ -185,15 +185,31 @@ const RootDocumentSchema = new mongoose.Schema(
  * It is derived UNCONDITIONALLY, overwriting anything supplied: a caller-chosen
  * key would let one row claim an address its `publicPath` does not name.
  *
- * ══ WHAT A HOOK DOES NOT COVER, STATED RATHER THAN ASSUMED ══════════════════
+ * ══ WHAT A HOOK DOES NOT COVER — AND IT IS ENFORCED, NOT DOCUMENTED ═════════
  *
  * Mongoose runs `pre('validate')` on `.save()`, `.create()` and `.validate()`
- * and NOT on `validateSync()`, `insertMany()` or `updateOne()`. So THE PUBLISH
- * PATH MUST USE `.save()`/`.create()`; the derivation is genuinely absent on the
- * bypass routes and this comment is the only thing that says so.
+ * and NOT on the query-level writers, which talk to the driver and never build a
+ * document at all. On those, `pathKey` IS NEVER DERIVED — so a row lands with
+ * whatever key the caller happened to pass, or with none.
  *
- * That asymmetry is exactly why the frozen-three refusal above is a VALIDATOR
- * and not part of this hook. Uniqueness degrades on a bypass. The protection of
+ * THE PUBLISH PATH MUST USE `.save()` OR `.create()`. Every one of these is
+ * BANNED on this model:
+ *
+ *     updateOne  updateMany  findOneAndUpdate  findByIdAndUpdate
+ *     replaceOne  bulkWrite  insertMany
+ *
+ * That ban is not left to this comment. test/fs/rootDocumentWrites.test.mjs
+ * scans src/ and scripts/ and fails if any of them is called on a binding
+ * imported from this file — and asserts this very list matches the one it
+ * enforces, so the two cannot drift. A comment stating a rule nobody enforces
+ * has burned this repo twice; this is the same rule with a guard under it.
+ *
+ * THE BAN IS SCOPED TO THIS MODEL. Those methods are correct and widely used
+ * elsewhere in the repo; a repo-wide ban would be wrong. What makes them wrong
+ * HERE is that this model's key is derived by middleware.
+ *
+ * The asymmetry is also why the frozen-three refusal above is a VALIDATOR and
+ * not part of this hook. Uniqueness degrades on a bypass. The protection of
  * three live public URLs does not.
  */
 RootDocumentSchema.pre('validate', function deriveLookupKey(next) {
