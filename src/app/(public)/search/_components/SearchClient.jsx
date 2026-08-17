@@ -51,17 +51,15 @@ const MONTH_TH = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
 ];
 
-const STATUS_STYLE = {
-  open:        { dot: 'bg-[#39b980]', text: 'text-[#39b980]', label: 'รับสมัคร' },
-  nearly_full: { dot: 'bg-[#ffc94a]', text: 'text-[#d4a017]', label: 'ใกล้เต็ม' },
-  full:        { dot: 'bg-[#ff4b55]', text: 'text-[#ff4b55]', label: 'เต็ม' },
-};
-
-const TYPE_COLOR = {
-  classroom: '#00CCFF',
-  hybrid:    '#8B5CF6',
-  online:    '#22C55E',
-};
+/**
+ * The delivery-type colours. Imported, not declared.
+ *
+ * This was a BYTE-IDENTICAL copy of /schedule's map — the cheapest kind of
+ * duplication to miss, because nothing about it ever looked wrong. It agreed
+ * right up until the moment someone edited one of the two, and two of the four
+ * copies that existed site-wide had already diverged by then.
+ */
+const TYPE_COLOR = TRAINING_TYPE_COLOR;
 
 const TYPE_LABEL = {
   classroom: 'Classroom',
@@ -90,30 +88,12 @@ const TYPE_LABEL = {
  * used to do by hand. Two digits is what every other schedule surface shows.
  */
 function formatDateLabel(scheduleItem) {
-  const dates = (scheduleItem?.dates ?? [])
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b);
-  if (dates.length === 0) return '-';
-  const first = dates[0];
-  const last  = dates[dates.length - 1];
-  const firstM = MONTH_TH[first.getMonth()];
-  if (dates.length === 1) {
-    return `${first.getDate()} ${firstM} ${first.getFullYear() + 543}`;
-  }
-  if (first.getMonth() === last.getMonth()) {
-    return `${first.getDate()}-${last.getDate()} ${firstM} ${first.getFullYear() + 543}`;
-  }
-  const lastM = MONTH_TH[last.getMonth()];
-  return `${first.getDate()} ${firstM} - ${last.getDate()} ${lastM} ${last.getFullYear() + 543}`;
+  return formatRoundDays(scheduleItem?.dates, { showMonth: true, showYear: true });
 }
 
-function formatArticleDate(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getDate()} ${MONTH_TH[d.getMonth()]} ${d.getFullYear() + 543}`;
-}
+// The article-date formatter that used to live here is gone with the date it
+// rendered — the article card's bottom row is a tag row now. `siteDateParts`
+// went with it; /articles still owns that formatting for its own list.
 
 // Compact Thai-locale date for promo range labels — 2-digit BE year.
 function formatPromoDate(iso) {
@@ -498,21 +478,20 @@ function CourseResultCard({ course, term }) {
   );
 }
 
-function ScheduleResultRow({ schedule, course, term }) {
-  const courseName = course?.course_name ?? schedule.course_name ?? '(ไม่ทราบชื่อหลักสูตร)';
-  const type = schedule.type ?? 'classroom';
-  const status = STATUS_STYLE[schedule.status] ?? STATUS_STYLE.open;
-  const typeColor = TYPE_COLOR[type] ?? TYPE_COLOR.classroom;
-  const typeLabel = TYPE_LABEL[type] ?? type;
-  const price = course?.course_price;
-
-  // Prefer internal registration page when we can (mirrors ScheduleCell logic).
-  const courseId = course?.course_id;
-  const internalHref =
-    schedule._id && courseId
-      ? `/registration/public?course=${String(courseId).toLowerCase()}&class=${schedule._id}`
-      : null;
-  const href = internalHref ?? schedule.signup_url ?? null;
+/**
+ * An ONLINE course result.
+ *
+ * The link LEAVES THE SITE: `target="_blank"`, and an external-link icon in
+ * place of the internal cards' arrow, so the difference is visible before the
+ * click rather than after it. The href itself comes from
+ * @/lib/onlineCourseHref, shared with the home-page card — that is behaviour,
+ * not styling, and it has one home regardless of how the cards look.
+ */
+function OnlineCourseResultCard({ course, term }) {
+  const href = onlineCourseHref(course);
+  const cover = course.o_course_cover_url;
+  const lessons = Number(course.o_number_lessons) || 0;
+  const price = Number(course.o_course_price) || 0;
 
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={RESULT_CARD}>
@@ -526,42 +505,48 @@ function ScheduleResultRow({ schedule, course, term }) {
             <MonitorPlay className="h-7 w-7" aria-hidden="true" />
           </span>
         )}
-        <p className="mt-0.5 text-xs text-gray-500">{formatDateLabel(schedule)}</p>
+        {/*
+          THE OUTBOUND MARKER, as an icon alone.
+
+          The "ไปที่ 9Expert Academy" text link is gone: the whole card is
+          already the link, so a call-to-action inside it was a second one for
+          the same destination. This is a decorative <span> — NOT a nested
+          <a> or <button>, which would be a focusable element inside an anchor.
+          The screen-reader equivalent is the sr-only line below, since an
+          aria-hidden icon says nothing.
+        */}
+        <span
+          aria-hidden="true"
+          className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-[#2486FF] shadow-sm"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </span>
       </div>
 
-      <span
-        className={`inline-flex shrink-0 items-center gap-1 text-xs font-semibold ${status.text}`}
-      >
-        <span className={`h-2 w-2 rounded-full ${status.dot}`} aria-hidden="true" />
-        {status.label}
-      </span>
-
-      <span className="shrink-0 text-sm font-bold text-[#0D1B2A]">
-        {!price || Number(price) === 0
-          ? 'Call .-'
-          : `${Number(price).toLocaleString('th-TH')} .-`}
-      </span>
-
-      {href ? (
-        href.startsWith('/') ? (
-          <Link
-            href={href}
-            className="shrink-0 rounded-9e-md bg-[#005CFF] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0046cc]"
-          >
-            สมัครเรียน →
-          </Link>
-        ) : (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 rounded-9e-md bg-[#005CFF] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0046cc]"
-          >
-            สมัครเรียน →
-          </a>
-        )
-      ) : null}
-    </div>
+      <div className={RESULT_BODY}>
+        <h3 className={RESULT_TITLE}>
+          {highlightText(course.o_course_name, term)}
+          <span className="sr-only"> (เปิดเว็บไซต์ภายนอก)</span>
+        </h3>
+        {/* The teaser is the card's body. No snippet: this card matches only
+            on name, code, program and teaser, and three of those four are
+            printed right here. */}
+        {course.o_course_teaser && (
+          <p className={RESULT_TEASER}>{highlightText(course.o_course_teaser, term)}</p>
+        )}
+        {/*
+          Lessons left, price right, and PINNED TO THE BOTTOM via `mt-auto` in a
+          column-flex body — so it stays on the card's baseline instead of
+          floating up under the title when the teaser is short or absent.
+        */}
+        <div className={RESULT_META_BOTTOM}>
+          <span>{lessons > 0 ? `${lessons} บทเรียน` : ''}</span>
+          <span className="font-semibold text-[#0D1B2A]">
+            {price === 0 ? 'ฟรี' : `${price.toLocaleString('th-TH')} .-`}
+          </span>
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -738,19 +723,12 @@ function ArticleTagRow({ tags, term }) {
 
 function ArticleResultCard({ article, term }) {
   return (
-    <Link
-      href={`/articles/${article.slug}`}
-      className="group flex gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md"
-    >
-      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+    <Link href={`/articles/${article.slug}`} className={RESULT_CARD}>
+      {/* next/image: article covers are admin-uploaded to Cloudinary and are
+          already rendered through it on /articles. */}
+      <div className={RESULT_COVER}>
         {article.coverUrl ? (
-          <Image
-            src={article.coverUrl}
-            alt={article.title ?? ''}
-            fill
-            sizes="80px"
-            className="object-cover"
-          />
+          <Image src={article.coverUrl} alt={article.title ?? ''} fill sizes={RESULT_COVER_SIZES} className={RESULT_COVER_IMG} />
         ) : (
           <span className={RESULT_COVER_FALLBACK}>
             <BookOpen className="h-7 w-7" aria-hidden="true" />
@@ -758,20 +736,22 @@ function ArticleResultCard({ article, term }) {
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        <h3 className="line-clamp-2 text-sm font-semibold text-[#0D1B2A] group-hover:text-[#005CFF]">
-          {highlightText(article.title, term)}
-        </h3>
+      <div className={RESULT_BODY}>
+        <h3 className={RESULT_TITLE}>{highlightText(article.title, term)}</h3>
         {article.excerpt && (
-          <p className="mt-1 line-clamp-2 text-xs text-gray-500">
-            {article.excerpt}
-          </p>
+          <p className={RESULT_TEASER}>{highlightText(article.excerpt, term)}</p>
         )}
-        {article.publishedAt && (
-          <p className="mt-2 text-xs text-gray-400">
-            {formatArticleDate(article.publishedAt)}
-          </p>
-        )}
+        {/*
+          NO SNIPPET, NO DATE.
+
+          The snippet is gone because this card matches on title, excerpt and
+          tags — and all three are now printed here, the tags as the row below.
+          The date went with it, and the cost is real and worth naming: an
+          article result no longer carries any recency signal at all. Tags say
+          what a piece is ABOUT, which is what a searcher is choosing between;
+          nothing on the card says how old it is.
+        */}
+        <ArticleTagRow tags={article.tags} term={term} />
       </div>
     </Link>
   );
@@ -1402,17 +1382,7 @@ export function SearchClient({ initialQ }) {
     }
   }
 
-  const showCourses     = activeTab === 'all' || activeTab === 'courses';
-  const showCareerPaths = activeTab === 'all' || activeTab === 'career-paths';
-  const showSchedules   = activeTab === 'all' || activeTab === 'schedules';
-  const showPromotions  = activeTab === 'all' || activeTab === 'promotions';
-  const showArticles    = activeTab === 'all' || activeTab === 'articles';
-  const isAll           = activeTab === 'all';
-  const visibleCourses       = isAll ? matchedCourses.slice(0, 6)      : matchedCourses;
-  const visibleCareerPaths   = isAll ? matchedCareerPaths.slice(0, 4)  : matchedCareerPaths;
-  const visibleSchedules     = isAll ? matchedSchedules.slice(0, 4)    : matchedSchedules;
-  const visiblePromotions    = isAll ? matchedPromotions.slice(0, 3)   : matchedPromotions;
-  const visibleArticles      = isAll ? matchedArticles.slice(0, 3)     : matchedArticles;
+  const isSearching = debouncedQ.trim().length >= SEARCH_MIN_CHARS;
 
   return (
     <div className="min-h-screen bg-[#F8FAFD]">
@@ -1479,6 +1449,9 @@ export function SearchClient({ initialQ }) {
               aria-label="ค้นหา"
               className="h-full w-full bg-transparent text-lg text-[#0D1B2A] placeholder:text-gray-400 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
+            {/* The ONE clear control. It sits AFTER the input in DOM order, so
+                Tab reaches the field first — a clear button a keyboard user hits
+                on the way IN is worse than none. */}
             {q.length > 0 && (
               <button
                 type="button"
@@ -1516,249 +1489,14 @@ export function SearchClient({ initialQ }) {
             </div>
           </div>
         ) : (
-          <>
-            {/* Summary + tabs */}
-            <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <p className="text-sm text-gray-500">
-                ผลการค้นหา{' '}
-                <span className="font-semibold text-[#0D1B2A]">
-                  &ldquo;{debouncedQ}&rdquo;
-                </span>{' '}
-                — พบ{' '}
-                <span className="font-bold text-[#005CFF]">{totalCount}</span>{' '}
-                รายการ
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {TABS.map((t) => {
-                  const count =
-                    t.key === 'all'           ? totalCount :
-                    t.key === 'courses'       ? matchedCourses.length :
-                    t.key === 'career-paths'  ? matchedCareerPaths.length :
-                    t.key === 'schedules'     ? matchedSchedules.length :
-                    t.key === 'promotions'    ? matchedPromotions.length :
-                                                matchedArticles.length;
-                  const active = activeTab === t.key;
-                  return (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setActiveTab(t.key)}
-                      className={
-                        'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ' +
-                        (active
-                          ? 'bg-[#005CFF] text-white shadow-sm'
-                          : 'border border-gray-200 bg-white text-[#0D1B2A] hover:border-[#005CFF]/40')
-                      }
-                    >
-                      {t.label} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {loading ? (
-              <ResultsSkeleton />
-            ) : totalCount === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-16 text-center">
-                <Search className="h-10 w-10 text-gray-300" aria-hidden="true" />
-                <p className="text-base font-semibold text-gray-500">
-                  ไม่พบผลลัพธ์สำหรับ &ldquo;{debouncedQ}&rdquo;
-                </p>
-                <p className="text-sm text-gray-400">ลองใช้คำค้นหาอื่น</p>
-              </div>
-            ) : (
-              <div className="space-y-10">
-                {showCourses && (
-                  <section role="region" aria-label="ผลการค้นหา: หลักสูตร">
-                    <SectionHeader
-                      icon={GraduationCap}
-                      title="หลักสูตร"
-                      count={matchedCourses.length}
-                    />
-                    {matchedCourses.length === 0 ? (
-                      <SectionEmpty
-                        icon={Search}
-                        message={`ไม่พบหลักสูตรที่ตรงกับ "${debouncedQ}"`}
-                      />
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          {visibleCourses.map((c) => (
-                            <CourseResultCard
-                              key={c._id ?? c.course_id}
-                              course={c}
-                              term={debouncedQ}
-                            />
-                          ))}
-                        </div>
-                        {isAll && matchedCourses.length > visibleCourses.length && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('courses')}
-                            className="mt-4 text-sm font-semibold text-[#2486FF] hover:underline"
-                          >
-                            ดูทั้งหมด ({matchedCourses.length}) →
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </section>
-                )}
-
-                {showCareerPaths && (
-                  <section role="region" aria-label="ผลการค้นหา: Career Path">
-                    <SectionHeader
-                      icon={Map}
-                      title="Career Path"
-                      count={matchedCareerPaths.length}
-                    />
-                    {matchedCareerPaths.length === 0 ? (
-                      <SectionEmpty
-                        icon={Map}
-                        message={`ไม่พบ Career Path ที่ตรงกับ "${debouncedQ}"`}
-                      />
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                          {visibleCareerPaths.map((cp) => (
-                            <CareerPathResultCard
-                              key={cp.career_path_id ?? cp._id ?? cp.api_slug ?? cp.slug}
-                              careerPath={cp}
-                              term={debouncedQ}
-                            />
-                          ))}
-                        </div>
-                        {isAll && matchedCareerPaths.length > visibleCareerPaths.length && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('career-paths')}
-                            className="mt-4 text-sm font-semibold text-[#2486FF] hover:underline"
-                          >
-                            ดูทั้งหมด ({matchedCareerPaths.length}) →
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </section>
-                )}
-
-                {showSchedules && (
-                  <section role="region" aria-label="ผลการค้นหา: ตารางอบรม">
-                    <SectionHeader
-                      icon={CalendarDays}
-                      title="ตารางอบรมที่กำลังเปิดรับสมัคร"
-                      count={matchedSchedules.length}
-                    />
-                    {matchedSchedules.length === 0 ? (
-                      <SectionEmpty
-                        icon={Search}
-                        message={`ไม่พบรอบอบรมที่ตรงกับ "${debouncedQ}"`}
-                      />
-                    ) : (
-                      <>
-                        <div className="space-y-3">
-                          {visibleSchedules.map((s, i) => (
-                            <ScheduleResultRow
-                              key={s._id ?? i}
-                              schedule={s}
-                              course={courseMap[String(s.course?._id ?? s.course ?? '')]}
-                              term={debouncedQ}
-                            />
-                          ))}
-                        </div>
-                        {isAll && matchedSchedules.length > visibleSchedules.length && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('schedules')}
-                            className="mt-4 text-sm font-semibold text-[#2486FF] hover:underline"
-                          >
-                            ดูทั้งหมด ({matchedSchedules.length}) →
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </section>
-                )}
-
-                {showPromotions && (
-                  <section role="region" aria-label="ผลการค้นหา: โปรโมชัน">
-                    <div className="mb-4 flex items-center gap-2">
-                      <Tag className="h-5 w-5 text-amber-500" aria-hidden="true" />
-                      <h2 className="text-lg font-bold text-[#0D1B2A]">โปรโมชัน</h2>
-                      <span className="inline-flex items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
-                        {matchedPromotions.length}
-                      </span>
-                    </div>
-                    {matchedPromotions.length === 0 ? (
-                      <SectionEmpty
-                        icon={Tag}
-                        message={`ไม่พบโปรโมชันที่ตรงกับ "${debouncedQ}"`}
-                      />
-                    ) : (
-                      <>
-                        <div className="space-y-3">
-                          {visiblePromotions.map((p) => (
-                            <PromotionResultCard
-                              key={p.promotion_id ?? p._id ?? p.api_slug}
-                              promotion={p}
-                              term={debouncedQ}
-                            />
-                          ))}
-                        </div>
-                        {isAll && matchedPromotions.length > visiblePromotions.length && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('promotions')}
-                            className="mt-4 text-sm font-semibold text-[#2486FF] hover:underline"
-                          >
-                            ดูทั้งหมด ({matchedPromotions.length}) →
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </section>
-                )}
-
-                {showArticles && (
-                  <section role="region" aria-label="ผลการค้นหา: บทความ">
-                    <SectionHeader
-                      icon={BookOpen}
-                      title="บทความ"
-                      count={matchedArticles.length}
-                    />
-                    {matchedArticles.length === 0 ? (
-                      <SectionEmpty
-                        icon={Search}
-                        message={`ไม่พบบทความที่ตรงกับ "${debouncedQ}"`}
-                      />
-                    ) : (
-                      <>
-                        <div className="space-y-3">
-                          {visibleArticles.map((a) => (
-                            <ArticleResultCard
-                              key={a.slug ?? a._id}
-                              article={a}
-                              term={debouncedQ}
-                            />
-                          ))}
-                        </div>
-                        {isAll && matchedArticles.length > visibleArticles.length && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab('articles')}
-                            className="mt-4 text-sm font-semibold text-[#2486FF] hover:underline"
-                          >
-                            ดูทั้งหมด ({matchedArticles.length}) →
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </section>
-                )}
-              </div>
-            )}
-          </>
+          <SearchResults
+            status={state.status}
+            term={debouncedQ}
+            data={state.data}
+            requestedTab={requestedTab}
+            onTabChange={setRequestedTab}
+            onRetry={() => setRetryToken((n) => n + 1)}
+          />
         )}
       </div>
     </div>
