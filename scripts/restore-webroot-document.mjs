@@ -21,6 +21,20 @@
  * injected, so a test can make the safety archive fail and prove the restore
  * copy was never attempted. This file is the wiring and the operator interface.
  *
+ * ══ MONGO IS REACHED BEFORE BLOB IS TOUCHED ═════════════════════════════════
+ *
+ * This file used to reach Mongo for the first time in `recordRestore`, which
+ * runs after both Blob copies. A connection from here has been MEASURED as
+ * intermittently unreachable — twice over 70 s, then 809 ms and 665 ms — so an
+ * outage at the wrong moment left the bytes replaced and the record missing:
+ * the 2026-08-10 defect shape, reached by an outage instead of a stale CDN read.
+ *
+ * `ensureRecordReachable` is now handed to the flow as step 4½ and runs before
+ * the first mutation. On failure the run stops having changed NOTHING, says so
+ * in those words, and exits 1. What did NOT change: the 15 s timeout. The cause
+ * of the >70 s waits is NOT ESTABLISHED, and a larger number would only make the
+ * failure slower. The order was the defect.
+ *
  * ══ NO --apply, NO RECEIPT ══════════════════════════════════════════════════
  *
  * The flag is `--commit`, matching scripts/rewrite-legacy-references.mjs rather
@@ -106,6 +120,39 @@ const sha256Of = (bytes) => createHash('sha256').update(bytes).digest('hex');
 /** Convenience for the listing, which wants a hash and not the bytes. */
 const hashOf = async (pathname) => sha256Of(await fetchFreshBytes(pathname));
 
+// ── the record, proved reachable BEFORE anything is written ─────────────────
+
+/**
+ * Connect to Mongo and PING it. Step 4½'s dependency — see restoreFlow.mjs.
+ *
+ * MEASURED: a connection from a node script here is intermittently unreachable
+ * — twice over 70 s, then 809 ms and 665 ms on the next attempts. Recording ran
+ * AFTER both Blob copies, so an outage in the wrong 30 seconds left Blob changed
+ * and Mongo not: the 2026-08-10 defect shape reached without any CDN involved.
+ *
+ * A PING, NOT JUST A CONNECT. `mongoose.connect` can resolve against a pooled
+ * or half-open connection; the ping is a round trip the server has to answer,
+ * which is the thing the record actually needs to work.
+ *
+ * NO NEW TIMEOUT NUMBER. 15 s is what recordRestore and showListing already
+ * pass, and the >70 s cause is NOT ESTABLISHED — a bigger number would only
+ * make the failure slower, never safer. It is the ORDER that was wrong here.
+ */
+async function ensureRecordReachable() {
+  if (!process.env.MONGODB_URI) {
+    return { ok: false, error: 'MONGODB_URI ไม่ได้ตั้งค่า — ส่ง --env-file=.env.local' };
+  }
+  try {
+    if (mongoose.connection.readyState !== 1) {
+      await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 15_000 });
+    }
+    await mongoose.connection.db.admin().command({ ping: 1 });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? String(err) };
+  }
+}
+
 const deps = {
   headLive: headOrNull,
   headArchive: headOrNull,
@@ -114,6 +161,7 @@ const deps = {
   }),
   fetchFreshBytes,
   sha256: sha256Of,
+  ensureRecordReachable,
   nowMs: () => Date.now(),
   wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
 };
@@ -203,6 +251,11 @@ async function showListing() {
  * as a rollback rather than as an ordinary replacement — see the model.
  */
 async function recordRestore(result) {
+  // Both guards below are now UNREACHABLE on the commit path: step 4½ refuses
+  // the whole restore when MONGODB_URI is unset or the ping fails, so by the
+  // time bytes have moved this connection has already answered once. They stay
+  // as belt-and-braces for a connection that drops in between — the window step
+  // 4½ narrows but cannot close.
   if (!process.env.MONGODB_URI) {
     console.log('  (MONGODB_URI unset — the restore was NOT recorded)');
     return;
@@ -292,6 +345,24 @@ async function main() {
     console.log('══ NOTHING WAS WRITTEN. ════════════════════════════════════════════════');
     await mongoose.disconnect().catch(() => {});
     return;
+  }
+
+  // ── the record was unreachable, so the restore never started ──────────────
+  //
+  // Its own branch, and the wording is the feature. An operator reading this
+  // mid-incident is deciding whether to re-run; a generic "✖ record-unreachable"
+  // would leave them guessing whether a half restore happened, and both guesses
+  // are expensive. This says outright that nothing moved.
+  if (result.status === RESTORE.RECORD_UNREACHABLE) {
+    console.error(`✖ ${result.error}`);
+    console.error('');
+    console.error('══ NOTHING WAS CHANGED. ════════════════════════════════════════════════');
+    console.error('   The database is checked BEFORE the first byte is copied, so no');
+    console.error('   archive was made and the live object was not touched. This command');
+    console.error('   is SAFE TO RETRY once the database answers.');
+    console.error('');
+    await mongoose.disconnect().catch(() => {});
+    process.exit(1);
   }
 
   // A REAL failure is one head() saw. Everything else records — see the RESTORE

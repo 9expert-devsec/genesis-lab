@@ -57,6 +57,9 @@ function spies(overrides = {}) {
     },
     fetchFreshBytes: async (p) => { log.push(`fetch:${p}`); return hashes.get(p) ?? null; },
     sha256: (v) => v,
+    // Step 4½. It goes in the SAME log as the copies, which is the only way the
+    // ordering claim below can be made about a position rather than a count.
+    ensureRecordReachable: async () => { log.push('recordCheck'); return { ok: true }; },
     nowMs: () => clock,
     wait: async (ms) => { log.push(`wait:${ms}`); clock += ms; },
   };
@@ -114,6 +117,108 @@ test('ORDERED CALL LOG: head() runs BEFORE the first public read of the restored
   assert.ok(fetchAt > -1, 'no public read after the restore copy');
   assert.ok(headAt < fetchAt,
     `head() must precede the public read. After-copy log was:\n${after.join('\n')}`);
+});
+
+// ── STEP 4½: THE RECORD IS REACHED BEFORE ANY BYTE MOVES ────────────────────
+//
+// The 2026-08-10 defect shape by a second route. Recording used to run AFTER
+// both copies, and a Mongo connection from the operator script is MEASURED
+// intermittently unreachable (>70 s twice, then 809 ms / 665 ms). An outage in
+// the wrong 30 seconds therefore left BLOB CHANGED AND MONGO NOT — with no CDN
+// involved at all.
+//
+// The claims are the same species as step 6's: negative, and about ORDER. A
+// failing check must yield a copy count of ZERO, not merely a result that says
+// it failed — which a flow could report having already overwritten the object.
+
+test('the record check FAILS → ZERO Blob mutations', async () => {
+  const s = spies({
+    ensureRecordReachable: async () => { s.log.push('recordCheck'); return { ok: false, error: 'no primary' }; },
+  });
+  const { r, recordCount } = await runAndRecord(s.deps);
+
+  assert.equal(r.status, RESTORE.RECORD_UNREACHABLE);
+  assert.equal(s.log.filter((l) => l.startsWith('copy:')).length, 0,
+    `THE RESTORE RAN WITH NO RECORD TO WRITE TO. Log was:\n${s.log.join('\n')}`);
+  assert.equal(recordCount, 0);
+  assert.equal(restoreDidWrite(r.status), false);
+  assert.match(r.error, /no primary/, 'the refusal must carry the underlying reason');
+});
+
+test('CONTROL: the copy spy DOES count when the record check SUCCEEDS', async () => {
+  // Without this the zero above is vacuous — it would pass just as well for a
+  // fixture whose copy spy never records, or for a flow that copies nothing on
+  // any input whatsoever.
+  const s = spies();
+  const r = await run(s.deps);
+  assert.equal(r.status, RESTORE.RESTORED_VERIFIED);
+  assert.equal(s.log.filter((l) => l.startsWith('copy:')).length, 2,
+    'the same fixture, with the check passing, must reach BOTH copies');
+});
+
+test('ORDERED CALL LOG: the record check precedes the FIRST copy', async () => {
+  // A count of 2 copies after a passing check does not say the check ran first.
+  // Position does.
+  const s = spies();
+  await run(s.deps);
+  const checkAt = firstIndex(s.log, /^recordCheck$/);
+  const firstCopy = firstIndex(s.log, /^copy:/);
+  assert.ok(checkAt > -1, `the check never ran. Log:\n${s.log.join('\n')}`);
+  assert.ok(firstCopy > -1, 'nothing was copied, so the ordering claim is vacuous');
+  assert.ok(checkAt < firstCopy,
+    `THE ORDER IS THE FEATURE. Log was:\n${s.log.join('\n')}`);
+});
+
+test('CONTROL: a flow that copied BEFORE checking would be caught', async () => {
+  // The defect, simulated: mutate first, discover the record is down after. It
+  // still REPORTS a refusal — which is exactly why the assertions above are
+  // about the log and not about the status.
+  const log = ['copy:live->archive', 'recordCheck'];
+  const r = { status: RESTORE.RECORD_UNREACHABLE };
+  assert.equal(r.status, RESTORE.RECORD_UNREACHABLE, 'it still reports the refusal…');
+  assert.notEqual(log.filter((l) => l.startsWith('copy:')).length, 0,
+    '…while having already copied. The real test asserts zero copies');
+  assert.ok(firstIndex(log, /^recordCheck$/) > firstIndex(log, /^copy:/),
+    'and the ordering assertion rejects this log too');
+});
+
+test('a check that THROWS is a refusal, not a crash — still zero copies', async () => {
+  // The real check talks to a network, so it throws as readily as it returns
+  // false. Propagating would exit through main()'s catch with a stack trace
+  // instead of the message an operator mid-incident needs.
+  const s = spies({
+    ensureRecordReachable: async () => { s.log.push('recordCheck'); throw new Error('ETIMEDOUT after 70s'); },
+  });
+  const r = await run(s.deps);
+  assert.equal(r.status, RESTORE.RECORD_UNREACHABLE);
+  assert.equal(s.log.filter((l) => l.startsWith('copy:')).length, 0);
+  assert.match(r.error, /ETIMEDOUT after 70s/);
+});
+
+test('FAILS CLOSED: omitting the dependency entirely refuses, it does not skip the step', async () => {
+  // The failure this defends against is a caller that simply forgets to wire
+  // the check. Defaulting to "fine" would hand back the pre-fix behaviour with
+  // every test in this file still green.
+  const s = spies();
+  delete s.deps.ensureRecordReachable;
+  const r = await run(s.deps);
+  assert.equal(r.status, RESTORE.RECORD_UNREACHABLE);
+  assert.equal(s.log.filter((l) => l.startsWith('copy:')).length, 0);
+  assert.match(r.error, /ensureRecordReachable/,
+    'the refusal must name the missing dependency, or a wiring mistake reads as an outage');
+});
+
+test('a DRY RUN does not need the record, and still writes nothing', async () => {
+  // Deliberate: a dry run has nothing to be inconsistent with, and its whole
+  // value is that it still works while the rest of the world is broken.
+  const s = spies({
+    ensureRecordReachable: async () => { s.log.push('recordCheck'); return { ok: false, error: 'down' }; },
+  });
+  const r = await run(s.deps, { commit: false });
+  assert.equal(r.status, RESTORE.PLANNED);
+  assert.equal(s.log.filter((l) => l.startsWith('copy:')).length, 0);
+  assert.equal(firstIndex(s.log, /^recordCheck$/), -1,
+    'the dry run must not even ask — it writes nothing either way');
 });
 
 // ── THE FALSE NEGATIVE — the bug this change exists to fix ──────────────────
@@ -236,7 +341,8 @@ test('the enum has NO failure-from-absence member', async () => {
   assert.equal(restoreDidWrite(RESTORE.RESTORED_VERIFIED), true);
   assert.equal(restoreDidWrite(RESTORE.RESTORED_UNOBSERVED), true);
   for (const s of [RESTORE.RESTORE_FAILED, RESTORE.RESTORE_NOT_PRESENT,
-    RESTORE.RESTORE_SIZE_MISMATCH, RESTORE.ARCHIVE_MISSING, RESTORE.PLANNED]) {
+    RESTORE.RESTORE_SIZE_MISMATCH, RESTORE.ARCHIVE_MISSING, RESTORE.PLANNED,
+    RESTORE.RECORD_UNREACHABLE]) {
     assert.equal(restoreDidWrite(s), false, `${s} must not record`);
   }
 });
@@ -395,6 +501,7 @@ test('resolveTarget redirects the flow for rehearsal, and the key check still ap
     copy: async (from, to) => { objects.set(to, objects.get(from)); hashes.set(to, hashes.get(from)); },
     fetchFreshBytes: async (p) => hashes.get(p) ?? null,
     sha256: (v) => v,
+    ensureRecordReachable: async () => ({ ok: true }),
     nowMs: () => clock,
     wait: async (ms) => { clock += ms; },
   };
