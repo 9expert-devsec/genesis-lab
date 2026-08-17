@@ -43,7 +43,31 @@ test('the save path plans from the RAW before-document, not the audit summary', 
   const { code } = readSource(ACTIONS);
   assert.match(code, /const beforeDoc = await CourseExtension\.findOne\(\{ courseId \}\)\.lean\(\);/);
   assert.match(code, /const before = extensionFields\(beforeDoc\);/);
-  assert.match(code, /before: beforeDoc,\s*after: update,/);
+
+  /**
+   * ── `after` MOVED FROM `update` TO `doc`, AND THAT IS THE POINT NOW ───────
+   * This line used to assert `after: update`. It no longer can, and the change
+   * is deliberate rather than incidental.
+   *
+   * `update` became PARTIAL: the action now writes only the keys a caller
+   * actually named, so omission means leave-alone instead of clear (the
+   * omisePaymentEnabled incident). A partial object is exactly the wrong input
+   * for THIS plan, for the same reason the summary was: `isVisible` reads
+   * `isPublished !== false`, so a MISSING flag reads as visible. Feeding it a
+   * partial update would make any caller that omits the flag look like a
+   * hide→show flip and fire the full layout revalidation on an ordinary edit —
+   * the identical failure this test's own docstring describes, arriving from a
+   * third direction.
+   *
+   * `doc` is the post-write document from `{ new: true }`, so it carries the
+   * EFFECTIVE state of every field, written or carried forward. It was the more
+   * correct argument even before; now it is the only correct one.
+   */
+  assert.match(code, /before: beforeDoc,\s*after: doc,/);
+  assert.doesNotMatch(
+    code, /before: beforeDoc,\s*after: update,/,
+    'the plan is back on the PARTIAL update object',
+  );
 });
 
 test('CONTROL: the audit trail still gets the SUMMARY, not the raw document', () => {

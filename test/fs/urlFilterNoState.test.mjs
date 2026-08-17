@@ -163,6 +163,24 @@ const FILTER_SCREENS = [
     component: 'CoursesAdminClient',
     filters: ['q', 'program', 'type'],
   },
+  /**
+   * Added the round the admin schedule table's from/to month range shipped.
+   * All three plain filters (`search`, `filterProgram`, `filterStatus`) were
+   * `useState`, converted together with the new month range rather than
+   * bolting the range onto a shape that was already wrong — the same rule
+   * CoursesAdminClient's own entry above documents.
+   *
+   * Named `filterProgram` / `filterStatus` rather than the bare `program` /
+   * `status` other screens use: this file's ScheduleModal already owns a
+   * `status` (the round's own field) with its own `setStatus`, and the bare
+   * name would have made `no filter setter survives` below fail on a setter
+   * that has nothing to do with the URL filter.
+   */
+  {
+    rel: 'src/app/admin/schedules/_components/SchedulesAdminClient.jsx',
+    component: 'SchedulesAdminClient',
+    filters: ['search', 'filterProgram', 'filterStatus', 'monthFrom', 'monthTo'],
+  },
 ];
 
 /**

@@ -15,8 +15,10 @@ import { getLandingData } from "@/lib/landing/getLandingData";
 import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
 import { siteConfig } from "@/config/site";
 
+import { HeroSection } from "./_components/home/HeroSection";
 import { HeroBanner } from "./_components/home/HeroBanner";
 import { HeroBannerCarousel } from "./_components/home/HeroBannerCarousel";
+import { FeatureContentSection } from "./_components/home/FeatureContentSection";
 import { ServicesSection } from "./_components/home/ServicesSection";
 import { ProgramSelector } from "./_components/home/ProgramSelector";
 import { NewCoursesSection } from "./_components/home/NewCoursesSection";
@@ -120,7 +122,12 @@ export default async function HomePage() {
   return (
     <>
       <TopNotificationBar bars={bars} />
-      <PublicHeader />
+      {/* `overlay` is opt-in and Home is the ONLY route that passes it: the
+          header is shared by every public page, and every other one must keep
+          its opaque per-theme treatment. It goes transparent while the hero
+          below is under it and switches back at that hero's bottom edge — see
+          src/lib/heroOverlay.js. */}
+      <PublicHeader overlay />
 
       {/* Organization structured data — surfaces the brand panel and
           course catalogue in Google's SERP. Inlined here (vs. layout)
@@ -173,13 +180,34 @@ export default async function HomePage() {
           9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง
         </h1>
 
-        {banners.length > 0 ? (
+        {/* FIRST thing in <main> after the hidden H1. It pulls itself up under
+            the sticky header (see HeroSection) — the banner carousel below is
+            untouched, including its banners.length fallback. */}
+        <HeroSection />
+
+        {/* ── THE BANNER SLIDE IS SWAPPED OUT, NOT REMOVED ──────────────────
+            Feature Content takes the slot the Banner Slide held. Reverting is
+            deleting this comment and un-commenting the ternary — nothing else
+            moved:
+              • HeroBannerCarousel and HeroBanner are untouched and still
+                imported above;
+              • `banners` is still destructured from getLandingData() and the
+                landing cache still syncs it, so the data path is warm and the
+                admin's banner edits keep flowing;
+              • the `banners.length > 0` fallback to <HeroBanner /> is intact.
+            The ternary is preserved verbatim so the revert is a one-line
+            decision by a reviewer, not a reconstruction. */}
+        {/* {banners.length > 0 ? (
           <HeroBannerCarousel banners={banners} />
         ) : (
           <HeroBanner />
-        )}
+        )} */}
 
-        <ServicesSection />
+        {/* Fed by the SAME `banners` array the carousel above used to take —
+            the landing_cache snapshot, unchanged. The Banner shape stops at
+            src/lib/home/featureContentFromBanners.js; this call site just
+            hands the payload across. */}
+        <FeatureContentSection banners={banners} />
 
         <ProgramSelector
           programs={programs}
@@ -191,17 +219,32 @@ export default async function HomePage() {
           snapshotAvailable={landing._meta?.snapshotAvailable !== false}
         />
 
-        <NewCoursesSection courses={newCoursesWithSchedules} currentYear={siteCurrentYear()} />
+        {/* `skillSlugs` is the SAME map already fetched above for the
+            Program/Skill selector — one getNavMenuData() call feeds both. The
+            course cards' skill capsules link through it; see
+            lib/skillCapsuleHref. */}
+        <NewCoursesSection
+          courses={newCoursesWithSchedules}
+          currentYear={siteCurrentYear()}
+          skillSlugs={skillSlugs}
+        />
 
-        <OnlineCoursesSection courses={onlineCoursesForSection} />
+        <OnlineCoursesSection
+          courses={onlineCoursesForSection}
+          skillSlugs={skillSlugs}
+        />
+
+        {/* ROUND HS-B: moved here from right after FeatureContentSection —
+            was rendering 3rd, ahead of ProgramSelector and the course
+            sections, which didn't match the intended order. Position only;
+            its background (the blue brand-gradient band) is unchanged. */}
+        <ServicesSection />
 
         {/* <InhouseCTA /> */}
 
         <ClientLogosSection logos={clientLogos} />
 
         <TestimonialStats reviews={reviews} />
-
-        
 
         <BlogSection
         articles={featuredArticles}

@@ -80,6 +80,11 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'admin', source: 'tree' },
   { segment: 'api', source: 'tree' },
   { segment: 'legacy-file', source: 'tree' },
+  // The root-file registry's delivery route. Reserved for the same reason
+  // legacy-file is: it is a real app-router segment, so a course alias claiming
+  // it would resolve to a file-delivery handler instead of a course page and
+  // silently never render.
+  { segment: 'root-file', source: 'tree' },
 
   // ── next.config.mjs redirects() ──────────────────────────────────────────
   // These never reach the router, so an alias here is unreachable in a way no
@@ -92,6 +97,8 @@ export const RESERVED_PATHS = Object.freeze([
   // ── public/ — served at the root ─────────────────────────────────────────
   { segment: 'assets', source: 'static' },
   { segment: 'brand', source: 'static' },
+  // The Home hero artwork. Same `-img` convention as policies-img below.
+  { segment: 'hero-img', source: 'static' },
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
   { segment: 'people', source: 'static' },
@@ -100,6 +107,9 @@ export const RESERVED_PATHS = Object.freeze([
   // that is very hard to see. The `-img` suffix is deliberate.
   { segment: 'policies-img', source: 'static' },
   { segment: 'port', source: 'static' },
+  // The /masterclass landing page's artwork. Same shadowing concern as
+  // policies-img above — not `masterclass`, which is the route itself.
+  { segment: 'masterclass-element', source: 'static' },
 
   // ── HAND-MAINTAINED. NOTHING VERIFIES THESE. ─────────────────────────────
   // From src/middleware.js's pass-through prefixes and framework internals.

@@ -32,14 +32,24 @@
  * `<` / `>`. That property is load-bearing (see `windowBetween`) and is pinned
  * by a test.
  *
- * ── NOT `ADMIN_SCHEDULE_MONTHS` ─────────────────────────────────────────────
- * src/lib/adminScheduleHorizon.js exports a horizon that is also a number of
- * months, and its own docstring warns against exactly this kind of borrowing
- * ("a different concept that merely happened to be 4 too"). The admin horizon
- * is a FETCH bound — it decides what MSDB is asked for. This one is a DISPLAY
- * default over data that was already fetched unbounded. They answer different
- * questions, they are tuned by different people for different reasons, and one
- * of them changing must not move the other. Do not import across.
+ * ── NOT `ADMIN_SCHEDULE_MONTHS`, AND NOT THE EDITOR'S PICKER RANGE ──────────
+ * Two other modules export something that is also a number of months, and this
+ * one must not borrow from either:
+ *
+ *   · src/lib/adminScheduleHorizon.js — a FETCH bound; it decides what MSDB is
+ *     asked for and how many columns the admin table draws.
+ *   · src/lib/schedule/editorCalendarRange.js — the admin editor's date-picker
+ *     range; it decides what a user may PICK when editing a round.
+ *
+ * This one is a DISPLAY default over data that was already fetched unbounded.
+ * All three answer different questions, they are tuned by different people for
+ * different reasons, and one of them changing must not move the others. Do not
+ * import across.
+ *
+ * That is not a stylistic preference. The picker was rewritten in August 2026
+ * because its window was derived from the wrong source, which left 15 of 90
+ * live rounds impossible to edit; the fix was to derive it from the data being
+ * edited rather than to borrow a horizon from elsewhere.
  */
 
 /**

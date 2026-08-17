@@ -376,7 +376,7 @@ export function MasterclassDetailClient({
               className={`relative isolate mb-4 w-full overflow-hidden rounded-2xl transition-shadow hover:shadow-md [-webkit-mask-image:-webkit-radial-gradient(white,black)] ${
                 batch.is_early_bird
                   ? "border-2 border-9e-lime bg-9e-navy dark:bg-9e-card"
-                  : "border border-gray-200 bg-white dark:border-gray-700 dark:bg-9e-card"
+                  : "border-2 border-9e-brand bg-white dark:border-gray-700 dark:bg-9e-card"
               }`}
             >
               {batch.status === "closed" && (
@@ -751,60 +751,96 @@ export function MasterclassDetailClient({
                         className={`shrink-0 text-gray-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                       />
                     </button>
+                    {/* THE REVEAL ANIMATES A GRID TRACK, NOT A max-height
+                        CEILING. This used to read
+                        `overflow-hidden transition-all duration-300` with
+                        `isOpen ? "max-h-[800px]" : "max-h-0"`. A ceiling is a
+                        guess about content height, and a module's topics_html /
+                        content_html are admin-authored with no length limit
+                        (MasterclassCourse.js:31,34 — plain String and [String],
+                        no maxlength). MEASURED: 1 of the 13 live modules —
+                        "Claude AI as Your Data Analyst Assistant", 22 block
+                        elements — estimates ~852px against that 800px ceiling,
+                        at EVERY viewport width, so it was already clipping
+                        mid-line with no scrollbar and nothing on screen to say
+                        so.
+
+                        Same fix as CourseOutline.jsx (11e460d) and
+                        FaqAccordionSection.jsx: grid-template-rows 0fr -> 1fr
+                        interpolates to real content height, so there is no
+                        ceiling to exceed.
+
+                        TIMING UNCHANGED, and verified rather than assumed:
+                        `duration-9e-reveal` IS 300ms (tailwind.config.js:140)
+                        and `ease-9e` IS cubic-bezier(0.4,0,0.2,1), which is also
+                        Tailwind's default and therefore what `transition-all
+                        duration-300` already resolved to here. 300ms before,
+                        300ms after. The property narrowed from `all` on purpose:
+                        nothing else on this element transitions.
+
+                        prefers-reduced-motion is unchanged — globals.css:449-455
+                        clamps transition-duration globally. */}
                     <div
-                      className={`overflow-hidden transition-all duration-300 ${isOpen ? "max-h-[800px]" : "max-h-0"}`}
+                      className={`grid transition-[grid-template-rows] duration-9e-reveal ease-9e ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
                     >
-                      <div className="px-5 pb-5">
-                        {(mod.topics_html || mod.topics?.length > 0) && (
-                          <div className="mt-1">
-                            {mod.topics_html ? (
-                              <div
-                                className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
-                                dangerouslySetInnerHTML={{
-                                  __html: mod.topics_html,
-                                }}
-                              />
-                            ) : (
-                              <ul className="space-y-1">
-                                {mod.topics.map((topic, ti) => {
-                                  const isSub = topic.startsWith("- ");
-                                  const text = isSub ? topic.slice(2) : topic;
-                                  return (
-                                    <li
-                                      key={ti}
-                                      className={`flex items-start gap-2 text-base text-gray-600 dark:text-gray-300 ${isSub ? "ml-5" : ""}`}
-                                    >
-                                      <span
-                                        className={`mt-2 shrink-0 rounded-full ${
-                                          isSub
-                                            ? "h-1 w-1 bg-gray-400"
-                                            : "h-1.5 w-1.5 bg-9e-brand"
-                                        }`}
-                                      />
-                                      {text}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </div>
-                        )}
-                        {mod.output && (
-                          <p className="mt-2 text-xs text-gray-400">
-                            <strong>ผลลัพธ์: </strong>
-                            {mod.output}
-                          </p>
-                        )}
-                        {mod.content_html && (
-                          <div
-                            className="mt-3 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
-                            dangerouslySetInnerHTML={{
-                              __html: mod.content_html,
-                            }}
-                          />
-                        )}
+                      {/* The grid item. `min-h-0` is what lets the 0fr track
+                          actually reach zero (a grid item's min-height is `auto`
+                          and refuses to shrink under min-content);
+                          `overflow-hidden` is what clips during the transition.
+                          Neither is enough alone. */}
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="px-5 pb-5">
+                          {(mod.topics_html || mod.topics?.length > 0) && (
+                            <div className="mt-1">
+                              {mod.topics_html ? (
+                                <div
+                                  className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
+                                  dangerouslySetInnerHTML={{
+                                    __html: mod.topics_html,
+                                  }}
+                                />
+                              ) : (
+                                <ul className="space-y-1">
+                                  {mod.topics.map((topic, ti) => {
+                                    const isSub = topic.startsWith("- ");
+                                    const text = isSub ? topic.slice(2) : topic;
+                                    return (
+                                      <li
+                                        key={ti}
+                                        className={`flex items-start gap-2 text-base text-gray-600 dark:text-gray-300 ${isSub ? "ml-5" : ""}`}
+                                      >
+                                        <span
+                                          className={`mt-2 shrink-0 rounded-full ${
+                                            isSub
+                                              ? "h-1 w-1 bg-gray-400"
+                                              : "h-1.5 w-1.5 bg-9e-brand"
+                                          }`}
+                                        />
+                                        {text}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+                          )}
+                          {mod.output && (
+                            <p className="mt-2 text-xs text-gray-400">
+                              <strong>ผลลัพธ์: </strong>
+                              {mod.output}
+                            </p>
+                          )}
+                          {mod.content_html && (
+                            <div
+                              className="mt-3 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
+                              dangerouslySetInnerHTML={{
+                                __html: mod.content_html,
+                              }}
+                            />
+                          )}
+                        </div>
+                        </div>
                       </div>
-                    </div>
                   </div>
                 );
               })}

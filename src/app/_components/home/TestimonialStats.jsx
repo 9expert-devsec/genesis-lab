@@ -2,17 +2,71 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
+import { useInView, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
 
+/**
+ * ROUND HS-C: split out of the old flat `value: '5K+'` strings into
+ * target/suffix/decimals so the count-up can animate a real number and
+ * reassemble the exact same displayed string at the end — '5K+', '90K+',
+ * '4.9', '700K+', '73' respectively. Verified against the values these
+ * replace: target + suffix (decimals=0) or target.toFixed(1) (decimals=1,
+ * the รีวิว stat only) reproduces each one exactly.
+ */
 const STATS = [
-  { value: '5K+', label: 'องค์กร' },
-  { value: '90K+', label: 'ผู้เรียน' },
-  { value: '4.9', label: 'รีวิว', star: true },
-  { value: '700K+', label: 'ผู้ติดตาม' },
-  { value: '73', label: 'หลักสูตร' },
+  { target: 5, suffix: 'K+', decimals: 0, label: 'องค์กร' },
+  { target: 90, suffix: 'K+', decimals: 0, label: 'ผู้เรียน' },
+  { target: 4.9, suffix: '', decimals: 1, label: 'รีวิว', star: true },
+  { target: 700, suffix: 'K+', decimals: 0, label: 'ผู้ติดตาม' },
+  { target: 73, suffix: '', decimals: 0, label: 'หลักสูตร' },
 ];
+
+/**
+ * rAF-based count-up, matching the pattern already established in
+ * src/components/portfolio/PortfolioStats.jsx (same cubic ease-out, same
+ * "snap to the exact target on the final frame" guarantee — that last
+ * `setCount(target)` in the p>=1 branch is what makes the landing value
+ * exact regardless of any float drift during the eased ramp).
+ *
+ * Extended for decimals: PortfolioStats' stats are all integers, but the
+ * รีวิว stat here is 4.9, so the value is kept as a float throughout and
+ * only rounded at FORMAT time via toFixed, not floored during the ramp.
+ */
+function useCountUp(target, decimals, duration, active, reduced) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!active) return undefined;
+    if (reduced) {
+      setCount(target);
+      return undefined;
+    }
+    let start = null;
+    let raf = 0;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const p = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setCount(eased * target);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else setCount(target);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [active, target, duration, reduced]);
+  return decimals > 0 ? count.toFixed(decimals) : String(Math.floor(count));
+}
+
+function StatNumber({ stat, active, reduced }) {
+  const display = useCountUp(stat.target, stat.decimals, 1350, active, reduced);
+  return (
+    <>
+      {display}
+      {stat.suffix}
+    </>
+  );
+}
 
 /**
  * Home-page testimonials + corporate stats.
@@ -24,8 +78,12 @@ const STATS = [
  * intentionally hardcoded (corporate marketing numbers, not API-driven).
  */
 export function TestimonialStats({ reviews = [] }) {
+  const statsRef = useRef(null);
+  const statsInView = useInView(statsRef, { once: true, margin: '-100px' });
+  const shouldReduceMotion = useReducedMotion() ?? false;
+
   return (
-    <section className="bg-white px-4 py-14 dark:bg-9e-border lg:px-6">
+    <section className="bg-9e-ice px-4 py-14 dark:bg-9e-card lg:px-6">
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-2 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ส่วนหนึ่งของความภาคภูมิใจ
@@ -38,7 +96,7 @@ export function TestimonialStats({ reviews = [] }) {
 
         <ReviewCarousel reviews={reviews} />
 
-        <div className="grid grid-cols-2 text-center md:grid-cols-5">
+        <div ref={statsRef} className="grid grid-cols-2 text-center md:grid-cols-5">
           {STATS.map((s, i) => (
             <div
               key={s.label}
@@ -52,7 +110,7 @@ export function TestimonialStats({ reviews = [] }) {
                   <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
                 )}
                 <span className="text-2xl font-extrabold text-9e-navy dark:text-white">
-                  {s.value}
+                  <StatNumber stat={s} active={statsInView} reduced={shouldReduceMotion} />
                 </span>
               </div>
               <span className="text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">

@@ -162,6 +162,76 @@ test('recording is gated on restoreDidWrite, so an unobserved restore still reco
   assert.ok(record > gate, 'the gate must precede the record CALL');
 });
 
+// ── STEP 4½ — the script must WIRE the precondition, not just own one ────────
+//
+// The pure file proves the flow refuses to copy when the check fails. What it
+// cannot see is whether the production script hands the flow a check that
+// actually reaches Mongo. An `ensureRecordReachable` that returned `{ ok: true }`
+// unconditionally would satisfy every pure test and restore the defect exactly.
+
+test('the script passes a record check INTO the flow, and it really pings Mongo', () => {
+  const src = readSource(SCRIPT);
+  assert.match(src.code, /ensureRecordReachable/,
+    'the script does not wire step 4½, so the flow falls back to its refusing '
+    + 'default and no restore can run at all');
+  const body = fnBody(src.code, 'ensureRecordReachable');
+  assert.ok(body.length > 50, 'ensureRecordReachable not found as a function — the matcher is broken');
+  assert.match(body, /mongoose\.connect\(/, 'the check must actually connect');
+  assert.match(body, /ping:\s*1/,
+    'connect alone can resolve against a pooled or half-open connection. The '
+    + 'record needs a round trip the server answered');
+  assert.match(src.code, /ensureRecordReachable,/,
+    'the check must be handed to runRestoreFlow in deps, not merely defined');
+});
+
+test('CONTROL: the same matcher REJECTS a check that only connects', () => {
+  // Without this, the ping assertion could be passing because the matcher is
+  // broken rather than because the code pings.
+  const connectOnly = `
+    async function ensureRecordReachable() {
+      await mongoose.connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 15_000 });
+      return { ok: true };
+    }`;
+  const b = fnBody(connectOnly, 'ensureRecordReachable');
+  assert.ok(b.length > 50, 'the control fixture did not parse — the matcher is broken');
+  assert.match(b, /mongoose\.connect\(/, 'the control must satisfy the connect half…');
+  assert.equal(/ping:\s*1/.test(b), false, '…and fail the ping half');
+});
+
+test('the timeout was NOT tuned — the order was the defect, not the number', () => {
+  // The >70 s waits are NOT ESTABLISHED as to cause. A bigger number would make
+  // the failure slower, never safer, and would read in a diff as a fix.
+  const src = readSource(SCRIPT);
+  const timeouts = [...src.code.matchAll(/serverSelectionTimeoutMS:\s*([\d_]+)/g)]
+    .map((m) => Number(m[1].replace(/_/g, '')));
+  assert.ok(timeouts.length >= 2, 'the timeout literals vanished — the matcher is broken');
+  for (const ms of timeouts) {
+    assert.equal(ms, 15_000,
+      `serverSelectionTimeoutMS is ${ms}. Every connection in this script uses `
+      + '15 s; changing it treats a latency number as the fix for an ordering bug');
+  }
+});
+
+test('the refusal tells the operator, in words, that NOTHING was changed', () => {
+  // An operator mid-incident reads this to decide whether to re-run. "✖
+  // record-unreachable" leaves them guessing whether a half restore happened,
+  // and both guesses are expensive.
+  const src = readSource(SCRIPT);
+  assert.match(src.code, /RESTORE\.RECORD_UNREACHABLE/,
+    'the script must branch on the refusal rather than lumping it in with the '
+    + 'failures that DID move bytes');
+  assert.match(src.code, /NOTHING WAS CHANGED/);
+  assert.match(src.code, /SAFE TO RETRY/i);
+  // The generic failure branch prints "the current bytes WERE archived", which
+  // would be a lie here — so the dedicated branch must come first.
+  const dedicated = src.code.indexOf('RESTORE.RECORD_UNREACHABLE');
+  const generic = src.code.indexOf('!restoreDidWrite(result.status)');
+  assert.ok(dedicated > -1 && generic > -1, 'one of the two branches is missing');
+  assert.ok(dedicated < generic,
+    'the generic branch would claim an archive was made. The refusal must be '
+    + 'handled before it');
+});
+
 test('the restore is recorded as a NEW row that says where it came from', () => {
   const src = readSource(SCRIPT);
   assert.match(src.code, /insertOne\(/, 'append-only: a new row, never an update');

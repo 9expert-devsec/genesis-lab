@@ -1,4 +1,7 @@
+'use client';
+
 import Image from 'next/image';
+import { motion, useReducedMotion } from 'framer-motion';
 
 /**
  * Founder/instructor quote band. Static content — name, title, and
@@ -8,9 +11,28 @@ import Image from 'next/image';
  * and the right column anchors the image with `items-end`. On mobile
  * the photo is hidden so the quote keeps its own breathing room.
  */
+
+/**
+ * ROUND HS-C: fade-in ONLY — no translateY, no scale. This is the page's
+ * closing statement, deliberately kept still; every other content section
+ * moves on entrance, this one just settles into place.
+ */
+const FADE_ONLY_VARIANTS = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.7, ease: 'easeOut' } },
+};
+
 export function InstructorQuote() {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
-    <section className="relative overflow-hidden">
+    <motion.section
+      className="relative overflow-hidden"
+      variants={FADE_ONLY_VARIANTS}
+      initial={shouldReduceMotion ? false : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+    >
       {/* Circuit board background — gradient + traces + nodes. All
           gradient/filter IDs are prefixed `instructor-` so they don't
           collide with other SVGs on the page. */}
@@ -22,11 +44,13 @@ export function InstructorQuote() {
         aria-hidden="true"
       >
         <defs>
-          <radialGradient id="instructor-bg" cx="40%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#EEF6FF" />
-            <stop offset="60%" stopColor="#DBEEFF" />
-            <stop offset="100%" stopColor="#EEF6FF" />
-          </radialGradient>
+          {/* ROUND HS-B: the light-mode-lightening "instructor-bg" radial
+              gradient (#EEF6FF/#DBEEFF) that used to sit here was never
+              actually applied to anything — no fill="url(#instructor-bg)"
+              existed anywhere in this file. The section's real background
+              was already only the flat #0D1B2A rect below; this def was
+              dead markup, removed rather than "neutralized" since there was
+              nothing live to neutralize. */}
           <radialGradient id="instructor-ng1" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#005CFF" stopOpacity="0.3" />
             <stop offset="100%" stopColor="#005CFF" stopOpacity="0" />
@@ -175,6 +199,6 @@ export function InstructorQuote() {
           </div>
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

@@ -3,7 +3,7 @@ import { listSkills } from '@/lib/api/skills';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
-import { resolveSkillBySlug } from '@/lib/resolvePageSlug';
+import { resolveSkillBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { SkillPageClient } from './_components/SkillPageClient';
@@ -49,10 +49,13 @@ export default async function SkillPage({ params }) {
   // No custom slug — render inline under /skill/<slug>.
   const { skill } = resolved;
   const skillId = String(skill._id);
-  const [programsRes, coursesRes, faqs] = await Promise.all([
+  const [programsRes, coursesRes, faqs, linkability] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
     getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []),
+    // Server-side, once per render, for the cards' skill capsules. Fails
+    // closed to empty maps — a capsule then renders unlinked, never dead.
+    getPageLinkability(),
   ]);
 
   const enriched = await enrichCoursesWithDetails(coursesRes.items ?? []);
@@ -77,6 +80,7 @@ export default async function SkillPage({ params }) {
       totalCourses={skillCourses.length}
       faqs={faqs}
       currentYear={siteCurrentYear()}
+      skillSlugs={linkability.skillSlugs}
     />
   );
 }

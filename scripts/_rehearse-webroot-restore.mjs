@@ -142,6 +142,14 @@ try {
       },
       fetchFreshBytes: fetchFresh,
       sha256: sha,
+      // Step 4½ stubbed TRUE, deliberately. This rehearsal exists to prove what
+      // real @vercel/blob does; it writes no record and asserts nothing about
+      // one, so making it depend on Mongo being up would only add a way for a
+      // Blob rehearsal to fail for a non-Blob reason. The precondition itself is
+      // proved by the ordered call log in test/pure/webrootRestoreFlow.test.mjs,
+      // and that the PRODUCTION script wires the real check is proved by
+      // test/fs/webrootRestoreScriptWiring.test.mjs.
+      ensureRecordReachable: async () => ({ ok: true }),
       nowMs: () => Date.now(),
       wait: (ms) => new Promise((r) => { setTimeout(r, ms); }),
     },

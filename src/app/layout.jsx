@@ -8,6 +8,8 @@ import { AnalyticsPageTracker } from '@/components/analytics/AnalyticsPageTracke
 import { FloatingActionDock } from '@/components/ui/FloatingActionDock';
 import { ChatLauncher } from '@/components/chat/ChatLauncher';
 import { ReadingProgressRing } from '@/components/ui/ReadingProgressRing';
+// TEMPORARY — round CB-A2 preview mount. Delete with the component.
+import { CookieBannerPreview } from '@/components/consent/CookieBannerPreview';
 import './globals.css';
 
 // ── Fonts ────────────────────────────────────────────────────────
@@ -157,6 +159,23 @@ export default function RootLayout({ children }) {
             topSlot={<ReadingProgressRing />}
             bottomSlot={chatEnabled ? <ChatLauncher /> : null}
           />
+          {/* ── TEMPORARY: cookie-banner UI preview (round CB-A2) ─────────
+              REMOVE THIS LINE AND DELETE CookieBannerPreview.jsx when consent
+              is actually wired. The banner is on screen for team review only:
+              it carries a Thai warning strip saying the choices do not take
+              effect, and it writes no cookie, no localStorage, and no
+              gtag('consent','update',…). Consent Mode defaults are untouched.
+
+              MOUNTED HERE, NOT IN (public)/layout.jsx, for the same reason the
+              dock above is — see the note there. The home page is outside the
+              (public) group, so that layout would both miss the most-reviewed
+              page and reset the in-memory dismissal on every crossing.
+
+              It renders null on /admin (client-side, via usePathname) by the
+              same split the dock uses: the path rule lives in the component so
+              it stays testable, not as a condition in this server layout which
+              cannot see the path. */}
+          <CookieBannerPreview />
         </ThemeProvider>
       </body>
     </html>

@@ -35,6 +35,12 @@ const SCHEDULE_SURFACES = [
   // stopped rendering English months and moved onto formatRoundDays. It is a
   // Thai-year surface now, and this guard is what stops the next `+ 543`.
   'src/components/registration/ScheduleCarousel.jsx',
+  // Added when /admin/schedules gave up its own `${first}-${last}` label and
+  // joined `formatRoundDays`. Its month columns are Intl-formatted Buddhist
+  // years (TH_MONTH_FMT) and its round labels now come from the shared
+  // formatter, so it is a Thai-year surface and this is what stops the next
+  // `+ 543` appearing on it.
+  'src/app/admin/schedules/_components/SchedulesAdminClient.jsx',
 ];
 
 test('no schedule surface contains a 543 literal', () => {

@@ -148,6 +148,20 @@ export default function WebrootDocumentsClient({
       bytes: file.size,
       contentType: WEBROOT_CONTENT_TYPE,
       sha256: localSha256,
+      /**
+       * THE NAME THE ADMIN PICKED — recorded HERE and not at prepare time.
+       *
+       * `prepareWebrootReplacement` issues the receipt the upload route trusts,
+       * and the route re-derives the destination out of that receipt precisely
+       * so nothing the client says can steer it. Putting an unverified name
+       * into that object would push it across the trust boundary the receipt
+       * exists to hold. This call happens AFTER the bytes are already live and
+       * its output is a history row, so the name lands where it is only ever
+       * read by a person.
+       *
+       * `doc.filename` above is the destination and stays the destination.
+       */
+      sourceFilename: file.name,
     });
     if (!recorded?.ok) setError(recorded?.error ?? '');
     await refreshHistory();
@@ -300,6 +314,23 @@ export default function WebrootDocumentsClient({
               <li key={r._id}>
                 v{r.version} · {r.filename} · {formatBytes(r.bytes)} ·{' '}
                 {new Date(r.uploadedAt).toLocaleString('th-TH')} · {r.uploadedBy || '—'}
+                {/*
+                  THE SOURCE NAME, AND THE UNKNOWN CASE SPELLED OUT.
+
+                  Rendered as an ordinary JSX child, so React escapes it — this
+                  value is client-supplied and unverified, and it is never
+                  passed to dangerouslySetInnerHTML, an href, or a src.
+
+                  A row written before this field existed has '' and says
+                  "ไม่ทราบ". It must NOT fall back to r.filename: that is the
+                  DESTINATION, and showing it here would say the admin picked
+                  the file they overwrote — the exact confusion this records
+                  its way out of.
+                */}
+                {' · ไฟล์ต้นทาง: '}
+                {r.sourceFilename
+                  ? <span data-source-filename>{r.sourceFilename}</span>
+                  : <span data-source-filename="unknown">ไม่ทราบ</span>}
                 {r.archivePathname ? ` · สำรองไว้ที่ ${r.archivePathname}` : ''}
               </li>
             ))}

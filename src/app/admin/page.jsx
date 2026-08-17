@@ -23,7 +23,13 @@ export default async function Page({ searchParams }) {
   // worse than either number alone.
   const [metrics, schedulesRes] = await Promise.allSettled([
     getDashboardMetrics(range),
-    getAllSchedules({ status: ADMIN_SCHEDULE_STATUSES }),
+    // includeStarted — the public surfaces now drop a round the moment its
+    // first training day arrives. This tile is an ADMIN count and must not
+    // move: an admin manages rounds that have started and rounds that have
+    // finished, and this number has to keep agreeing with the /admin/schedules
+    // table it links to. Two admin surfaces disagreeing about how many rounds
+    // exist is exactly what `status: all` was added to stop.
+    getAllSchedules({ status: ADMIN_SCHEDULE_STATUSES, includeStarted: true }),
   ]);
 
   const data   = metrics.status === 'fulfilled' ? metrics.value : null;

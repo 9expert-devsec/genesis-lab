@@ -38,6 +38,9 @@ const MasterclassBatchSchema = new mongoose.Schema(
     status_override: { type: Boolean, default: false },  // true = admin manual lock
 
     payment_enabled: { type: Boolean, default: false },
+    // Legacy docs predate this field and read back as undefined through .lean();
+    // readers must go through isQuoteEnabled() so those still count as enabled.
+    quote_enabled:   { type: Boolean, default: true },
     internal_notes:  { type: String, default: '' },
   },
   { timestamps: true, collection: 'masterclass_batches' }

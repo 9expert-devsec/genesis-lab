@@ -4,6 +4,7 @@ import MasterclassBatch    from '@/models/MasterclassBatch';
 import MasterclassRegistration from '@/models/MasterclassRegistration';
 import MasterclassCourse   from '@/models/MasterclassCourse';
 import { resolveBatchPrice } from '@/lib/masterclass/getMasterclass';
+import { isQuoteEnabled }    from '@/lib/masterclass/quoteAccess';
 import { computePricing }    from '@/lib/pricing';
 import { headers }           from 'next/headers';
 import { refNo } from '@/lib/refNo';
@@ -42,6 +43,12 @@ export async function POST(req) {
     if (batch.status !== 'open') {
       return NextResponse.json(
         { error: 'batch_unavailable', message: 'รุ่นนี้ไม่เปิดรับสมัครแล้ว' },
+        { status: 409 }
+      );
+    }
+    if (paymentMethod === 'quote' && !isQuoteEnabled(batch)) {
+      return NextResponse.json(
+        { error: 'quote_disabled', message: 'รุ่นนี้ไม่เปิดรับการขอใบเสนอราคา' },
         { status: 409 }
       );
     }

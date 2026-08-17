@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Award, BarChart2, BookOpen, Clock, ExternalLink } from "lucide-react";
 import { onlineCourseHref } from "@/lib/onlineCourseHref";
 import { cn } from "@/lib/utils";
+import { skillCapsuleHref } from "@/lib/skillCapsuleHref";
+import { logUnresolvedCapsule } from "@/lib/logUnresolvedCapsule";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
 
@@ -16,7 +18,7 @@ const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
  * at 9Expert Academy via `website_urls[0]`, falling back to the
  * academy root if the course doesn't carry a direct link.
  */
-export function OnlineCourseCard({ course, className }) {
+export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
   if (!course) return null;
 
   const id = typeof course.o_course_id === "string"
@@ -42,6 +44,14 @@ export function OnlineCourseCard({ course, className }) {
   const skillTags = Array.isArray(course.skills)
     ? course.skills.filter((s) => s && typeof s === "object" && s.skill_name)
     : [];
+
+  // Same resolution as the in-class CourseCard, by ID and never by the printed
+  // name. See lib/skillCapsuleHref. A null leaves the capsule a plain <span>.
+  const skillLinks = skillTags.slice(0, 3).map((s) => {
+    const href = skillCapsuleHref(s, skillSlugs);
+    if (!href) logUnresolvedCapsule({ skill: s, where: "OnlineCourseCard", courseId: id });
+    return { skill: s, href };
+  });
 
   // ONE definition, shared with the /search result card — see the module.
   const ctaHref = onlineCourseHref(course);
@@ -87,16 +97,38 @@ export function OnlineCourseCard({ course, className }) {
       </a>
 
       <div className="flex flex-1 flex-col p-4">
-        {skillTags.length > 0 && (
+        {/*
+          Same substitution and same class-literal rule as the in-class
+          CourseCard — both strings written out in full, never composed, because
+          Tailwind scans text and never evaluates it. Focus is left to the
+          app-wide `*:focus-visible` rule in globals.css.
+
+          THE CAPSULE IS AN INTERNAL LINK ON A CARD WHOSE EVERY OTHER LINK IS
+          EXTERNAL. The thumbnail, title and CTA all open 9Expert Academy in a
+          new tab; this one navigates in place, to our own catalogue. That is
+          deliberate — the capsule means "this skill", not "this course" — so it
+          carries neither `target` nor the outbound icon the other three use.
+        */}
+        {skillLinks.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {skillTags.slice(0, 3).map((s) => (
-              <span
-                key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-              >
-                {s.skill_name}
-              </span>
-            ))}
+            {skillLinks.map(({ skill: s, href }) =>
+              href ? (
+                <Link
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  href={href}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
+                >
+                  {s.skill_name}
+                </Link>
+              ) : (
+                <span
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                >
+                  {s.skill_name}
+                </span>
+              )
+            )}
           </div>
         )}
 

@@ -208,6 +208,74 @@ const CASES = [
     property: '--tw-ring-color',
     referencesVar: '--round-ring',
   },
+  {
+    /**
+     * ── THE COURSE-CARD SKILL CAPSULE, NOW A LINK ────────────────────────────
+     *
+     * No arbitrary value and no runtime variable, so neither shape above. It is
+     * here for the THIRD way a class paints nothing: `9e-action` is a CUSTOM
+     * token, not a stock Tailwind colour. `hover:text-9e-action` is a perfectly
+     * ordinary-looking string that compiles to precisely nothing if the token is
+     * renamed, moved out of `theme.extend.colors`, or if this file ever falls
+     * outside the `content` globs. The markup would still read
+     * `class="… hover:text-9e-action"` and the capsule would simply not
+     * highlight — the same silent, look-correct failure, reached by a third
+     * route.
+     *
+     * It matters more than an ordinary hover because the hover IS the
+     * affordance: these capsules sit inside a card whose thumbnail and title are
+     * already links, so a capsule that never changes on hover reads as inert
+     * text and the link goes undiscovered.
+     *
+     * Only the light-mode pair is cased. The `dark:` variants compile through
+     * exactly the same token lookup, so they add a second failure of the same
+     * kind rather than a new one — and the guard is a named list, not a sweep.
+     *
+     * ── THIS CASE IS MASKED, AND THAT IS RECORDED RATHER THAN HIDDEN ─────────
+     * MEASURED when the control for it fired nothing: `hover:text-9e-action`
+     * appears THREE times in CourseCard.jsx — the capsule, the course title's
+     * <h3>, and the collapse button. Assembling the capsule's class away still
+     * leaves the other two emitting `.hover\:text-9e-action`, so this case
+     * stayed green through a break that genuinely killed the capsule's hover.
+     *
+     * That is the third reading in run.mjs's "control that fires nothing" note:
+     * the CODE has redundancy hiding the claim, not a weak test. The honest
+     * move is to say so, not to adjust the assertion until it goes red.
+     *
+     * The BORDER case below is the one that actually carries the claim —
+     * `hover:border-9e-action` is unique to the capsule — and its control DOES
+     * fire. This case is kept because it still catches the wider failure (the
+     * `9e-action` token removed, or this file dropped from the content globs),
+     * which would redden both.
+     */
+    what: 'the course-card skill capsule hover (text)',
+    file: 'src/app/(public)/training-course/_components/CourseCard.jsx',
+    className: 'hover:text-9e-action',
+    property: 'color',
+  },
+  {
+    what: 'the course-card skill capsule hover (border)',
+    file: 'src/app/(public)/training-course/_components/CourseCard.jsx',
+    className: 'hover:border-9e-action',
+    property: 'border-color',
+  },
+  {
+    /**
+     * The online card's capsule, same substitution, same tokens.
+     *
+     * ONLY THE BORDER IS CASED HERE, deliberately. `hover:text-9e-action` is
+     * masked in this file exactly as it is in CourseCard — the course title's
+     * <h3> carries the identical class — so a text case would be a known-green
+     * assertion, which is worse than no assertion because it reads as coverage.
+     * `hover:border-9e-action` is unique to the capsule in both files and is
+     * what actually fails when the capsule's class stops compiling. The full
+     * reasoning is on the CourseCard text case above.
+     */
+    what: 'the online-card skill capsule hover (border)',
+    file: 'src/app/_components/home/OnlineCourseCard.jsx',
+    className: 'hover:border-9e-action',
+    property: 'border-color',
+  },
   /**
    * ── THE PAGE-BUILDER ACCENT (round 24) ──────────────────────────────────
    *

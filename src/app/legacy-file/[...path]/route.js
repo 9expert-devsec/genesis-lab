@@ -6,7 +6,7 @@ import {
   documentContentType,
   encodePath,
   extensionOf,
-  proxyFromCloudinary,
+  proxyUpstream,
 } from '@/lib/legacyDelivery';
 // The transformation is NOT written here. It comes from the same module the
 // rewrites read, so the resolver and the static path can never deliver the
@@ -114,7 +114,7 @@ async function handle(request, ctx, method) {
       `${encodePath(row.publicId)}.${row.format || ext}`,
     );
 
-  return proxyFromCloudinary(request, upstream, {
+  return proxyUpstream(request, upstream, {
     fileName: sourcePath.slice(sourcePath.lastIndexOf('/') + 1),
     forceContentType: isRaw ? documentContentType(ext) : null,
     method,

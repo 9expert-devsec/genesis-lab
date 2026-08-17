@@ -169,7 +169,22 @@ test('the nav hidden read rides in the SAME Promise.all as the reads already the
 test('getLandingData filters the home snapshot on read', () => {
   const { code } = readSource('src/lib/landing/getLandingData.js');
   assert.ok(countCallSites(code, 'loadHiddenCourseIds') === 1);
-  assert.match(code, /newCoursesWithSchedules:\s*dropHiddenCourses\(/);
+  /**
+   * TWO read-time narrowings now, composed, and the pattern pins BOTH.
+   *
+   * This assertion was `newCoursesWithSchedules:\s*dropHiddenCourses\(` — the
+   * hidden-course filter sitting directly on the key. `dropStartedRounds` was
+   * added around it (a round disappears from the public site once its first
+   * training day arrives, and the home page must not wait for the 3-hourly
+   * cron to learn that), which moved `dropHiddenCourses` one call deep.
+   *
+   * Rewritten to name the nesting rather than relaxed to "appears somewhere":
+   * a looser pattern would keep passing if a later edit left `dropHiddenCourses`
+   * in the file but stopped applying it to this key, which is precisely the
+   * regression this test exists to catch. The new form asserts strictly more
+   * than the old one did.
+   */
+  assert.match(code, /newCoursesWithSchedules:\s*dropStartedRounds\(\s*dropHiddenCourses\(/);
   const block = /await Promise\.all\(\[([\s\S]*?)\]\);/.exec(code);
   assert.ok(block, 'the parallel read block is there');
   assert.match(block[1], /LandingCache\.findOne/);

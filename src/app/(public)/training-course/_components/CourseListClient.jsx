@@ -68,7 +68,18 @@ import { EmptyState } from './EmptyState';
  * page — the list endpoint returns ~73 courses, well within the size where a
  * client-side filter is simpler than refetching.
  */
-export function CourseListClient({ items, programOrder = [], earlyBirdMap = {}, currentYear }) {
+// `skillSlugs` (plural) is the id → catalog-URL map for the capsules and is
+// unrelated to the `skillSlug` (singular) filter value read from the query
+// string below. Two names one letter apart in one file is a hazard, so: the
+// singular one selects which courses to SHOW, the plural one decides where a
+// capsule LINKS.
+export function CourseListClient({
+  items,
+  programOrder = [],
+  earlyBirdMap = {},
+  currentYear,
+  skillSlugs = {},
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -263,6 +274,7 @@ export function CourseListClient({ items, programOrder = [], earlyBirdMap = {}, 
               courses={g.courses}
               earlyBirdMap={earlyBirdMap}
               currentYear={currentYear}
+              skillSlugs={skillSlugs}
             />
           ))
         ) : (

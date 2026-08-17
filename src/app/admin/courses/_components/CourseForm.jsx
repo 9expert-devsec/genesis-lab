@@ -15,7 +15,7 @@ import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
-import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
+import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
@@ -270,6 +270,38 @@ export function CourseForm({
     '';
   const [previousCourse, setPreviousCourse] = useState(initialPreviousCode);
 
+  /**
+   * ── SECTION 7's SEED, FROM THE SAME FUNCTION THE PUBLIC PAGE ASKS ────────
+   * `seedTopicEditorRows` calls `resolveTopicRich`, which is the function
+   * `courseOutlineView` calls to decide what a VISITOR sees. One decision,
+   * two surfaces. If the seed made its own the admin would edit formatting
+   * nobody can see, or overwrite formatting the form never loaded.
+   *
+   * `warning` is non-empty ONLY in the stale case, where the rich copy has
+   * been discarded and seeding fell back to the plain MSDB text.
+   */
+  const topicSeed = useMemo(
+    () => seedTopicEditorRows({
+      course: initial,
+      extension,
+      onLegacyShape: warnLegacyTopicShape,
+    }),
+    [initial, extension]
+  );
+
+  /**
+   * The rich half of section 7, lifted out of the editor.
+   *
+   * `[]` until the child reports — which it does in a mount effect, so it is
+   * settled before the unsaved-changes baseline is taken a frame later. It is
+   * ordinary React state and is therefore NOT in FormData, so it is compared
+   * explicitly in `courseEditorSignature` the way the gallery is; without
+   * that, a formatting-only edit (bolding a word, nesting a bullet) changes
+   * nothing the plain projection can see and the guard would let the admin
+   * walk away from it.
+   */
+  const [trainingTopicsRich, setTrainingTopicsRich] = useState([]);
+
   // ── Unsaved-changes guard: snapshot, dirty, interception ──────────
 
   /** Everything the editor can change, as one comparable string. */
@@ -279,9 +311,11 @@ export function CourseForm({
         formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
+          trainingTopicsRich,
         },
       }),
-    [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery]
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
+      trainingTopicsRich]
   );
 
   /**
@@ -423,9 +457,20 @@ export function CourseForm({
         gallery: gallery.map((item, i) => ({ ...item, order: i })),
         isPublished,
         omisePaymentEnabled,
+        /**
+         * ── THE KEY IS ALWAYS NAMED, AND THAT IS THE POINT ───────────────
+         * `buildExtensionUpdate` selects on KEY PRESENCE: an absent key means
+         * leave-alone. Every OTHER caller of this action omits the field and
+         * must keep leaving it alone; this one owns it, so it names it on
+         * every save — including when the value is `[]`, which is how a
+         * course whose formatting the admin REMOVED gets its obsolete rich
+         * copy cleared rather than kept forever as a stale one.
+         */
+        trainingTopicsRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
-    [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished, omisePaymentEnabled]
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
+      omisePaymentEnabled, trainingTopicsRich]
   );
 
   /**
@@ -678,7 +723,7 @@ export function CourseForm({
           Section 1 — ข้อมูลหลัก
       ─────────────────────────────────────────────────────────── */}
       <Section title="1. ข้อมูลหลัก">
-        <Field label="ชื่อหลักสูตร (course_name) *">
+        <Field label="ชื่อหลักสูตร *">
           <input
             required
             type="text"
@@ -689,7 +734,7 @@ export function CourseForm({
         </Field>
 
         <Field
-          label={`รหัสหลักสูตร (course_id) ${mode === 'create' ? '*' : ''}`}
+          label={`รหัสหลักสูตร ${mode === 'create' ? '*' : ''}`}
           hint={
             mode === 'edit'
               ? 'แก้ไขไม่ได้หลังจากสร้างแล้ว — ใช้เป็น URL slug + key อ้างอิงอื่นๆ'
@@ -740,7 +785,7 @@ export function CourseForm({
           </Field>
 
         <Field
-          label="คำอธิบายสั้น (course_teaser)"
+          label="คำอธิบายสั้น"
           hint="สูงสุด 200 ตัวอักษร — ใช้สำหรับ card / SEO"
         >
           <textarea
@@ -753,7 +798,7 @@ export function CourseForm({
         </Field>
 
         <Field
-          label="เนื้อหา (title)"
+          label="เนื้อหา"
           hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ใน MSDB ชื่อ field คือ &quot;title&quot; แม้จะเก็บ body"
         >
           <textarea
@@ -773,12 +818,12 @@ export function CourseForm({
           name="course_cover_url"
           currentUrl={initial?.course_cover_url ?? ''}
           folder="courses/covers"
-          label="รูปปกหลักสูตร (course_cover_url)"
+          label="รูปปกหลักสูตร"
           hint="แนะนำ 800×450px (16:9) · JPG/WebP · ไม่เกิน 5MB"
         />
 
         <div className="grid gap-4 md:grid-cols-3">
-          <Field label="จำนวนวันอบรม (course_trainingdays)">
+          <Field label="จำนวนวันอบรม">
             <input
               type="number"
               min="0"
@@ -788,7 +833,7 @@ export function CourseForm({
               className={inputCls}
             />
           </Field>
-          <Field label="จำนวนชั่วโมง (course_traininghours)">
+          <Field label="จำนวนชั่วโมง">
             <input
               type="number"
               min="0"
@@ -798,7 +843,7 @@ export function CourseForm({
               className={inputCls}
             />
           </Field>
-          <Field label="ระดับ (course_levels)">
+          <Field label="ระดับ">
             <select
               name="course_levels"
               defaultValue={String(initial?.course_levels ?? '1')}
@@ -810,7 +855,7 @@ export function CourseForm({
             </select>
           </Field>
 
-          <Field label="ราคา (course_price)">
+          <Field label="ราคา">
             <input
               type="number"
               min="0"
@@ -821,7 +866,7 @@ export function CourseForm({
             />
           </Field>
           <Field
-            label="ราคาสุทธิ (course_netprice)"
+            label="ราคาสุทธิ"
             hint="ราคาหลังหักส่วนลด — เว้นว่างถ้าเท่ากับ course_price"
           >
             <input
@@ -833,7 +878,7 @@ export function CourseForm({
               className={inputCls}
             />
           </Field>
-          <Field label="ลำดับแสดงผล (sort_order)">
+          <Field label="ลำดับแสดงผล">
             <input
               type="number"
               step="1"
@@ -845,7 +890,7 @@ export function CourseForm({
         </div>
 
         <Field
-          label="หลักสูตรก่อนหน้า (previous_course)"
+          label="หลักสูตรก่อนหน้า"
           hint="เลือกหลักสูตรที่เป็นพื้นฐานก่อน — ใช้ใน roadmap"
         >
           {/* Was a 77-option <select>. The picker keeps a hidden named input in
@@ -908,7 +953,7 @@ export function CourseForm({
             empty value (see shapePayload) so a cleared dropdown would silently
             keep the old program instead of reporting anything. `required` turns
             that silent no-op into the browser refusing to submit. */}
-        <Field label="โปรแกรม (program)" hint="จำเป็นต้องเลือก">
+        <Field label="โปรแกรม" hint="จำเป็นต้องเลือก">
           <select
             name="program"
             defaultValue={programId}
@@ -1036,35 +1081,35 @@ export function CourseForm({
             the payload is still exactly the lines typed. */}
         <BulletTextarea
           name="course_objectives"
-          label={`${COURSE_SECTION_LABELS.objective} (course_objectives)`}
+          label={COURSE_SECTION_LABELS.objective}
           hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
           marker="number"
         />
         <BulletTextarea
           name="course_target_audience"
-          label={`${COURSE_SECTION_LABELS.target} (course_target_audience)`}
+          label={COURSE_SECTION_LABELS.target}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
           marker="check"
         />
         <BulletTextarea
           name="course_prerequisites"
-          label={`${COURSE_SECTION_LABELS.prerequisite} (course_prerequisites)`}
+          label={COURSE_SECTION_LABELS.prerequisite}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
           marker="check"
         />
         <BulletTextarea
           name="course_system_requirements"
-          label={`${COURSE_SECTION_LABELS.requirement} (course_system_requirements)`}
+          label={COURSE_SECTION_LABELS.requirement}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
           marker="check"
         />
         <BulletTextarea
           name="bullets"
-          label="ไฮไลต์ (bullets)"
+          label="ไฮไลต์"
           hint="คำโปรย bullet ที่แสดงในหน้า course"
           defaultValue={initial?.bullets}
         />
@@ -1074,12 +1119,14 @@ export function CourseForm({
           Section 7 — Training Topics
       ─────────────────────────────────────────────────────────── */}
       <Section
-        title={`7. ${COURSE_SECTION_LABELS.outline} (training_topics)`}
-        hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — 1 บรรทัด = 1 หัวข้อย่อย"
+        title={`7. ${COURSE_SECTION_LABELS.outline}`}
+        hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — จัดรูปแบบและซ้อนได้สูงสุด 3 ระดับ · ชื่อหัวข้อหลักเป็นข้อความธรรมดา (MSDB เป็นเจ้าของ)"
       >
         <TrainingTopicsEditor
           name="training_topics"
-          initialTopics={seedTrainingTopics(initial, { onLegacyShape: warnLegacyTopicShape })}
+          initialTopics={topicSeed.rows}
+          staleWarning={topicSeed.warning}
+          onRowsChange={setTrainingTopicsRich}
         />
       </Section>
 

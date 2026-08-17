@@ -22,6 +22,8 @@ import { aliasConflict, normaliseAlias, legacyPathOwner } from '@/lib/courses/al
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { resolveAnchorWrite, ANCHOR } from '@/lib/courses/upstreamAnchorPlan';
+import { buildExtensionUpdate } from '@/lib/courses/extensionUpdate';
+import { sanitiseTopicRichForWrite } from '@/lib/courses/topicEditorSave';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -253,40 +255,31 @@ export async function saveCourseExtension(courseId, data) {
 
   const cleanAlias = normaliseAlias(data?.urlAlias);
 
-  // Normalize gallery — drop empty rows, re-number `order`.
-  const galleryRaw = Array.isArray(data?.gallery) ? data.gallery : [];
-  const gallery = galleryRaw
-    .filter((item) => {
-      if (!item || !item.type) return false;
-      if (item.type === 'youtube') return Boolean(item.videoId?.trim());
-      if (item.type === 'image') return Boolean(item.url?.trim());
-      return false;
-    })
-    .map((item, i) => ({
-      type: item.type,
-      url: item.type === 'image' ? String(item.url ?? '').trim() : '',
-      videoId: item.type === 'youtube' ? String(item.videoId ?? '').trim() : '',
-      alt: String(item.alt ?? '').trim(),
-      order: i,
-    }));
-
-  const tags = Array.isArray(data?.tags)
-    ? data.tags.map((t) => String(t).trim()).filter(Boolean)
-    : [];
-
-  const update = {
+  /**
+   * ── OMISSION MEANS LEAVE-ALONE. IT USED TO MEAN CLEAR. ──────────────────
+   * The selection rule, the per-key coercion and the reasons for both live in
+   * lib/courses/extensionUpdate. They are OUT of this file for the reason
+   * trainingTopics.js gives: this module is `use server` and no test can
+   * import it, and "the object built for the payloads the real callers send
+   * today is identical to the object built before the change" is a question a
+   * test has to be able to RUN, not merely read off the source.
+   *
+   * `cleanAlias` is passed in rather than recomputed there: it is needed above
+   * for `checkAliasAvailable` and below for `revalidatePath`, and normalising
+   * it twice would be two implementations of what a stored alias looks like.
+   */
+  /**
+   * ── SANITISED ON WRITE, ON THE SERVER, WHATEVER THE CLIENT DID ──────────
+   * The admin form sanitises before sending, but a server action is a POST
+   * endpoint and the client is not a boundary. `sanitiseTopicRichForWrite`
+   * leaves the payload untouched when the key is absent, so every caller that
+   * does not own this field keeps its leave-alone semantics.
+   */
+  const update = buildExtensionUpdate({
     courseId,
-    urlAlias: cleanAlias,
-    metaTitle: String(data?.metaTitle ?? '').trim(),
-    metaDescription: String(data?.metaDescription ?? '').trim(),
-    ogImage: String(data?.ogImage ?? '').trim(),
-    tags,
-    gallery,
-    isPublished:
-      typeof data?.isPublished === 'boolean' ? data.isPublished : true,
-    omisePaymentEnabled:
-      typeof data?.omisePaymentEnabled === 'boolean' ? data.omisePaymentEnabled : false,
-  };
+    data: sanitiseTopicRichForWrite(data),
+    cleanAlias,
+  });
 
   /**
    * ── THE APP-LEVEL ALIAS CHECK — BELT, WITH THE INDEX AS BRACES ────────────
@@ -411,9 +404,27 @@ export async function saveCourseExtension(courseId, data) {
      * above are unguarded for the same reason, and adding a catch here would be
      * copying the shape of that fix rather than its reason.
      */
+    /**
+     * ── `doc`, NOT `update`. THIS IS LOAD-BEARING SINCE THE $set CHANGE ─────
+     * `update` is now a PARTIAL object: it carries only the keys the caller
+     * actually sent. `isVisible` reads `ext.isPublished !== false`, so an
+     * ABSENT `isPublished` reads as VISIBLE — which means a caller that omits
+     * the flag would make this plan see a hidden→visible flip that never
+     * happened, and revalidate the mega menu, the home page, /training-course,
+     * /schedule and every catalog page for nothing.
+     *
+     * `doc` is the real post-write document, already in hand from `{new:true}`,
+     * so it carries the EFFECTIVE state of every field — written or carried
+     * forward. It was the more correct argument even before the $set change;
+     * now it is the only correct one.
+     *
+     * Guarded by a control in test/fs/extensionUpdateShape.test.mjs, because
+     * the failure mode is a spurious revalidation sweep and is invisible
+     * without one.
+     */
     for (const { path, type } of planVisibilityRevalidation({
       before: beforeDoc,
-      after: update,
+      after: doc,
     }).paths) {
       revalidatePath(path, type);
     }

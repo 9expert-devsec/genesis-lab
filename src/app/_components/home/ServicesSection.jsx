@@ -1,5 +1,19 @@
+'use client';
+
 import Link from 'next/link';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Building2, Monitor, Users } from 'lucide-react';
+
+/**
+ * ROUND HS-C: subtle scale-in, not a fade-up — this section's visual weight
+ * already comes from the color shift into the blue brand band, so the
+ * animation is kept understated (scale 0.98→1) rather than competing with
+ * that transition the way a translateY fade-up would.
+ */
+const SCALE_IN_VARIANTS = {
+  hidden: { opacity: 0, scale: 0.98 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: 'easeOut' } },
+};
 
 const SERVICES = [
   {
@@ -23,8 +37,16 @@ const SERVICES = [
 ];
 
 export function ServicesSection() {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
-    <section className="bg-9e-gradient-hero px-4 py-12 sm:px-6 sm:py-14 lg:px-8 dark:bg-none dark:bg-9e-navy">
+    <motion.section
+      className="bg-9e-gradient-hero px-4 py-12 sm:px-6 sm:py-14 lg:px-8 dark:bg-none dark:bg-9e-navy"
+      variants={SCALE_IN_VARIANTS}
+      initial={shouldReduceMotion ? false : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+    >
       <div className="mx-auto max-w-[1200px] text-center">
         <h2 className="mb-2 text-2xl font-bold text-white">
           บริการของเรา
@@ -53,6 +75,6 @@ export function ServicesSection() {
           ))}
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

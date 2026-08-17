@@ -12,6 +12,8 @@ import { formatStatusFromAPI } from "@/lib/formatScheduleDate";
 import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
 import { scheduleRegistrationHref } from "@/lib/schedule/scheduleRegistrationHref";
 import { trainingTypeColor } from "@/lib/schedule/trainingTypeColor";
+import { skillCapsuleHref } from "@/lib/skillCapsuleHref";
+import { logUnresolvedCapsule } from "@/lib/logUnresolvedCapsule";
 
 const LEVEL_LABEL = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
 
@@ -49,7 +51,30 @@ const MAX_CARD_ROUNDS = 2;
  * than guessing — so a call site that forgets to pass it fails loudly, and only
  * on a card that actually has rounds to draw. That is the intended failure mode.
  */
-function CourseCardComponent({ course, className, earlyBirdScheduleId = null, currentYear }) {
+/**
+ * `skillSlugs` DEFAULTS TO `{}`, unlike `currentYear` above, and the difference
+ * is deliberate rather than an inconsistency.
+ *
+ * `currentYear` has no default because its omission is a hard 500 and must fail
+ * loudly. An absent slug map is the opposite: every capsule resolves to null
+ * and renders exactly the inert <span> it rendered before this prop existed.
+ * A missing map must cost the LINK, never the page — an upstream outage or a
+ * failed Mongo read has to degrade the card, not blank the catalogue.
+ *
+ * Silence is not the same as safety, though, so a capsule that cannot resolve
+ * warns once per skill per process — see lib/logUnresolvedCapsule.
+ *
+ * That the prop is THREADED at all is enforced by
+ * test/fs/skillSlugsThreading, which derives the set of routes from the import
+ * graph rather than a list.
+ */
+function CourseCardComponent({
+  course,
+  className,
+  earlyBirdScheduleId = null,
+  currentYear,
+  skillSlugs = {},
+}) {
   const [expanded, setExpanded] = useState(false);
 
   if (!course) return null;
@@ -86,6 +111,20 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null, cu
   const skillTags = Array.isArray(skills)
     ? skills.filter((s) => s && typeof s === "object" && s.skill_name)
     : [];
+
+  /**
+   * The capsule's destination, resolved ONCE per card rather than inside the
+   * map below — and by ID, never by the printed `skill_name`. See
+   * lib/skillCapsuleHref for why the displayed string is not a key: the
+   * `Development` capsule lives at /programming-all-courses.
+   *
+   * A null means "no link"; the capsule stays a <span>.
+   */
+  const skillLinks = skillTags.slice(0, 3).map((s) => {
+    const href = skillCapsuleHref(s, skillSlugs);
+    if (!href) logUnresolvedCapsule({ skill: s, where: "CourseCard", courseId: id });
+    return { skill: s, href };
+  });
 
   const hours_ = hours ?? (days ? days * 6 : null);
 
@@ -127,16 +166,46 @@ function CourseCardComponent({ course, className, earlyBirdScheduleId = null, cu
       {/* ── Content ── */}
       <div className="flex flex-1 flex-col p-4">
         {/* Skill tags */}
-        {skillTags.length > 0 && (
+        {/*
+          THE TWO CLASS STRINGS ARE WRITTEN OUT IN FULL, TWICE, ON PURPOSE.
+
+          Factoring the shared half into a constant and composing it — with a
+          template literal or through `cn()` — is how the /schedule round hover
+          shipped dead: Tailwind scans source TEXT and never evaluates it, so a
+          class it cannot see written out is a class it never emits, and the
+          markup still looks perfect. `cn()` carries a second hazard here:
+          twMerge does not know the custom `9e-*` scales, so it cannot be
+          trusted to keep `text-xs` alongside `text-9e-slate-dp-50`.
+
+          Duplication is the cheap half of that trade. test/fs/tailwindArbitrary
+          ValueRules COMPILES this file and asserts the hover rules exist.
+
+          FOCUS is deliberately absent from both strings. globals.css carries an
+          app-wide `*:focus-visible { ring-2 ring-9e-brand ring-offset-2 }`, so
+          the anchor is already focus-visible; adding a local ring — or setting
+          `--tw-ring-color` inline, which is a global custom property on the
+          element — would repaint that rule for this one capsule.
+        */}
+        {skillLinks.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1">
-            {skillTags.slice(0, 3).map((s) => (
-              <span
-                key={s._id ?? s.skill_id ?? s.skill_name}
-                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-              >
-                {s.skill_name}
-              </span>
-            ))}
+            {skillLinks.map(({ skill: s, href }) =>
+              href ? (
+                <Link
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  href={href}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
+                >
+                  {s.skill_name}
+                </Link>
+              ) : (
+                <span
+                  key={s._id ?? s.skill_id ?? s.skill_name}
+                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+                >
+                  {s.skill_name}
+                </span>
+              )
+            )}
           </div>
         )}
 

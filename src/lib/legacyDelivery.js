@@ -36,7 +36,21 @@
 /** Cloudinary delivery host for this project's cloud. */
 export const CLOUDINARY_BASE = (cloud) => `https://res.cloudinary.com/${cloud}`;
 
-/** Upstream ceiling. Vercel kills the function before this on Hobby. */
+/**
+ * Upstream ceiling. Vercel kills the function before this on Hobby.
+ *
+ * ══ A MODULE CONSTANT, NOT A PER-CALLER OPTION. DO NOT RE-OPEN THIS. ════════
+ *
+ * MEASURED, so the question does not have to be argued again: the 42.58 MB
+ * catalog — the largest object either caller will ever stream — comes off Blob
+ * in ~1.1 s median with a TTFB of ~35 ms. That is 4.5% of this ceiling. The
+ * headroom is more than twenty-fold for the worst case that exists.
+ *
+ * So parameterising it would add a knob whose every sensible setting is this
+ * number, on a value that is not a tuning dial but a BACKSTOP: it exists to
+ * stop a hung upstream from holding a function open until the platform kills
+ * it, and that backstop is the same regardless of which store answers.
+ */
 export const UPSTREAM_TIMEOUT_MS = 25_000;
 
 /** Headers that describe the BYTES and must survive the hop unchanged. */
@@ -104,17 +118,46 @@ export function inlineDisposition(fileName) {
 /**
  * Fetch `upstreamUrl` and return a Response that streams it back.
  *
+ * ══ STORAGE-NEUTRAL, AND THE NAME NOW SAYS SO ═══════════════════════════════
+ *
+ * This was `proxyFromCloudinary`. MEASURED before renaming: its body contains
+ * no Cloudinary reference of any kind — no host, no signature, no transform, no
+ * branch on the store. Every Cloudinary specific is computed by the CALLER and
+ * handed in as a finished URL, which is why the same function serves a second
+ * caller backed by Vercel Blob without a line changing.
+ *
+ * The old name was the kind of inaccuracy this repo pays for: someone needing
+ * a Blob proxy reads `proxyFromCloudinary`, concludes it is the wrong tool, and
+ * writes a second one. `legacyDelivery.js:53` is already a second copy of
+ * RAW_EXTENSION_LIST, arrived at exactly that way.
+ *
  * `request` supplies Range / If-None-Match. `fileName` names the download.
- * `forceContentType` overrides Cloudinary's guess for raw documents, where it
- * frequently answers `application/octet-stream` and a browser then downloads a
- * PDF instead of rendering it.
+ * `forceContentType` overrides an upstream's guess for raw documents — Cloudinary
+ * frequently answers `application/octet-stream`, and a browser then downloads a
+ * PDF instead of rendering it. That is a fact about a CALLER's upstream, not
+ * about this function, which simply sets whatever it is given.
  */
-export async function proxyFromCloudinary(request, upstreamUrl, {
+export async function proxyUpstream(request, upstreamUrl, {
   fileName,
   forceContentType = null,
   method = 'GET',
+  /**
+   * Pass a FALSY value to set no `cache-control` at all.
+   *
+   * The root-file route needs that: `no-store` for those paths comes from the
+   * `headers()` rule in next.config.mjs, matched by request path, and a
+   * `cache-control` set here would be a SECOND claim about the same response —
+   * with this default, a 24-hour shared cache, saying the opposite. Omitting
+   * the header is what leaves one authority instead of two.
+   */
   cacheControl = 'public, max-age=0, s-maxage=86400, stale-while-revalidate=604800',
   tag = '',
+  /**
+   * The fetch to use. Injected ONLY so a caller's tests can drive this function
+   * without a network — the default is the global, so no behaviour changes for
+   * anyone who does not pass it.
+   */
+  fetchImpl = fetch,
 } = {}) {
   const forwarded = new Headers();
   const range = request.headers.get('range');
@@ -124,7 +167,7 @@ export async function proxyFromCloudinary(request, upstreamUrl, {
 
   let upstream;
   try {
-    upstream = await fetch(upstreamUrl, {
+    upstream = await fetchImpl(upstreamUrl, {
       method,
       headers: forwarded,
       redirect: 'follow',
@@ -154,7 +197,7 @@ export async function proxyFromCloudinary(request, upstreamUrl, {
   // Advertise Range even when this request had none, or a PDF viewer will not
   // attempt a ranged fetch in the first place.
   if (!out.has('accept-ranges')) out.set('accept-ranges', 'bytes');
-  out.set('cache-control', cacheControl);
+  if (cacheControl) out.set('cache-control', cacheControl);
   if (tag) out.set('x-legacy-delivery', tag);
 
   if (method === 'HEAD' || upstream.status === 304) {

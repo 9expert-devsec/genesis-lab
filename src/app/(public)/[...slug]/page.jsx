@@ -22,6 +22,7 @@ import { CourseTarget } from './_components/CourseTarget';
 import { CoursePrerequisites } from './_components/CoursePrerequisites';
 import { CourseRequirements } from './_components/CourseRequirements';
 import { CourseOutline } from './_components/CourseOutline';
+import { prepareOutlineRichHtml } from '@/lib/courses/courseOutlineView';
 import { CourseRoadmap } from './_components/CourseRoadmap';
 import { SidebarNav } from './_components/SidebarNav';
 import { CourseSectionTabs } from './_components/CourseSectionTabs';
@@ -162,10 +163,14 @@ async function loadProgram(slug) {
   const cfg = await ProgramPageConfig.findOne({ urlSlug: slug }).lean();
   if (!cfg || cfg.isPublished === false) return null;
 
-  const [programsRes, coursesRes, earlyBirdMap] = await Promise.all([
+  const [programsRes, coursesRes, earlyBirdMap, linkability] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
+    // For the course cards' skill capsules. The course-detail branch below
+    // already resolves this for its chips; the program and skill branches
+    // return BEFORE reaching it, which is why each loader fetches its own.
+    getPageLinkability(),
   ]);
 
   const resolved = await resolveProgramBySlug(slug, programsRes.items ?? []);
@@ -178,7 +183,7 @@ async function loadProgram(slug) {
   );
   const courses = await enrichCoursesWithDetails(programCourses);
   const faqs = await getLocalFaqsForCourse('program', programRefId(program)).catch(() => []);
-  return { program, config, courses, earlyBirdMap, faqs };
+  return { program, config, courses, earlyBirdMap, faqs, skillSlugs: linkability.skillSlugs };
 }
 
 function courseInSkill(course, skillId) {
@@ -194,10 +199,13 @@ async function loadSkill(slug) {
   const cfg = await SkillPageConfig.findOne({ urlSlug: slug }).lean();
   if (!cfg || cfg.isPublished === false) return null;
 
-  const [skillsRes, programsRes, coursesRes] = await Promise.all([
+  const [skillsRes, programsRes, coursesRes, linkability] = await Promise.all([
     listSkills().catch(() => ({ items: [] })),
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
+    // See the note in loadProgram: this branch returns before the
+    // course-detail linkability read, so it does its own.
+    getPageLinkability(),
   ]);
 
   const resolved = await resolveSkillBySlug(slug, skillsRes.items ?? []);
@@ -221,7 +229,10 @@ async function loadSkill(slug) {
     .filter((g) => g.courses.length > 0);
 
   const faqs = await getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []);
-  return { skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs };
+  return {
+    skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs,
+    skillSlugs: linkability.skillSlugs,
+  };
 }
 
 export async function generateMetadata({ params, searchParams }) {
@@ -457,6 +468,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           earlyBirdMap={programData.earlyBirdMap}
           faqs={programData.faqs}
           currentYear={siteCurrentYear()}
+          skillSlugs={programData.skillSlugs}
         />
       );
     }
@@ -470,6 +482,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           totalCourses={skillData.totalCourses}
           faqs={skillData.faqs}
           currentYear={siteCurrentYear()}
+          skillSlugs={skillData.skillSlugs}
         />
       );
     }
@@ -664,9 +677,13 @@ export default async function CatchAllPage({ params, searchParams }) {
             />
           </>
         )}
+        {/* `skillSlugs` is REUSED, not refetched — `linkability` is already
+            resolved above for this page's own skill chips. It travels on to
+            RelatedCourses, whose cards carry capsules of their own. */}
         <CourseDetail
           course={course}
           skillHrefs={skillHrefs}
+          skillSlugs={linkability.skillSlugs}
           courseProgramHref={courseProgramHref}
           extension={extension}
           schedules={schedules}
@@ -748,6 +765,7 @@ export default async function CatchAllPage({ params, searchParams }) {
 function CourseDetail({
   course,
   skillHrefs = {},
+  skillSlugs = {},
   courseProgramHref = null,
   extension,
   schedules,
@@ -864,7 +882,16 @@ function CourseDetail({
             <CourseTarget course={course} />
             <CoursePrerequisites course={course} />
             <CourseRequirements course={course} />
-            <CourseOutline course={course} />
+            {/* Rich section-7 bullets are resolved and SANITISED SERVER-SIDE.
+                CourseOutline is a client component; importing the sanitiser
+                there would ship parse5 + sanitize-html to the browser to
+                re-clean stored content on every page view. Returns null for
+                every course today — no rich copy exists and there is no
+                backfill — so the plain path is reached exactly as before. */}
+            <CourseOutline
+              course={course}
+              richHtml={prepareOutlineRichHtml({ course, extension })}
+            />
             <CourseRoadmap course={course} />
             <FaqAccordionSection
               faqs={faqs}
@@ -903,7 +930,11 @@ function CourseDetail({
         </div>
       </div>
 
-      <RelatedCourses courses={relatedCourses} currentYear={siteCurrentYear()} />
+      <RelatedCourses
+        courses={relatedCourses}
+        currentYear={siteCurrentYear()}
+        skillSlugs={skillSlugs}
+      />
 
       <CourseStickyCTA
         title={course.course_name}

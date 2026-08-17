@@ -6,6 +6,7 @@ import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
 import {
   parseTrainingTopicsValue, normaliseTopicRow, rowHasContent, seedTrainingTopics,
 } from '@/lib/courses/trainingTopics';
+import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 
 /**
  * The admin round trip must return upstream data UNCHANGED.
@@ -42,6 +43,25 @@ import {
  * opposite of what it claims. Every key probe below is written as `"key":`.
  */
 
+/**
+ * ══ B3: THE EDITOR'S PROP IS NOW `{ title, html }` ═════════════════════════
+ *
+ * Section 7's bullets are edited as rich HTML, so `initialTopics` carries
+ * `{ title, html }` and the MSDB → editor conversion moved into
+ * `seedTopicEditorRows`. Every test below therefore starts at the MSDB ROW and
+ * seeds through that function.
+ *
+ * THAT IS A STRENGTHENING, NOT AN ACCOMMODATION. Section (d) of this file
+ * already argued the loop must begin at the row rather than at the editor's
+ * props, because the defect it pins lived in the seed map. Before B3 only two
+ * tests did; now they all do, and the escaping step — the one that decides
+ * whether `List<mailmessage>` survives being opened — is inside the loop
+ * rather than beside it.
+ */
+function seedRows(trainingTopics, opts) {
+  return seedTopicEditorRows({ course: { training_topics: trainingTopics }, extension: null, ...opts }).rows;
+}
+
 /** Render the editor and pull the JSON out of its hidden input. */
 function serialisedPayload(initialTopics) {
   const html = renderToStaticMarkup(
@@ -64,18 +84,33 @@ const UPSTREAM = [
 
 // ── a. the round trip ───────────────────────────────────────────────────────
 test('round trip: upstream {title,bullets} survives editor → payload → parse', () => {
-  const { json } = serialisedPayload(UPSTREAM);
+  const { json } = serialisedPayload(seedRows(UPSTREAM));
   const back = parseTrainingTopicsValue(json);
   assert.deepEqual(back, UPSTREAM);
 });
 
 test('round trip: the payload itself is already the upstream shape', () => {
-  const { json } = serialisedPayload(UPSTREAM);
+  const { json } = serialisedPayload(seedRows(UPSTREAM));
   assert.deepEqual(JSON.parse(json), UPSTREAM);
 });
 
 test('CONTROL: the round trip CAN fail — a renamed key does not survive', () => {
-  // Exactly the pre-fix situation: data arrives under the retired names only.
+  /**
+   * Exactly the pre-fix situation: data arrives under the retired names only.
+   *
+   * ── THIS ONE DELIBERATELY DOES NOT GO THROUGH `seedRows` ────────────────
+   * Every other test in this file seeds first, because the loop must start at
+   * the MSDB row. This control is about THE EDITOR, and the seed would answer
+   * for it: `seedTopicEditorRows` delegates to `seedTrainingTopics`, whose
+   * documented RESCUE ARM maps a legacy row across so the shape does not take
+   * the admin's form away. Seeding here would make the control assert that the
+   * rescue works — which it does, and which is not what this is for.
+   *
+   * Fed straight to the editor, a retired-shape row carries neither `title`
+   * nor `html`, is dropped, and the payload is empty. That is the claim: the
+   * EDITOR does not rescue, so the round-trip assertions above are genuinely
+   * sensitive to key names.
+   */
   const legacyOnly = [{ topic: 'heading', subtopics: ['a', 'b'] }];
   const { json } = serialisedPayload(legacyOnly);
   const back = parseTrainingTopicsValue(json);
@@ -88,7 +123,7 @@ test('CONTROL: the round trip CAN fail — a renamed key does not survive', () =
 // ── b. title-only rows survive ──────────────────────────────────────────────
 test('a title-only row (bullets: []) survives the full round trip', () => {
   const titleOnly = [{ title: 'Part 9. สรุปเนื้อหา และ Q&A', bullets: [] }];
-  const { json } = serialisedPayload(titleOnly);
+  const { json } = serialisedPayload(seedRows(titleOnly));
   const back = parseTrainingTopicsValue(json);
   assert.equal(back.length, 1, '121 real headings upstream have no bullets — none may be dropped');
   assert.deepEqual(back, titleOnly);
@@ -109,13 +144,13 @@ test('CONTROL: a "drop rows without bullets" filter WOULD redden the test above'
 });
 
 test('a row with NEITHER title nor bullets is still dropped', () => {
-  const { json } = serialisedPayload([{ title: '', bullets: [] }, ...UPSTREAM]);
+  const { json } = serialisedPayload(seedRows([{ title: '', bullets: [] }, ...UPSTREAM]));
   assert.deepEqual(parseTrainingTopicsValue(json), UPSTREAM);
 });
 
 // ── c. no retired key names anywhere in the payload ─────────────────────────
 test('the serialised payload contains no "topic" and no "subtopics" KEY', () => {
-  const { json } = serialisedPayload(UPSTREAM);
+  const { json } = serialisedPayload(seedRows(UPSTREAM));
   assert.equal(json.includes('"topic":'), false, 'retired key `topic` is in the payload');
   assert.equal(json.includes('"subtopics":'), false, 'retired key `subtopics` is in the payload');
   assert.equal(json.includes('"title":'), true);
@@ -139,7 +174,7 @@ const MSDB_ROW = {
 };
 
 test('round trip from the MSDB ROW: seed → editor → payload → parse is lossless', () => {
-  const seeded = seedTrainingTopics(MSDB_ROW);
+  const seeded = seedTopicEditorRows({ course: MSDB_ROW, extension: null }).rows;
   const { json } = serialisedPayload(seeded);
   assert.deepEqual(parseTrainingTopicsValue(json), MSDB_ROW.training_topics);
 });
@@ -153,7 +188,7 @@ test('CONTROL: reverting the seed to `t.topic` reddens the round trip above', ()
     bullets: Array.isArray(t?.subtopics) ? t.subtopics : '',
   }));
 
-  const { json } = serialisedPayload(revertedSeed(MSDB_ROW));
+  const { json } = serialisedPayload(seedRows(revertedSeed(MSDB_ROW)));
   const back = parseTrainingTopicsValue(json);
 
   assert.notDeepEqual(back, MSDB_ROW.training_topics,
@@ -197,7 +232,7 @@ test('CONTROL: the key probe reddens when the old key name is put back', () => {
 
   // And the boundary matters: a bare substring probe is satisfied by the input's
   // own name attribute, which is why every probe above is written as `"key":`.
-  const { html } = serialisedPayload(UPSTREAM);
+  const { html } = serialisedPayload(seedRows(UPSTREAM));
   assert.equal(html.includes('topic'), true,
     'proves the bare-substring form is useless here: "training_topics" contains "topic"');
   assert.equal(html.includes('"topic":'), false);

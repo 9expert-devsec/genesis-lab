@@ -70,6 +70,7 @@ function emptyBatch(suggestedNo) {
     status: 'draft',
     status_override: false,
     payment_enabled: false,
+    quote_enabled: true,
     internal_notes: '',
   };
 }
@@ -131,6 +132,8 @@ export function MasterclassBatchListClient({ course, batches }) {
       status: batch.status ?? 'draft',
       status_override: batch.status_override ?? false,
       payment_enabled: batch.payment_enabled ?? false,
+      // !== false, not ?? true: an explicit false must survive and undefined resolves to ON
+      quote_enabled: batch.quote_enabled !== false,
       internal_notes: batch.internal_notes ?? '',
     });
     setError(null);
@@ -168,6 +171,7 @@ export function MasterclassBatchListClient({ course, batches }) {
       status: form.status,
       status_override: form.status_override,
       payment_enabled: form.payment_enabled,
+      quote_enabled: form.quote_enabled,
       internal_notes: form.internal_notes,
     };
   }
@@ -462,6 +466,11 @@ export function MasterclassBatchListClient({ course, batches }) {
           <div className="mt-4 flex flex-wrap gap-6">
             <Toggle checked={form.status_override} onChange={(v) => set({ status_override: v })} label="กำหนด Status เอง (ไม่คำนวณจากที่นั่ง)" />
             <Toggle checked={form.payment_enabled} onChange={(v) => set({ payment_enabled: v })} label="payment_enabled" />
+            <Toggle
+              checked={form.quote_enabled}
+              onChange={(v) => set({ quote_enabled: v })}
+              label="quote_enabled (เปิดให้ขอใบเสนอราคา)"
+            />
           </div>
 
           <div className="mt-4">

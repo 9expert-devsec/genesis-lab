@@ -13,9 +13,11 @@ import {
   ArrowLeft,
   ChevronDown,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
 import { computePricing, formatTHB } from "@/lib/pricing";
+import { isQuoteEnabled } from "@/lib/masterclass/quoteAccess";
 import { CountdownTimer } from "../../../_components/CountdownTimer";
 import { cn } from "@/lib/utils";
 import {
@@ -162,6 +164,17 @@ function BatchSummary({ course, batch }) {
       )}
       {batch.is_early_bird && batch.early_bird_deadline && (
         <CountdownTimer deadline={batch.early_bird_deadline} className="mt-3" />
+      )}
+      {course.slug && (
+        <Link
+          href={`/masterclass/${course.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-9e-md border border-9e-action px-4 py-2.5 text-sm font-semibold text-9e-action transition-colors hover:bg-9e-action hover:text-white dark:border-white/40 dark:text-white dark:hover:bg-white/10"
+        >
+          ดูรายละเอียดหลักสูตร
+          <ExternalLink size={16} />
+        </Link>
       )}
     </aside>
   );
@@ -497,6 +510,7 @@ export function MasterclassRegisterClient({ course, batch }) {
   }, []);
 
   const licenseEnabled = Boolean(course.license_options?.enabled);
+  const quoteEnabled = isQuoteEnabled(batch);
   const pricing = computePricing(
     batch.effective_price,
     formState.attendeesCount ?? 1,
@@ -1170,6 +1184,9 @@ export function MasterclassRegisterClient({ course, batch }) {
     // Quote always needs billing data for the invoice — reveal the form inline
     // on first press, then validate + register on the second.
     if (method === "quote") {
+      // The radio is already disabled in this case; this guards a stale
+      // `method` surviving a toggle flip mid-session. The API rejects it too.
+      if (!quoteEnabled) return;
       if (!formState.request_invoice && !quoteNeedsInvoice) {
         setQuoteNeedsInvoice(true);
         setOpenSections((p) => ({ ...p, invoice: true }));
@@ -2200,14 +2217,20 @@ export function MasterclassRegisterClient({ course, batch }) {
                         />
                         <MethodRadio
                           selected={method === "quote"}
+                          disabled={!quoteEnabled}
                           onClick={() => {
+                            if (!quoteEnabled) return;
                             setMethod("quote");
                             setChannel(null);
                             setWantsDoc(null);
                             setQuoteNeedsInvoice(true);
                           }}
                           title="ขอใบเสนอราคา"
-                          subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                          subtitle={
+                            quoteEnabled
+                              ? "เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                              : "รุ่นนี้ไม่เปิดรับการขอใบเสนอราคา กรุณาเลือกชำระทันที"
+                          }
                         />
                       </div>
                     </div>

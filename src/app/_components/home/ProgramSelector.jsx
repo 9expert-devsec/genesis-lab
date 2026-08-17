@@ -3,8 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { motion, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Keyboard, Lightbulb } from "lucide-react";
 import { cn, programHref, skillHref } from "@/lib/utils";
+
+/** ROUND HS-C: whole-section fade-up, once per mount. */
+const FADE_UP_VARIANTS = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
 
 /**
  * Program / Skill selector.
@@ -101,8 +108,16 @@ export function ProgramSelector({
     (skillSafePage + 1) * skillsPerPage,
   );
 
+  const shouldReduceMotion = useReducedMotion();
+
   return (
-    <section className="bg-[#f8fafd] dark:bg-9e-border px-4 py-14 lg:px-6">
+    <motion.section
+      className="bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6"
+      variants={FADE_UP_VARIANTS}
+      initial={shouldReduceMotion ? false : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.2 }}
+    >
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ค้นหาสิ่งที่คุณสนใจ
@@ -309,7 +324,7 @@ export function ProgramSelector({
           </div>
         )}
       </div>
-    </section>
+    </motion.section>
   );
 }
 

@@ -7,6 +7,7 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { CourseListClient } from './_components/CourseListClient';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
+import { getPageLinkability } from '@/lib/resolvePageSlug';
 
 export const metadata = { title: 'หลักสูตรทั้งหมด' };
 
@@ -15,13 +16,20 @@ export default async function Page() {
   let programOrder = [];
   let earlyBirdMap = {};
   let fetchError = null;
+  // Resolved on the SERVER, once per render, and passed down — the capsule
+  // links are not allowed to cost a client fetch. `getPageLinkability` already
+  // fails closed to empty maps, which degrades a capsule to the plain <span>
+  // it was before rather than taking the page down.
+  let skillSlugs = {};
 
   try {
-    const [coursesResult, rawPrograms, earlyBirdMapResult] = await Promise.all([
+    const [coursesResult, rawPrograms, earlyBirdMapResult, linkability] = await Promise.all([
       listPublicCourses(),
       listPrograms().catch(() => ({ items: [] })),
       getAllActiveEarlyBirdMap().catch(() => ({})),
+      getPageLinkability(),
     ]);
+    skillSlugs = linkability.skillSlugs;
     items = await enrichCoursesWithDetails(coursesResult.items);
     earlyBirdMap = earlyBirdMapResult;
     // Apply admin-set program order. We pass the names down so the
@@ -50,6 +58,7 @@ export default async function Page() {
         programOrder={programOrder}
         earlyBirdMap={earlyBirdMap}
         currentYear={siteCurrentYear()}
+        skillSlugs={skillSlugs}
       />
     </Suspense>
   );

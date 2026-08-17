@@ -128,7 +128,7 @@ export const POLICY_PAGES = [
     title: 'ข้อกำหนดและเงื่อนไข',
     titleEn: 'Terms & Conditions',
     blurb: 'เงื่อนไขการใช้บริการเว็บไซต์ เนื้อหา และบริการของ 9EXPERT',
-    updated: DRAFTED_2569,
+    updated: NOT_YET_IN_FORCE,
   },
   {
     slug: 'refund-policy',

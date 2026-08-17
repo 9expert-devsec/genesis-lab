@@ -15,9 +15,38 @@
  *   2. refuse an archive key that does not belong to that name
  *   3. head() the SOURCE archive — never copy blind
  *   4. head() the live object, so there is something to protect
+ *   4½. prove the RECORD is reachable, before any byte moves      ← below
  *   5. archive the CURRENT bytes and VERIFY that archive          ← §2's rule
  *   6. only then copy the source archive over the live key
  *   7. verify: head() FIRST (authoritative), then observability
+ *
+ * ══ STEP 4½: THE RECORD IS A PRECONDITION, NOT A POSTSCRIPT ═════════════════
+ *
+ * MEASURED, and the reason this step exists: the operator script reaches Mongo
+ * for the first time in `recordRestore`, which runs AFTER runRestoreFlow has
+ * already made two Blob copies. A Mongo connection from that script has been
+ * measured as INTERMITTENTLY unreachable — twice over 70 s, then 809 ms and
+ * 665 ms on the next attempts. So an outage during the wrong 30 seconds
+ * produced the 2026-08-10 defect shape by a second route: BLOB CHANGED, MONGO
+ * NOT. The first time, a stale CDN read got there; this way needs no CDN at all.
+ *
+ * So a successful connect-and-ping now gates the first mutation. When it fails
+ * the flow returns RECORD_UNREACHABLE having copied NOTHING, and the operator
+ * is told in as many words that nothing changed and the command is safe to
+ * retry — because in an incident the alternative is guessing whether a half
+ * restore happened, and guessing wrong in either direction is expensive.
+ *
+ * WHAT THIS DOES NOT CLAIM: it narrows the window, it does not close it. Mongo
+ * can still fall over between step 4½ and `recordRestore`. What it removes is
+ * the case that actually bit — Mongo already down when the restore was started.
+ *
+ * IT DOES NOT RUN ON A DRY RUN, deliberately. A dry run writes nothing, so it
+ * has nothing to be inconsistent with, and its whole value is that it still
+ * works while the rest of the world is broken.
+ *
+ * The check is INJECTED and its default REFUSES. A dependency that defaults to
+ * "fine" would let a caller that forgot to wire it get the old behaviour back
+ * silently, which is the failure mode this step exists to remove.
  *
  * ══ STEP 7 IS SHARED WITH THE BROWSER PATH, NOT FORKED ══════════════════════
  *
@@ -112,6 +141,12 @@ export const RESTORE = {
   REFUSED_ARCHIVE_KEY: 'refused-archive-key',
   ARCHIVE_MISSING: 'archive-missing',
   LIVE_MISSING: 'live-missing',
+  /**
+   * The record could not be reached, so nothing was touched. A refusal, not a
+   * failure: it is returned BEFORE the first Blob mutation, which is the whole
+   * point of it — see step 4½ in the header.
+   */
+  RECORD_UNREACHABLE: 'record-unreachable',
   SAFETY_ARCHIVE_FAILED: 'safety-archive-failed',
   SAFETY_ARCHIVE_UNVERIFIED: 'safety-archive-unverified',
   /** Dry run. Everything was READ, nothing was written. */
@@ -156,6 +191,20 @@ export function isArchiveKeyFor(filename, archivePathname) {
 }
 
 /**
+ * The DEFAULT for `ensureRecordReachable`, and it refuses.
+ *
+ * FAILS CLOSED ON PURPOSE. If this defaulted to `{ ok: true }`, a caller that
+ * simply forgot the dependency would get back exactly the behaviour step 4½
+ * removes — copies first, record maybe — and every test in this file would
+ * still be green. Refusing means the omission shows up as a restore that will
+ * not run, which is loud, reversible and costs nothing.
+ */
+const RECORD_CHECK_NOT_WIRED = async () => ({
+  ok: false,
+  error: 'ไม่ได้ต่อสายตัวตรวจสอบฐานข้อมูล (ensureRecordReachable) เข้ากับ runRestoreFlow',
+});
+
+/**
  * Run the restore. `deps` are all async:
  *
  *   headLive(blobPathname)    → { size } | null   the object being overwritten
@@ -163,6 +212,7 @@ export function isArchiveKeyFor(filename, archivePathname) {
  *                                                 the verification of the new one
  *   copy(from, to)            → whatever
  *   hash(pathname)            → sha256 hex        content, never length
+ *   ensureRecordReachable()   → { ok, error }     step 4½; DEFAULTS TO REFUSING
  *
  * `resolveTarget` is overridable ONLY so this flow can be rehearsed end to end
  * against a scratch pathname without touching any of the three real documents —
@@ -180,6 +230,7 @@ export async function runRestoreFlow(
   const {
     headLive, headArchive, copy,
     fetchFreshBytes, sha256, nowMs, wait,
+    ensureRecordReachable = RECORD_CHECK_NOT_WIRED,
     budgetMs = WEBROOT_RESTORE_OBSERVE_BUDGET_MS,
     schedule = WEBROOT_POLL_SCHEDULE_MS,
     resolveTarget = webrootUploadTarget,
@@ -258,6 +309,32 @@ export async function runRestoreFlow(
       sourceBytes: Number(source.size),
       previousBytes: Number(live.size),
       alreadyIdentical: sourceSha256 === liveSha256,
+    };
+  }
+
+  // ── 4½. THE RECORD MUST BE REACHABLE BEFORE ANY BYTE MOVES ──────────────
+  //
+  // Everything above this line only READ. Everything below it writes. This is
+  // the last point at which "change nothing" is still free, so it is where the
+  // one dependency that has been MEASURED unreachable gets proved.
+  //
+  // A throw is treated as a refusal rather than propagated: the caller's check
+  // talks to a network, and an exception from it means exactly what a false
+  // means — the record cannot be reached — while propagating would exit through
+  // main()'s catch with a stack trace instead of the message an operator in an
+  // incident actually needs.
+  let record;
+  try {
+    record = await ensureRecordReachable();
+  } catch (err) {
+    record = { ok: false, error: err?.message ?? String(err) };
+  }
+  if (!record?.ok) {
+    return {
+      status: RESTORE.RECORD_UNREACHABLE,
+      target,
+      archivePathname,
+      error: `ต่อฐานข้อมูลไม่ได้ จึงยังไม่เริ่มกู้คืน — ${record?.error ?? 'ไม่ทราบสาเหตุ'}`,
     };
   }
 

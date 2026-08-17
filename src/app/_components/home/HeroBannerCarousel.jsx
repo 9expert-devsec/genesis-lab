@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { useSwipe } from "@/hooks/useSwipe";
+import { LEGACY_TYPES } from "@/lib/banners/bannerTypes";
 import { resolveBannerLink, warnBlockedBannerLink } from "@/lib/bannerLinkUrl";
 
 /**
@@ -363,12 +364,26 @@ function useFilteredBanners(allBanners) {
   // — otherwise `[total]` effects and the track map re-fire unnecessarily.
   const banners = useMemo(
     () =>
+      // Same predicate, same four comparisons — the ids now come from
+      // src/lib/banners/bannerTypes.js instead of being typed here.
+      //
+      // THE RENDER SWITCH BELOW STILL HOLDS ITS OWN LITERALS, deliberately, and
+      // test/pure/bannerTypeSingleSource carries it as a NAMED exception. This
+      // component is dormant (Home renders Feature Content in its place) and
+      // rewriting a 60-line switch it no longer runs would be change without
+      // verification. It goes when the component does.
       allBanners.filter((b) => {
-        if (b.type === "youtube") return true;
+        if (b.type === LEGACY_TYPES.YOUTUBE) return true;
         if (isMobile) {
-          return b.type === "image_mobile" || b.type === "image_button_mobile";
+          return (
+            b.type === LEGACY_TYPES.IMAGE_MOBILE ||
+            b.type === LEGACY_TYPES.IMAGE_BUTTON_MOBILE
+          );
         }
-        return b.type === "image_desktop" || b.type === "image_button_desktop";
+        return (
+          b.type === LEGACY_TYPES.IMAGE_DESKTOP ||
+          b.type === LEGACY_TYPES.IMAGE_BUTTON_DESKTOP
+        );
       }),
     [allBanners, isMobile],
   );
