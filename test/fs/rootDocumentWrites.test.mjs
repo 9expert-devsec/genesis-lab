@@ -31,14 +31,19 @@ import { blankStringBodies, readSource, walkSources } from '../sourceScan.mjs';
  * off the IMPORT — it finds what each file calls the RootDocument default export
  * and checks only calls on that binding.
  *
- * ══ WHAT IS VACUOUS TODAY, SAID OUT LOUD ════════════════════════════════════
+ * ══ IT IS LIVE NOW — IT WAS NOT WHEN IT WAS WRITTEN ═════════════════════════
  *
- * NOTHING IMPORTS THIS MODEL YET. The repo-wide assertion is therefore a floor
- * that passes because there is nothing to catch, and a matcher that matches
- * nothing proves nothing. So the DETECTOR is proved against synthetic fixtures
- * that own their own data — one call site per banned method, plus legitimate
- * `.save()`/`.create()` sites that must NOT be flagged — and the repo-wide
- * assertion becomes load-bearing the moment the first importer lands.
+ * When this guard shipped NOTHING imported the model, so the repo-wide
+ * assertion was a floor that passed because there was nothing to catch. The
+ * first importer has since landed: src/app/root-file/[...path]/route.js reads
+ * the registry with `.findOne().lean()`, which is exactly the shape this guard
+ * permits, so it now passes for the right reason rather than for lack of a
+ * subject.
+ *
+ * The DETECTOR is still proved against synthetic fixtures that own their own
+ * data — one call site per banned method, plus legitimate `.save()`/`.create()`
+ * sites that must NOT be flagged — because a real tree with one compliant
+ * importer still cannot demonstrate that a violation would be caught.
  */
 
 const MODEL = 'src/models/RootDocument.js';

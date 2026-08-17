@@ -80,6 +80,11 @@ export const RESERVED_PATHS = Object.freeze([
   { segment: 'admin', source: 'tree' },
   { segment: 'api', source: 'tree' },
   { segment: 'legacy-file', source: 'tree' },
+  // The root-file registry's delivery route. Reserved for the same reason
+  // legacy-file is: it is a real app-router segment, so a course alias claiming
+  // it would resolve to a file-delivery handler instead of a course page and
+  // silently never render.
+  { segment: 'root-file', source: 'tree' },
 
   // ── next.config.mjs redirects() ──────────────────────────────────────────
   // These never reach the router, so an alias here is unreachable in a way no

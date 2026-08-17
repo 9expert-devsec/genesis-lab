@@ -141,8 +141,23 @@ export async function proxyUpstream(request, upstreamUrl, {
   fileName,
   forceContentType = null,
   method = 'GET',
+  /**
+   * Pass a FALSY value to set no `cache-control` at all.
+   *
+   * The root-file route needs that: `no-store` for those paths comes from the
+   * `headers()` rule in next.config.mjs, matched by request path, and a
+   * `cache-control` set here would be a SECOND claim about the same response —
+   * with this default, a 24-hour shared cache, saying the opposite. Omitting
+   * the header is what leaves one authority instead of two.
+   */
   cacheControl = 'public, max-age=0, s-maxage=86400, stale-while-revalidate=604800',
   tag = '',
+  /**
+   * The fetch to use. Injected ONLY so a caller's tests can drive this function
+   * without a network — the default is the global, so no behaviour changes for
+   * anyone who does not pass it.
+   */
+  fetchImpl = fetch,
 } = {}) {
   const forwarded = new Headers();
   const range = request.headers.get('range');
@@ -152,7 +167,7 @@ export async function proxyUpstream(request, upstreamUrl, {
 
   let upstream;
   try {
-    upstream = await fetch(upstreamUrl, {
+    upstream = await fetchImpl(upstreamUrl, {
       method,
       headers: forwarded,
       redirect: 'follow',
@@ -182,7 +197,7 @@ export async function proxyUpstream(request, upstreamUrl, {
   // Advertise Range even when this request had none, or a PDF viewer will not
   // attempt a ranged fetch in the first place.
   if (!out.has('accept-ranges')) out.set('accept-ranges', 'bytes');
-  out.set('cache-control', cacheControl);
+  if (cacheControl) out.set('cache-control', cacheControl);
   if (tag) out.set('x-legacy-delivery', tag);
 
   if (method === 'HEAD' || upstream.status === 304) {
