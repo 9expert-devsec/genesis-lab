@@ -7,6 +7,7 @@ import {
   uploadSchedulePDF,
   deleteSchedulePDF,
 } from '@/lib/actions/schedule-pdf';
+import { formatBytes } from '@/lib/formatBytes.mjs';
 
 function formatDate(value) {
   if (!value) return '—';
@@ -19,13 +20,6 @@ function formatDate(value) {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
 export default function SchedulePDFClient({ current }) {

@@ -12,17 +12,27 @@ import {
   ChevronRight,
   ArrowLeft,
   ChevronDown,
-  Download,
-  RefreshCw,
-  ChevronUp,
   X,
 } from "lucide-react";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
 import { computePricing, formatTHB } from "@/lib/pricing";
 import { CountdownTimer } from "../../../_components/CountdownTimer";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  SummaryLine,
+  MethodRadio,
+  ChannelCard,
+} from "@/components/payment/PaymentAtoms";
+import {
+  detectCardBrand,
+  cardNumberValid,
+  expiryValid,
+  cvcMax,
+} from "@/components/payment/card";
+import { QrPanelFull } from "@/components/payment/QrPanelFull";
+import { CardPanelFull } from "@/components/payment/CardPanelFull";
+import { Step2MobileBar } from "@/components/payment/Step2MobileBar";
+import { TermsModal } from "@/components/payment/TermsModal";
 import { trackPurchase, trackFormSubmitLead } from "@/lib/analytics/conversions";
 
 const STORAGE_KEY = "masterclass-register-v1";
@@ -154,495 +164,6 @@ function BatchSummary({ course, batch }) {
         <CountdownTimer deadline={batch.early_bird_deadline} className="mt-3" />
       )}
     </aside>
-  );
-}
-
-// ── Summary / payment atoms (copied from RegisterWizard) ──────────────────────
-function SummaryLine({ label, value }) {
-  return (
-    <div className="flex justify-between">
-      <span className="text-[var(--text-secondary)]">{label}</span>
-      <span className="text-[var(--text-primary)]">{value}</span>
-    </div>
-  );
-}
-
-// Step 2 mobile-only bottom bar: collapsed total + CTA, with an expandable summary sheet.
-// Extracted as a component (not an inline IIFE) so its useState hook is called unconditionally.
-function Step2MobileBar({
-  pricing,
-  canStep2Confirm,
-  submitting,
-  method,
-  onConfirm,
-  onBack,
-}) {
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  return (
-    <>
-      {/* Expandable summary sheet */}
-      {summaryOpen && (
-        <div
-          className="fixed inset-0 z-[60] flex items-end lg:hidden"
-          onClick={() => setSummaryOpen(false)}
-        >
-          <div
-            className="w-full rounded-t-2xl border-t border-[var(--surface-border)] bg-white p-5 shadow-2xl dark:bg-[#0D1B2A]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-9e-navy dark:text-white">
-                สรุปยอด
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSummaryOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={18} />
-              </button>
-            </div>
-            <div className="space-y-2 text-sm">
-              <SummaryLine
-                label={`ราคาต่อที่นั่ง × ${pricing.seats}`}
-                value={`${formatTHB(pricing.subtotal)} บาท`}
-              />
-              <SummaryLine label="ส่วนลด" value={`${formatTHB(0)} บาท`} />
-              <SummaryLine
-                label="VAT 7%"
-                value={`${formatTHB(pricing.vatAmount)} บาท`}
-              />
-              <div className="mt-2 flex items-baseline justify-between border-t border-[var(--surface-border)] pt-2">
-                <span className="font-semibold text-9e-navy dark:text-white">
-                  ยอดรวมสุทธิ
-                </span>
-                <span className="text-xl font-bold text-9e-action">
-                  {formatTHB(pricing.total)} บาท
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bottom bar */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--surface-border)] bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] dark:bg-[#0D1B2A] lg:hidden">
-        <div className="flex items-center gap-2">
-          {/* Price + expand toggle */}
-          <button
-            type="button"
-            onClick={() => setSummaryOpen((v) => !v)}
-            className="flex flex-1 flex-col items-start"
-          >
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              ยอดรวมสุทธิ
-            </span>
-            <span className="flex items-center gap-1 text-base font-bold text-9e-action">
-              {formatTHB(pricing.total)} บาท
-              <ChevronUp
-                size={14}
-                className={cn(
-                  "transition-transform",
-                  summaryOpen && "rotate-180",
-                )}
-              />
-            </span>
-          </button>
-          {/* Back button */}
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={submitting}
-            className="flex shrink-0 items-center justify-center rounded-full px-5 py-3 text-sm font-semibold border border-[var(--surface-border)] text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
-          >
-            ย้อนกลับ
-          </button>
-          {/* CTA — quote path only */}
-          {method === "quote" && (
-            <button
-              type="button"
-              onClick={onConfirm}
-              disabled={!canStep2Confirm || submitting}
-              className={cn(
-                "rounded-full px-5 py-3 text-sm font-semibold transition-colors",
-                canStep2Confirm && !submitting
-                  ? "bg-9e-lime text-9e-navy hover:bg-9e-lime/80"
-                  : "cursor-not-allowed bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500",
-              )}
-            >
-              {submitting ? "..." : "ขอใบเสนอราคา"}
-            </button>
-          )}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function MethodRadio({ selected, disabled, onClick, title, subtitle }) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        "flex w-full items-start gap-3 rounded-9e-lg border p-3 text-left transition-all",
-        disabled
-          ? "cursor-not-allowed border-[var(--surface-border)] opacity-50"
-          : selected
-            ? "border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15"
-            : "border-[var(--surface-border)] hover:border-9e-brand/40",
-      )}
-    >
-      <span
-        className={cn(
-          "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
-          selected ? "border-9e-brand" : "border-[var(--surface-border)]",
-        )}
-      >
-        {selected && <span className="h-2 w-2 rounded-full bg-9e-brand" />}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold text-[var(--text-primary)]">
-          {title}
-        </span>
-        <span className="mt-0.5 block text-xs leading-5 text-[var(--text-secondary)]">
-          {subtitle}
-        </span>
-      </span>
-    </button>
-  );
-}
-
-function ChannelCard({ selected, onClick, Icon, label }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={selected}
-      className={cn(
-        "flex flex-col items-center gap-2 rounded-9e-lg border p-3 text-center transition-all",
-        selected
-          ? "border-9e-brand bg-9e-brand/5 ring-2 ring-9e-brand/15"
-          : "border-[var(--surface-border)] hover:border-9e-brand/40",
-      )}
-    >
-      <Icon
-        className={cn(
-          "h-6 w-6",
-          selected ? "text-9e-brand" : "text-[var(--text-secondary)]",
-        )}
-      />
-      <span className="text-xs font-semibold text-[var(--text-primary)]">
-        {label}
-      </span>
-    </button>
-  );
-}
-
-// ── Card input helpers (brand detection / formatting / validation) ──────────────
-
-function detectCardBrand(num) {
-  const n = (num || "").replace(/\D/g, "");
-  if (/^3[47]/.test(n)) return "amex";
-  if (/^35/.test(n)) return "jcb";
-  if (/^4/.test(n)) return "visa";
-  if (/^(5[1-5]|222[1-9]|22[3-9]\d|2[3-6]\d\d|27[01]\d|2720)/.test(n))
-    return "mastercard";
-  return "unknown";
-}
-function formatCardNumber(value, brand) {
-  const max = brand === "amex" ? 15 : 16;
-  const digits = (value || "").replace(/\D/g, "").slice(0, max);
-  if (brand === "amex") {
-    return digits.replace(/^(\d{0,4})(\d{0,6})(\d{0,5}).*/, (_, a, b, c) =>
-      [a, b, c].filter(Boolean).join(" "),
-    );
-  }
-  return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
-}
-function formatExpiry(value) {
-  const d = (value || "").replace(/\D/g, "").slice(0, 4);
-  return d.length <= 2 ? d : d.slice(0, 2) + "/" + d.slice(2);
-}
-function expiryValid(mmYY) {
-  const m = (mmYY || "").match(/^(\d{2})\/(\d{2})$/);
-  if (!m) return false;
-  const mm = Number(m[1]);
-  const yy = 2000 + Number(m[2]);
-  if (mm < 1 || mm > 12) return false;
-  return new Date(yy, mm, 0, 23, 59, 59) >= new Date();
-}
-function cvcMax(brand) {
-  return brand === "amex" ? 4 : 3;
-}
-function cardNumberValid(num, brand) {
-  const n = (num || "").replace(/\D/g, "");
-  return brand === "amex" ? n.length === 15 : n.length >= 16;
-}
-
-const CARD_BRAND_LABEL = {
-  visa: "Visa",
-  mastercard: "Mastercard",
-  amex: "Amex",
-  jcb: "JCB",
-  unknown: "บัตร",
-};
-
-function CardFields({ card, setCard }) {
-  const brand = detectCardBrand(card.number);
-  const numDigits = card.number.replace(/\D/g, "");
-  const numError = numDigits.length > 0 && !cardNumberValid(card.number, brand);
-  const expError = card.expiry.length > 0 && !expiryValid(card.expiry);
-  const cvcError = card.cvc.length > 0 && card.cvc.length !== cvcMax(brand);
-  return (
-    <div className="space-y-3">
-      <div>
-        <div className="mb-1 flex items-center justify-between">
-          <Label htmlFor="card-number">หมายเลขบัตร</Label>
-          {numDigits.length > 0 && (
-            <span className="text-xs font-semibold text-9e-action">
-              {CARD_BRAND_LABEL[brand]}
-            </span>
-          )}
-        </div>
-        <Input
-          id="card-number"
-          inputMode="numeric"
-          autoComplete="cc-number"
-          placeholder="4242 4242 4242 4242"
-          value={card.number}
-          onChange={(e) =>
-            setCard((c) => ({
-              ...c,
-              number: formatCardNumber(
-                e.target.value,
-                detectCardBrand(e.target.value),
-              ),
-            }))
-          }
-        />
-        {numError && (
-          <p className="mt-1 text-xs text-red-500">หมายเลขบัตรไม่ถูกต้อง</p>
-        )}
-      </div>
-      <div>
-        <Label htmlFor="card-name">ชื่อบนบัตร</Label>
-        <Input
-          id="card-name"
-          autoComplete="cc-name"
-          placeholder="NAME SURNAME"
-          value={card.name}
-          onChange={(e) => setCard((c) => ({ ...c, name: e.target.value }))}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <Label htmlFor="card-expiry">วันหมดอายุ (MM/YY)</Label>
-          <Input
-            id="card-expiry"
-            inputMode="numeric"
-            autoComplete="cc-exp"
-            maxLength={5}
-            placeholder="MM/YY"
-            value={card.expiry}
-            onChange={(e) =>
-              setCard((c) => ({ ...c, expiry: formatExpiry(e.target.value) }))
-            }
-          />
-          {expError && (
-            <p className="mt-1 text-xs text-red-500">วันหมดอายุไม่ถูกต้อง</p>
-          )}
-        </div>
-        <div>
-          <Label htmlFor="card-cvc">CVC</Label>
-          <Input
-            id="card-cvc"
-            inputMode="numeric"
-            autoComplete="cc-csc"
-            placeholder={brand === "amex" ? "1234" : "123"}
-            value={card.cvc}
-            onChange={(e) =>
-              setCard((c) => ({
-                ...c,
-                cvc: e.target.value
-                  .replace(/\D/g, "")
-                  .slice(0, cvcMax(detectCardBrand(card.number))),
-              }))
-            }
-          />
-          {cvcError && (
-            <p className="mt-1 text-xs text-red-500">CVC ไม่ถูกต้อง</p>
-          )}
-        </div>
-      </div>
-      <p className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)]">
-        <Lock className="h-3.5 w-3.5" />
-        ข้อมูลบัตรถูกเข้ารหัสและส่งตรงไปยัง Omise — เราไม่เก็บเลขบัตรของคุณ
-      </p>
-    </div>
-  );
-}
-
-// ── Expanded PromptPay panel (left column, after charge created) ──────────────
-function QrPanelFull({ charge, pricing, expired, secondsLeft, onRegenerate }) {
-  const mmss = `${String(Math.floor((secondsLeft ?? 0) / 60)).padStart(2, "0")}:${String(
-    (secondsLeft ?? 0) % 60,
-  ).padStart(2, "0")}`;
-  return (
-    <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
-      <h3 className="text-base font-bold text-9e-navy dark:text-white">
-        ชำระเงินผ่าน PromptPay QR
-      </h3>
-      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        สแกน QR ผ่าน Mobile Banking
-        แล้วระบบจะตรวจสอบสถานะการชำระเงินให้อัตโนมัติ
-      </p>
-
-      <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
-        {/* left: QR + amount + timer */}
-        <div className="flex flex-col items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={charge.qrUrl}
-            alt="PromptPay QR"
-            className="h-56 w-56 rounded-9e-md border border-[var(--surface-border)] bg-white p-2"
-          />
-          <p className="mt-3 text-sm text-[var(--text-secondary)]">
-            ยอดชำระ:{" "}
-            <span className="text-lg font-bold text-9e-action">
-              {formatTHB(charge.amount ?? pricing?.total ?? 0)} บาท
-            </span>
-          </p>
-          {!expired ? (
-            <span className="mt-2 inline-flex items-center rounded-full border border-amber-400 px-3 py-0.5 text-xs font-semibold text-amber-600">
-              ชำระภายใน {mmss}
-            </span>
-          ) : (
-            <span className="mt-2 text-sm text-red-500">
-              QR หมดอายุแล้ว กรุณาสร้าง QR ใหม่
-            </span>
-          )}
-        </div>
-
-        {/* right: reference, status, steps */}
-        <div className="space-y-3">
-          {charge.referenceNumber && (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-9e-slate-dp-50">
-                เลขที่อ้างอิง
-              </p>
-              <p className="text-sm font-semibold text-9e-navy dark:text-white">
-                {charge.referenceNumber}
-              </p>
-            </div>
-          )}
-          <div>
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-xs font-semibold",
-                expired
-                  ? "bg-red-100 text-red-600"
-                  : "bg-amber-100 text-amber-700",
-              )}
-            >
-              {expired ? "หมดอายุ" : "รอการชำระเงิน"}
-            </span>
-          </div>
-          <ol className="space-y-1 text-sm text-[var(--text-secondary)]">
-            <li>1. เปิดแอปธนาคารบนมือถือ</li>
-            <li>2. สแกน QR Code นี้</li>
-            <li>3. ตรวจสอบยอดและยืนยันการชำระเงิน</li>
-          </ol>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <a
-          href={charge.qrUrl}
-          download="promptpay-qr.png"
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--surface-border)] px-4 py-2 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
-        >
-          <Download size={14} /> ดาวน์โหลด QR
-        </a>
-        {expired && (
-          <button
-            type="button"
-            onClick={onRegenerate}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[var(--surface-border)] px-4 py-2 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white"
-          >
-            <RefreshCw size={14} /> สร้าง QR ใหม่
-          </button>
-        )}
-      </div>
-    </section>
-  );
-}
-
-// ── Expanded card panel (left column, after confirm) ──────────────────────────
-function CardPanelFull({
-  card,
-  setCard,
-  pricing,
-  onCharge,
-  onChangeMethod,
-  submitting,
-  processing,
-  payError,
-  cardValid,
-  omiseReady,
-}) {
-  return (
-    <section className="mt-5 rounded-2xl border border-[var(--surface-border)] bg-white p-5 shadow-sm dark:bg-[#111d2c]">
-      <h3 className="text-base font-bold text-9e-navy dark:text-white">
-        ชำระเงินผ่านบัตรเครดิต / เดบิต
-      </h3>
-      <p className="mt-1 text-sm text-[var(--text-secondary)]">
-        กรอกข้อมูลบัตรอย่างปลอดภัยผ่าน Card Secure Fields
-      </p>
-
-      <div className="mt-3 flex items-start gap-2 rounded-9e-md border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">
-        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        กรอกข้อมูลผ่าน Card Secure Fields จาก Payment Gateway
-        โดยไม่เก็บเลขบัตรเต็มในระบบ
-      </div>
-
-      <div className="mt-4">
-        <CardFields card={card} setCard={setCard} />
-      </div>
-
-      {payError && (
-        <div className="mt-3 rounded-9e-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-500">
-          {payError}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={onCharge}
-        disabled={submitting || processing || !cardValid || !omiseReady}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-9e-lime py-3 text-sm font-bold text-9e-navy transition-colors hover:bg-9e-lime/80 disabled:opacity-50"
-      >
-        {submitting || processing ? (
-          <>
-            <Loader2 size={16} className="animate-spin" />{" "}
-            {processing ? "กำลังตรวจสอบการชำระเงิน…" : "กำลังดำเนินการ…"}
-          </>
-        ) : (
-          <>
-            <Lock size={14} /> ชำระเงิน {formatTHB(pricing.total)} บาท
-          </>
-        )}
-      </button>
-      <button
-        type="button"
-        onClick={onChangeMethod}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-full py-2.5 text-sm font-medium text-gray-500 hover:bg-9e-ice dark:hover:bg-white/5"
-      >
-        เปลี่ยนวิธีชำระเงิน
-      </button>
-    </section>
   );
 }
 
@@ -1233,8 +754,13 @@ export function MasterclassRegisterClient({ course, batch }) {
       if (!addr.addressLine?.trim())
         return "กรุณากรอกที่อยู่สำหรับออกใบเสนอราคา";
       if (!addr.postalCode?.trim()) return "กรุณากรอกรหัสไปรษณีย์";
-      if (!addr.subDistrict?.trim())
-        return "กรุณาเลือกแขวง/ตำบล (กรอกรหัสไปรษณีย์ก่อน)";
+      // STATE-NEUTRAL. This used to add "(กรอกรหัสไปรษณีย์ก่อน)", which told the
+      // customer to do the thing they had already done whenever the postcode
+      // was not in the dataset and the field had become typeable. The validator
+      // deliberately does NOT learn about the field's locked/select/manual
+      // state — a message that cannot be wrong is better than a second copy of
+      // that logic living here.
+      if (!addr.subDistrict?.trim()) return "กรุณาระบุแขวง/ตำบล";
       if (!addr.district?.trim()) return "กรุณาเลือกเขต/อำเภอ";
       if (!addr.province?.trim()) return "กรุณาเลือกจังหวัด";
     }
@@ -2946,6 +2472,13 @@ export function MasterclassRegisterClient({ course, batch }) {
         )}
 
         {/* ── STEP 2 Mobile bottom bar ── */}
+        {/* NOT passing `publishesOccupancy`, and that is deliberate rather than
+            an oversight: this page is /masterclass/[slug]/register, the one
+            path dockLiftsForBottomBar matches, so the dock is ALREADY raised to
+            bottom-24 by that static rule. Publishing as well would make it
+            double-count — static lift plus measured inset — and float roughly
+            200px off the bottom. When the static lift is retired in favour of
+            the measured clearance, this call site opts in and the prop goes. */}
         {step === 2 && !result && (
           <Step2MobileBar
             pricing={pricing}
@@ -3087,71 +2620,6 @@ export function MasterclassRegisterClient({ course, batch }) {
         )}
       </div>
     </>
-  );
-}
-
-// ── Terms & conditions modal ──────────────────────────────────────────────────
-function TermsModal({ open, onClose }) {
-  if (!open) return null;
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="เงื่อนไขการสมัครและการชำระเงิน"
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      {/* Panel */}
-      <div className="relative z-[60] w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl border border-[var(--surface-border)] bg-white p-6 shadow-xl dark:bg-[#111d2c]">
-        <h2 className="text-base font-bold text-9e-navy dark:text-white mb-4">
-          เงื่อนไขการสมัครและการชำระเงิน
-        </h2>
-        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-          <p>
-            <strong className="text-9e-navy dark:text-white">
-              1. การตรวจสอบข้อมูล
-            </strong>
-            <br />
-            ผู้สมัครรับผิดชอบในการตรวจสอบความถูกต้องของข้อมูลการสมัครก่อนยืนยัน
-          </p>
-          <p>
-            <strong className="text-9e-navy dark:text-white">
-              2. นโยบายการคืนเงิน
-            </strong>
-            <br />
-            บริษัทไม่มีนโยบายคืนเงินหลังจากชำระเงินแล้วในทุกกรณี
-          </p>
-          <p>
-            <strong className="text-9e-navy dark:text-white">
-              3. การเลื่อน / เปลี่ยนแปลงรอบอบรม
-            </strong>
-            <br />
-            ผู้สมัครสามารถขอเลื่อนรอบอบรมได้ล่วงหน้าไม่น้อยกว่า 7 วันทำการ
-            ทั้งนี้ขึ้นอยู่กับที่นั่งว่างของรอบที่ต้องการเปลี่ยน
-          </p>
-          <p>
-            <strong className="text-9e-navy dark:text-white">
-              4. เงื่อนไขการอบรม
-            </strong>
-            <br />
-            ผู้สมัครยินยอมปฏิบัติตามกฎระเบียบและเงื่อนไขการอบรมของ 9Expert
-            Training ตลอดระยะเวลาการอบรม
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 w-full rounded-full bg-9e-action py-2.5 text-sm font-semibold text-white hover:bg-9e-brand"
-        >
-          รับทราบและปิด
-        </button>
-      </div>
-    </div>
   );
 }
 

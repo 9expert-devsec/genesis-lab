@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useId, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Award, Clock, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
+import { INHOUSE_ONLY_LABEL, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
 
 /**
  * Hero for the course detail page.
@@ -53,8 +54,10 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
     course.course_id
   ).toLowerCase()}`;
 
-  // course_price === 0 means inhouse-only (no public schedule, no public price)
-  const isInhouseOnly = !course.course_price || Number(course.course_price) === 0;
+  // course_price === 0 means inhouse-only (no public schedule, no public price).
+  // Shared predicate so this page's price line, the catalog table's cell and
+  // /schedule's column cannot disagree about what counts as priceless.
+  const isInhouseOnly = isInhouseOnlyPrice(course.course_price);
 
   const inhouseHref = `/registration/in-house?course=${String(course.course_id).toLowerCase()}`;
 
@@ -67,20 +70,87 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
     Number(course.course_netprice) > 0 &&
     Number(course.course_netprice) !== Number(course.course_price);
 
+  // Below lg the hero is EDGE-TO-EDGE: no section padding, no gap between the
+  // cover and the card, no rounding on either. The offsets are STRIPPED rather
+  // than cancelled with negative margins — a negative margin has to match the
+  // padding exactly or every course page grows a horizontal scrollbar, whereas
+  // removing the padding cannot produce one at all.
+  //
+  // Accepted consequence: the programme-colour gradient is INVISIBLE below lg,
+  // because the cover and the card together cover the whole section. That is
+  // the intent; there is deliberately no surviving sliver of it.
+  //
+  // `py-6` had no lg variant, so it is re-added as `lg:py-6` — dropping it
+  // outright would have taken the desktop vertical padding with it.
   return (
-    <section style={sectionStyle} className="w-full px-4 py-6 lg:px-6">
+    <section style={sectionStyle} className="w-full lg:px-6 lg:py-6">
       <div className="mx-auto max-w-[1200px]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6">
-          {/* LEFT — standalone rounded white info card */}
+        <div className="flex flex-col lg:flex-row lg:items-stretch lg:gap-6">
+          {/* MOBILE — cover zone above the info card.
+              A SECOND element rather than responsive classes on the desktop
+              one: a single node cannot simultaneously be the full-width block
+              above the card and the clipped right-hand column, because the two
+              sit at different points in the flow. Of the two ways to get it
+              above the card, this — a `lg:hidden` sibling placed first in
+              source — is the cheaper: the container is already `flex-col`
+              below lg, so source order alone puts it on top and no `order-*`
+              utility is needed at all (the masterclass block carries
+              `order-first`, which is likewise a no-op there). Restructuring the
+              flex row into a reorderable grid would have touched the desktop
+              layout, which must stay exactly as it was.
+
+              Not rounded and no shadow: below lg the section has no padding at
+              all, so `w-full` here is the full viewport width — flush left,
+              right and top, directly under the site header. The desktop block
+              below keeps rounded-2xl. */}
+          <div className="relative aspect-video w-full overflow-hidden lg:hidden">
+            {coverSlides.length === 0 ? (
+              /* Same empty state as desktop — no cover and no gallery still
+                 has to paint the programme colour, not collapse to nothing. */
+              <div
+                className="absolute inset-0 flex items-center justify-center"
+                style={{ background: sectionStyle.background }}
+              >
+                {course.program?.programiconurl && (
+                  <Image
+                    src={course.program.programiconurl}
+                    alt=""
+                    width={120}
+                    height={120}
+                    className="object-contain opacity-80"
+                  />
+                )}
+              </div>
+            ) : (
+              <CoverSlider slides={coverSlides} />
+            )}
+          </div>
+
+          {/* LEFT — standalone info card; rounded and floating only at lg. */}
           {/* dark:ring — color-agnostic edge separator. On the dark card the
               runtime hero gradient (programcolor/skillcolor) can, for a rare
               dark-navy source, lighten to a tone near #1E3A5F and blur the
               card's outer edge. A faint inset light ring keeps the edge
               readable for ANY gradient without special-casing a colour.
-              Dark-only, so light mode is unchanged. */}
-          <div className="min-w-0 flex flex-col justify-center rounded-2xl bg-[var(--surface-raised)] p-6 shadow-9e-sm dark:ring-1 dark:ring-inset dark:ring-white/10 lg:w-[40%] lg:flex-none lg:px-8 lg:py-6 ">
+              Dark-only, so light mode is unchanged.
+
+              It is now lg-ONLY, and so are rounded-2xl and shadow-9e-sm,
+              because below lg the thing each of them exists to do has gone
+              away. The ring separates the card from the gradient; edge-to-edge
+              there IS no gradient, so all it draws is a 1px hairline hugging
+              the left and right viewport edges against nothing. The shadow
+              says "card floating above the gradient"; with the card flush to
+              both edges its left and right halves are clipped clean off by the
+              viewport and what survives reads as a smudge rather than a lift.
+              Neither is load-bearing below lg; both are exactly as before at lg.
+
+              What this does NOT solve is the cover/card seam — see the commit
+              message. A top-edge separator is a different utility (border-t,
+              one side) from an inset ring (four sides), so keeping the ring on
+              mobile would not have bought it. */}
+          <div className="min-w-0 flex flex-col justify-center bg-[var(--surface-raised)] p-6 lg:w-[40%] lg:flex-none lg:rounded-2xl lg:px-8 lg:py-6 lg:shadow-9e-sm lg:dark:ring-1 lg:dark:ring-inset lg:dark:ring-white/10">
             <div className="w-full">
-              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              <p className="mb-1 text-xs font-bold  tracking-wider text-[var(--text-secondary)]">
                 {course.course_id}
               </p>
 
@@ -97,25 +167,51 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
                 <span>/ ช่วงเวลา 9:00 - 16:00 น.</span>
               </div>
 
-              <div className="mb-4 flex flex-wrap gap-2">
-                {course.course_type_public && (
-                  <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
-                    Classroom
-                  </span>
-                )}
-                <span className="rounded-full border border-purple-400 bg-white px-3 py-1 text-xs font-bold text-purple-600">
-                  Hybrid
-                </span>
-                {course.course_type_inhouse && (
-                  <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
-                    Inhouse
-                  </span>
-                )}
-              </div>
+              {/* COURSE TYPE, from the two flags the admin actually edits.
+                  Both may be true — 49 of the 77 upstream courses are, MSE-L1
+                  among them — so this is two independent pills, not a choice.
+
+                  The whole block is conditional rather than just its children:
+                  an empty flex row still renders its `mb-4`, so a course with
+                  neither flag would leave a 16px ghost gap under the duration
+                  line. No such course exists upstream today (0 of 77), but
+                  9fd1a85 made unchecking Public actually save, so it is now
+                  reachable by an admin edit rather than impossible.
+
+                  NOT a delivery format. `Classroom` / `Hybrid` on /schedule and
+                  in search results come from a schedule's `type` and mean where
+                  a ROUND is held; these two mean who a COURSE is sold to. The
+                  old markup blurred them — it labelled `course_type_public` as
+                  "Classroom" and rendered "Hybrid" as an unconditional literal
+                  tied to no field at all. */}
+              {(course.course_type_public || course.course_type_inhouse) && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {course.course_type_public && (
+                    <span className="rounded-full border border-9e-brand bg-white px-3 py-1 text-xs font-bold text-9e-action">
+                      Public
+                    </span>
+                  )}
+                  {course.course_type_inhouse && (
+                    <span className="rounded-full border border-9e-slate-lt-400 dark:border-9e-slate-dp-400 bg-white px-3 py-1 text-xs font-bold text-9e-slate-dp-50">
+                      Inhouse
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="mb-1 flex flex-wrap items-baseline gap-2">
                 {isInhouseOnly ? (
-                  <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">Call</span>
+                  /* The widest slot the label has to fit: 3xl extrabold, and
+                     the only surface where it is the headline rather than a
+                     figure in a row. It holds — ~200px against a 360px viewport
+                     less the card's padding — but only as one line, so the
+                     break is disallowed explicitly rather than left to luck.
+                     The Thai gloss underneath (*รับเฉพาะ InHouse Training
+                     เท่านั้น) already carries the full explanation, so the
+                     label does not have to grow to say more. */
+                  <span className="whitespace-nowrap text-3xl font-extrabold text-9e-action dark:text-9e-air">
+                    {INHOUSE_ONLY_LABEL}
+                  </span>
                 ) : (
                   <>
                     <span className="text-3xl font-extrabold text-9e-action dark:text-9e-air">
@@ -214,12 +310,24 @@ export function CourseHero({ course, heroColor, gallery = [] }) {
 const COVER_AUTO_MS = 5000;
 
 function CoverSlider({ slides }) {
+  // The hero mounts this component TWICE — once for the mobile slot, once for
+  // the desktop column — so a module-constant iframe id would be emitted twice
+  // into one document. getElementById would then hand both instances the SAME
+  // (first-in-document) iframe and initPlayers would wire the YT.Player to the
+  // wrong one, or to the display:none one. `useId` is per-instance, so the two
+  // mounts namespace apart. Mirrors MasterclassCoverSlider, which hit this
+  // first. Every id — the attribute below and the getElementById lookup in
+  // initPlayers — is built through `iframeId`, so there is exactly one place
+  // the format is defined and no pair of literals that have to stay in sync.
+  const uid = useId();
   const [current, setCurrent] = useState(0);
   const [hovered, setHovered] = useState(false);
   const [ytPlaying, setYtPlaying] = useState(false);
   const ytPlayersRef = useRef({});   // { slideIndex: YT.Player }
   const ytApiReadyRef = useRef(false);
   const total = slides.length;
+
+  const iframeId = (i) => `yt-${uid}-${i}`;
 
   // ── Auto-advance ──────────────────────────────────────────────
   // Pauses ONLY when: user hovers, or YouTube is actively playing.
@@ -259,10 +367,10 @@ function CoverSlider({ slides }) {
   function initPlayers() {
     slides.forEach((slide, i) => {
       if (slide.type !== 'youtube') return;
-      const iframeId = `yt-slide-${i}`;
-      const el = document.getElementById(iframeId);
+      const id = iframeId(i);
+      const el = document.getElementById(id);
       if (!el || ytPlayersRef.current[i]) return;
-      ytPlayersRef.current[i] = new window.YT.Player(iframeId, {
+      ytPlayersRef.current[i] = new window.YT.Player(id, {
         events: {
           onStateChange: (e) => {
             // 1 = PLAYING → pause auto-advance
@@ -315,7 +423,7 @@ function CoverSlider({ slides }) {
             >
               {slide.type === 'youtube' ? (
                 <iframe
-                  id={`yt-slide-${i}`}
+                  id={iframeId(i)}
                   className="absolute inset-0 h-full w-full"
                   src={`https://www.youtube.com/embed/${slide.videoId}?rel=0&enablejsapi=1`}
                   title="Course video"

@@ -1,12 +1,17 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getCourseByCode } from '@/lib/api/public-courses';
-import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import {
+  PUBLIC_SCHEDULE_STATUSES,
+  listSchedulesByCourse,
+} from '@/lib/api/schedules';
 import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getScheduleLocals } from '@/lib/actions/schedules';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
+import { courseHref } from '@/lib/utils';
 
 /**
  * Base path for the public registration wizard. The wizard pushes
@@ -36,13 +41,46 @@ export async function RegisterPageContent({ searchParams, step }) {
     redirect('/training-course');
   }
 
-  const course = await getCourseByCode(courseSlug.toUpperCase());
+  // Two separate blocks, deliberately. `redirect()` works by THROWING
+  // NEXT_REDIRECT, so the try must wrap ONLY the upstream call — pull the
+  // `if (!course) redirect(...)` inside it and the catch swallows the redirect
+  // and reports it as an upstream failure. Do not "simplify" these into one
+  // try/catch.
+  //
+  // The two outcomes are logged apart because they mean opposite things: a miss
+  // is a bad or stale link, a throw is upstream being down. Without this the
+  // user is bounced to the catalog with no server-side trace either way.
+  // .toUpperCase() STAYS. It is what makes the 72 already-uppercase courses hit
+  // the direct call inside the helper; passing the raw lowercase slug would miss
+  // it every time and push all 77 onto the list fallback.
+  const attempted = courseSlug.toUpperCase();
+  let course = null;
+  try {
+    course = await getCourseByCodeInsensitive(attempted);
+  } catch (err) {
+    console.warn(
+      `[registration] upstream lookup FAILED for course_id="${attempted}" ` +
+        `(from ?course=${courseSlug}): ${err?.message}`
+    );
+    throw err;
+  }
   if (!course) {
+    console.warn(
+      `[registration] no course for course_id="${attempted}" ` +
+        `(from ?course=${courseSlug}) — redirecting to /training-course`
+    );
     redirect('/training-course');
   }
 
   const [{ items: rawSchedules }, earlyBirdMap, ext] = await Promise.all([
-    listSchedulesByCourse(course._id, { limit: 20 }),
+    // All three statuses. A `?class=` deep link to a sold-out round used to
+    // land on a wizard whose carousel did not contain it — step 1 rendered
+    // nothing and said nothing. The round has to ARRIVE before RegisterWizard
+    // can tell the user it is full.
+    listSchedulesByCourse(course._id, {
+      limit: 20,
+      status: PUBLIC_SCHEDULE_STATUSES,
+    }),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getCourseExtension(course.course_id).catch(() => null),
   ]);
@@ -52,6 +90,22 @@ export async function RegisterPageContent({ searchParams, step }) {
 
   const earlyBirdScheduleId =
     earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
+
+  // Back-link target for step 1 — the detail page of the course being
+  // registered for, not the catalog.
+  //
+  // Legacy "<course_id lowercased>-training-course" slug, matching CourseCard.
+  // Deliberately NOT `ext.urlAlias`: aliases are stored WITH a leading slash
+  // (normalizeAlias in course-extensions.js) and are not required to carry the
+  // '-training-course' suffix, so courseHref would turn `/foo` into
+  // `//foo-training-course` — a URL resolveCourse cannot match by either of its
+  // two paths. The legacy slug always resolves via resolveCourse's path 2.
+  //
+  // courseHref('') already returns '/training-course', so a course with no id
+  // falls back to the catalog without a second guard here.
+  const courseDetailHref = courseHref(
+    course.course_id ? String(course.course_id).toLowerCase() : ''
+  );
 
   // ── Omise online-payment inputs ────────────────────────────────
   // The toggle lives on the CourseExtension sidecar; per-round price
@@ -91,9 +145,11 @@ export async function RegisterPageContent({ searchParams, step }) {
           earlyBirdScheduleId={earlyBirdScheduleId}
           step={step}
           basePath={REGISTRATION_BASE_PATH}
+          courseDetailHref={courseDetailHref}
           omisePaymentEnabled={omisePaymentEnabled}
           coursePrice={course.course_price ?? null}
           priceByScheduleId={priceByScheduleId}
+          currentYear={siteCurrentYear()}
         />
       )}
     </article>

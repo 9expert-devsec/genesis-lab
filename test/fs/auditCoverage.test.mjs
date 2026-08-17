@@ -47,9 +47,11 @@ const ROOT = path.resolve(HERE, '..', '..');
 const READ_ONLY_EXPORTS = {
   'src/lib/actions/roles.js': ['listRolesFull'],
   'src/lib/actions/registrations.js': ['listRegistrations', 'getRegistrationById', 'getRegistrationStatusCounts'],
-  'src/lib/actions/inhouse-registrations.js': [
-    'listInhouseRegistrations', 'getInhouseRegistrationById', 'getInhouseStatusCounts',
-  ],
+  // listInhouseRegistrations and getInhouseStatusCounts were deleted unused —
+  // /admin/registrations lists both collections through registrations.js. The
+  // CONTROL below asserts every exempted name still EXISTS, so a stale entry
+  // here would go red rather than quietly exempt nothing.
+  'src/lib/actions/inhouse-registrations.js': ['getInhouseRegistrationById'],
   'src/lib/actions/career-path-registrations.js': [
     'getCareerPathRegistrations', 'getCareerPathRegistrationById',
   ],
@@ -512,11 +514,140 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
  * exactly that sum. Bumping only the total would have left the delta assertion
  * red and taught the next reader that the sum is decorative.
  *
- * Pinned rather than floored, for the same reason as EXPECTED_TESTS: a number
- * nobody wrote down is one nobody notices drifting. When the sweep adds or
- * removes an action, this moves deliberately in that commit.
+ * Pinned rather than floored: a number nobody wrote down is one nobody notices
+ * drifting. When the sweep adds or removes an action, this moves deliberately in
+ * that commit.
+ *
+ * (This used to cite EXPECTED_TESTS in test/run.mjs as the precedent. That
+ * control is a FLOOR now, so it is no longer an argument for pinning — the
+ * reasoning above stands on its own.)
+ *
+ * ── 162 → 163: deleteMediaFile ──────────────────────────────────────────────
+ * ONE new export in media.js — /admin/media v2's per-file delete. It writes
+ * directly (LegacyFileMigration.updateOne, marking a migration row `deleted`
+ * rather than removing it), so the FILE-LOCAL classifier sees it
+ * and the depth-0 figure in W2-b moves with it, 158 → 159. Both numbers move
+ * together for the same reason the articles.js change did: 163 is 159 plus the
+ * four exports only the import walk can see, and W2-b asserts exactly that sum.
+ *
+ * media.js is NOT in SWEPT_FILES and that is deliberate, not an oversight — it
+ * DOES record an audit row. See the note at the foot of src/lib/audit/
+ * sweptMenus.js for why a file written instrumented from the start is absent
+ * from a list that tracks a retrofit.
+ *
+ * ── 163 → 164: course-outlines.js ──────────────────────────────────────────
+ * The new module src/lib/actions/course-outlines.js adds TWO exports, and only
+ * ONE of them moves this number:
+ *
+ *   recordCourseOutlineUpload  writes Mongo directly (CourseOutlineFile
+ *                              .findOneAndUpdate, recording which bytes landed
+ *                              and bumping the version counter), so the
+ *                              FILE-LOCAL classifier sees it → +1 here and +1
+ *                              in W2-b's depth-0 figure, 159 → 160.
+ *   signCourseOutlineUpload    signs a browser-direct Cloudinary upload and
+ *                              writes NOTHING — not Mongo, not MSDB. It is
+ *                              correctly classified read-only and is absent
+ *                              from both counts, even though it does record an
+ *                              audit row (signing a destructive overwrite is an
+ *                              event worth logging whether or not it mutates
+ *                              our own storage).
+ *
+ * ── 164 → 165: webroot-documents.js ────────────────────────────────────────
+ * The site-root PDF replacement module adds THREE exports, and again only ONE
+ * moves the number:
+ *
+ *   recordWebrootReplacement   WebrootDocumentFile.create() — append-only, one
+ *                              row per replacement → +1 here, and +1 in W2-b's
+ *                              depth-0 figure, 160 → 161.
+ *   prepareWebrootReplacement  archives the previous bytes to Blob and returns
+ *                              authorisation. It writes to the BLOB STORE, not
+ *                              to Mongo or MSDB, so the classifier does not see
+ *                              it — correctly, since the classifier is about
+ *                              OUR databases. It records an audit row anyway,
+ *                              because destroying-then-replacing a public
+ *                              document is an event regardless of where the
+ *                              bytes live.
+ *   listWebrootReplacements    read-only.
+ *
+ * Both numbers still differ by exactly the four REACHED_THROUGH_IMPORT exports.
+ *
+ * ── 164 → 165, and W2-b's depth-0 figure 160 → 161, for cache-console.js ───
+ *
+ *   applyMirrorReset      calls Model.deleteMany, so the FILE-LOCAL classifier
+ *                         sees it. It is the only export in this repo whose
+ *                         purpose is to DELETE rows in bulk, which is why it
+ *                         carries three separate refusal gates before the call.
+ *   previewMirrorReset    reads and computes; writes nothing. Correctly
+ *                         classified read-only and absent from both counts —
+ *                         and that absence is load-bearing rather than
+ *                         incidental, since a preview that mutated anything
+ *                         would defeat the preview-before-apply ruling.
+ *   listMirrorResetKeys   returns a constant list. Read-only.
+ *
+ * ── prepareWebrootReplacement gains a Mongo write ──────────────────────────
+ * The upload route refuses to mint a Blob token without a single-use receipt,
+ * and `prepareWebrootReplacement` is what issues one — so the export that
+ * previously touched only the Blob store now writes to Mongo as well.
+ *
+ * IT MOVES THE DEPTH-1 TOTAL AND NOT THE DEPTH-0 FIGURE, which is the whole
+ * reason the walk exists. The write is `WebrootUploadReceipt.create(...)` inside
+ * `issueWebrootReceipt`, in src/lib/webroot/receiptStore.js — an IMPORTED
+ * helper. The file-local classifier sees `issueWebrootReceipt(doc)` and reads it
+ * as an ordinary call, exactly as it read `syncFaqsAction` before the walk.
+ *
+ * That this entry is a live one matters: the four before it were all found
+ * during the walk's own construction, so none of them tested whether the walk
+ * still works on code written afterwards. This one was.
+ *
+ * (receiptStore.js is deliberately `.js` and not `.mjs`. resolveSpec below only
+ * follows `.js`/`.jsx`, so a `.mjs` helper would be invisible to the walk and
+ * this export would keep reading as non-mutating while writing to Mongo — a hole
+ * in the guard, dressed as a file-extension preference. The store's own header
+ * says so too.)
  */
-const MUTATING_EXPORT_COUNT = 162;
+// 165 → 166 for round 4's applySnapshotOverride. It writes the snapshot through
+// syncLandingData, which it imports STATICALLY for exactly this reason: this
+// walk resolves static imports only, so a dynamic one classified a mutating,
+// snapshot-writing export as read-only — and "every mutating export records an
+// audit row" then skipped it in silence. The classification was correct by luck
+// rather than by the guard, which is the state this file exists to prevent.
+// previewSnapshotOverride reads the stored refusal and writes nothing.
+//
+// Then saveProgramCourseOrder (program-order.js — the /admin/courses
+// drag-reorder write, ProgramOrder.findOneAndUpdate) and renameCourseCodePhase1
+// (course-rename.js — the genesis-side half of a course-code rename across
+// twelve Mongo stores). Both are file-local and direct, so each lands in W2-b's
+// depth-0 figure too and neither changes the delta between the two figures.
+// `inspectRenameState` only re-runs the read-only preview and stays out.
+//
+// ══ MERGED 2026-08-17: dev + wip/root-files ═══════════════════════════════
+// Both branches moved this pin (dev to 168, wip/root-files to 166), so neither
+// side's number describes the merged tree and the conflict could not be
+// resolved by taking a side.
+//
+// 170 and the depth-0 figure 164 were MEASURED: both pins were set to
+// deliberately-wrong placeholders and the walk run against the merged tree, and
+// these are the numbers it reported back. 170 − 164 = 6, exactly the six
+// entries now in REACHED_THROUGH_IMPORT.
+//
+// ── A CORRECTION, KEPT HERE BECAUSE THE FALSE VERSION WAS COMMITTED ────────
+// The first version of this comment, and the message of merge commit 64f7f70,
+// claimed the additive arithmetic gave 171 and that the walk's 170 differed
+// because the two branches "overlap at recordWebrootReplacement". BOTH HALVES
+// WERE FALSE and neither was measured:
+//
+//   · `git grep -n recordWebrootReplacement c4f6303 -- src/` returns NOTHING,
+//     as does `git grep -ln webroot c4f6303 -- src/`. dev had no webroot code
+//     at all, so there was nothing to overlap. The two branches changed
+//     disjoint sets of action modules — dev 11, wip 1, both 0.
+//   · the additive arithmetic gives 170, not 171, on all three pins:
+//     164+4+2 = 170, 160+3+1 = 164, 4+1+1 = 6. There was no discrepancy.
+//
+// 171 was a value typed in before measuring; the "overlap" was then invented to
+// explain a gap that did not exist. The pin is right because it was measured,
+// which is the only reason it was ever safe. The commit message cannot be
+// corrected without rewriting history, so the correction lives here.
+const MUTATING_EXPORT_COUNT = 170;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -524,6 +655,20 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
   'src/lib/actions/previewAccess.js': { submitPreviewPassword: 'src/lib/actions/pageBuilder.js#verifyPreviewPassword' },
+  // Round 4. `applySnapshotOverride` writes nothing itself — it re-runs the
+  // landing sync with the downgrade guard bypassed for one call, so the write
+  // is syncLandingData's. The import is STATIC precisely so this walk can see
+  // it; with a dynamic import the export read as read-only and the "every
+  // mutating export records an audit row" check skipped it in silence.
+  'src/lib/actions/cache-console.js': { applySnapshotOverride: 'src/lib/landing/syncLandingData.js#syncLandingData' },
+  // ══ MERGED: this is a UNION, not a choice ═══════════════════════════════
+  // Each branch added a different entry and BOTH are true of the merged tree —
+  // `applySnapshotOverride` reaches syncLandingData, `prepareWebrootReplacement`
+  // reaches issueWebrootReceipt, and each is a real import-crossing write that
+  // the file-local classifier cannot see. Taking either side alone would delete
+  // a live entry and the delta assertion below would then disagree with the
+  // measured counts by construction.
+  'src/lib/actions/webroot-documents.js': { prepareWebrootReplacement: 'src/lib/webroot/receiptStore.js#issueWebrootReceipt' },
 });
 
 test('the mutating-export count across every action module is pinned', () => {
@@ -683,15 +828,30 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 158,
-    'depth 0 must reproduce the file-local classifier exactly — 157 was the pinned ' +
-    'count before this walk existed, and it is 158 since articles.js gained ' +
-    'moveArticleToRank, which mutates through a file-local helper'
+    zero, 164,
+    'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
+    'count before this walk existed; it then moved for moveArticleToRank ' +
+    '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
+    '(media.js, writes directly), recordCourseOutlineUpload (course-outlines.js, ' +
+    'CourseOutlineFile.findOneAndUpdate), applyMirrorReset (cache-console.js, ' +
+    'Model.deleteMany), recordWebrootReplacement (webroot-documents.js, ' +
+    'WebrootDocumentFile.create), saveProgramCourseOrder (program-order.js, ' +
+    'ProgramOrder.findOneAndUpdate) and renameCourseCodePhase1 (course-rename.js). ' +
+    'Deliberately NOT in this figure: previewMirrorReset and listMirrorResetKeys ' +
+    '(a preview that mutated would defeat its own ruling), signCourseOutlineUpload, ' +
+    'and prepareWebrootReplacement — the last writes Mongo only through an ' +
+    'IMPORTED helper, which is precisely what depth 0 cannot see. ' +
+    'MERGED 2026-08-17: both branches moved this pin, so the value below was ' +
+    'MEASURED against the merged tree rather than summed'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
     MUTATING_EXPORT_COUNT,
-    'and the delta is exactly the four exports named in REACHED_THROUGH_IMPORT'
+    'and the delta is exactly the exports named in REACHED_THROUGH_IMPORT. '
+    + 'Both applySnapshotOverride (→ syncLandingData) and prepareWebrootReplacement '
+    + '(→ receiptStore.js#issueWebrootReceipt) reach their write across an import, '
+    + 'so both are in that map and neither is in the depth-0 figure. If only one of '
+    + 'the two numbers moved, they now disagree by construction and one is wrong'
   );
 });
 

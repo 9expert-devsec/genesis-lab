@@ -7,6 +7,7 @@ import MasterclassBatch        from '@/models/MasterclassBatch';
 import MasterclassCourse       from '@/models/MasterclassCourse';
 import { requireAdmin }         from '@/lib/actions/auth';
 import { buildLicenseModel }   from '@/lib/email/buildLicenseModel';
+// import { recomputeBatchSeats } from '@/lib/masterclass/recomputeBatchSeats';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
 const ADMIN_PATH = '/admin/masterclass/registrations';

@@ -56,7 +56,73 @@ export const SWEPT = Object.freeze([
   // A step can rebalance a span; a pin renumbers the block behind it. All of
   // those are one audit row with the collateral counted in `meta.alsoTouched`.
   { file: 'src/lib/actions/articles.js', menus: ['articles'] },
+
+  // ── Cache console round 3 — NOT a sweep round, but it adds the first
+  //    destructive action outside the sweep and it is instrumented from the
+  //    start rather than joining a later round already un-audited.
+  //
+  // The OWED note that stood here is DISCHARGED: RecordHistory is mounted on
+  // /admin/cache — twice, because this menu holds two record kinds. The
+  // snapshot panel carries `entity: 'snapshot'` for `homepage_v1`, and the
+  // mirror panel carries `entity: 'mirror'` with all four collection keys as an
+  // array (the shape `courses` uses for its two key spaces), so one panel
+  // answers "has anyone purged anything lately" across every collection.
+  //
+  // Both mounts live in page.jsx rather than inside the panels: RecordHistory
+  // is an async server component and the panels are deliberately synchronous so
+  // the render tier can drive them with renderToStaticMarkup, which cannot
+  // await a child.
+  { file: 'src/lib/actions/cache-console.js', menus: ['landing_cache'] },
+
+  // ── Ordering round — the gap the course-rename work walked into ──────────
+  //
+  // program-order.js owns EVERY ordering write in the product: the programme
+  // order, the skill order, the programmes inside a skill, the courses inside a
+  // programme, and the two visibility toggles. None of it was audited, so "who
+  // reordered this" had no answer — and the file sits partly on `courses`,
+  // which was already swept, so the history widget showed course edits and
+  // silently omitted every ordering change beside them. That is worse than an
+  // uninstrumented menu: the trail looked complete.
+  //
+  // TWO menus, because the file genuinely spans two screens: seven exports are
+  // /admin/programs (`programs`) and saveProgramCourseOrder is the drag on
+  // /admin/courses (`courses`). Each row carries the menu its own requireAdmin
+  // guards on, which the coverage guard checks pair by pair.
+  //
+  // `programs` becomes swept by this line. RecordHistory is NOT mounted on
+  // /admin/programs — reported rather than silently accepted: rows will exist
+  // and the screen has nowhere to show them, so the definition-of-done above is
+  // met for `courses` and OWED for `programs`.
+  { file: 'src/lib/actions/program-order.js', menus: ['programs', 'courses'] },
 ]);
+
+/**
+ * ── ONE INSTRUMENTED FILE IS DELIBERATELY ABSENT FROM THE LIST ABOVE ────────
+ *
+ * `src/lib/actions/media.js` records an audit row for `deleteMediaFile`
+ * (`media|file`, action `delete`) and is NOT listed. Stated here rather than
+ * left as an omission, because "every instrumented file appears in SWEPT" is
+ * exactly the invariant somebody will check against this file.
+ *
+ * Two reasons, and both are about what listing it would MEAN rather than about
+ * effort:
+ *
+ *   · The definition of done above requires MOUNTING the history widget on that
+ *     menu's screens. /admin/media has no per-record screen to mount it on — a
+ *     row is a Cloudinary asset, not a document with a detail page — so listing
+ *     it would flip `isMenuSwept('media')` to true for a widget that is
+ *     nowhere, which is the "wired up" claim this module exists to make honest.
+ *
+ *   · The sweep is a retrofit of 38 pre-existing action files, all of which
+ *     guard with `requireAdmin('<literal>')`. media.js is new code, written
+ *     instrumented, and guards with `requirePageAction(PAGE_KEY)`. The coverage
+ *     guard reads that literal out of the source text to check it against the
+ *     recorded menu, and would report a false red on a file that is not doing
+ *     anything wrong.
+ *
+ * If /admin/media ever grows a per-file detail view, both reasons expire
+ * together and media.js should join the list.
+ */
 
 /** The file list the coverage guard iterates. Derived — never typed twice. */
 export const SWEPT_FILES = Object.freeze(SWEPT.map((s) => s.file));

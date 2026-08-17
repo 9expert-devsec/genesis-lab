@@ -15,7 +15,14 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
  *      can scan how a skill is broken down across programs.
  *   3. Optional roadmap image when `skill_roadmap_url` is present.
  */
-export function SkillPageClient({ skill, coursesByProgram, totalCourses, faqs = [] }) {
+export function SkillPageClient({
+  skill,
+  coursesByProgram,
+  totalCourses,
+  faqs = [],
+  currentYear,
+  skillSlugs = {},
+}) {
   const description =
     skill?.skill_description || skill?.skill_teaser || '';
   const roadmapUrl = skill?.skill_roadmap_url ?? null;
@@ -111,7 +118,12 @@ export function SkillPageClient({ skill, coursesByProgram, totalCourses, faqs = 
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {courses.map((c) => (
-                    <CourseCard key={c._id ?? c.course_id} course={c} />
+                    <CourseCard
+                      key={c._id ?? c.course_id}
+                      course={c}
+                      currentYear={currentYear}
+                      skillSlugs={skillSlugs}
+                    />
                   ))}
                 </div>
               </section>

@@ -40,18 +40,28 @@
  *   course_prerequisites[]       ← string[]
  *   course_system_requirements[] ← string[]
  *   bullets[]                    ← string[] (highlight bullets)
- *   training_topics              ← [{ topic, subtopics[] }]
- *   course_doc_paths[]           ← URL[]
- *   course_lab_paths[]           ← URL[]
- *   course_case_study_paths[]    ← URL[]
- *   website_urls[]               ← URL[]
- *   exam_links[]                 ← URL[]
+ *   training_topics              ← [{ title, bullets[] }]
+ *
+ * NOT SENT, and therefore not listed above: course_doc_paths, course_lab_paths,
+ * course_case_study_paths, exam_links, website_urls. The form no longer edits
+ * them and the payload no longer mentions them, so MSDB keeps whatever it
+ * already holds. They still exist upstream and are still returned by the read
+ * side — `website_urls` in particular is still READ on public surfaces
+ * (articles/[slug]/_components/ArticleDetailClient.jsx:712 links every related
+ * course card through `website_urls[0]`, and lib/actions/career-paths.js:286
+ * copies it into a curriculum's publicUrl). What was removed is the ability to
+ * EDIT it from genesis admin; MSDB's own admin still can.
  */
 
 import { revalidatePath } from 'next/cache';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { aiFetch, unwrap } from '@/lib/api/client';
+import { parseTrainingTopicsValue } from '@/lib/courses/trainingTopics';
+import { outlineFromFormValue } from '@/lib/courses/courseOutline';
+import { checkboxBool, courseTypeFlags } from '@/lib/courses/courseTypeFlags';
+import { courseIdConflict } from '@/lib/courses/courseIdAvailability';
+import { findCourseExtensionCodeInsensitive } from '@/lib/actions/course-extensions';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import {
   resolveCourseObjectIds,
@@ -159,10 +169,6 @@ function toNullableNum(v) {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
-function toBool(v) {
-  if (typeof v === 'boolean') return v;
-  return v === 'on' || v === 'true' || v === '1';
-}
 function toStrArr(v) {
   if (Array.isArray(v)) return v.map(toStr).filter(Boolean);
   if (typeof v === 'string' && v.length > 0) {
@@ -184,32 +190,19 @@ function linesOf(formData, key) {
 }
 
 /**
- * Parse the JSON-serialized Training Topics. Each row should be
- * `{ topic: string, subtopics: string[] }`. Malformed input falls back
- * to an empty array — better to lose the field than to abort the save.
+ * Pull the JSON-serialized Training Topics out of the form and decode them.
+ *
+ * Each row is `{ title: string, bullets: string[] }` — the shape MSDB actually
+ * stores. It was `{ topic, subtopics }` here, which upstream discards, so a
+ * save replaced real subdocuments with schema defaults. The decode itself lives
+ * in src/lib/courses/trainingTopics.js, which carries the measurement and is
+ * importable by tests; this module is `'use server'` and is not.
  */
 function parseTrainingTopics(formData) {
   const raw = formData instanceof FormData
     ? formData.get('training_topics')
     : formData?.training_topics;
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(String(raw));
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((row) => ({
-        topic: toStr(row?.topic),
-        subtopics: Array.isArray(row?.subtopics)
-          ? row.subtopics.map(toStr).filter(Boolean)
-          : toStr(row?.subtopics)
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean),
-      }))
-      .filter((t) => t.topic || t.subtopics.length > 0);
-  } catch {
-    return [];
-  }
+  return parseTrainingTopicsValue(raw);
 }
 
 /**
@@ -227,19 +220,16 @@ function shapePayload(formData) {
     return Array.isArray(v) ? v : [];
   };
 
-  // course_type comes from either two checkboxes (new form) or the
-  // legacy single select. Accept both.
-  const courseType = toStr(get('course_type'));
-  const explicitPublic  = get('course_type_public');
-  const explicitInhouse = get('course_type_inhouse');
-  const isPublic  =
-    explicitPublic  != null
-      ? toBool(explicitPublic)
-      : courseType !== 'inhouse';
-  const isInhouse =
-    explicitInhouse != null
-      ? toBool(explicitInhouse)
-      : courseType === 'inhouse';
+  // course_type comes from either two checkboxes (new form) or the legacy
+  // single select. Which dialect this is, is decided by whether the LEGACY
+  // FIELD was posted — never by whether a checkbox has a value, because an
+  // unchecked box posts nothing and so cannot tell the two apart. See
+  // lib/courses/courseTypeFlags for the trace this came out of.
+  const { isPublic, isInhouse } = courseTypeFlags({
+    courseType:   get('course_type'),
+    publicField:  get('course_type_public'),
+    inhouseField: get('course_type_inhouse'),
+  });
 
   return {
     course_name:               toStr(get('course_name') || get('title')),
@@ -255,13 +245,26 @@ function shapePayload(formData) {
     sort_order:                toNum(get('sort_order')),
     course_type_public:        isPublic,
     course_type_inhouse:       isInhouse,
-    course_workshop_status:    toBool(get('course_workshop_status')),
-    course_certificate_status: toBool(get('course_certificate_status')),
-    course_promote_status:     toBool(get('course_promote_status')),
+    course_workshop_status:    checkboxBool(get('course_workshop_status')),
+    course_certificate_status: checkboxBool(get('course_certificate_status')),
+    course_promote_status:     checkboxBool(get('course_promote_status')),
+    /* STAYS `|| undefined` — deliberately NOT clearable, unlike its neighbour.
+     * A course with no program drops out of the mega menu, the /schedule
+     * grouping and all-courses at once. Measured before ruling: 0 of the 77
+     * upstream courses have an empty program, so nothing depends on clearing
+     * it. MSDB would accept null (the path is not `required`), which is exactly
+     * why the guard has to live here and in the form's `required` select rather
+     * than upstream. Omitting the key leaves the stored program in place. */
     program:                   toStr(get('program')) || undefined,
     skills:                    toStrArr(getAll('skills')),
     // course_id strings — caller resolves to ObjectIds for MSDB body.
-    previous_course:           toStr(get('previous_course')) || undefined,
+    /* `null`, not undefined and NOT '': an optional prerequisite has to be
+     * removable, and undefined omitted the key so "— ไม่มี —" never saved.
+     * Verified read-only against MSDB's schema — the path is
+     * `{ ObjectId, ref: PublicCourse, default: null }`, so null is its own
+     * resting value and validates; '' is REJECTED with a cast-to-ObjectId
+     * error, which is why the empty string is not the fix here. */
+    previous_course:           toStr(get('previous_course')) || null,
     related_courses:           toStrArr(getAll('related_courses')).slice(0, 5),
     // Bullets / arrays
     course_objectives:           linesOf(formData, 'course_objectives'),
@@ -269,12 +272,32 @@ function shapePayload(formData) {
     course_prerequisites:        linesOf(formData, 'course_prerequisites'),
     course_system_requirements:  linesOf(formData, 'course_system_requirements'),
     bullets:                     linesOf(formData, 'bullets'),
-    course_doc_paths:            linesOf(formData, 'course_doc_paths'),
-    course_lab_paths:            linesOf(formData, 'course_lab_paths'),
-    course_case_study_paths:     linesOf(formData, 'course_case_study_paths'),
-    website_urls:                linesOf(formData, 'website_urls'),
-    exam_links:                  linesOf(formData, 'exam_links'),
+    /* course_doc_paths, course_lab_paths, course_case_study_paths and
+     * exam_links are NOT EMITTED — the keys are absent, not empty.
+     *
+     * Their inputs were removed from the form (section 8). `linesOf` returns
+     * `[]` for a missing key, never undefined, so leaving these lines in place
+     * would have sent four empty arrays on every save and MSDB's unfiltered
+     * `findByIdAndUpdate(id, body)` would have written them: 74 of 77 courses
+     * carry a course_doc_paths URL and 2 carry exam_links. Omitting the keys
+     * puts them in the same leave-alone channel as `program`.
+     *
+     * Restoring one is one line — plus its input back in section 8. */
     training_topics:             parseTrainingTopics(formData),
+    /* ── OUTLINE PDFs — ALWAYS BOTH KEYS, ALWAYS THE FULL 8-KEY OBJECT ──────
+     *
+     * The form posts a root-relative path per language, or '' to clear. An
+     * empty value becomes the ALL-EMPTY OBJECT, never an omitted key: omitting
+     * asks MSDB to leave the previous value alone, so "clear" would appear to
+     * work in the form and change nothing upstream — the same silent no-op
+     * that hid the training_topics damage.
+     *
+     * The five keys we do not set (file_id, filename, content_type, size,
+     * uploaded_at) are left exactly as upstream leaves them. Measured: they
+     * are empty even on POWER-BI, the row that renders a working button.
+     */
+    course_outline_th:           outlineFromFormValue(toStr(get('course_outline_th_path'))),
+    course_outline_en:           outlineFromFormValue(toStr(get('course_outline_en_path'))),
   };
 }
 
@@ -302,11 +325,76 @@ async function resolveCourseRefs(body) {
   return out;
 }
 
+/**
+ * The MSDB course_id matching `code` IGNORING CASE, or null — read UNCACHED.
+ *
+ * Two reasons this is not `getCourseByCode`:
+ *   · that is ISR-cached for an hour, and a guard whose failure mode is
+ *     overwriting another course's SEO must not answer from a cache that
+ *     predates the course it is looking for;
+ *   · upstream `?course_id=` is EXACT-MATCH and case-sensitive (verified:
+ *     `COPILOT-STU` → 1 row, `copilot-stu` → 0), so the exact hit is only half
+ *     the question. The list scan is what catches a differently-cased twin.
+ *
+ * Returns the STORED spelling so the caller can name the casing that collided.
+ * Injectable for tests; the default fetches the real thing.
+ */
+export async function findCourseCodeInsensitive(code, { fetchAll } = {}) {
+  const wanted = String(code ?? '').trim();
+  if (!wanted) return null;
+
+  const load = fetchAll ?? (async () => {
+    const raw = await aiFetch('/public-course', { revalidate: 0 });
+    return unwrap(raw).items ?? [];
+  });
+
+  const items = await load();
+  const lower = wanted.toLowerCase();
+  const hit = (items ?? []).find(
+    (c) => String(c?.course_id ?? '').toLowerCase() === lower
+  );
+  return hit?.course_id ?? null;
+}
+
 export async function createCourse(formData) {
   const session = await requireAdmin('courses');
   const body = shapePayload(formData);
   if (!body.course_name) return { ok: false, error: 'กรุณากรอกชื่อหลักสูตร' };
   if (!body.course_id)   return { ok: false, error: 'กรุณากรอกรหัสหลักสูตร (course_id)' };
+
+  /**
+   * DUPLICATE GUARD — BEFORE ANY WRITE, and covering BOTH stores.
+   *
+   * Lives inside the action rather than in the form so it cannot be bypassed,
+   * and runs before `msdbCreate` so a refusal creates nothing at all. See
+   * lib/courses/courseIdAvailability for why a duplicate code is destructive
+   * rather than merely invalid: the extension write is an upsert keyed by the
+   * code, so it would silently overwrite a DIFFERENT course's SEO, gallery and
+   * omisePaymentEnabled.
+   *
+   * A failed lookup is NOT treated as "free". Refusing to answer is not the
+   * same as answering no, and guessing here costs another course's data.
+   */
+  try {
+    const [existingCourseId, existingExtensionId] = await Promise.all([
+      findCourseCodeInsensitive(body.course_id),
+      findCourseExtensionCodeInsensitive(body.course_id),
+    ]);
+    const conflict = courseIdConflict({
+      code: body.course_id,
+      existingCourseId,
+      existingExtensionId,
+    });
+    if (conflict) return { ok: false, ...conflict };
+  } catch (err) {
+    return {
+      ok: false,
+      field: 'course_id',
+      error:
+        'ตรวจสอบรหัสหลักสูตรซ้ำไม่สำเร็จ จึงยังไม่ได้สร้างหลักสูตร — '
+        + `กรุณาลองใหม่อีกครั้ง (${err?.message ?? 'lookup failed'})`,
+    };
+  }
 
   try {
     const payload = await resolveCourseRefs(body);
@@ -408,3 +496,4 @@ export async function deleteCourse(id) {
     return { ok: false, error: err?.message ?? 'ลบหลักสูตรไม่สำเร็จ' };
   }
 }
+

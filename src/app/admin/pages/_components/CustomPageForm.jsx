@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
+import { ResizableImage } from '@/lib/editor/resizableImage';
 import TiptapLink from '@tiptap/extension-link';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -32,34 +32,6 @@ import {
   Minus, Sigma, FileCode, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   Undo2, Redo2, ChevronLeft, ChevronDown, X, Upload, Copy, RefreshCw, Trash2,
 } from 'lucide-react';
-
-/**
- * Image extension with width/style/alt round-trip support — mirrors the
- * one in ArticleForm so pasted/inserted images keep their width on reload.
- */
-const ResizableImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: {
-        default: null,
-        renderHTML: (attrs) =>
-          attrs.width ? { width: attrs.width, style: `width:${attrs.width}` } : {},
-        parseHTML: (el) => el.getAttribute('width') || el.style.width || null,
-      },
-      alt: {
-        default: '',
-        renderHTML: (attrs) => (attrs.alt ? { alt: attrs.alt } : {}),
-        parseHTML: (el) => el.getAttribute('alt') || '',
-      },
-      style: {
-        default: null,
-        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
-        parseHTML: (el) => el.getAttribute('style') || null,
-      },
-    };
-  },
-});
 
 import { buildPageJsonLd, validatePageJsonLd } from '@/lib/customPages/buildPageJsonLd';
 import {

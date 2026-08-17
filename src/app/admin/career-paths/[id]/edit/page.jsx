@@ -16,7 +16,9 @@ export default async function EditCareerPathPage({ params }) {
 
   const [all, coursesResult] = await Promise.all([
     getAllCareerPaths(),
-    listPublicCourses().catch(() => ({ items: [] })),
+    // includeHidden — admin picker. A curriculum step may already point at a
+    // course that has since been hidden; filtering would drop it on save.
+    listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
   ]);
 
   const careerPath = all.find(

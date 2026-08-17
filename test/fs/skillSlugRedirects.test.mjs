@@ -99,14 +99,21 @@ test('CONTROL: a missing rule and a mis-aimed rule are reported differently', ()
   );
 });
 
-test('the redirect table is EXACTLY these four sources', () => {
-  // An exact set, not a `.some()`: the three pre-existing rules
+test('the redirect table is EXACTLY these five sources', () => {
+  // An exact set, not a `.some()`: the pre-existing rules
   // (/online-course, /online-course/:path*, /promotion) are load-bearing too,
   // and a subset check would let any of them be deleted in silence. Adding a
   // redirect is meant to bump this list in the same commit.
+  //
+  // /cancellation-refund-policy joined the table with the legal centre: the
+  // refund page is served at /refund-policy, but the policy calls itself the
+  // Cancellation & Refund Policy throughout, so the longer URL is the one a
+  // person guesses. Without the rule it falls through to [...slug] and gets
+  // answered by a course lookup.
   assert.deepEqual(
     REDIRECTS.map((r) => r.source).sort(),
     [
+      '/cancellation-refund-policy',
       '/online-course',
       '/online-course/:path*',
       '/promotion',

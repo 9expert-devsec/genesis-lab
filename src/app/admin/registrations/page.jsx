@@ -1,6 +1,8 @@
 import { requirePage } from '@/lib/rbac/guard';
 import { listRegistrations, getRegistrationStatusCounts } from '@/lib/actions/registrations';
+import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
+import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
 import { RegistrationsClient } from './_components/RegistrationsClient';
 
 export const metadata = { title: 'การลงทะเบียน' };
@@ -16,9 +18,17 @@ export default async function Page({ searchParams }) {
   const source = ['public', 'inhouse'].includes(sp.source) ? sp.source : 'public';
   const range  = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
 
-  const [data, counts] = await Promise.all([
-    listRegistrations({ page, status, q, source }),
+  // The course map is only wanted by the in-house body, so a public render does
+  // not ask for it at all — and it joins the existing Promise.all rather than
+  // adding a serial await.
+  const [data, counts, courseNames] = await Promise.all([
+    // `range` goes to BOTH queries. It used to reach only the counts, so the
+    // date chips filtered the summary cards and left the table below them
+    // showing everything — see buildRegistrationFilter in
+    // src/lib/registrations/listFilter.js.
+    listRegistrations({ page, status, q, source, range }),
     getRegistrationStatusCounts({ range, source }),
+    source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
 
   // ONE audit query for the whole page, never one per row. It has to follow the
@@ -36,6 +46,13 @@ export default async function Page({ searchParams }) {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
+      {/*
+        `dynamic = 'force-dynamic'` above keeps the SERVER fresh; it does not
+        reach the client Router Cache, which is what served a list missing a
+        just-created row while the same URL under F5 showed it. See the cost and
+        the no-flash reasoning in the component.
+      */}
+      <RefreshOnNavigate />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--text-primary)]">การลงทะเบียน</h1>
@@ -45,14 +62,21 @@ export default async function Page({ searchParams }) {
         </div>
       </div>
 
+      {/*
+        The filters go down as PLAIN NAMES, not `initial*`. They are derived
+        from searchParams above on every render and the client renders straight
+        from them — see the header of RegistrationsClient for what the `initial`
+        prefix cost when they were seeded into useState instead.
+      */}
       <RegistrationsClient
         initialData={data}
-        initialStatus={status}
-        initialQ={q}
-        initialSource={source}
-        initialRange={range}
+        status={status}
+        q={q}
+        source={source}
+        range={range}
         counts={counts}
         lastEdited={lastEdited}
+        courseNames={courseNames}
       />
     </div>
   );

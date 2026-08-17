@@ -14,7 +14,11 @@
  * `null` as "render nothing" and lean on validateJsonLd() for the
  * human-facing status.
  */
-export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app') {
+
+import { toMetaDescription } from '@/lib/seo/metaDescription';
+import { ARTICLE_SITE_URL, articleCanonicalUrl } from '@/lib/articles/articleUrl';
+
+export function buildJsonLd(article, siteUrl = ARTICLE_SITE_URL) {
   if (!article?.jsonLd?.enabled) return null;
   if (!article.active || !article.publishedAt) return null;
 
@@ -29,7 +33,10 @@ export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app'
   }
 
   const ov = article.jsonLd.overrides ?? {};
-  const canonicalUrl = `${siteUrl}/articles/${article.slug}`;
+  // Through the shared helper, not a local template literal: /articles now
+  // emits an ItemList whose entries must name this exact string. See
+  // lib/articles/articleUrl.js.
+  const canonicalUrl = articleCanonicalUrl(article.slug, siteUrl);
   const publisherName = '9Expert Training';
   const publisherLogo = `${siteUrl}/logo.png`;
 
@@ -41,7 +48,12 @@ export function buildJsonLd(article, siteUrl = 'https://genesis-lab.9expert.app'
       '@id':   canonicalUrl,
     },
     headline:    ov.headline    || article.title,
-    description: ov.description || article.excerpt || '',
+    // Same helper as the <meta> tag, deliberately. The same sentence goes to
+    // the same consumer through two channels; two truncation rules would let
+    // the structured data and the meta tag disagree about what the page is
+    // about. `ov.description` is uncapped in the schema, so it is truncated
+    // here too — see the helper for why that is accepted.
+    description: toMetaDescription(ov.description, article.excerpt),
     image:       ov.image       || article.coverUrl || '',
     author: {
       '@type': 'Person',

@@ -2,20 +2,31 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { normaliseTopicRow, rowHasContent } from '@/lib/courses/trainingTopics';
 
 /**
- * TrainingTopicsEditor — dynamic list of `{ topic, subtopics[] }`.
+ * TrainingTopicsEditor — dynamic list of `{ title, bullets[] }`.
+ *
+ * ══ THE KEY NAMES ARE title / bullets ══════════════════════════════════════
+ * This editor used to read and write `{ topic, subtopics }`, which MSDB does
+ * not store. It therefore rendered blank against perfectly good data, and a
+ * save wrote those blanks back under keys the upstream schema discards — see
+ * src/lib/courses/trainingTopics.js for the measurement and the damage.
  *
  * Two ways to feed seed data:
  *   - `initialTopics` (preferred): the MSDB-shaped array
- *     `[{ topic: string, subtopics: string[] }]`. We map each subtopics
- *     array to a newline-joined string for the textarea representation.
+ *     `[{ title: string, bullets: string[] }]`. Each bullets array is
+ *     newline-joined for the textarea representation.
  *   - `defaultValue` (legacy alias): same shape, kept so older callers
  *     don't break. Treated as a fallback when `initialTopics` is omitted.
  *
  * The whole list is serialised to a single hidden input (`name`, default
  * "training_topics") as JSON. `parseTrainingTopics()` on the server
- * (src/lib/actions/courses.js) decodes it back to the upstream shape.
+ * (src/lib/courses/trainingTopics.js) decodes it back to the upstream shape.
+ *
+ * A ROW WITH A TITLE AND NO BULLETS IS KEPT. 121 real headings upstream have
+ * no bullets; a filter that required them would delete those headings on the
+ * next save. Only a row with neither is dropped.
  *
  * Init pattern
  *   We seed `useState` with a normalisation of the prop at mount, then
@@ -29,12 +40,12 @@ function normalise(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((row) => ({
-      topic: String(row?.topic ?? ''),
-      subtopics: Array.isArray(row?.subtopics)
-        ? row.subtopics.map((s) => String(s ?? '')).join('\n')
-        : String(row?.subtopics ?? ''),
+      title: String(row?.title ?? ''),
+      bullets: Array.isArray(row?.bullets)
+        ? row.bullets.map((s) => String(s ?? '')).join('\n')
+        : String(row?.bullets ?? ''),
     }))
-    .filter((r) => r.topic || r.subtopics.length > 0);
+    .filter((r) => r.title || r.bullets.length > 0);
 }
 
 export function TrainingTopicsEditor({
@@ -48,7 +59,7 @@ export function TrainingTopicsEditor({
   const [rows, setRows] = useState(() =>
     seedNormalised.length > 0
       ? seedNormalised
-      : [{ topic: '', subtopics: '' }]
+      : [{ title: '', bullets: '' }]
   );
 
   // If the parent passes a non-empty seed AFTER first paint (async data
@@ -74,7 +85,7 @@ export function TrainingTopicsEditor({
   }
   function addRow() {
     markEdited();
-    setRows((cur) => [...cur, { topic: '', subtopics: '' }]);
+    setRows((cur) => [...cur, { title: '', bullets: '' }]);
   }
   function removeRow(idx) {
     markEdited();
@@ -82,18 +93,14 @@ export function TrainingTopicsEditor({
   }
 
   // Serialise on every keystroke. Cheap — list is small.
-  const serialized = useMemo(() => {
-    const cleaned = rows
-      .map((r) => ({
-        topic: String(r.topic ?? '').trim(),
-        subtopics: String(r.subtopics ?? '')
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
-      }))
-      .filter((r) => r.topic || r.subtopics.length > 0);
-    return JSON.stringify(cleaned);
-  }, [rows]);
+  //
+  // Built through the SAME helpers the server parse uses, so the two halves of
+  // the round trip cannot drift into different ideas of what a row is. The
+  // filter keeps a title-only row (`bullets: []`) on purpose.
+  const serialized = useMemo(
+    () => JSON.stringify(rows.map(normaliseTopicRow).filter(rowHasContent)),
+    [rows]
+  );
 
   return (
     <div className="space-y-3">
@@ -118,14 +125,14 @@ export function TrainingTopicsEditor({
           </div>
           <input
             type="text"
-            value={row.topic}
-            onChange={(e) => updateRow(i, 'topic', e.target.value)}
+            value={row.title}
+            onChange={(e) => updateRow(i, 'title', e.target.value)}
             placeholder="ชื่อหัวข้อหลัก"
             className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
           />
           <textarea
-            value={row.subtopics}
-            onChange={(e) => updateRow(i, 'subtopics', e.target.value)}
+            value={row.bullets}
+            onChange={(e) => updateRow(i, 'bullets', e.target.value)}
             placeholder="หัวข้อย่อย (1 บรรทัด = 1 อย่าง)"
             rows={3}
             className="mt-2 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"

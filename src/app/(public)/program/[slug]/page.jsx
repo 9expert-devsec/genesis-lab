@@ -3,9 +3,10 @@ import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
-import { resolveProgramBySlug } from '@/lib/resolvePageSlug';
+import { resolveProgramBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { ProgramPageClient } from './_components/ProgramPageClient';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 
 export const revalidate = 3600;
 
@@ -43,10 +44,13 @@ export default async function ProgramPage({ params }) {
 
   // No custom slug — render inline under /program/<slug>.
   const { program, config } = resolved;
-  const [coursesRes, earlyBirdMap, faqs] = await Promise.all([
+  const [coursesRes, earlyBirdMap, faqs, linkability] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getLocalFaqsForCourse('program', programRefId(program)).catch(() => []),
+    // Server-side, once per render, for the cards' skill capsules. Fails
+    // closed to empty maps — a capsule then renders unlinked, never dead.
+    getPageLinkability(),
   ]);
   const programKey = String(program._id);
   const programCourses = (coursesRes.items ?? []).filter(
@@ -61,6 +65,8 @@ export default async function ProgramPage({ params }) {
       courses={courses}
       earlyBirdMap={earlyBirdMap}
       faqs={faqs}
+      currentYear={siteCurrentYear()}
+      skillSlugs={linkability.skillSlugs}
     />
   );
 }

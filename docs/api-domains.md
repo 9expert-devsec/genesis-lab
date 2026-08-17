@@ -268,6 +268,54 @@ Verified 2026-04-23.
 | `/public-course`   | `course_id`      | Short code string (e.g. `COPILOT-STU`)        |
 | `/schedules`       | `course`         | MongoDB ObjectId (e.g. `69267e3b...`)         |
 
+## Write semantics — `PUT` MERGES, measured 2026-08-16
+
+**`PUT /public-course/<_id>` is a MERGE (`$set` of the keys sent), not a
+replace.** A key absent from the body leaves the stored value alone.
+
+Established by controlled experiment, not by reading — see
+`scripts/_probe-msdb-put-semantics.mjs`, which is step-gated so each
+invocation issues at most one write.
+
+Subject: the course commissioned as `ZZTEST-EXCEL-01`, now `EXCEL-HR-01`
+upstream (`_id 6a7a97f0b830e289fc383406`, 0 registrations).
+
+| Step | Action | Result |
+| ---- | ------ | ------ |
+| 1 | Read the complete row, saved verbatim | 36 fields |
+| 2 | `PUT` with a body of **one key** (`sort_order: 0 → 1`) | `ok: true` |
+| 3 | Read back, diff vs snapshot | **34/36 unchanged, 0 missing, 0 added.** Only `sort_order` and `updatedAt` moved |
+| 4 | `PUT` the snapshot value back | `ok: true` |
+| 5 | Read back, diff vs snapshot | **35/36 identical**; only `updatedAt` differs |
+
+35 fields that were **not** in the one-key body survived it untouched. That is
+merge, conclusively.
+
+### What this confirms and what it costs
+
+- `shapePayload`'s deliberate omissions are **correct and load-bearing**:
+  `program` when empty, plus `course_doc_paths`, `course_lab_paths`,
+  `course_case_study_paths` and `exam_links`. Under merge, omitting preserves;
+  sending `[]` would blank. Guarded by `test/fs/coursePayloadOmissions`.
+- Conversely, `updateCourse` **over-sends**: it ships the full ~30-key payload
+  on every save when only the changed keys are required. Harmless, but it means
+  every course save rewrites every field it knows about, and any field it does
+  *not* know about is only safe because it is omitted.
+
+### `updatedAt` is server-stamped and cannot be restored
+
+Upstream uses Mongoose `timestamps`, so every write re-stamps `updatedAt` and
+ignores whatever the body says. No client can put it back. Any restore
+verification has to exclude it explicitly rather than count it as damage.
+
+### The read shape is NOT the write shape
+
+Reads return `previous_course`, `related_courses`, `skills` and `program`
+**populated** — full objects with `_id`, names and icon URLs — while writes
+expect ObjectIds. This is why `resolveCourseRefs` exists in
+`lib/actions/courses.js`. **A read row cannot be echoed back as a write body**
+without converting those four fields first.
+
 ### Known quirks
 
 - `/public-course?_id=<objectId>` — the `_id` parameter is **silently

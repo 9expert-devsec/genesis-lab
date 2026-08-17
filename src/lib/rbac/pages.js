@@ -62,6 +62,20 @@ export const ADMIN_PAGES = [
       { key: 'featured_reviews', label: 'รีวิวแนะนำ', href: '/admin/featured-reviews', match: 'prefix' },
       { key: 'articles',   label: 'บทความ',           href: '/admin/articles',      match: 'prefix' },
       { key: 'pages',      label: 'จัดการหน้าเพจ',    href: '/admin/pages',         match: 'prefix' },
+      // The file manager that replaces FileZilla. Registering it HERE is what
+      // earns it two things and only two: a place in MENU_ENUM, so its own
+      // actions are auditable, and a checkbox in the roles UI, so granting a
+      // person upload rights is an ordinary role edit rather than a code
+      // change. Both come from this file — see ALL_PAGE_KEYS below.
+      //
+      // The SIDEBAR LINK DOES NOT COME FROM HERE. src/components/layout/
+      // AdminSidebar.jsx renders from its own hardcoded NAV_GROUPS array and
+      // never imports this registry, so a page added here appears in no menu
+      // until it is added there too. This entry and audit_log were both
+      // registered here with no link at all for exactly that reason. An entry
+      // added here needs a matching NAV_GROUPS entry, and the two lists are
+      // held in step by an automated parity check — see test/fs/.
+      { key: 'media', label: 'จัดการไฟล์', href: '/admin/media', match: 'prefix' },
       { key: 'faqs',       label: 'FAQ',              href: '/admin/faqs',          match: 'prefix' },
       { key: 'local_faqs', label: 'FAQ (Local)',      href: '/admin/local-faqs',    match: 'prefix' },
       { key: 'schedule_pdf', label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf', match: 'prefix' },
@@ -73,7 +87,14 @@ export const ADMIN_PAGES = [
       { key: 'registrations',             label: 'การลงทะเบียน',                href: '/admin/registrations',             match: 'prefix' },
       { key: 'career_path_registrations', label: 'Career Path Registrations',   href: '/admin/career-path-registrations', match: 'prefix' },
       { key: 'recruits',      label: 'ประกาศงาน',     href: '/admin/recruits',      match: 'prefix' },
-      { key: 'landing_cache', label: 'Landing Cache', href: '/admin/landing-cache', match: 'prefix' },
+      // THE KEY IS DELIBERATELY STILL `landing_cache` while the page is now the
+      // whole cache console at /admin/cache. `Role.pages` stores these strings
+      // in Mongo, so renaming the key would revoke the screen from every role
+      // that had been granted it until each was edited by hand — a silent
+      // permission regression dressed up as a tidy-up. The label and href moved;
+      // the permission did not. /admin/landing-cache still resolves to this key
+      // through its own requirePage call (that page is now a redirect).
+      { key: 'landing_cache', label: 'Cache Console', href: '/admin/cache', match: 'prefix' },
       { key: 'webhook_logs',  label: 'Webhook Logs',  href: '/admin/webhook-logs',  match: 'prefix' },
       { key: 'security',      label: 'ความปลอดภัย',   href: '/admin/security',      match: 'prefix' },
       { key: 'profile',       label: 'โปรไฟล์',       href: '/admin/profile',       match: 'prefix' },
@@ -83,9 +104,14 @@ export const ADMIN_PAGES = [
       // Phase 3a — the admin action history. Adding it here has two INTENDED
       // consequences, neither of them a side effect: it enters MENU_ENUM
       // automatically (MENU_ENUM = [...ALL_PAGE_KEYS, UNKNOWN_MENU]), so the
-      // audit log becomes auditable by the same machinery; and it appears in
-      // both the sidebar and the roles checkbox UI, because both render from
-      // ADMIN_PAGES. Granting it is therefore a normal role edit.
+      // audit log becomes auditable by the same machinery; and it gets a
+      // checkbox in the roles UI, which renders from ADMIN_PAGES. Granting it
+      // is therefore a normal role edit.
+      //
+      // The sidebar link is NOT one of them — that lives in NAV_GROUPS in
+      // AdminSidebar.jsx, a separate hardcoded list. This entry had no link
+      // for exactly that reason; the two lists are now held in step by an
+      // automated parity check.
       { key: 'audit_log',     label: 'ประวัติการดำเนินการ', href: '/admin/audit-log', match: 'prefix' },
     ],
   },

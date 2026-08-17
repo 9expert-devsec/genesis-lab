@@ -147,8 +147,8 @@ test('Design is present with the measured upstream identity', () => {
 test('the config covers exactly seven skills', () => {
   // An exact count, not a floor. Upstream had 7 on 2026-08-04; a skill added
   // upstream is invisible to this suite (see the header), so the number here
-  // is the thing a human bumps when they have re-measured — the same contract
-  // as EXPECTED_TESTS in test/run.mjs.
+  // is the thing a human bumps when they have re-measured. (test/run.mjs used to
+  // be the same contract; it is a FLOOR now, so this one stands alone.)
   assert.equal(skills.length, 7);
 });
 

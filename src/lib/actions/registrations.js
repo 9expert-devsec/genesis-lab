@@ -6,6 +6,8 @@ import RegisterPublic  from '@/models/RegisterPublic';
 import RegisterInhouse from '@/models/RegisterInhouse';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
+import { INHOUSE_STATUS_VALUES } from '@/lib/registrations/inhouseStatuses';
+import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
@@ -61,35 +63,23 @@ function entityForSource(source) {
 
 // ── List (paginated + filtered) ────────────────────────────────────
 
-export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public' } = {}) {
+export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public', range = 'all' } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
-  const Model  = getModel(source);
-  const filter = {};
+  const Model = getModel(source);
 
-  if (status && status !== 'all') {
-    filter.status = status;
-  }
-
-  if (q && q.trim()) {
-    const term = q.trim();
-    if (source === 'inhouse') {
-      filter.$or = [
-        { companyName:        { $regex: term, $options: 'i' } },
-        { contactFirstName:   { $regex: term, $options: 'i' } },
-        { contactLastName:    { $regex: term, $options: 'i' } },
-        { contactEmail:       { $regex: term, $options: 'i' } },
-      ];
-    } else {
-      filter.$or = [
-        { courseName:              { $regex: term, $options: 'i' } },
-        { 'coordinator.firstName': { $regex: term, $options: 'i' } },
-        { 'coordinator.lastName':  { $regex: term, $options: 'i' } },
-        { 'coordinator.email':     { $regex: term, $options: 'i' } },
-      ];
-    }
-  }
+  /**
+   * THE FILTER IS BUILT IN ONE PLACE, SHARED WITH THE COUNTS.
+   *
+   * `range` used to stop at `getRegistrationStatusCounts` and never reach this
+   * query, so the summary cards were filtered by date and the table below them
+   * was not — วันนี้ showed ทั้งหมด 1 above a table listing all seven rows.
+   * Both callers now derive from `buildRegistrationFilter` /
+   * `rangeToDateFilter` in lib/registrations/listFilter.js, so a date window
+   * that applies to one and not the other is no longer expressible.
+   */
+  const filter = buildRegistrationFilter({ status, q, source, range });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
   const total = await Model.countDocuments(filter);
@@ -100,7 +90,22 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(PAGE_SIZE)
-      .select('companyName contactFirstName contactLastName contactEmail coursesInterested participantsCount trainingFormat status createdAt')
+      /**
+       * THE PROJECTION IS THE RENDER LIST, field for field.
+       *
+       * It gained `contactPhone` and `preferredMonth` because InhouseTable shows
+       * both, and `trainingFormat` is back because the รูปแบบ column now renders
+       * it. It was dropped for one commit on the grounds that all four stored
+       * records say 'onsite' — which was reasoning from the sample, not the
+       * schema, where it is a required two-value enum with no default.
+       *
+       * Keeping the two lists equal is the actual guard here. A projection that
+       * is a superset of the render is dead weight over the wire; one that is a
+       * SUBSET renders `undefined`, and this whole table was blank because a
+       * public-shaped render was fed an in-house-shaped projection. If you add a
+       * column, add the field.
+       */
+      .select('companyName contactFirstName contactLastName contactEmail contactPhone coursesInterested participantsCount trainingFormat preferredMonth status createdAt')
       .lean();
   } else {
     docs = await Model.find(filter)
@@ -134,7 +139,14 @@ export async function getRegistrationById(id, source = 'public') {
 // ── Status update ──────────────────────────────────────────────────
 
 const PUBLIC_STATUSES  = new Set(['pending', 'confirmed', 'paid', 'cancelled']);
-const INHOUSE_STATUSES = new Set(['new', 'contacted', 'quoted', 'closed-won', 'closed-lost']);
+/**
+ * DERIVED, not written out again. This Set is the write-side gate on
+ * `updateRegistrationStatus`; the cards and the chips on the list screen are
+ * built from the same array in lib/registrations/inhouseStatuses.js. Spelling
+ * the five values here a second time is how the screen came to offer a `quoted`
+ * chip that no card could display.
+ */
+const INHOUSE_STATUSES = new Set(INHOUSE_STATUS_VALUES);
 
 export async function updateRegistrationStatus(id, status, source = 'public') {
   const session = await requireAdmin('registrations');
@@ -176,15 +188,32 @@ export async function updateRegistration(id, data, source = 'public') {
   const update = {};
 
   if (source === 'inhouse') {
-    // Inhouse editable fields
+    /**
+     * Inhouse editable fields — AN ALLOWLIST, so a field that is not named here
+     * reaches Mongo from nowhere. That cuts both ways and the omissions are
+     * deliberate:
+     *
+     *   · `skillLevel`, `objective`, `scheduleMode`, `preferredDateFrom`,
+     *     `preferredDateTo`, `onsiteEquipment`, `onsiteAddress`,
+     *     `onsiteProvince`, `onsiteDistrict` — removed from the form; the paths
+     *     survive on the Mongoose schema so old enquiries still read back, and
+     *     leaving them writable would let the admin surface create data in a
+     *     shape nothing else produces any more.
+     *   · `branch` — LEGACY READ-ONLY. `branchType` / `branchCode` replaced it.
+     *     Keeping it writable is precisely how the two representations drift
+     *     apart, one of them wins in a template, and nobody can say which was
+     *     meant. An fs guard pins its absence from both allowlists.
+     *   · `companyName` — a derived mirror of `quotationCompany`, written by
+     *     one line in the API route and nowhere else.
+     */
     const inhouseFields = [
-      'coursesInterested','participantsCount','skillLevel','objective','contentMode','contentDetails',
-      'scheduleMode','preferredMonth','preferredDateFrom','preferredDateTo','scheduleNote',
-      'trainingFormat','onsiteAddress','onsiteProvince','onsiteDistrict','onsiteEquipment',
+      'coursesInterested','participantsCount','contentMode','contentDetails',
+      'preferredMonth','scheduleNote',
+      'trainingFormat','onsiteVenue',
       'onlineRegion','onlineTimezone',
-      'contactFirstName','contactLastName','contactRole','contactDepartment','companyName',
+      'contactFirstName','contactLastName','contactRole','contactDepartment',
       'contactEmail','contactPhone','contactLine',
-      'quotationCountry','quotationCompany','taxId','branch',
+      'quotationCountry','quotationCompany','taxId','branchType','branchCode',
       'thaiAddress','internationalAddress','message','adminNotes',
     ];
     for (const f of inhouseFields) {
@@ -234,7 +263,18 @@ export async function updateRegistration(id, data, source = 'public') {
         if (inv.firstName   !== undefined) update['invoice.firstName']   = String(inv.firstName ?? '').trim();
         if (inv.lastName    !== undefined) update['invoice.lastName']    = String(inv.lastName ?? '').trim();
         if (inv.companyName !== undefined) update['invoice.companyName'] = String(inv.companyName ?? '').trim();
-        if (inv.branch      !== undefined) update['invoice.branch']      = String(inv.branch ?? '').trim();
+        /**
+         * `invoice.branch` IS DELIBERATELY NOT COPIED — it is legacy read-only.
+         *
+         * This one-key-at-a-time copy is the third layer of a three-layer save
+         * (JSX control → lazily-created skeleton → this allowlist) and the only
+         * one with no visible symptom when it is wrong: an unnamed key is
+         * dropped here, the action returns ok, and the admin sees the old value
+         * after a refresh. Same class of trap as articleSchema's strip mode.
+         */
+        if (inv.branchType  !== undefined) update['invoice.branchType']  = inv.branchType;
+        if (inv.branchCode  !== undefined) update['invoice.branchCode']  = String(inv.branchCode ?? '').trim();
+        if (inv.branchFree  !== undefined) update['invoice.branchFree']  = String(inv.branchFree ?? '').trim();
         if (inv.taxId       !== undefined) update['invoice.taxId']       = String(inv.taxId ?? '').trim();
         if (inv.thaiAddress !== undefined) {
           update['invoice.thaiAddress'] = inv.thaiAddress;
@@ -247,7 +287,11 @@ export async function updateRegistration(id, data, source = 'public') {
       }
     }
     if (data.notes !== undefined) {
-      update.notes = String(data.notes ?? '').trim().slice(0, 500) || undefined;
+      // The `!== undefined` guard above already draws the line this file cares
+      // about: a caller that did not mention `notes` never reaches here, so the
+      // field is left alone. Once inside, the value is a deliberate one — and
+      // `|| undefined` threw that away again, making "clear the note" a no-op.
+      update.notes = String(data.notes ?? '').trim().slice(0, 500);
     }
   }
 
@@ -313,28 +357,37 @@ export async function getRegistrationStatusCounts({ range = 'all', source = 'pub
   await requireAdmin('registrations');
   await dbConnect();
 
-  const now = new Date();
-  let from = null;
-  if (range === 'today') {
-    from = new Date(now); from.setHours(0, 0, 0, 0);
-  } else if (range === 'week') {
-    from = new Date(now); from.setDate(from.getDate() - 6); from.setHours(0, 0, 0, 0);
-  } else if (range === 'month') {
-    from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  }
-
-  const dateFilter = from ? { createdAt: { $gte: from } } : {};
+  // The SAME derivation the list query uses — see listRegistrations.
+  const dateFilter = rangeToDateFilter(range);
   const Model = getModel(source);
 
   if (source === 'inhouse') {
-    const [total, newCount, contacted, closedWon, closedLost] = await Promise.all([
+    /**
+     * ONE COUNT PER DECLARED STATUS, driven by the array — never by a list of
+     * names written here.
+     *
+     * The four hand-named counts this replaces omitted `quoted` entirely, so a
+     * real record was included in `total` and returned under no key at all. The
+     * card for it could not have shown a number even if one had been declared.
+     * Counting `INHOUSE_STATUS_VALUES` means a status added to that array is
+     * counted here without this file being edited.
+     *
+     * Keys are the STORED VALUE (`closed-won`, not `closedWon`), which is also
+     * the card key and the filter value, so no consumer has to map between
+     * spellings.
+     */
+    const [total, ...perStatus] = await Promise.all([
       Model.countDocuments(dateFilter),
-      Model.countDocuments({ ...dateFilter, status: 'new' }),
-      Model.countDocuments({ ...dateFilter, status: 'contacted' }),
-      Model.countDocuments({ ...dateFilter, status: 'closed-won' }),
-      Model.countDocuments({ ...dateFilter, status: 'closed-lost' }),
+      ...INHOUSE_STATUS_VALUES.map((value) =>
+        Model.countDocuments({ ...dateFilter, status: value })
+      ),
     ]);
-    return serialize({ total, new: newCount, contacted, closedWon, closedLost, range, source });
+
+    const byStatus = Object.fromEntries(
+      INHOUSE_STATUS_VALUES.map((value, i) => [value, perStatus[i]])
+    );
+
+    return serialize({ total, ...byStatus, range, source });
   } else {
     const [total, pending, confirmed, paid, cancelled] = await Promise.all([
       Model.countDocuments(dateFilter),

@@ -11,7 +11,12 @@ import { useSwipe } from '@/hooks/useSwipe';
  * chevrons. Button visibility tracks `scrollLeft` so the prev arrow
  * doesn't appear at position 0 and the next arrow hides at the end.
  */
-export function CourseCarousel({ courses, CardComponent = CourseCard }) {
+export function CourseCarousel({
+  courses,
+  CardComponent = CourseCard,
+  currentYear,
+  skillSlugs = {},
+}) {
   const scrollerRef = useRef(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
@@ -68,7 +73,7 @@ export function CourseCarousel({ courses, CardComponent = CourseCard }) {
             key={c._id ?? c.course_id ?? c.o_course_id}
             className="w-[280px] shrink-0 snap-start sm:w-[310px] md:w-[330px]"
           >
-            <CardComponent course={c} />
+            <CardComponent course={c} currentYear={currentYear} skillSlugs={skillSlugs} />
           </div>
         ))}
       </div>

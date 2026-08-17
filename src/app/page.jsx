@@ -20,6 +20,7 @@ import { HeroBannerCarousel } from "./_components/home/HeroBannerCarousel";
 import { ServicesSection } from "./_components/home/ServicesSection";
 import { ProgramSelector } from "./_components/home/ProgramSelector";
 import { NewCoursesSection } from "./_components/home/NewCoursesSection";
+import { siteCurrentYear } from "@/lib/articlePublishTime";
 import { OnlineCoursesSection } from "./_components/home/OnlineCoursesSection";
 import { InhouseCTA } from "./_components/home/InhouseCTA";
 import { TestimonialStats } from "./_components/home/TestimonialStats";
@@ -62,14 +63,7 @@ export default async function HomePage() {
   // as `(public)/layout.jsx`; both are cached together via
   // `revalidatePath('/', 'layout')` on admin writes.
   const [
-    {
-      banners,
-      programs,
-      skills,
-      newCoursesWithSchedules,
-      onlineCoursesForSection,
-      reviews,
-    },
+    landing,
     bars,
     featuredArticles,
     clientLogos,
@@ -105,6 +99,17 @@ export default async function HomePage() {
     listPrograms().catch(() => ({ items: [] })),
     listSkills().catch(() => ({ items: [] })),
   ]);
+
+  // Destructured after the fact so `landing._meta` survives — the sections are
+  // the same values as before; only the wrapper is kept alongside them.
+  const {
+    banners,
+    programs,
+    skills,
+    newCoursesWithSchedules,
+    onlineCoursesForSection,
+    reviews,
+  } = landing;
 
   // Shared with /articles — see src/lib/articleTaxonomy.js for why the keys are
   // program_id / skill_id rather than _id, and why an id that resolves to no
@@ -181,13 +186,27 @@ export default async function HomePage() {
           skills={skills}
           programSlugs={programSlugs}
           skillSlugs={skillSlugs}
+          // False only when getLandingData could not serve a snapshot at all,
+          // which is what separates "nothing here yet" from "could not load".
+          snapshotAvailable={landing._meta?.snapshotAvailable !== false}
         />
 
-        <NewCoursesSection courses={newCoursesWithSchedules} />
+        {/* `skillSlugs` is the SAME map already fetched above for the
+            Program/Skill selector — one getNavMenuData() call feeds both. The
+            course cards' skill capsules link through it; see
+            lib/skillCapsuleHref. */}
+        <NewCoursesSection
+          courses={newCoursesWithSchedules}
+          currentYear={siteCurrentYear()}
+          skillSlugs={skillSlugs}
+        />
 
-        <OnlineCoursesSection courses={onlineCoursesForSection} />
+        <OnlineCoursesSection
+          courses={onlineCoursesForSection}
+          skillSlugs={skillSlugs}
+        />
 
-        <InhouseCTA />
+        {/* <InhouseCTA /> */}
 
         <ClientLogosSection logos={clientLogos} />
 

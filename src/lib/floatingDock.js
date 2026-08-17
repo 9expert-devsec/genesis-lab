@@ -135,10 +135,26 @@ export function shouldRenderChatLauncher(pathname) {
  * fresh decision — it is why this one rule does NOT go through
  * matchesRoutePattern. Measured: it fires on /masterclass/[slug]/register and
  * on nothing else in the tree, because "registration" does not contain
- * "register" (regist-R-ation vs regist-E-r). That is correct — the masterclass
- * register page is one of only three public surfaces with its own fixed bottom
- * bar, and the registration wizards have none. Rewriting it as a pattern would
- * change which pages lift, which is a separate call with its own click-testing.
+ * "register" (regist-R-ation vs regist-E-r).
+ *
+ * THE STRING REASONING ABOVE IS RIGHT; THE CONCLUSION THAT USED TO FOLLOW IT
+ * WAS WRONG. It said the registration wizards have no bottom bar, so missing
+ * them was harmless. They do have one: ReviewAndPayStep renders
+ * Step2MobileBar (fixed inset-x-0 bottom-0 z-30 lg:hidden) on step 2 of
+ * /registration/*, and this predicate does not match there — so for every
+ * mobile session on that step the dock sat on that bar's controls, unlifted.
+ * That is now fixed by the bar PUBLISHING its occupied box to
+ * viewportBottomInset, not by widening this predicate.
+ *
+ * Which leaves the two mechanisms side by side on purpose, for now: this
+ * static lift serves /masterclass/[slug]/register, and the measured clearance
+ * serves everything else. They must not both serve the same bar — the dock
+ * would double-count and float roughly 200px up — which is why
+ * Step2MobileBar's publishing is opt-in and the masterclass register call site
+ * deliberately does not opt in. Retiring this predicate in favour of the
+ * measured clearance is the end state, and is a separate call with its own
+ * click-testing; rewriting it as a pattern would change which pages lift and
+ * is likewise separate.
  */
 export function dockLiftsForBottomBar(pathname) {
   return typeof pathname === 'string' && pathname.includes('/register');

@@ -1,8 +1,12 @@
 import { notFound, permanentRedirect } from 'next/navigation';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
-import { listSchedulesByCourse } from '@/lib/api/schedules';
+import {
+  PUBLIC_SCHEDULE_STATUSES,
+  listSchedulesByCourse,
+} from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { resolveHiddenCourseForAdmin } from '@/lib/courses/adminCoursePreview';
 import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
@@ -20,9 +24,12 @@ import { CourseRequirements } from './_components/CourseRequirements';
 import { CourseOutline } from './_components/CourseOutline';
 import { CourseRoadmap } from './_components/CourseRoadmap';
 import { SidebarNav } from './_components/SidebarNav';
+import { CourseSectionTabs } from './_components/CourseSectionTabs';
+import { SECTION_ANCHOR_CLASS } from '@/lib/courseSectionNav';
 import { InhouseCTA } from './_components/InhouseCTA';
 import { PDFDownload } from './_components/PDFDownload';
 import { RelatedCourses } from './_components/RelatedCourses';
+import { siteCurrentYear } from '@/lib/articlePublishTime';
 import { CourseStickyCTA } from './_components/CourseStickyCTA';
 import { EarlyBirdBanner } from './_components/EarlyBirdBanner';
 import { CoursePromoSection } from './_components/CoursePromoSection';
@@ -120,6 +127,14 @@ async function resolveCustomPageForRequest(segment, searchParams) {
 // (revalidate = 3600, so a scheduled page goes live within the hour, not on the
 // second) is documented there.
 
+// ── ADMIN PREVIEW OF A HIDDEN COURSE ──────────────────────────────────────
+// Same shape as resolveCustomPageForRequest above — `?preview=` on this route,
+// gated, falling through to the ordinary answer when it does not apply — so
+// this route has ONE preview idiom rather than two. The gate itself lives in
+// lib/courses/adminCoursePreview because a page file can export nothing but
+// Next's own contract, and "no session means no course" is a claim that needs a
+// callable function to prove, not a grep over this file.
+
 // Resolve a PUBLIC builder page. Reads any-status (the published-only action
 // can't express the date window) and gates in JS. Preview lives on its own
 // /preview/[slug] route and never resolves here.
@@ -142,10 +157,14 @@ async function loadProgram(slug) {
   const cfg = await ProgramPageConfig.findOne({ urlSlug: slug }).lean();
   if (!cfg || cfg.isPublished === false) return null;
 
-  const [programsRes, coursesRes, earlyBirdMap] = await Promise.all([
+  const [programsRes, coursesRes, earlyBirdMap, linkability] = await Promise.all([
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
+    // For the course cards' skill capsules. The course-detail branch below
+    // already resolves this for its chips; the program and skill branches
+    // return BEFORE reaching it, which is why each loader fetches its own.
+    getPageLinkability(),
   ]);
 
   const resolved = await resolveProgramBySlug(slug, programsRes.items ?? []);
@@ -158,7 +177,7 @@ async function loadProgram(slug) {
   );
   const courses = await enrichCoursesWithDetails(programCourses);
   const faqs = await getLocalFaqsForCourse('program', programRefId(program)).catch(() => []);
-  return { program, config, courses, earlyBirdMap, faqs };
+  return { program, config, courses, earlyBirdMap, faqs, skillSlugs: linkability.skillSlugs };
 }
 
 function courseInSkill(course, skillId) {
@@ -174,10 +193,13 @@ async function loadSkill(slug) {
   const cfg = await SkillPageConfig.findOne({ urlSlug: slug }).lean();
   if (!cfg || cfg.isPublished === false) return null;
 
-  const [skillsRes, programsRes, coursesRes] = await Promise.all([
+  const [skillsRes, programsRes, coursesRes, linkability] = await Promise.all([
     listSkills().catch(() => ({ items: [] })),
     listPrograms().catch(() => ({ items: [] })),
     listPublicCourses().catch(() => ({ items: [] })),
+    // See the note in loadProgram: this branch returns before the
+    // course-detail linkability read, so it does its own.
+    getPageLinkability(),
   ]);
 
   const resolved = await resolveSkillBySlug(slug, skillsRes.items ?? []);
@@ -201,7 +223,10 @@ async function loadSkill(slug) {
     .filter((g) => g.courses.length > 0);
 
   const faqs = await getLocalFaqsForCourse('skill', skillRefId(skill)).catch(() => []);
-  return { skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs };
+  return {
+    skill, config, coursesByProgram, totalCourses: skillCourses.length, faqs,
+    skillSlugs: linkability.skillSlugs,
+  };
 }
 
 export async function generateMetadata({ params, searchParams }) {
@@ -436,6 +461,8 @@ export default async function CatchAllPage({ params, searchParams }) {
           courses={programData.courses}
           earlyBirdMap={programData.earlyBirdMap}
           faqs={programData.faqs}
+          currentYear={siteCurrentYear()}
+          skillSlugs={programData.skillSlugs}
         />
       );
     }
@@ -448,6 +475,8 @@ export default async function CatchAllPage({ params, searchParams }) {
           coursesByProgram={skillData.coursesByProgram}
           totalCourses={skillData.totalCourses}
           faqs={skillData.faqs}
+          currentYear={siteCurrentYear()}
+          skillSlugs={skillData.skillSlugs}
         />
       );
     }
@@ -496,9 +525,20 @@ export default async function CatchAllPage({ params, searchParams }) {
   }
 
   // Course resolver handles both alias and `-training-course` suffix.
-  const resolved = await resolveCourse(segment);
+  //
+  // The admin-preview arm runs ONLY when the public answer was null, so the
+  // happy path — every published course — does exactly the work it did before
+  // this existed. See resolveHiddenCourseForAdmin for why that ordering is
+  // load-bearing rather than tidy, and for the correction to the reason this
+  // comment originally gave (the full-route cache, which this route does not
+  // have: `next build` reports /[...slug] as ƒ Dynamic, and did before this
+  // change too).
+  const publicResolved = await resolveCourse(segment);
+  const resolved =
+    publicResolved ?? (await resolveHiddenCourseForAdmin(segment, searchParams));
   if (resolved) {
     const { course, extension } = resolved;
+    const isHiddenPreview = publicResolved === null;
 
     // Parallelise schedules + programs. `/programs` carries `programcolor`
     // which the hero gradient uses; the course detail response doesn't
@@ -509,7 +549,13 @@ export default async function CatchAllPage({ params, searchParams }) {
       skillsRes, linkabilityRes,
     ] =
       await Promise.allSettled([
-        listSchedulesByCourse(course._id, { limit: 10 }),
+        // All three statuses — the detail page's ตารางอบรม block is where a
+        // buyer decides; a round that is full is information, not noise, and
+        // hiding it makes the course look like it simply has fewer dates.
+        listSchedulesByCourse(course._id, {
+          limit: 10,
+          status: PUBLIC_SCHEDULE_STATUSES,
+        }),
         listPrograms(),
         getEarlyBirdByCourse(course.course_id),
         getActiveCoursePromos(course.course_id),
@@ -601,19 +647,37 @@ export default async function CatchAllPage({ params, searchParams }) {
 
     return (
       <>
-        {courseJsonLd && (
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }}
-          />
+        {/* Structured data is SUPPRESSED on a preview. A hidden course is one
+            an admin has taken off the site; emitting Course + BreadcrumbList
+            JSON-LD for it would be publishing machine-readable claims about a
+            page that officially does not exist. The banner sits outside the
+            article for the same reason the builder-page one does — nothing in
+            the rendered course can style it away. */}
+        {isHiddenPreview ? (
+          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
+            ตัวอย่างหลักสูตรที่ซ่อนอยู่ (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
+          </div>
+        ) : (
+          <>
+            {courseJsonLd && (
+              <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }}
+              />
+            )}
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+            />
+          </>
         )}
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-        />
+        {/* `skillSlugs` is REUSED, not refetched — `linkability` is already
+            resolved above for this page's own skill chips. It travels on to
+            RelatedCourses, whose cards carry capsules of their own. */}
         <CourseDetail
           course={course}
           skillHrefs={skillHrefs}
+          skillSlugs={linkability.skillSlugs}
           courseProgramHref={courseProgramHref}
           extension={extension}
           schedules={schedules}
@@ -695,6 +759,7 @@ export default async function CatchAllPage({ params, searchParams }) {
 function CourseDetail({
   course,
   skillHrefs = {},
+  skillSlugs = {},
   courseProgramHref = null,
   extension,
   schedules,
@@ -739,12 +804,27 @@ function CourseDetail({
         programHref={courseProgramHref}
       />
 
+      {/* Mobile-only sticky jump links; the sidebar copy is hidden below lg.
+          Kept as a component rather than inline markup on purpose — see the
+          "WHY A COMPONENT AND NOT INLINE MARKUP" note in CourseSectionTabs.jsx,
+          which is also where the reasoning lives so that this call site carries
+          no element names in prose. That is not tidiness: the depth counter in
+          test/render/stickyBarButtonCoordination scans this span as RAW TEXT,
+          so tag names written here between the article and the aside are
+          counted as if they were markup. */}
+      <CourseSectionTabs
+        course={course}
+        hasSchedules={hasSchedules}
+        hasRelated={hasRelated}
+        hasFaqs={Boolean(faqs?.length)}
+      />
+
       {/* pb-36 below lg reserves room for the fixed CourseStickyCTA bar so the
           reflowed sidebar (Course Outline downloads) can scroll clear of it on
           small screens; this is content-length-independent (works when a short
           course has no RelatedCourses below). lg keeps the original pb-8 — the
           large-screen bar is centered and its presentation is unchanged. */}
-      <div className="mx-auto max-w-[1200px] pt-8 pb-36 lg:pb-8 ">
+      <div className="mx-auto max-w-[1200px] px-4 pt-8 pb-36 lg:pb-8">
         {/* id="course-content" marks the content zone (main column + sidebar).
             CourseStickyCTA hides once this element's bottom scrolls above the
             viewport — i.e. before the related-courses section / footer — and
@@ -754,6 +834,24 @@ function CourseDetail({
           className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_300px]"
         >
           <div className="min-w-0 space-y-10">
+            {/* MOBILE slot for the course-outline downloads. Below lg the aside
+                reflows to the very bottom of the page, so the sidebar copy is
+                unreachable in practice — the same defect fb03dc1 fixed for the
+                section nav, one component later in the same aside.
+
+                Inside the content wrapper rather than beside the tab strip, so
+                it takes the body's px-4 inset and the column's space-y-10
+                rhythm without inventing a width. The strip is full-bleed with
+                its padding on the scroll track; this is a rounded, bordered
+                card and belongs with the body content, indented from the edge.
+
+                NOT sticky, deliberately. SECTION_ANCHOR_CLASS is currently
+                scroll-mt-36 = 80 header + 48 strip + 16, and a second sticky
+                element would force that number up again in a place nobody
+                remembers to look; and this card is several times the strip's
+                height, so pinning it would permanently spend a third of a
+                phone screen on two download buttons. */}
+            <PDFDownload course={course} className="lg:hidden" layout="row" />
             {earlyBird && (
               <EarlyBirdBanner
                 earlyBird={earlyBird}
@@ -770,6 +868,7 @@ function CourseDetail({
                 course={course}
                 schedules={schedules}
                 earlyBird={earlyBird}
+                currentYear={siteCurrentYear()}
               />
             )}
             <CourseDescription course={course} />
@@ -782,7 +881,7 @@ function CourseDetail({
             <FaqAccordionSection
               faqs={faqs}
               id="faq"
-              className="scroll-mt-24"
+              className={SECTION_ANCHOR_CLASS}
               headingClassName="mb-4 border-l-4 border-9e-brand pl-3 text-lg font-bold text-[var(--text-primary)]"
             />
           </div>
@@ -801,12 +900,26 @@ function CourseDetail({
               hasFaqs={Boolean(faqs?.length)}
             />
             {/* <InhouseCTA courseId={course.course_id} /> */}
-            <PDFDownload course={course} />
+            {/* DESKTOP slot. `hidden lg:flex`, not `lg:block` — the card's root
+                is a flex row and block would stack its icon above its text.
+                Without the `hidden` half the card ships TWICE below lg, which
+                looks right in a screenshot of the top of the page and is wrong
+                on every real one.
+
+                `layout="stacked"` puts the buttons under the label, which is
+                what a ~300px column wants. Said here rather than as an `lg:`
+                class on purpose: this slot is the NARROW one despite being the
+                lg one, so a breakpoint would read backwards. */}
+            <PDFDownload course={course} className="hidden lg:flex" layout="stacked" />
           </aside>
         </div>
       </div>
 
-      <RelatedCourses courses={relatedCourses} />
+      <RelatedCourses
+        courses={relatedCourses}
+        currentYear={siteCurrentYear()}
+        skillSlugs={skillSlugs}
+      />
 
       <CourseStickyCTA
         title={course.course_name}

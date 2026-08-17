@@ -10,11 +10,43 @@
  */
 
 import { getCourseByCode } from './public-courses';
-import { listSchedulesByCourse } from './schedules';
+import { PUBLIC_SCHEDULE_STATUSES, listSchedulesByCourse } from './schedules';
 
 const FETCH_CHUNK = 10;
 
-export async function enrichCoursesWithDetails(items, { schedulesPerCourse = 3 } = {}) {
+/**
+ * @param {object[]} items list-shaped public-course rows
+ * @param {object}   [opts]
+ * @param {number}   [opts.schedulesPerCourse=5]
+ *   How many rounds to FETCH per course — a buffer, not a display count. The
+ *   card renders MAX_CARD_ROUNDS (2) of whatever arrives.
+ *   This was 3 while the fetch omitted `status` and therefore only ever saw
+ *   registerable rounds, leaving a 1-round buffer over what the card draws.
+ *   Now that the fetch passes PUBLIC_SCHEDULE_STATUSES, `full` rounds arrive
+ *   too and OCCUPY SLOTS: a course whose next two rounds are both full would
+ *   fill the card's two slots with sold-out boxes and show no bookable round
+ *   at all. 5 keeps a real buffer behind the two the card draws.
+ * @param {boolean}  [opts.withSchedules=true]
+ *   Set false to skip the SECOND fan-out entirely. The schedule pass costs one
+ *   `listSchedulesByCourse` request per course on top of the detail pass, and
+ *   a caller that already has every schedule from a single `getAllSchedules()`
+ *   — /search's corpus builder does — would be buying the same rows twice, N
+ *   requests at a time. `schedules` is still present on the result, as `[]`,
+ *   so the returned shape does not change under the caller.
+ *   DEFAULT TRUE: every pre-existing caller (/training-course, /program/[slug],
+ *   /skill/[slug]) relies on the schedules and must be unaffected.
+ * @param {string[]} [opts.includeDetailFields=[]]
+ *   Extra keys copied verbatim from the DETAIL response. The fixed mapping
+ *   below is tuned for what the course CARDS render; /search additionally needs
+ *   `course_objectives` and `training_topics` to match on, and those must not
+ *   be added to the default mapping — they are large, and every existing
+ *   caller passes its enriched courses straight into a client component, so a
+ *   new default field is a payload regression on three other pages.
+ */
+export async function enrichCoursesWithDetails(
+  items,
+  { schedulesPerCourse = 5, withSchedules = true, includeDetailFields = [] } = {},
+) {
   if (!Array.isArray(items) || items.length === 0) return [];
 
   const detailById = new Map();
@@ -34,26 +66,38 @@ export async function enrichCoursesWithDetails(items, { schedulesPerCourse = 3 }
   }
 
   const scheduleById = new Map();
-  for (let i = 0; i < items.length; i += FETCH_CHUNK) {
-    const chunk = items.slice(i, i + FETCH_CHUNK);
-    const results = await Promise.allSettled(
-      chunk.map((c) => listSchedulesByCourse(c._id, { limit: schedulesPerCourse }))
-    );
-    results.forEach((r, idx) => {
-      const id = chunk[idx]._id;
-      if (r.status === 'fulfilled') {
-        scheduleById.set(id, r.value.items ?? []);
-      } else {
-        console.warn('[enrich-courses] schedule fetch failed:', id, r.reason);
-      }
-    });
+  if (withSchedules) {
+    for (let i = 0; i < items.length; i += FETCH_CHUNK) {
+      const chunk = items.slice(i, i + FETCH_CHUNK);
+      const results = await Promise.allSettled(
+        chunk.map((c) =>
+          listSchedulesByCourse(c._id, {
+            limit: schedulesPerCourse,
+            status: PUBLIC_SCHEDULE_STATUSES,
+          })
+        )
+      );
+      results.forEach((r, idx) => {
+        const id = chunk[idx]._id;
+        if (r.status === 'fulfilled') {
+          scheduleById.set(id, r.value.items ?? []);
+        } else {
+          console.warn('[enrich-courses] schedule fetch failed:', id, r.reason);
+        }
+      });
+    }
   }
+
+  const extras = Array.isArray(includeDetailFields) ? includeDetailFields : [];
 
   return items.map((c) => {
     const detail = detailById.get(c.course_id);
     const hoursFromDetail = detail?.course_traininghours ?? null;
+    const extra = {};
+    for (const key of extras) extra[key] = detail?.[key] ?? null;
     return {
       ...c,
+      ...extra,
       course_cover_url: detail?.course_cover_url ?? null,
       course_teaser: detail?.course_teaser ?? null,
       course_levels: detail?.course_levels ?? null,

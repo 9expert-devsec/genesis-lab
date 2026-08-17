@@ -13,7 +13,7 @@ import { OnlineCourseCard } from './OnlineCourseCard';
  * Header CTA links out to 9Expert Academy (`siteConfig.academyUrl`)
  * where these courses actually run.
  */
-export function OnlineCoursesSection({ courses = [] }) {
+export function OnlineCoursesSection({ courses = [], skillSlugs = {} }) {
   if (!courses.length) return null;
 
   return (
@@ -24,7 +24,7 @@ export function OnlineCoursesSection({ courses = [] }) {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-9e-brand">
               <Monitor className="h-4 w-4 text-white" strokeWidth={2} />
             </div>
-            <h2 className="text-xl font-bold text-9e-navy dark:text-white">คอร์สออนไลน์</h2>
+            <h2 className="text-xl font-bold text-9e-navy dark:text-white">หลักสูตรออนไลน์</h2>
           </div>
           <Link
             href={siteConfig.academyUrl}
@@ -37,7 +37,11 @@ export function OnlineCoursesSection({ courses = [] }) {
           </Link>
         </div>
 
-        <CourseCarousel courses={courses} CardComponent={OnlineCourseCard} />
+        <CourseCarousel
+          courses={courses}
+          CardComponent={OnlineCourseCard}
+          skillSlugs={skillSlugs}
+        />
       </div>
     </section>
   );

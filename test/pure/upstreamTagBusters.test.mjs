@@ -326,24 +326,59 @@ test('the sync-job scan finds the jobs at all', () => {
 });
 
 test('EXACTLY these sync jobs read upstream without busting first', () => {
-  // An exact list, not "none" — because one offender is REAL and is knowingly
-  // left alone in this commit:
+  // NOW EMPTY, AND THE LIST STAYS AN EXACT SET RATHER THAN BECOMING `length === 0`.
   //
-  //   syncLandingData.js  reads listPublicCourses, getOnlineCourses,
-  //                       listPrograms, listSkills, listSchedulesByCourse and
-  //                       getReviewsById, and busts none of them. It has the
-  //                       identical defect syncNavMenuData just had, over six
-  //                       domains instead of two. Reported, not fixed here.
+  // It used to hold syncLandingData.js, with a note saying the offender was
+  // real and knowingly left for later — and that this line would have to be
+  // updated in the same commit that fixed it, rather than leaving a lie
+  // behind. That is what happened; the entry is gone because the defect is.
   //
-  // Written as an exact set so that BOTH directions redden: a new unbusted job
-  // appears, and fixing syncLandingData forces this line to be updated in the
-  // same commit rather than leaving a lie behind.
-  assert.deepEqual(syncJobsReadingUnbusted(SYNC_FILES), ['syncLandingData.js']);
+  // An exact set still reddens in the direction that remains: a NEW sync job
+  // that reads upstream without busting appears here the moment it is written.
+  // The detector's own controls are below — they drive it with fixtures, so an
+  // empty expectation here is not the same as an untested one.
+  assert.deepEqual(syncJobsReadingUnbusted(SYNC_FILES), []);
 });
 
 test('syncNavMenuData busts before its first read', () => {
   // The concrete repair, pinned by name so a revert is loud.
   assert.ok(!syncJobsReadingUnbusted(SYNC_FILES).includes('syncNavMenuData.js'));
+});
+
+test('syncLandingData busts before its first read', () => {
+  // The same repair, one job later and over five domains instead of two.
+  // Pinned by name for the same reason: the empty set above would also be
+  // satisfied by a scan that stopped finding this file, and this would not.
+  assert.ok(SYNC_FILES.some((f) => f.endsWith('syncLandingData.js')), 'the file is still scanned');
+  assert.ok(!syncJobsReadingUnbusted(SYNC_FILES).includes('syncLandingData.js'));
+});
+
+test('syncLandingData busts every FIXED tag its own reads carry', () => {
+  /**
+   * Presence-and-order is what the scan above checks. This checks the SET,
+   * because busting the wrong tags is silent in exactly the way busting none
+   * was: the job still runs, still writes, still reports ok, and the domain
+   * whose tag was forgotten is still served from an hour-old entry.
+   *
+   * Derived from the file's own imports rather than hard-coded, so adding a
+   * sixth tagged read without busting it fails here instead of shipping.
+   * Per-record tags (`course:<id>`, `schedules:course:<oid>`) are deliberately
+   * out of scope — their ids are not known until after the list read, which
+   * the file documents at its bust site.
+   */
+  const src = scrubSource(
+    readFileSync(path.join(HERE, '..', '..', 'src', 'lib', 'landing', 'syncLandingData.js'), 'utf8')
+  );
+  const call = /bustUpstream\(([\s\S]*?)\);/.exec(src);
+  assert.ok(call, 'syncLandingData calls bustUpstream');
+  const busted = [...call[1].matchAll(/UPSTREAM_TAGS\.([A-Z_]+)/g)].map((m) => m[1]).sort();
+  assert.deepEqual(busted, [
+    'ONLINE_COURSES', // getOnlineCourses
+    'PROGRAMS',       // listPrograms
+    'PUBLIC_COURSES', // listPublicCourses, incl. the per-program probe reads
+    'REVIEWS',        // getReviewsById
+    'SKILLS',         // listSkills
+  ]);
 });
 
 test('CONTROL: moving the bust BELOW the first read reddens', () => {

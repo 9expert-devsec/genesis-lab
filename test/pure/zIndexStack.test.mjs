@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { NATIVE_Z, classLiteral, configZScale, firstZ, resolveZ } from '../zScale.mjs';
+import { readSource } from '../sourceScan.mjs';
 
 // The public-site z-index ladder. jsdom computes no stacking, and we don't run a
 // browser here, so paint order itself is inferred — but the INPUTS are checked
@@ -165,4 +166,71 @@ test('CONTROL: without the config entry the header falls to auto and loses to th
   );
   // the fix flips it
   assert.ok(resolveZ('z-60', EXTRA) > 0, 'post-fix: header sits above content');
+});
+
+// ── The ladder must DESCRIBE the tree, not a snapshot of it ─────────────────
+// z-30 was documented as belonging to CourseSectionTabs alone at the moment
+// that component was added — while the rung already had three other users. A
+// rung documented as singly owned when it has four is prose that reads as
+// measured fact while being wrong: the same defect as the
+// dockLiftsForBottomBar docstring corrected in 1c4b348, and the reason that one
+// was only caught by reading the tree rather than the comment.
+//
+// This guard reads the config RAW, and that is the documented EXCEPTION rather
+// than an oversight: the subject under test IS a comment. Scrubbing would
+// delete it and the assertion would fail on a perfectly correct file.
+
+const Z30_OCCUPANTS = [
+  'src/app/(public)/[...slug]/_components/CourseSectionTabs.jsx',
+  'src/components/payment/Step2MobileBar.jsx',
+  'src/app/admin/masterclass/_components/MasterclassCourseFormClient.jsx',
+  'src/components/promotions/PromotionBannerCarousel.jsx',
+];
+
+test('every z-30 occupant in the tree is named in the documented ladder', () => {
+  for (const rel of Z30_OCCUPANTS) {
+    const component = rel.split('/').pop().replace(/\.jsx$/, '');
+    // The occupant files are read as CODE: the subject there is a className,
+    // and prose can quote a class without using it — see the control below.
+    assert.ok(
+      readSource(rel).code.includes('z-30'),
+      `${rel} is listed as a z-30 occupant but no longer carries z-30 — remove it ` +
+        `from this list AND from the ladder comment`,
+    );
+    assert.ok(
+      CONFIG.includes(component),
+      `${component} uses z-30 but the ladder in tailwind.config.js does not name it. ` +
+        `A rung documented as having fewer users than it has is prose pretending ` +
+        `to be measurement.`,
+    );
+  }
+});
+
+test('the ladder does not still call z-30 a single-occupant rung', () => {
+  // The specific wrong shape: one component named on the 30 line and nothing
+  // else. Asserting the plural marker is present is cheaper and more robust
+  // than trying to parse the block.
+  assert.match(
+    CONFIG,
+    /SHARED LOW RUNG/,
+    'the 30 entry states that the rung is shared',
+  );
+});
+
+test('CONTROL: the occupant probes can both fail', () => {
+  // Without this, "CONFIG includes the name" could be passing because the
+  // config mentions every word, and "the file has z-30" because the probe
+  // matches anything.
+  assert.equal(CONFIG.includes('SomeComponentThatDoesNotExist'), false);
+
+  // floatingDock.js is the ideal negative, and it was found by getting this
+  // control wrong first: it MENTIONS z-30 in prose — the corrected
+  // dockLiftsForBottomBar docstring quotes Step2MobileBar's class string — while
+  // using it nowhere. Raw, it looks like a fifth occupant; as code it is not one.
+  const decoy = readSource('src/lib/floatingDock.js');
+  assert.equal(decoy.raw.includes('z-30'), true, 'the prose really does quote it');
+  assert.equal(decoy.code.includes('z-30'), false, 'and the scrub is what tells them apart');
+
+  // ...and a real occupant still reads as one, so the probe is not just strict.
+  assert.ok(readSource(Z30_OCCUPANTS[0]).code.includes('z-30'));
 });

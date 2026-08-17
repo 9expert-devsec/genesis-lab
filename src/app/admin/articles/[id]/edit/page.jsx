@@ -27,7 +27,9 @@ export default async function EditArticlePage({ params }) {
     getPinCapacity(id),
     listPrograms().catch(() => ({ items: [] })),
     listSkills().catch(()   => ({ items: [] })),
-    listPublicCourses().catch(() => ({ items: [] })),
+    // includeHidden — admin picker. An article may already pin a course that
+    // has since been hidden; filtering would drop it on the next save.
+    listPublicCourses({ includeHidden: true }).catch(() => ({ items: [] })),
   ]);
   if (!article) notFound();
   const isSuperAdmin = session?.user?.isSuperadmin ?? false;

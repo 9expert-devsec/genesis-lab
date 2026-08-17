@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
+import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
+import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
 
 /**
  * Pure resolver for the bar's single action. Exported so the three behaviours
@@ -138,12 +140,108 @@ export function CourseStickyCTA({
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasSchedules]);
 
+  // ── Publishing the clearance ────────────────────────────────────────────
+  // EVERYTHING from here to the early return is hooks, and it has to stay on
+  // this side of it: `if (barDismissed) return null` is below, and a hook
+  // placed after it would be a conditional hook that throws the moment someone
+  // presses X.
+  //
+  // Note the early return does NOT unmount this component — it keeps rendering,
+  // just as null — so dismiss does not fire any cleanup. Dismiss is handled by
+  // the VALUE going to 0, not by teardown. Teardown is a separate concern
+  // (navigation), handled by its own effect below.
+  const barKey = useId();
+  const shellRef = useRef(null);
+  const cardRef = useRef(null);
+  const [metrics, setMetrics] = useState({
+    cardHeight: 0,
+    bottomOffset: 0,
+    cardLeft: 0,
+    cardRight: 0,
+  });
+
+  // Measure once the bar exists, and again on resize. Everything here is
+  // genuinely responsive and none of it may be assumed:
+  //   - the card's height. It is min-h-[7rem] but GROWS: the cover thumbnail is
+  //     `hidden sm:block`, so a course with a cover is taller from sm up.
+  //   - the bar's own bottom offset, which is bottom-2 md:bottom-6.
+  //   - the card's horizontal extent. The card is capped at 860px and
+  //     left-aligned inside a 1200px box, so it does NOT span the viewport and
+  //     its right edge moves with the width.
+  //
+  // TWO DIFFERENT READS, on purpose. offsetHeight and the computed `bottom` are
+  // LAYOUT reads, unaffected by the translate that hides the bar — using a rect
+  // for the height would report a position in flight during the 300ms slide and
+  // the consumer would chase it down the screen. The rect IS used for left and
+  // right, and that is safe for the same reason it is unsafe for the height:
+  // the transition is `translate-y`, purely vertical, so the horizontal edges
+  // of the rect sit still throughout it.
+  useEffect(() => {
+    const measure = () => {
+      const card = cardRef.current;
+      const shell = shellRef.current;
+      if (!card || !shell) return;
+      const cardHeight = card.offsetHeight;
+      const rect = card.getBoundingClientRect();
+      const bottomOffset =
+        Number.parseFloat(window.getComputedStyle(shell).bottom) || 0;
+      // Bail out of the state update when nothing moved: resize fires in
+      // streams, and an unconditional setState would re-render the bar on every
+      // frame of a window drag.
+      setMetrics((prev) =>
+        prev.cardHeight === cardHeight &&
+        prev.bottomOffset === bottomOffset &&
+        prev.cardLeft === rect.left &&
+        prev.cardRight === rect.right
+          ? prev
+          : { cardHeight, bottomOffset, cardLeft: rect.left, cardRight: rect.right },
+      );
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const occupancyHeight = stickyBarOccupancyHeight({
+    dismissed: barDismissed,
+    revealed: showStickyBar,
+    cardHeight: metrics.cardHeight,
+    bottomOffset: metrics.bottomOffset,
+  });
+
+  // Publish the box this bar occupies: how far up it reaches, and WHERE across
+  // the width it reaches there. The height goes to 0 when the bar is dismissed
+  // or scrolled away while the span stays — the bar is still that wide, it is
+  // simply covering nothing, and a consumer outside its column was never
+  // affected either way.
+  //
+  // Deliberately does NOT clear on cleanup: this effect re-runs on every
+  // change, and clearing first would drop the box between two live values,
+  // making a consumer animate down and back up on something as ordinary as a
+  // resize. Primitives in the deps rather than an object, so an identical
+  // measurement does not re-publish.
+  useEffect(() => {
+    setOccupiedBox(barKey, {
+      height: occupancyHeight,
+      left: metrics.cardLeft,
+      right: metrics.cardRight,
+    });
+  }, [barKey, occupancyHeight, metrics.cardLeft, metrics.cardRight]);
+
+  // Teardown, and ONLY teardown. Empty deps, so this cleanup runs exactly once,
+  // when the component really unmounts — which is what a route change does. If
+  // this is missing, the dock stays lifted on every page the user visits after
+  // leaving a course page: a bug that only appears after a navigation, so it
+  // survives casual testing and never gets reproduced from a bug report.
+  useEffect(() => () => clearOccupiedBox(barKey), [barKey]);
+
   if (barDismissed) return null;
 
   const action = stickyCtaAction({ hasSchedules, inhouseHref });
 
   return (
     <div
+      ref={shellRef}
       className={`fixed inset-x-0 bottom-2 md:bottom-6 z-40
 
             transition-transform duration-300 ease-in-out
@@ -158,20 +256,26 @@ export function CourseStickyCTA({
           bar's box sits behind them. The bar still paints above ordinary flow
           content, which is un-positioned.
 
-          The same holds for the bottom-right floating dock, which carries z-50
-          for both of its slots. NOTE the property is the DOCK's now, not the
-          back-to-top button's: that button no longer positions itself and no
-          longer carries a z-index at all (see FloatingActionDock.jsx). The dock
-          is also TALLER than the single button this comment used to describe —
-          it stacks back-to-top above a chat launcher — so it covers more of
-          this bar's right-hand end than it once did. That overlap is accepted,
-          not compensated for: this bar deliberately has no lift rule, and
-          inventing one here would put an offset in this file that has to agree
-          with an offset in the dock, which is the exact coupling the dock was
-          created to remove. */}
+          The bottom-right floating dock is a DIFFERENT case, and this
+          paragraph used to say the opposite. The dock carries z-50 for both of
+          its slots, so where it overlapped this bar the taps landed on the dock
+          and the bar's own controls became unreachable — measured at 390px, the
+          chat launcher sat on top of the CTA button and the back-to-top button
+          sat squarely on top of the X. That is not the harmless z-order overlap
+          described above for the sidebar; it is two live controls fighting.
+
+          It is now resolved, and NOT by a lift rule in this file. This bar
+          publishes how much of the bottom edge it occupies and the dock pads
+          itself clear of whatever it is told. No offset here has to agree with
+          an offset there — that coupling is exactly what the dock was created
+          to remove, and it stays removed, because the number is measured rather
+          than authored and travels in one direction. */}
       <div className="mx-auto flex max-w-[1200px] justify-start min-[1920px]:justify-center">
         <div className="max-w-[860px] px-4 w-full min-[1920px]:max-w-[900px]">
-          <div className="relative flex min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]">
+          <div
+            ref={cardRef}
+            className="relative flex min-h-[7rem] items-center overflow-clip bg-white dark:bg-9e-navy rounded-2xl shadow-[0_0_36px_rgba(36,134,255,0.3)]"
+          >
             {/* Cover image — flush left, full bar height, 16:9, no padding */}
             {coverUrl ? (
               <div className="hidden sm:block shrink-0 self-stretch p-3 ">

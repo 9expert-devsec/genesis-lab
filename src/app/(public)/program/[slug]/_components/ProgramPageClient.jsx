@@ -16,7 +16,15 @@ import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
  * The roadmap image isn't part of the verified `/programs` shape, but
  * we look for likely field names so it shows up if upstream adds one.
  */
-export function ProgramPageClient({ program, config, courses, earlyBirdMap = {}, faqs = [] }) {
+export function ProgramPageClient({
+  program,
+  config,
+  courses,
+  earlyBirdMap = {},
+  faqs = [],
+  currentYear,
+  skillSlugs = {},
+}) {
   const roadmapUrl =
     program?.program_roadmap_url ??
     program?.programroadmapurl ??
@@ -125,6 +133,8 @@ export function ProgramPageClient({ program, config, courses, earlyBirdMap = {},
                 earlyBirdScheduleId={
                   earlyBirdMap[String(c.course_id).toUpperCase()] ?? null
                 }
+                currentYear={currentYear}
+                skillSlugs={skillSlugs}
               />
             ))}
           </div>

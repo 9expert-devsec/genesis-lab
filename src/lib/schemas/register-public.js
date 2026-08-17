@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
 
 /**
  * Validation schema for /registration/public form submissions.
@@ -18,13 +19,23 @@ export const thaiAddressSchema = z.object({
   postalCode:  z.string().trim().regex(/^\d{5}$/, 'รหัสไปรษณีย์ 5 หลัก'),
 });
 
+/**
+ * 'Other country' is an ENGLISH-ONLY branch. The predicate is shared with
+ * register-inhouse.js — see src/lib/registration/englishOnly.js for why it is
+ * an exclusion of the Thai block and NOT an A-Z allowlist (an allowlist rejects
+ * `Côte d'Ivoire`, `A/S` and `#12-04`).
+ */
+const noThai = (schema) => schema.refine((v) => !containsThai(v), { message: ENGLISH_ONLY_MESSAGE });
+const englishRequired = (msg, max) => noThai(z.string().trim().min(1, msg).max(max));
+const englishOptional = (max) => noThai(z.string().trim().max(max)).optional();
+
 export const internationalAddressSchema = z.object({
-  line1:      z.string().trim().min(1, 'กรุณากรอกที่อยู่').max(200),
-  line2:      z.string().trim().max(200).optional().or(z.literal('')),
-  city:       z.string().trim().min(1, 'กรุณากรอกเมือง').max(100),
-  state:      z.string().trim().max(100).optional().or(z.literal('')),
-  postalCode: z.string().trim().max(20).optional().or(z.literal('')),
-  country:    z.string().trim().min(1, 'กรุณากรอกประเทศ').max(100),
+  line1:      englishRequired('กรุณากรอกที่อยู่', 200),
+  line2:      englishOptional(200),
+  city:       englishRequired('กรุณากรอกเมือง', 100),
+  state:      englishOptional(100),
+  postalCode: englishOptional(20),
+  country:    englishRequired('กรุณากรอกประเทศ', 100),
 });
 
 // ── Party schemas ──────────────────────────────────────────────────
@@ -53,7 +64,27 @@ export const invoiceSchema = z
     firstName:   z.string().trim().max(100).optional().or(z.literal('')),
     lastName:    z.string().trim().max(100).optional().or(z.literal('')),
     companyName: z.string().trim().max(200).optional().or(z.literal('')),
-    branch:      z.string().trim().max(100).optional().or(z.literal('')),
+    /**
+     * STRUCTURED, and there is deliberately NO `branch` key here any more.
+     *
+     * `branch` survives as a legacy read-only path on RegisterPublic's
+     * InvoiceSchema so old documents still say what they said, but nothing
+     * writes it: zod is in strip mode, so a client that still sends
+     * `invoice.branch` has it dropped here, and the admin action's allowlist
+     * does not name it either. Writing a derived string alongside the pair is
+     * how one value under two names ends up disagreeing with itself — this repo
+     * already paid for that lesson as quotation_address / billing_address. The
+     * label is computed at read time by src/lib/registration/branchLabel.js.
+     *
+     * `branchFree` is the 'Other country' counterpart: a Thai Revenue-Department
+     * branch number is meaningless abroad, so that branch keeps free text.
+     */
+    branchType:  z.enum(['head_office', 'branch']).default('head_office'),
+    // max(20), NOT max(5): the 5-digit rule is conditional and lives in
+    // superRefine, and a field-level max would pre-empt it on a 6-digit value
+    // with zod's own English message. This bound just stops an unbounded string.
+    branchCode:  z.string().trim().max(20).optional().or(z.literal('')),
+    branchFree:  z.string().trim().max(100).optional().or(z.literal('')),
     taxId:       z.string().trim().max(30).optional().or(z.literal('')),
     // Only one of these will be populated depending on invoice.country
     thaiAddress:          thaiAddressSchema.optional().nullable(),
@@ -73,6 +104,13 @@ export const invoiceSchema = z
       if (!data.taxId || !/^\d{13}$/.test(data.taxId)) {
         ctx.addIssue({ path: ['taxId'], code: 'custom', message: 'เลขประจำตัวผู้เสียภาษี 13 หลัก' });
       }
+      // Sub-branch → a 5-digit Revenue-Department branch number. Corporate
+      // only, matching where the control renders.
+      if (data.type === 'corporate' && data.branchType === 'branch' && !/^\d{5}$/.test(data.branchCode ?? '')) {
+        ctx.addIssue({ path: ['branchCode'], code: 'custom', message: 'เลขที่สาขา 5 หลัก' });
+      }
+    } else if (containsThai(data.branchFree)) {
+      ctx.addIssue({ path: ['branchFree'], code: 'custom', message: ENGLISH_ONLY_MESSAGE });
     }
 
     // Address: require the matching sub-object
@@ -85,7 +123,18 @@ export const invoiceSchema = z
         ctx.addIssue({ path: ['internationalAddress'], code: 'custom', message: 'กรุณากรอกที่อยู่' });
       }
     }
-  });
+  })
+  /**
+   * head_office + a leftover code → blank the code, do NOT reject.
+   *
+   * The code input is HIDDEN when the type is head office, so an error there
+   * would be unreachable and unclearable — the user could not see the field
+   * they were being asked to fix. Same ruling as the in-house schema; pinned by
+   * a test in both.
+   */
+  .transform((data) =>
+    data.branchType === 'head_office' && data.branchCode ? { ...data, branchCode: '' } : data
+  );
 
 // ── Consent schema (Omise pre-payment summary) ─────────────────────
 export const consentSchema = z.object({

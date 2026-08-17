@@ -1,8 +1,8 @@
-import { Suspense } from 'react';
 import { getArticles, listUsedArticleSkillIds } from '@/lib/actions/articles';
 import { listPrograms } from '@/lib/api/programs';
 import { listSkills } from '@/lib/api/skills';
 import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
+import { buildListJsonLd } from '@/lib/articles/buildListJsonLd';
 import { ArticlesPageClient } from './_components/ArticlesPageClient';
 
 export const metadata = {
@@ -96,8 +96,23 @@ export default async function ArticlesIndexPage({ searchParams }) {
     .filter((s) => s.skill_name)
     .sort((a, b) => a.skill_name.localeCompare(b.skill_name, 'th'));
 
+  // The set THIS request returned, described for readers that never run the
+  // page's JavaScript. Server-side and unconditional on the body markup — see
+  // lib/articles/buildListJsonLd.js. `null` when nothing matched, in which case
+  // no script tag is emitted at all.
+  const listJsonLd = buildListJsonLd(items, { page, pageSize: PAGE_SIZE, total });
+
   return (
     <>
+      {listJsonLd && (
+        <script
+          type="application/ld+json"
+          // Same mechanism as the article detail page: App Router serialises
+          // this into the streamed HTML, so a crawler receives it in the
+          // response rather than after hydration.
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(listJsonLd) }}
+        />
+      )}
       <section className="relative overflow-hidden bg-gradient-to-br from-[#0D1B2A] via-[#0F2A4A] to-[#005CFF] text-white">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_40%)]" />
         <div className="relative mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20">
@@ -108,23 +123,43 @@ export default async function ArticlesIndexPage({ searchParams }) {
         </div>
       </section>
 
-      <section className="mx-auto mt-8 max-w-[1200px] pb-16">
-        {/* useSearchParams inside ArticlesPageClient forces a CSR
-            bailout for the search-param-driven subtree — Suspense
-            gives the static pre-render something to flush. */}
-        <Suspense fallback={null}>
-          <ArticlesPageClient
-            articles={items}
-            programs={programs}
-            programNames={programNames}
-            skillNames={skillNames}
-            skillOptions={skillOptions}
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            initialFilters={{ q: search, tag, program, skill }}
-          />
-        </Suspense>
+      <section className="mx-auto mt-8 max-w-[1200px] px-4 pb-16 lg:px-6">
+        {/* NO SUSPENSE BOUNDARY, AND THAT IS THE POINT OF THE COMMIT THAT
+            REMOVED IT. It was here because ArticlesPageClient called
+            useSearchParams, which bails a client subtree out to CSR during a
+            STATIC render; the boundary gave that render something to flush.
+
+            The component no longer calls the hook — every filter reaches it as
+            a prop, resolved above from `searchParams` — so there is nothing
+            left to bail out and nothing for a boundary to catch. Wrapping a
+            synchronous subtree in Suspense after that is not harmful, it is
+            just a claim about this component that is no longer true, and the
+            next reader would take it as evidence the grid cannot be
+            server-rendered.
+
+            Note that the boundary was ALREADY not what stood between a crawler
+            and the grid: `dynamic = 'force-dynamic'` above means this route is
+            never statically rendered, so the bailout the comment described had
+            not fired since that line was added. Measured against the
+            production build on 2026-08-14 — /articles?skill=DES returned its 3
+            filtered articles in the server HTML. Removing the hook is what
+            makes that a property of the code rather than a consequence of one
+            export nobody may touch. */}
+        <ArticlesPageClient
+          articles={items}
+          programs={programs}
+          programNames={programNames}
+          skillNames={skillNames}
+          skillOptions={skillOptions}
+          page={page}
+          totalPages={totalPages}
+          total={total}
+          q={search}
+          tag={tag}
+          program={program}
+          skill={skill}
+          articleType={articleType}
+        />
       </section>
     </>
   );

@@ -130,6 +130,25 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // `menu` is the RESOLVED page key (pageKeyForType), so a FAQ edited under a
   // course is filed under `courses`. Without this pair a real row is rejected.
   entry('courses', 'local_faq',  'FAQ (เฉพาะหลักสูตร)', 'full'),
+  /**
+   * The order of COURSES INSIDE ONE PROGRAMME, dragged on /admin/courses.
+   *
+   * On the `courses` menu because that is the screen and therefore the
+   * requireAdmin key — but note it keys on a programId, which is a THIRD key
+   * space on a menu already documented as dual. See DUAL_KEY_SPACE_MENUS.
+   */
+  entry('courses', 'course_order', 'ลำดับหลักสูตรในโปรแกรม', ORDERED_IDS_POLICY),
+  /**
+   * A course-code rename. `full` because the payload IS the small thing —
+   * `{ code }` before and after — while the twelve per-store counts belong in
+   * `meta`, which is outside the diff scale entirely.
+   *
+   * recordId is the NEW code, so the row is findable from the course that
+   * exists now; the old one lives in `meta.from`. That is the third key space
+   * on this menu (see DUAL_KEY_SPACE_MENUS) and it is the RIGHT one: a reader
+   * holding today's catalogue has the new code, not the retired one.
+   */
+  entry('courses', 'course_code', 'รหัสหลักสูตร', 'full'),
 
   entry('schedules',   'schedule',   'รอบอบรม', 'full'),
   entry('instructors', 'instructor', 'วิทยากร', 'full'),
@@ -140,6 +159,10 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   // ordering — hence ordered_ids rather than a reorder of `program`.
   entry('programs', 'program_order', 'ลำดับโปรแกรม', ORDERED_IDS_POLICY),
   entry('programs', 'skill_order',   'ลำดับ Skill', ORDERED_IDS_POLICY),
+  // The order of PROGRAMMES INSIDE ONE SKILL — SkillOrder.programOrder. A
+  // different question from `skill_order` (the order OF the skills), so a
+  // different pair: sharing one would merge two series onto one record id.
+  entry('programs', 'skill_program_order', 'ลำดับโปรแกรมใน Skill', ORDERED_IDS_POLICY),
   entry('programs', 'program_sync',  'ซิงก์โปรแกรมจาก API', 'count_only'),
   entry('programs', 'skill_sync',    'ซิงก์ Skill จาก API', 'count_only'),
 
@@ -212,7 +235,74 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
 
   entry('schedule_pdf', 'pdf', 'ไฟล์ตารางอบรม PDF', 'full'),
 
+  // /admin/media. DELETE is the only mutation this menu records, and act_only
+  // is not a carve-out — it is the whole row. `recordId` holds the public_id,
+  // which IS the URL that stopped resolving, so the one fact a reader wants is
+  // already in the identity of the row. A `before` here could only be a
+  // Cloudinary resource description (dimensions, etag, a version number) that
+  // nobody asked for and that says nothing about what was lost.
+  entry('media', 'file', 'ไฟล์ในคลังไฟล์', 'act_only'),
+
   // ── ระบบ ────────────────────────────────────────────────────────
+  /**
+   * The cache console. The menu key is `landing_cache` and NOT `cache`, even
+   * though the page now lives at /admin/cache and covers six cache surfaces:
+   * `Role.pages` stores these strings in Mongo, so minting a new key would
+   * revoke the screen from every role that holds the old one. The key outlived
+   * its name deliberately (see rbac/pages.js).
+   *
+   * THIS MENU WAS `MENUS_WITHOUT_MUTATIONS` UNTIL NOW, and the docstring below
+   * still says so for `dashboard`. It was read-only and correctly had no entry;
+   * round 3 of the cache-console work gives it destructive actions, so it joins
+   * the contract — exactly the shape §8.7's `security` note describes for sweep
+   * round 6. Without these pairs `buildAuditRow` fails closed: the policy drops
+   * to act_only and every before/after is discarded with a console.warn, so the
+   * pre-image a destructive action is required to capture would be thrown away
+   * by the writer that was asked to keep it.
+   *
+   * `full` and not `count_only`, which is what the five `*_sync` pairs use. A
+   * sync's outcome genuinely IS a count, so count_only loses nothing there. A
+   * reset has a real before→after worth diffing — "27 programs → 5" is the
+   * claim an admin needs — and count_only nulls both sides
+   * (recordAdminAction.js:140). There is no PII in a cache summary, so nothing
+   * argues for a lower ceiling.
+   *
+   * Two entities because two different KINDS of record change, per §8.7's rule
+   * that `entity` distinguishes kinds and the verb lives in `action`: a
+   * single-document snapshot and a mirror collection have different shapes,
+   * different failure modes and different reset semantics.
+   */
+  entry('landing_cache', 'snapshot', 'สแนปช็อตแคช', 'full'),
+  entry('landing_cache', 'mirror',   'คอลเลกชันมิเรอร์', 'full'),
+  /**
+   * Round 7. The manual nav-menu resync, now that /admin/cache has a button
+   * for it. Same menu key for the same reason as the two above — `landing_cache`
+   * is the RBAC page key for this whole screen (rbac/pages.js:97) and minting
+   * a nav-specific one would revoke the console from every role holding the
+   * old key. No new menu key was invented.
+   *
+   * A THIRD ENTITY and not a reuse of `snapshot`. `snapshot` could have carried
+   * it — nav_menu_cache is also a single document, and recordId ('navmenu_v1'
+   * vs 'homepage_v1') would tell the two records apart. It is separate anyway,
+   * for two reasons that outweigh the saved line. First, `snapshot` is `full`,
+   * a ceiling chosen for RESETS because "27 programs → 5" is the claim an admin
+   * needs; a sync's outcome genuinely IS a count, which is what the five
+   * existing `*_sync` pairs use and why they exist as their own entities rather
+   * than as an action on the record they sync. Second, filing both under one
+   * entity mixes "someone overrode the downgrade guard on the landing snapshot"
+   * with "the nav resync ran" in a single history stream, and those two are read
+   * for different reasons by someone in different trouble.
+   *
+   * NOTE for whoever adds the next one: this is the FIRST sync in the codebase
+   * that actually writes a row. The other five `*_sync` pairs are registered
+   * and unwritten — recordAdminAction has no call site under src/app/api/ and
+   * syncCareerPathsAction/syncFaqsAction/syncPromotionsAction record nothing.
+   * The landing sync button beside this one is equally silent. That asymmetry
+   * is real and is not fixed here; it is noted so the gap is not mistaken for
+   * a deliberate exemption.
+   */
+  entry('landing_cache', 'nav_menu_sync', 'ซิงก์เมกะเมนูหลักสูตร', 'count_only'),
+
   // PII entities (§5.1/§5.2): status transitions only, never a field diff.
   entry('registrations', 'public',  'ใบสมัครอบรม (Public)', 'status_only'),
   entry('registrations', 'inhouse', 'คำขออบรม In-house', 'status_only'),

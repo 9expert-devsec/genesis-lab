@@ -278,3 +278,25 @@ export const footerNav = {
     { label: 'คำถามที่พบบ่อย', href: '/faq' },
   ],
 };
+
+/**
+ * Legal links for the footer's bottom bar, beside the © line.
+ *
+ * Deliberately NOT imported from config/policies.js, for two reasons:
+ *
+ *  1. policies.js imports siteConfig (for the legal entity name). Importing it
+ *     back would close a cycle around a value read at module-init.
+ *  2. These labels are not the page titles. A bottom bar has room for
+ *     'นโยบายความเป็นส่วนตัว', not
+ *     'นโยบายคุ้มครองข้อมูลส่วนบุคคล (Privacy Policy)'. Shorter labels for a
+ *     denser context is different data, not a second copy of the same data.
+ *
+ * The `href`s ARE the same four values, and that is the part worth keeping
+ * honest — test/fs/reservedPaths asserts each one is a real route.
+ */
+export const policyNav = [
+  { label: 'นโยบายความเป็นส่วนตัว', href: '/privacy-policy' },
+  { label: 'นโยบายการใช้คุกกี้',    href: '/cookie-policy' },
+  { label: 'ข้อกำหนดและเงื่อนไข',   href: '/terms' },
+  { label: 'การยกเลิกและคืนเงิน',   href: '/refund-policy' },
+];

@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import Image from '@tiptap/extension-image';
+import { NodeSelection } from '@tiptap/pm/state';
+import { ResizableImage, imageModalAttrs } from '@/lib/editor/resizableImage';
 import TiptapLink from '@tiptap/extension-link';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
@@ -32,38 +33,6 @@ import {
   Undo2, Redo2, ChevronLeft, X, Search, Trash2, Eye,
 } from 'lucide-react';
 
-/**
- * Image extension with width/style/alt round-trip support.
- *
- * The bundled @tiptap/extension-image only persists `src` and `alt`, so
- * any width the admin sets in the ImagePropertiesModal would vanish on
- * save / reload. We extend it with `width` (mirrors into both the HTML
- * attribute and inline `style`) and `style` (raw inline style so future
- * editors can keep custom styling intact through a round-trip).
- */
-const ResizableImage = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: {
-        default: null,
-        renderHTML: (attrs) =>
-          attrs.width ? { width: attrs.width, style: `width:${attrs.width}` } : {},
-        parseHTML: (el) => el.getAttribute('width') || el.style.width || null,
-      },
-      alt: {
-        default: '',
-        renderHTML: (attrs) => (attrs.alt ? { alt: attrs.alt } : {}),
-        parseHTML: (el) => el.getAttribute('alt') || '',
-      },
-      style: {
-        default: null,
-        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
-        parseHTML: (el) => el.getAttribute('style') || null,
-      },
-    };
-  },
-});
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import {
   createArticle,
@@ -74,6 +43,11 @@ import {
 } from '@/lib/actions/articles';
 import { pinCapacityMessage } from '@/lib/articlePositioning';
 import { buildJsonLd, validateJsonLd } from '@/lib/articles/buildJsonLd';
+import {
+  excerptStatus,
+  fieldFromActionError,
+  EXCERPT_BLOCK_AT,
+} from '@/lib/articles/excerptStatus';
 import {
   formatSiteDateTime,
   fromLocalInput,
@@ -191,6 +165,12 @@ export function ArticleForm({
   const isEdit = Boolean(article?._id);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
+  /**
+   * The server's rejection, split into the field it names and the rest. Kept
+   * apart from `error` so the message can be shown ON the field while anything
+   * unattributable still reaches the banner — see fieldFromActionError.
+   */
+  const [fieldError, setFieldError] = useState(null); // { field, message } | null
 
   // Sidebar — Cover
   const [coverUrl,      setCoverUrl]      = useState(article?.coverUrl      ?? '');
@@ -351,7 +331,27 @@ export function ArticleForm({
       // openOnClick: false stops the editor from following links on
       // single-click — admins expect clicks to place the cursor.
       TiptapLink.configure({ openOnClick: false, autolink: true }),
-      ResizableImage.configure({ inline: false, allowBase64: false }),
+      ResizableImage.configure({
+        inline: false,
+        allowBase64: false,
+        /**
+         * The node view's edit button, opted into HERE and nowhere else.
+         *
+         * The extension is shared with CustomPageForm, which has no image
+         * modal; supplying no opener there is what keeps the button out of
+         * that editor entirely. Same destination as the double-click below,
+         * and deliberately the same three lines of state — one modal, two
+         * ways in.
+         *
+         * The node view selects the image itself before calling this, so the
+         * modal's `updateAttributes` on confirm lands on the right node.
+         */
+        onEditImage: (attrs) => {
+          setImgAlt(attrs.alt ?? '');
+          setImgWidth(attrs.width ?? '');
+          setImgModal({ url: attrs.src, mode: 'edit' });
+        },
+      }),
       Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
@@ -365,9 +365,50 @@ export function ArticleForm({
         class:
           'article-content prose prose-sm dark:prose-invert max-w-none min-h-[400px] focus:outline-none px-4 py-3',
       },
+      /**
+       * THE WAY BACK INTO THE IMAGE MODAL.
+       *
+       * Until this existed the modal had exactly ONE opener — the toolbar's
+       * upload handler — so an image was editable for the few seconds between
+       * upload and insertion and never again. Its alt text and width could not
+       * be corrected without deleting the image and re-uploading it.
+       *
+       * DOUBLE-CLICK rather than a BubbleMenu: it is a handler on the
+       * editorProps object that already exists, with no new component, no
+       * floating-position logic and no extra z-index to reconcile against the
+       * modal (z-[60]) and the preview overlay this screen already stacks. The
+       * tradeoff is discoverability — a bubble menu advertises itself and this
+       * does not — but double-click-for-properties is the convention every
+       * other editor an admin uses already follows.
+       *
+       * The node is SELECTED explicitly before the modal opens. `chain()
+       * .updateAttributes('image', …)` on confirm applies to the current
+       * selection, so without this a double-click that left the cursor
+       * elsewhere would edit the wrong image, or nothing at all.
+       */
+      handleDoubleClickOn: (view, pos, node, nodePos) => {
+        if (node.type.name !== 'image') return false;
+        view.dispatch(
+          view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)),
+        );
+        setImgAlt(node.attrs.alt ?? '');
+        setImgWidth(node.attrs.width ?? '');
+        setImgModal({ url: node.attrs.src, mode: 'edit' });
+        return true; // handled — do not fall through to the default behaviour
+      },
     },
     immediatelyRender: false,
   });
+
+  /**
+   * The excerpt's live state. Recomputed on every keystroke — the rule lives in
+   * lib/articles/excerptStatus.js so it can be tested; this is only the read.
+   * `seoDescription` is an input because the warn threshold only applies when
+   * the excerpt is what becomes the meta description.
+   */
+  const excerptState = excerptStatus(excerpt, { seoDescription });
+  /** The server's message, but only when the server blamed THIS field. */
+  const excerptFieldError = fieldError?.field === 'excerpt' ? fieldError.message : null;
 
   // Auto-grow the title / excerpt textareas as their content grows.
   const titleRef = useRef(null);
@@ -405,6 +446,7 @@ export function ArticleForm({
   //                       a date to render.
   const submit = useCallback(({ asDraft } = {}) => {
     setError(null);
+    setFieldError(null);
     if (!editor) {
       setError('Editor ยังไม่พร้อม');
       return;
@@ -417,6 +459,18 @@ export function ArticleForm({
     if (!trimmed)             { setError('กรุณาใส่เนื้อหา');         return; }
     if (!title.trim())        { setError('กรุณาใส่ชื่อบทความ');       return; }
     if (!slug.trim())         { setError('กรุณาใส่ slug');             return; }
+
+    // BLOCK only at the schema cap — the one length the server will actually
+    // refuse. Checked here rather than left to the round-trip so the admin is
+    // told before the save, and the message is the same one already sitting
+    // under the field. The WARN level deliberately does not gate: a truncated
+    // meta description is a trade-off to be aware of, not an error.
+    const excerptCheck = excerptStatus(excerpt, { seoDescription });
+    if (excerptCheck.blocked) {
+      setFieldError({ field: 'excerpt', message: excerptCheck.message });
+      setError(`คำโปรย: ${excerptCheck.message}`);
+      return;
+    }
 
     let finalActive      = active;
     let finalPublishedAt = publishedAt;
@@ -469,7 +523,13 @@ export function ArticleForm({
           ? await updateArticle(article._id, fd)
           : await createArticle(fd);
         if (!res || res.ok === false) {
-          setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+          const raw = res?.error ?? 'บันทึกไม่สำเร็จ';
+          setError(raw);
+          // Also attach it to the field the server named, when it named one.
+          // Unattributable messages ('ไม่พบบทความ', a thrown Error) get
+          // `field: null` and stay in the banner alone — guessing a field for
+          // them would point the admin at something that is not wrong.
+          setFieldError(fieldFromActionError(raw));
           return;
         }
         if (isEdit) {
@@ -661,7 +721,7 @@ export function ArticleForm({
               onImageUploaded={(url) => {
                 setImgAlt('');
                 setImgWidth('');
-                setImgModal({ url });
+                setImgModal({ url, mode: 'insert' });
               }}
             />
           </div>
@@ -676,14 +736,58 @@ export function ArticleForm({
               rows={1}
               className="w-full resize-none border-0 bg-transparent p-0 text-3xl font-bold leading-tight text-9e-navy outline-none placeholder:text-9e-slate-dp-50 dark:text-white"
             />
+            {/*
+              NO maxLength, deliberately — see lib/articles/excerptStatus.js.
+              It would truncate a paste silently, and the text is gone from the
+              clipboard too by the time anyone notices. The counter below says
+              what happened instead of hiding it.
+            */}
             <textarea
               ref={excerptRef}
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
               placeholder="สรุปสั้นๆ..."
               rows={1}
+              aria-invalid={excerptState.blocked || excerptFieldError ? 'true' : undefined}
+              aria-describedby="excerpt-status"
               className="mt-3 w-full resize-none border-0 bg-transparent p-0 text-lg leading-relaxed text-9e-slate-dp-50 outline-none placeholder:text-9e-slate-dp-50 dark:text-[#94a3b8]"
             />
+
+            {/*
+              Same shape as the editor's own footer stats further down — a plain
+              count in the same 11px muted type, so the two counters on this
+              screen read as one idea rather than as a stat and a validation.
+              It gains colour only when it has something to say.
+            */}
+            <div
+              id="excerpt-status"
+              className={
+                'mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] ' +
+                (excerptState.level === 'block'
+                  ? 'text-red-600 dark:text-red-400'
+                  : excerptState.level === 'warn'
+                    ? 'text-amber-700 dark:text-amber-400'
+                    : 'text-9e-slate-dp-50 dark:text-[#94a3b8]')
+              }
+            >
+              <span>
+                {excerptState.length.toLocaleString('en-US')} /{' '}
+                {EXCERPT_BLOCK_AT.toLocaleString('en-US')} ตัวอักษร
+              </span>
+              {excerptState.message && <span>{excerptState.message}</span>}
+              {/*
+                The server's own rejection, on the FIELD. It used to appear only
+                in the banner at the top of a scrolling page — which names the
+                field and then puts the message as far from it as the layout
+                allows. Shown alongside the live count, so "over by how much" is
+                answerable without doing the subtraction.
+              */}
+              {excerptFieldError && (
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  เซิร์ฟเวอร์ปฏิเสธ: {excerptFieldError}
+                </span>
+              )}
+            </div>
 
             <hr className="my-4 border-[var(--surface-border)]" />
 
@@ -1145,18 +1249,29 @@ export function ArticleForm({
                 type="button"
                 onClick={() => {
                   if (!editor) return;
-                  editor.chain().focus().setImage({
+                  // INSERT builds a new node, so `undefined` means "use the
+                  // default". EDIT merges over an existing one, and
+                  // `updateAttributes` IGNORES `undefined` — a cleared field
+                  // has to send an explicit value or the old one survives
+                  // silently. See imageModalAttrs.
+                  const attrs = imageModalAttrs({
+                    mode:  imgModal.mode,
                     src:   imgModal.url,
-                    alt:   imgAlt.trim() || undefined,
-                    width: imgWidth.trim() || undefined,
-                  }).run();
+                    alt:   imgAlt,
+                    width: imgWidth,
+                  });
+                  if (imgModal.mode === 'edit') {
+                    editor.chain().focus().updateAttributes('image', attrs).run();
+                  } else {
+                    editor.chain().focus().setImage(attrs).run();
+                  }
                   setImgModal(null);
                   setImgAlt('');
                   setImgWidth('');
                 }}
                 className="rounded-lg bg-9e-action px-4 py-2 text-sm font-semibold text-white hover:bg-9e-brand"
               >
-                แทรกรูปภาพ
+                {imgModal.mode === 'edit' ? 'บันทึกการแก้ไข' : 'แทรกรูปภาพ'}
               </button>
             </div>
           </div>
