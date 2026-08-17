@@ -137,6 +137,23 @@ const CASES = [
      * Only the light-mode pair is cased. The `dark:` variants compile through
      * exactly the same token lookup, so they add a second failure of the same
      * kind rather than a new one — and the guard is a named list, not a sweep.
+     *
+     * ── THIS CASE IS MASKED, AND THAT IS RECORDED RATHER THAN HIDDEN ─────────
+     * MEASURED when the control for it fired nothing: `hover:text-9e-action`
+     * appears THREE times in CourseCard.jsx — the capsule, the course title's
+     * <h3>, and the collapse button. Assembling the capsule's class away still
+     * leaves the other two emitting `.hover\:text-9e-action`, so this case
+     * stayed green through a break that genuinely killed the capsule's hover.
+     *
+     * That is the third reading in run.mjs's "control that fires nothing" note:
+     * the CODE has redundancy hiding the claim, not a weak test. The honest
+     * move is to say so, not to adjust the assertion until it goes red.
+     *
+     * The BORDER case below is the one that actually carries the claim —
+     * `hover:border-9e-action` is unique to the capsule — and its control DOES
+     * fire. This case is kept because it still catches the wider failure (the
+     * `9e-action` token removed, or this file dropped from the content globs),
+     * which would redden both.
      */
     what: 'the course-card skill capsule hover (text)',
     file: 'src/app/(public)/training-course/_components/CourseCard.jsx',
