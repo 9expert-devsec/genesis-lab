@@ -49,7 +49,8 @@ const HERO_DESCRIPTION =
 
 export function HeroSection() {
   return (
-    <section className="relative w-full -mt-[81px]  min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden">
+    <section className="relative w-full -mt-[81px]  
+    min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0"> //2545 จอกลาง - 1425 จอแนวตั้ง
       {/* THE LCP ELEMENT, and it is FULL-BLEED at every width — no cap, no
           rounding, no letterboxing. `sizes="100vw"` says exactly that.
           `object-bottom` rather than `object-center`: the box is far wider
@@ -62,6 +63,7 @@ export function HeroSection() {
         alt=""
         fill
         priority
+        quality={100}
         sizes="100vw"
         className="object-cover object-bottom"
       />
@@ -275,8 +277,8 @@ export function HeroSection() {
     lg:w-[640px]
 
     /* Large Desktop 1280px+ */
-    xl:-bottom-[150px]
-    xl:-right-[260px]
+    xl:-bottom-[15%]
+    xl:-right-[15%]
     xl:h-[500px]
     xl:w-[700px]
   "
@@ -297,6 +299,43 @@ export function HeroSection() {
           </div>
         </div>
       </div>
+
+      {/* ── THE SEAM WITH THE SECTION BELOW ──────────────────────────────────
+          Layer 1 of 3. The other two are on FeatureContentSection; all three
+          are defined together in the "FEATURE CONTENT SECTION" block at the
+          bottom of globals.css, which is also where this gradient's height
+          (--9e-fc-fade: 120px, 180px from lg) and its colour come from.
+
+          Transparent at the top to that section's base colour at the bottom,
+          so the artwork does not simply stop at a horizontal line. It is
+          NEVER written as a `to-transparent` gradient: `transparent` is
+          transparent BLACK and interpolating through it paints a grey band
+          along the very seam this exists to erase. Same R,G,B, alpha 0.
+
+          ── z-[15] IS THE WHOLE POINT OF THIS ELEMENT'S POSITION ────────────
+          The hero's internal rungs are: mascot z-10, copy + CTAs z-20. Both
+          resolve in the same stacking context — the wrappers between them are
+          `position:relative` with `z-index:auto`, which does NOT open a new
+          one — so a number between the two lands exactly where it reads.
+
+          ABOVE THE MASCOT (10), and that is not a detail. น้องนาย is parked at
+          `lg:-bottom-[110px]` and hard-clipped by this section's
+          overflow-hidden, i.e. it is cut off at precisely the seam line. Put
+          this fade underneath it and everything else dissolves while the
+          mascot keeps a razor-straight cut edge — the seam survives in the one
+          place the eye is already looking.
+
+          BELOW THE COPY (20), so the headline and both CTAs stay at full
+          contrast no matter how short the viewport gets and the fade never
+          washes over a button.
+
+          `pointer-events-none`: it spans the full width across the CTAs' row
+          on a short viewport, and this repo has already shipped an invisible
+          strip that ate hero clicks. */}
+      <div
+        aria-hidden="true"
+        className="fc-hero-fade pointer-events-none absolute inset-x-0 bottom-0 z-[15]"
+      />
 
       {/* THE SWITCH-BACK MARKER, AND IT IS AT THE TOP OF THE HERO ON PURPOSE.
           DO NOT MOVE IT BACK TO THE BOTTOM.
