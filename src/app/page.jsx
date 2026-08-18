@@ -18,6 +18,7 @@ import { siteConfig } from "@/config/site";
 import { HeroSection } from "./_components/home/HeroSection";
 import { HeroBanner } from "./_components/home/HeroBanner";
 import { HeroBannerCarousel } from "./_components/home/HeroBannerCarousel";
+import { FeatureContentSection } from "./_components/home/FeatureContentSection";
 import { ServicesSection } from "./_components/home/ServicesSection";
 import { ProgramSelector } from "./_components/home/ProgramSelector";
 import { NewCoursesSection } from "./_components/home/NewCoursesSection";
@@ -184,11 +185,29 @@ export default async function HomePage() {
             untouched, including its banners.length fallback. */}
         <HeroSection />
 
-        {banners.length > 0 ? (
+        {/* ── THE BANNER SLIDE IS SWAPPED OUT, NOT REMOVED ──────────────────
+            Feature Content takes the slot the Banner Slide held. Reverting is
+            deleting this comment and un-commenting the ternary — nothing else
+            moved:
+              • HeroBannerCarousel and HeroBanner are untouched and still
+                imported above;
+              • `banners` is still destructured from getLandingData() and the
+                landing cache still syncs it, so the data path is warm and the
+                admin's banner edits keep flowing;
+              • the `banners.length > 0` fallback to <HeroBanner /> is intact.
+            The ternary is preserved verbatim so the revert is a one-line
+            decision by a reviewer, not a reconstruction. */}
+        {/* {banners.length > 0 ? (
           <HeroBannerCarousel banners={banners} />
         ) : (
           <HeroBanner />
-        )}
+        )} */}
+
+        {/* Fed by the SAME `banners` array the carousel above used to take —
+            the landing_cache snapshot, unchanged. The Banner shape stops at
+            src/lib/home/featureContentFromBanners.js; this call site just
+            hands the payload across. */}
+        <FeatureContentSection banners={banners} />
 
         <ServicesSection />
 

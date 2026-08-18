@@ -50,7 +50,8 @@ const HERO_DESCRIPTION =
 export function HeroSection() {
   return (
     <section className="relative w-full -mt-[81px]  
-    min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0"> //2545 จอกลาง - 1425 จอแนวตั้ง
+    min-h-dvh min-[1537px]:h-[601px] min-[1537px]:min-h-0 overflow-hidden min-[1400px]:portrait:h-[601px] min-[1400px]:portrait:min-h-0">
+      {/* 2545 จอกลาง - 1425 จอแนวตั้ง */}
       {/* THE LCP ELEMENT, and it is FULL-BLEED at every width — no cap, no
           rounding, no letterboxing. `sizes="100vw"` says exactly that.
           `object-bottom` rather than `object-center`: the box is far wider
