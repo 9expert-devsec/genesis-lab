@@ -15,6 +15,7 @@ import { getLandingData } from "@/lib/landing/getLandingData";
 import { getNavMenuData } from "@/lib/navmenu/getNavMenuData";
 import { siteConfig } from "@/config/site";
 
+import { HeroSection } from "./_components/home/HeroSection";
 import { HeroBanner } from "./_components/home/HeroBanner";
 import { HeroBannerCarousel } from "./_components/home/HeroBannerCarousel";
 import { ServicesSection } from "./_components/home/ServicesSection";
@@ -120,7 +121,12 @@ export default async function HomePage() {
   return (
     <>
       <TopNotificationBar bars={bars} />
-      <PublicHeader />
+      {/* `overlay` is opt-in and Home is the ONLY route that passes it: the
+          header is shared by every public page, and every other one must keep
+          its opaque per-theme treatment. It goes transparent while the hero
+          below is under it and switches back at that hero's bottom edge — see
+          src/lib/heroOverlay.js. */}
+      <PublicHeader overlay />
 
       {/* Organization structured data — surfaces the brand panel and
           course catalogue in Google's SERP. Inlined here (vs. layout)
@@ -172,6 +178,11 @@ export default async function HomePage() {
         >
           9Expert Training อบรมคอร์สเทคโนโลยีชั้นนำ AI Data Automation Power BI Excel ด้วยผู้เชี่ยวชาญตัวจริง
         </h1>
+
+        {/* FIRST thing in <main> after the hidden H1. It pulls itself up under
+            the sticky header (see HeroSection) — the banner carousel below is
+            untouched, including its banners.length fallback. */}
+        <HeroSection />
 
         {banners.length > 0 ? (
           <HeroBannerCarousel banners={banners} />

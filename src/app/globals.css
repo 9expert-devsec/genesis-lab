@@ -465,6 +465,31 @@ html.dark   { color-scheme: dark; }
     [data-chat-typing] {
       animation: none !important;
     }
+
+    /* The Home hero's ambient sky and its floating mascot.
+       Same reasoning as the typing indicator above, and the same reason it is
+       not covered by the `*` rule: a 0.01ms animation still RUNS. Three
+       streaks and three breathing stars all snapping to their end state on
+       every render is a flicker, which is exactly what a motion-sensitive
+       reader asked not to have. This removes the animation outright.
+
+       Scoped by data attribute rather than by class on purpose. Tailwind scans
+       raw text, including this file, so naming a utility here would emit that
+       utility's CSS from the prose — a rule with no user, and a guard that
+       cannot tell the two apart.
+
+       The streaks need the second rule as well: with no animation, opacity
+       falls back to the element's own value and a frozen streak would hang in
+       the sky. The stars keep their resting brightness and the mascot its
+       untransformed position, which is the designed static hero. */
+    [data-hero-motion],
+    [data-hero-motion] * {
+      animation: none !important;
+    }
+
+    [data-hero-motion='streak'] {
+      opacity: 0 !important;
+    }
   }
 
   /* NOTE for anyone adding motion to the chat launcher or panel: the block
