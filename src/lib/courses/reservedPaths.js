@@ -97,6 +97,8 @@ export const RESERVED_PATHS = Object.freeze([
   // ── public/ — served at the root ─────────────────────────────────────────
   { segment: 'assets', source: 'static' },
   { segment: 'brand', source: 'static' },
+  // The Home hero artwork. Same `-img` convention as policies-img below.
+  { segment: 'hero-img', source: 'static' },
   { segment: 'logo', source: 'static' },
   { segment: 'mock-article', source: 'static' },
   { segment: 'people', source: 'static' },

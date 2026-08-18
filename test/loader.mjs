@@ -78,6 +78,10 @@ export const STUBS = {
   // the lines above — and see the stub's own note on why it throws rather than
   // returning a benign result.
   '@/lib/actions/cache-console': path.join(ROOT, 'test', 'stub-cache-console-actions.mjs'),
+  // BannerForm imports createBanner/updateBanner for its submit handler and
+  // AdminBannerList imports deleteBanner for its row button; that chain reaches
+  // next-auth → next/headers AND mongoose. Same reasoning as every line above.
+  '@/lib/actions/banners': path.join(ROOT, 'test', 'stub-banner-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);

@@ -190,21 +190,42 @@ test('every cover SLOT still clips the same way', () => {
   }
 });
 
-test('the raw-<img> covers carry object-cover; the rest is an fs claim', () => {
+test('EVERY cover carries object-cover, next/image ones included', () => {
   /**
-   * `object-cover` lives on the IMAGE, and test/stub-next-image.mjs drops
-   * `className` along with every other next-only prop — so the three next/image
-   * cards render an <img> with no class at all in this tier. Asserted here for
-   * the two that survive the stub, and in the fs tier by source for all five.
+   * This used to assert the opposite for the three next/image cards, and the
+   * reason was a limitation of the harness rather than of the component:
+   * test/stub-next-image.mjs dropped `className` along with the next-only
+   * props, so those cards rendered an <img> with no class at all and the claim
+   * could only be made in the fs tier, by reading source.
+   *
+   * The stub now forwards `className` and `style`, which is what next/image
+   * itself does. So the claim is checkable HERE, on the emitted tree, for all
+   * five — and the fs-tier version of it is no longer the only guard.
    */
-  for (const type of ['careerPaths', 'promotions']) {
+  for (const type of TYPES) {
     assert.match(card(render(type)), /object-cover/, `${type}: the image must fill its slot`);
   }
-  // The stub really is what erases it — not the component.
-  assert.equal(
-    /object-cover/.test(card(render('courses'))), false,
-    'the next/image cards lose their class to the stub, which is why fs covers them',
-  );
+});
+
+test('CONTROL: the cover probe reads the IMAGE, not the slot around it', () => {
+  /**
+   * `object-cover` anywhere in the card would satisfy the substring search
+   * above — including on the wrapper, where it would do nothing at all. This
+   * ties the class to the ELEMENT that carries the cover's own src.
+   *
+   * Located by that src rather than by tag name, deliberately: two of these
+   * five are a raw <img> and three are next/image, and pinning the tag would
+   * make the control fail the day one of them is switched — which this file
+   * already documents as a legitimate change, and is not what is guarded here.
+   */
+  for (const type of TYPES) {
+    const html = card(render(type));
+    const at = html.indexOf(COVERS[type]);
+    assert.ok(at > -1, `${type}: the cover src is not in the card`);
+    const tag = html.slice(html.lastIndexOf('<', at), html.indexOf('>', at) + 1);
+    assert.match(tag, /object-cover/,
+      `${type}: the class must be on the element carrying the src, not around it`);
+  }
 });
 
 // ── Per-card metadata stays per-card ────────────────────────────────────────

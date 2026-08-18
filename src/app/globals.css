@@ -465,6 +465,31 @@ html.dark   { color-scheme: dark; }
     [data-chat-typing] {
       animation: none !important;
     }
+
+    /* The Home hero's ambient sky and its floating mascot.
+       Same reasoning as the typing indicator above, and the same reason it is
+       not covered by the `*` rule: a 0.01ms animation still RUNS. Three
+       streaks and three breathing stars all snapping to their end state on
+       every render is a flicker, which is exactly what a motion-sensitive
+       reader asked not to have. This removes the animation outright.
+
+       Scoped by data attribute rather than by class on purpose. Tailwind scans
+       raw text, including this file, so naming a utility here would emit that
+       utility's CSS from the prose — a rule with no user, and a guard that
+       cannot tell the two apart.
+
+       The streaks need the second rule as well: with no animation, opacity
+       falls back to the element's own value and a frozen streak would hang in
+       the sky. The stars keep their resting brightness and the mascot its
+       untransformed position, which is the designed static hero. */
+    [data-hero-motion],
+    [data-hero-motion] * {
+      animation: none !important;
+    }
+
+    [data-hero-motion='streak'] {
+      opacity: 0 !important;
+    }
   }
 
   /* NOTE for anyone adding motion to the chat launcher or panel: the block
@@ -820,3 +845,291 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    ────────────────────────────────────────────────────────────── */
 .no-native-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-native-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ──────────────────────────────────────────────────────────────
+   FEATURE CONTENT SECTION — the one place its colours are defined
+   ══════════════════════════════════════════════════════════════
+
+   THIS BLOCK IS THE SINGLE SOURCE for the Home "Feature Content"
+   section (src/app/_components/home/FeatureContentSection.jsx).
+   Every colour the Figma frame `featured-content-section` (node 2:4)
+   uses and that the repo had no exact token for lives here, and
+   NOWHERE else — the components reference these by var name.
+
+   ── WHY THE SECTION HAS ITS OWN BASE INSTEAD OF --page-bg ──────
+   The base is #000314, NOT --page-bg and NOT 9e-navy (#0D1B2A). The
+   card panels are #091124, which is LIGHTER than #000314. On a navy
+   base the panels would come out DARKER than the section behind them
+   and recede instead of lift, inverting the design's depth. So the
+   section owns its base.
+
+   ── IT IS DARK IN BOTH THEMES, ON PURPOSE, FOR NOW ─────────────
+   These vars are declared on bare :root with no `.dark` override, so
+   light and dark render identically. That is the current ruling, not
+   an oversight. A light-mode variant is added later by adding a
+   `.dark { --9e-fc-… }` (or a light override) HERE — no call site
+   changes, because no call site names a hex.
+
+   ── THE BASE IS STORED AS AN RGB TRIPLET, AND THAT IS THE POINT ─
+   --9e-fc-base-rgb holds `0 3 20`, unquoted, so the SAME value can be
+   spent two ways:
+       rgb(var(--9e-fc-base-rgb))        → the opaque section fill
+       rgb(var(--9e-fc-base-rgb) / 0)    → the SAME colour at alpha 0
+   Every seam gradient below terminates on that second form. It is
+   never `transparent`: `transparent` is transparent BLACK, and some
+   browsers interpolate a gradient through it, which paints a faint
+   grey band exactly along the seam the gradient exists to erase.
+   Same R,G,B, zero alpha — no band, in any browser.
+
+   Because the fill and every gradient stop are computed from the one
+   triplet, the section colour and the gradients' terminal colour
+   CANNOT drift apart. Change the triplet, everything moves together.
+   ────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── The base. Read the note above before changing it. ── */
+  --9e-fc-base-rgb: 0 3 20;          /* #000314 */
+
+  /* ── Surfaces ── */
+  --9e-fc-panel:        #091124;     /* featured card + the three cards */
+  --9e-fc-panel-border: #1e2c4f;
+  --9e-fc-control:      #1e293b;     /* prev/next buttons, YouTube watermark */
+  --9e-fc-control-border: #334155;   /* also the secondary button's border */
+  --9e-fc-rule:         #1e293b;     /* the hairline inside the featured card */
+
+  /* ── Text ── */
+  --9e-fc-text-muted:   #64748b;     /* eyebrow-adjacent copy, prices struck out */
+  --9e-fc-text-body:    #cbd5e1;     /* meta chips, subtitle */
+
+  /* ── Accents ──
+     #005CFF is NOT here: it is an exact match for the existing
+     `9e-action` token, so the primary button and the 9Expert dot use
+     `bg-9e-action` directly. Everything below had no repo equivalent. */
+  --9e-fc-accent:       #38bdf8;     /* sky — eyebrow, badge text, more-link */
+  --9e-fc-accent-deep:  2 132 199;   /* sky-600, as a triplet, for the aurora */
+
+  /* ── Pre-mixed translucent fills ──
+     These are NOT written as `bg-[rgb(var(--x)/0.15)]` at the call sites, and
+     that is on purpose. Tailwind reads the `/` inside an arbitrary value as
+     its own opacity modifier, so that class is a coin-flip on whether any CSS
+     comes out at all — and this repo has already shipped a class that emitted
+     perfect markup and zero CSS. A var holding the finished colour is a plain
+     literal at the call site and cannot fail that way. */
+  --9e-fc-badge-bg:     rgba(2, 132, 199, 0.15);   /* "แนะนำสำหรับคุณ" chip */
+  --9e-fc-watermark-bg: rgba(30, 41, 59, 0.8);     /* the YouTube watermark */
+  --9e-fc-gold-bg:      rgba(234, 179, 8, 0.15);   /* card badge — gold */
+  --9e-fc-red-bg:       rgba(239, 68, 68, 0.15);   /* card badge — red */
+  --9e-fc-cyan-bg:      rgba(6, 182, 212, 0.15);   /* card badge — cyan */
+  --9e-fc-gold:         #eab308;     /* "2026", the คอร์สแนะนำ badge */
+  --9e-fc-emerald:      #10b981;     /* the discounted price */
+  --9e-fc-cyan:         #22d3ee;     /* the คอร์สใหม่ badge */
+  --9e-fc-red:          #f87171;     /* the YouTube badge */
+
+  /* ── Seam geometry ──
+     Mobile values; the desktop overrides are in the media query below.
+     Kept as vars so the section's negative margin, its matching top
+     padding, and the height of the gradient that fills that band can
+     never be edited apart from one another. */
+  --9e-fc-rise:    140px;   /* transparent → base, measured from the section top */
+  --9e-fc-overlap:  80px;   /* how far the section is pulled up over the hero */
+  --9e-fc-fade:    120px;   /* the hero's own bottom fade, inside the hero */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --9e-fc-rise:    200px;
+    --9e-fc-overlap: 120px;
+    --9e-fc-fade:    180px;
+  }
+}
+
+/* ── SEAM LAYER 1 — the hero's bottom fade ────────────────────────
+   Lives INSIDE HeroSection, `pointer-events-none`, and stacked ABOVE
+   the mascot (see the note at its call site). Transparent at the top,
+   the section's base at the bottom, so the hero photo — and the
+   mascot's hard-clipped bottom edge — dissolve rather than get cut. */
+.fc-hero-fade {
+  height: var(--9e-fc-fade);
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--9e-fc-base-rgb) / 0) 0%,
+    rgb(var(--9e-fc-base-rgb)) 100%
+  );
+}
+
+/* ── SEAM LAYER 2 — the section's own surface, and its pull-up ────
+   ONE background-image and NO background-color, deliberately: a
+   gradient's last stop extends to the end of the box, so this single
+   declaration is both the fade-in at the top AND the flat fill for the
+   entire rest of the section. There is no second value to keep in sync
+   — that second value is exactly the thing that would drift later and
+   put the band back with no traceable cause.
+
+   The pull-up and the padding that compensates for it are HERE, not as
+   Tailwind arbitrary classes on the element, for two reasons:
+     1. `-mt-[var(--x)]` is a bet on how the JIT rewrites a negative
+        arbitrary value. These three numbers are the whole seam.
+     2. Margin, padding and gradient length must move together. In one
+        rule they cannot be edited apart.
+
+   `padding-top` is the overlap PLUS 3rem, and 3rem is `py-12` — the
+   vertical padding every other Home section uses. So the content sits
+   exactly where a normal section's content would, and the overlap is
+   pure extra. `pb-12` stays a Tailwind class on the element, because
+   the bottom edge is ordinary.
+
+   NOTE: this element must stay `pointer-events-none`. That padding-top
+   band lies directly over the hero's lower area, and an element that
+   accepts pointer events there would swallow clicks meant for the
+   hero's CTAs. The section re-enables them on its inner content
+   wrapper, which begins BELOW the band. */
+.fc-surface {
+  margin-top: calc(var(--9e-fc-overlap) * -1);
+  padding-top: calc(var(--9e-fc-overlap) + 3rem);
+  /* ── TWO LAYERS, AND THE SECOND ONE IS NOT OPTIONAL ──────────────
+     This was one gradient at first and it shipped a visible grey band.
+     Measured at 1600×1500: rgb(77,79,91) → rgb(52,55,68) → rgb(26,29,44)
+     across the 80px directly under the hero's bottom edge.
+
+     The cause is that --9e-fc-rise (200px) is LONGER than
+     --9e-fc-overlap (120px). Only the first `overlap` pixels of this
+     section are over the hero; everything past that is over the page,
+     and the page is --page-bg — WHITE in light mode. So the last 80px
+     of a still-translucent dark gradient was compositing over white.
+     Nothing to do with `transparent`; a single gradient simply cannot
+     be translucent past the element it is overlapping.
+
+     Layer 1 (listed first, so it paints ON TOP) is the dissolve.
+     Layer 2 is a backstop: base at ALPHA 0 for exactly `overlap`
+     pixels, then base at alpha 1 from that same pixel down. Alpha 0 of
+     the base colour, never the `transparent` keyword — that keyword is
+     transparent BLACK, and interpolating toward it greys the ramp.
+     BOTH stops read the SAME var, so the step cannot drift away from
+     where the hero actually ends.
+
+     The step is invisible, and provably so rather than by luck:
+       • just ABOVE it  → layer 1 over the hero, and the hero's own
+                          fade has already reached full base by its
+                          bottom edge (its last stop is 100%);
+       • just BELOW it  → layer 1 over layer 2, which is full base.
+     Both sides evaluate to the base colour, so there is nothing to see.
+     That is why .fc-hero-fade must end at alpha 1 — if it is ever
+     softened to stop short, this step becomes visible. */
+  background-image:
+    linear-gradient(
+      to bottom,
+      rgb(var(--9e-fc-base-rgb) / 0) 0,
+      rgb(var(--9e-fc-base-rgb)) var(--9e-fc-rise)
+    ),
+    linear-gradient(
+      to bottom,
+      rgb(var(--9e-fc-base-rgb) / 0) 0,
+      rgb(var(--9e-fc-base-rgb) / 0) var(--9e-fc-overlap),
+      rgb(var(--9e-fc-base-rgb)) var(--9e-fc-overlap)
+    );
+}
+
+/* ── SEAM LAYER 3 — the aurora glow ───────────────────────────────
+   The Figma ships this as an SVG: a 1000×450 ellipse filled #0284C7 at
+   10% with a 120px background blur. It is reproduced as a CSS radial
+   gradient, not fetched — the flat plateau then soft falloff below is
+   what the blur on a hard-edged ellipse actually looks like.
+
+   It spills ABOVE the section's top edge, which is why the section must
+   never be `overflow-hidden`: clipping it would remove the softening at
+   the exact edge it exists to soften.
+
+   Geometry is here rather than in classes for the same reason as the
+   pull-up above — `top` is negative and `width` is a min() with a
+   comma, and neither should depend on how the JIT parses it.
+
+   `min(1000px, 95vw)` keeps the designed 1000px from ~1053px up and
+   shrinks it below that, where a fixed 1000px ellipse would be a flat
+   wash across the whole screen instead of a glow.
+
+   THE vw BRANCH IS 95, NOT 120, and that is a fix rather than a taste
+   call. At 120vw the ellipse hung 84px past the right edge at a 768
+   viewport and became the widest thing on the page — measured
+   document.scrollWidth 837 against a 753px viewport, with this element
+   as the sole cause. `body { overflow-x: clip }` was hiding the
+   scrollbar, so it read as fine while the document really was wider
+   than the screen. Staying under 100vw means the glow never depends on
+   that rule to look right. */
+.fc-aurora {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -100px;
+  width: min(1000px, 95vw);
+  height: 300px;
+  background-image: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    rgb(var(--9e-fc-accent-deep) / 0.12) 0%,
+    rgb(var(--9e-fc-accent-deep) / 0.10) 45%,
+    rgb(var(--9e-fc-accent-deep) / 0.045) 72%,
+    rgb(var(--9e-fc-accent-deep) / 0) 100%
+  );
+}
+
+@media (min-width: 1024px) {
+  /* The Figma places the ellipse at top:-150px, 1000×450, at 1440 scale. */
+  .fc-aurora {
+    top: -150px;
+    height: 450px;
+  }
+}
+
+/* ── THE FILMSTRIP'S EDGE FADES ─────────────────────────────────────────────
+   Two overlays on the strip's leading and trailing edges, so a card that is
+   half out of view reads as "there is more this way" instead of as a card that
+   got cut off. The component mounts each one ONLY when the strip can actually
+   scroll that way — see FeatureContentStrip.jsx. A fade at an edge with
+   nothing behind it is a lie, and a lie here is worse than no fade.
+
+   ── WHY THESE ARE CLASSES AND NOT TAILWIND ARBITRARY VALUES ────────────────
+   Two reasons, and both are already written down elsewhere in this file:
+
+   1. The terminal stop must be `rgb(var(--9e-fc-base-rgb) / 0)` — the SAME
+      colour at alpha 0, never `transparent`. `transparent` is transparent
+      BLACK, and a browser that interpolates through it paints a grey band down
+      the middle of the fade. Identical reasoning to every seam gradient above,
+      and the same single source: change the triplet and these move with it.
+
+   2. Tailwind reads `/` inside an arbitrary value as its own opacity modifier,
+      so `bg-[linear-gradient(...rgb(var(--x)/0)...)]` is a coin-flip on whether
+      any CSS is emitted at all. This repo has already shipped a class that
+      produced perfect markup and zero CSS. A named class cannot fail that way.
+
+   The width is one card's worth of peek at most — wide enough to soften the
+   cut, narrow enough that it never covers a whole card's title. */
+.fc-strip-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  pointer-events: none;
+}
+
+.fc-strip-fade-start {
+  left: 0;
+  background-image: linear-gradient(
+    to right,
+    rgb(var(--9e-fc-base-rgb)) 0%,
+    rgb(var(--9e-fc-base-rgb) / 0) 100%
+  );
+}
+
+.fc-strip-fade-end {
+  right: 0;
+  background-image: linear-gradient(
+    to left,
+    rgb(var(--9e-fc-base-rgb)) 0%,
+    rgb(var(--9e-fc-base-rgb) / 0) 100%
+  );
+}
+
+@media (min-width: 768px) {
+  .fc-strip-fade {
+    width: 64px;
+  }
+}
