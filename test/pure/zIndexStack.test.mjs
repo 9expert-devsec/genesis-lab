@@ -43,7 +43,34 @@ test('config declares z-index 60/70/80 so the header z-60 generates (not auto)',
 });
 
 // ── Pull the real z token each element ships ────────────────────────────────
-const headerTok = firstZ(HEADER.match(/<header className="([^"]*)"/)[1]);
+// THE HEADER'S CLASS IS NO LONGER A PLAIN DOUBLE-QUOTED LITERAL. It became a
+// cn() call when the header gained its transparent-over-hero mode, and the old
+// extraction here — `HEADER.match(/<header className="([^"]*)"/)[1]` — was an
+// unguarded index into a null match: the whole FILE would have thrown at module
+// load, taking every test in it with it, instead of failing readably. That is
+// the exact defect classLiteral() was written for (see test/zScale.mjs), and
+// the three extractions below already used it, so the header now joins them
+// rather than getting a second mechanism.
+//
+// The anchor is the FIRST literal inside the cn() call, which is where the
+// layout/stacking classes live; the conditional colour branches after it carry
+// no z token. If that literal is renamed or reordered, this THROWS naming the
+// element instead of yielding '' — an empty string would read as a pass to
+// every "does not contain" assertion in this file.
+//
+// EXTRACTED LAZILY — a function, called inside the tests, NOT a module-level
+// const like the four below it. Measured while making this change: with the
+// runner's isolation:'none', a throw at module scope does not fail the run at
+// all. The file simply stops importing, the tests defined after the throw are
+// never registered, and the suite reports GREEN with seven fewer tests — which
+// the FLOOR cannot see. classLiteral throwing by name is only useful if the
+// throw happens somewhere the reporter is listening.
+const HEADER_ANCHOR = {
+  label: 'PublicHeaderClient <header>',
+  re: /<header\s+className=\{cn\(\s*'sticky[^']*'/,
+  file: 'PublicHeaderClient.jsx',
+};
+const headerTok = () => firstZ(classLiteral(HEADER, HEADER_ANCHOR));
 const asideTok = firstZ(PAGE.match(/<aside\s+className="([^"]*)"/)[1]);
 const dockTok = firstZ(
   classLiteral(DOCK, {
@@ -78,7 +105,7 @@ const backdropTok = 'z-[9998]'; // backdrop (PublicHeaderClient.jsx:1168)
 
 test('every layered element ships a z token that generates', () => {
   for (const [name, tok] of [
-    ['header', headerTok],
+    ['header', headerTok()],
     ['aside', asideTok],
     ['dock', dockTok],
     ['bar', barTok],
@@ -89,13 +116,27 @@ test('every layered element ships a z token that generates', () => {
     assert.notEqual(resolveZ(tok, EXTRA), null, `${name} z (${tok}) generates`);
   }
   // sanity: the tokens are the values the audit expects
-  assert.equal(headerTok, 'z-60');
+  assert.equal(headerTok(), 'z-60');
   assert.equal(asideTok, 'z-50');
   assert.equal(dockTok, 'z-50', 'the dock inherited the back-to-top button’s tier unchanged');
   assert.equal(barTok, 'z-40');
   assert.equal(chatTok, 'z-[9500]', 'chat overlay sits in the arbitrary overlay tier');
   assert.equal(popupTok, 'z-[9000]', 'and SitePopup is where the ladder says it is');
   assert.ok(HEADER.includes('z-[9999]') && HEADER.includes('z-[9998]'), 'drawer tokens present');
+});
+
+test('CONTROL: the header extractor fails LOUDLY, by name, if its anchor moves', () => {
+  // The header's class stopped being a plain double-quoted literal when it
+  // gained the transparent-over-hero mode. If it moves again — a template
+  // literal, a renamed helper, a reordered class list — this guard must say so
+  // in a failing test, not return '' (which every "does not contain" assertion
+  // in this file would read as a pass) and not throw where nothing reports it.
+  assert.throws(
+    () => classLiteral('<header className={`sticky top-0 z-60`}>', HEADER_ANCHOR),
+    /could not locate the className for "PublicHeaderClient <header>"/,
+  );
+  // …and on the real file it still finds the real thing.
+  assert.equal(headerTok(), 'z-60');
 });
 
 // ── The intended numeric order ──────────────────────────────────────────────
@@ -105,7 +146,7 @@ test('resolved z-order matches the intended stack (top → bottom)', () => {
     bar: resolveZ(barTok, EXTRA),
     aside: resolveZ(asideTok, EXTRA),
     dock: resolveZ(dockTok, EXTRA),
-    header: resolveZ(headerTok, EXTRA),
+    header: resolveZ(headerTok(), EXTRA),
     popup: resolveZ(popupTok, EXTRA),
     chat: resolveZ(chatTok, EXTRA),
     backdrop: resolveZ(backdropTok, EXTRA),

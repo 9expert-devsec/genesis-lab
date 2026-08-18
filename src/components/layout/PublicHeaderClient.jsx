@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -25,6 +25,11 @@ import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
 import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
+import {
+  HERO_OVERLAY_SENTINEL_ID,
+  OVERLAY_SUBPIXEL_TOLERANCE_PX,
+  isHeaderTransparent,
+} from '@/lib/heroOverlay';
 import { sortSkillsByAdminOrder } from '@/lib/navmenu/skillOrder';
 import { composeCoursePreview } from '@/lib/navmenu/coursePreview';
 import { DesktopSkillRows, MobileSkillRows } from '@/components/layout/SkillMenuRows';
@@ -66,6 +71,10 @@ function careerPathRows(dynamicCareerPaths) {
  * the `tnhsCourses` / `navOnlineCourses` / `dynamicCareerPaths` props
  * fetched by the parent Server Component (PublicHeader). Each may be an
  * empty array on upstream failure — every consumer degrades gracefully.
+ *
+ * `overlay` (default FALSE) is the per-page opt-in for the transparent
+ * treatment used over the Home hero. Off, this component renders exactly what
+ * it always has. See the overlayActive effect below.
  */
 export function PublicHeaderClient({
   programs = [],
@@ -74,8 +83,48 @@ export function PublicHeaderClient({
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
+  overlay = false,
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Is the header currently sitting ON the hero artwork?
+  //
+  // Seeded from the prop so the SSR markup and the first client render agree —
+  // an overlay page is at the top of its hero before anything scrolls. The
+  // observer below corrects it on mount (it fires once immediately), which
+  // covers a restored scroll position.
+  const [overlayActive, setOverlayActive] = useState(overlay);
+
+  // ── IS ANYTHING HANGING OFF THE BAR? ───────────────────────────────────────
+  // Every panel that drops out of the header keeps its OWN `isOpen` — the mega
+  // menu and each dropdown open on hover and close themselves on a route
+  // change, and that behaviour belongs to them. What does NOT belong to them is
+  // knowing what the bar looks like. So each one REPORTS through the single
+  // hook below and the answer is derived here, once.
+  //
+  // A Set rather than a boolean per panel: the nav is built from a config array,
+  // so the number of dropdowns is not fixed. OR-ing a fixed list of flags at
+  // each use site is how the fourth panel gets forgotten.
+  const [openPanels, setOpenPanels] = useState(() => new Set());
+  const setPanelOpen = useCallback((key, open) => {
+    setOpenPanels((prev) => {
+      if (open === prev.has(key)) return prev; // no-op → no re-render
+      const next = new Set(prev);
+      if (open) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+
+  // THE one value, and the rule behind it lives in lib/heroOverlay so it can be
+  // stated and tested once. Everything that follows the overlay — the bar's own
+  // background AND the forced-light nav text — reads THIS, never `overlayActive`
+  // directly: if the bar goes opaque and the links stay white, the nav is
+  // white-on-white.
+  const overlayTransparent = isHeaderTransparent({
+    overlayActive,
+    openPanelCount: openPanels.size,
+  });
 
   // THE SKILL LIST IS SORTED ONCE, HERE, and handed to both menus as a prop.
   //
@@ -96,6 +145,56 @@ export function PublicHeaderClient({
     setMounted(true);
   }, []);
 
+  // Transparent ONLY while the page is at rest on the hero — read from a
+  // sentinel element at the hero's TOP edge, never from a scroll offset.
+  //
+  // NOT `scrollY > n`: TopNotificationBar renders or renders null depending on
+  // what an admin has scheduled, so the header's own distance from the top of
+  // the document is not a constant and no threshold is right in both cases.
+  //
+  // WHY THE RULE IS "the sentinel is at or below the viewport top". The hero
+  // pulls itself up by exactly this header's height, so the hero's top edge and
+  // the header's top edge are THE SAME document position. While that point is
+  // still at or below the top of the viewport, the header is sitting on hero
+  // artwork and nothing else. One pixel further and the hero is passing
+  // underneath it — which is the state that put the hero's CTAs on top of the
+  // nav links when this was anchored to the hero's BOTTOM instead.
+  //
+  // The header's own height does not enter the comparison any more, and that is
+  // why PUBLIC_HEADER_HEIGHT_PX is no longer imported here: it would have to be
+  // added to both sides. It remains the source of the hero's pull-up.
+  useEffect(() => {
+    if (!overlay) return undefined;
+    const sentinel = document.getElementById(HERO_OVERLAY_SENTINEL_ID);
+    if (!sentinel) {
+      // Opted in, but no hero on the page. Fail back to the opaque header
+      // rather than leaving a permanently transparent one over ordinary
+      // content, which would be unreadable.
+      setOverlayActive(false);
+      return undefined;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        // Read the geometry, not `isIntersecting`: that is false both before
+        // the marker scrolls in and after it scrolls out, and only one of those
+        // is the transparent state. The observer's job is just to deliver a
+        // callback at the crossing (and once immediately on observe, which is
+        // what makes a restored scroll position correct on load).
+        //
+        // The comparison is against -TOLERANCE, never 0: at a fractional device
+        // pixel ratio the hero's 81px pull-up rounds to whole device pixels and
+        // leaves this a sub-pixel NEGATIVE number at scroll 0. See the measured
+        // table on OVERLAY_SUBPIXEL_TOLERANCE_PX in lib/heroOverlay.
+        setOverlayActive(
+          entry.boundingClientRect.top >= -OVERLAY_SUBPIXEL_TOLERANCE_PX
+        );
+      },
+      { threshold: 0 }
+    );
+    io.observe(sentinel);
+    return () => io.disconnect();
+  }, [overlay]);
+
   // Lock the page underneath while the drawer is open so iOS rubber-band
   // and laptop trackpad scroll don't leak through the backdrop.
   useEffect(() => {
@@ -109,7 +208,19 @@ export function PublicHeaderClient({
 
   return (
     <>
-    <header className="sticky top-0 left-0 right-0 z-60 border-b border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy">
+    {/* The opaque branch is byte-for-byte the class string this header has
+        always carried — the split is placed so cn() re-joins it unchanged, and
+        a render test pins the exact string. The transparent branch also drops
+        `backdrop-blur-md` (the point is to see the artwork sharply) and makes
+        the border transparent, or a hairline draws across it. */}
+    <header
+      className={cn(
+        'sticky top-0 left-0 right-0 z-60 border-b',
+        overlayTransparent
+          ? 'border-transparent bg-transparent transition-colors'
+          : 'border-[var(--surface-border)] bg-white backdrop-blur-md transition-colors dark:bg-9e-navy'
+      )}
+    >
       <div className="mx-auto flex h-20 max-w-[1200px] items-center gap-4 max-md:px-4">
         {/* ── Logo ─────────────────────────────────────────────── */}
         <div className="flex-none">
@@ -134,13 +245,22 @@ export function PublicHeaderClient({
                   navOnlineCourses={navOnlineCourses}
                   navMenuData={navMenuData}
                   navMasterclasses={navMasterclasses}
+                  overlay={overlayTransparent}
+                  onPanelOpenChange={setPanelOpen}
                 />
               );
             }
             if (item.children) {
-              return <DesktopDropdown key={item.label} item={item} />;
+              return (
+                <DesktopDropdown
+                  key={item.label}
+                  item={item}
+                  overlay={overlayTransparent}
+                  onPanelOpenChange={setPanelOpen}
+                />
+              );
             }
-            return <DesktopLink key={item.label} item={item} />;
+            return <DesktopLink key={item.label} item={item} overlay={overlayTransparent} />;
           })}
         </nav>
 
@@ -149,7 +269,12 @@ export function PublicHeaderClient({
           <Link
             href="/search"
             aria-label="ค้นหา"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand"
+            className={cn(
+              'inline-flex h-10 w-10 items-center justify-center rounded-full',
+              overlayTransparent
+                ? 'text-white transition-colors duration-9e-micro ease-9e hover:bg-white/10 hover:text-white'
+                : 'text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] hover:text-9e-brand'
+            )}
           >
             <Search className="h-5 w-5" strokeWidth={1.75} />
           </Link>
@@ -162,7 +287,12 @@ export function PublicHeaderClient({
             aria-label={drawerOpen ? 'ปิดเมนู' : 'เปิดเมนู'}
             aria-expanded={drawerOpen}
             onClick={() => setDrawerOpen((v) => !v)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] lg:hidden"
+            className={cn(
+              'inline-flex h-10 w-10 items-center justify-center rounded-full',
+              overlayTransparent
+                ? 'text-white transition-colors duration-9e-micro ease-9e hover:bg-white/10 lg:hidden'
+                : 'text-[var(--text-primary)] transition-colors duration-9e-micro ease-9e hover:bg-[var(--surface-muted)] lg:hidden'
+            )}
           >
             {drawerOpen ? (
               <X className="h-5 w-5" strokeWidth={1.75} />
@@ -203,22 +333,98 @@ export function PublicHeaderClient({
 
 // ── Desktop sub-components ──────────────────────────────────────
 
-function DesktopLink({ item }) {
+/**
+ * THE ONE WAY a panel tells the header it is open.
+ *
+ * Every element that drops out of the bar calls this and nothing else: no
+ * component reaches into the header's state, and the header never enumerates
+ * panels. A new panel is one line — `useReportPanelOpen('its-key', isOpen,
+ * onPanelOpenChange)` — and the bar's background follows it for free.
+ *
+ * The cleanup is not decoration: a panel that unmounts while open (a route
+ * change that changes the nav) would otherwise leave its key in the set and the
+ * header permanently opaque.
+ */
+function useReportPanelOpen(key, isOpen, report) {
+  useEffect(() => {
+    report(key, isOpen);
+    return () => report(key, false);
+  }, [key, isOpen, report]);
+}
+
+/**
+ * Dismiss a HOVER-OPENED panel on a scroll or on Escape.
+ *
+ * ── THE MEASURED DEFECT ─────────────────────────────────────────────────────
+ * `onMouseLeave` is the only thing that closed these panels, and a SCROLL DOES
+ * NOT DISPATCH ONE. Chrome fires no mouseleave when the page moves out from
+ * under a stationary cursor, so hovering a nav trigger and then scrolling with
+ * the wheel leaves `isOpen` true indefinitely — measured: the panel was still
+ * `opacity-100 pointer-events-auto` after scrolling to 600 and back to 0.
+ *
+ * The visible symptom was in the header's colour, not the panel: an open panel
+ * holds the bar in its opaque treatment (see isHeaderTransparent), so the
+ * header never returned to transparent on the way back up to the hero. The
+ * IntersectionObserver was innocent throughout — it fired on the way up with
+ * `top: 0` and derived `true` on every path, including the failing one.
+ *
+ * Escape is included because it was missing for the same reason nothing else
+ * closed these: `onMouseLeave` was the whole story. Route change and clicking a
+ * link inside are handled by each panel already.
+ *
+ * The listener only exists while a panel is open, `scroll` is passive, and
+ * neither handler reads layout — so this adds nothing to the scroll path of a
+ * page with no menu open, which is every page most of the time. `scroll` does
+ * not bubble from an element, so scrolling INSIDE the panel's own columns does
+ * not close it.
+ */
+function useDismissOnScrollOrEscape(isOpen, setOpen) {
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const dismiss = () => setOpen(false);
+    const onKey = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('scroll', dismiss, { passive: true });
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', dismiss);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [isOpen, setOpen]);
+}
+
+// `overlay` on the three nav triggers below is the header's transparent mode.
+// It forces the DARK-ARTWORK treatment — light text — in BOTH themes, because
+// what sits behind them then is the hero image, not the page background. The
+// class strings are split so that with overlay=false cn() re-joins exactly the
+// string each element carried before the prop existed.
+function DesktopLink({ item, overlay = false }) {
   return (
     <Link
       href={item.href}
       target={item.external ? '_blank' : undefined}
       rel={item.external ? 'noopener noreferrer' : undefined}
-      className="rounded-9e-sm px-3 py-2 text-[15px] font-medium text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:hover:text-9e-air"
+      className={cn(
+        'rounded-9e-sm px-3 py-2 text-[15px] font-medium',
+        overlay
+          ? 'text-white transition-colors duration-9e-micro ease-9e hover:text-9e-air'
+          : 'text-[var(--text-secondary)] transition-colors duration-9e-micro ease-9e hover:text-9e-action dark:hover:text-9e-air'
+      )}
     >
       {item.label}
     </Link>
   );
 }
 
-function DesktopDropdown({ item }) {
+function DesktopDropdown({ item, overlay = false, onPanelOpenChange = () => {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+
+  // Tell the header a surface is hanging off it, so the bar drops its
+  // transparent treatment while this panel is down.
+  useReportPanelOpen(`dropdown:${item.label}`, isOpen, onPanelOpenChange);
+  useDismissOnScrollOrEscape(isOpen, setIsOpen);
 
   // Close immediately on route change — same JS-state fix as DesktopMega.
   // A pure CSS `group-hover:` rule would keep the panel open after a
@@ -238,7 +444,9 @@ function DesktopDropdown({ item }) {
         className={cn(
           'inline-flex items-center gap-1 rounded-9e-sm px-3 py-2 text-[15px] font-medium',
           'transition-colors duration-9e-micro ease-9e',
-          isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]'
+          overlay
+            ? (isOpen ? 'text-9e-air' : 'text-white')
+            : (isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]')
         )}
       >
         {item.label}
@@ -354,6 +562,8 @@ function DesktopMega({
   navOnlineCourses = [],
   navMenuData = { programs: {}, skills: {}, programSlugs: {}, skillSlugs: {}, skillOrder: {} },
   navMasterclasses = [],
+  overlay = false,
+  onPanelOpenChange = () => {},
 }) {
   const cpRows = careerPathRows(dynamicCareerPaths);
   const hasPrograms = programs.length > 0;
@@ -365,6 +575,11 @@ function DesktopMega({
   // every route change.
   const [isOpen, setIsOpen] = useState(false);
   const pathname = usePathname();
+
+  // Same report as every other panel — see useReportPanelOpen. This is the
+  // full-width one, so it is the panel that made the seam obvious.
+  useReportPanelOpen('mega', isOpen, onPanelOpenChange);
+  useDismissOnScrollOrEscape(isOpen, setIsOpen);
 
   useEffect(() => {
     setIsOpen(false);
@@ -606,7 +821,9 @@ function DesktopMega({
         className={cn(
           'inline-flex h-full items-center gap-1 rounded-9e-sm px-3 text-[15px] font-medium',
           'transition-colors duration-9e-micro ease-9e',
-          isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]'
+          overlay
+            ? (isOpen ? 'text-9e-air' : 'text-white')
+            : (isOpen ? 'text-9e-action dark:text-9e-brand' : 'text-[var(--text-secondary)]')
         )}
       >
         {item.label}
@@ -647,17 +864,50 @@ function DesktopMega({
                     : 'grid-cols-[200px_1fr]' // online
               )}
             >
-              {/* ── COL 1 — Sidebar (flat 6 items) ───────────── */}
-              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pl-4 py-3 pr-2 bg-9e-air-scale-950">
+              {/* ── COL 1 — Sidebar (flat 6 items) ─────────────
+                  The background is `--surface-muted`, the same token every
+                  other column of this panel uses, and NOT a fixed tint. It used
+                  to be the 9e-air-scale-950 tint (#F6FBFF), which has no dark
+                  counterpart — in the dark theme this column rendered as a
+                  white slab with pale text beside four correctly-dark siblings.
+                  Light-mode appearance is unchanged: #F6FBFF → #F8FAFD.
+
+                  The retired class name is deliberately NOT written here as a
+                  utility: Tailwind scans raw text, so a comment quoting one
+                  keeps its rule in the compiled stylesheet with nothing using
+                  it. Same scanner, opposite failure, as an interpolated class
+                  emitting no CSS at all. */}
+              <div className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] pl-4 py-3 pr-2 bg-[var(--surface-muted)]">
                 <ul className="flex flex-col gap-0.5">
                   {COL1_ITEMS.map((c) => {
                     const active = !c.clickOnly && col1Active === c.key;
                     const Icon = c.icon;
+                    // Both states previously hovered to plain white — a
+                    // light-mode literal with no dark counterpart: the same
+                    // defect as the column background, waiting for a mouse.
+                    //
+                    // `--page-bg` is the chip colour for the selected row and
+                    // the hover lift. In light it resolves to #FFFFFF, which is
+                    // exactly what that hover painted, so nothing about the
+                    // light theme moves. In dark it is #0D1B2A — a step
+                    // AWAY from the column's #1A2D42 rather than toward it, and
+                    // it is the only panel surface on which the shared accent
+                    // clears AA: `dark:text-9e-brand` (#2486FF) measures 4.91:1
+                    // there, against 3.96:1 on --surface-muted (what the
+                    // sibling columns use) and 3.25:1 on --surface-raised.
+                    // The ACCENT TOKENS ARE UNCHANGED — `text-9e-action
+                    // dark:text-9e-brand` is what every other active row in
+                    // this panel uses, so the column matches its siblings
+                    // rather than inventing a third treatment.
+                    //
+                    // The active row keeps no separate hover colour: it already
+                    // sits on the chip, and its state is carried by the brand
+                    // left border and the bold accent text.
                     const itemClass = cn(
                       'flex cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-sm transition-colors duration-9e-micro ease-9e',
                       active
-                        ? 'border-l-2 border-9e-brand bg-[var(--surface-muted)] font-medium text-9e-action dark:text-9e-brand hover:bg-white'
-                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-white hover:text-9e-action dark:hover:text-9e-air'
+                        ? 'border-l-2 border-9e-brand bg-[var(--page-bg)] font-medium text-9e-action dark:text-9e-brand'
+                        : 'border-l-2 border-transparent text-[var(--text-secondary)] hover:bg-[var(--page-bg)] hover:text-9e-action dark:hover:text-9e-air'
                     );
                     const inner = (
                       <>
