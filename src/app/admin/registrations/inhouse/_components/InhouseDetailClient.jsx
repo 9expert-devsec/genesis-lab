@@ -12,6 +12,24 @@ import {
   updateInhouseAdminNotes,
   deleteInhouseRegistration,
 } from '@/lib/actions/inhouse-registrations';
+/**
+ * THE SHARED FIELD WRITER. `updateRegistration(id, data, 'inhouse')` — the same
+ * export the public screen calls, taking the source as its third argument.
+ *
+ * ── WHY THIS IMPORT DID NOT EXIST, AND WHAT THAT COST ──────────────────────
+ * Round 2 gave `updateRegistration` a `source === 'inhouse'` branch with a
+ * 26-name allowlist, and NO CLIENT WAS EVER POINTED AT IT. This screen's only
+ * writes were the status action, the admin-notes action and delete, so 25 of
+ * those 26 fields were rendered by the read view and editable by nothing. The
+ * server was never the fault; the call site did not exist.
+ *
+ * `onlyDigits` comes with it for the same reason the public invoice form uses
+ * it: this path runs NO zod (`runValidators: false`), so an unconstrained box
+ * here is a way for an admin to store a tax id or branch code the customer-facing
+ * form would have rejected.
+ */
+import { updateRegistration } from '@/lib/actions/registrations';
+import { onlyDigits } from '@/lib/registration/digitsOnly';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { refNo } from '@/lib/refNo';
 import { monthLongLabel } from '@/lib/schedule/monthWindow';
@@ -28,6 +46,7 @@ import {
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   SummaryStrip, TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
+  EditField, EditArea, EditSelect,
 } from '../../_components/detailShell';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -146,6 +165,25 @@ const mono = (value) => (value ? <span className="font-mono text-[11px]">{value}
 
 const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
+/**
+ * The three address skeletons the edit forms lazily create.
+ *
+ * `onsiteVenue` and `thaiAddress` are THE SAME SHAPE and are still two
+ * constants, because they are two different things that happen to agree today:
+ * the venue is where the training runs and the Thai address is where the
+ * quotation is sent, and `formatThaiAddress` vs `formatBillingAddress` already
+ * treat them as such (see the note on `onsiteVenueSummary`). One shared constant
+ * would make a future divergence in either look like a bug in both.
+ *
+ * Written out in full rather than derived, so a key the action's allowlist
+ * expects cannot go missing from the skeleton — the public invoice form's note
+ * spells out what that costs: a lazily-created object missing a key produces a
+ * save that succeeds and stores nothing.
+ */
+const EMPTY_VENUE     = { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' };
+const EMPTY_THAI_ADDR = { addressLine: '', subDistrict: '', district: '', province: '', postalCode: '' };
+const EMPTY_INTL_ADDR = { line1: '', line2: '', city: '', state: '', postalCode: '', country: '' };
+
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -170,6 +208,114 @@ function scheduleSummary(doc) {
   if (doc.preferredMonth) return `เดือน: ${monthLongLabel(doc.preferredMonth)}`;
   const legacyRange = [doc.preferredDateFrom, doc.preferredDateTo].filter(Boolean).join(' ถึง ');
   return legacyRange || '';
+}
+
+/**
+ * ── THE EDITABLE GROUPS, AS FUNCTIONS OF THE DOCUMENT ──────────────────────
+ *
+ * One per editable card. Each returns the exact object its card submits, seeded
+ * from `doc`, and they are the ONLY definition of what this screen can write.
+ *
+ * ── WHY THEY ARE MODULE-LEVEL AND EXPORTED ────────────────────────────────
+ * Two jobs that were previously done by two hand-kept copies of the same list:
+ *
+ *   · `useState` seeds from them and `cancelEdit` re-seeds from them, so
+ *     "cancel restores what the server holds" is the same code as "this is what
+ *     the card started with" rather than a second list that has to agree;
+ *   · test/fs/inhouseFieldEditable calls them with a probe document and compares
+ *     `Object.keys` against the allowlist PARSED OUT OF updateRegistration's
+ *     source. That comparison is only worth running because neither side is
+ *     re-typed in the test — a field added to a card here, or removed from the
+ *     allowlist there, moves one side and not the other and the test says so.
+ *
+ * A field that this form submits and the allowlist does not name is dropped in
+ * SILENCE: `updateRegistration` returns `{ok:true}`, the card closes, the value
+ * is unchanged after a refresh, and nothing anywhere reports it. That is the
+ * failure this pair of exports exists to make impossible to ship.
+ *
+ * The DEFAULTS in each are the schema's, not invented: `participantsCount` 15
+ * and `contentMode` 'standard' come from publicRegistrationDefaults' in-house
+ * twin, `quotationCountry` 'TH' and `branchType` 'head_office' from the zod
+ * enums' own `.default(...)`. `trainingFormat` deliberately has NONE — it has no
+ * schema default either, and inventing one here is how the select would write a
+ * format nobody chose.
+ */
+export const editableContact = (doc) => ({
+  contactFirstName:  doc.contactFirstName  ?? '',
+  contactLastName:   doc.contactLastName   ?? '',
+  contactRole:       doc.contactRole       ?? '',
+  contactDepartment: doc.contactDepartment ?? '',
+  contactEmail:      doc.contactEmail      ?? '',
+  contactPhone:      doc.contactPhone      ?? '',
+  contactLine:       doc.contactLine       ?? '',
+});
+
+export const editableRequirement = (doc) => ({
+  participantsCount: doc.participantsCount ?? 15,
+  contentMode:       doc.contentMode       ?? 'standard',
+  contentDetails:    doc.contentDetails    ?? '',
+});
+
+export const editableSchedule = (doc) => ({
+  preferredMonth: doc.preferredMonth ?? '',
+  scheduleNote:   doc.scheduleNote   ?? '',
+  trainingFormat: doc.trainingFormat ?? '',
+  onlineRegion:   doc.onlineRegion   ?? '',
+  onlineTimezone: doc.onlineTimezone ?? '',
+  onsiteVenue:    doc.onsiteVenue ? { ...doc.onsiteVenue } : { ...EMPTY_VENUE },
+});
+
+export const editableQuotation = (doc) => ({
+  quotationCountry: doc.quotationCountry ?? 'TH',
+  quotationCompany: doc.quotationCompany ?? '',
+  taxId:            doc.taxId            ?? '',
+  branchType:       doc.branchType       ?? 'head_office',
+  branchCode:       doc.branchCode       ?? '',
+  thaiAddress:          doc.thaiAddress          ? { ...doc.thaiAddress }          : null,
+  internationalAddress: doc.internationalAddress ? { ...doc.internationalAddress } : null,
+});
+
+/**
+ * Every group, keyed by the section name the card passes to `editProps`.
+ *
+ * `message` and `notes` are single-field cards and are here anyway, so the set
+ * this screen can write is ONE object rather than four objects plus two things
+ * a reader has to remember. `adminNotes` travels through
+ * `updateInhouseAdminNotes` rather than `updateRegistration` — it is listed
+ * because the allowlist names it too, and the test asserts the union.
+ */
+export const INHOUSE_EDITABLE_GROUPS = {
+  contact:     editableContact,
+  requirement: editableRequirement,
+  schedule:    editableSchedule,
+  quotation:   editableQuotation,
+  message:     (doc) => ({ message:    doc.message    ?? '' }),
+  notes:       (doc) => ({ adminNotes: doc.adminNotes ?? '' }),
+};
+
+/**
+ * The schedule card's payload — the state, minus the fields that state can
+ * legally hold and the DOCUMENT must not.
+ *
+ * ── ONE OMISSION, AND IT IS NOT TIDINESS ────────────────────────────────────
+ * `trainingFormat: ''` is a real state of the control (the "— ยังไม่ระบุ —"
+ * option, which exists because a legacy document can hold `flexible` and the
+ * field has no schema default). It is NOT a value the document may take:
+ * `updateRegistration` copies whatever it is handed with `runValidators: false`,
+ * so an empty string would be written straight over a stored `onsite` and the
+ * รูปแบบ row would go blank on a request that had a format a moment ago.
+ *
+ * Dropping the KEY is what makes the allowlist's `data[f] !== undefined` test
+ * leave the stored value alone. Sending `undefined` would work identically; the
+ * key is omitted instead so this function's output can be compared against the
+ * allowlist by a test without a special case for "present but undefined".
+ *
+ * Kept module-level and pure so that test can call it directly rather than
+ * reaching through a render.
+ */
+export function schedulePayload(schedule) {
+  const { trainingFormat, ...rest } = schedule;
+  return trainingFormat ? { ...rest, trainingFormat } : rest;
 }
 
 /** The same window, without the `เดือน:` prefix — the strip cell has a label. */
@@ -255,7 +401,34 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
 
   const [status,      setStatus]      = useState(doc.status);
   const [adminNotes,  setAdminNotes]  = useState(doc.adminNotes ?? '');
-  const [editSection, setEditSection] = useState(null); // 'notes' | null
+
+  /**
+   * ── THE FOUR EDITABLE GROUPS, MIRRORING THE FOUR CARDS ────────────────────
+   *
+   * Each holds ONLY names the allowlist in `updateRegistration` accepts. That is
+   * not a coincidence to be maintained by care — test/fs/inhouseFieldEditable
+   * asserts the two sets against each other in BOTH directions, because a field
+   * this form submits that the allowlist does not name is dropped in silence:
+   * the action returns `ok`, the card closes, and the old value is still there
+   * after a refresh. Nothing on screen says otherwise.
+   *
+   * ── THE ONE NAME THAT LOOKS MISSING AND IS DELIBERATE ─────────────────────
+   * `companyName` is NOT here, and the บริษัท control below writes
+   * `quotationCompany` instead. `companyName` is a legacy-compat MIRROR written
+   * by one line in the API route; the allowlist omits it on purpose. Binding the
+   * control to the DISPLAYED value would have bound it to `companyName` on
+   * exactly the legacy documents where the two diverge — and those are the only
+   * documents where it matters — so the edit would have been dropped precisely
+   * where it was needed. See `companyDiverges` below.
+   */
+  const [contact,     setContact]     = useState(() => editableContact(doc));
+  const [requirement, setRequirement] = useState(() => editableRequirement(doc));
+  const [schedule,    setSchedule]    = useState(() => editableSchedule(doc));
+  const [quotation,   setQuotation]   = useState(() => editableQuotation(doc));
+  const [message,     setMessage]     = useState(doc.message ?? '');
+
+  // 'contact' | 'requirement' | 'schedule' | 'quotation' | 'message' | 'notes' | null
+  const [editSection, setEditSection] = useState(null);
   const [tab,         setTab]         = useState(TABS[0].key);
   const [menuOpen,    setMenuOpen]    = useState(false);
   const [busy,        setBusy]        = useState(null);
@@ -377,14 +550,73 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
     });
   };
 
-  const cancelEdit = () => {
-    setAdminNotes(doc.adminNotes ?? '');
-    setEditSection(null);
+  /**
+   * THE FIELD SAVE — the same helper the public client has, with the source
+   * argument that makes `updateRegistration` take its in-house branch.
+   *
+   * `'inhouse'` is written HERE and nowhere else in the file. It is the one
+   * place this screen has to name its own collection, and passing it per call
+   * site would be six chances to pass 'public' by accident — which would not
+   * throw, would not warn, and would send these fields through the PUBLIC
+   * allowlist, where almost none of them are named. Every one would be dropped
+   * and the save would report success.
+   */
+  const save = (payload, busyKey) => {
+    setBusy(busyKey); setError(null);
+    startTransition(async () => {
+      const res = await updateRegistration(doc._id, payload, 'inhouse');
+      if (res.ok) setEditSection(null);
+      else setError(res.error || 'บันทึกไม่สำเร็จ');
+      setBusy(null);
+    });
   };
 
-  const address = quotationAddress(doc);
-  const venue = onsiteVenueSummary(doc);
-  const countryLabel = doc.quotationCountry === 'OTHER' ? 'ต่างประเทศ' : 'ไทย';
+  /**
+   * ── CANCEL RESTORES FROM `doc`, PER SECTION ────────────────────────────────
+   *
+   * It takes the section now. It previously took nothing and reset `adminNotes`
+   * unconditionally, which was correct while notes were the only editable thing
+   * and becomes wrong the moment a second card can open: cancelling the
+   * quotation card would have silently reverted an unsaved note in a card the
+   * reader was not looking at.
+   *
+   * Every branch reads `doc`, never the live state, so cancel means "back to
+   * what the server holds" rather than "back to whatever it was when this card
+   * opened". The two differ after a successful save of a neighbouring card, and
+   * only the first is what the word means.
+   */
+  const cancelEdit = (section) => {
+    setEditSection(null);
+    if (section === 'notes')       setAdminNotes(doc.adminNotes ?? '');
+    if (section === 'message')     setMessage(doc.message ?? '');
+    if (section === 'contact')     setContact(editableContact(doc));
+    if (section === 'requirement') setRequirement(editableRequirement(doc));
+    if (section === 'schedule')    setSchedule(editableSchedule(doc));
+    if (section === 'quotation')   setQuotation(editableQuotation(doc));
+  };
+
+  /**
+   * One venue field, without clobbering the rest of the subdocument.
+   *
+   * The skeleton is created lazily HERE rather than on mount, so a request that
+   * has never had a venue does not gain an all-empty `onsiteVenue` object simply
+   * by the admin opening the card and closing it again.
+   */
+  const setVenueField = (field, val) =>
+    setSchedule((s) => ({ ...s, onsiteVenue: { ...(s.onsiteVenue ?? EMPTY_VENUE), [field]: val } }));
+
+  const setAddrField = (key, empty) => (field, val) =>
+    setQuotation((q) => ({ ...q, [key]: { ...(q[key] ?? empty), [field]: val } }));
+  const setThaiAddr = setAddrField('thaiAddress', EMPTY_THAI_ADDR);
+  const setIntlAddr = setAddrField('internationalAddress', EMPTY_INTL_ADDR);
+
+  // ALL THREE READ THE LIVE STATE, not `doc` — see the note on `contactName`.
+  // `{ ...doc, ...schedule }` keeps the LEGACY fallback paths reachable: the
+  // formatters read `preferredDateFrom` / `onsiteAddress` / `branch`, none of
+  // which is editable and all of which only exist on `doc`.
+  const address = quotationAddress({ ...doc, ...quotation });
+  const venue = onsiteVenueSummary({ ...doc, ...schedule });
+  const countryLabel = quotation.quotationCountry === 'OTHER' ? 'ต่างประเทศ' : 'ไทย';
 
   /**
    * TWO COMPANY NAMES, ONE ROW — until they disagree.
@@ -401,17 +633,51 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
    * rather than resolved: pick one silently and a salesperson calling the
    * contact company would never learn the quotation names a different entity.
    */
+  // `contactCompany` reads `doc` and NOT state, because `companyName` is not
+  // editable — it is the legacy mirror the allowlist deliberately omits. The
+  // quotation name reads STATE, so an edit to it can flip `companyDiverges`
+  // live: correcting a legacy quotation company to match the contact company
+  // makes the two rows collapse into one, which is the point of the divergence
+  // check rather than a side effect of it.
   const contactCompany   = (doc.companyName ?? '').trim();
-  const quotationCompany = (doc.quotationCompany ?? '').trim();
+  const quotationCompany = (quotation.quotationCompany ?? '').trim();
   const companyDiverges  = Boolean(contactCompany && quotationCompany && contactCompany !== quotationCompany);
   const displayCompany   = companyDiverges ? contactCompany : (quotationCompany || contactCompany);
+
+  const isThaiQuotation = quotation.quotationCountry !== 'OTHER';
+
+  /**
+   * Switching country swaps WHICH address subdocument exists, and nulls the
+   * other.
+   *
+   * The same shape as the public invoice form's handler, and the null matters
+   * as much as the skeleton: leaving a stale `thaiAddress` on a quotation that
+   * has become foreign means `formatBillingAddress` has two addresses to choose
+   * between, and the one it shows is decided by its own precedence rather than
+   * by anything the admin did.
+   */
+  const handleCountryChange = (next) => setQuotation((q) => ({
+    ...q,
+    quotationCountry: next,
+    thaiAddress:          next === 'TH'    ? (q.thaiAddress          ?? { ...EMPTY_THAI_ADDR }) : null,
+    internationalAddress: next === 'OTHER' ? (q.internationalAddress ?? { ...EMPTY_INTL_ADDR }) : null,
+    // A foreign quotation carries no Thai branch. Clearing the code here keeps
+    // it from surviving invisibly behind a hidden control, exactly as the
+    // branchType handler does.
+    branchCode: next === 'OTHER' ? '' : q.branchCode,
+  }));
+
   // A foreign quotation has no Thai branch concept at all, so the row is
   // suppressed rather than defaulted to สำนักงานใหญ่.
-  const branchLabel = doc.quotationCountry === 'OTHER'
+  const branchLabel = !isThaiQuotation
     ? ''
-    : formatBranchLabel({ branchType: doc.branchType, branchCode: doc.branchCode, legacyBranch: doc.branch });
+    : formatBranchLabel({ branchType: quotation.branchType, branchCode: quotation.branchCode, legacyBranch: doc.branch });
 
-  const contactName = `${doc.contactFirstName ?? ''} ${doc.contactLastName ?? ''}`.trim();
+  // READ FROM STATE, not from `doc`. Both this and the rows below it are what a
+  // successful save leaves on screen: the action revalidates the path, but the
+  // client keeps rendering until that lands, and a name that reverts for a beat
+  // after a save reads as the save having failed.
+  const contactName = `${contact.contactFirstName ?? ''} ${contact.contactLastName ?? ''}`.trim();
 
   /**
    * The status bar's one-line description — DERIVED, never a map keyed by
@@ -569,93 +835,374 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
       <TabPanel id={idFor('request', 'panel')} labelledBy={idFor('request', 'tab')} hidden={tab !== 'request'}>
         <div className="space-y-[16px]">
 
-          <SectionCard icon={Building2} title="ผู้ประสานงาน & บริษัท">
-            <DL>
-              <DLRow
-                label={companyDiverges ? 'บริษัท / องค์กร (ที่ติดต่อ)' : 'บริษัท / องค์กร'}
-                value={displayCompany}
-                action={displayCompany
-                  ? <CopyButton value={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />
-                  : null}
-              />
-              <DLRow label="ชื่อ-นามสกุล" value={contactName} />
-              <DLRow label="ตำแหน่ง / แผนก" value={[doc.contactRole, doc.contactDepartment].filter(Boolean).join(' · ')} />
-              <DLRow label="อีเมล" value={doc.contactEmail
-                ? <a href={`mailto:${doc.contactEmail}`} className="text-9e-action hover:underline">{doc.contactEmail}</a>
-                : ''} />
-              <DLRow label="เบอร์โทร" value={doc.contactPhone
-                ? <a href={`tel:${doc.contactPhone}`} className="text-9e-action hover:underline">{doc.contactPhone}</a>
-                : ''} />
-              <DLRow label="LINE ID" value={doc.contactLine} />
-            </DL>
+          <SectionCard
+            icon={Building2}
+            title="ผู้ประสานงาน & บริษัท"
+            {...editProps('contact')}
+            onSave={() => save(contact, 'save-contact')}
+          >
+            {editSection === 'contact' ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/*
+                  NO บริษัท CONTROL HERE — it is in the quotation card, bound to
+                  `quotationCompany`, and that placement is the whole point.
+
+                  This card DISPLAYS `displayCompany`, which resolves to
+                  `companyName` on a legacy document where the two diverge.
+                  `companyName` is not in the allowlist (it is a derived mirror),
+                  so a box here bound to what this card shows would be dropped
+                  silently on exactly the documents where the divergence is real
+                  — the only ones where editing it means anything.
+                */}
+                <EditField label="ชื่อ" required value={contact.contactFirstName}
+                  onChange={(v) => setContact((c) => ({ ...c, contactFirstName: v }))} />
+                <EditField label="นามสกุล" required value={contact.contactLastName}
+                  onChange={(v) => setContact((c) => ({ ...c, contactLastName: v }))} />
+                <EditField label="ตำแหน่ง" value={contact.contactRole}
+                  onChange={(v) => setContact((c) => ({ ...c, contactRole: v }))} />
+                <EditField label="แผนก" value={contact.contactDepartment}
+                  onChange={(v) => setContact((c) => ({ ...c, contactDepartment: v }))} />
+                <EditField label="อีเมล" type="email" required value={contact.contactEmail}
+                  onChange={(v) => setContact((c) => ({ ...c, contactEmail: v }))} />
+                <EditField label="เบอร์โทร" type="tel" value={contact.contactPhone}
+                  onChange={(v) => setContact((c) => ({ ...c, contactPhone: v }))} />
+                <EditField label="LINE ID" value={contact.contactLine}
+                  onChange={(v) => setContact((c) => ({ ...c, contactLine: v }))} />
+              </div>
+            ) : (
+              <DL>
+                <DLRow
+                  label={companyDiverges ? 'บริษัท / องค์กร (ที่ติดต่อ)' : 'บริษัท / องค์กร'}
+                  value={displayCompany}
+                  action={displayCompany
+                    ? <CopyButton value={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />
+                    : null}
+                />
+                <DLRow label="ชื่อ-นามสกุล" value={contactName} />
+                <DLRow label="ตำแหน่ง / แผนก" value={[contact.contactRole, contact.contactDepartment].filter(Boolean).join(' · ')} />
+                <DLRow label="อีเมล" value={contact.contactEmail
+                  ? <a href={`mailto:${contact.contactEmail}`} className="text-9e-action hover:underline">{contact.contactEmail}</a>
+                  : ''} />
+                <DLRow label="เบอร์โทร" value={contact.contactPhone
+                  ? <a href={`tel:${contact.contactPhone}`} className="text-9e-action hover:underline">{contact.contactPhone}</a>
+                  : ''} />
+                <DLRow label="LINE ID" value={contact.contactLine} />
+              </DL>
+            )}
           </SectionCard>
 
-          <SectionCard icon={GraduationCap} title="Training Requirement">
-            <DL>
-              {/*
-                NAME over CODE, the same two-line shape the in-house LIST column
-                uses. Resolved server-side and handed in as `courses`; a miss
-                keeps the code as the primary line rather than blanking — see the
-                page's docstring.
+          <SectionCard
+            icon={GraduationCap}
+            title="Training Requirement"
+            {...editProps('requirement')}
+            onSave={() => save(requirement, 'save-requirement')}
+          >
+            {editSection === 'requirement' ? (
+              <div className="space-y-3">
+                {/*
+                  หลักสูตรที่สนใจ IS NOT EDITABLE HERE, and `coursesInterested`
+                  is deliberately absent from `requirement` above.
 
-                The empty hint stays: an enquiry naming NO course is a data fault
-                a salesperson has to see, not a row to hide.
-              */}
-              <DLRow label="หลักสูตรที่สนใจ" wide emptyHint="ไม่ได้ระบุหลักสูตร"
-                value={courses.length > 0 ? <CourseList courses={courses} /> : ''} />
-              <DLRow label="จำนวนผู้เข้าอบรม" value={doc.participantsCount == null ? '' : `${doc.participantsCount} ท่าน`} />
-              <DLRow label="เนื้อหา" value={CONTENT_MODE_LABEL[doc.contentMode] ?? doc.contentMode} />
-              <DLRow label="รายละเอียดเนื้อหา" wide value={doc.contentDetails} />
-            </DL>
+                  It is an ARRAY OF UPSTREAM COURSE CODES, and the only honest
+                  control for it is a picker backed by the same course list
+                  page.jsx resolves names from. A free-text box would let an
+                  admin type a code that resolves to nothing, and the read view
+                  would then show the raw code with no name — indistinguishable
+                  from the upstream-is-down case the `name || code` fallback
+                  already covers, so the screen could not tell the reader which
+                  had happened. The field stays in the allowlist and stays
+                  writable by anything that can send a valid array; this form
+                  simply does not offer one. Reported as open.
+                */}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EditField
+                    label="จำนวนผู้เข้าอบรม (ท่าน)"
+                    type="number"
+                    value={String(requirement.participantsCount ?? '')}
+                    onChange={(v) => setRequirement((r) => ({
+                      ...r,
+                      // The stored field is a NUMBER and the input yields a
+                      // string. `updateRegistration`'s in-house branch copies
+                      // the value through untouched with `runValidators:false`,
+                      // so a string here would be written as a string and every
+                      // later `participantsCount == null ? … : …` test would
+                      // still pass while the type quietly changed under it.
+                      participantsCount: v === '' ? '' : Number(v),
+                    }))}
+                  />
+                  <EditSelect
+                    label="เนื้อหา"
+                    value={requirement.contentMode}
+                    onChange={(v) => setRequirement((r) => ({ ...r, contentMode: v }))}
+                  >
+                    {/*
+                      TWO OPTIONS, matching the zod enum — `consult` is a LEGACY
+                      value the read view still labels but the form must not
+                      offer, exactly as CONTENT_MODE_LABEL's own note says. An
+                      option here would let an admin write a value the customer
+                      form can no longer produce.
+                    */}
+                    <option value="standard">Outline มาตรฐาน</option>
+                    <option value="custom">ปรับเนื้อหา</option>
+                  </EditSelect>
+                </div>
+                <EditArea
+                  label="รายละเอียดเนื้อหา"
+                  value={requirement.contentDetails}
+                  onChange={(v) => setRequirement((r) => ({ ...r, contentDetails: v }))}
+                  rows={4}
+                />
+              </div>
+            ) : (
+              <DL>
+                {/*
+                  NAME over CODE, the same two-line shape the in-house LIST column
+                  uses. Resolved server-side and handed in as `courses`; a miss
+                  keeps the code as the primary line rather than blanking — see the
+                  page's docstring.
+
+                  The empty hint stays: an enquiry naming NO course is a data fault
+                  a salesperson has to see, not a row to hide.
+                */}
+                <DLRow label="หลักสูตรที่สนใจ" wide emptyHint="ไม่ได้ระบุหลักสูตร"
+                  value={courses.length > 0 ? <CourseList courses={courses} /> : ''} />
+                <DLRow label="จำนวนผู้เข้าอบรม" value={requirement.participantsCount === '' || requirement.participantsCount == null ? '' : `${requirement.participantsCount} ท่าน`} />
+                <DLRow label="เนื้อหา" value={CONTENT_MODE_LABEL[requirement.contentMode] ?? requirement.contentMode} />
+                <DLRow label="รายละเอียดเนื้อหา" wide value={requirement.contentDetails} />
+              </DL>
+            )}
           </SectionCard>
 
-          <SectionCard icon={CalendarClock} title="ตารางเวลา & รูปแบบการอบรม">
-            <DL>
-              <DLRow label="ช่วงเวลา" value={scheduleSummary(doc)} />
-              <DLRow label="หมายเหตุเวลา" value={doc.scheduleNote} />
-              <DLRow label="รูปแบบ" value={TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat} />
-              {doc.trainingFormat === 'online' && (
-                <>
-                  <DLRow label="พื้นที่ผู้เข้าอบรม" value={doc.onlineRegion} />
-                  <DLRow label="ข้อจำกัดด้านเวลา" value={doc.onlineTimezone} />
-                </>
-              )}
-              {/*
-                THE VENUE KEEPS ITS EMPTY STATE, deliberately, against the
-                general "absent means absent" rule: an ONSITE enquiry with no
-                venue is not a blank field, it is the next phone call. Hiding the
-                row would hide the job.
-              */}
-              {doc.trainingFormat === 'onsite' && (
-                <DLRow label="สถานที่จัดอบรม" wide value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
-                  action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
-              )}
-            </DL>
+          <SectionCard
+            icon={CalendarClock}
+            title="ตารางเวลา & รูปแบบการอบรม"
+            {...editProps('schedule')}
+            onSave={() => save(schedulePayload(schedule), 'save-schedule')}
+          >
+            {editSection === 'schedule' ? (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/*
+                    `type="month"` yields exactly the `YYYY-MM` the field stores
+                    — the same VALUE the customer form's <select> produced, not
+                    the Thai label beside it. `monthLongLabel` renders it back.
+                    A free-text box here is how the row came to read
+                    "เดือน: 2026-09" in the first place, one layer up.
+                  */}
+                  <EditField label="เดือนที่ต้องการ" type="month" value={schedule.preferredMonth}
+                    onChange={(v) => setSchedule((s) => ({ ...s, preferredMonth: v }))} />
+                  <EditSelect label="รูปแบบ" required value={schedule.trainingFormat}
+                    onChange={(v) => setSchedule((s) => ({ ...s, trainingFormat: v }))}>
+                    {/*
+                      An EMPTY option, because `trainingFormat` has NO schema
+                      default and a legacy document can hold `flexible`, which
+                      the zod enum no longer accepts. Without a blank the select
+                      would silently show 'onsite' for a document holding
+                      neither, and saving the card would write a format nobody
+                      chose. The empty value is filtered out of the payload —
+                      see `schedulePayload`.
+                    */}
+                    <option value="">— ยังไม่ระบุ —</option>
+                    <option value="onsite">Onsite</option>
+                    <option value="online">Online</option>
+                  </EditSelect>
+                </div>
+                <EditField label="หมายเหตุเวลา" value={schedule.scheduleNote}
+                  onChange={(v) => setSchedule((s) => ({ ...s, scheduleNote: v }))} />
+
+                {schedule.trainingFormat === 'online' && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <EditField label="พื้นที่ผู้เข้าอบรม" value={schedule.onlineRegion}
+                      onChange={(v) => setSchedule((s) => ({ ...s, onlineRegion: v }))} />
+                    <EditField label="ข้อจำกัดด้านเวลา" value={schedule.onlineTimezone}
+                      onChange={(v) => setSchedule((s) => ({ ...s, onlineTimezone: v }))} />
+                  </div>
+                )}
+
+                {schedule.trainingFormat === 'onsite' && (
+                  <div className="space-y-3 rounded-9e-md border border-[var(--surface-border)] p-4">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)]">สถานที่จัดอบรม</p>
+                    <EditField label="ที่อยู่" value={schedule.onsiteVenue?.addressLine ?? ''}
+                      onChange={(v) => setVenueField('addressLine', v)} />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <EditField label="รหัสไปรษณีย์" value={schedule.onsiteVenue?.postalCode ?? ''}
+                        onChange={(v) => setVenueField('postalCode', v)} />
+                      <EditField label="แขวง / ตำบล" value={schedule.onsiteVenue?.subDistrict ?? ''}
+                        onChange={(v) => setVenueField('subDistrict', v)} />
+                      <EditField label="เขต / อำเภอ" value={schedule.onsiteVenue?.district ?? ''}
+                        onChange={(v) => setVenueField('district', v)} />
+                      <EditField label="จังหวัด" value={schedule.onsiteVenue?.province ?? ''}
+                        onChange={(v) => setVenueField('province', v)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <DL>
+                <DLRow label="ช่วงเวลา" value={scheduleSummary({ ...doc, ...schedule })} />
+                <DLRow label="หมายเหตุเวลา" value={schedule.scheduleNote} />
+                <DLRow label="รูปแบบ" value={TRAINING_FORMAT_LABEL[schedule.trainingFormat] ?? schedule.trainingFormat} />
+                {schedule.trainingFormat === 'online' && (
+                  <>
+                    <DLRow label="พื้นที่ผู้เข้าอบรม" value={schedule.onlineRegion} />
+                    <DLRow label="ข้อจำกัดด้านเวลา" value={schedule.onlineTimezone} />
+                  </>
+                )}
+                {/*
+                  THE VENUE KEEPS ITS EMPTY STATE, deliberately, against the
+                  general "absent means absent" rule: an ONSITE enquiry with no
+                  venue is not a blank field, it is the next phone call. Hiding the
+                  row would hide the job.
+                */}
+                {schedule.trainingFormat === 'onsite' && (
+                  <DLRow label="สถานที่จัดอบรม" wide value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
+                    action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
+                )}
+              </DL>
+            )}
           </SectionCard>
 
-          <SectionCard icon={Receipt} title="ข้อมูลใบเสนอราคา">
-            <DL>
-              <DLRow label="ประเทศ" value={countryLabel} />
-              {/* Only when it disagrees with the contact company — see companyDiverges. */}
-              {companyDiverges && (
-                <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
-                  action={<CopyButton value={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
-              )}
-              <DLRow label="เลขผู้เสียภาษี" value={doc.taxId}
-                action={doc.taxId ? <CopyButton value={doc.taxId} label="เลขผู้เสียภาษี" /> : null} />
-              {/* Derived at read time. `branch` is legacy read-only and is the
-                  fallback for pre-split enquiries — see branchLabel.js. */}
-              <DLRow label="สาขา" value={branchLabel} />
-              <DLRow label="ที่อยู่" wide value={address}
-                action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
-            </DL>
+          <SectionCard
+            icon={Receipt}
+            title="ข้อมูลใบเสนอราคา"
+            {...editProps('quotation')}
+            onSave={() => save(quotation, 'save-quotation')}
+          >
+            {editSection === 'quotation' ? (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <EditSelect label="ประเทศ" value={quotation.quotationCountry} onChange={handleCountryChange}>
+                    <option value="TH">ไทย / Thailand</option>
+                    <option value="OTHER">ต่างประเทศ / Other</option>
+                  </EditSelect>
+                  {/*
+                    THE COMPANY LIVES HERE, not on the contact card — it is
+                    `quotationCompany`, which is the name that goes on the
+                    quotation and the one the allowlist actually accepts.
+                  */}
+                  <EditField label="ชื่อบริษัท (ใบเสนอราคา)" value={quotation.quotationCompany}
+                    onChange={(v) => setQuotation((q) => ({ ...q, quotationCompany: v }))} />
+                </div>
+
+                <EditField
+                  label={isThaiQuotation ? 'เลขประจำตัวผู้เสียภาษี' : 'Tax ID / VAT ID'}
+                  value={quotation.taxId}
+                  // DIGITS-ONLY ON THE THAI PATH, exactly as the public invoice
+                  // form does it and for the same measured reason: this path runs
+                  // no zod, so an unconstrained box is a way to store a tax id
+                  // the customer form would have rejected.
+                  onChange={(v) => setQuotation((q) => ({ ...q, taxId: isThaiQuotation ? onlyDigits(v, 13) : v }))}
+                />
+
+                {/* A FOREIGN quotation has no Thai branch concept — the read
+                    view already suppresses the row, and the controls follow it
+                    rather than offering a สาขาย่อย on a company in Singapore. */}
+                {isThaiQuotation && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <EditSelect
+                      label="สาขา"
+                      value={quotation.branchType}
+                      onChange={(next) => setQuotation((q) => ({
+                        ...q,
+                        branchType: next,
+                        // Clear the code on the way back to head office: its
+                        // input is hidden in that state, so a leftover value
+                        // would be unreachable AND still saved.
+                        branchCode: next === 'branch' ? (q.branchCode ?? '') : '',
+                      }))}
+                    >
+                      <option value="head_office">สำนักงานใหญ่</option>
+                      <option value="branch">สาขาย่อย</option>
+                    </EditSelect>
+                    {quotation.branchType === 'branch' && (
+                      <EditField label="เลขที่สาขา" required value={quotation.branchCode}
+                        onChange={(v) => setQuotation((q) => ({ ...q, branchCode: onlyDigits(v, 5) }))} />
+                    )}
+                  </div>
+                )}
+
+                {isThaiQuotation ? (
+                  <div className="space-y-3 rounded-9e-md border border-[var(--surface-border)] p-4">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)]">ที่อยู่ (ไทย)</p>
+                    <EditField label="ที่อยู่" value={quotation.thaiAddress?.addressLine ?? ''}
+                      onChange={(v) => setThaiAddr('addressLine', v)} />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <EditField label="รหัสไปรษณีย์" value={quotation.thaiAddress?.postalCode ?? ''}
+                        onChange={(v) => setThaiAddr('postalCode', v)} />
+                      <EditField label="แขวง / ตำบล" value={quotation.thaiAddress?.subDistrict ?? ''}
+                        onChange={(v) => setThaiAddr('subDistrict', v)} />
+                      <EditField label="เขต / อำเภอ" value={quotation.thaiAddress?.district ?? ''}
+                        onChange={(v) => setThaiAddr('district', v)} />
+                      <EditField label="จังหวัด" value={quotation.thaiAddress?.province ?? ''}
+                        onChange={(v) => setThaiAddr('province', v)} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3 rounded-9e-md border border-[var(--surface-border)] p-4">
+                    <p className="text-xs font-semibold text-[var(--text-secondary)]">Address</p>
+                    <EditField label="Address line 1" value={quotation.internationalAddress?.line1 ?? ''}
+                      onChange={(v) => setIntlAddr('line1', v)} />
+                    <EditField label="Address line 2" value={quotation.internationalAddress?.line2 ?? ''}
+                      onChange={(v) => setIntlAddr('line2', v)} />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <EditField label="City" value={quotation.internationalAddress?.city ?? ''}
+                        onChange={(v) => setIntlAddr('city', v)} />
+                      <EditField label="State / Province" value={quotation.internationalAddress?.state ?? ''}
+                        onChange={(v) => setIntlAddr('state', v)} />
+                      <EditField label="Postal code" value={quotation.internationalAddress?.postalCode ?? ''}
+                        onChange={(v) => setIntlAddr('postalCode', v)} />
+                      <EditField label="Country" value={quotation.internationalAddress?.country ?? ''}
+                        onChange={(v) => setIntlAddr('country', v)} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <DL>
+                <DLRow label="ประเทศ" value={countryLabel} />
+                {/* Only when it disagrees with the contact company — see companyDiverges. */}
+                {companyDiverges && (
+                  <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
+                    action={<CopyButton value={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
+                )}
+                <DLRow label="เลขผู้เสียภาษี" value={quotation.taxId}
+                  action={quotation.taxId ? <CopyButton value={quotation.taxId} label="เลขผู้เสียภาษี" /> : null} />
+                {/* Derived at read time. `branch` is legacy read-only and is the
+                    fallback for pre-split enquiries — see branchLabel.js. */}
+                <DLRow label="สาขา" value={branchLabel} />
+                <DLRow label="ที่อยู่" wide value={address}
+                  action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
+              </DL>
+            )}
           </SectionCard>
 
-          {doc.message && (
-            <SectionCard icon={MessageSquare} title="หมายเหตุจากลูกค้า">
-              <QuotedNote>{doc.message}</QuotedNote>
-            </SectionCard>
-          )}
+          {/*
+            ── THIS CARD IS UNCONDITIONAL NOW, AND THAT IS A VACUITY FIX ───────
+            It was `{doc.message && <SectionCard …>}`, which is exactly the
+            pattern that keeps turning up: the guard reads as "only show the note
+            when there is one" and its real effect was that a request with NO
+            customer note had no card — so `message` was in the allowlist, on the
+            screen's own list of editable fields, and unreachable by any control
+            on any document that did not already have a value.
+
+            The empty state is now the caller's muted sentence, matching the
+            public screen's หมายเหตุ card exactly. `QuotedNote` is still never
+            rendered empty — an accent rule beside nothing asserts a quotation.
+          */}
+          <SectionCard
+            icon={MessageSquare}
+            title="หมายเหตุจากลูกค้า"
+            {...editProps('message')}
+            onSave={() => save({ message }, 'save-message')}
+          >
+            {editSection === 'message' ? (
+              <EditArea label="หมายเหตุจากลูกค้า" value={message} onChange={setMessage} rows={4} maxLength={2000} />
+            ) : message ? (
+              <QuotedNote>{message}</QuotedNote>
+            ) : (
+              <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ไม่มีหมายเหตุจากลูกค้า</p>
+            )}
+          </SectionCard>
 
           <SectionCard
             icon={StickyNote}

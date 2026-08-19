@@ -660,3 +660,83 @@ export function DetailError({ message }) {
   if (!message) return null;
   return <p className="pt-[8px] text-[12px] leading-[18px] text-9e-accent">{message}</p>;
 }
+
+// ── Edit-form atoms ─────────────────────────────────────────────────────────
+
+/**
+ * The two form controls both edit forms are built out of.
+ *
+ * ── WHY THESE ARE HERE AND THE FIELD LISTS ARE NOT ──────────────────────────
+ * The file header's test is "would a change to this be WRONG for one of them".
+ * An input's height, radius and focus ring are a house style; changing them is
+ * right for both screens or wrong for both. A card's field LIST is the opposite,
+ * which is why none is here and none ever should be.
+ *
+ * They lived as private copies in RegistrationDetailClient until the in-house
+ * screen needed them. Copying rather than moving would have put a second
+ * `h-9 rounded-9e-md focus-visible:ring-9e-brand` in the tree, and the failure
+ * that produces is not a crash — it is one screen's inputs quietly drifting a
+ * pixel and a shade away from the other's, which nothing tests and nobody
+ * notices until the two are seen side by side.
+ *
+ * `selectCls` is a FUNCTION returning a literal rather than a `const` string
+ * because the class list is what Tailwind scans, and a bare exported string is
+ * just as scannable — the function is for symmetry with the other call sites
+ * and costs nothing. Both are COMPLETE LITERALS: nothing here is interpolated,
+ * so the JIT can see every class.
+ */
+export function selectCls() {
+  return cn(
+    'h-9 w-full rounded-9e-md border bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)]',
+    'border-[var(--surface-border)]',
+    'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand',
+  );
+}
+
+export function EditField({ label, value, onChange, type = 'text', required, className, placeholder }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+        {label}{required && <span className="ml-0.5 text-9e-accent">*</span>}
+      </label>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
+      />
+    </div>
+  );
+}
+
+/** A multi-line field, same frame as EditField. */
+export function EditArea({ label, value, onChange, rows = 4, maxLength, placeholder, className }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">{label}</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        className="w-full resize-y rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
+      />
+    </div>
+  );
+}
+
+/** A labelled `<select>`. `children` are the options — this file names none. */
+export function EditSelect({ label, value, onChange, required, className, children }) {
+  return (
+    <div className={className}>
+      <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+        {label}{required && <span className="ml-0.5 text-9e-accent">*</span>}
+      </label>
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={selectCls()}>
+        {children}
+      </select>
+    </div>
+  );
+}
