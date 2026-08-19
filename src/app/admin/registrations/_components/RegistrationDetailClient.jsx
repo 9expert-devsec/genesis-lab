@@ -797,7 +797,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
               />
             ) : (
               <DL>
-                <DLRow label="หลักสูตร"  value={doc.courseName} wide />
+                <DLRow label="หลักสูตร"  value={doc.courseName} />
                 <DLRow label="รหัสคอร์ส" value={doc.courseCode || doc.courseId} />
                 <DLRow
                   label="รอบอบรม"
@@ -1722,10 +1722,10 @@ function InvoiceReadView({ requestInvoice, invoice }) {
         // The whole invoice, not invoice.thaiAddress — the formatter reads
         // invoice.country to choose its branch, so passing the sub-object alone
         // would silently take the Thai path for a foreign address.
-        <DLRow label="ที่อยู่" wide value={formatBillingAddress(invoice)} />
+        <DLRow label="ที่อยู่" value={formatBillingAddress(invoice)} />
       )}
       {invoice.country === 'OTHER' && invoice.internationalAddress && (
-        <DLRow label="ที่อยู่" wide
+        <DLRow label="ที่อยู่"
           value={[invoice.internationalAddress.line1, invoice.internationalAddress.line2, invoice.internationalAddress.city, invoice.internationalAddress.state, invoice.internationalAddress.postalCode, invoice.internationalAddress.country].filter(Boolean).join(', ')}
         />
       )}
@@ -1777,7 +1777,7 @@ function PaymentInfoCard({ payment, pricing, consent }) {
             </a>
           ) : ''}
         />
-        <DLRow label="สาเหตุที่ล้มเหลว" wide
+        <DLRow label="สาเหตุที่ล้มเหลว"
           value={[payment.failureCode, payment.failureMessage].filter(Boolean).join(' · ')} />
       </DL>
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment, isValidElement } from 'react';
 import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
@@ -34,10 +35,15 @@ import { cn } from '@/lib/utils';
  * Measured from the Figma file at a 1080 container. VERTICAL RHYTHM AND INTERNAL
  * PADDING ARE ABSOLUTE and are written as arbitrary-value classes. HORIZONTAL
  * POSITIONS ARE NOT: the admin sidebar collapses, so a column stated as `w-[500px]`
- * would be wrong the moment it does. The two 500px DL columns are
- * `grid-cols-2 gap-x-[36px]` inside a 22px inset — which IS 500px at 1080 and
- * stays correct at every other width — and the three ~335px columns of the
- * ข้อมูลระบบ card are `grid-cols-3 gap-x-[20px]` in the same box.
+ * would be wrong the moment it does.
+ *
+ * ── ROUND 4'S TWO-COLUMN DEFINITION LIST IS SUPERSEDED ─────────────────────
+ * It was `grid-cols-2 gap-x-[36px]` — two 500px columns at a 1080 container —
+ * with the ข้อมูลระบบ card at `grid-cols-3 gap-x-[20px]`. BOTH ARE GONE. Every
+ * field on both screens is now one row spanning the card's full inner width,
+ * label left and value right; ข้อมูลระบบ is no longer an exception. See
+ * `FIELD_ROW_COLUMNS` for the split, the breakpoint and the arithmetic behind
+ * both.
  *
  * The one absolute horizontal number is the container's max-width, which is a
  * cap rather than a position and is what the proportions are proportions OF.
@@ -698,59 +704,181 @@ export function SectionCard({ icon: Icon, title, editLabel, onEdit, editing, sav
 }
 
 /**
- * The definition list: two columns with a 36px gap, 18px between rows.
+ * ══ THE FIELD ROW — ONE FIELD PER ROW, LABEL LEFT, VALUE RIGHT ══════════════
  *
- * `<dl>` because the rows really are dt/dd pairs. The grid lives on the `<dl>`
- * so each row is a grid ITEM and `wide` is a plain col-span rather than a second
- * container.
+ * ROUND 4'S TWO 500px COLUMNS ARE SUPERSEDED AND GONE. That shape was
+ * `grid-cols-2 gap-x-[36px]` with each cell stacking its term over its
+ * description and the occasional `col-span-full` row. Every field now spans the
+ * card's full inner width with its label on the left and its value on the right,
+ * on one baseline, separated by a hairline rule.
  *
- * `columns` exists for the ข้อมูลระบบ card, which measures three. It is a count
- * rather than a width for the reason the file header gives, and the two literal
- * class strings are written out in full because Tailwind scans text: a
- * `grid-cols-${n}` would compile to nothing and the rows would stack in one
- * column with the markup looking perfectly correct.
+ * The `wide` prop went with it. It meant "span both columns"; there is one
+ * column, so every row is wide and a prop saying so would be a no-op that reads
+ * like a choice. `columns` went the same way — see `SystemCard`.
+ *
+ * ── (1) THE VALUE COLUMN STARTS AT THE SAME PLACE IN EVERY CARD ────────────
+ *
+ * That single alignment down the whole page is most of the effect, and it is the
+ * reason the split is ONE MODULE CONSTANT rather than a prop, a per-card
+ * measurement or a `w-fit` label. A card whose labels are all short — ข้อมูลระบบ
+ * is the live example — would otherwise compute its own narrower column and
+ * break the line the eye is following.
+ *
+ * `FIELD_ROW_COLUMNS` is that source. It is spelled out as a complete literal
+ * for the usual reason (Tailwind matches raw text) and it is asserted to be the
+ * only such split in the tree, so a second card cannot quietly grow its own.
+ *
+ * ── WHY 22% / 1fr AND NOT 22% / minmax(0,1fr) ─────────────────────────────
+ *
+ * MEASURED, NOT PREFERRED. `lg:grid-cols-[22%_minmax(0,1fr)]` — the form you
+ * would reach for first, because `minmax(0,1fr)` is the standard way to stop a
+ * track being pushed wide by unbreakable content — COMPILES TO NOTHING.
+ * Tailwind splits an arbitrary value on the comma, so the template is rejected
+ * and no rule is emitted. It is a complete literal containing no interpolation,
+ * so every shape check in this suite passes it, exactly as `bg-9e-action/12`
+ * did. Run `node scripts/_probe-field-row-columns.mjs` to reproduce; it prints
+ * DEAD for that class and COMPILES for the eight others.
+ *
+ * `1fr` is `minmax(auto, 1fr)`, so the track CAN be pushed by a long unbroken
+ * value. `min-w-0` on the `<dd>` is what prevents it: it clamps the item's
+ * automatic minimum size to zero, which is the same mechanism `minmax(0,…)`
+ * would have used one level up. That class is load-bearing, not tidiness — see
+ * (3) below.
+ *
+ * ── (3) A LONG VALUE WRAPS INSIDE THE VALUE COLUMN ─────────────────────────
+ * Never under the label. The grid guarantees it: the label occupies its own
+ * track, so there is no line for the value to wrap onto beneath it. The address
+ * and the customer note are the live cases.
+ *
+ * ── (4) A CHIP KEEPS ITS CHIP ──────────────────────────────────────────────
+ * A node value renders in the value cell at the cell's own left edge, which is
+ * the same edge a text value starts at. Nothing in the row inspects what the
+ * value IS.
+ *
+ * ── NARROW WIDTHS: THE SPLIT ARRIVES AT `lg`, AND THE ARITHMETIC SAYS WHY ──
+ *
+ * Below `lg` the row STACKS — label above value, which is what shipped before
+ * this round — and the rule between rows survives, because the rule is on the
+ * LIST and not on the row.
+ *
+ * The breakpoint is not a taste call. With the sidebar expanded the card's inner
+ * width is `viewport − 256 (sidebar) − 48 (p-6) − 44 (card px-[22px])`, so:
+ *
+ *     767px  no sidebar   →  inner 675  →  22% = 148px
+ *     768px  md, sidebar  →  inner 420  →  22% =  92px   ← the NARROWEST case
+ *    1023px               →  inner 675  →  22% = 148px
+ *    1024px  lg           →  inner 676  →  22% = 149px
+ *    1440px  capped 1080  →  inner 1036 →  22% = 228px
+ *
+ * The longest label on either screen is `เลขประจำตัวผู้เสียภาษี`, which needs
+ * roughly 130px at 11px. 22% clears that only once the inner width passes ~600px,
+ * i.e. viewport ≥ ~948px, and `lg` is the first Tailwind step above it.
+ *
+ * `md` is the WRONG answer and the table above is why: the content area is at its
+ * narrowest just ABOVE md, not below it, because that is where the 256px sidebar
+ * arrives. A split that switched on at md would turn on precisely where there is
+ * least room for it.
  */
-export function DL({ columns = 2, children }) {
-  return (
-    <dl
-      className={cn(
-        'grid gap-y-[18px]',
-        columns === 3 ? 'grid-cols-3 gap-x-[20px]' : 'grid-cols-2 gap-x-[36px]',
-      )}
-    >
-      {children}
-    </dl>
-  );
+export const FIELD_ROW_COLUMNS = 'lg:grid lg:grid-cols-[22%_1fr] lg:items-baseline lg:gap-x-[1%]';
+
+/**
+ * The field list.
+ *
+ * ── (2) THE DIVIDER IS THE LIST'S, NOT THE ROW'S ───────────────────────────
+ *
+ * `divide-y` compiles to `& > :not([hidden]) ~ :not([hidden])` — a border-TOP on
+ * every child after the first. So a trailing rule is not merely avoided, it is
+ * UNEXPRESSIBLE: there is no last-child rule to suppress, and a one-row card has
+ * no sibling pair and draws nothing at all.
+ *
+ * That matters more than the tidiness. "Divider after each row except the last"
+ * written as a per-row `border-b` plus a `last:border-b-0` is the trailing-element
+ * trap this suite has now caught twice, and it fails in the one place nobody
+ * looks: a row that returns `null` is still a CHILD as far as `:last-child` is
+ * concerned in some hand-rolled variants, so the rule lands under a row that was
+ * dropped. Moving the rule to the container removes the question.
+ *
+ * A dropped row therefore also drops its divider, with nothing to keep in step —
+ * which is what (5) requires and is the reason absent-means-absent and
+ * no-trailing-divider are ONE mechanism here rather than two that must agree.
+ */
+export function DL({ children }) {
+  return <dl className="divide-y divide-[var(--surface-border)]">{children}</dl>;
 }
 
 /**
- * One term/description pair: a 16px term line over a 25px description.
+ * ── (5) ABSENT MEANS ABSENT, AND A WRAPPER DOES NOT DEFEAT IT ──────────────
  *
- * ── AN ABSENT VALUE MEANS AN ABSENT ROW ────────────────────────────────────
- * Carried over from the in-house client's `Row`, whose docstring earned it: the
- * previous shape rendered `value || '—'`, so every optional field the customer
- * skipped printed an em dash and a typical enquiry was mostly a column of them —
- * reading as "we hold nothing about this company" when the truth was "these
- * questions were not asked".
+ * The rule is unchanged from round 4 and its docstring is still the reason for
+ * it: the shape before that rendered `value || '—'`, so every optional field the
+ * customer skipped printed an em dash and a typical enquiry was mostly a column
+ * of them — reading as "we hold nothing about this company" when the truth was
+ * "these questions were not asked". The check lives HERE rather than at each call
+ * site because as a `&&` per row it was applied to some fields and forgotten on
+ * others, which is how the dashes accumulated in the first place.
  *
- * The check lives HERE rather than at each call site, because as a `&&` guard
- * per row it was applied to some fields and forgotten on others, which is how
- * the dashes accumulated in the first place. A caller cannot emit one by
- * accident.
+ * WHAT ROUND 5 FOUND, AND WHAT THIS FIXES. The old test was
+ * `value === null || undefined || '' || false`. A REACT ELEMENT IS ALWAYS
+ * TRUTHY, so `<span className="font-mono">{''}</span>` — a wrapper around
+ * nothing — passed it and rendered a row, a label and a rule around empty space.
+ * Every call site that wraps its value therefore had to repeat the guard itself,
+ * and `mono()`, the mailto link, the tel link and `CourseList` each do. That is
+ * four copies of a rule this component exists to own.
  *
- * `emptyHint` is the deliberate exception, for a missing value that IS the
- * information — an onsite enquiry with no venue, an enquiry naming no course.
- * Those are work for a salesperson, not blanks to hide.
+ * `isEmptyValue` recurses instead, and it is deliberately CONSERVATIVE about
+ * what it will call empty:
+ *
+ *   · `true` joins the empty set. React renders a boolean as nothing, so a row
+ *     whose value is `true` was always a guaranteed empty row; the old test
+ *     caught only `false`.
+ *   · ARRAYS and FRAGMENTS are pure wrapping — empty when everything inside is.
+ *   · A HOST element (`typeof type === 'string'`) is empty when its children are,
+ *     EXCEPT the void and self-drawing tags, which are content in themselves.
+ *   · A COMPONENT element is NEVER called empty. Its output cannot be seen from
+ *     here, and guessing would drop a row that renders fine. That direction is
+ *     the safe one: it is exactly today's behaviour.
  */
-export function DLRow({ label, value, wide = false, emptyHint = '', action = null }) {
-  const isEmpty = value === null || value === undefined || value === '' || value === false;
-  if (isEmpty && !emptyHint) return null;
+const SELF_DRAWING = new Set(['img', 'svg', 'hr', 'br', 'input', 'canvas', 'video', 'iframe', 'picture']);
+
+export function isEmptyValue(value) {
+  if (value === null || value === undefined || value === '' || value === false || value === true) return true;
+  if (Array.isArray(value)) return value.every(isEmptyValue);
+  if (isValidElement(value)) {
+    if (typeof value.type === 'string') {
+      return SELF_DRAWING.has(value.type) ? false : isEmptyValue(value.props?.children);
+    }
+    // A fragment wraps and draws nothing of its own; anything else is a
+    // component whose output this function cannot see.
+    return value.type === Fragment ? isEmptyValue(value.props?.children) : false;
+  }
+  return false;
+}
+
+/**
+ * One field: `label` in the left column, `value` in the right.
+ *
+ * `emptyHint` is the deliberate exception to (5), for a missing value that IS the
+ * information — an onsite enquiry with no venue, an enquiry naming no course.
+ * Those are work for a salesperson, not blanks to hide. A row with a hint renders
+ * and therefore carries its divider like any other; a row without one renders
+ * nothing, and the divider goes with it because the divider was never the row's.
+ */
+export function DLRow({ label, value, emptyHint = '', action = null }) {
+  const empty = isEmptyValue(value);
+  if (empty && !emptyHint) return null;
 
   return (
-    <div className={cn('min-h-[40px]', wide && 'col-span-full')}>
-      <dt className="text-[11px] leading-[16px] text-[var(--text-muted)]">{label}</dt>
-      <dd className="flex items-start justify-between gap-[10px] text-[13px] leading-[25px] text-[var(--text-primary)]">
-        {isEmpty
+    <div className={cn('py-[11px]', FIELD_ROW_COLUMNS)}>
+      <dt className="text-[11px] leading-[16px] text-[var(--text-muted)] lg:leading-[25px]">{label}</dt>
+      {/*
+        `min-w-0` IS LOAD-BEARING — see the note on FIELD_ROW_COLUMNS. Without it
+        the `1fr` track takes its minimum from the value's min-content width, so
+        one long unbroken address widens the value column and drags the label
+        column out of alignment with every other card on the page. That is the
+        one thing (1) cannot survive.
+      */}
+      <dd className="flex min-w-0 items-start justify-between gap-[10px] text-[13px] leading-[25px] text-[var(--text-primary)]">
+        {empty
           ? <span className="min-w-0 italic text-[var(--text-muted)]">{emptyHint}</span>
           : <span className="min-w-0">{value}</span>}
         {action}
@@ -760,12 +888,30 @@ export function DLRow({ label, value, wide = false, emptyHint = '', action = nul
 }
 
 /**
- * The ข้อมูลระบบ card — the last card on both screens, and shaped unlike the
- * others because it is machine data rather than customer data.
+ * The ข้อมูลระบบ card — the last card on both screens.
  *
  * Inner container inset 1px; title row 16px in and 14px down with a 25x25 icon
- * and the bold 17px label 33px in (so 8px after the box); a THREE-column
- * definition list.
+ * and the bold 17px label 33px in (so 8px after the box).
+ *
+ * ── IT IS NO LONGER A THREE-COLUMN GRID. IT IS ROWS, LIKE EVERY OTHER CARD ─
+ *
+ * It measured `grid-cols-3 gap-x-[20px]` and it was the one card on either
+ * screen that did not use the shared definition list's shape. That exception is
+ * withdrawn, and the reason is (1): the value column starting at the same place
+ * in every card is most of what makes the page read as designed, and this is the
+ * LAST card on both screens — the one a reader's eye arrives at with the
+ * alignment already established. A three-column grid there breaks the line at
+ * the bottom of every page.
+ *
+ * The case for keeping the grid was that the values are short, and they are:
+ * `web`, an IP, a date, two ids. But short values are the argument for a grid
+ * only if the card is read on its own, and it never is. What the grid actually
+ * bought was vertical space — six fields in two rows rather than six — and the
+ * card sits at the bottom of a scrolling page where that is worth least.
+ *
+ * (It holds SIX rows on the public screen and FIVE in-house, not three; the
+ * three was the column count. Worth stating because "three short values" is the
+ * natural misreading of the old markup and it changes the trade-off.)
  */
 export function SystemCard({ icon: Icon, title, children }) {
   return (
@@ -778,7 +924,7 @@ export function SystemCard({ icon: Icon, title, children }) {
           <h2 className="text-[12px] font-bold leading-[17px] text-[var(--text-secondary)]">{title}</h2>
         </div>
         <div className="pt-[14px]">
-          <DL columns={3}>{children}</DL>
+          <DL>{children}</DL>
         </div>
       </div>
     </section>
@@ -909,6 +1055,41 @@ export function DetailError({ message }) {
 
 /**
  * The two form controls both edit forms are built out of.
+ *
+ * ══ THE EDIT VIEW KEEPS LABEL-ABOVE-CONTROL. THAT IS A DECISION, NOT DRIFT ══
+ *
+ * Round 7 moved the READ view to label-left / value-right. The edit forms were
+ * NOT moved with it and stay as they are — a label stacked over its control,
+ * two-up at `sm` via the callers' own `sm:grid-cols-2`. Recorded here because
+ * "the two views have different layouts" is exactly what an unexplained
+ * inconsistency looks like, and the next reader is owed the reason rather than
+ * left to assume one of the two was forgotten.
+ *
+ * The read view's label column exists to buy ONE ALIGNMENT DOWN THE WHOLE PAGE
+ * (see `FIELD_ROW_COLUMNS`), and that alignment is worth a fifth of the width
+ * because a read view is SCANNED — the reader is looking for one field among
+ * twenty and the shared left edge is what makes that a glance instead of a read.
+ *
+ * An edit form is not scanned, it is filled, one control at a time, and the two
+ * properties that matter there are the opposite ones:
+ *
+ *   · A CONTROL WANTS THE WIDTH. Spending 22% on a label leaves 77% for an
+ *     input, and the callers pair their fields two-up at `sm` — so a
+ *     label-left row inside a two-column grid gives each input about 39% of the
+ *     card. `ที่อยู่` and the international address lines do not fit that.
+ *   · A LABEL MUST BE UNAMBIGUOUS AT THE POINT OF FOCUS. Directly above its
+ *     control is the shortest possible distance between the two; across a
+ *     gutter is further, and it is further in the axis the eye is not moving in
+ *     while tabbing down a form.
+ *
+ * And the difference is legible as STATE rather than as inconsistency, because
+ * it never appears next to the read view: `SectionCard` swaps one for the other
+ * and also changes its border to `border-9e-brand/40` while editing. The two
+ * shapes are never on screen together to be compared.
+ *
+ * The read view's `emptyHint` rows are the one place the two could have been
+ * made to agree cheaply, and they were not, for the same reason: a hint is a
+ * sentence to be read, not a field to be filled.
  *
  * ── WHY THESE ARE HERE AND THE FIELD LISTS ARE NOT ──────────────────────────
  * The file header's test is "would a change to this be WRONG for one of them".
