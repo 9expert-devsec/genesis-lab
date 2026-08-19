@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Image from "next/image";
+import {
+  isViewerScrollKey,
+  isViewerWheel,
+  stripScrollState,
+} from "@/lib/home/featureStripScroll";
 
 /**
  * The filmstrip under the featured card: EVERY item in the pool, scrolled
@@ -61,26 +66,21 @@ const TONE_CLASSES = {
   cyan: "bg-[var(--9e-fc-cyan-bg)] text-[var(--9e-fc-cyan)]",
 };
 
-/** The keys a browser scrolls a container with. See handleKeyDown. */
-const SCROLL_KEYS = new Set([
-  "ArrowLeft",
-  "ArrowRight",
-  "Home",
-  "End",
-  "PageUp",
-  "PageDown",
-]);
+/**
+ * The edge/thumb arithmetic and the "is this the viewer?" predicates live in
+ * src/lib/home/featureStripScroll.js. They moved out so they could be TESTED:
+ * inside here they were reachable only through a live scroll container with a
+ * real compositor, which the node suite does not have, so they were guarded by
+ * nothing. This component calls those functions, so the tests exercise what
+ * actually runs.
+ */
 
 /**
- * How close to an edge still counts as "at the edge", in px.
- *
- * Not zero. `scrollLeft` is fractional on a zoomed or fractionally-scaled
- * display and `scrollWidth - clientWidth` rounds independently of it, so an
- * exact comparison leaves a strip that is visually at its end reporting one
- * stray pixel of remaining scroll — which mounts a trailing fade over nothing.
- * That is precisely the lying fade this component is supposed to avoid.
+ * Sub-pixel slack when asking "is the active card fully inside the scrollport?".
+ * Rect maths is fractional and a card that is visually flush can read as 0.3px
+ * outside, which would make the strip re-scroll on every tick for no reason.
  */
-const EDGE_EPSILON = 2;
+const VISIBILITY_EPSILON = 2;
 
 /**
  * The filmstrip, its edge fades, its position bar, and the controls that drive
@@ -116,17 +116,9 @@ export function FeatureContentStrip({
   const syncScrollState = useCallback(() => {
     const el = stripRef.current;
     if (!el) return;
+    // Read the three numbers here, decide what they mean in the pure module.
     const { scrollLeft, scrollWidth, clientWidth } = el;
-    const maxScroll = scrollWidth - clientWidth;
-    setScrollState({
-      overflows: maxScroll > EDGE_EPSILON,
-      atStart: scrollLeft <= EDGE_EPSILON,
-      atEnd: scrollLeft >= maxScroll - EDGE_EPSILON,
-      // Both as percentages of the track, because the track's own width is a
-      // flex result this component never measures.
-      thumbWidth: scrollWidth > 0 ? (clientWidth / scrollWidth) * 100 : 100,
-      thumbLeft: scrollWidth > 0 ? (scrollLeft / scrollWidth) * 100 : 0,
-    });
+    setScrollState(stripScrollState({ scrollLeft, scrollWidth, clientWidth }));
   }, []);
 
   // ── WHAT IS OBSERVED, AND WHY EACH ONE IS NEEDED ──────────────────────────
@@ -209,8 +201,8 @@ export function FeatureContentStrip({
     // ignores the strip's own scroll padding. This arithmetic holds whatever
     // the box model does.
     const fullyVisible =
-      cardBox.left >= stripBox.left - EDGE_EPSILON &&
-      cardBox.right <= stripBox.right + EDGE_EPSILON;
+      cardBox.left >= stripBox.left - VISIBILITY_EPSILON &&
+      cardBox.right <= stripBox.right + VISIBILITY_EPSILON;
     if (fullyVisible) return;
 
     // ── LAND THE CARD CLEAR OF THE LEADING FADE, NOT UNDER IT ───────────────
@@ -267,9 +259,7 @@ export function FeatureContentStrip({
   // named explicitly.
   const handleWheel = useCallback(
     (event) => {
-      if (event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
-        onTakeControl?.();
-      }
+      if (isViewerWheel(event)) onTakeControl?.();
     },
     [onTakeControl]
   );
@@ -280,7 +270,7 @@ export function FeatureContentStrip({
   // auto-slide transiently, which is the right strength for that gesture.
   const handleKeyDown = useCallback(
     (event) => {
-      if (SCROLL_KEYS.has(event.key)) onTakeControl?.();
+      if (isViewerScrollKey(event.key)) onTakeControl?.();
     },
     [onTakeControl]
   );
