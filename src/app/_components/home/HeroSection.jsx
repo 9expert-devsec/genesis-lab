@@ -278,10 +278,14 @@ export function HeroSection() {
     lg:w-[640px]
 
     /* Large Desktop 1280px+ */
-    xl:-bottom-[15%]
+    xl:-bottom-[20%]
     xl:-right-[15%]
     xl:h-[500px]
     xl:w-[700px]
+
+    /* Large Desktop 1280px+ */
+    min-[1537px]:-bottom-[40%]
+    min-[1537px]:-right-[15%]
   "
           >
             <Image
