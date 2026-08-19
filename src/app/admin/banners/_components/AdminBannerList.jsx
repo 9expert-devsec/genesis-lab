@@ -2,14 +2,12 @@
 
 import { useState, useTransition } from 'react';
 import { deleteBanner } from '@/lib/actions/banners';
+import { ALL_TYPE_LABELS } from '@/lib/banners/bannerTypes';
 
-const TYPE_LABELS = {
-  youtube:              'Video Banner',
-  image_desktop:        'Hero Image (Desktop)',
-  image_mobile:         'Hero Image (Mobile)',
-  image_button_desktop: 'Section Banner (Desktop)',
-  image_button_mobile:  'Section Banner (Mobile)',
-};
+// Was a local copy of the five legacy labels. It is now the shared map, which
+// also covers the four new type ids — so a record saved as `image` or `video`
+// gets a name here instead of falling through to its raw id.
+const TYPE_LABELS = ALL_TYPE_LABELS;
 
 export function AdminBannerList({ banners }) {
   const [items, setItems] = useState(banners);

@@ -6,27 +6,56 @@ import Image from 'next/image';
 import * as LucideIcons from 'lucide-react';
 import { Trash2 } from 'lucide-react';
 import { createBanner, updateBanner } from '@/lib/actions/banners';
+import {
+  ALL_TYPE_LABELS,
+  BANNER_TYPE_HINTS,
+  BANNER_TYPES,
+  LEGACY_TYPE_HINTS,
+  LEGACY_TYPE_IDS,
+  LEGACY_TYPES,
+} from '@/lib/banners/bannerTypes';
 import { FEATURE_TAG_ICONS } from '@/lib/schemas/banner';
 
-const TYPE_OPTIONS = [
-  { value: 'youtube',              label: 'Video Banner (YouTube)' },
-  { value: 'image_desktop',        label: 'Hero Image – Desktop (1920×700)' },
-  { value: 'image_mobile',         label: 'Hero Image – Mobile (360×584)' },
-  { value: 'image_button_desktop', label: 'Section Banner + Button – Desktop (1920×700)' },
-  { value: 'image_button_mobile',  label: 'Section Banner + Button – Mobile (360×584)' },
-];
+/**
+ * The dropdown, built from the shared map instead of a local copy.
+ *
+ * ── THIS SLICE OFFERS THE LEGACY IDS ONLY ───────────────────────────────────
+ * LEGACY_TYPE_IDS, not ALL_TYPE_IDS. The four new types have no form fields
+ * behind them yet — no course picker, no article picker — so offering them
+ * here would let an admin save a `course` record with nothing in it. The
+ * schema ACCEPTS all nine (so nothing has to migrate yet); the form OFFERS
+ * five. They widen together in the admin slice.
+ *
+ * ── THE LABELS LOST THEIR PIXEL SPEC, AND THAT IS THE FIX ───────────────────
+ * These five read "Hero Image – Desktop (1920×700)" and so on, while the list
+ * screen one click away read "Hero Image (Desktop)". Every one of the five
+ * disagreed. The shared map holds the NAME; the spec is a hint, and still
+ * renders on the upload field below where it is actionable.
+ */
+const TYPE_OPTIONS = LEGACY_TYPE_IDS.map((value) => ({
+  value,
+  label: ALL_TYPE_LABELS[value],
+}));
 
 export function BannerForm({ banner }) {
   const isEdit = !!banner?._id;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [type, setType] = useState(banner?.type ?? 'image_desktop');
+  const [type, setType] = useState(banner?.type ?? LEGACY_TYPES.IMAGE_DESKTOP);
   const [imagePreview, setImagePreview] = useState(banner?.image_url ?? '');
   const [featureTags, setFeatureTags] = useState(banner?.feature_tags ?? []);
   const [errors, setErrors] = useState({});
 
-  const isYouTube = type === 'youtube';
-  const isImage   = type.startsWith('image');
+  // BEHAVIOUR UNCHANGED — the literals are gone, the tests are the same ones.
+  // `BANNER_TYPES.IMAGE` is the string 'image', so `startsWith` still matches
+  // all four legacy image_* ids exactly as before.
+  //
+  // These two SUBSTRING tests are on borrowed time and the admin slice replaces
+  // them: `hasButton` reads a naming convention rather than a field, and
+  // `isImage` will answer true for the new `image` id as well — which is right
+  // by accident, not by design.
+  const isYouTube = type === LEGACY_TYPES.YOUTUBE;
+  const isImage   = type.startsWith(BANNER_TYPES.IMAGE);
   const hasButton = type.includes('button');
 
   function handleFileChange(e) {
@@ -217,7 +246,10 @@ export function BannerForm({ banner }) {
         <Field
           label="รูปภาพ Banner *"
           error={errors.image_url}
-          hint={type.includes('desktop') ? '1920×700 px แนะนำ' : '360×584 px แนะนำ'}
+          // Was `type.includes('desktop') ? '1920×700…' : '360×584…'` — a sixth
+          // copy of the specs AND a substring test that would silently answer
+          // "mobile" for the new `image` type, which contains neither word.
+          hint={LEGACY_TYPE_HINTS[type] ?? BANNER_TYPE_HINTS[type]}
         >
           <input type="hidden" name="image_url" value={banner?.image_url ?? ''} />
           <input type="hidden" name="image_public_id" value={banner?.image_public_id ?? ''} />
