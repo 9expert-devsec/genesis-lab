@@ -244,14 +244,42 @@ test('the read-only flag is derived from the STORED status', () => {
  * a cancelled record).
  */
 test('there is exactly ONE producer of an edit affordance, and it is gated', () => {
+  /**
+   * ── THE GATE ANSWERS TWO QUESTIONS NOW, AND STILL ONLY ONE PLACE ASKS ─────
+   *
+   * `editProps` gained a second parameter. The round card must lose its แก้ไข
+   * when there are NO ROUNDS to offer — an editor whose only control is an empty
+   * dropdown is a button that leads nowhere — and that is a different reason
+   * from the cancellation lock.
+   *
+   * The first draft put the second reason at the CALL SITE, as
+   * `rounds.length ? editProps('course') : { editLabel: 'แก้ไข' }`, and the
+   * sibling assertion below caught it: that spreads an object which is not from
+   * `editProps` at all. The guard was right and the code moved, not the test.
+   *
+   * SO THE CLAIM IS UNCHANGED — one producer, and it is gated on `readOnly` —
+   * and only the two shapes it is matched by have widened. Both are still
+   * pinned exactly rather than loosened to a substring: the parameter list must
+   * carry `section` first, and `readOnly` must still be part of the condition.
+   */
   const producers = (DETAIL.code.match(/onEdit:/g) ?? []).length;
   assert.equal(producers, 1,
     `${producers} places assign an onEdit. Exactly one — editProps — may, or a card can be `
     + 'given an ungated edit button.');
-  assert.match(DETAIL.code, /const editProps = \(section\) => \(\{/,
+  assert.match(DETAIL.code, /const editProps = \(section,[^)]*\) => \(\{/,
     'the single gate `editProps` is gone');
-  assert.match(DETAIL.code, /onEdit:\s*readOnly \? undefined :/,
-    'the one onEdit is not gated on readOnly');
+  assert.match(DETAIL.code, /onEdit:\s*\(readOnly \|\| !available\) \? undefined :/,
+    'the one onEdit is not gated on readOnly — or the second reason replaced it rather than joining it');
+
+  /**
+   * `readOnly` ALONE MUST STILL SUFFICE. A gate that answers two questions can
+   * answer the first one too narrowly: `available && !readOnly` would look
+   * identical at a glance and would leave a cancelled record editable whenever
+   * rounds happened to be available. The condition is an OR of reasons to
+   * REFUSE, and this is what says so.
+   */
+  assert.ok(!/onEdit:\s*\(available &&/.test(DETAIL.code),
+    'the gate ANDs its reasons — a cancelled record would stay editable');
 });
 
 /**

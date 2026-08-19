@@ -4,6 +4,54 @@ import { getRegistrationById } from '@/lib/actions/registrations';
 import { RegistrationDetailClient } from '../_components/RegistrationDetailClient';
 import { RecordHistory } from '@/components/audit/RecordHistory';
 import { refNo } from '@/lib/refNo';
+import { PUBLIC_SCHEDULE_STATUSES, listSchedulesByCourse } from '@/lib/api/schedules';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+
+/**
+ * THE ROUNDS THIS REGISTRATION MAY BE MOVED TO, resolved HERE on the server.
+ *
+ * ── WHY NOT IN THE CLIENT ─────────────────────────────────────────────────
+ * `RegistrationDetailClient` is `'use client'`. A fetch there would run in the
+ * browser, once per viewer, with none of the Data Cache this page shares —
+ * exactly the reasoning the in-house page already records for `courses`.
+ *
+ * ── THE SAME SOURCE OF TRUTH THE PUBLIC WIZARD USES ───────────────────────
+ * `listSchedulesByCourse`, the same call `RegisterPageContent` makes, so the
+ * admin never sees a set of rounds the booking flow does not have. The
+ * registration stores a course_id CODE, so the course ObjectId is resolved
+ * first — `getCourseByCodeInsensitive` for the mixed-case ids.
+ *
+ * ── PAST ROUNDS ARE NOT HERE AND CANNOT BE ────────────────────────────────
+ * The endpoint applies a `>= today` bound UNCONDITIONALLY and `status` does not
+ * lift it (measured and curl-verified in lib/api/schedules.js). FULL rounds ARE
+ * included — the admin case is correction rather than booking, so a sold-out
+ * round is a legitimate destination.
+ *
+ * NOTHING HERE WIDENS THE ENDPOINT FOR ADMIN, deliberately. It is a public data
+ * path serving the registration wizard, and adding a parameter to loosen its
+ * date filter for one admin screen is how a guard that protects the booking flow
+ * gets relaxed by someone who only needed to read. The consequence — a stored
+ * round that has already run is not in this list — is handled by rendering it as
+ * a MARKED, UNSELECTABLE option; see `storedRoundOption`.
+ *
+ * ── IT NEVER THROWS ───────────────────────────────────────────────────────
+ * This route is force-dynamic and has to render regardless. An upstream failure
+ * degrades to an EMPTY list, which the card reads as "cannot offer a change"
+ * and says so — rather than taking the page down over a dropdown.
+ */
+async function roundsForRegistration(doc) {
+  try {
+    const course = await getCourseByCodeInsensitive(doc.courseId);
+    if (!course?._id) return [];
+    const { items } = await listSchedulesByCourse(course._id, {
+      limit: 50,
+      status: PUBLIC_SCHEDULE_STATUSES,
+    });
+    return items ?? [];
+  } catch {
+    return [];
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -39,9 +87,14 @@ export default async function Page({ params }) {
    * clicked ประวัติการดำเนินการ has already asked the question the accordion
    * would ask again.
    */
+  // Alongside the history slot, not before it: neither depends on the other and
+  // a serial await would add an upstream round trip to every page load.
+  const rounds = await roundsForRegistration(doc);
+
   return (
     <RegistrationDetailClient
       doc={doc}
+      rounds={rounds}
       history={(
         <RecordHistory
           menu="registrations"

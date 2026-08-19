@@ -155,8 +155,27 @@ const BASE_DOC = {
   updatedAt: '2025-08-02T03:00:00.000Z',
 };
 
+/**
+ * ROUNDS ARE SUPPLIED, because this file's subject is the CANCELLATION LOCK and
+ * an empty round list would suppress the ข้อมูลคอร์ส card's แก้ไข for an
+ * unrelated reason — every count here would then be measuring two things at
+ * once and would drop by one for a cause that has nothing to do with status.
+ *
+ * `ROUNDS` includes the round the fixture already holds (`class-9`), so the
+ * stored round is LIVE here and the no-longer-offered path is not on. That path
+ * has its own file; mixing it in would put a disabled option in the middle of
+ * every lock assertion.
+ */
+const ROUNDS = [
+  { _id: 'class-9', dates: ['2026-08-12', '2026-08-13'], type: 'hybrid', status: 'open' },
+  { _id: 'class-10', dates: ['2026-09-01'], type: 'classroom', status: 'open' },
+];
+
 const html = (status, extra = {}) =>
-  renderToStaticMarkup(createElement(RegistrationDetailClient, { doc: { ...BASE_DOC, status, ...extra } }));
+  renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, status, ...extra },
+    rounds: ROUNDS,
+  }));
 
 const cancelled = html('cancelled');
 const paid      = html('paid', { payment: { method: 'promptpay', omiseStatus: 'successful', omiseChargeId: 'chrg_test_1', paidAt: '2025-08-02T03:00:00.000Z' } });
@@ -219,6 +238,32 @@ test('a paid document renders the edit controls', () => {
   // Still five: the attendee card moved to its own TAB rather than out of the
   // page, and every panel is in the markup with the inactive ones `hidden`.
   assert.equal(countExactly(paid, 'แก้ไข'), 5, 'all five editable cards keep their แก้ไข button');
+});
+
+test('a course with NO rounds loses only the ROUND card’s แก้ไข, not the others', () => {
+  /**
+   * ── A SECOND REASON AN AFFORDANCE CAN BE ABSENT, AND IT MUST NOT SPREAD ───
+   *
+   * `rounds` is empty when upstream is down, when the course was withdrawn, or
+   * when a course simply has no upcoming rounds. Opening an editor whose only
+   * control is an empty dropdown is a button that leads nowhere, so the round
+   * card closes — but NOTHING ELSE MAY.
+   *
+   * That is the assertion worth having. `available` is threaded through the same
+   * gate as the cancellation lock, and a gate that answers two questions is a
+   * gate that can answer the second one too broadly.
+   */
+  const noRounds = renderToStaticMarkup(createElement(RegistrationDetailClient, {
+    doc: { ...BASE_DOC, status: 'pending' },
+    rounds: [],
+  }));
+  assert.equal(countExactly(noRounds, 'แก้ไข'), 4,
+    'exactly one card — the round card — should lose its button when there are no rounds');
+  assert.equal(countExactly(pending, 'แก้ไข'), 5, 'the same record WITH rounds keeps all five');
+
+  // …and the card says why, rather than rendering a header with nothing in it.
+  assert.ok(noRounds.includes('ไม่มีรอบให้เลือกในขณะนี้'),
+    'the round card went read-only without explaining itself');
 });
 
 test('a paid document renders exactly ONE status action, and it is cancel', () => {
