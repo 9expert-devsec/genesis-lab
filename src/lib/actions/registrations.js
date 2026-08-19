@@ -15,6 +15,7 @@ import {
   statusLabel,
 } from '@/lib/registrations/statuses';
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
+import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
@@ -350,7 +351,25 @@ export async function updateRegistration(id, data, source = 'public') {
       'contactFirstName','contactLastName','contactRole','contactDepartment',
       'contactEmail','contactPhone','contactLine',
       'quotationCountry','quotationCompany','taxId','branchType','branchCode',
-      'thaiAddress','internationalAddress','message','adminNotes',
+      'thaiAddress','internationalAddress','message',
+      /**
+       * ── `adminNotes` IS GONE FROM THIS LIST, AND ITS ABSENCE IS THE LOCK ──
+       *
+       * Internal notes are APPEND-ONLY and this action is a `$set` of whatever
+       * it is handed. Leaving the name here would have been the entire hole:
+       * a caller could send `adminNotes: []` and erase the record, or send a
+       * rewritten array and overwrite any note in it — which is exactly the
+       * failure the append-only design exists to prevent, reachable through a
+       * different door.
+       *
+       * The UI absence of an edit control is NOT the enforcement. Every export
+       * of a `'use server'` module is a POST endpoint; the enforcement is that
+       * the only action which touches this field uses `$push` and takes a
+       * single body string. See `addInternalNote` below.
+       *
+       * test/fs/internalNotesAppendOnly pins this absence, because re-adding
+       * the name is a one-word change that no render test could see.
+       */
     ];
     for (const f of inhouseFields) {
       if (data[f] !== undefined) update[f] = data[f];
@@ -499,6 +518,122 @@ export async function updateRegistration(id, data, source = 'public') {
   recordAdminActionAfter({
     menu:        'registrations',
     action:      'update',
+    entity:      entityForSource(source),
+    recordId:    String(id),
+    recordLabel: '',
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
+  return { ok: true };
+}
+
+// ── Internal notes (append-only) ───────────────────────────────────
+
+/**
+ * ADD ONE INTERNAL NOTE. Both sources. The only writer of `adminNotes`.
+ *
+ * ══ WHY THIS IS ITS OWN ACTION AND NOT A FIELD ON updateRegistration ════════
+ *
+ * Round 5 established the reason and it is about the AUDIT TRAIL being true.
+ * The public history feed says `แก้ไขข้อมูลใบสมัคร` for every edit, because
+ * `updateRegistration` genuinely does not know which field changed — it is a
+ * `$set` of an allowlisted bag. Routing notes through it would file "somebody
+ * edited this registration" when what happened was "somebody added a note", and
+ * the feed would be technically true and useless. A dedicated action makes the
+ * history row say `เพิ่มบันทึกภายใน`, on both sources.
+ *
+ * ══ APPEND-ONLY IS ENFORCED HERE, NOT BY THE ABSENCE OF UI ══════════════════
+ *
+ * THE REASON, at the place the action lives, because this is where someone will
+ * come to add an edit: a single mutable text field lets the SECOND WRITER
+ * SILENTLY OVERWRITE THE FIRST. That is the failure this feature replaces —
+ * in-house's `adminNotes` was one String and two salespeople could not both use
+ * it. Allowing edits reintroduces exactly that defect one level up: the note is
+ * still overwritable, just one click deeper and with no record that it happened.
+ * Internal notes are a RECORD TO READ BACK, not a document to revise.
+ *
+ * Three things make that structural rather than conventional:
+ *   1. `$push`, never `$set`. There is no code path here that can replace the
+ *      array or any element of it.
+ *   2. THE SIGNATURE. It takes a body string and nothing else — no index, no
+ *      note id, no array. A caller cannot NAME an existing note to change it,
+ *      so a hand-crafted POST has nothing to aim at. This is why the subdocument
+ *      has `_id: false`.
+ *   3. `adminNotes` is NOT in `updateRegistration`'s allowlist — see the note
+ *      there. That was the door round the back.
+ *
+ * ══ THE NOTE BODY NEVER REACHES AN AUDIT ROW ════════════════════════════════
+ *
+ * These records carry names, emails, phones and tax ids, and AN INTERNAL NOTE IS
+ * THE FIELD MOST LIKELY TO QUOTE A CUSTOMER VERBATIM — what they asked for, what
+ * they can afford, who to call. The audit trail is append-only and presently
+ * forever, so anything copied into it cannot be redacted when a deletion request
+ * arrives.
+ *
+ * The row records THAT a note was added, BY WHOM, and WHEN. Not what it said.
+ * The `before`/`after` slots are deliberately unused; the contract caps this
+ * entity at status_only and the writer reduces whatever it is handed, but the
+ * discipline is here as well as there.
+ */
+export async function addInternalNote(id, body, source = 'public') {
+  const session = await requireAdmin('registrations');
+  if (!id) return { ok: false, error: 'Missing id' };
+
+  // Normalised BEFORE the emptiness test, so "is this empty" is asked of the
+  // exact string that would have been stored. Testing the raw input instead
+  // lets a body of spaces through and stores '' — a byline attached to nothing.
+  const note = normalizeNoteBody(body);
+  if (!note) return { ok: false, error: 'กรุณากรอกบันทึก' };
+
+  await dbConnect();
+  const Model = getModel(source);
+
+  /**
+   * THE CANCELLATION LOCK, same filter as every other editable card.
+   *
+   * A cancelled record is read-only and the notes card is not an exception —
+   * "the card obeys the cancellation lock like every other editable card" was
+   * the instruction, and the lock lives in the FILTER for the same reason it
+   * does everywhere else on this screen: a preceding read can be raced by the
+   * cancel it is checking for.
+   */
+  const doc = await Model.findOneAndUpdate(
+    { _id: id, status: { $ne: 'cancelled' } },
+    {
+      $push: {
+        adminNotes: buildNoteEntry({
+          body: note,
+          authorId:   session.user?.id,
+          // DENORMALISED ON PURPOSE — the name AT THE TIME OF WRITING. It must
+          // not be re-resolved from authorId later; see the reasoning in
+          // lib/registrations/internalNotes. A future reader will see the
+          // duplication and want to normalise it away.
+          authorName: session.user?.name,
+        }),
+      },
+    },
+    { new: true, runValidators: false },
+  );
+
+  if (!doc) {
+    // Same ambiguity as every other gate here — no such id, or a locked one.
+    // One extra read on the refusal path only, so the messages stay distinct.
+    const existing = await Model.findById(id).select('status').lean();
+    if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+    return { ok: false, error: 'รายการนี้ถูกยกเลิกแล้ว จึงเพิ่มบันทึกไม่ได้' };
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  // THE ACT, THE ACTOR, THE TIME. NOT THE BODY. See the header.
+  recordAdminActionAfter({
+    menu:        'registrations',
+    // `notes`, NOT a new `note`. This is the action in-house's retired
+    // `updateInhouseAdminNotes` already wrote, so historical rows keep their
+    // title and the shared action produces the same row on both sources. A new
+    // verb would have split one event into two names for no reason.
+    action:      'notes',
     entity:      entityForSource(source),
     recordId:    String(id),
     recordLabel: '',

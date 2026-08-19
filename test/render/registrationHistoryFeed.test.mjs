@@ -211,16 +211,44 @@ test('(b) the vocabulary carries EXACTLY the actions that are written', () => {
     [...readSource(rel).code.matchAll(/action:\s*'([a-z_-]+)'/g)].map((m) => m[1])
   );
 
+  /**
+   * ── THE IN-HOUSE SET IS A UNION NOW, AND THAT IS THE CHANGE ───────────────
+   *
+   * It used to read `written('inhouse-registrations.js')` alone, because that
+   * file was the only writer of in-house rows. Round 6 moved two things into the
+   * SHARED module: internal notes (`addInternalNote`) and field edits (the
+   * in-house screen now calls `updateRegistration`). Both record with
+   * `entity: entityForSource(source)`, so both can file an IN-HOUSE row from
+   * registrations.js.
+   *
+   * Reading one file would therefore have understated what in-house writes — and
+   * it did: this assertion is what caught `update` having no in-house title,
+   * which would have rendered the raw English enum on a Thai feed. Nobody
+   * noticed by reading.
+   *
+   * `delete` appears in both files and the union absorbs it, which is correct:
+   * the question is "can a row with this action reach this feed", not "which
+   * file wrote it".
+   */
+  const SHARED = written('src/lib/actions/registrations.js');
+  const INHOUSE_OWN = written('src/lib/actions/inhouse-registrations.js');
+
   assert.deepEqual(
     new Set(Object.keys(PUBLIC_ACTION_TITLES)),
-    written('src/lib/actions/registrations.js'),
+    SHARED,
     'the public titles and the public actions have drifted apart',
   );
   assert.deepEqual(
     new Set(Object.keys(INHOUSE_ACTION_TITLES)),
-    written('src/lib/actions/inhouse-registrations.js'),
+    new Set([...INHOUSE_OWN, ...SHARED]),
     'the in-house titles and the in-house actions have drifted apart',
   );
+
+  // The union is not vacuous: the in-house file still writes actions of its own,
+  // so this is a union of two non-empty sets rather than the shared set wearing
+  // a different name.
+  assert.ok(INHOUSE_OWN.size >= 2, `the in-house file writes only ${INHOUSE_OWN.size} actions`);
+  assert.ok(INHOUSE_OWN.has('status'), 'the in-house file stopped writing its own status action');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -269,17 +297,36 @@ test('(c) the in-house notes row is titled, and its BODY is still not recorded',
   assert.equal(lines[1], 'ดำเนินการโดย ทีมขาย');
 });
 
-test('(c) PUBLIC has no notes action, so it says what WAS recorded', () => {
+test('(c) PUBLIC NOW HAS A notes ACTION, because it genuinely writes one', () => {
   /**
-   * THE ASYMMETRY, ASSERTED. Public notes are one field among many in
-   * `updateRegistration`, which records `update`. Titling a public `update` as
-   * "เพิ่มบันทึกภายใน" would be a label asserting something the row does not
-   * hold — the row genuinely does not know which field changed.
+   * ══ THE ASYMMETRY IS GONE, AND THE OLD TEST'S REASONING IS WHY THIS IS OK ══
+   *
+   * This asserted `!('notes' in PUBLIC_ACTION_TITLES)`. The reasoning was
+   * sound and is worth keeping in view: public notes used to be one field among
+   * many in `updateRegistration`, which records `update`, so titling a public
+   * `update` as "เพิ่มบันทึกภายใน" would have been a label asserting something
+   * the row does not hold.
+   *
+   * ROUND 6 DID NOT RELAX THAT — it removed its cause. `addInternalNote` is a
+   * dedicated action on BOTH sources and records `action: 'notes'` directly, so
+   * a public notes row now really does mean a note was added. The title is
+   * earned rather than borrowed.
+   *
+   * THE CLAIM THAT SURVIVES UNCHANGED is the one that was actually load-bearing:
+   * `update` must still not be titled as if it knew which field changed. That is
+   * asserted below and is byte-identical to what it was.
    */
-  assert.ok(!('notes' in PUBLIC_ACTION_TITLES), 'public grew a notes action it does not write');
+  assert.ok('notes' in PUBLIC_ACTION_TITLES, 'public lost the notes action it now writes');
   assert.ok('notes' in INHOUSE_ACTION_TITLES, 'in-house lost the notes action it does write');
-  assert.notEqual(PUBLIC_ACTION_TITLES.update, INHOUSE_ACTION_TITLES.notes,
-    'public update and in-house notes are titled the same — one of them is claiming too much');
+  assert.equal(PUBLIC_ACTION_TITLES.notes, INHOUSE_ACTION_TITLES.notes,
+    'one mechanism, two titles — the two feeds would name the same event differently');
+
+  // UNCHANGED, and this is the half that mattered all along: a wholesale field
+  // edit must not be titled as if the row named a field.
+  assert.notEqual(PUBLIC_ACTION_TITLES.update, PUBLIC_ACTION_TITLES.notes,
+    'public update and public notes are titled the same — update is claiming too much');
+  assert.equal(PUBLIC_ACTION_TITLES.update, 'แก้ไขข้อมูลใบสมัคร',
+    'the wholesale-edit title changed — it must stay non-specific');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -535,17 +582,49 @@ test('in-house takes the SAME entry shape as public', () => {
   assert.ok(!INHOUSE_FEED.includes('>แก้ไข<'), 'the in-house history card grew an edit button');
 });
 
-test('in-house names its notes action; the same row on public could not be', () => {
+test('BOTH vocabularies name the notes action, identically', () => {
+  /**
+   * ── RE-POINTED, AND THE CLAIM IS NOW THE OPPOSITE ONE ─────────────────────
+   *
+   * It read "in-house names its notes action; the same row on public could not
+   * be", and rendered the identical row through PUBLIC_ACTION_TITLES to show it
+   * came out as the raw enum `notes` — because public had no title for an action
+   * it never wrote.
+   *
+   * Public writes it now. So the assertion is inverted: the same row through
+   * either vocabulary produces the SAME Thai title, which is what "one notes
+   * mechanism" means at the reading end. A raw `notes` appearing on either feed
+   * would now be the defect.
+   *
+   * NOT WEAKER. The old form proved a title was absent; this proves two titles
+   * agree AND that neither degrades to the enum — the second half is the one
+   * that was doing the real work, and it is still here.
+   */
   const lines = linesOf(entries(INHOUSE_FEED)[1]);
   assert.equal(lines[0], 'เพิ่มบันทึกภายใน', 'the in-house notes row is not titled');
-  // THE ASYMMETRY: the identical row rendered with the PUBLIC vocabulary shows
-  // its raw action, because public has no title for an action it never writes.
+
   const asPublic = renderToStaticMarkup(createElement(HistoryFeed, {
     state: HISTORY_STATE.OK, rows: [NOTES_ROW], total: 1,
     titles: PUBLIC_ACTION_TITLES, origin: null, title: 'x',
   }));
-  assert.equal(linesOf(entries(asPublic)[0])[0], 'notes',
-    'the public vocabulary titled an action it does not write');
+  assert.equal(linesOf(entries(asPublic)[0])[0], 'เพิ่มบันทึกภายใน',
+    'the public vocabulary renders the raw enum for an action it now writes');
+});
+
+test('CONTROL: an untitled action DOES still degrade to its raw enum', () => {
+  /**
+   * The assertion above no longer demonstrates the fallback, because both
+   * vocabularies now carry `notes`. Without this, "the feed renders the raw
+   * action when it has no title" would be an untested claim — and it is the
+   * behaviour that keeps a future action from rendering a blank line.
+   */
+  const unknownRow = { ...NOTES_ROW, action: 'defenestrate' };
+  const markup = renderToStaticMarkup(createElement(HistoryFeed, {
+    state: HISTORY_STATE.OK, rows: [unknownRow], total: 1,
+    titles: PUBLIC_ACTION_TITLES, origin: null, title: 'x',
+  }));
+  assert.equal(linesOf(entries(markup)[0])[0], 'defenestrate',
+    'an unknown action rendered something other than its raw value');
 });
 
 test('in-house synthesises its own creation entry, from its own source', () => {

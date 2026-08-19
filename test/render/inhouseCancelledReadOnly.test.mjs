@@ -227,8 +227,20 @@ const EDITABLE_CARDS = [
   'ตารางเวลา & รูปแบบการอบรม',
   'ข้อมูลใบเสนอราคา',
   'หมายเหตุจากลูกค้า',
-  'บันทึกภายในของทีมขาย',
 ];
+
+/**
+ * The notes card is NOT in the list above, and that is not a card losing its
+ * edit control — it is a card that has nothing to edit.
+ *
+ * Internal notes became APPEND-ONLY. There is no แก้ไข because there is no
+ * revision: what the card has instead is a COMPOSER, and the composer is gated
+ * on exactly the same `readOnly` flag every แก้ไข is. So the cancellation lock
+ * still covers it, in the shape the card actually has — asserted separately
+ * below rather than folded into the แก้ไข count, because counting a control
+ * that does not exist would have meant re-adding one to satisfy a test.
+ */
+const APPEND_ONLY_CARD = 'บันทึกภายในของทีมขาย';
 
 /**
  * Card titles are matched through the SAME ESCAPING React applies.
@@ -247,7 +259,8 @@ test('a pending request keeps its edit control — on EVERY editable card', () =
   assert.equal(
     countExactly(pending, 'แก้ไข'),
     EDITABLE_CARDS.length,
-    `expected one แก้ไข per editable card (${EDITABLE_CARDS.join(', ')})`,
+    `expected one แก้ไข per editable card (${EDITABLE_CARDS.join(', ')}); `
+    + `${APPEND_ONLY_CARD} is deliberately not among them — it is append-only`,
   );
   // Each named card is actually on the page, so the count above cannot be
   // reached by six buttons on three cards.
@@ -262,14 +275,57 @@ test('a pending request keeps its edit control — on EVERY editable card', () =
  * cancelled. This is what makes the count above a statement about the LOCK and
  * not merely about the markup.
  */
-test('the cancellation lock removes every one of those six, not merely some', () => {
+test('the cancellation lock removes every one of those, not merely some', () => {
   assert.equal(countExactly(pending, 'แก้ไข'), EDITABLE_CARDS.length);
   assert.equal(countExactly(cancelled, 'แก้ไข'), 0,
     'a cancelled request must offer no edit control on ANY card');
   // …and the cards themselves are still drawn. A lock that worked by not
   // rendering the cards would satisfy the line above and hide the record.
-  for (const title of EDITABLE_CARDS) {
+  for (const title of [...EDITABLE_CARDS, APPEND_ONLY_CARD]) {
     assert.ok(cancelled.includes(escaped(title)), `the ${title} card vanished on a cancelled request`);
+  }
+});
+
+test('THE NOTES CARD OBEYS THE LOCK TOO — its composer is the gated control', () => {
+  /**
+   * The notes card has no แก้ไข, so the count above cannot cover it. Its edit
+   * affordance is the COMPOSER, and this is what says the lock reaches it.
+   *
+   * Without this assertion the card would be the one editable surface on the
+   * screen that the read-only tests did not touch — which is precisely how the
+   * original in-house defect survived: an affordance that no assertion was
+   * shaped to look for.
+   *
+   * The button's TEXT is the probe, not a class, and the card is asserted
+   * present in both states so this cannot pass by the whole card disappearing.
+   */
+  assert.ok(pending.includes(escaped(APPEND_ONLY_CARD)), 'the notes card is missing when pending');
+  assert.ok(showsExactly(pending, 'เพิ่มบันทึก'), 'a pending request cannot add a note');
+  assert.ok(!showsExactly(cancelled, 'เพิ่มบันทึก'),
+    'a CANCELLED request still offers the note composer — the lock does not reach it');
+});
+
+test('there is no per-note edit or delete control, on either state', () => {
+  /**
+   * APPEND-ONLY IS THE DESIGN. The absence of UI is not the enforcement — the
+   * server's `$push` and the action's signature are — but a control here would
+   * CONTRADICT the enforcement, and the contradiction is what a reader would
+   * trust. So it is pinned.
+   *
+   * Read from the notes card's own region: `ลบ` appears in the overflow menu
+   * ("ลบ Request นี้") and `แก้ไข` on five other cards, so a page-wide probe
+   * would be answering about entirely different controls.
+   */
+  for (const [name, markup] of Object.entries({ pending, cancelled })) {
+    const start = markup.indexOf(escaped(APPEND_ONLY_CARD));
+    assert.notEqual(start, -1, `${name}: the notes card is missing`);
+    const end = markup.indexOf('>ข้อมูลระบบ<', start);
+    assert.notEqual(end, -1, `${name}: the card after the notes card is missing — region unbounded`);
+    const card = markup.slice(start, end);
+
+    assert.ok(!card.includes('>แก้ไข<'), `${name}: the notes card grew an edit control`);
+    assert.ok(!/>ลบ[^<]*</.test(card), `${name}: the notes card grew a delete control`);
+    assert.ok(!card.includes('aria-haspopup="menu"'), `${name}: the notes card grew a ••• menu`);
   }
 });
 

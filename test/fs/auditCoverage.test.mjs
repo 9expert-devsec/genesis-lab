@@ -101,6 +101,9 @@ const COMPUTED_ENTITY = {
     updateRegistrationStatus: ['public', 'inhouse'],
     updateRegistration:       ['public', 'inhouse'],
     deleteRegistration:       ['public', 'inhouse'],
+    // The shared append-only note writer. Same `source` → same normalisation
+    // through entityForSource, so the same two entities.
+    addInternalNote:          ['public', 'inhouse'],
   },
 };
 

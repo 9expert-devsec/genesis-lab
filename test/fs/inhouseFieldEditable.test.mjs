@@ -86,7 +86,11 @@ test('both sides parsed to something — neither is an empty set', () => {
   // renamed or the export disappears: ∅ ⊆ anything, in both directions.
   assert.ok(ALLOWLIST.size >= 20, `the allowlist parsed to only ${ALLOWLIST.size} names`);
   assert.ok(FORM_FIELDS.size >= 15, `the form parsed to only ${FORM_FIELDS.size} names`);
-  assert.equal(Object.keys(INHOUSE_EDITABLE_GROUPS).length, 6,
+  // FIVE, not six. The `notes` group left when internal notes became an
+  // append-only array: `adminNotes` is no longer written through
+  // `updateRegistration` at all, so it is not a field this form submits and it
+  // is not in the allowlist either. See §4.
+  assert.equal(Object.keys(INHOUSE_EDITABLE_GROUPS).length, 5,
     'a card was added or removed without this test being told');
 });
 
@@ -156,6 +160,18 @@ const NOT_OFFERED_BY_THE_FORM = {
   coursesInterested: 'needs a course picker, not a text box',
 };
 
+/**
+ * `adminNotes` IS NOT AN EXEMPTION — IT IS OUT OF THE ALLOWLIST ENTIRELY.
+ *
+ * It used to be in both lists. It is now in neither, because internal notes are
+ * APPEND-ONLY and written exclusively by `addInternalNote` with `$push`. Listing
+ * it as a "stated gap" above would have been exactly wrong: an exemption says
+ * "writable by the action, not offered by this form", and the whole point is
+ * that `updateRegistration` MUST NOT be able to write it. §4 asserts the
+ * absence from both sides.
+ */
+const APPEND_ONLY_FIELDS = ['adminNotes'];
+
 test('every allowlisted in-house field is offered by some card, or is a stated gap', () => {
   const unreachable = [...ALLOWLIST].filter(
     (f) => !FORM_FIELDS.has(f) && !(f in NOT_OFFERED_BY_THE_FORM),
@@ -186,11 +202,49 @@ test('the stated gaps are still IN the allowlist — a gap is not a deletion', (
 const CLIENT = readSource('src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx');
 
 test('the in-house client calls updateRegistration with the inhouse source', () => {
-  assert.match(CLIENT.withImports, /import\s*\{\s*updateRegistration\s*\}\s*from\s*'@\/lib\/actions\/registrations'/,
+  // The import list is matched LOOSELY on the binding, not on the whole
+  // statement: the module also exports `addInternalNote`, which the client now
+  // imports beside this one, and a `\{\s*updateRegistration\s*\}` pattern fails
+  // the moment a second name joins the braces. That is a matcher that breaks on
+  // correct code every time the file grows.
+  assert.match(CLIENT.withImports, /import\s*\{[^}]*\bupdateRegistration\b[^}]*\}\s*from\s*'@\/lib\/actions\/registrations'/,
     'the in-house client does not import the shared field writer');
   assert.match(CLIENT.code, /updateRegistration\(\s*doc\._id\s*,\s*payload\s*,\s*'inhouse'\s*\)/,
     "the save must pass 'inhouse' — the public branch names almost none of these fields, "
     + 'so every one would be dropped and the save would still report success');
+});
+
+// ── 4. The append-only field is out of BOTH lists ───────────────────────────
+
+test('adminNotes is in neither the allowlist nor the form — it is append-only', () => {
+  /**
+   * ══ THE HOLE THIS CLOSES ═══════════════════════════════════════════════════
+   *
+   * Internal notes are append-only, enforced by `addInternalNote` using `$push`
+   * and by its signature taking a body string and nothing else. NONE OF THAT
+   * MATTERS if `updateRegistration` can still `$set` the array: a caller sends
+   * `adminNotes: []` and the whole record is erased, or sends a rewritten array
+   * and overwrites any note in it. Same defect, different door.
+   *
+   * So the name must be absent from the allowlist, and absent from the form's
+   * groups, and this asserts both. It is a one-word change to put either back
+   * and no render test could see it.
+   */
+  for (const field of APPEND_ONLY_FIELDS) {
+    assert.ok(!ALLOWLIST.has(field),
+      `${field} is back in updateRegistration's allowlist — an append-only field is $set-able again`);
+    assert.ok(!FORM_FIELDS.has(field),
+      `${field} is submitted by an edit card — the form would overwrite the whole array`);
+  }
+});
+
+test('the append-only field IS still written, just not by that action', () => {
+  // Without this, the assertion above is satisfied by a field nobody writes at
+  // all — which would mean the feature had been deleted rather than moved.
+  assert.match(SHARED.code, /export async function addInternalNote\(/,
+    'addInternalNote is gone — adminNotes now has no writer at all');
+  assert.match(SHARED.code, /\$push:\s*\{\s*adminNotes:/,
+    'addInternalNote does not $push adminNotes');
 });
 
 test('there is exactly ONE updateRegistration call site, not one per card', () => {

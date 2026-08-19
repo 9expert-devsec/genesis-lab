@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { InternalNoteSchema } from './internalNoteSchema';
 
 const ThaiAddressSchema = new mongoose.Schema(
   {
@@ -194,7 +195,34 @@ const RegisterInhouseSchema = new mongoose.Schema(
       enum: ['pending', 'quoted', 'cancelled'],
       default: 'pending',
     },
-    adminNotes: { type: String, trim: true },
+    /**
+     * ── INTERNAL NOTES. APPEND-ONLY. WAS A STRING, IS NOW AN ARRAY. ─────────
+     *
+     * The same field on RegisterPublic, running the same mechanism. See
+     * lib/registrations/internalNotes for the shape and the append-only
+     * reasoning, and models/internalNoteSchema for why the subdocument is
+     * shared rather than duplicated.
+     *
+     * ── THIS IS THE EXPAND PHASE. THE READER STILL TOLERATES A STRING. ─────
+     * `readNotes` handles both shapes, so this deploy and the migration are
+     * independent and a rollback strands nothing. MEASURED, read-only:
+     * `adminNotes` is ABSENT on all 8 in-house documents — the field was never
+     * written in production — so the migration has zero rows and this type
+     * change breaks nothing that exists. It is still written, still
+     * dry-run-by-default, and still required before the String branch of
+     * `readNotes` may be removed. THAT NARROWING IS THE CONTRACT PHASE AND IS
+     * NOT IN THIS ROUND: last, and alone.
+     *
+     * `default: undefined` rather than `[]` so an untouched document keeps
+     * having NO field, which is what the 8 live documents look like. A default
+     * of `[]` would make Mongoose write an empty array on every save and turn
+     * "never had a note" into "had notes, has none now" — a distinction the
+     * reader relies on and a migration cannot recover.
+     */
+    adminNotes: {
+      type: [InternalNoteSchema],
+      default: undefined,
+    },
     source:     { type: String, default: 'web' },
     ipAddress:  { type: String },
   },

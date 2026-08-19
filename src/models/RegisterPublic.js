@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { InternalNoteSchema } from './internalNoteSchema';
 
 /**
  * Sub-schema for a single attendee (person actually attending).
@@ -224,7 +225,36 @@ const RegisterPublicSchema = new mongoose.Schema(
     supersedesRegistrationId: { type: String, default: null },
 
     // Meta
+    /**
+     * ── THE CUSTOMER'S OWN NOTE. SHOWN BACK TO THEM. ─────────────────────────
+     * Written by the public registration form, non-empty on 31 of 39 documents,
+     * and quoted in the confirmation email. It is NOT an internal field and
+     * nothing internal may be written into it — see `adminNotes` below, which is
+     * the one that must never reach the customer.
+     */
     notes:  { type: String, trim: true, maxlength: 500 },
+
+    /**
+     * ── INTERNAL NOTES. APPEND-ONLY. NEVER SHOWN TO THE CUSTOMER. ───────────
+     *
+     * NOT called `notes`, and that is the whole point: `notes` directly above is
+     * the customer's own text and is mailed back to them. An internal note is
+     * the field most likely to quote a customer verbatim — what they can afford,
+     * who to call, what they actually want — and it goes nowhere near an email
+     * or an audit row.
+     *
+     * The name mirrors RegisterInhouse.adminNotes so both screens run one
+     * mechanism. See lib/registrations/internalNotes for the shape, the
+     * append-only reasoning, and why `authorName` is denormalised.
+     *
+     * `_id: false` on the subdocument: a note is identified by its position in
+     * an append-only list and by nothing else. Giving each one an id would be
+     * the first half of an edit/delete API that is deliberately not being built.
+     */
+    adminNotes: {
+      type: [InternalNoteSchema],
+      default: undefined,
+    },
     status: {
       type: String,
       enum: ['pending', 'confirmed', 'paid', 'cancelled'],

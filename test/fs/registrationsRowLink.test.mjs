@@ -245,8 +245,16 @@ test('CONTROL: the function bound really excludes the other actions’ selects',
 
   // …and the whole file really does contain those other selects, so this
   // control is describing the real situation rather than a hypothetical.
-  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 4,
-    'the actions file no longer has four selects — re-read the scoping note');
+  //
+  // FIVE, not four. `addInternalNote` added a fifth in round 6 — the
+  // `.select('status')` on its refusal path, which distinguishes "no such id"
+  // from "cancelled and locked" exactly as the other write actions do. The
+  // number is bumped deliberately rather than relaxed to a floor: this control's
+  // whole job is to say that the scoping matters BECAUSE the file has selects
+  // the slice must not reach, and a `>= 4` would stop noticing when it gains
+  // more.
+  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 5,
+    'the actions file no longer has five selects — re-read the scoping note');
 });
 
 test('CONTROL: the field matcher would catch an unprojected read', () => {
