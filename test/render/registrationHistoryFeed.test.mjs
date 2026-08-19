@@ -230,25 +230,74 @@ test('(b) the vocabulary carries EXACTLY the actions that are written', () => {
    * the question is "can a row with this action reach this feed", not "which
    * file wrote it".
    */
-  const SHARED = written('src/lib/actions/registrations.js');
-  const INHOUSE_OWN = written('src/lib/actions/inhouse-registrations.js');
+  /**
+   * ── NOT EVERY SHARED ACTION CAN FILE AN IN-HOUSE ROW ──────────────────────
+   *
+   * The first version of this union assumed the whole shared module was
+   * reachable from both entities. It is not: `updateRegistrationRound` writes
+   * `entity: 'public'` as a LITERAL, because only public registrations have a
+   * training round at all — an in-house request is an enquiry about a course
+   * that has not been scheduled yet.
+   *
+   * So the entity is read per action rather than assumed. An action whose
+   * `entity` is `entityForSource(source)` can reach both; one with a literal
+   * reaches exactly that entity.
+   *
+   * This mattered immediately: the over-broad union demanded a `round` title on
+   * the IN-HOUSE feed, for a row that collection can never receive. Adding one
+   * would have been a label for an event nothing writes — which is the defect
+   * this whole test exists to prevent, arriving through the test itself.
+   */
+  const actionsByEntity = (rel) => {
+    const code = readSource(rel).code;
+    const both = new Set();
+    const perEntity = { public: new Set(), inhouse: new Set() };
+    // Each recordAdminActionAfter call, as one blob, so `action` and `entity`
+    // are read from the SAME call rather than paired by proximity.
+    for (const m of code.matchAll(/recordAdminActionAfter\(\{([\s\S]*?)\n\s*\}\);/g)) {
+      const call = m[1];
+      const action = /action:\s*'([a-z_-]+)'/.exec(call)?.[1];
+      if (!action) continue;
+      if (/entity:\s*entityForSource\(/.test(call)) { both.add(action); continue; }
+      const literal = /entity:\s*'([a-z_-]+)'/.exec(call)?.[1];
+      if (literal && perEntity[literal]) perEntity[literal].add(action);
+    }
+    return { both, ...perEntity };
+  };
+
+  const shared = actionsByEntity('src/lib/actions/registrations.js');
+  const inhouseOwn = actionsByEntity('src/lib/actions/inhouse-registrations.js');
+
+  const publicWrites  = new Set([...shared.both, ...shared.public,
+    ...inhouseOwn.public]);
+  const inhouseWrites = new Set([...shared.both, ...shared.inhouse,
+    ...inhouseOwn.both, ...inhouseOwn.inhouse]);
 
   assert.deepEqual(
     new Set(Object.keys(PUBLIC_ACTION_TITLES)),
-    SHARED,
+    publicWrites,
     'the public titles and the public actions have drifted apart',
   );
   assert.deepEqual(
     new Set(Object.keys(INHOUSE_ACTION_TITLES)),
-    new Set([...INHOUSE_OWN, ...SHARED]),
+    inhouseWrites,
     'the in-house titles and the in-house actions have drifted apart',
   );
+
+  // The parse found real calls of both shapes, so neither set is empty by
+  // accident and the per-entity split is doing work rather than collapsing.
+  assert.ok(shared.both.size >= 3, `only ${shared.both.size} source-derived actions parsed`);
+  assert.ok(shared.public.size >= 1, 'no public-literal action parsed — the split found nothing');
 
   // The union is not vacuous: the in-house file still writes actions of its own,
   // so this is a union of two non-empty sets rather than the shared set wearing
   // a different name.
-  assert.ok(INHOUSE_OWN.size >= 2, `the in-house file writes only ${INHOUSE_OWN.size} actions`);
-  assert.ok(INHOUSE_OWN.has('status'), 'the in-house file stopped writing its own status action');
+  // The in-house module still writes actions of its own, so `inhouseWrites` is
+  // a real union rather than the shared set wearing a different name.
+  const ownCount = inhouseOwn.both.size + inhouseOwn.inhouse.size;
+  assert.ok(ownCount >= 2, `the in-house file writes only ${ownCount} actions of its own`);
+  assert.ok(inhouseOwn.inhouse.has('status'),
+    'the in-house file stopped writing its own status action');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

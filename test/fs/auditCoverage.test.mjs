@@ -650,7 +650,18 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // explain a gap that did not exist. The pin is right because it was measured,
 // which is the only reason it was ever safe. The commit message cannot be
 // corrected without rewriting history, so the correction lives here.
-const MUTATING_EXPORT_COUNT = 170;
+// ── 170 → 171, and the depth-0 figure 164 → 165: round 6 ──────────────────
+// TWO mutating exports were added to src/lib/actions/registrations.js
+// (`addInternalNote`, `updateRegistrationRound`) and ONE was deleted from
+// src/lib/actions/inhouse-registrations.js (`updateInhouseAdminNotes`, whose
+// single-String $set was replaced by the shared append-only push). Net +1, and
+// both pins move by the same +1 because all three write Mongo directly through
+// a Model call in their own body — none of them is reached through an import,
+// so REACHED_THROUGH_IMPORT is unchanged and the difference stays 6.
+//
+// MEASURED against this tree, not derived: the pins were left at their old
+// values, the walk was run, and 171 / 165 are the numbers it reported.
+const MUTATING_EXPORT_COUNT = 171;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -831,7 +842,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 164,
+    zero, 165,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -845,7 +856,11 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'and prepareWebrootReplacement — the last writes Mongo only through an ' +
     'IMPORTED helper, which is precisely what depth 0 cannot see. ' +
     'MERGED 2026-08-17: both branches moved this pin, so the value below was ' +
-    'MEASURED against the merged tree rather than summed'
+    'MEASURED against the merged tree rather than summed. ' +
+    'ROUND 6: 164 → 165, net +1 — addInternalNote and updateRegistrationRound ' +
+    'added to registrations.js, updateInhouseAdminNotes deleted from ' +
+    'inhouse-registrations.js. All three write Mongo directly in their own body, ' +
+    'so REACHED_THROUGH_IMPORT is unchanged and the delta below stays 6.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

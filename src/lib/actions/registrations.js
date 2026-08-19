@@ -16,6 +16,9 @@ import {
 } from '@/lib/registrations/statuses';
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
+import { ROUND_FIELDS, roundFieldsFor } from '@/lib/registrations/roundSelection';
+import { PUBLIC_SCHEDULE_STATUSES, listSchedulesByCourse } from '@/lib/api/schedules';
+import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
 
 const ADMIN_PATH = '/admin/registrations';
 const PAGE_SIZE  = 20;
@@ -375,11 +378,26 @@ export async function updateRegistration(id, data, source = 'public') {
       if (data[f] !== undefined) update[f] = data[f];
     }
   } else {
-    // Public editable fields
-    if (data.classDate      !== undefined) update.classDate      = String(data.classDate ?? '').trim();
-    if (data.scheduleType   !== undefined) update.scheduleType   = data.scheduleType;
-    if (data.attendanceMode !== undefined) update.attendanceMode = data.attendanceMode;
+    /**
+     * ── THE FOUR ROUND FIELDS ARE GONE FROM HERE ────────────────────────────
+     *
+     * `classDate`, `scheduleType` and `attendanceMode` used to be writable
+     * through this action, one key at a time, with no `classId` involved at all.
+     * THAT WAS THE COUPLING HOLE: a caller could set the date label to anything
+     * while `classId` went on pointing at the old round, and no screen would
+     * show the disagreement.
+     *
+     * They now move only through `updateRegistrationRound`, which takes an ID,
+     * looks the round up, verifies it belongs to this registration's course, and
+     * derives all four itself. `classId` was never in this allowlist and is not
+     * being added — a client that could send an id here would bypass the lookup.
+     *
+     * fs/roundCouplingGate pins all four names out of this list. Re-adding any
+     * one of them is a one-word change that restores the hole, and no render
+     * test could see it.
+     */
 
+    // Public editable fields
     if (data.coordinator) {
       const c = data.coordinator;
       if (c.firstName !== undefined) update['coordinator.firstName'] = String(c.firstName).trim();
@@ -525,6 +543,164 @@ export async function updateRegistration(id, data, source = 'public') {
   });
 
   return { ok: true };
+}
+
+// ── The training round (four coupled fields) ───────────────────────
+
+/**
+ * MOVE A REGISTRATION TO A DIFFERENT ROUND. Public only.
+ *
+ * ══ THE CLIENT SENDS AN ID; THE SERVER WRITES FOUR FIELDS ═══════════════════
+ *
+ * `classId`, `classDate`, `scheduleType` and `attendanceMode` describe ONE round
+ * and must move together. A control that writes only the date label leaves
+ * `classId` pointing at a different round than the label shows, and nothing on
+ * screen would reveal it.
+ *
+ * So the payload is `{ classId }` plus `attendanceMode` ONLY when the chosen
+ * round is hybrid. The client does NOT send `classDate` or `scheduleType` — it
+ * cannot, because they are not in the signature — and THIS action reads the
+ * round from the real source and derives all four itself. A client that cannot
+ * send a label cannot send one that disagrees with the id.
+ *
+ * ── WHY NOT `updateRegistration` ──────────────────────────────────────────
+ * That action is a wholesale `$set` of an allowlisted bag, and the three label
+ * fields WERE in its allowlist — which is exactly the hole: a caller could send
+ * `classDate: 'whatever'` with no `classId` at all. They have been removed from
+ * it; see the note there.
+ */
+export async function updateRegistrationRound(id, { classId, attendanceMode } = {}) {
+  const session = await requireAdmin('registrations');
+  if (!id) return { ok: false, error: 'Missing id' };
+  if (!classId) return { ok: false, error: 'กรุณาเลือกรอบอบรม' };
+
+  await dbConnect();
+
+  /**
+   * The registration first, for TWO reasons — the course it belongs to, and the
+   * `before` values the audit row needs. One read serves both.
+   */
+  const doc = await RegisterPublic.findById(id)
+    .select('status courseId classId classDate scheduleType attendanceMode')
+    .lean();
+  if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+  // The cancellation lock, read here rather than in a filter because the write
+  // below is already preceded by this read for the course id — so unlike every
+  // other action on this screen there is no extra round trip to save, and the
+  // conditional update below still carries the same `$ne` so a cancel racing
+  // this call cannot land.
+  if (doc.status === 'cancelled') {
+    return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
+  }
+
+  /**
+   * ══ REQUIREMENT 3: THE ROUND MUST BELONG TO THIS REGISTRATION'S COURSE ═════
+   *
+   * Without this an admin — or anything that can POST — could move an attendee
+   * onto ANOTHER COURSE'S round by sending its id. The registration would then
+   * name one course and point at a round of a different one, and the detail
+   * screen would render the new date beside the old course name perfectly
+   * happily.
+   *
+   * It is enforced by CONSTRUCTION rather than by comparison: the candidate
+   * rounds are fetched FOR THIS COURSE, and a `classId` not among them is
+   * refused. There is no branch that could compare the wrong two things.
+   */
+  const course = await getCourseByCodeInsensitive(doc.courseId).catch(() => null);
+  if (!course?._id) {
+    // Upstream is down, or the course was withdrawn. REFUSE rather than write —
+    // an unverifiable round is exactly what this action exists to prevent.
+    return { ok: false, error: 'ไม่สามารถตรวจสอบหลักสูตรของรายการนี้ได้ กรุณาลองใหม่' };
+  }
+
+  const { items: rounds } = await listSchedulesByCourse(course._id, {
+    limit: 50,
+    // ── FULL ROUNDS ARE OFFERED; PAST ROUNDS CANNOT BE ─────────────────────
+    // The admin case is CORRECTION, not booking, so a sold-out round is a
+    // legitimate destination and `PUBLIC_SCHEDULE_STATUSES` includes `full`.
+    //
+    // PAST rounds are a different matter and the DATA DOES NOT SUPPORT THEM:
+    // the endpoint applies a `>= today` bound UNCONDITIONALLY and the `status`
+    // parameter does not lift it — measured and curl-verified in
+    // lib/api/schedules.js. There is no request that returns a finished round.
+    // That is why requirement 5 (a stored round that is no longer listed still
+    // renders, marked) is load-bearing rather than defensive.
+    status: PUBLIC_SCHEDULE_STATUSES,
+  }).catch(() => ({ items: null }));
+
+  if (!rounds) return { ok: false, error: 'ไม่สามารถอ่านรอบอบรมของหลักสูตรนี้ได้ กรุณาลองใหม่' };
+
+  const round = rounds.find((r) => String(r?._id) === String(classId));
+  if (!round) {
+    return { ok: false, error: 'รอบที่เลือกไม่ได้อยู่ในหลักสูตรของรายการนี้' };
+  }
+
+  /**
+   * ══ REQUIREMENT 4: HYBRID REQUIRES A CHOICE, NEVER DEFAULTED ═══════════════
+   *
+   * `roundFieldsFor` returns null when a hybrid round has no valid mode. It is
+   * a REFUSAL, not a prompt to substitute one: guessing `classroom` for someone
+   * who meant Teams sends an attendee to a building on the day.
+   *
+   * A NON-hybrid round sets `classroom` automatically, exactly as RegisterWizard
+   * does — the same function, imported, not restated.
+   */
+  const fields = roundFieldsFor(round, attendanceMode);
+  if (!fields) {
+    return { ok: false, error: 'รอบนี้เป็นแบบ Hybrid กรุณาเลือกรูปแบบการเข้าอบรม' };
+  }
+
+  const updated = await RegisterPublic.findOneAndUpdate(
+    { _id: id, status: { $ne: 'cancelled' } },
+    { $set: fields },
+    { new: false, runValidators: false },
+  );
+  if (!updated) return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  /**
+   * ══ THE ONE EXCEPTION TO THE NO-DIFF AUDIT RULE. READ BEFORE REMOVING. ═════
+   *
+   * Every other field edit on this screen records the ACT ONLY, because
+   * `RegisterPublic` holds names, emails, phones and tax ids and the audit trail
+   * is append-only and presently forever — a shadow copy of personal data in
+   * there cannot be redacted when a deletion request arrives.
+   *
+   * THESE FOUR FIELDS ARE NOT PERSONAL DATA. A round id is an upstream ObjectId,
+   * a date label is a date, and the two enums are `classroom`/`hybrid`/`online`
+   * and `classroom`/`teams`. None of them says anything about a person.
+   *
+   * AND MOVING SOMEONE BETWEEN ROUNDS IS AMONG THE MOST WORTH TRACING CHANGES ON
+   * THIS SCREEN: it changes which day a person is expected on and which room or
+   * link they need, it is the edit most likely to be disputed afterwards
+   * ("nobody told me it moved"), and it is the one an admin can make by
+   * mis-clicking a dropdown.
+   *
+   * So this call carries `before`/`after` FOR EXACTLY THESE FOUR NAMES and
+   * nothing else. THIS IS DELIBERATE AND IS NOT AN INCONSISTENCY WITH THE
+   * ACTIONS EITHER SIDE OF IT — the next reader will see a diff payload beside
+   * `update`'s bare `{}` and "fix" it. Do not.
+   *
+   * The payload is built by picking ROUND_FIELDS off the documents rather than
+   * by spreading them, so a field added to the registration later cannot join
+   * this row by accident.
+   */
+  const pick = (source) => Object.fromEntries(ROUND_FIELDS.map((f) => [f, source?.[f] ?? null]));
+
+  recordAdminActionAfter({
+    menu:        'registrations',
+    action:      'round',
+    entity:      'public',
+    recordId:    String(id),
+    recordLabel: '',
+    before:      pick(doc),
+    after:       pick(fields),
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
+  return { ok: true, fields };
 }
 
 // ── Internal notes (append-only) ───────────────────────────────────

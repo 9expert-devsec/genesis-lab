@@ -28,7 +28,12 @@
 
 import { after } from 'next/server';
 import AdminAuditLog, { MENU_ENUM, UNKNOWN_MENU } from '@/models/AdminAuditLog';
-import { pairContract, ORDERED_IDS_POLICY } from '@/lib/audit/auditContract';
+import {
+  pairContract,
+  ORDERED_IDS_POLICY,
+  ROUND_AND_STATUS_POLICY,
+  ROUND_AND_STATUS_KEYS,
+} from '@/lib/audit/auditContract';
 
 /**
  * Ceiling for ONE payload field (`before`, `after`, `meta`), measured as the
@@ -135,6 +140,28 @@ export function reducePayload(value, policy) {
       return typeof value === 'object' && value !== null && 'orderedIds' in value
         ? { orderedIds: value.orderedIds }
         : null;
+
+    /**
+     * AN ALLOWLIST OF FIELD NAMES: the status enum plus the four coupled round
+     * fields, and nothing else.
+     *
+     * The registration pairs hold personal data and are capped for that reason;
+     * this policy is what lets `updateRegistrationRound` record a real
+     * before/after WITHOUT relaxing the cap for the actions beside it. A key not
+     * on the list is DROPPED here, so an action that hands over a name by
+     * mistake cannot put one in the trail.
+     *
+     * Returns null rather than `{}` when nothing survives, so the row reads as
+     * act-only instead of carrying an empty object that looks like a diff.
+     */
+    case ROUND_AND_STATUS_POLICY: {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+      const kept = {};
+      for (const key of ROUND_AND_STATUS_KEYS) {
+        if (key in value) kept[key] = value[key];
+      }
+      return Object.keys(kept).length > 0 ? kept : null;
+    }
 
     // The count belongs in `meta`, which is outside this scale entirely.
     case 'count_only':
