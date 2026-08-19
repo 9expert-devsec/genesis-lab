@@ -208,7 +208,26 @@ function toItem(banner) {
     titleAccent: null, // `title` is one field — nothing marks a second line
     titleHighlight: null,
     subtitle: null, // no source
-    description: text(banner.slide_text),
+    // ── `description ?? slide_text`, AND THAT ORDER IS THE MODEL'S OWN RULE ──
+    // src/models/Banner.js says it out loud on `slide_text`: the replacement
+    // field is `description`, both coexist during the migration, and "readers
+    // use `description ?? slide_text`". This reader only ever read slide_text,
+    // so it was one of the readers that sentence describes and did not do.
+    //
+    // It changes NOTHING today and that is exactly why it is safe to correct
+    // now: `description` is one of the additive four-type fields, nothing
+    // writes it (the admin form posts `slide_text` — see actions/banners.js)
+    // and no record in the pool carries it, so all ten still resolve to
+    // slide_text. Measured after the change, at five viewports: every split
+    // card's height is what it was before to the hundredth of a pixel, and the
+    // image cards still render no description element at all. Wiring it once
+    // the migration has run
+    // would mean the migration silently blanks the description until a second
+    // commit lands; wiring it now means the migration is the only step.
+    //
+    // `text()` on both sides, so a whitespace-only `description` falls through
+    // to slide_text rather than winning with nothing in it.
+    description: text(banner.description) ?? text(banner.slide_text),
     meta, // [] on every image record
 
     // ── Media ──
@@ -218,6 +237,19 @@ function toItem(banner) {
     // ── Actions ──
     href,
     linkKind,
+    // The admin's own label for the button, when they typed one. This is a
+    // REAL authorable field, not a placeholder: BannerForm has the input and
+    // createBanner/updateBanner both persist it. Measured: all five image
+    // records render the fallback label, so nothing fills this today and the
+    // fallback is the path production actually runs — which is the one worth
+    // proving before anything does fill it. (The five video records are not
+    // observable the same way: their link_url is the watch URL, so `href` is
+    // null and they render no button at all.)
+    //
+    // Empty → null, so the component's `??` fallback fires on '' as well as on
+    // a missing key. `link_text: ''` is the model default, so without the
+    // coercion the fallback would never run and every button would be blank.
+    linkText: text(banner.link_text),
     // The id, not a watch URL: the video plays INLINE in the card. Null on
     // every non-video record, which is what the facade branches on.
     videoId: isVideo ? videoId : null,

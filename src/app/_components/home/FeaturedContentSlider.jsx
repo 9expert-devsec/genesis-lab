@@ -41,15 +41,22 @@ import { FeatureContentCards } from "./FeatureContentCards";
  * small cards under it.
  *
  * ── THE FEATURED CARD HAS TWO LAYOUTS, CHOSEN BY TYPE ───────────────────────
- * `image` records are ARTWORK ONLY — the picture fills the whole card and the
- * whole card is one link. There is no badge, headline, description or button
- * over it on desktop, because the artwork already contains all of that: what
- * looks like a button in these banners is painted into the JPEG. Drawing our
- * own chrome on top would double every element the designer already drew.
+ * FROM lg, `image` records are ARTWORK ONLY — the picture fills the whole card
+ * and the whole card is one link. No badge, headline, description or button
+ * over it, because the artwork already contains all of that: what looks like a
+ * button in these banners is painted into the JPEG. Drawing our own chrome on
+ * top would double every element the designer already drew.
+ *
+ * BELOW lg that reasoning does not survive its own measurement, so it does not
+ * apply. The artwork renders 341×136 at a 375 viewport, which puts the
+ * headline painted inside it at roughly 8–10px tall — present, and unreadable.
+ * So a phone gets the badge, title, description and button as REAL TEXT, from
+ * the same SlideCopy and SlideAction the split layout uses. The full argument
+ * and the numbers are on ImageOnlyCard.
  *
  * Everything else (`video`, and `course`/`article` when they arrive) keeps the
- * text-left / media-right split, because those records carry real text fields
- * that have to be laid out as text.
+ * text-left / media-right split at every width, because those records carry
+ * real text fields that have to be laid out as text.
  *
  * The branch is on the NORMALISED type from the mapper — never on
  * `banner.type`, and never on a substring. `startsWith('image')` answers true
@@ -469,10 +476,22 @@ const CARD_RADIUS_BELOW_LG = "max-lg:rounded-[24px]";
  * does not. At a 1024 viewport the frame is ~976×480 = 2.03:1 and cover takes
  * ~26% off the width. `object-center` keeps that symmetric.
  *
- * ── MOBILE GETS THE DESCRIPTION, DESKTOP DOES NOT ───────────────────────────
- * On a phone the artwork is ~340px wide and the text painted inside it is
- * unreadable, so the record's own description is repeated below as real text.
- * On desktop the artwork is legible and the same text would be a duplicate.
+ * ── BELOW lg AN IMAGE SLIDE IS NOT ARTWORK-ONLY. THIS REVERSES A RULING ─────
+ * The rule at the top of this file — "the artwork already contains all of
+ * that, drawing our own chrome on top would double every element" — is TRUE AT
+ * DESKTOP WIDTH AND FALSE ON A PHONE, and desktop is where it was decided.
+ *
+ * Measured: at a 375 viewport the artwork renders 341×136. The banner's own
+ * headline occupies roughly a sixth of its height, so it lands at about 8–10px
+ * tall. It is not small, it is unreadable — and "the art carries the message"
+ * only holds while the message can be read. Against that, the reserved stack
+ * left 431px of empty panel — 76% of the card — under a 136px band.
+ *
+ * So below lg an image slide renders what every other type renders: badge,
+ * title, description and one button — the SAME components, via SlideCopy and
+ * SlideAction, not a second set that looks like them. From lg the whole block
+ * is `lg:hidden` and the card is artwork-only exactly as before, because at
+ * 1200px wide the original reasoning still holds.
  */
 function ImageOnlyCard({ item, active }) {
   const body = (
@@ -505,6 +524,7 @@ function ImageOnlyCard({ item, active }) {
           `overflow-hidden` alongside it because the <Image> is a positioned
           fill child: a radius on the wrapper alone would not clip it. */}
       <div
+        data-fc-art=""
         className={`relative aspect-[2.5/1] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
       >
         <SlideImage
@@ -514,24 +534,60 @@ function ImageOnlyCard({ item, active }) {
         />
       </div>
 
-      {item.description ? (
-        <p className="px-4 pb-4 pt-3 text-[13px] leading-relaxed text-[var(--9e-fc-text-muted)] lg:hidden">
-          {item.description}
-        </p>
-      ) : null}
+      {/* ── THE COPY BLOCK, BELOW lg ONLY ────────────────────────────────
+          `gap-4` between the copy group and the action, which is the split
+          card's own below-lg spacing (`gap-4`, going to `lg:gap-5` where this
+          block no longer exists). Same number because it is the same design,
+          not because it was tuned twice.
+
+          THE ARTWORK IS FULL-BLEED AND THE TEXT IS NOT. `px-4` lives here
+          rather than on the shell so the picture still runs edge to edge and
+          measures 341×136 at 375 — padding the shell would narrow it to 309
+          and change the one thing this round was told not to move. `pt-4`
+          rather than the old `pt-3`: it is now the gap between the artwork and
+          a badge, not between the artwork and a paragraph.
+
+          `lg:hidden` and not a `max-lg:` variant on each child — one switch
+          for the whole block, so there is a single place that answers "does
+          desktop still render artwork only?". */}
+      <div
+        data-fc-copy=""
+        className="flex flex-col gap-4 px-4 pb-4 pt-4 lg:hidden"
+      >
+        <SlideCopy item={item} />
+        {/* NEVER A DEAD BUTTON — the same guard, on the same key, that the
+            split card uses. All five live image records resolve an href today
+            (measured: every one renders as a <Link>), so this guard is
+            defensive rather than exercised; a record whose link_url is absent
+            or refused by bannerLinkUrl.js gets badge, title and description
+            and no button, instead of a control that goes nowhere. */}
+        {item.href ? <SlideAction item={item} /> : null}
+      </div>
     </>
   );
 
-  // `max-lg:h-full` + centring: the grid reserves the tallest slide's height,
-  // and below lg that is a video card (~568px at 375) against an image card's
-  // ~150px band of artwork. Without this the difference was 418px of raw page
-  // background under the banner, which reads as a failed render rather than as
-  // reserved space. Filling the panel and centring the artwork inside it puts
-  // the same empty space behind a border and a background, where it looks like
-  // a deliberate frame. The reservation is unchanged — only where the gap sits.
+  // `max-lg:h-full` + centring: the grid reserves the TALLEST slide's height,
+  // and below lg that is a video card. Measured at 375, and the reservation is
+  // set by ONE record — the longest-titled video, at 567.75px:
+  //
+  //   video cards          507.97 · 507.97 · 537.86 · 553.86 · 567.75
+  //   image cards, content 290.28 · 320.17 · 350.06 · 350.06 · 409.84
+  //
+  // The image card is still the shorter of the two and still stretches to the
+  // track, so it still needs to fill and centre rather than leave raw page
+  // background under a short band. What changed is the size of the gap it is
+  // hiding: the copy block took it from 431px to between 158px and 277px.
+  //
+  // THE RESERVATION ITSELF DID NOT MOVE — 567.75 before this change and after
+  // it, and still after a 266-character description is injected into every
+  // image record (worst case then 485.22, comfortably under). The tallest
+  // slide is the same video record it always was. If an image card ever DOES
+  // overtake it, the number changes by itself: the track is a CSS max of the
+  // children, so there is nothing here to keep in sync.
   //
   // From lg the frame's own ratio already governs and every slide is the same
-  // height, so none of this applies.
+  // height, so none of this applies — and `lg:hidden` on the copy block means
+  // an image card is artwork and nothing else there, exactly as before.
   const shell =
     "block w-full overflow-hidden border border-[var(--9e-fc-panel-border)] " +
     CARD_RADIUS + " " +
@@ -568,6 +624,175 @@ function ImageOnlyCard({ item, active }) {
   );
 }
 
+/**
+ * Badge, headline block and description — the split layout's copy column,
+ * lifted out whole so the image card can render THE SAME ELEMENTS below lg
+ * rather than a lookalike set.
+ *
+ * ── WHY EXTRACTED RATHER THAN COPIED ────────────────────────────────────────
+ * The image card and the split card now show the same four things on a phone.
+ * Two copies of that markup means the badge's padding, the h3's clamp and the
+ * description's line-clamp have to be changed in two places forever, and the
+ * failure when somebody changes one is that two slides in the SAME carousel
+ * disagree about their own type styling — visible only while auto-slide
+ * happens to be on the other one.
+ *
+ * Every slot is still guarded here, not at the call sites: the mapper returns
+ * null — never '' — for anything the Banner model cannot supply, and today
+ * that is kicker, both title accents and the subtitle on EVERY record. A `''`
+ * would still occupy a line box and still pull the gap above it; null removes
+ * the element.
+ */
+function SlideCopy({ item }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {item.badge ? (
+        <div
+          data-fc-badge=""
+          className="flex w-fit items-center gap-1.5 rounded-lg bg-[var(--9e-fc-badge-bg)] px-3 py-1"
+        >
+          <Star
+            className="h-3.5 w-3.5 shrink-0 text-[var(--9e-fc-accent)]"
+            strokeWidth={2}
+          />
+          <p className="text-xs font-bold text-[var(--9e-fc-accent)]">
+            {item.badge}
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-col gap-1.5">
+        {item.kicker ? (
+          <p className="text-sm font-semibold text-[var(--9e-fc-text-muted)]">
+            {item.kicker}
+          </p>
+        ) : null}
+
+        {/* h3, not h2 — the section already spent its h2 on the heading above,
+            and this is one item inside that section. */}
+        <h3
+          data-fc-title=""
+          className="text-[26px] font-extrabold leading-[1.15] text-white lg:text-[34px]"
+        >
+          <span className="block">{item.title}</span>
+          {item.titleAccent || item.titleHighlight ? (
+            <span className="block">
+              {item.titleAccent ? (
+                <span className="text-[var(--9e-fc-accent)]">
+                  {item.titleAccent}
+                </span>
+              ) : null}
+              {item.titleAccent && item.titleHighlight ? " " : null}
+              {item.titleHighlight ? (
+                <span className="text-[var(--9e-fc-gold)]">
+                  {item.titleHighlight}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </h3>
+
+        {item.subtitle ? (
+          <p className="text-sm font-medium text-[var(--9e-fc-text-body)]">
+            {item.subtitle}
+          </p>
+        ) : null}
+      </div>
+
+      {/* `description` is `description ?? slide_text` from the mapper, and it
+          is EMPTY on all five image records today. The guard is therefore the
+          production path for an image slide, not the exception — the whole
+          element goes, and the `gap-3` above it goes with it, so nothing
+          reserves a strip for text that is not there. */}
+      {item.description ? (
+        <p
+          data-fc-desc=""
+          className="line-clamp-3 text-[13px] leading-relaxed text-[var(--9e-fc-text-muted)]"
+        >
+          {item.description}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The label when the record does not supply its own `link_text`. */
+const DETAILS_LABEL = "ดูรายละเอียด";
+
+/**
+ * The card's one call to action.
+ *
+ * ── IT RENDERS AS A LINK **OR** AS A SPAN, AND THAT IS THE WHOLE POINT ──────
+ * The split card owns nothing above it, so its action is a real <Link> — it
+ * is the only navigable thing on that card.
+ *
+ * The image card is DIFFERENT and cannot be: the whole card is already one
+ * <Link> to the same `link_url`, on mobile exactly as on desktop. Putting an
+ * <a> inside an <a> is not a styling problem to be worked around, it is
+ * invalid HTML — the parser CLOSES the outer anchor at the inner one, so the
+ * markup React describes and the DOM the browser builds stop matching, and
+ * hydration then patches a tree that is not the tree it rendered.
+ *
+ * Three ways out were on the table:
+ *
+ *   1. Drop the card-wide link below lg, leave only the button.  REFUSED —
+ *      the ruling is that the whole card stays one link target on mobile as it
+ *      is on desktop, and 341×136 of artwork that is not tappable is worse
+ *      than no button at all.
+ *   2. Stretched-link: card is a <div>, an absolutely-positioned <a> covers
+ *      it, the button sits above on a higher z-index.  REFUSED — that is TWO
+ *      controls in the accessibility tree pointing at one destination, it
+ *      makes the card's text unselectable, and the button must then out-stack
+ *      an overlay whose only job is to be on top of everything.
+ *   3. ONE <a>, and the button is a <span> inside it.  TAKEN.
+ *
+ * So `interactive={false}` renders a <span> carrying the identical classes.
+ * It is a real, full-size, correctly-labelled affordance that navigates when
+ * pressed — because the anchor around it is what is pressed. It is not a
+ * second control, so there is nothing that can fire twice, nothing extra in
+ * the tab order, and nothing to announce twice to a screen reader.
+ *
+ * NO `role="button"`, NO `tabIndex` on that span. Either one would put the
+ * second control back into the accessibility tree — the exact thing the span
+ * exists to avoid — while leaving it unable to actually be activated by
+ * keyboard, which is the worst of both.
+ *
+ * `target`/`rel` only exist on the interactive form; on the span they would be
+ * inert attributes, and the outer <Link> already carries them.
+ */
+function SlideAction({ item, interactive = false }) {
+  const label = item.linkText ?? DETAILS_LABEL;
+  const className =
+    "inline-flex items-center gap-1.5 rounded-[10px] bg-9e-action px-5 py-2.5 " +
+    "text-sm font-bold text-white transition-colors duration-9e-micro ease-9e " +
+    "hover:bg-9e-action-scale-100";
+
+  const content = (
+    <>
+      <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+      {label}
+    </>
+  );
+
+  return (
+    <div data-fc-action="" className="flex flex-wrap gap-3">
+      {interactive ? (
+        <Link
+          href={item.href}
+          {...(item.linkKind === "external"
+            ? { target: "_blank", rel: "noopener noreferrer" }
+            : null)}
+          className={className}
+        >
+          {content}
+        </Link>
+      ) : (
+        <span className={className}>{content}</span>
+      )}
+    </div>
+  );
+}
+
 /** `video` (and later `course`/`article`): text left, media right. */
 function SplitCard({ item, active, isPlaying, onPlay }) {
   return (
@@ -585,84 +810,13 @@ function SplitCard({ item, active, isPlaying, onPlay }) {
           unbroken Thai — without it the panel refuses to shrink below its
           content's intrinsic width and shoves the media off the card. */}
       <div className="flex flex-col justify-center gap-4 lg:h-full lg:min-w-0 lg:flex-1 lg:gap-5">
-        <div className="flex flex-col gap-3">
-          {item.badge ? (
-            <div className="flex w-fit items-center gap-1.5 rounded-lg bg-[var(--9e-fc-badge-bg)] px-3 py-1">
-              <Star
-                className="h-3.5 w-3.5 shrink-0 text-[var(--9e-fc-accent)]"
-                strokeWidth={2}
-              />
-              <p className="text-xs font-bold text-[var(--9e-fc-accent)]">
-                {item.badge}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-1.5">
-            {/* Every slot below is guarded. The mapper returns null — never ''
-                — for anything the Banner model cannot supply, and today that
-                is kicker, both title accents and the subtitle on EVERY record.
-                A `''` would still occupy a line box and still pull the gap
-                above it; null removes the element. */}
-            {item.kicker ? (
-              <p className="text-sm font-semibold text-[var(--9e-fc-text-muted)]">
-                {item.kicker}
-              </p>
-            ) : null}
-
-            {/* h3, not h2 — the section already spent its h2 on the heading
-                above, and this is one item inside that section. */}
-            <h3 className="text-[26px] font-extrabold leading-[1.15] text-white lg:text-[34px]">
-              <span className="block">{item.title}</span>
-              {item.titleAccent || item.titleHighlight ? (
-                <span className="block">
-                  {item.titleAccent ? (
-                    <span className="text-[var(--9e-fc-accent)]">
-                      {item.titleAccent}
-                    </span>
-                  ) : null}
-                  {item.titleAccent && item.titleHighlight ? " " : null}
-                  {item.titleHighlight ? (
-                    <span className="text-[var(--9e-fc-gold)]">
-                      {item.titleHighlight}
-                    </span>
-                  ) : null}
-                </span>
-              ) : null}
-            </h3>
-
-            {item.subtitle ? (
-              <p className="text-sm font-medium text-[var(--9e-fc-text-body)]">
-                {item.subtitle}
-              </p>
-            ) : null}
-          </div>
-
-          {item.description ? (
-            <p className="line-clamp-3 text-[13px] leading-relaxed text-[var(--9e-fc-text-muted)]">
-              {item.description}
-            </p>
-          ) : null}
-        </div>
+        <SlideCopy item={item} />
 
         <div className="flex flex-col gap-4">
           {/* NEVER A DEAD BUTTON, and there is only one button now: the
               thumbnail is the play control, so `ดูวิดีโอ` was a second
               affordance for an action the media panel already offers. */}
-          {item.href ? (
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href={item.href}
-                {...(item.linkKind === "external"
-                  ? { target: "_blank", rel: "noopener noreferrer" }
-                  : null)}
-                className="inline-flex items-center gap-1.5 rounded-[10px] bg-9e-action px-5 py-2.5 text-sm font-bold text-white transition-colors duration-9e-micro ease-9e hover:bg-9e-action-scale-100"
-              >
-                <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-                ดูรายละเอียด
-              </Link>
-            </div>
-          ) : null}
+          {item.href ? <SlideAction item={item} interactive /> : null}
 
           {/* The hairline belongs TO the chip row, so it goes when the row
               goes. On a record with no feature_tags a rule with nothing under
