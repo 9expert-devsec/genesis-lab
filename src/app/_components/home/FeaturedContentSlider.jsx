@@ -439,6 +439,23 @@ export function FeaturedContentSlider({ copy, items = [] }) {
 const FEATURED_FRAME = "lg:aspect-[2.5/1] lg:max-h-[480px] lg:min-h-0";
 
 /**
+ * The featured card's corner radius.
+ *
+ * 24px is the Figma value the card has always carried, and it is also exactly
+ * `borderRadius['9e-xl']` in tailwind.config.js — so this is the repo's own
+ * largest radius token, not a number invented here.
+ *
+ * TWO CONSTANTS, BOTH COMPLETE LITERALS, and that is not redundancy. Tailwind
+ * scans raw text: it can see `rounded-[24px]` and `max-lg:rounded-[24px]`
+ * written out, and it can see NEITHER if one is assembled as
+ * `"max-lg:" + CARD_RADIUS`. That form emits perfect markup and zero CSS,
+ * which this repo has shipped before. Keep them in step by hand; there is no
+ * safe way to derive one from the other.
+ */
+const CARD_RADIUS = "rounded-[24px]";
+const CARD_RADIUS_BELOW_LG = "max-lg:rounded-[24px]";
+
+/**
  * `image` records: the artwork, full width, nothing drawn over it.
  *
  * ── object-cover, NOT object-contain ────────────────────────────────────────
@@ -471,7 +488,25 @@ function ImageOnlyCard({ item, active }) {
           the same 4.4% off each side the desktop card takes — instead of
           something that worsens as the screen narrows. It is a short band on a
           phone (375/2.5 = 150px) and that is the artwork's real shape. */}
-      <div className="relative aspect-[2.5/1] w-full lg:h-full lg:aspect-auto">
+      {/* ── THE ARTWORK ROUNDS ITSELF, BUT ONLY BELOW lg ──────────────────
+          From lg the artwork fills the shell (measured: 1198×478 inside a
+          1200×480 shell, inset 1px by the border), so it reaches the corners
+          and the shell's own `overflow-hidden` + 24px radius already clips it
+          round. Nothing to add there, and adding it anyway would round a box
+          that sits 1px inside the clip — a hairline of panel showing through
+          each corner.
+
+          Below lg the card fills the reserved height and centres the artwork,
+          which leaves it inset 216px top and bottom at 375. It never touches
+          the shell's corners, so the clip does nothing and the banner rendered
+          with square ones inside a rounded panel. It needs its own radius, and
+          it is the SAME radius — see CARD_RADIUS above.
+
+          `overflow-hidden` alongside it because the <Image> is a positioned
+          fill child: a radius on the wrapper alone would not clip it. */}
+      <div
+        className={`relative aspect-[2.5/1] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
+      >
         <SlideImage
           item={item}
           active={active}
@@ -498,7 +533,8 @@ function ImageOnlyCard({ item, active }) {
   // From lg the frame's own ratio already governs and every slide is the same
   // height, so none of this applies.
   const shell =
-    "block w-full overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] " +
+    "block w-full overflow-hidden border border-[var(--9e-fc-panel-border)] " +
+    CARD_RADIUS + " " +
     "bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] " +
     "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:justify-center " +
     FEATURED_FRAME;
