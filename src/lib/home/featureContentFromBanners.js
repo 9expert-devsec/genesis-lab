@@ -36,6 +36,13 @@
  * a divider above it.
  */
 
+import {
+  BANNER_TYPES,
+  LEGACY_TO_NEW,
+  LEGACY_TYPES,
+} from '@/lib/banners/bannerTypes';
+import { resolveBannerLink, warnBlockedBannerLink } from '@/lib/bannerLinkUrl';
+
 /** The section's own chrome. Not from the database — there is no field for it. */
 export const FEATURE_CONTENT_COPY = {
   eyebrow: 'FEATURED CONTENT',
@@ -64,7 +71,7 @@ export const FEATURE_CONTENT_COPY = {
  *   image_button_desktop  — one record, inactive. Zero live.
  *   image_button_mobile   — the type has never had a single record.
  */
-const POOL_TYPES = ['youtube', 'image_desktop'];
+const POOL_TYPES = [LEGACY_TYPES.YOUTUBE, LEGACY_TYPES.IMAGE_DESKTOP];
 
 const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtu\.be)$/i;
 
@@ -132,8 +139,14 @@ function isLive(banner, now) {
 
 /** One Banner → one view-model item, or null if it cannot fill the slot. */
 function toItem(banner) {
-  const type = banner.type;
-  const isVideo = type === 'youtube';
+  // NORMALISED, and every branch below reads this — never `banner.type`.
+  // 'youtube' → 'video', 'image_desktop' → 'image'. A record already stored
+  // under a new id passes through unchanged. Nothing here does a substring test
+  // on a type string: `startsWith('image')` answers true for four different
+  // legacy ids AND for the new one, which is the bug that shape always becomes.
+  const type = LEGACY_TO_NEW[banner.type] ?? banner.type;
+  const isVideo = type === BANNER_TYPES.VIDEO;
+  const isImage = type === BANNER_TYPES.IMAGE;
   const videoId = text(banner.youtube_id);
 
   // An item with no picture has no card. The featured slot IS an image slot.
@@ -151,18 +164,24 @@ function toItem(banner) {
 
   const link = text(banner.link_url);
 
-  // THE BUTTON RULE. `ดูวิดีโอ` needs a video; `ดูรายละเอียด` needs a page that
-  // is not that same video. A link_url pointing at YouTube is folded into the
-  // video target and does NOT also become a details link — otherwise both
-  // buttons render and both go to the same URL.
-  const videoHref = isVideo
-    ? videoId
-      ? `https://www.youtube.com/watch?v=${videoId}`
-      : link && isYouTubeUrl(link)
-        ? link
-        : null
-    : null;
-  const href = link && !isYouTubeUrl(link) ? link : null;
+  // `ดูรายละเอียด` needs a page that is NOT the video itself. Every live video
+  // record's link_url is the watch URL for the id already in `youtube_id`, so
+  // without this test the button would point at the thing the card already
+  // plays inline.
+  //
+  // There is no `ดูวิดีโอ` button any more: the thumbnail IS the play control,
+  // so a second affordance to the same action was one too many. `videoId` below
+  // is what the facade needs — an id, not a URL, because the embed is built
+  // from it and no navigation happens.
+  const detailsUrl = link && !isYouTubeUrl(link) ? link : null;
+
+  // Internal / external / mailto / refused — the SAME rules the carousel uses,
+  // resolved here so no component has to know them. `blocked` warns once and
+  // renders unlinked rather than silently dropping the link.
+  const resolved = resolveBannerLink(detailsUrl);
+  if (resolved.kind === 'blocked') warnBlockedBannerLink(banner);
+  const href = resolved.href;
+  const linkKind = resolved.kind;
 
   // feature_tags is the only stored source for the chip row, and only youtube
   // records have any. `line1` alone is enough for a chip; a tag with neither
@@ -180,6 +199,7 @@ function toItem(banner) {
     id: String(banner._id ?? `${type}-${banner.weight ?? 0}`),
     type,
     isVideo,
+    isImage,
 
     // ── The eight designed slots ──
     badge: isVideo ? 'วิดีโอแนะนำ' : 'แนะนำสำหรับคุณ', // derived from type
@@ -197,17 +217,36 @@ function toItem(banner) {
 
     // ── Actions ──
     href,
-    videoHref,
+    linkKind,
+    // The id, not a watch URL: the video plays INLINE in the card. Null on
+    // every non-video record, which is what the facade branches on.
+    videoId: isVideo ? videoId : null,
 
     // ── Chrome ──
-    watchOnYouTube: isVideo,
-    brand: '9Expert',
+    // Two keys used to live here and both are gone, for the same reason:
+    // `brand: '9Expert'` fed a chip at the thumbnail's top left, and
+    // `watchOnYouTube` fed a "Watch on YouTube" pill at its bottom right.
+    // Both chips were removed once the real YouTube play mark landed on the
+    // image, and neither key has a consumer any more. A view-model key with no
+    // reader is the kind of thing someone restores later assuming something
+    // needed it — so it goes with the thing that read it.
 
     // ── Small-card presentation. `tone` is a KEY, not a class: the component
     //    owns the palette, the same way it owns the icon components. ──
     tone: isVideo ? 'red' : 'cyan',
     cardBadge: isVideo ? 'YouTube' : 'แนะนำ',
     cardSubtitle: text(banner.slide_text),
+
+    // ── COURSE PRICE — the slot exists, the source does not, yet. ───────────
+    // Rendered under the small card's title for `course` records ONLY. The
+    // Banner model has no price field and never will: a price belongs to the
+    // course, so it arrives with the course reference in the deferred data
+    // slice (MSDB `course_price` / `course_netprice`).
+    //
+    // NULL on every record today, which is the point of shipping it now — the
+    // collapse path is the one that runs in production for every existing
+    // banner, so it is the path worth proving before anything can populate it.
+    price: null,
   };
 }
 

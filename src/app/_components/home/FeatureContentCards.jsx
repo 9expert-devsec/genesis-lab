@@ -13,11 +13,20 @@ import Image from "next/image";
  * moment they were browsing the pool, and the featured card already carries
  * the real destination on its own buttons.
  *
- * ── WHAT IS NOT HERE ANY MORE ───────────────────────────────────────────────
- * The PRICE line is gone, not commented out. The Banner model has no price
- * field and Step C is not adding one, so the branch was code that could never
- * execute. `metaRight` (the "4.8 ★ / 95K views" slot in the Figma) is gone for
- * the same reason — nothing in the collection can supply it.
+ * ── THE RIGHT-HAND META SLOT IS GONE FOR GOOD ───────────────────────────────
+ * The Figma drew a second value opposite the chip — "4.8 ★ (120 รีวิว)",
+ * "95K views", "เริ่มเรียนได้ทันที". Nothing in this system can supply any of
+ * them: there is no rating, no review count and no view count anywhere in the
+ * data, and inventing one would be a number on a card that means nothing. The
+ * chip keeps the left of that row to itself.
+ *
+ * ── THE PRICE LINE IS BUILT AND RENDERS NOTHING ─────────────────────────────
+ * `price` is populated for `course` records only, and no course record exists
+ * yet — so today this slot collapses on every single card. That is deliberate
+ * rather than premature: the collapse path is the one that actually runs in
+ * production, so it is worth having under test before anything can fill it.
+ * The mapper returns null, and null removes the element rather than leaving an
+ * empty line pulling `gap-2` open.
  *
  * ── IMAGES ARE CONTAINED, NEVER CROPPED ─────────────────────────────────────
  * Same ruling as the featured card. The slot is the design's ~2.56:1, which is
@@ -83,6 +92,7 @@ export function FeatureContentCards({ cards = [], onSelect }) {
                   {item.cardBadge}
                 </span>
               ) : null}
+              {/* No second value opposite the chip — see the note above. */}
 
               {/* Two lines on a phone, one line from md.
                   The Figma truncates to a single line, and at the designed
@@ -94,6 +104,29 @@ export function FeatureContentCards({ cards = [], onSelect }) {
               <p className="line-clamp-2 text-sm font-bold text-white md:truncate">
                 {item.title}
               </p>
+
+              {/* Course price. Null on every record today; see the header. The
+                  three parts are independent — a course with a price but no
+                  "was" price renders two spans, not a struck-through blank. */}
+              {item.price ? (
+                <div className="flex flex-wrap items-baseline gap-2">
+                  {item.price.prefix ? (
+                    <span className="text-xs text-[var(--9e-fc-text-muted)]">
+                      {item.price.prefix}
+                    </span>
+                  ) : null}
+                  {item.price.now ? (
+                    <span className="text-[15px] font-extrabold text-[var(--9e-fc-emerald)]">
+                      {item.price.now}
+                    </span>
+                  ) : null}
+                  {item.price.was ? (
+                    <span className="text-[11px] text-[var(--9e-fc-text-muted)] line-through">
+                      {item.price.was}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* Collapses on every image record — they have no slide_text. */}
               {item.cardSubtitle ? (
