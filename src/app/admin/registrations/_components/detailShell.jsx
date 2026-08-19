@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 /**
@@ -414,6 +415,134 @@ export function OverflowItem({ children, onClick, disabled, busy, icon: Icon, to
  * empty one — a 21x18 box with nothing in it is the same class of defect as an
  * empty line, one element larger.
  */
+/**
+ * ── THE TAB'S TWO STATES, AS A cva VARIANT AND NOT AS A className ──────────
+ *
+ * The shipped selected tab was `bg-9e-navy text-9e-ice` — a dark slab. The
+ * design's treatment is the other way round: the GROUP is a light neutral
+ * surface, the SELECTED tab is a raised white card with a BLUE label and icon,
+ * and the unselected tabs are transparent.
+ *
+ * ══ WHY cva — AND A MEASURED CORRECTION TO THE USUAL REASON ═════════════════
+ *
+ * The reason normally given for this is that `cn` is twMerge and TWMERGE CANNOT
+ * MERGE THIS REPO'S `9e-*` SCALES, so two competing colour utilities would both
+ * survive and the winner would be decided by CSS emission order.
+ *
+ * THAT IS NOT TRUE OF THE COLOURS. Measured with
+ * scripts/_probe-twmerge-9e.mjs, and every colour pair collapses correctly:
+ *
+ *     cn('text-9e-ice', 'text-9e-action')      → 'text-9e-action'      COLLAPSED
+ *     cn('bg-9e-navy', 'bg-transparent')       → 'bg-transparent'      COLLAPSED
+ *     cn('bg-9e-action/10', 'bg-9e-air/15')    → 'bg-9e-air/15'        COLLAPSED
+ *     cn('text-9e-signature-50', '…-900')      → 'text-9e-signature-900' COLLAPSED
+ *
+ * twMerge groups by the utility PREFIX (`text-`, `bg-`) and treats the rest as
+ * an opaque value, so it does not need to know the colour names at all.
+ *
+ * WHERE THE RULE IS REAL IS THE NON-COLOUR EXTENDS:
+ *
+ *     cn('rounded-9e-md', 'rounded-9e-lg')     → BOTH KEPT
+ *
+ * `borderRadius` has a closed set of known suffixes and `9e-md` is not one of
+ * them, so twMerge cannot tell the two apart and emits both. That IS the
+ * documented hazard, and it applies to `rounded-9e-*` — which this very file
+ * uses on every card — rather than to the tab colours.
+ *
+ * ── SO WHY IS THIS STILL A VARIANT ────────────────────────────────────────
+ * Because the two states are a CLOSED CHOICE, not a base plus an adjustment. A
+ * variant makes "selected" and "unselected" the only two things a tab can be and
+ * puts both class lists where they can be read side by side; a className
+ * override makes them a default and an exception, and leaves a caller free to
+ * produce a third state nobody designed. The merge behaviour would decide
+ * whether an override WORKED; it was never what decides whether one should
+ * exist. `TabList` takes NO className for its tabs, so the question does not
+ * arise at any call site.
+ *
+ * test/render/registrationTabColours pins the measurement in both directions, so
+ * if a twMerge upgrade ever changes either behaviour it is a red test rather
+ * than a comment that has quietly become false.
+ *
+ * ══ THE COLOURS, MEASURED — scripts/_probe-tab-contrast.mjs ═════════════════
+ *
+ * No new colour is introduced. Every value is an existing 9e-* token or an
+ * existing CSS variable, and the pair was chosen on the numbers rather than on
+ * the design's light-mode drawing:
+ *
+ *                                       light        dark
+ *   SELECTED label                                              (bar: 4.5:1)
+ *     9e-action  on --surface-raised     5.28 PASS    2.18 FAIL
+ *     9e-air     on --surface-raised     2.35 FAIL    4.89 PASS
+ *     9e-brand   on --surface-raised     3.54 FAIL    3.25 FAIL
+ *   → `text-9e-action dark:text-9e-air`. NEITHER TOKEN PASSES IN BOTH THEMES,
+ *     so a single blue was not available; 9e-brand fails in both and is the one
+ *     a reader would reach for first, since it is the logo colour.
+ *
+ *   UNSELECTED label
+ *     --text-muted     on --surface-muted 5.23 PASS   2.56 FAIL
+ *     --text-secondary on --surface-muted 7.35 PASS   8.82 PASS
+ *   → `--text-secondary`, WHICH IS ALSO WHAT SHIPPED. The design says "muted
+ *     labels" and `--text-muted` is the token with that name, and IT FAILS AA IN
+ *     DARK BY A WIDE MARGIN. Taking the design literally would have been a
+ *     regression. "Muted" is satisfied by being a step down from
+ *     --text-primary, which --text-secondary is.
+ *
+ * The labels are 13px SEMIBOLD — below the 18.66px large-text threshold — so
+ * 4.5:1 is the bar that applies, not 3.0.
+ *
+ * ── THE CARD IS SEPARATED BY ITS SHADOW, NOT BY ITS COLOUR ────────────────
+ * --surface-raised against --surface-muted is 1.05:1 in light and 1.22:1 in
+ * dark. That is by design — a white card on a near-white group — and it means
+ * `shadow-9e-sm` is LOAD-BEARING rather than decorative: remove it and the
+ * selected tab is distinguished by its label colour alone. Stated because a
+ * future tidy-up will otherwise read the shadow as ornament.
+ */
+const tabVariants = cva(
+  'flex h-[39px] flex-1 items-center justify-center gap-[6px] rounded-9e-md text-[13px] font-semibold transition-colors',
+  {
+    variants: {
+      selected: {
+        true:  'bg-[var(--surface-raised)] text-9e-action shadow-9e-sm dark:text-9e-air',
+        false: 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
+      },
+    },
+    defaultVariants: { selected: false },
+  },
+);
+
+/**
+ * The count badge follows the tab it sits in.
+ *
+ * A separate cva rather than more branches inside `tabVariants`, because the two
+ * answer different questions and cva composes variants of ONE element. The
+ * selected badge is the blue at 12% behind the same blue text — no new colour,
+ * and it reads as part of the label rather than as a second chip.
+ */
+const tabCountVariants = cva(
+  'flex h-[18px] w-[21px] items-center justify-center rounded-full text-[10px] font-bold tabular-nums',
+  {
+    variants: {
+      selected: {
+        // ── `/10` AND `/15`, NOT `/12` ────────────────────────────────────
+        // The first draft wrote `bg-9e-action/12` and it COMPILED TO NOTHING:
+        // 12 is not a step of Tailwind's opacity scale, and an out-of-scale
+        // modifier is silently dropped rather than rejected. The badge would
+        // have had no background at all — a number floating on a white card,
+        // which reads as a layout bug rather than a missing class.
+        //
+        // Caught by the compile-through-Tailwind harvest in
+        // test/fs/tailwindArbitraryValueRules, NOT by review and not by any
+        // source scan: the class is a complete literal and contains no `[...]`,
+        // so every shape-based check passes it. Both steps below are registered
+        // there for the same reason.
+        true:  'bg-9e-action/10 text-9e-action dark:bg-9e-air/15 dark:text-9e-air',
+        false: 'bg-[var(--surface-border)] text-[var(--text-secondary)]',
+      },
+    },
+    defaultVariants: { selected: false },
+  },
+);
+
 export function TabList({ tabs, active, onSelect, idFor }) {
   return (
     <div
@@ -432,24 +561,21 @@ export function TabList({ tabs, active, onSelect, idFor }) {
             aria-selected={selected}
             aria-controls={idFor(tab.key, 'panel')}
             onClick={() => onSelect(tab.key)}
-            className={cn(
-              'flex h-[39px] flex-1 items-center justify-center gap-[6px] rounded-9e-md text-[13px] font-semibold transition-colors',
-              selected
-                ? 'bg-9e-navy text-9e-ice shadow-9e-sm'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-            )}
+            // The variant IS the class list — no `cn` wrapping it and no
+            // className prop feeding it. See the note above: this is about the
+            // two states being a closed choice, not about what twMerge can do.
+            className={tabVariants({ selected })}
           >
+            {/*
+              The ICON takes the label's colour through `currentColor`, which is
+              what lucide renders with by default. That is deliberate: colouring
+              it separately would be a second place for the selected blue to
+              live, and the two would drift the first time one was changed.
+            */}
             <Icon aria-hidden="true" className="h-[14px] w-[14px] shrink-0" />
             <span>{tab.label}</span>
             {tab.count == null ? null : (
-              <span
-                className={cn(
-                  'flex h-[18px] w-[21px] items-center justify-center rounded-full text-[10px] font-bold tabular-nums',
-                  selected ? 'bg-9e-ice/20 text-9e-ice' : 'bg-[var(--surface-border)] text-[var(--text-secondary)]',
-                )}
-              >
-                {tab.count}
-              </span>
+              <span className={tabCountVariants({ selected })}>{tab.count}</span>
             )}
           </button>
         );
