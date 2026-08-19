@@ -68,6 +68,56 @@ const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
  * pairing is checked rather than assumed on both sides.
  */
 const CASES = [
+  /**
+   * ── THE RESTYLED TABS (round 6) ─────────────────────────────────────────
+   *
+   * The selected tab became a raised card with a blue label. Three of its four
+   * new classes are exactly the shapes this file exists to catch, and they are
+   * routed through the REAL COMPILER rather than through a source scan, because
+   * a source scan cannot answer the question that matters.
+   *
+   * `bg-9e-action/12` is the one to watch. It is an OPACITY MODIFIER ON A
+   * `theme.extend.colors` ENTRY — not stock Tailwind, and not an arbitrary value
+   * either, so it is invisible to a `[...]`-shaped check while still being able
+   * to compile to nothing if the scale is renamed or the modifier syntax is
+   * unsupported for that entry. The failure would be a badge with NO background
+   * at all, which on a white card is a number floating in space and reads as a
+   * layout bug rather than a missing class.
+   *
+   * `dark:text-9e-air` is registered because the dark half of the pair is the
+   * half nobody looks at: the design is drawn in light, the screenshot is taken
+   * in light, and a dark variant that compiled to nothing would leave the
+   * selected label at 2.18:1 against its own card — measured, see
+   * scripts/_probe-tab-contrast.mjs — with nothing on screen to say so.
+   */
+  {
+    what: 'the selected tab card',
+    file: 'src/app/admin/registrations/_components/detailShell.jsx',
+    className: 'bg-[var(--surface-raised)]',
+    property: 'background-color',
+    referencesVar: '--surface-raised',
+  },
+  {
+    what: 'the selected tab label (dark half)',
+    file: 'src/app/admin/registrations/_components/detailShell.jsx',
+    className: 'dark:text-9e-air',
+    property: 'color',
+  },
+  {
+    what: 'the selected tab count badge',
+    file: 'src/app/admin/registrations/_components/detailShell.jsx',
+    className: 'bg-9e-action/10',
+    property: 'background-color',
+  },
+  {
+    // The dark half of the same badge, and the step DIFFERS from the light one
+    // (15 vs 10) because the blue sits on a dark card. Registered separately
+    // rather than assumed to follow: each step is independently droppable.
+    what: 'the selected tab count badge (dark half)',
+    file: 'src/app/admin/registrations/_components/detailShell.jsx',
+    className: 'dark:bg-9e-air/15',
+    property: 'background-color',
+  },
   {
     what: 'the /schedule round hover',
     file: 'src/app/(public)/schedule/_components/ScheduleClient.jsx',
