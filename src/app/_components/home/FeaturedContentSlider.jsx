@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -34,11 +28,19 @@ import {
 } from "lucide-react";
 import { useSwipe } from "@/hooks/useSwipe";
 import { BANNER_TYPES } from "@/lib/banners/bannerTypes";
-import { FeatureContentCards } from "./FeatureContentCards";
+import { FeatureContentStrip } from "./FeatureContentStrip";
 
 /**
- * The Feature Content board: section header, the featured card, and the three
- * small cards under it.
+ * The Feature Content board: section header, the featured card, and the
+ * filmstrip of the whole pool beneath it.
+ *
+ * ── WHERE THE CONTROLS LIVE, AND WHY NOT HERE ───────────────────────────────
+ * The Play/Stop and the two arrows are BUILT here — they read auto-slide state
+ * that only this component has — but they are RENDERED inside the strip, passed
+ * down as the `controls` node. They used to sit at the top right of the section
+ * opposite the heading, a featured card's height away from the row they moved,
+ * and on a phone above the fold while those cards were cut off below it. State
+ * stays where the state is; position follows what the control acts on.
  *
  * ── THE FEATURED CARD HAS TWO LAYOUTS, CHOSEN BY TYPE ───────────────────────
  * FROM lg, `image` records are ARTWORK ONLY — the picture fills the whole card
@@ -227,18 +229,13 @@ export function FeaturedContentSlider({ copy, items = [] }) {
     setPlayingId(null);
   }, [current]);
 
-  // The next three, wrapping, and never the current one. `total - 1` is the cap
-  // so a pool of 2 yields 1 card and a pool of 3 yields 2 — "show what exists
-  // without padding". Each entry carries its index in the POOL, because
-  // clicking card 2 must promote pool item 7.
-  const upcoming = useMemo(() => {
-    const out = [];
-    for (let step = 1; step <= Math.min(3, total - 1); step += 1) {
-      const at = (current + step) % total;
-      out.push({ item: items[at], index: at });
-    }
-    return out;
-  }, [current, items, total]);
+  // ── THE STRIP GETS THE WHOLE POOL, NOT A WINDOW ONTO IT ───────────────────
+  // A `upcoming` memo used to live here and built "the next three, wrapping,
+  // never the current one". It is gone with the row it fed: the strip now
+  // renders every item and marks the active one, so the slice that used to be
+  // computed per advance is just `items`, and the index the strip reports is
+  // already the pool index — no translation step, and nothing that can be off
+  // by one when the active card wraps past the end.
 
   if (!total || !item) return null;
 
@@ -281,53 +278,21 @@ export function FeaturedContentSlider({ copy, items = [] }) {
       onBlur={() => setFocusWithin(false)}
     >
       {/* ── Section header ───────────────────────────────────────────────
-          `sm:items-end` so the controls sit on the baseline of the description
-          rather than floating level with the eyebrow. Below sm they drop under
-          the copy — at 390px there is no room for the text block and three
-          controls on one line. */}
-      <div className="flex w-full flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex max-w-[800px] flex-col gap-1.5">
-          <p className="text-xs font-bold uppercase tracking-wide text-[var(--9e-fc-accent)]">
-            {copy.eyebrow}
-          </p>
-          <h2 className="text-[26px] font-bold leading-tight text-white lg:text-[34px]">
-            {copy.title}
-          </h2>
-          <p className="text-sm leading-relaxed text-[var(--9e-fc-text-muted)]">
-            {copy.description}
-          </p>
-        </div>
-
-        {hasPool ? (
-          <div className="flex shrink-0 items-center gap-3">
-            <SliderButton
-              label={
-                autoPlaying
-                  ? "หยุดเลื่อนอัตโนมัติ"
-                  : "เริ่มเลื่อนอัตโนมัติ"
-              }
-              onClick={() => setUserStopped((s) => !s)}
-            >
-              {autoPlaying ? (
-                <Pause className="h-4 w-4" strokeWidth={2} />
-              ) : (
-                <Play className="h-4 w-4" strokeWidth={2} />
-              )}
-            </SliderButton>
-            <SliderButton
-              label="คอนเทนต์ก่อนหน้า"
-              onClick={() => takeControl(prev)}
-            >
-              <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-            </SliderButton>
-            <SliderButton
-              label="คอนเทนต์ถัดไป"
-              onClick={() => takeControl(next)}
-            >
-              <ChevronRight className="h-4 w-4" strokeWidth={2} />
-            </SliderButton>
-          </div>
-        ) : null}
+          Copy only. The three controls used to sit opposite this block, at the
+          top right of the section — which put them a full featured card away
+          from the strip they drive, and on a phone above the fold while the
+          cards they move were cut off below it. They now live in the strip's
+          own bar row; see `controls` below. */}
+      <div className="flex w-full max-w-[800px] flex-col gap-1.5">
+        <p className="text-xs font-bold uppercase tracking-wide text-[var(--9e-fc-accent)]">
+          {copy.eyebrow}
+        </p>
+        <h2 className="text-[26px] font-bold leading-tight text-white lg:text-[34px]">
+          {copy.title}
+        </h2>
+        <p className="text-sm leading-relaxed text-[var(--9e-fc-text-muted)]">
+          {copy.description}
+        </p>
       </div>
 
       {/* ── EVERY SLIDE IS RENDERED, STACKED IN ONE GRID CELL ─────────────
@@ -402,9 +367,52 @@ export function FeaturedContentSlider({ copy, items = [] }) {
       </div>
 
       {hasPool ? (
-        <FeatureContentCards
-          cards={upcoming}
+        <FeatureContentStrip
+          items={items}
+          activeIndex={current}
+          // Picking a card is deliberate navigation, exactly like an arrow, so
+          // it goes through the same `takeControl` and stops auto-slide for
+          // good. Nothing here treats a strip click as gentler than an arrow.
           onSelect={(at) => takeControl(() => setIndex(at))}
+          // A viewer who scrolls the strip has taken control too, but has NOT
+          // asked for a different slide — so this sets the same permanent stop
+          // without moving the index. The strip is what decides which scrolls
+          // are the viewer's; see the note on its wheel/pointer handlers.
+          onTakeControl={() => setUserStopped(true)}
+          // Passed down rather than re-read: this component already holds a
+          // LIVE matchMedia listener for it, and a second reader in the strip
+          // would be a second thing to keep in step for one boolean.
+          reducedMotion={reducedMotion}
+          controls={
+            <div className="flex shrink-0 items-center gap-3">
+              <SliderButton
+                label={
+                  autoPlaying
+                    ? "หยุดเลื่อนอัตโนมัติ"
+                    : "เริ่มเลื่อนอัตโนมัติ"
+                }
+                onClick={() => setUserStopped((s) => !s)}
+              >
+                {autoPlaying ? (
+                  <Pause className="h-4 w-4" strokeWidth={2} />
+                ) : (
+                  <Play className="h-4 w-4" strokeWidth={2} />
+                )}
+              </SliderButton>
+              <SliderButton
+                label="คอนเทนต์ก่อนหน้า"
+                onClick={() => takeControl(prev)}
+              >
+                <ChevronLeft className="h-4 w-4" strokeWidth={2} />
+              </SliderButton>
+              <SliderButton
+                label="คอนเทนต์ถัดไป"
+                onClick={() => takeControl(next)}
+              >
+                <ChevronRight className="h-4 w-4" strokeWidth={2} />
+              </SliderButton>
+            </div>
+          }
         />
       ) : null}
     </div>

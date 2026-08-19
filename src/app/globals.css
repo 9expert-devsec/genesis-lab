@@ -1078,3 +1078,58 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
     height: 450px;
   }
 }
+
+/* ── THE FILMSTRIP'S EDGE FADES ─────────────────────────────────────────────
+   Two overlays on the strip's leading and trailing edges, so a card that is
+   half out of view reads as "there is more this way" instead of as a card that
+   got cut off. The component mounts each one ONLY when the strip can actually
+   scroll that way — see FeatureContentStrip.jsx. A fade at an edge with
+   nothing behind it is a lie, and a lie here is worse than no fade.
+
+   ── WHY THESE ARE CLASSES AND NOT TAILWIND ARBITRARY VALUES ────────────────
+   Two reasons, and both are already written down elsewhere in this file:
+
+   1. The terminal stop must be `rgb(var(--9e-fc-base-rgb) / 0)` — the SAME
+      colour at alpha 0, never `transparent`. `transparent` is transparent
+      BLACK, and a browser that interpolates through it paints a grey band down
+      the middle of the fade. Identical reasoning to every seam gradient above,
+      and the same single source: change the triplet and these move with it.
+
+   2. Tailwind reads `/` inside an arbitrary value as its own opacity modifier,
+      so `bg-[linear-gradient(...rgb(var(--x)/0)...)]` is a coin-flip on whether
+      any CSS is emitted at all. This repo has already shipped a class that
+      produced perfect markup and zero CSS. A named class cannot fail that way.
+
+   The width is one card's worth of peek at most — wide enough to soften the
+   cut, narrow enough that it never covers a whole card's title. */
+.fc-strip-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  pointer-events: none;
+}
+
+.fc-strip-fade-start {
+  left: 0;
+  background-image: linear-gradient(
+    to right,
+    rgb(var(--9e-fc-base-rgb)) 0%,
+    rgb(var(--9e-fc-base-rgb) / 0) 100%
+  );
+}
+
+.fc-strip-fade-end {
+  right: 0;
+  background-image: linear-gradient(
+    to left,
+    rgb(var(--9e-fc-base-rgb)) 0%,
+    rgb(var(--9e-fc-base-rgb) / 0) 100%
+  );
+}
+
+@media (min-width: 768px) {
+  .fc-strip-fade {
+    width: 64px;
+  }
+}
