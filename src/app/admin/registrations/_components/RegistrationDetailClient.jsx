@@ -24,7 +24,7 @@ import {
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   SummaryStrip, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
-  DL, DLRow, QuotedNote, DetailError,
+  DL, DLRow, QuotedNote, DetailError, EditField, selectCls,
 } from './detailShell';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -1187,25 +1187,9 @@ function copyText(value) {
 
 // ── Shared atoms ───────────────────────────────────────────────────
 
-function selectCls() {
-  return cn(
-    'h-9 w-full rounded-9e-md border bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)]',
-    'border-[var(--surface-border)]',
-    'focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand'
-  );
-}
-
-function EditField({ label, value, onChange, type = 'text', required, className }) {
-  return (
-    <div className={className}>
-      <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
-        {label}{required && <span className="ml-0.5 text-9e-accent">*</span>}
-      </label>
-      <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand" />
-    </div>
-  );
-}
+// `selectCls` and `EditField` MOVED to detailShell.jsx when the in-house screen
+// gained edit forms — see the note there. They are imported at the top of this
+// file; a second copy here is exactly the drift that move removed.
 
 // ── Invoice edit form ─────────────────────────────────────────────
 

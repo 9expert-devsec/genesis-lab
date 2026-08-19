@@ -201,10 +201,76 @@ test('a quoted request offers only cancel', () => {
   assert.ok(menuItems(quoted).map(textOf).includes('ยกเลิกคำขอ'));
 });
 
-test('a pending request keeps its edit control', () => {
-  // The other side of the read-only assertion — without it, "no แก้ไข when
-  // cancelled" would pass on a screen that never renders one at all.
-  assert.equal(countExactly(pending, 'แก้ไข'), 1, 'the admin-notes card lost its edit button');
+/**
+ * ── RE-POINTED, AND STRICTLY STRONGER THAN THE LINE IT REPLACES ─────────────
+ *
+ * It read `countExactly(pending, 'แก้ไข') === 1` — one button, the admin-notes
+ * card's, because that was the only editable card on the screen. Its stated job
+ * was to stop "no แก้ไข when cancelled" passing vacuously on a screen that
+ * renders no edit control at all, and THAT JOB IS UNCHANGED AND STILL DONE:
+ * a non-zero exact count still fails the moment the affordance disappears.
+ *
+ * What the number now additionally pins is the defect this round fixed. The
+ * in-house screen displayed 25 allowlisted fields and could edit none of them,
+ * and the old `=== 1` was GREEN throughout — it was satisfied by the one card
+ * that worked, and said nothing about the five that did not. Six is therefore
+ * not a looser constant than one; it is the same guard with the five missing
+ * cards brought inside it.
+ *
+ * The count is spelled as a NAMED LIST rather than a bare 6 so a card removed
+ * on purpose changes this list in the same commit, and one lost by accident
+ * fails against a name a reader can act on.
+ */
+const EDITABLE_CARDS = [
+  'ผู้ประสานงาน & บริษัท',
+  'Training Requirement',
+  'ตารางเวลา & รูปแบบการอบรม',
+  'ข้อมูลใบเสนอราคา',
+  'หมายเหตุจากลูกค้า',
+  'บันทึกภายในของทีมขาย',
+];
+
+/**
+ * Card titles are matched through the SAME ESCAPING React applies.
+ *
+ * `ผู้ประสานงาน & บริษัท` renders as `ผู้ประสานงาน &amp; บริษัท`, so a raw
+ * `includes` of the source string reports the card MISSING on a page that draws
+ * it perfectly. Measured with scripts/_probe-inhouse-edit-count.mjs — the first
+ * draft of this list failed on exactly the two titles containing an ampersand
+ * while the แก้ไข counts were already correct, which is the tell: a probe that
+ * disagrees with itself about one card and not another is reading the markup
+ * wrong, not finding a defect.
+ */
+const escaped = (s) => s.replace(/&/g, '&amp;');
+
+test('a pending request keeps its edit control — on EVERY editable card', () => {
+  assert.equal(
+    countExactly(pending, 'แก้ไข'),
+    EDITABLE_CARDS.length,
+    `expected one แก้ไข per editable card (${EDITABLE_CARDS.join(', ')})`,
+  );
+  // Each named card is actually on the page, so the count above cannot be
+  // reached by six buttons on three cards.
+  for (const title of EDITABLE_CARDS) {
+    assert.ok(pending.includes(escaped(title)), `the ${title} card is missing from the page`);
+  }
+});
+
+/**
+ * THE PAIRING, stated as one assertion rather than left implicit across two
+ * tests: the same render that has six buttons when pending has zero when
+ * cancelled. This is what makes the count above a statement about the LOCK and
+ * not merely about the markup.
+ */
+test('the cancellation lock removes every one of those six, not merely some', () => {
+  assert.equal(countExactly(pending, 'แก้ไข'), EDITABLE_CARDS.length);
+  assert.equal(countExactly(cancelled, 'แก้ไข'), 0,
+    'a cancelled request must offer no edit control on ANY card');
+  // …and the cards themselves are still drawn. A lock that worked by not
+  // rendering the cards would satisfy the line above and hide the record.
+  for (const title of EDITABLE_CARDS) {
+    assert.ok(cancelled.includes(escaped(title)), `the ${title} card vanished on a cancelled request`);
+  }
 });
 
 /**
