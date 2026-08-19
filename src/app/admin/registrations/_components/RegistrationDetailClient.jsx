@@ -689,7 +689,34 @@ export function RegistrationDetailClient({ doc, history = null }) {
                 <DLRow label="ชื่อ-นามสกุล" value={`${coordinator.firstName ?? ''} ${coordinator.lastName ?? ''}`.trim()} />
                 <DLRow label="อีเมล"         value={coordinator.email} />
                 <DLRow label="เบอร์โทร"      value={coordinator.phone} />
-                <DLRow label="เข้าอบรมด้วย"  value={doc.coordinator?.isAttending ? 'ใช่' : 'ไม่'} />
+                {/*
+                  ── เข้าอบรมด้วย IS REMOVED FROM THE READ VIEW ONLY ─────────
+                  DISPLAY ONLY. `coordinator.isAttending` stays on the schema, is
+                  still written by the public wizard's checkbox, and is still
+                  READ in five places that matter — `buildAttendees` gives the
+                  coordinator the first seat when it is true, the attendee table
+                  below marks their row, and three email models carry it. None of
+                  that changes.
+
+                  IT WAS NOT EDITABLE HERE AND DOES NOT BECOME EDITABLE.
+                  `updateRegistration`'s coordinator branch names exactly
+                  firstName / lastName / email / phone; `isAttending` is not in
+                  the allowlist and no control ever offered it. So the instruction
+                  "stays editable if it is editable today" resolves to: it was
+                  not, and it still is not.
+
+                  ── A VACUITY CHANGE, AND IT IS THIS CARD'S ────────────────
+                  This row's value was `isAttending ? 'ใช่' : 'ไม่'` — TRUTHY IN
+                  BOTH BRANCHES. It was the one row of this card that `DLRow`
+                  could never drop, so the card was guaranteed to render at least
+                  one row whatever the document held. Any assertion of the shape
+                  "the coordinator card renders something" was satisfied by this
+                  row and by the data never. With it gone all three remaining
+                  rows are genuinely optional, and such an assertion now measures
+                  the record. Nothing in the suite currently makes that claim —
+                  checked — so nothing went from meaningful to vacuous here; the
+                  change is in the safe direction.
+                */}
               </DL>
             )}
           </SectionCard>
