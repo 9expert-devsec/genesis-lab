@@ -2,6 +2,10 @@ import {
   FEATURE_CONTENT_COPY,
   mapBannersToFeatureContent,
 } from "@/lib/home/featureContentFromBanners";
+import {
+  resolveFeatureContentRefs,
+  warnFeatureContentMisses,
+} from "@/lib/home/featureContentRefs";
 import { FeaturedContentSlider } from "./FeaturedContentSlider";
 
 /**
@@ -77,8 +81,27 @@ import { FeaturedContentSlider } from "./FeaturedContentSlider";
  * variants here and there should not be: the base is a named token, so a
  * light variant is added by overriding that token, not by editing call sites.
  */
-export function FeatureContentSection({ banners = [] }) {
-  const items = mapBannersToFeatureContent(banners);
+export async function FeatureContentSection({ banners = [] }) {
+  // ── RESOLUTION HAPPENS HERE, MAPPING HAPPENS AFTER IT ─────────────────────
+  // `course` and `article` banners carry a REFERENCE, not content: a course
+  // code or an article slug. Something has to turn those into records, and it
+  // must not be the mapper -- that module is pure by design, which is what lets
+  // it be tested without a database and what keeps the Banner shape from
+  // leaking into components.
+  //
+  // So this component, which is already a server component and already async in
+  // everything but keyword, does the batched lookup and hands the answers down.
+  // It costs NOTHING for a pool with no course or article records: the resolver
+  // collects the references first and returns immediately when there are none,
+  // which is every pool that exists today.
+  //
+  // The warning is emitted here rather than inside the mapper for the same
+  // purity reason, and it names the record AND what it failed to find, because
+  // "a card is missing from the home page" is otherwise unactionable.
+  const { resolved, misses } = await resolveFeatureContentRefs(banners);
+  if (misses.length) warnFeatureContentMisses(misses);
+
+  const items = mapBannersToFeatureContent(banners, { resolved });
 
   // No banner in the pool means no section — not an empty dark band with a
   // heading over nothing. The hero's bottom fade still resolves correctly

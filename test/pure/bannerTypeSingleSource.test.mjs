@@ -102,6 +102,11 @@ const BANNER_SURFACES = [
   'src/lib/actions/banners.js',
   'src/lib/landing/syncLandingData.js',
   'src/lib/home/featureContentFromBanners.js',
+  // Added in the course/article slice. It reads `banner.type`, `course_ref` and
+  // `article_slug`, so it is a banner surface by this file's own definition --
+  // and SCAN 2 immediately earned its place by catching a `kind: 'course'`
+  // discriminator in its sibling that shadowed a real type id.
+  'src/lib/home/featureContentRefs.js',
   'src/app/page.jsx',
   'src/app/admin/banners/page.jsx',
   'src/app/admin/banners/new/page.jsx',

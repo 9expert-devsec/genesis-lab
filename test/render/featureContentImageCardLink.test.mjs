@@ -81,7 +81,7 @@ const videoBanner = (over = {}) => ({
 });
 
 function renderSlider(banners) {
-  const items = mapBannersToFeatureContent(banners, new Date('2026-08-19T00:00:00Z'));
+  const items = mapBannersToFeatureContent(banners, { now: new Date('2026-08-19T00:00:00Z') });
   assert.ok(items.length, 'fixture produced no items — the test would pass vacuously');
   const html = renderToStaticMarkup(
     createElement(FeaturedContentSlider, { copy: FEATURE_CONTENT_COPY, items })
