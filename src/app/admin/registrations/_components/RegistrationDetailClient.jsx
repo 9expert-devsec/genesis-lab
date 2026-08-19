@@ -16,7 +16,10 @@ import {
   updateRegistration,
   deleteRegistration,
   addInternalNote,
+  updateRegistrationRound,
 } from '@/lib/actions/registrations';
+import { storedRoundOption, isHybridRound, formatClassDates } from '@/lib/registrations/roundSelection';
+import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 import { refNo } from '@/lib/refNo';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
@@ -216,15 +219,41 @@ const TABS = [
  *        component only places it. Switching to the ประวัติ tab therefore costs
  *        no round trip: the markup already exists.
  */
-export function RegistrationDetailClient({ doc, history = null }) {
+/**
+ * @param {Array<object>} [props.rounds] the course's upcoming rounds, resolved
+ *        SERVER-SIDE by page.jsx — see its docstring for why not here, and for
+ *        why past rounds are not among them.
+ */
+export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   const router = useRouter();
 
   // ── Editable state (mirrors doc on load) ────────────────────
   const [status,       setStatus]       = useState(doc.status);
-  const [course,       setCourse]       = useState({
+  /**
+   * The round, as the screen currently believes it to be.
+   *
+   * READ-ONLY DISPLAY STATE. Nothing in this file writes it field by field any
+   * more — `handleSaveRound` replaces the whole object with what the SERVER
+   * derived and returned, which is the only shape in which the four cannot
+   * drift apart on the client either.
+   */
+  const [course, setCourse] = useState({
+    classId:        doc.classId        ?? '',
     classDate:      doc.classDate      ?? '',
     scheduleType:   doc.scheduleType   ?? 'classroom',
     attendanceMode: doc.attendanceMode ?? 'classroom',
+  });
+
+  /**
+   * THE DRAFT IS AN ID AND A MODE. That is the whole payload.
+   *
+   * There is no `classDate` and no `scheduleType` in here, and that absence is
+   * the client half of the guarantee: a control that cannot hold a label cannot
+   * submit one that disagrees with the id.
+   */
+  const [roundDraft, setRoundDraft] = useState({
+    classId: doc.classId ?? '',
+    attendanceMode: doc.attendanceMode ?? '',
   });
   const [coordinator,  setCoordinator]  = useState({ ...doc.coordinator });
   const [attendeesListProvided, setAttendeesListProvided] = useState(doc.attendeesListProvided ?? true);
@@ -280,7 +309,9 @@ export function RegistrationDetailClient({ doc, history = null }) {
 
   const cancelEdit = (section) => {
     setEditSection(null);
-    if (section === 'course')      setCourse({ classDate: doc.classDate ?? '', scheduleType: doc.scheduleType ?? 'classroom', attendanceMode: doc.attendanceMode ?? 'classroom' });
+    // The round card restores the DRAFT, not `course` — `course` only ever
+    // holds what the server confirmed, so there is nothing there to revert.
+    if (section === 'course')      setRoundDraft({ classId: course.classId ?? '', attendanceMode: course.attendanceMode ?? '' });
     if (section === 'coordinator') setCoordinator({ ...doc.coordinator });
     if (section === 'attendees')   { setAttendees(doc.attendees?.length ? [...doc.attendees] : []); setAttendeesListProvided(doc.attendeesListProvided ?? true); setAttendeesCount(doc.attendeesCount ?? 1); }
     if (section === 'notes')       setNotes(doc.notes ?? '');
@@ -317,6 +348,39 @@ export function RegistrationDetailClient({ doc, history = null }) {
       if (res.ok) {
         setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
         setNoteDraft('');
+      } else {
+        setError(res.error || 'บันทึกไม่สำเร็จ');
+      }
+      setBusy(null);
+    });
+  };
+
+  /**
+   * MOVE THE REGISTRATION TO A DIFFERENT ROUND.
+   *
+   * ── THE PAYLOAD IS AN ID, AND THE REPLY IS THE TRUTH ──────────────────────
+   * `updateRegistrationRound` returns the four fields IT derived, and they are
+   * written to `course` wholesale. The client never computes a label: doing so
+   * would be a second implementation of the coupling, on the side that cannot
+   * see the round, and the two would disagree the first time upstream changed a
+   * date.
+   *
+   * `attendanceMode` is sent ONLY when it has been chosen. Sending `''` for a
+   * non-hybrid round would be a client asserting a mode it was never asked for;
+   * the server ignores it for non-hybrid rounds anyway, and omitting it keeps
+   * the payload honest about what the admin actually decided.
+   */
+  const handleSaveRound = () => {
+    setBusy('save-course'); setError(null);
+    startTransition(async () => {
+      const res = await updateRegistrationRound(doc._id, {
+        classId: roundDraft.classId,
+        ...(roundDraft.attendanceMode ? { attendanceMode: roundDraft.attendanceMode } : {}),
+      });
+      if (res.ok && res.fields) {
+        setCourse(res.fields);
+        setRoundDraft({ classId: res.fields.classId, attendanceMode: res.fields.attendanceMode });
+        setEditSection(null);
       } else {
         setError(res.error || 'บันทึกไม่สำเร็จ');
       }
@@ -451,9 +515,24 @@ export function RegistrationDetailClient({ doc, history = null }) {
    * button only when it is given something to do — no disabled state, which
    * invites the click and then explains nothing.
    */
-  const editProps = (section) => ({
+  /**
+   * `available` is a SECOND reason the affordance can be absent, and it goes
+   * through the same producer rather than beside it.
+   *
+   * The round card needs it: with no rounds to offer, opening an editor whose
+   * only control is an empty dropdown is a button that leads nowhere. A first
+   * draft expressed that as a ternary at the call site —
+   * `rounds.length ? editProps('course') : { editLabel: 'แก้ไข' }` — and
+   * fs/registrationActionsDerived caught it: that spreads an object which is NOT
+   * from `editProps`, which is precisely the shape the single-producer rule
+   * exists to forbid. The guard was right and the code was wrong.
+   *
+   * So the reason lives INSIDE the gate. There is still exactly one place a card
+   * can be given an `onEdit`, and it now answers two questions instead of one.
+   */
+  const editProps = (section, available = true) => ({
     editLabel: 'แก้ไข',
-    onEdit:    readOnly ? undefined : () => setEditSection(section),
+    onEdit:    (readOnly || !available) ? undefined : () => setEditSection(section),
     editing:   editSection === section,
     saving:    busy === `save-${section}`,
     onCancel:  () => cancelEdit(section),
@@ -551,6 +630,29 @@ export function RegistrationDetailClient({ doc, history = null }) {
    * is the defect the single-producer rule exists to make unrepresentable.
    */
   const attendeeEdit = editProps('attendees');
+
+  /**
+   * THE ROUND CARD'S EDIT GATE, taken once — same single-producer rule as the
+   * attendee card's.
+   *
+   * ── AND IT CLOSES WHEN THERE ARE NO ROUNDS TO OFFER ───────────────────────
+   * `rounds` is empty when upstream is down, when the course was withdrawn, or
+   * when a course simply has no upcoming rounds. Opening an editor whose only
+   * control is an empty dropdown is a button that leads nowhere, so the
+   * affordance follows the data — the same "absent means no button" rule the
+   * cancellation lock uses, applied to a second reason.
+   *
+   * The read view says why; see the empty hint below.
+   */
+  const roundEdit = editProps('course', rounds.length > 0);
+
+  /**
+   * The stored round WHEN IT IS NO LONGER IN THE LIST — see requirement 5.
+   *
+   * Not an edge case. The schedule endpoint filters `>= today` unconditionally,
+   * so EVERY registration for a round that has already run lands here.
+   */
+  const storedRound = storedRoundOption(course, rounds);
 
   /**
    * The three cells of the attendee tab's summary row.
@@ -668,43 +770,58 @@ export function RegistrationDetailClient({ doc, history = null }) {
       <TabPanel id={idFor('registration', 'panel')} labelledBy={idFor('registration', 'tab')} hidden={tab !== 'registration'}>
         <div className="space-y-[16px]">
 
+          {/*
+            ── THE FREE-TEXT ROUND EDITOR IS GONE. DO NOT BRING IT BACK. ──────
+            It was three controls writing `classDate`, `scheduleType` and
+            `attendanceMode` INDEPENDENTLY, with `classId` involved in none of
+            them — so an admin could set the date label to anything while the id
+            went on pointing at the old round, and no screen showed the
+            disagreement.
+
+            What replaces it sends an ID and lets the server derive the rest.
+            See lib/registrations/roundSelection and `updateRegistrationRound`.
+          */}
           <SectionCard
             icon={GraduationCap}
             title="ข้อมูลคอร์ส"
-            {...editProps('course')}
-            onSave={() => save({ classDate: course.classDate, scheduleType: course.scheduleType, attendanceMode: course.attendanceMode }, 'save-course')}
+            {...roundEdit}
+            onSave={handleSaveRound}
           >
             {editSection === 'course' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <EditField label="วันที่อบรม" value={course.classDate}
-                  onChange={(v) => setCourse((c) => ({ ...c, classDate: v }))} className="sm:col-span-2" />
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">ประเภทรอบ</label>
-                  <select value={course.scheduleType}
-                    onChange={(e) => setCourse((c) => ({ ...c, scheduleType: e.target.value }))}
-                    className={selectCls()}>
-                    <option value="classroom">Classroom</option>
-                    <option value="hybrid">Hybrid</option>
-                    <option value="online">Online</option>
-                  </select>
-                </div>
-                {course.scheduleType === 'hybrid' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">รูปแบบการอบรม</label>
-                    <select value={course.attendanceMode}
-                      onChange={(e) => setCourse((c) => ({ ...c, attendanceMode: e.target.value }))}
-                      className={selectCls()}>
-                      <option value="classroom">Classroom</option>
-                      <option value="teams">Online via Microsoft Teams</option>
-                    </select>
-                  </div>
-                )}
-              </div>
+              <RoundEditForm
+                rounds={rounds}
+                storedOption={storedRound}
+                classId={roundDraft.classId}
+                attendanceMode={roundDraft.attendanceMode}
+                onChange={setRoundDraft}
+              />
             ) : (
               <DL>
                 <DLRow label="หลักสูตร"  value={doc.courseName} wide />
                 <DLRow label="รหัสคอร์ส" value={doc.courseCode || doc.courseId} />
-                <DLRow label="รอบอบรม"   value={course.classDate} emptyHint="ยังไม่ได้ระบุรอบ" />
+                <DLRow
+                  label="รอบอบรม"
+                  value={course.classDate}
+                  emptyHint="ยังไม่ได้ระบุรอบ"
+                  /*
+                    THE READ VIEW SAYS WHY THE BUTTON IS MISSING. A card with no
+                    แก้ไข and no explanation reads as a broken page — the same
+                    reasoning as the status bar's read-only copy. Two distinct
+                    reasons, and they are not interchangeable:
+                      · no rounds at all  → nothing to move to
+                      · the stored round is gone → it can be SHOWN but not
+                        re-chosen, which is a different sentence
+                  */
+                  action={rounds.length === 0 ? (
+                    <span className="shrink-0 text-[11px] italic leading-[16px] text-[var(--text-muted)]">
+                      ไม่มีรอบให้เลือกในขณะนี้
+                    </span>
+                  ) : storedRound ? (
+                    <span className="shrink-0 text-[11px] italic leading-[16px] text-[var(--text-muted)]">
+                      รอบนี้ไม่เปิดรับแล้ว
+                    </span>
+                  ) : null}
+                />
                 {/*
                   รูปแบบการอบรม IS UNCONDITIONAL NOW, and that is a change of
                   shape rather than of data. It used to render only for `hybrid`,
@@ -1283,6 +1400,136 @@ function copyText(value) {
 // `selectCls` and `EditField` MOVED to detailShell.jsx when the in-house screen
 // gained edit forms — see the note there. They are imported at the top of this
 // file; a second copy here is exactly the drift that move removed.
+
+// ── Round edit form ───────────────────────────────────────────────
+
+/**
+ * A round's status, as a suffix the option label carries.
+ *
+ * `normalizeScheduleStatus` is the SAME classifier the public carousel uses, so
+ * a round the admin sees badged เต็ม is the one the wizard refuses to book. A
+ * second status vocabulary here is the defect the schedule-status unification
+ * removed from five surfaces.
+ *
+ * FULL ROUNDS ARE OFFERED AND MARKED, not hidden: the admin case is CORRECTION
+ * rather than booking — moving someone onto a sold-out round is a legitimate
+ * thing to do when they were already promised a seat — but the admin must be
+ * told, because it is not a thing to do by accident.
+ */
+function roundStatusSuffix(round) {
+  const status = normalizeScheduleStatus(round?.status);
+  if (status === 'full') return ' — เต็ม';
+  if (status === 'nearly_full') return ' — ใกล้เต็ม';
+  return '';
+}
+
+/**
+ * EXPORTED for the render tier only — the form is behind `editSection`, which a
+ * click sets and `renderToStaticMarkup` cannot reach. Same reason as
+ * `InvoiceEditForm`.
+ */
+export function RoundEditForm({ rounds, storedOption, classId, attendanceMode, onChange }) {
+  const selected = rounds.find((r) => String(r._id) === String(classId)) ?? null;
+  const hybrid = isHybridRound(selected);
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+          รอบอบรม<span className="ml-0.5 text-9e-accent">*</span>
+        </label>
+        <select
+          value={classId}
+          onChange={(e) => {
+            /**
+             * ── CHANGING THE ROUND ALWAYS CLEARS THE MODE ───────────────────
+             * Unconditionally, whichever type the new round is, and the two
+             * reasons are different:
+             *
+             *   · a HYBRID round must not inherit the previous round's answer —
+             *     the admin has to look, because the server refuses an
+             *     unanswered hybrid rather than guessing;
+             *   · a NON-HYBRID round needs no answer at all, and the client must
+             *     not supply `classroom` itself. That is the SERVER's
+             *     derivation. Sending it would be the client asserting one of
+             *     the four coupled fields, which is exactly what the payload
+             *     shape exists to prevent.
+             *
+             * So there is no branch here. A first draft wrote
+             * `isHybridRound(next) ? '' : ''` — a ternary whose arms were
+             * identical, which is the tell that the condition was never doing
+             * any work.
+             */
+            onChange({ classId: e.target.value, attendanceMode: '' });
+          }}
+          className={selectCls()}
+        >
+          {/*
+            ── THE STORED ROUND THAT IS NO LONGER OFFERED ────────────────────
+            Rendered as the selected option and DISABLED. Never silently
+            cleared: a select that opened with nothing chosen would invite an
+            admin to pick a new round for a record that already has one, moving
+            an attendee off a course they have already attended.
+
+            DISABLED because there is no honest way to offer it — the schedule
+            endpoint filters `>= today` unconditionally, so re-selecting it
+            would send an id the server cannot verify and would be refused. A
+            control that can be operated but never succeeds is worse than one
+            that visibly cannot.
+          */}
+          {storedOption ? (
+            <option value={storedOption.value} disabled>
+              {storedOption.label} — ไม่เปิดรับแล้ว
+            </option>
+          ) : null}
+          {rounds.map((r) => (
+            <option key={r._id} value={r._id}>
+              {formatClassDates(r.dates)}{roundStatusSuffix(r)}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/*
+        THE MODE PICKER APPEARS ONLY FOR A HYBRID ROUND, and it starts with NO
+        selection — the server rejects a hybrid round with no mode rather than
+        defaulting one, and a pre-selected radio would be the screen answering
+        on the admin's behalf.
+      */}
+      {hybrid ? (
+        <div>
+          <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+            รูปแบบการอบรม<span className="ml-0.5 text-9e-accent">*</span>
+          </label>
+          <select
+            value={attendanceMode}
+            onChange={(e) => onChange({ classId, attendanceMode: e.target.value })}
+            className={selectCls()}
+          >
+            <option value="">— เลือกรูปแบบ —</option>
+            <option value="classroom">Classroom</option>
+            <option value="teams">Online via Microsoft Teams</option>
+          </select>
+          {!attendanceMode ? (
+            <p className="pt-[6px] text-[11px] leading-[16px] text-9e-accent">
+              รอบนี้เป็นแบบ Hybrid ต้องเลือกรูปแบบการเข้าอบรม
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/*
+        WHAT THE SERVER WILL WRITE, said before the click rather than after.
+        Moving someone between rounds changes the day they are expected — the
+        one edit on this screen where a mis-click has a person turning up on the
+        wrong date — so the consequence is stated where the decision is made.
+      */}
+      <p className="text-[11px] leading-[16px] text-[var(--text-muted)]">
+        ระบบจะบันทึกวันที่และรูปแบบของรอบที่เลือกให้อัตโนมัติ
+      </p>
+    </div>
+  );
+}
 
 // ── Invoice edit form ─────────────────────────────────────────────
 

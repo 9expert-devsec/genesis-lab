@@ -429,25 +429,40 @@ export function OverflowItem({ children, onClick, disabled, busy, icon: Icon, to
  * MERGE THIS REPO'S `9e-*` SCALES, so two competing colour utilities would both
  * survive and the winner would be decided by CSS emission order.
  *
- * THAT IS NOT TRUE OF THE COLOURS. Measured with
- * scripts/_probe-twmerge-9e.mjs, and every colour pair collapses correctly:
+ * THAT IS NOT TRUE OF THE COLOURS, AND THE MEASUREMENT IS THE POINT — inherit
+ * the finding, not a corrected opinion. Run
+ * `node scripts/_probe-twmerge-9e.mjs` to reproduce it. What was tested, and
+ * exactly what came back:
  *
- *     cn('text-9e-ice', 'text-9e-action')      → 'text-9e-action'      COLLAPSED
- *     cn('bg-9e-navy', 'bg-transparent')       → 'bg-transparent'      COLLAPSED
- *     cn('bg-9e-action/10', 'bg-9e-air/15')    → 'bg-9e-air/15'        COLLAPSED
- *     cn('text-9e-signature-50', '…-900')      → 'text-9e-signature-900' COLLAPSED
+ *   COLLAPSED — only the last class survives, so an override WOULD work:
+ *     cn('text-9e-ice',           'text-9e-action')        → 'text-9e-action'
+ *     cn('text-9e-navy',          'text-9e-air')           → 'text-9e-air'
+ *     cn('bg-9e-navy',            'bg-[var(--surface-raised)]')
+ *                                                          → 'bg-[var(--surface-raised)]'
+ *     cn('bg-9e-navy',            'bg-transparent')        → 'bg-transparent'
+ *     cn('text-9e-signature-50',  'text-9e-signature-900') → 'text-9e-signature-900'
+ *     cn('bg-9e-action-scale-50', 'bg-9e-action-scale-900')→ 'bg-9e-action-scale-900'
+ *     cn('bg-9e-action/10',       'bg-9e-air/15')          → 'bg-9e-air/15'
+ *     cn('shadow-9e-sm',          'shadow-9e-lg')          → 'shadow-9e-lg'
+ *     cn('text-red-500',          'text-blue-500')         → 'text-blue-500'   (stock baseline)
  *
- * twMerge groups by the utility PREFIX (`text-`, `bg-`) and treats the rest as
- * an opaque value, so it does not need to know the colour names at all.
+ *   BOTH KEPT — the winner is decided by CSS emission order:
+ *     cn('rounded-9e-md',         'rounded-9e-lg')  → 'rounded-9e-md rounded-9e-lg'
  *
- * WHERE THE RULE IS REAL IS THE NON-COLOUR EXTENDS:
+ * So the flat tokens, the NUMBERED scales, the opacity-modified forms, the
+ * arbitrary `var()` values and even the shadow scale all collapse. twMerge
+ * groups by the utility PREFIX (`text-`, `bg-`, `shadow-`) and treats the rest
+ * as an opaque value, so it never needs to know that `9e-action` is a colour.
  *
- *     cn('rounded-9e-md', 'rounded-9e-lg')     → BOTH KEPT
+ * WHERE THE RULE IS REAL IS `borderRadius`, and only there: it has a CLOSED SET
+ * of known suffixes (none/sm/md/lg/xl/full/arbitrary) and `9e-md` is not one of
+ * them, so twMerge cannot tell two `rounded-9e-*` classes apart and emits both.
+ * That is the documented hazard, and it applies to `rounded-9e-*` — which this
+ * very file uses on every card — rather than to the tab colours.
  *
- * `borderRadius` has a closed set of known suffixes and `9e-md` is not one of
- * them, so twMerge cannot tell the two apart and emits both. That IS the
- * documented hazard, and it applies to `rounded-9e-*` — which this very file
- * uses on every card — rather than to the tab colours.
+ * Both behaviours are pinned by test/render/registrationTabColours §3, so a
+ * twMerge upgrade that changes either is a red test rather than a comment that
+ * has quietly become false again.
  *
  * ── SO WHY IS THIS STILL A VARIANT ────────────────────────────────────────
  * Because the two states are a CLOSED CHOICE, not a base plus an adjustment. A
