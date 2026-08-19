@@ -54,16 +54,26 @@ import { cn } from '@/lib/utils';
 // ── Back link ───────────────────────────────────────────────────────────────
 
 /**
- * The back link: a 40.5px block starting 30px down, holding a 20px line.
+ * The back link: a 40.5px block holding a 20px line.
  *
  * `onClick` rather than an `<a>` because the target is "where the reader came
  * from" — `router.back()` — and that is not a URL this component can know. The
  * list screen's row link is the opposite case and is a real anchor for the
  * reasons tableParts spells out; this is a return, not a destination.
+ *
+ * ── THERE IS NO TOP PADDING, AND THAT SUPERSEDES THE GEOMETRY ──────────────
+ * The Figma read puts this block 30px down and it shipped as `pt-[30px]`. THE
+ * PADDING WAS REMOVED BY HAND, DELIBERATELY, AND THE MEASUREMENT DOES NOT WIN
+ * AGAINST THAT. Do not restore it from the design file; the admin layout already
+ * supplies the space above this element, so the 30px was being added twice.
+ *
+ * Nothing in the suite pins it in either direction — checked, not assumed — so
+ * this comment is the only record of the decision. If the vertical rhythm ever
+ * makes the gap look necessary again, that is a conversation, not a re-add.
  */
 export function BackLink({ label, onClick }) {
   return (
-    <div className="pt-[30px]">
+    <div>
       <div className="flex h-[40.5px] items-start">
         <button
           type="button"

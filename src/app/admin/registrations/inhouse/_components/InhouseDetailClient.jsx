@@ -32,6 +32,7 @@ import { updateRegistration } from '@/lib/actions/registrations';
 import { onlyDigits } from '@/lib/registration/digitsOnly';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { refNo } from '@/lib/refNo';
+import { detailHeading, inhouseHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { monthLongLabel } from '@/lib/schedule/monthWindow';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
@@ -739,11 +740,25 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
     <div className="mx-auto w-full max-w-[1080px]">
       <BackLink label="กลับรายการ" onClick={() => router.back()} />
 
+      {/*
+        THE HEADING NAMES THE COMPANY — see lib/registrations/detailHeading for
+        why the company rather than the contact, and for the empty rule: a
+        request with no company recorded renders the label ALONE, never a
+        trailing colon.
+
+        THE SUBTITLE IS THE CONTACT NOW. It was the company, which has moved UP
+        into the heading; leaving it here as well would have printed the same
+        string twice, one line apart. The contact is the natural occupant — it is
+        the other half of "who is this request from" — and it degrades the same
+        way every optional line on this screen does: `DetailHeader` drops the
+        whole 25px block when there is nothing for it, rather than rendering an
+        empty paragraph.
+      */}
       <DetailHeader
         badge={<TypeBadge label="In-house" className="bg-violet-100 text-violet-700" />}
         timestamp={`ส่งคำขอเมื่อ ${fmtDate(doc.createdAt)}`}
-        title={<>In-house Request <span className="font-mono text-9e-action">{refNo(doc._id)}</span></>}
-        subtitle={displayCompany}
+        title={detailHeading(inhouseHeadingIdentifier(doc))}
+        subtitle={contactName}
       />
 
       {/*
@@ -1205,6 +1220,17 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
           </SectionCard>
 
           <SystemCard icon={Database} title="ข้อมูลระบบ">
+            {/*
+              เลขอ้างอิง — MOVED HERE FROM THE HEADING. Same ruling as the public
+              screen: round 3 removed the เลขอ้างอิง column from both list tables
+              because the detail heading carried it, and the heading no longer
+              does. Outside this row the number survives only in the
+              delete-confirm dialog, which quotes it and is left alone.
+
+              First in the card, above the raw id: this is the value a human
+              quotes, the 24-character `_id` is the one they paste into a query.
+            */}
+            <DLRow label="เลขอ้างอิง"    value={mono(refNo(doc._id))} />
             <DLRow label="Request ID"   value={mono(doc._id)} />
             <DLRow label="แหล่งที่มา"    value={doc.source ?? 'inhouse'} />
             <DLRow label="IP Address"   value={doc.ipAddress} />
