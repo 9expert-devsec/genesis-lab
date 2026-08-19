@@ -134,12 +134,17 @@ export function FeaturedContentSlider({ copy, items = [] }) {
   // explicitly and gets it.
   //
   // ── READ IN AN EFFECT, NOT IN A useState INITIALISER ──────────────────────
-  // The initialiser version of this shipped a HYDRATION MISMATCH and React said
-  // so out loud: "some attributes of the server rendered HTML didn't match the
-  // client properties. This won't be patched up." The server has no matchMedia,
-  // so it rendered `data-fc-paused="offscreen"`, while the client's first render
-  // computed "reduced-motion" — and because React 19 does not patch mismatched
-  // ATTRIBUTES, the DOM kept the server's value permanently.
+  // The initialiser version of this shipped a HYDRATION MISMATCH and the
+  // renderer said so out loud: "some attributes of the server rendered HTML
+  // didn't match the client properties. This won't be patched up." The server
+  // has no matchMedia, so it rendered `data-fc-paused="offscreen"`, while the
+  // client's first render computed "reduced-motion" — and the DOM kept the
+  // server's value permanently, exactly as that message promises.
+  //
+  // The renderer is React 19 (see the `inert` note further down for why that
+  // is NOT what package.json says). The version is incidental here though —
+  // the fix below is right on any of them, because it removes the disagreement
+  // instead of relying on someone patching it up.
   //
   // An effect runs after the first client render, so server and client agree on
   // `false` and the correction is an ordinary state update. It also makes the
@@ -326,8 +331,31 @@ export function FeaturedContentSlider({ copy, items = [] }) {
           (so the track stays tall) while removing the subtree from the tab
           order and from the accessibility tree. `inert` says the same thing
           explicitly and covers the browsers that treat visibility loosely.
-          It is `inert=""` and not `inert={true}` because this is React 18,
-          which does not know `inert` is a boolean attribute and would warn.
+
+          ── `inert={!active}`, A BOOLEAN, AND THE VERSION NOTE WAS WRONG ────
+          This used to pass the STRING "true", justified by "this is React 18,
+          which does not know `inert`". Both halves were wrong, and the runtime
+          said so out loud on every render:
+
+            Received the string `true` for the boolean attribute `inert`.
+            Although this works, it will not work as expected if you pass the
+            string "false". Did you mean inert={true}?
+
+          A renderer that names the attribute and suggests the boolean form
+          plainly knows the attribute. What confused it: `node_modules/react`
+          IS 18.3.1, and `react-dom` 18.3.1 contains the string "inert" zero
+          times — so reasoning from package.json gives the wrong answer. The
+          App Router does not use that copy. Next 15.5.15 renders with its own
+          vendored `next/dist/compiled/react-dom`, which reports version
+          19.2.0-canary-0bdb9206-20250818 and has an explicit `case "inert":`
+          in its attribute table. React 19 is what renders this tree, and React
+          19 wants the boolean.
+
+          `!active` rather than `active ? undefined : true`: for a known
+          boolean attribute React omits it on `false` and emits `inert=""` on
+          `true`, which is the same two outcomes with one fewer branch. The
+          server renderer has the same table, so SSR and hydration agree and
+          there is no mismatch to patch.
 
           The swipe ref moved to this container: it wraps every slide, so the
           gesture works whichever one is showing. */}
@@ -339,7 +367,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
               key={slide.id}
               data-fc-slide={active ? "active" : "inactive"}
               aria-hidden={active ? undefined : "true"}
-              inert={active ? undefined : "true"}
+              inert={!active}
               className={
                 active
                   ? "col-start-1 row-start-1"
