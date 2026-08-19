@@ -72,6 +72,15 @@ export const PUBLIC_ACTION_TITLES = Object.freeze({
   // records it directly. See the header for why this could not simply be
   // borrowed from in-house before.
   notes:  'เพิ่มบันทึกภายใน',
+  /**
+   * ── THE ONE ROW ON THIS SCREEN THAT CARRIES A BEFORE/AFTER DIFF ──────────
+   * `updateRegistrationRound` records the four round fields on both sides —
+   * the single exception to the no-diff rule, because a round id, a date label
+   * and two short enums are not personal data and moving a person between
+   * rounds is the change most worth tracing. See the action for the full
+   * reasoning; this entry is only its title.
+   */
+  round:  'ย้ายรอบอบรม',
   delete: 'ลบใบสมัคร',
 });
 

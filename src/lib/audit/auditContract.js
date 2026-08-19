@@ -89,10 +89,48 @@ export const DIFF_POLICY_RANK = Object.freeze({
  */
 export const ORDERED_IDS_POLICY = 'ordered_ids';
 
+/**
+ * ── THE REGISTRATION ROUND, PLUS THE STATUS. OFF THE SCALE, LIKE ordered_ids ─
+ *
+ * The registration pairs are capped at `status_only` because those collections
+ * hold names, emails, phones and tax ids, and the audit trail is append-only and
+ * presently forever. That cap is not being relaxed.
+ *
+ * But `updateRegistrationRound` records a BEFORE/AFTER of the four coupled round
+ * fields, and that is a deliberate, argued exception: a round id, a date label
+ * and the two enums `classroom|hybrid|online` and `classroom|teams` say nothing
+ * about a person, while moving someone between rounds is the change on this
+ * screen most worth tracing and most likely to be disputed.
+ *
+ * ── WHY A NEW POLICY AND NOT `full` ───────────────────────────────────────
+ * A policy is a property of the (menu, entity) PAIR, not of one action, so
+ * raising `registrations|public` to `full` would permit a field diff on
+ * `updateRegistration` too — the action that edits the customer's name, email
+ * and phone. That is precisely the thing the cap exists to prevent, and it would
+ * have been relaxed as a side effect of an unrelated feature.
+ *
+ * So this policy is an ALLOWLIST OF FIELD NAMES. It permits `status` (so the
+ * existing transition diff is unaffected) and the four round fields, and it
+ * DROPS EVERYTHING ELSE — including anything a future action hands over by
+ * mistake. The reduction is still fail-closed.
+ */
+export const ROUND_AND_STATUS_POLICY = 'round_and_status';
+
+/**
+ * The exact keys `round_and_status` lets through. Written here, beside the
+ * policy, rather than imported from lib/registrations — the audit layer must not
+ * depend on a product module for its own safety rule, or a refactor over there
+ * silently widens what the trail may carry.
+ */
+export const ROUND_AND_STATUS_KEYS = Object.freeze([
+  'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',
+]);
+
 /** Every legal value of the `diff` field. */
 export const DIFF_POLICIES = Object.freeze([
   ...Object.keys(DIFF_POLICY_RANK),
   ORDERED_IDS_POLICY,
+  ROUND_AND_STATUS_POLICY,
 ]);
 
 /**
@@ -304,7 +342,16 @@ export const AUDIT_CONTRACT_ENTRIES = Object.freeze([
   entry('landing_cache', 'nav_menu_sync', 'ซิงก์เมกะเมนูหลักสูตร', 'count_only'),
 
   // PII entities (§5.1/§5.2): status transitions only, never a field diff.
-  entry('registrations', 'public',  'ใบสมัครอบรม (Public)', 'status_only'),
+  /**
+   * `round_and_status`, NOT `full`, and NOT `status_only` any more.
+   *
+   * The cap on personal data is unchanged — this policy is an allowlist of five
+   * field names (the status enum plus the four coupled round fields) and drops
+   * everything else, so `updateRegistration`'s wholesale edit still records the
+   * act alone. See the policy's own note for why raising this pair to `full`
+   * would have been the wrong way to get the round diff.
+   */
+  entry('registrations', 'public',  'ใบสมัครอบรม (Public)', ROUND_AND_STATUS_POLICY),
   entry('registrations', 'inhouse', 'คำขออบรม In-house', 'status_only'),
   entry('career_path_registrations', 'registration', 'ใบสมัคร Career Path', 'status_only'),
 

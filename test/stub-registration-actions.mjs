@@ -24,5 +24,8 @@ export async function deleteRegistration()           { return { ok: false, error
 // The shared append-only note writer. BOTH detail clients import it now — the
 // in-house one moved off updateInhouseAdminNotes, which no longer exists.
 export async function addInternalNote()              { return { ok: false, error: 'stubbed' }; }
+// The round mover. Takes an id and derives the other three fields server-side —
+// see the action. Stubbed as a refusal like every export here.
+export async function updateRegistrationRound()       { return { ok: false, error: 'stubbed' }; }
 export async function getRegistrationStatusCounts()  { return { total: 0, range: 'all', source: 'public' }; }
 export async function getRegistrationTotal()         { return 0; }

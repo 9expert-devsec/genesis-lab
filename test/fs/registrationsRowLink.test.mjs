@@ -253,8 +253,11 @@ test('CONTROL: the function bound really excludes the other actions’ selects',
   // whole job is to say that the scoping matters BECAUSE the file has selects
   // the slice must not reach, and a `>= 4` would stop noticing when it gains
   // more.
-  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 5,
-    'the actions file no longer has five selects — re-read the scoping note');
+  // SIX. `updateRegistrationRound` added the sixth: it reads the registration
+  // for its courseId and its `before` values in one go. Bumped deliberately, as
+  // a floor would stop noticing when the file gains more.
+  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 6,
+    'the actions file no longer has six selects — re-read the scoping note');
 });
 
 test('CONTROL: the field matcher would catch an unprojected read', () => {

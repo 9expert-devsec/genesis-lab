@@ -20,6 +20,9 @@ import {
 import { computePricing, formatTHB } from "@/lib/pricing";
 import { ScheduleCarousel } from "@/components/registration/ScheduleCarousel";
 import { normalizeScheduleStatus } from "@/lib/scheduleStatus";
+// The round's four coupled fields, shared with the admin detail screen. See the
+// note where formatClassDates used to live.
+import { formatClassDates } from "@/lib/registrations/roundSelection";
 import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
@@ -38,35 +41,19 @@ const STORAGE_KEY = "registration-public-v3";
 const RESULT_KEY = "registration-public-result-v3";
 const FORMDATA_KEY = "registration-public-formdata-v1";
 
-const THAI_MONTHS = [
-  "ม.ค.",
-  "ก.พ.",
-  "มี.ค.",
-  "เม.ย.",
-  "พ.ค.",
-  "มิ.ย.",
-  "ก.ค.",
-  "ส.ค.",
-  "ก.ย.",
-  "ต.ค.",
-  "พ.ย.",
-  "ธ.ค.",
-];
-
-function formatClassDates(dates) {
-  if (!dates?.length) return "";
-  const sorted = [...dates].sort();
-  const start = new Date(sorted[0]);
-  const end = new Date(sorted[sorted.length - 1]);
-  const year = start.getFullYear() + 543;
-  if (sorted.length === 1) {
-    return `${start.getDate()} ${THAI_MONTHS[start.getMonth()]} ${year}`;
-  }
-  if (start.getMonth() === end.getMonth()) {
-    return `${start.getDate()}-${end.getDate()} ${THAI_MONTHS[start.getMonth()]} ${year}`;
-  }
-  return `${start.getDate()} ${THAI_MONTHS[start.getMonth()]} - ${end.getDate()} ${THAI_MONTHS[end.getMonth()]} ${year}`;
-}
+/*
+ * `THAI_MONTHS` and `formatClassDates` MOVED to
+ * lib/registrations/roundSelection.js and are imported at the top of this file.
+ *
+ * They moved because the ADMIN detail screen now has to produce the same
+ * `classDate` label when it moves a registration between rounds, and a second
+ * implementation would mean the label a re-saved round gets differs from the
+ * label its neighbours got — invisibly, since nothing compares them.
+ *
+ * The function is byte-for-byte what it was. Every `classDate` in the
+ * collection was written by it, so a "tidier" version would be a silent
+ * reformatting of live data.
+ */
 
 export function RegisterWizard({
   course,

@@ -9,10 +9,13 @@ import {
   DIFF_POLICIES,
   DIFF_POLICY_RANK,
   ORDERED_IDS_POLICY,
+  ROUND_AND_STATUS_POLICY,
+  ROUND_AND_STATUS_KEYS,
   isValidPair,
   pairContract,
   isDualKeySpace,
 } from '@/lib/audit/auditContract';
+import { reducePayload } from '@/lib/audit/recordAdminAction';
 
 // The (menu, entity) vocabulary the audit trail is allowed to contain.
 //
@@ -257,14 +260,27 @@ test('CONTROL: the closed set rejects a plausible typo', () => {
   }
 });
 
-test('the policy set is exactly the ranked ceilings plus ordered_ids', () => {
+test('the policy set is exactly the ranked ceilings plus the two off-scale ones', () => {
+  /**
+   * TWO off-scale policies now. `round_and_status` joined `ordered_ids` for the
+   * same structural reason: neither is a POINT on a "how much may be recorded"
+   * scale. `ordered_ids` records a set of ids; `round_and_status` records an
+   * allowlist of five named fields. A rank would have to answer "is this more or
+   * less than status_only", and the honest answer is "it is a different axis".
+   *
+   * Their `undefined` rank is asserted below because it is load-bearing rather
+   * than incidental: the PII test has an explicit branch for it, and a policy
+   * that quietly acquired a rank would take the other branch and be compared as
+   * though it sat on the scale.
+   */
   assert.deepEqual(
     new Set(DIFF_POLICIES),
-    new Set([...Object.keys(DIFF_POLICY_RANK), ORDERED_IDS_POLICY]),
+    new Set([...Object.keys(DIFF_POLICY_RANK), ORDERED_IDS_POLICY, ROUND_AND_STATUS_POLICY]),
     'the ranks and the legal values must not drift apart — a policy with no ' +
     'rank cannot be compared, and a rank with no policy is unreachable'
   );
   assert.equal(DIFF_POLICY_RANK[ORDERED_IDS_POLICY], undefined, 'off the scale on purpose');
+  assert.equal(DIFF_POLICY_RANK[ROUND_AND_STATUS_POLICY], undefined, 'off the scale on purpose');
 });
 
 test('the PII entities are capped below a full diff — §5.2 made executable', () => {
@@ -277,14 +293,74 @@ test('the PII entities are capped below a full diff — §5.2 made executable', 
     ['mc_registrations', 'registration'],
     ['career_path_registrations', 'registration'],
   ];
+  /**
+   * ── OFF-SCALE POLICIES NEED THEIR OWN CLAUSE, AND HERE IS WHY ─────────────
+   *
+   * `DIFF_POLICY_RANK[c.diff]` is `undefined` for a policy that is deliberately
+   * off the ranked scale (`ordered_ids`, `round_and_status`), and
+   * `undefined < 3` is FALSE — so the original one-line form would have failed
+   * on a correct contract, and the tempting fix (`<= status_only`, or a `?? 0`)
+   * would have made it pass on ANY off-scale policy including a future one that
+   * permitted everything.
+   *
+   * So the rule is stated in two parts: never `full`, and an off-scale policy
+   * must be one of a NAMED set whose key allowlist is written down here. Adding
+   * a policy to a PII pair now requires editing this list, which is the point.
+   */
+  const SAFE_OFF_SCALE = {
+    // Status enum + the four coupled round fields. A round id, a date label and
+    // two short enums are not personal data; the reduction drops every other
+    // key, so the cap on names/emails/phones is untouched.
+    round_and_status: ['status', 'classId', 'classDate', 'scheduleType', 'attendanceMode'],
+  };
+
   for (const [menu, entity] of PII) {
     const c = pairContract(menu, entity);
     assert.ok(c, `${menu}.${entity} must exist`);
-    assert.ok(
-      DIFF_POLICY_RANK[c.diff] < DIFF_POLICY_RANK.full,
-      `${menu}.${entity} is a PII entity and must not permit a full field diff`
-    );
+    assert.notEqual(c.diff, 'full',
+      `${menu}.${entity} is a PII entity and must not permit a full field diff`);
+
+    const ranked = DIFF_POLICY_RANK[c.diff];
+    if (ranked === undefined) {
+      assert.ok(c.diff in SAFE_OFF_SCALE,
+        `${menu}.${entity} uses the off-scale policy "${c.diff}", which is not in this test's `
+        + 'reviewed set. An off-scale policy bypasses the rank comparison entirely, so it has '
+        + 'to be read and listed here before it may guard a PII entity.');
+      // …and the allowlist it claims must actually be the one the writer applies.
+      assert.deepEqual([...ROUND_AND_STATUS_KEYS], SAFE_OFF_SCALE[c.diff],
+        `the key allowlist for "${c.diff}" has changed since it was reviewed here`);
+    } else {
+      assert.ok(ranked < DIFF_POLICY_RANK.full,
+        `${menu}.${entity} is a PII entity and must not permit a full field diff`);
+    }
   }
+});
+
+test('the round_and_status reduction DROPS a personal field', () => {
+  /**
+   * The policy above is only safe if its reduction really is an allowlist. This
+   * hands the writer a payload containing a customer's email beside the round
+   * fields — the exact mistake a future action could make — and requires the
+   * email to be gone.
+   */
+  const reduced = reducePayload(
+    { classId: 'c1', classDate: '1 ม.ค. 2569', scheduleType: 'hybrid',
+      attendanceMode: 'teams', status: 'paid',
+      coordinatorEmail: 'someone@example.com', notes: 'a customer note' },
+    ROUND_AND_STATUS_POLICY,
+  );
+  assert.deepEqual(Object.keys(reduced).sort(),
+    ['attendanceMode', 'classDate', 'classId', 'scheduleType', 'status']);
+  assert.ok(!('coordinatorEmail' in reduced), 'a personal field survived the reduction');
+  assert.ok(!('notes' in reduced), 'the customer note survived the reduction');
+});
+
+test('the round_and_status reduction returns NULL when nothing survives', () => {
+  // `{}` would read as a diff that happened to be empty. Null reads as
+  // act-only, which is what a row carrying no permitted field actually is.
+  assert.equal(reducePayload({ coordinatorEmail: 'x@y.z' }, ROUND_AND_STATUS_POLICY), null);
+  assert.equal(reducePayload(null, ROUND_AND_STATUS_POLICY), null);
+  assert.equal(reducePayload(['status'], ROUND_AND_STATUS_POLICY), null, 'an array was let through');
 });
 
 test('the preview ceiling is STRUCTURAL — pages|preview cannot carry a payload', () => {
