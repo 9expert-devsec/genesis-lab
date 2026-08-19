@@ -451,13 +451,35 @@ export function FeatureContentStrip({
         ) : null}
       </div>
 
-      {/* ── THE BAR ROW: position readout on the left, controls on the right ──
+      {/* ── THE BAR ROW ──────────────────────────────────────────────────────
           The arrows and Play/Stop used to sit at the top right of the section,
           level with the heading and a full card's height away from the strip
           they drive — on a phone they were above the fold while the cards were
           cut off below it, so they read as unrelated chrome. They belong next
-          to the thing they move. */}
-      <div className="flex items-center gap-4">
+          to the thing they move.
+
+          ── AND BELOW lg THEY GO ON THE LEFT ────────────────────────────────
+          FloatingActionDock is `fixed right-4 … lg:right-8` and describes
+          itself as "the ONE fixed container that owns the bottom-right" — the
+          chat launcher and the scroll-to-top button live in it. Putting these
+          three controls at the row's right edge on a phone parked the
+          next-arrow underneath that dock, and not transiently: the strip sits
+          near the bottom of the first screenful, so the collided state is what
+          a visitor sees before touching anything. Scrolling clears it, which
+          is no defence — it means the control is unusable exactly when it is
+          first offered.
+
+          `flex-row-reverse` rather than a second copy of the controls or an
+          `order-*` on each child: one property, applied once, and DOM order is
+          untouched — which matters because the bar must stay before the
+          controls for anything that reads the tree in order. Nothing is fixed
+          at the bottom LEFT (the dock is the only fixed corner container), so
+          the left edge is genuinely free.
+
+          From lg the dock moves to `right-8`, the section is 1200px wide with
+          the controls nowhere near the viewport edge, and the layout is signed
+          off — so `lg:flex-row` puts it back exactly as it was. */}
+      <div className="flex flex-row-reverse items-center gap-4 lg:flex-row">
         {/* ── THE POSITION BAR ─────────────────────────────────────────────
             aria-hidden, and that is not laziness. The strip already conveys
             position to assistive tech properly: every card is a real button
