@@ -172,22 +172,14 @@ function tabPanels(markup) {
   return [...markup.matchAll(/<div[^>]*role="tabpanel"[^>]*>/g)].map((m) => m[0]);
 }
 
-/**
- * The dark strip's cells, by the padding class the geometry fixes on them.
- *
- * Keyed on `pt-[14px]` — the "label 14px from the cell top" measurement — which
- * appears on nothing else in either render, so the probe follows the measured
- * cell rather than a wrapper somebody might add.
+/*
+ * `stripCells` IS DELETED. It located the dark strip by `h-[93px]` and its cells
+ * by `pt-[14px]`, and both classes are gone from the tree with the component.
+ * A probe kept alive against markup that no longer exists would fail its own
+ * `notEqual(start, -1)` guard, which is the honest outcome — but every
+ * assertion built on it has been deleted or re-pointed instead, so there is
+ * nothing left to locate.
  */
-function stripCells(markup) {
-  const start = markup.indexOf('h-[93px]');
-  assert.notEqual(start, -1, 'no dark strip in the render — the marker class has changed');
-  const end = markup.indexOf('role="tablist"', start);
-  assert.notEqual(end, -1, 'the strip is not followed by the tab list — the probe would over-read');
-  const region = markup.slice(start, end);
-  return [...region.matchAll(/<div class="[^"]*pt-\[14px\][^"]*">([\s\S]*?)(?=<div class="[^"]*pt-\[14px\]|$)/g)]
-    .map((m) => m[1]);
-}
 
 /** The class list of the first element carrying `marker` as a whole token. */
 function classesOfElementWith(markup, marker) {
@@ -313,102 +305,179 @@ test('CONTROL: the panel probe would see a panel that had leaked visible', () =>
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. THE DARK SUMMARY STRIP
+// 2. THE DARK SUMMARY STRIP IS GONE
+//
+// Five assertions and one probe were deleted here rather than left green over
+// markup that no longer renders. Named, with what happened to each claim:
+//
+//   · public has THREE strip cells and in-house has FOUR
+//   · the strip cells are CONTENT-WIDTH, divided by rules rather than by gaps
+//   · CONTROL: the strip probe lands on the strip and finds its cells
+//       → DELETED OUTRIGHT. All three are about the strip's own geometry. There
+//         is no surviving claim: the thing they measured does not exist.
+//
+//   · the ยอดสุทธิ sub-line is DROPPED without pricing, not rendered blank
+//       → DELETED, AND THE DEFECT WITH IT. This asserted the strip degraded
+//         gracefully on a quotation-path registration; the ruling is that
+//         rendering `—` for a total that does not exist was itself the defect,
+//         and it is not ported. `PaymentInfoCard` is the surviving surface and
+//         it is absent — not dashed — on that path, because `pricing` and
+//         `payment` are written by one object literal in build-public.js.
+//         `DLRow`'s absent-means-absent rule is separately asserted in §5.
+//
+//   · the public ผู้เข้าอบรม cell carries the ครบ / ยังไม่ครบ sub-line
+//   · the in-house strip says "15 ท่าน" and never "ประมาณ"
+//       → RE-POINTED, below. Both carried a claim that outlives the strip.
 // ════════════════════════════════════════════════════════════════════════════
 
-test('public has THREE strip cells and in-house has FOUR', () => {
-  assert.equal(stripCells(PUB_FULL).length, 3);
-  assert.equal(stripCells(INH_FULL).length, 4);
-});
-
-test('the strip cells are CONTENT-WIDTH, divided by rules rather than by gaps', () => {
+test('all three roster branches still render — on the surface that survived', () => {
   /**
-   * The measurement, and it is not decoration: equal-fraction cells would make a
-   * course name and "3 ท่าน" the same width and the strip would read as a row of
-   * tiles rather than as one band.
+   * RE-POINTED from the dark strip's ผู้เข้าอบรม cell to the ผู้เข้าอบรม TAB's
+   * summary row, which reads the same `rosterState`.
    *
-   * A cell must therefore carry no width and no flex-grow of its own, and the
-   * separation must come from a divider on the parent. Both halves, because
-   * either alone is satisfiable — content-width cells with a gap, or equal cells
-   * with a rule.
-   */
-  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
-    const region = markup.slice(markup.indexOf('h-[93px]'), markup.indexOf('role="tablist"'));
-    for (const m of region.matchAll(/<div class="([^"]*pt-\[14px\][^"]*)"/g)) {
-      const classes = m[1].split(/\s+/);
-      assert.ok(!classes.some((c) => /^flex-1$|^basis-|^w-\[/.test(c)),
-        `${name}: a strip cell sizes itself instead of its content: [${m[1]}]`);
-    }
-    assert.match(region, /divide-x/, `${name}: the strip cells are not divided by a rule`);
-    assert.ok(!/gap-\[/.test(region.slice(0, region.indexOf('pt-[14px]'))),
-      `${name}: the strip has a gap between cells — they must sit flush`);
-  }
-});
-
-test('the public ผู้เข้าอบรม cell carries the ครบ / ยังไม่ครบ sub-line', () => {
-  /**
-   * RULED OUT on the LIST and ALLOWED HERE, and the difference is measurable:
+   * ── NOT WEAKER, AND HERE IS THE COMPARISON ────────────────────────────────
+   * The claim was never about the strip. It is that the roster derivation has
+   * THREE branches and every one is reachable and worded — a fixture that only
+   * reaches one proves the others are unwritten rather than correct. That claim
+   * is unchanged; only the element carrying it moved.
+   *
+   * The wording differs because the room does: the 16.5px sub-line said
+   * `รายชื่อครบ 2/2` and the 359px cell says `ครบ 2/2`. Asserting the cell's
+   * text rather than the strip's is what makes this an assertion about the
+   * screen as it now is.
+   *
+   * RULED OUT on the LIST and ALLOWED HERE for the unchanged measured reason:
    * the derivation needs `attendeesListProvided` and the `attendees` ARRAY, the
    * list projection carries neither, and `getRegistrationById` is
    * `findById(id).lean()` with no projection at all. Nothing is widened.
-   *
-   * All three branches, because a fixture that only reaches one proves the
-   * others are unwritten rather than correct.
    */
-  assert.ok(stripCells(PUB_FULL)[1].includes('รายชื่อครบ 2/2'), 'a complete roster does not say so');
-  assert.ok(stripCells(PUB_SPARSE)[1].includes('ยังไม่ครบ 1/3'), 'an incomplete roster does not say so');
+  const cellOf = (markup) => {
+    const start = markup.indexOf('h-[75.85px]');
+    assert.notEqual(start, -1, 'no attendee summary row in the render');
+    const region = markup.slice(start, start + 1800);
+    const cells = [...region.matchAll(/<div class="[^"]*pt-\[15px\][^"]*">([\s\S]*?)(?=<div class="[^"]*pt-\[15px\]|$)/g)]
+      .map((m) => m[1]);
+    assert.equal(cells.length, 3, 'the summary row does not have three cells');
+    assert.ok(cells[2].includes('ความครบถ้วน'), 'cell 2 is not the completeness cell');
+    return cells[2];
+  };
+
+  assert.ok(cellOf(PUB_FULL).includes('>ครบ 2/2<'), 'a complete roster does not say so');
+  assert.ok(cellOf(PUB_SPARSE).includes('>ยังไม่ครบ 1/3<'), 'an incomplete roster does not say so');
 
   const optedOut = pub({ ...PUBLIC_FULL, attendeesListProvided: false });
-  assert.ok(stripCells(optedOut)[1].includes('ยังไม่แจ้งรายชื่อ'),
-    'an opt-out roster is reported as a count');
-  assert.ok(!stripCells(optedOut)[1].includes('ครบ'),
+  assert.ok(cellOf(optedOut).includes('>ยังไม่แจ้ง<'), 'an opt-out roster is reported as a count');
+  // Thai negates by PREFIX: `ยังไม่ครบ` CONTAINS `ครบ`, so a bare includes()
+  // cannot tell the two apart. Read the fraction instead — an opted-out roster
+  // has no denominator to be complete against.
+  assert.ok(!/\d+\/\d+/.test(cellOf(optedOut).replace(/<[^>]*>/g, ' ')),
     'an opt-out roster claims a completeness it cannot have');
 });
 
-test('the ยอดสุทธิ sub-line is DROPPED without pricing, not rendered blank', () => {
+test('the in-house headcount reads "15 ท่าน" and never "ประมาณ"', () => {
   /**
-   * The branch that decides whether an optional line is absent or empty. A
-   * quotation-path registration has no `pricing`, and a 16.5px empty paragraph
-   * under a dash is the exact defect that shipped twice on the list screen and
-   * which text matching cannot see.
-   */
-  const full = stripCells(PUB_FULL)[2];
-  const sparse = stripCells(PUB_SPARSE)[2];
-  assert.ok(full.includes('2 ที่นั่ง'), 'the priced cell lost its sub-line');
-  assert.equal((sparse.match(/<p\b/g) ?? []).length, 2,
-    `the unpriced ยอดสุทธิ cell renders ${(sparse.match(/<p\b/g) ?? []).length} lines; `
-    + 'expected the label and the value only — the sub-line must be ABSENT, not blank');
-  assert.ok(sparse.includes('>—<'), 'the unpriced cell shows nothing at all where a total would be');
-});
-
-test('the in-house strip says "15 ท่าน" and never "ประมาณ"', () => {
-  /**
-   * THE CALL, STATED. The design's รูปแบบการอบรม cell reads "ประมาณ 15 คน", and
-   * a summary strip MAY hedge where a data table may not — so the width and
-   * scanning arguments that ruled the word out of the list's 5% จำนวน column do
-   * not reach here.
+   * RE-POINTED from the strip's รูปแบบการอบรม sub-line to the Training
+   * Requirement card's จำนวนผู้เข้าอบรม row.
    *
-   * It is still not built, for the reason that survives the change of surface:
-   * `participantsCount` is a STORED NUMBER and nothing flags it as an estimate.
-   * The schema gives it a minimum of 15 and no `isEstimate`, no min/max pair.
-   * "ประมาณ" would be the screen asserting an imprecision the record does not
-   * record — the same rule the list keeps for its format and status chips.
+   * ── THE ARGUMENT SHRANK, AND SAYING SO IS THE POINT ──────────────────────
+   * It used to read: "a summary strip MAY hedge where a data table may not, so
+   * the width argument that ruled ประมาณ out of the list's จำนวน column does
+   * not reach here — and it is STILL not built, because nothing flags the number
+   * as an estimate." THE FIRST CLAUSE IS NOW MOOT. There is no summary strip, so
+   * the concession it granted has nothing to apply to.
    *
-   * Kept consistent with the list's จำนวน column, which was the instruction.
+   * The second clause is the one that was load-bearing all along and it is
+   * untouched: `participantsCount` is a STORED NUMBER and the Mongoose schema
+   * gives it a minimum of 15 and no `isEstimate`, no min/max pair. "ประมาณ"
+   * would be the screen asserting an imprecision the record does not record.
+   *
+   * The page-wide half of the assertion is BYTE-IDENTICAL to what it was — it
+   * never depended on the strip, only on the whole render.
    */
-  assert.ok(stripCells(INH_FULL)[1].includes('15 ท่าน'), 'the headcount sub-line is gone');
+  assert.ok(INH_FULL.includes('>15 ท่าน<'),
+    'the จำนวนผู้เข้าอบรม row is gone or no longer phrased as the list phrases it');
   for (const [name, markup] of Object.entries({ INH_FULL, INH_SPARSE })) {
-    assert.ok(!markup.includes('ประมาณ'), `${name}: the strip hedges a stored number`);
+    assert.ok(!markup.includes('ประมาณ'), `${name}: the screen hedges a stored number`);
   }
 });
 
-test('CONTROL: the strip probe lands on the strip and finds its cells', () => {
-  // Off-by-one here would assert the shape of some other row of divs. Each probe
-  // result must be a cell of the strip it claims to be.
-  const cells = stripCells(PUB_FULL);
-  assert.ok(cells[0].includes('รอบอบรม'),    'cell 0 is not the round cell');
-  assert.ok(cells[1].includes('ผู้เข้าอบรม'), 'cell 1 is not the attendee cell');
-  assert.ok(cells[2].includes('ยอดสุทธิ'),    'cell 2 is not the total cell');
+test('nothing on either screen still renders the strip', () => {
+  /**
+   * The delete, asserted rather than assumed. A component left mounted behind a
+   * falsy guard would satisfy every re-pointed assertion above while still being
+   * in the tree, and the ยอดสุทธิ defect would come back with it.
+   *
+   * ── TWO PROBES, AND TWO EARLIER DRAFTS WITHDRAWN AS WRONG ─────────────────
+   * `h-[93px]` is the strip's height and is on nothing else. The second probe is
+   * the strip's CONTAINER SHAPE — an element carrying both `rounded-9e-lg` and
+   * `bg-9e-navy` — which no surviving element has.
+   *
+   * Draft 1 asserted `!markup.includes('pt-[14px]')` on the grounds that the
+   * class marked a strip CELL. It does not: `SystemCard` carries `pt-[14px]`
+   * twice. Draft 2 asserted no `bg-9e-navy` between the status bar and the tab
+   * list; that region CONTAINS the status bar's own contents, and `PrimaryAction`
+   * is `bg-9e-navy`. Both reddened on a perfectly correct render.
+   *
+   * Recording both is the point rather than tidying them away: a class believed
+   * unique to a deleted component and actually shared with a live one is how a
+   * delete-check becomes a permanent false alarm, and it took two tries to find
+   * a probe that is actually specific to the thing that was removed. The strip's
+   * container was `rounded-9e-lg bg-9e-navy`; the two navy BUTTONS are
+   * `rounded-9e-md`, which is what separates them.
+   */
+  const darkCards = (markup) =>
+    [...markup.matchAll(/\sclass="([^"]*)"/g)]
+      .map((m) => m[1].split(/\s+/))
+      .filter((cs) => cs.includes('bg-9e-navy') && cs.includes('rounded-9e-lg'));
+
+  for (const [name, markup] of Object.entries({ PUB_FULL, PUB_SPARSE, INH_FULL, INH_SPARSE })) {
+    assert.ok(!markup.includes('h-[93px]'), `${name}: the 93px strip is still rendered`);
+    assert.deepEqual(darkCards(markup), [],
+      `${name}: a large dark card is still rendered — the strip is back`);
+  }
+});
+
+test('CONTROL: the dark-card probe DOES find a strip-shaped element', () => {
+  // Without this, the assertion above passes on any markup at all — including an
+  // empty string — and would have gone on passing if the probe were misspelled.
+  const fake = '<div class="mt-[16px] flex h-[93px] rounded-9e-lg bg-9e-navy px-[4px]"></div>';
+  const found = [...fake.matchAll(/\sclass="([^"]*)"/g)]
+    .map((m) => m[1].split(/\s+/))
+    .filter((cs) => cs.includes('bg-9e-navy') && cs.includes('rounded-9e-lg'));
+  assert.equal(found.length, 1, 'the probe cannot see a strip even when one is there');
+
+  // …and it does NOT fire on the navy BUTTONS that legitimately remain.
+  const button = '<button class="h-[38px] w-[100px] rounded-9e-md bg-9e-navy"></button>';
+  const falsePositives = [...button.matchAll(/\sclass="([^"]*)"/g)]
+    .map((m) => m[1].split(/\s+/))
+    .filter((cs) => cs.includes('bg-9e-navy') && cs.includes('rounded-9e-lg'));
+  assert.equal(falsePositives.length, 0, 'the probe cannot tell the strip from a primary button');
+});
+
+test('the tab list moved up under the status bar, keeping the 16px', () => {
+  /**
+   * The rhythm the removal had to preserve. `mt-[16px]` was the gap between the
+   * strip and the tabs; with the strip gone it is the gap between the STATUS BAR
+   * and the tabs, and the two blocks are still 16px apart.
+   *
+   * Asserted as ADJACENCY, not merely as the class surviving: the class alone
+   * would still be there if something else had been left between them.
+   */
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
+    const bar = markup.indexOf('h-[87px]');
+    const tabs = markup.indexOf('role="tablist"');
+    assert.notEqual(bar, -1, `${name}: no status bar`);
+    assert.notEqual(tabs, -1, `${name}: no tab list`);
+    assert.ok(bar < tabs, `${name}: the tab list is not below the status bar`);
+
+    const between = markup.slice(bar, tabs);
+    // The tab list's own opening tag is the next SIBLING BLOCK. Only the status
+    // card's own contents and the (absent) error line may lie between them.
+    assert.ok(!between.includes('rounded-9e-lg bg-9e-navy'),
+      `${name}: a dark block still sits between the status bar and the tabs`);
+    const tablistTag = /<div[^>]*role="tablist"[^>]*>/.exec(markup)[0];
+    assert.match(tablistTag, /mt-\[16px\]/, `${name}: the tab list lost its 16px offset`);
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════

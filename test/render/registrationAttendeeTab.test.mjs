@@ -127,12 +127,17 @@ test('the summary row has THREE equal cells, and they read the roster', () => {
   assert.ok(cells[2].includes('>ยังไม่ครบ 3/4<'), 'the completeness cell does not read the roster');
 });
 
-test('the summary cells are EQUAL width, unlike the dark strip', () => {
+test('the summary cells are EQUAL width', () => {
   /**
-   * The measurement: 359.46px each at 1080, exactly a third. `SummaryStrip`
-   * above the tabs is the opposite — content-width, because its values are a
-   * course name beside "3 ท่าน" — so a shared component with a flag would have
-   * one thing answering two different measurements.
+   * The measurement: 359.46px each at 1080, exactly a third.
+   *
+   * ── THE COMPARISON IN THE TITLE IS GONE, THE MEASUREMENT IS NOT ───────────
+   * This read "EQUAL width, unlike the dark strip", and the docstring explained
+   * that `SummaryStrip` was content-width so a shared component with a flag
+   * would have answered two measurements with one thing. The strip is deleted,
+   * so that contrast has nothing to contrast with — but `flex-1` on each cell is
+   * still the measured requirement and is still what this asserts. Only the
+   * justification narrowed; nothing was dropped from the check itself.
    */
   const start = FULL.indexOf('h-[75.85px]');
   const region = FULL.slice(start, start + 1400);
@@ -145,21 +150,37 @@ test('the summary cells are EQUAL width, unlike the dark strip', () => {
   assert.match(region, /divide-x/, 'the summary cells are not divided by a rule');
 });
 
-test('the ความครบถ้วน cell and the dark strip agree, in different words', () => {
+test('the ความครบถ้วน cell and the card sentence agree, in different words', () => {
   /**
-   * THE REASON THE DERIVATION MOVED INTO A MODULE. Both surfaces are on this one
-   * page, three inches apart. They may WORD it differently — the strip has room
-   * for `รายชื่อครบ`, the cell shows `ครบ` — but the STATE and the two numbers
-   * are one derivation, and this is what says so.
+   * ── RE-POINTED, AND IT IS WEAKER IN ONE NAMED RESPECT ─────────────────────
+   *
+   * This asserted that the ความครบถ้วน CELL and the DARK STRIP carried the same
+   * roster state in different wordings — the point being that two surfaces three
+   * inches apart on one page read ONE derivation, which is why `rosterState`
+   * moved into lib/registrations/attendeeInfo at all.
+   *
+   * The strip is deleted. Its `rosterSub` phrasing went with it and had no other
+   * reader, so THE SECOND SURFACE THIS TEST COMPARED AGAINST NO LONGER EXISTS.
+   *
+   * Rather than delete the test — which would drop the two-surface claim
+   * entirely — it is re-pointed at the pair that is still on the page: the
+   * summary cell (`ยังไม่ครบ 3/4`) and the attendee card's own second-row
+   * SENTENCE (`ยังขาดอีก 1 ท่าน จากที่สมัครไว้ 4 ท่าน`). Both are built from
+   * `roster` and both are in the ผู้เข้าอบรม tab.
+   *
+   * SAY PLAINLY WHAT SHRANK: the surviving pair sits in one tab panel rather
+   * than spanning the page, so this no longer proves that a surface OUTSIDE the
+   * tab agrees with one inside it. That cross-page claim has no subject any
+   * more. It is not being quietly retained under a new name.
    */
-  const strip = FULL.slice(FULL.indexOf('h-[93px]'), FULL.indexOf('role="tablist"'));
-  assert.ok(strip.includes('ยังไม่ครบ 3/4'), 'the dark strip does not carry the roster');
-  assert.ok(summaryCells(FULL)[2].includes('ยังไม่ครบ 3/4'), 'the tab cell does not carry the same roster');
+  assert.ok(summaryCells(FULL)[2].includes('ยังไม่ครบ 3/4'), 'the tab cell does not carry the roster');
+  assert.ok(FULL.includes('ยังขาดอีก 1 ท่าน จากที่สมัครไว้ 4 ท่าน'),
+    'the card sentence does not carry the same roster');
 
   // And on the opted-out record BOTH say so, neither invents a denominator.
-  const stripOut = OPTED_OUT.slice(OPTED_OUT.indexOf('h-[93px]'), OPTED_OUT.indexOf('role="tablist"'));
-  assert.ok(stripOut.includes('ยังไม่แจ้งรายชื่อ'), 'the strip claims a count on an opted-out roster');
   assert.ok(summaryCells(OPTED_OUT)[2].includes('>ยังไม่แจ้ง<'), 'the cell claims a count on an opted-out roster');
+  assert.ok(OPTED_OUT.includes('ผู้ประสานงานยังไม่ประสงค์แจ้งรายชื่อ'),
+    'the card sentence claims a count on an opted-out roster');
   // No fraction, read from the cell's TEXT rather than its markup — the markup
   // is full of `/` from closing tags and the first draft of this line matched
   // every one of them.

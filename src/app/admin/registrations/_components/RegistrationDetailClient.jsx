@@ -23,7 +23,7 @@ import {
 } from '@/lib/registrations/attendeeInfo';
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
-  SummaryStrip, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
+  EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
   DL, DLRow, QuotedNote, DetailError, EditField, selectCls,
 } from './detailShell';
 
@@ -440,7 +440,7 @@ export function RegistrationDetailClient({ doc, history = null }) {
         : 'ไม่มีขั้นตอนถัดไปในระบบ — ดำเนินการนอกระบบ';
 
   /**
-   * THE ROSTER SUB-LINE, AND WHY IT IS ALLOWED HERE AND NOT ON THE LIST.
+   * THE ROSTER STATE, AND WHY IT IS DERIVED HERE AND NOT ON THE LIST.
    *
    * The list screen's ผู้เข้าอบรม cell renders a bare number, and the design's
    * ครบ / ยังไม่ครบ chip was RULED OUT there — deriving it needs
@@ -450,58 +450,34 @@ export function RegistrationDetailClient({ doc, history = null }) {
    *
    * HERE nothing is widened. `getRegistrationById` is `findById(id).lean()` with
    * no projection at all, so this page already holds the whole document,
-   * attendees included — verified against the action rather than assumed. The
-   * derivation is therefore free, and the strip is where "is the roster
-   * complete" is actually the question.
+   * attendees included — verified against the action rather than assumed.
    *
    * ── THE DERIVATION MOVED OUT IN ROUND 5, AND THAT WAS FORCED ─────────────
-   * The attendee TAB's ความครบถ้วน cell asks this same question three inches
-   * below the strip. Round 4 computed it here in four lines; a second copy in
-   * the tab would be two derivations of one number on one page, which is how a
-   * screen comes to answer one question two ways — the defect this whole branch
-   * keeps removing.
+   * Round 4 computed it inline; a second copy for the attendee tab would be two
+   * derivations of one number on one page, which is how a screen comes to answer
+   * one question two ways. `rosterState` in lib/registrations/attendeeInfo is now
+   * the only place it is computed.
    *
-   * `rosterState` in lib/registrations/attendeeInfo is now the only place it is
-   * computed. Both surfaces read it and each WORDS it for the room it has: the
-   * strip says `รายชื่อครบ 2/2`, the 359px cell says `ครบ 2/2`. Formatting is the
-   * caller's; the STATE and the two numbers are not.
+   * ── `rosterSub` WENT WITH THE STRIP, AND IT WAS ITS ONLY READER ──────────
+   * It phrased this state as `รายชื่อครบ 2/2` for the 16.5px dark sub-line and
+   * NOTHING ELSE CONSUMED IT — the tab badge renders `attendeesCount`, and the
+   * attendee card's second row has its own `rosterSentence`. So the variable is
+   * deleted rather than kept "in case": the two surviving surfaces both read
+   * `roster` directly, and a third phrasing with no reader is a thing to
+   * maintain and no way to notice it has gone wrong.
+   *
+   * `roster` itself stays — `attendeeSummaryCells` and `rosterSentence` below
+   * are both built from it.
    */
   const roster = rosterState({ attendeesListProvided, attendeesCount, attendees });
-  const rosterSub = roster.state === 'not-provided'
-    ? 'ยังไม่แจ้งรายชื่อ'
-    : roster.state === 'complete'
-      ? `รายชื่อครบ ${roster.named}/${roster.count}`
-      : `ยังไม่ครบ ${roster.named}/${roster.count}`;
 
-  /**
-   * The three dark-strip cells.
-   *
-   * ยอดสุทธิ is the one with an empty branch and it is real: a registration
-   * taken through the quotation path carries no `pricing`, so the value falls
-   * back to a dash and the SUB-LINE IS DROPPED ENTIRELY rather than rendered
-   * blank. `sub: ''` is what the shell reads as "no line".
+  /*
+   * THE THREE DARK-STRIP CELLS ARE GONE — see the note in detailShell where the
+   * component was. รอบอบรม and the arrangement are rows of the ข้อมูลคอร์ส card;
+   * the attendee count is the ผู้เข้าอบรม tab's summary row and its tab badge;
+   * ยอดสุทธิ is PaymentInfoCard's, where it is correctly ABSENT on the quotation
+   * path instead of rendering a dash.
    */
-  const pricing = doc.pricing;
-  const stripCells = [
-    {
-      key:   'round',
-      label: 'รอบอบรม',
-      value: course.classDate || '—',
-      sub:   scheduleLabel(course.scheduleType, course.attendanceMode),
-    },
-    {
-      key:   'attendees',
-      label: 'ผู้เข้าอบรม',
-      value: `${attendeesCount} ท่าน`,
-      sub:   rosterSub,
-    },
-    {
-      key:   'total',
-      label: 'ยอดสุทธิ',
-      value: pricing ? `${formatTHB(pricing.total)} บาท` : '—',
-      sub:   pricing ? `${pricing.seats} ที่นั่ง · รวม VAT 7%` : '',
-    },
-  ];
 
   /**
    * The tabs, with the count badge on ผู้เข้าอบรม — and WITHOUT ประวัติ when
@@ -629,8 +605,6 @@ export function RegistrationDetailClient({ doc, history = null }) {
           </OverflowMenu>
         )}
       />
-
-      <SummaryStrip cells={stripCells} />
 
       <DetailError message={error} />
 

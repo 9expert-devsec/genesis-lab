@@ -1388,7 +1388,12 @@ test('the measured geometry really is in the harvest, not merely a large count',
 
   for (const measured of [
     'h-[87px]',   // the status bar
-    'h-[93px]',   // the dark strip
+    // `h-[93px]` — THE DARK STRIP — is deliberately absent. The strip was
+    // deleted from both screens in round 6, so a screen that still emitted this
+    // class would be one that had brought it back. Left named here rather than
+    // silently dropped, because this list's whole job is to be the measurements
+    // the geometry specifies, and a reader comparing it to the design file will
+    // otherwise wonder which of the two is out of date.
     'h-[49px]',   // the tab list
     'h-[39px]',   // one tab
     'w-[100px]',  // the primary action

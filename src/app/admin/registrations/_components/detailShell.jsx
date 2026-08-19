@@ -355,49 +355,45 @@ export function OverflowItem({ children, onClick, disabled, busy, icon: Icon, to
   );
 }
 
-// ── Dark summary strip ──────────────────────────────────────────────────────
-
-/**
- * The 93px dark strip, 16px below the status bar.
+/*
+ * ── `SummaryStrip` IS GONE. DO NOT REINTRODUCE IT ──────────────────────────
  *
- * ── THE CELLS ARE CONTENT-WIDTH, WHICH IS THE MEASUREMENT ──────────────────
- * They are NOT equal fractions. They sit flush against one another with no gap,
- * 4px inset at each end of the card, and are separated by RULES rather than by
- * space — so a cell holding a course name is wide and a cell holding "3 ท่าน" is
- * narrow, and the strip reads as one continuous band rather than as a row of
- * tiles. `flex` with no `flex-1` is what produces that; `divide-x` is the rule.
+ * The 93px dark strip that sat between the status bar and the tabs was deleted
+ * in round 6, on both screens, along with every assertion that stood on its
+ * geometry. It is recorded here because "the design has a dark strip" is true
+ * and the removal was a ruling against the design, so the next reader comparing
+ * the two will otherwise file it as missing work.
  *
- * `cells` is an array so the caller decides how many there are — public has 3
- * and in-house has 4, and this component is not allowed to know which is which.
+ * WHAT IT SHOWED, AND WHERE THAT LIVES NOW — checked cell by cell before the
+ * delete, not assumed:
+ *   · รอบอบรม + the arrangement → the ข้อมูลคอร์ส card's own two rows
+ *   · ผู้เข้าอบรม + รายชื่อครบ N/N → the ผู้เข้าอบรม tab's summary row, which
+ *     reads the SAME `rosterState` derivation and words it for its own width
+ *   · หลักสูตร / รูปแบบ / ช่วงเวลา / ผู้ติดต่อ (in-house) → the four request
+ *     cards, row for row
+ * Nothing was the strip's alone. The strip was a second rendering of values the
+ * cards below it already carried.
  *
- * A cell's `sub` is OPTIONAL and its line vanishes with it. The public ยอดสุทธิ
- * cell is the case that matters: a registration taken through the quotation path
- * carries no `pricing`, and a 16.5px empty line under a dash is the invisible
- * defect the file header describes.
+ * ── AND ONE DEFECT WENT WITH IT, DELIBERATELY UNPORTED ────────────────────
+ * The public ยอดสุทธิ cell rendered `—` for a QUOTATION-PATH registration,
+ * which has no `pricing` at all. That is the strip asserting a total for a
+ * record that has none. It is not carried anywhere: `PaymentInfoCard` shows the
+ * total instead, and it is correctly absent on the quote path because `pricing`
+ * and `payment` are written by the same object literal in
+ * lib/registration/build-public.js — so a document with a total always has the
+ * card that displays it, and one without has neither.
  */
-export function SummaryStrip({ cells }) {
-  return (
-    <div className="mt-[16px] flex h-[93px] items-stretch overflow-hidden rounded-9e-lg bg-9e-navy px-[4px] py-[4px]">
-      <div className="flex min-w-0 flex-1 divide-x divide-9e-ice/15">
-        {cells.map((cell) => (
-          <div key={cell.key} className="min-w-0 px-[17px] pt-[14px]">
-            <p className="whitespace-nowrap text-[11px] leading-[15px] text-9e-ice/60">{cell.label}</p>
-            <p className="truncate text-[20px] font-bold leading-[23.5px] text-9e-ice">{cell.value}</p>
-            {cell.sub ? (
-              <p className="truncate text-[11px] leading-[16.5px] text-9e-ice/70">{cell.sub}</p>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Tab list ────────────────────────────────────────────────────────────────
 
 /**
- * The 49px tab list, 16px below the strip: 5px of padding, 39px tabs, 4px gaps,
- * EQUAL WIDTH filling the row.
+ * The 49px tab list, 16px BELOW THE STATUS BAR: 5px of padding, 39px tabs, 4px
+ * gaps, EQUAL WIDTH filling the row.
+ *
+ * The 16px was measured against the dark strip that used to sit between the two.
+ * With the strip gone the tabs move up and KEEP the 16px, so the rhythm from the
+ * status card down is unchanged — the gap did not belong to the strip, it was
+ * the spacing between two stacked blocks and there are still two.
  *
  * Equal width is `flex-1`, not a fraction keyed on the tab count — public has
  * three tabs and in-house has two, and hard-coding either would make this
