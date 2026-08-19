@@ -84,7 +84,24 @@ export function FeatureContentCards({ cards = [], onSelect }) {
               <CardImage item={item} />
             </div>
 
-            <div className="flex min-w-0 flex-col gap-2">
+            {/* ── THE TEXT BLOCK RESERVES ITS TALLEST STATE BELOW md ────────
+                Same reason the featured slides stack in one grid cell: the
+                three cards change on every auto-advance, and their heights
+                did not. Measured at 375 across a full cycle, the block came
+                out 47 / 67 / 87 / 107px depending on whether the title wrapped
+                to two lines and whether the record had a subtitle at all — so
+                the row oscillated between 213px and 253px and the page moved
+                under the reader every five seconds.
+
+                107px is the measured worst case (two-line title plus two-line
+                subtitle), not a guess. Reserving it costs up to 40px of empty
+                space on the shortest cards — and the row was ALREADY at its
+                tall state in 7 of 10 steps, so this pins it to what it looks
+                like most of the time rather than introducing a new shape.
+
+                Below md only: from md the titles `truncate` to one line and
+                the heights are already constant. */}
+            <div className="flex min-w-0 flex-col gap-2 max-md:min-h-[107px]">
               {item.cardBadge ? (
                 <span
                   className={`w-fit shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold ${tone}`}

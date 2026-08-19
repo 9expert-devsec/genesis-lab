@@ -323,16 +323,76 @@ export function FeaturedContentSlider({ copy, items = [] }) {
         ) : null}
       </div>
 
-      {isImageOnly ? (
-        <ImageOnlyCard cardRef={cardRef} item={item} />
-      ) : (
-        <SplitCard
-          cardRef={cardRef}
-          item={item}
-          isPlaying={playingId === item.id}
-          onPlay={() => setPlayingId(item.id)}
-        />
-      )}
+      {/* ── EVERY SLIDE IS RENDERED, STACKED IN ONE GRID CELL ─────────────
+          The container therefore sizes itself to the TALLEST slide, and the
+          height stops changing when the active slide does.
+
+          ── WHY THIS EXISTS ────────────────────────────────────────────────
+          Below lg the two layouts are genuinely different heights — an image
+          card is the artwork alone (~150px at 375) while a split card stacks
+          thumbnail above title, description and chips (~700px). Rendering one
+          at a time meant auto-slide reflowed the whole page every five
+          seconds. The empty space under a short slide is the accepted cost;
+          a page that jumps under the reader's thumb is not.
+
+          ── WHY CSS AND NOT A MEASURED HEIGHT ──────────────────────────────
+          The obvious alternative is to measure the tallest slide in JS and
+          set the container to it. That number is wrong the moment anything
+          changes it: a resize, a webfont finishing (this section is Thai,
+          which reflows hard when LINE Seed loads), a description that wraps
+          to one more line, an image whose aspect resolves late. Each of those
+          needs its own listener and each is a chance to be wrong until the
+          next one fires. A grid track computes the same number from the same
+          content, continuously, with nothing to keep in sync.
+
+          `col-start-1 row-start-1` on every child is what overlaps them; the
+          track then takes the max of their heights, which is exactly the
+          reservation being asked for.
+
+          ── THE INACTIVE SLIDES MUST NOT EXIST FOR THE READER ──────────────
+          `invisible` is visibility:hidden, NOT opacity-0 — it keeps the box
+          (so the track stays tall) while removing the subtree from the tab
+          order and from the accessibility tree. `inert` says the same thing
+          explicitly and covers the browsers that treat visibility loosely.
+          It is `inert=""` and not `inert={true}` because this is React 18,
+          which does not know `inert` is a boolean attribute and would warn.
+
+          The swipe ref moved to this container: it wraps every slide, so the
+          gesture works whichever one is showing. */}
+      <div ref={cardRef} className="grid">
+        {items.map((slide, i) => {
+          const active = i === current;
+          return (
+            <div
+              key={slide.id}
+              data-fc-slide={active ? "active" : "inactive"}
+              aria-hidden={active ? undefined : "true"}
+              inert={active ? undefined : "true"}
+              className={
+                active
+                  ? "col-start-1 row-start-1"
+                  : "col-start-1 row-start-1 invisible"
+              }
+            >
+              {slide.type === BANNER_TYPES.IMAGE ? (
+                <ImageOnlyCard item={slide} active={active} />
+              ) : (
+                <SplitCard
+                  item={slide}
+                  active={active}
+                  // Belt and braces on `active`: playingId already resets on
+                  // every index change, and an inactive slide's play button is
+                  // inert, so neither alone should be able to mount a player
+                  // off-screen. Both are cheap and the failure they prevent —
+                  // audio from a card nobody can see — is the worst one here.
+                  isPlaying={active && playingId === slide.id}
+                  onPlay={() => setPlayingId(slide.id)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {hasPool ? (
         <FeatureContentCards
@@ -397,7 +457,7 @@ const FEATURED_FRAME = "lg:aspect-[2.5/1] lg:max-h-[480px] lg:min-h-0";
  * unreadable, so the record's own description is repeated below as real text.
  * On desktop the artwork is legible and the same text would be a duplicate.
  */
-function ImageOnlyCard({ cardRef, item }) {
+function ImageOnlyCard({ item, active }) {
   const body = (
     <>
       {/* ONE ratio below lg, and it is the DESKTOP frame's ratio (1200×480 =
@@ -412,12 +472,10 @@ function ImageOnlyCard({ cardRef, item }) {
           something that worsens as the screen narrows. It is a short band on a
           phone (375/2.5 = 150px) and that is the artwork's real shape. */}
       <div className="relative aspect-[2.5/1] w-full lg:h-full lg:aspect-auto">
-        <Image
-          src={item.image}
-          alt={item.imageAlt}
-          fill
+        <SlideImage
+          item={item}
+          active={active}
           sizes="(min-width: 1280px) 1200px, (min-width: 1024px) 92vw, 100vw"
-          className="object-cover object-center"
         />
       </div>
 
@@ -429,16 +487,27 @@ function ImageOnlyCard({ cardRef, item }) {
     </>
   );
 
+  // `max-lg:h-full` + centring: the grid reserves the tallest slide's height,
+  // and below lg that is a video card (~568px at 375) against an image card's
+  // ~150px band of artwork. Without this the difference was 418px of raw page
+  // background under the banner, which reads as a failed render rather than as
+  // reserved space. Filling the panel and centring the artwork inside it puts
+  // the same empty space behind a border and a background, where it looks like
+  // a deliberate frame. The reservation is unchanged — only where the gap sits.
+  //
+  // From lg the frame's own ratio already governs and every slide is the same
+  // height, so none of this applies.
   const shell =
     "block w-full overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] " +
     "bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] " +
+    "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:justify-center " +
     FEATURED_FRAME;
 
   // No usable link_url → a plain box. Never an <a> with no href: that is not a
   // link, it is a div that lies to the accessibility tree.
   if (!item.href) {
     return (
-      <div ref={cardRef} data-fc-card="image" className={shell}>
+      <div data-fc-card="image" className={shell}>
         {body}
       </div>
     );
@@ -450,7 +519,6 @@ function ImageOnlyCard({ cardRef, item }) {
   const external = item.linkKind === "external";
   return (
     <Link
-      ref={cardRef}
       href={item.href}
       data-fc-card="image"
       aria-label={item.title}
@@ -465,10 +533,9 @@ function ImageOnlyCard({ cardRef, item }) {
 }
 
 /** `video` (and later `course`/`article`): text left, media right. */
-function SplitCard({ cardRef, item, isPlaying, onPlay }) {
+function SplitCard({ item, active, isPlaying, onPlay }) {
   return (
     <div
-      ref={cardRef}
       // Marks the featured card's outer shell. Both layouts carry it, which is
       // what makes "do an image slide and a video slide have the same height?"
       // a question that can be ASKED of the DOM rather than inferred from a
@@ -580,7 +647,7 @@ function SplitCard({ cardRef, item, isPlaying, onPlay }) {
         {isPlaying && item.videoId ? (
           <VideoEmbed videoId={item.videoId} title={item.title} />
         ) : (
-          <VideoFacade item={item} onPlay={onPlay} />
+          <VideoFacade item={item} active={active} onPlay={onPlay} />
         )}
       </div>
     </div>
@@ -652,13 +719,14 @@ function YouTubePlayMark({ className }) {
  * So the only chrome this component now draws over a thumbnail is the play
  * control itself.
  */
-function VideoFacade({ item, onPlay }) {
+function VideoFacade({ item, active, onPlay }) {
   const playable = Boolean(item.videoId);
 
   const content = (
     <>
-      <ThumbImage
+      <SlideImage
         item={item}
+        active={active}
         sizes="(min-width: 1280px) 640px, (min-width: 1024px) 58vw, 100vw"
       />
 
@@ -789,20 +857,45 @@ function MetaRow({ chips }) {
 }
 
 /**
- * Thumbnail with a one-shot source fallback.
+ * A slide's picture, with a one-shot source fallback.
+ *
+ * ── ONLY THE ACTIVE SLIDE HAS A PICTURE AT ALL ──────────────────────────────
+ * Every slide is now in the DOM so the grid can reserve the tallest height,
+ * and that turns image loading into a real question: ten cards, one of them a
+ * 1.4MB banner, all with layout boxes inside the viewport.
+ *
+ * `loading="lazy"` does NOT save us here, and that was measured rather than
+ * assumed. A `visibility:hidden` element still has a layout box and still
+ * intersects the viewport, so the browser treats a lazy image inside it as
+ * in-view and fetches it anyway. Measured at 375 with the cache disabled,
+ * counting only this section's own image requests:
+ *
+ *   inactive slides render a lazy <img>   13 requests, 175 KB
+ *   inactive slides render no <img>        6 requests,  60 KB
+ *
+ * The lazy version pulled all five YouTube thumbnails and three extra banners
+ * for cards nobody could see.
+ *
+ * So an inactive slide renders NO <img> at all. Nothing is lost by it: the
+ * height these slides exist to contribute comes from the aspect-ratio boxes
+ * (`aspect-[2.5/1]` on an image card, `aspect-[16/9]` on a video panel), which
+ * size themselves without a pixel of image data. The network profile is
+ * therefore identical to rendering one slide at a time — which is what it was
+ * before this change, and what it has to stay.
+ *
+ * `key` on the <Image> resets the fallback when the item changes: without it,
+ * an item that had fallen back would keep the previous item's flag and skip
+ * straight past its own maxres.
  *
  * WHY A FALLBACK AT ALL: a YouTube `maxresdefault.jpg` is only generated for
  * videos uploaded above a certain resolution. All five ids in the pool have one
- * today — that is an observation, not a guarantee about the sixth video
- * somebody uploads. `hqdefault.jpg` (480×360) always exists. On the error event
- * we swap once and never again, so a broken fallback cannot loop.
- *
- * `key` on the <Image> resets the swap when the item changes: without it, an
- * item that had fallen back would keep the previous item's fallback flag and
- * skip straight past its own maxres.
+ * today — an observation, not a guarantee about the sixth video somebody
+ * uploads. `hqdefault.jpg` (480×360) always exists. We swap once and never
+ * again, so a broken fallback cannot loop.
  */
-function ThumbImage({ item, sizes }) {
+function SlideImage({ item, active, sizes }) {
   const [failed, setFailed] = useState(false);
+  if (!active) return null;
   const src = failed && item.imageFallback ? item.imageFallback : item.image;
 
   return (
