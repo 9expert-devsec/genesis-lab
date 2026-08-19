@@ -1450,7 +1450,22 @@ test('the measured geometry really is in the harvest, not merely a large count',
     'w-[39px]',   // the overflow button
     'w-[21px]',   // the count badge
     'h-[43px]',   // the section-card header row
-    'gap-x-[36px]', // the two 500px DL columns
+    // ── the field row's column split ──────────────────────────────────────
+    // `gap-x-[36px]` — THE TWO 500px DL COLUMNS — is deliberately absent. Round
+    // 7 replaced the two-column definition list with one field per row, so a
+    // screen still emitting that class would be one that had brought the old
+    // geometry back. Named rather than silently dropped, for the same reason
+    // `h-[93px]` is named above.
+    //
+    // These two are the replacement, and they are the reason this list exists.
+    // `lg:grid-cols-[22%_minmax(0,1fr)]` — the form written first — COMPILES TO
+    // NOTHING (Tailwind splits an arbitrary value on the comma), and it is a
+    // complete literal that every shape check in this file passes. It reached
+    // the harvest and the harvest is what said so. See
+    // scripts/_probe-field-row-columns.mjs.
+    'lg:grid-cols-[22%_1fr]', // the label column at 22%, the value column filling
+    'lg:gap-x-[1%]',          // ...so the value column's left edge lands at 23%
+    'py-[11px]',              // the row's own rhythm, between the hairlines
     // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
     'h-[75.85px]', // the three-cell summary row
     'h-[48.3px]',  // one attendee row
@@ -1467,6 +1482,56 @@ test('the measured geometry really is in the harvest, not merely a large count',
   ]) {
     assert.ok(classes.has(measured), `the render carries no ${measured} — a measured element is missing`);
   }
+});
+
+test('the field-row divider is SIBLING-based, so it cannot trail the last row', async () => {
+  /**
+   * ── THE HALF A MARKUP ASSERTION CANNOT MAKE ───────────────────────────────
+   *
+   * test/render/registrationFieldRows asserts that the `<dl>` carries `divide-y`
+   * and that no ROW carries a bottom border. Both are true of a class named
+   * `divide-y` that draws a rule under EVERY child including the last — the name
+   * would be the only thing saying otherwise, and a name is not a mechanism.
+   *
+   * So the claim is made against the COMPILED SELECTOR: the rule must be
+   * sibling-based (`~` or `+`), which paints between children and therefore has
+   * no last one to paint after, and must NOT be a `:last-child` construction,
+   * which is the shape that needs an escape hatch and is the trailing-element
+   * trap this suite has caught twice.
+   *
+   * This is also what makes "a card with one row emits no divider" a mechanism
+   * rather than a coincidence: one child is never the second of a sibling pair.
+   */
+  const css = await compile([{ raw: 'divide-y divide-[var(--surface-border)]', extension: 'html' }]);
+
+  const rule = /(\.divide-y\b[^{]*)\{/.exec(css);
+  assert.ok(rule, 'Tailwind emitted no rule for divide-y at all');
+  const selector = rule[1];
+
+  assert.match(selector, /[~+]/,
+    `divide-y is not sibling-based — it cannot guarantee "between rows": ${selector}`);
+  assert.equal(/last-child/.test(selector), false,
+    `divide-y is a :last-child construction, which needs an escape hatch: ${selector}`);
+  assert.match(selector, /^\.divide-y\s*>/,
+    `divide-y does not target direct children, so a nested element could take a rule: ${selector}`);
+
+  // The colour follows the same selector, or the rule is 1px of nothing.
+  const colour = /(\.divide-\\\[var\\\(--surface-border\\\)\\\][^{]*)\{/.exec(css);
+  assert.ok(colour, 'the divider colour compiled to nothing');
+  assert.match(colour[1], /[~+]/, 'the divider colour is not scoped to the same sibling pairs');
+});
+
+test('CONTROL: the selector probe DOES reject a trailing-divider mechanism', async () => {
+  // Without this the assertion above passes on any selector containing a tilde,
+  // and would go on passing if the patterns were misspelled. Two hand-written
+  // selectors with known answers: the shape that trails, and the shape that does
+  // not.
+  const trailing = '.divide-y > :not([hidden]):last-child';
+  const between  = '.divide-y > :not([hidden]) ~ :not([hidden])';
+  assert.ok(/last-child/.test(trailing), 'the probe cannot see a :last-child construction');
+  assert.equal(/[~+]/.test(trailing), false, 'the probe thinks a :last-child rule is sibling-based');
+  assert.ok(/[~+]/.test(between), 'the probe cannot see a sibling combinator');
+  assert.equal(/last-child/.test(between), false);
 });
 
 test('CONTROL: the detail file list is the one the render can draw from', async () => {

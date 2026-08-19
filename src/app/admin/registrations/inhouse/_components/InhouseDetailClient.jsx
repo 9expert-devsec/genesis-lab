@@ -747,8 +747,8 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
    *
    * Every one of them was a second rendering of a row that is still on the page,
    * checked before the delete rather than assumed:
-   *   · หลักสูตรที่สนใจ → the Training Requirement card's own wide row, which
-   *     shows ALL the courses rather than the first plus "และอีก N"
+   *   · หลักสูตรที่สนใจ → the Training Requirement card's own row, which shows
+   *     ALL the courses rather than the first plus "และอีก N"
    *   · รูปแบบการอบรม + the headcount → that card's จำนวนผู้เข้าอบรม row and the
    *     schedule card's รูปแบบ row
    *   · ช่วงเวลาที่ต้องการ + หมายเหตุเวลา → the schedule card's two rows
@@ -995,11 +995,11 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                   The empty hint stays: an enquiry naming NO course is a data fault
                   a salesperson has to see, not a row to hide.
                 */}
-                <DLRow label="หลักสูตรที่สนใจ" wide emptyHint="ไม่ได้ระบุหลักสูตร"
+                <DLRow label="หลักสูตรที่สนใจ" emptyHint="ไม่ได้ระบุหลักสูตร"
                   value={courses.length > 0 ? <CourseList courses={courses} /> : ''} />
                 <DLRow label="จำนวนผู้เข้าอบรม" value={requirement.participantsCount === '' || requirement.participantsCount == null ? '' : `${requirement.participantsCount} ท่าน`} />
                 <DLRow label="เนื้อหา" value={CONTENT_MODE_LABEL[requirement.contentMode] ?? requirement.contentMode} />
-                <DLRow label="รายละเอียดเนื้อหา" wide value={requirement.contentDetails} />
+                <DLRow label="รายละเอียดเนื้อหา" value={requirement.contentDetails} />
               </DL>
             )}
           </SectionCard>
@@ -1086,7 +1086,7 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                   row would hide the job.
                 */}
                 {schedule.trainingFormat === 'onsite' && (
-                  <DLRow label="สถานที่จัดอบรม" wide value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
+                  <DLRow label="สถานที่จัดอบรม" value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
                     action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
                 )}
               </DL>
@@ -1201,7 +1201,7 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                 {/* Derived at read time. `branch` is legacy read-only and is the
                     fallback for pre-split enquiries — see branchLabel.js. */}
                 <DLRow label="สาขา" value={branchLabel} />
-                <DLRow label="ที่อยู่" wide value={address}
+                <DLRow label="ที่อยู่" value={address}
                   action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
               </DL>
             )}
