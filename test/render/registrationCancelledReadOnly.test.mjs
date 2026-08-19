@@ -84,14 +84,27 @@ function primaryButton(markup) {
  * every deepEqual against it went red on correct code.
  *
  * That is the measured version of a probe that was right by accident. It is
- * bounded to the status card — the 87px element — and stops at the summary strip
- * that follows it, so it reads the menu the claim is about and nothing else.
+ * bounded to the status card — the 87px element — and stops at the TAB LIST that
+ * follows it, so it reads the menu the claim is about and nothing else.
+ *
+ * ── THE UPPER BOUND MOVED WHEN THE DARK STRIP WAS DELETED ──────────────────
+ * It was `h-[93px]`, the strip that used to sit between the status bar and the
+ * tabs. With the strip gone that class is in no render, so the bound became
+ * unfindable — and note what the failure would have looked like: `indexOf`
+ * returns -1, `slice(start, -1)` silently returns almost the WHOLE PAGE, and the
+ * unscoped-probe defect this function was written to fix comes straight back.
+ * The `notEqual` guard below is what turns that into a loud failure instead, and
+ * it is why the bound is asserted rather than trusted.
+ *
+ * `role="tablist"` is the new bound: it is the next block on the page, it is
+ * unique, and it is not a measurement, so a future geometry change cannot move
+ * it without also moving the thing it marks.
  */
 function statusBarRegion(markup) {
   const start = markup.indexOf('h-[87px]');
   assert.notEqual(start, -1, 'no status bar in the render — the marker class has changed');
-  const end = markup.indexOf('h-[93px]', start);
-  assert.notEqual(end, -1, 'the status bar is not followed by the summary strip — the probe would over-read');
+  const end = markup.indexOf('role="tablist"', start);
+  assert.notEqual(end, -1, 'the status bar is not followed by the tab list — the probe would over-read');
   return markup.slice(start, end);
 }
 

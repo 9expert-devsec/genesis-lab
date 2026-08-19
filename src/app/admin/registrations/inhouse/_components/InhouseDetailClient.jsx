@@ -45,7 +45,7 @@ import {
 } from '@/lib/registrations/statuses';
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
-  SummaryStrip, TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
+  TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
   EditField, EditArea, EditSelect,
 } from '../../_components/detailShell';
 
@@ -318,11 +318,13 @@ export function schedulePayload(schedule) {
   return trainingFormat ? { ...rest, trainingFormat } : rest;
 }
 
-/** The same window, without the `เดือน:` prefix — the strip cell has a label. */
-function scheduleStripValue(doc) {
-  if (doc.preferredMonth) return monthLongLabel(doc.preferredMonth);
-  return [doc.preferredDateFrom, doc.preferredDateTo].filter(Boolean).join(' ถึง ') || '—';
-}
+/*
+ * `scheduleStripValue` IS DELETED WITH THE STRIP. It was the same window as
+ * `scheduleSummary` above, without the `เดือน:` prefix, because the strip cell
+ * carried a label of its own and the card row does not. Its only caller was the
+ * strip, so it goes with it rather than surviving as a second formatter of one
+ * value with nothing reading it.
+ */
 
 /**
  * The venue, from the structured `onsiteVenue` — falling back to the three
@@ -699,55 +701,31 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
         ? `ขั้นตอนถัดไป: ${statusLabel(primaryTarget)}`
         : 'ไม่มีขั้นตอนถัดไปในระบบ — ปิดงานนอกระบบ';
 
-  /**
-   * The four dark-strip cells.
+  /*
+   * ── THE FOUR DARK-STRIP CELLS ARE GONE ────────────────────────────────────
    *
-   * ── "ประมาณ 15 คน" IS NOT BUILT, AND THAT IS A DECISION RATHER THAN AN
-   *    OVERSIGHT ────────────────────────────────────────────────────────────
-   * The design's รูปแบบการอบรม cell hedges the headcount. A summary strip MAY
-   * hedge where a data table may not — it is summarising, and the width argument
-   * that ruled the word out of the list's 5% จำนวน column does not apply here.
+   * Every one of them was a second rendering of a row that is still on the page,
+   * checked before the delete rather than assumed:
+   *   · หลักสูตรที่สนใจ → the Training Requirement card's own wide row, which
+   *     shows ALL the courses rather than the first plus "และอีก N"
+   *   · รูปแบบการอบรม + the headcount → that card's จำนวนผู้เข้าอบรม row and the
+   *     schedule card's รูปแบบ row
+   *   · ช่วงเวลาที่ต้องการ + หมายเหตุเวลา → the schedule card's two rows
+   *   · ผู้ติดต่อ + phone/email → the contact card's three rows
    *
-   * It is still not built, for the reason that survives the change of surface:
-   * `participantsCount` IS A STORED NUMBER AND NOTHING FLAGS IT AS AN ESTIMATE.
-   * The Mongoose schema gives it a minimum of 15 and no `isEstimate`, no
-   * `min`/`max` pair, nothing. "ประมาณ" would be the screen asserting an
-   * imprecision the record does not record — the same rule the list table keeps
-   * for its format chip and its status chip: no branch may assert something the
-   * document does not hold.
+   * ── "ประมาณ 15 คน" IS STILL NOT BUILT, AND THE REASON OUTLIVES THE STRIP ──
+   * The design hedges the headcount. `participantsCount` IS A STORED NUMBER AND
+   * NOTHING FLAGS IT AS AN ESTIMATE — the Mongoose schema gives it a minimum of
+   * 15 and no `isEstimate`, no `min`/`max` pair. "ประมาณ" would be the screen
+   * asserting an imprecision the record does not record, which is the same rule
+   * the list table keeps for its format and status chips.
    *
-   * So the sub-line reads "15 ท่าน", phrased exactly as the list's จำนวน column
-   * phrases it, which is also what the instruction asked for: one admin, one way
-   * of saying a headcount.
+   * That argument was previously written as "a summary strip MAY hedge where a
+   * data table may not, and it still does not". THE FIRST HALF IS NOW MOOT —
+   * there is no summary strip — and the second half is what was load-bearing all
+   * along. The surviving row is the Training Requirement card's, which reads
+   * `15 ท่าน`, phrased exactly as the list's จำนวน column phrases it.
    */
-  const firstCourse = courses[0];
-  const stripCells = [
-    {
-      key:   'courses',
-      label: 'หลักสูตรที่สนใจ',
-      value: firstCourse ? (firstCourse.name || firstCourse.code) : '—',
-      sub:   courses.length > 1 ? `และอีก ${courses.length - 1} หลักสูตร` : (firstCourse?.name ? firstCourse.code : ''),
-    },
-    {
-      key:   'format',
-      label: 'รูปแบบการอบรม',
-      value: TRAINING_FORMAT_LABEL[doc.trainingFormat] ?? doc.trainingFormat ?? '—',
-      sub:   doc.participantsCount == null ? '' : `${doc.participantsCount} ท่าน`,
-    },
-    {
-      key:   'window',
-      label: 'ช่วงเวลาที่ต้องการ',
-      value: scheduleStripValue(doc),
-      sub:   doc.scheduleNote ?? '',
-    },
-    {
-      key:   'contact',
-      label: 'ผู้ติดต่อ',
-      value: contactName || '—',
-      sub:   doc.contactPhone || doc.contactEmail || '',
-    },
-  ];
-
   /**
    * A NULL SLOT MEANS NO TAB, NOT AN EMPTY PANEL — see the public client's note
    * at length. `RecordHistory` renders nothing when the viewer may not read the
@@ -824,8 +802,6 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
           </OverflowMenu>
         )}
       />
-
-      <SummaryStrip cells={stripCells} />
 
       <DetailError message={error} />
 
