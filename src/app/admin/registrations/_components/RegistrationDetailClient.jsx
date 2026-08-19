@@ -17,6 +17,7 @@ import {
   deleteRegistration,
 } from '@/lib/actions/registrations';
 import { refNo } from '@/lib/refNo';
+import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import {
   attendeeInfoState, missingAttendeeFields, rosterState,
@@ -541,10 +542,17 @@ export function RegistrationDetailClient({ doc, history = null }) {
     <div className="mx-auto w-full max-w-[1080px]">
       <BackLink label="กลับรายการ" onClick={() => router.back()} />
 
+      {/*
+        THE HEADING NAMES THE COORDINATOR, AND THE REFERENCE NUMBER IS GONE FROM
+        IT — it is a row of the ข้อมูลระบบ card at the foot of the page. See
+        lib/registrations/detailHeading for the empty-identifier rule; a
+        registration whose coordinator has no name renders the label ALONE, never
+        a trailing colon.
+      */}
       <DetailHeader
         badge={<TypeBadge label="Public" className="bg-sky-100 text-sky-700" />}
         timestamp={`สมัครเมื่อ ${fmtDate(doc.createdAt)}`}
-        title={<>ใบสมัคร <span className="font-mono text-9e-action">{refNo(doc._id)}</span></>}
+        title={detailHeading(publicHeadingIdentifier(doc))}
         subtitle={doc.courseName}
       />
 
@@ -745,6 +753,19 @@ export function RegistrationDetailClient({ doc, history = null }) {
           </SectionCard>
 
           <SystemCard icon={Database} title="ข้อมูลระบบ">
+            {/*
+              เลขอ้างอิง — MOVED HERE FROM THE HEADING, and it is now the ONLY
+              place in the UI this value appears outside the delete-confirm
+              dialog. Round 3 deleted the เลขอ้างอิง column from both list tables
+              on the express grounds that the detail heading carried it; the
+              heading no longer does, so this row is what keeps that decision
+              from having quietly removed the number from the product.
+
+              It is FIRST in the card, above the raw id, because it is the value
+              a human quotes down the phone — the 24-character `_id` below it is
+              for pasting into a query.
+            */}
+            <DLRow label="เลขอ้างอิง"      value={mono(refNo(doc._id))} />
             <DLRow label="Registration ID" value={mono(doc._id)} />
             <DLRow label="Class ID"        value={mono(doc.classId)} />
             <DLRow label="แหล่งที่มา"       value={doc.source ?? 'web'} />

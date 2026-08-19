@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
 import { InhouseDetailClient } from '@/app/admin/registrations/inhouse/_components/InhouseDetailClient';
 import { NEUTRAL_STATUS_BADGE, statusBadge, statusLabel } from '@/lib/registrations/statuses';
+import { DETAIL_HEADING_LABEL } from '@/lib/registrations/detailHeading';
+import { refNo } from '@/lib/refNo';
 
 /**
  * THE RESTYLED DETAIL SCREENS: the tabs, the dark strip, the status bar and the
@@ -302,6 +304,102 @@ test('CONTROL: the panel probe would see a panel that had leaked visible', () =>
   const two = '<div role="tabpanel" hidden></div><div role="tabpanel"></div><div role="tabpanel"></div>';
   assert.equal(tabPanels(two).length, 3);
   assert.equal(tabPanels(two).filter((p) => !/\bhidden\b/.test(p)).length, 2);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 1b. THE PAGE HEADING, AND WHERE THE REFERENCE NUMBER WENT
+// ════════════════════════════════════════════════════════════════════════════
+
+/** The `<h1>`'s text content. The heading is the claim; the badge above is not. */
+function headingText(markup) {
+  const m = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(markup);
+  assert.ok(m, 'no <h1> in the render');
+  return textOf(m[1]);
+}
+
+test('both screens head with ข้อมูลการลงทะเบียน and their identifying field', () => {
+  assert.equal(headingText(PUB_FULL), `${DETAIL_HEADING_LABEL} : สมชาย ใจดี`);
+  assert.equal(headingText(INH_FULL), `${DETAIL_HEADING_LABEL} : บริษัท ทดสอบ จำกัด`);
+});
+
+test('THE IN-HOUSE CHOICE: the company heads the page, not the contact', () => {
+  /**
+   * Stated as an assertion rather than left to the docstring, because both
+   * fields are on the fixture and either would have produced a heading that
+   * looks perfectly reasonable. See lib/registrations/detailHeading for the
+   * three reasons; this pins the outcome.
+   *
+   * The contact has NOT been dropped — it is the subtitle — so the second half
+   * asserts it is still on the page, in the block below the heading.
+   */
+  assert.ok(!headingText(INH_FULL).includes('สมชาย'), 'the contact name is in the heading');
+  assert.ok(INH_FULL.includes('>สมชาย ใจดี<'), 'the contact name is nowhere on the page');
+});
+
+test('THE MISSING-FIELD FIXTURE: no bare colon on either screen', () => {
+  /**
+   * The heading now depends on a field that can be absent, so a record without
+   * it is rendered rather than reasoned about. `ข้อมูลการลงทะเบียน : ` at 40px
+   * reads as data that failed to load.
+   *
+   * Both directions of "absent": a coordinator whose name fields are EMPTY, and
+   * one that is whitespace-only — which is truthy and is how the defect would
+   * come back past a naive `if (name)`.
+   */
+  const noName = pub({ ...PUBLIC_FULL, coordinator: { ...PUBLIC_FULL.coordinator, firstName: '', lastName: '' } });
+  const blankName = pub({ ...PUBLIC_FULL, coordinator: { ...PUBLIC_FULL.coordinator, firstName: '  ', lastName: ' ' } });
+  const noCompany = inh({ ...INHOUSE_FULL, companyName: '', quotationCompany: '' });
+
+  for (const [name, markup] of Object.entries({ noName, blankName, noCompany })) {
+    assert.equal(headingText(markup), DETAIL_HEADING_LABEL,
+      `${name}: the heading is not the bare label`);
+    assert.ok(!headingText(markup).includes(':'), `${name}: THE BARE COLON IS BACK`);
+  }
+});
+
+test('refNo is in ข้อมูลระบบ and NOWHERE in the heading', () => {
+  /**
+   * ── THE CONSEQUENCE CHAIN THIS CLOSES ─────────────────────────────────────
+   * Round 3 deleted the เลขอ้างอิง column from BOTH list tables, and the reason
+   * recorded then was that the detail heading carried the number. The heading no
+   * longer does. If this row were ever dropped the reference number would exist
+   * NOWHERE in the UI except a confirm dialog, and nothing else in the suite
+   * would notice.
+   *
+   * Both halves matter: present in the system card, and absent from the heading.
+   * Asserting only the first would pass on a screen that shows it twice.
+   */
+  for (const [name, markup, id] of [
+    ['PUB_FULL', PUB_FULL, PUBLIC_FULL._id],
+    ['INH_FULL', INH_FULL, INHOUSE_FULL._id],
+  ]) {
+    const ref = refNo(id);
+    assert.ok(ref.length === 8, 'the fixture id is not ObjectId-shaped');
+    assert.ok(markup.includes('>เลขอ้างอิง<'), `${name}: the เลขอ้างอิง row is missing`);
+    assert.ok(markup.includes(`>${ref}<`), `${name}: the reference number ${ref} is not rendered`);
+    assert.ok(!headingText(markup).includes(ref), `${name}: the reference number is still in the heading`);
+
+    // …and it is in the ข้อมูลระบบ card specifically, not merely somewhere.
+    const card = markup.slice(markup.indexOf('>ข้อมูลระบบ<'));
+    assert.ok(card.includes(`>${ref}<`), `${name}: the reference number is not in ข้อมูลระบบ`);
+  }
+});
+
+test('the BackLink carries NO top padding — the hand removal is deliberate', () => {
+  /**
+   * The Figma read puts this block 30px down and it shipped as `pt-[30px]`. It
+   * was removed BY HAND and that supersedes the measurement — the admin layout
+   * already supplies the space, so the 30px was applied twice.
+   *
+   * NOTHING PINNED THIS IN EITHER DIRECTION BEFORE, which is exactly how a hand
+   * edit gets undone by the next person reading the design file. It is pinned
+   * now, in the direction the decision went.
+   */
+  for (const [name, markup] of Object.entries({ PUB_FULL, INH_FULL })) {
+    const upToBack = markup.slice(0, markup.indexOf('h-[40.5px]'));
+    assert.ok(!upToBack.includes('pt-[30px]'),
+      `${name}: the back-link block's 30px top padding is back — see the note on BackLink`);
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════
