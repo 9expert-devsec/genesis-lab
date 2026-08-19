@@ -171,7 +171,12 @@ test('the in-house allowlist no longer names any DELETED field', () => {
 test('CONTROL: the allowlist probe DOES find the fields that are still there', () => {
   // Without this, a mangled regex capture (or a renamed array) would make both
   // membership tests above pass on an empty string.
-  for (const field of ['coursesInterested', 'trainingFormat', 'quotationCompany', 'adminNotes']) {
+  // `adminNotes` WAS in this probe and has been removed from it, because it has
+  // been removed from the allowlist: internal notes are append-only and are
+  // written only by `addInternalNote` with `$push`. Leaving it here would have
+  // asserted that the back door is still open. `message` takes its place so the
+  // control still names a field from the same end of the list.
+  for (const field of ['coursesInterested', 'trainingFormat', 'quotationCompany', 'message']) {
     assert.ok(INHOUSE_ALLOWLIST.includes(`'${field}'`), `${field} should still be editable`);
   }
 });

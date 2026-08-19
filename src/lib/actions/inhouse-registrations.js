@@ -181,43 +181,27 @@ export async function updateInhouseStatus(id, status) {
  * that cancellation is terminal. Nothing here should be "completed" by gating
  * deleteInhouseRegistration.
  */
-export async function updateInhouseAdminNotes(id, adminNotes) {
-  const session = await requireAdmin('registrations');
-  if (!id) return { ok: false, error: 'Missing id' };
-  await dbConnect();
-  const doc = await RegisterInhouse.findOneAndUpdate(
-    { _id: id, status: { $ne: 'cancelled' } },
-    // '' NOT `|| undefined`: Mongoose drops an undefined value from an update
-    // object, so clearing the box sent nothing and the old note survived the
-    // save. A note is a plain String with no cast to fail, so the empty string
-    // is both a legal value and the only one that means "cleared".
-    { $set: { adminNotes: String(adminNotes ?? '').trim().slice(0, 2000) } },
-    { new: true, runValidators: false }
-  );
-  if (!doc) {
-    // Same ambiguity as the status gate — no such id, or a locked one. One
-    // extra read on the refusal path only, so the two messages stay distinct.
-    const existing = await RegisterInhouse.findById(id).select('status').lean();
-    if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
-    return { ok: false, error: 'คำขอนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
-  }
-  revalidatePath(`${ADMIN_DETAIL_PATH}/${id}`);
-
-  // THE ACT ONLY — never the note text, before or after. Admin notes are free
-  // text about a customer and will contain their details: what they asked for,
-  // what they can afford, who to call. That is the most sensitive field on the
-  // record, not the least.
-  recordAdminActionAfter({
-    menu:        'registrations',
-    action:      'notes',
-    entity:      'inhouse',
-    recordId:    String(id),
-    recordLabel: '',
-    actor:       { id: session.user?.id, name: session.user?.name },
-  });
-
-  return { ok: true };
-}
+/*
+ * ══ `updateInhouseAdminNotes` IS DELETED. DO NOT REINSTATE IT. ══════════════
+ *
+ * In-house internal notes now go through `addInternalNote` in
+ * lib/actions/registrations.js — THE SAME ACTION THE PUBLIC SCREEN USES. That
+ * was the instruction and it is the point: one notes mechanism, not two.
+ *
+ * ── WHAT IT DID, AND WHY THAT SHAPE HAD TO GO ─────────────────────────────
+ * It was a `$set` of ONE String field. Two salespeople could not both use it:
+ * the second writer silently overwrote the first, with no record that anything
+ * had been lost. That is the exact defect the append-only array replaces, and
+ * keeping this action alive beside it would have left the overwrite reachable
+ * through a second door while the UI advertised an append-only record.
+ *
+ * Its cancellation lock, its not-found/locked message split and its
+ * body-never-in-the-audit-row discipline all survive — they were carried into
+ * `addInternalNote` rather than dropped. What did NOT survive is `$set`.
+ *
+ * The audit action name is unchanged (`notes`), so historical rows written by
+ * this function keep their title and read identically to new ones.
+ */
 
 // ── Delete ─────────────────────────────────────────────────────────
 

@@ -13,27 +13,35 @@
  * files rather than off the design:
  *
  *   public   (lib/actions/registrations.js)          status · update · delete
- *   in-house (lib/actions/inhouse-registrations.js)  status · notes  · delete
+ *   in-house (lib/actions/inhouse-registrations.js)  status · delete
+ *   BOTH     (lib/actions/registrations.js)          notes
  *
  * That is the entire vocabulary. A title for anything else would be a label for
  * an event nothing writes.
  *
- * ── THE ONE ASYMMETRY BETWEEN THE TWO COLLECTIONS ──────────────────────────
+ * ── THE ASYMMETRY IS GONE, AND IT WAS CLOSED THE RIGHT WAY ─────────────────
  *
- * IN-HOUSE HAS A DEDICATED `notes` ACTION AND PUBLIC DOES NOT. In-house notes go
- * through `updateInhouseAdminNotes`, which records `action: 'notes'`; public
- * notes are one field among many in `updateRegistration`, which records
- * `action: 'update'` for every field edit it makes.
+ * This file used to record a difference in KIND: in-house had a dedicated
+ * `notes` action and public did not, because public notes were one field among
+ * many in `updateRegistration`, which records `action: 'update'` and genuinely
+ * does not know which field changed. The note said the gap must NOT be closed by
+ * making the two match — because the only ways to do that were to invent a
+ * `notes` label for a public `update` (a title asserting something the row does
+ * not hold) or to take in-house's away (losing real information).
  *
- * So the in-house feed can say "เพิ่มบันทึกภายใน" and the public feed cannot —
- * the public row genuinely does not know which field changed, and inventing
- * "เพิ่มบันทึกภายใน" for a public `update` would be a label asserting something
- * the row does not hold. Public says "แก้ไขข้อมูลใบสมัคร", which is exactly what
- * was recorded.
+ * ROUND 6 CLOSED IT BY THE THIRD ROUTE, which is the one that was actually
+ * available: public GENUINELY GOT A DEDICATED ACTION. `addInternalNote` in
+ * lib/actions/registrations.js is the only writer of internal notes on either
+ * source, it records `action: 'notes'`, and so the public row now really does
+ * know that a note was added. Nothing is invented and nothing was given up.
  *
- * That is a difference in KIND, not a gap to be filled by making them match.
- * Making them match means either giving public a `notes` action it does not have
- * or taking in-house's away, and the second would lose real information.
+ * So `notes` is in BOTH maps below. The reasoning above is kept rather than
+ * deleted, because "why don't these match" is the question a reader arrives
+ * with, and the answer — they do now, and here is why the obvious two ways of
+ * getting there were both wrong — is worth more than silence.
+ *
+ * `update` still does not name a field, and still must not: `updateRegistration`
+ * remains a wholesale `$set` of an allowlisted bag.
  *
  * ── `delete` IS HERE AND IS UNREACHABLE FROM THE DETAIL PAGE ───────────────
  *
@@ -60,12 +68,35 @@
 export const PUBLIC_ACTION_TITLES = Object.freeze({
   status: 'อัปเดตสถานะรายการ',
   update: 'แก้ไขข้อมูลใบสมัคร',
+  // NEW in round 6, and it is TRUE rather than inferred — `addInternalNote`
+  // records it directly. See the header for why this could not simply be
+  // borrowed from in-house before.
+  notes:  'เพิ่มบันทึกภายใน',
   delete: 'ลบใบสมัคร',
 });
 
-/** action → Thai title, for the IN-HOUSE collection. See the note on `notes`. */
+/**
+ * action → Thai title, for the IN-HOUSE collection. See the note on `notes`.
+ *
+ * ── `update` IS NEW HERE, AND ITS ABSENCE WAS A REAL GAP ──────────────────
+ * Until round 6 the in-house screen could not edit a field at all — it called
+ * `updateInhouseStatus`, `updateInhouseAdminNotes` and delete, and nothing else
+ * — so no `update` row could ever be filed against an in-house record and a
+ * title for one would have been a label for an event nothing wrote.
+ *
+ * The in-house screen now calls `updateRegistration`, which records `update`
+ * with `entity: 'inhouse'`. Without an entry here that row would render the raw
+ * English enum `update` on a Thai feed. Caught by the vocabulary test in
+ * render/registrationHistoryFeed, which compares the titles against the actions
+ * the action files actually write — not by anyone noticing.
+ *
+ * The wording differs from public's by one noun (คำขอ vs ใบสมัคร) and is
+ * equally non-specific, for the same reason: `updateRegistration` is a wholesale
+ * `$set` of an allowlisted bag and genuinely does not know which field changed.
+ */
 export const INHOUSE_ACTION_TITLES = Object.freeze({
   status: 'อัปเดตสถานะรายการ',
+  update: 'แก้ไขข้อมูลคำขอ',
   notes:  'เพิ่มบันทึกภายใน',
   delete: 'ลบคำขออบรม',
 });

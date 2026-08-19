@@ -787,6 +787,103 @@ export function QuotedNote({ children }) {
   );
 }
 
+// ── Internal notes ──────────────────────────────────────────────────────────
+
+/**
+ * The append-only internal-notes card body, for BOTH screens.
+ *
+ * ══ NO EDIT, NO DELETE, NO PER-NOTE "•••" — AND THAT IS THE DESIGN ══════════
+ *
+ * The reason is stated in full where the write happens (`addInternalNote` in
+ * lib/actions/registrations.js), and it is repeated in one line here because
+ * this is the surface a future reader will be looking at when they think of
+ * adding a menu: a single mutable field lets the second writer silently
+ * overwrite the first, and an edit control reintroduces that one level up.
+ *
+ * The absence of UI is NOT the enforcement — the server's `$push` and the
+ * action's signature are. This component simply does not contradict them.
+ *
+ * ══ NO AVATAR ══════════════════════════════════════════════════════════════
+ * The design shows one. It is not wanted, so it is not built. Each note renders
+ * its BODY, WHO wrote it, and WHEN, which is the whole of what a note is.
+ *
+ * ══ THE COMPOSER IS AN EDIT AFFORDANCE AND IS GATED LIKE ONE ═══════════════
+ * `onAdd` absent ⇒ no composer, exactly as `onEdit` absent ⇒ no แก้ไข on every
+ * other card. A cancelled record gets the notes it already has, read-only, and
+ * no way to add another — the same rule, expressed the same way, so the
+ * cancellation lock has one shape on this screen rather than two.
+ */
+export function InternalNotesBody({
+  notes, draft, onDraftChange, onAdd, adding, formatDate, emptyLabel,
+}) {
+  return (
+    <div className="space-y-[14px]">
+      {notes.length === 0 ? (
+        // NOT an empty quoted block — an accent rule beside nothing asserts
+        // there is a note there. Same rule as QuotedNote's own docstring.
+        <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">{emptyLabel}</p>
+      ) : (
+        <ol className="space-y-[12px]">
+          {notes.map((note, i) => (
+            // The key is the INDEX, and that is correct here rather than lazy:
+            // the list is append-only, so an entry's position never changes and
+            // nothing is ever inserted, removed or reordered. The subdocument
+            // deliberately has no `_id` — see models/internalNoteSchema.
+            <li key={i} className="rounded-9e-md border border-[var(--surface-border)] px-[14px] py-[12px]">
+              <p className="whitespace-pre-wrap text-[13px] leading-[22px] text-[var(--text-primary)]">
+                {note.body}
+              </p>
+              <p className="pt-[6px] text-[11px] leading-[16px] text-[var(--text-muted)]">
+                {/*
+                  WHO, then WHEN. `authorName` is the name AT THE TIME OF
+                  WRITING and is stored on the note — it is never re-resolved
+                  from `authorId`. An entry with no name renders the em dash
+                  rather than an empty span, because a byline that collapses to
+                  nothing is invisible to every text assertion.
+                */}
+                {note.authorName || '—'}
+                {note.createdAt ? ` · ${formatDate(note.createdAt)}` : ''}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {onAdd ? (
+        <div className="space-y-[8px] border-t border-[var(--surface-border)] pt-[14px]">
+          <textarea
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            maxLength={2000}
+            rows={3}
+            placeholder="เพิ่มบันทึกภายใน (บันทึกแล้วแก้ไขไม่ได้)"
+            className="w-full resize-y rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
+          />
+          <div className="flex items-center justify-between gap-[10px]">
+            {/*
+              THE PLACEHOLDER SAYS IT AND SO DOES THIS LINE. Append-only is a
+              surprise to anyone who has used a notes box before, and the moment
+              to learn it is BEFORE typing, not after clicking save.
+            */}
+            <p className="text-[11px] leading-[16px] text-[var(--text-muted)]">
+              บันทึกจะถูกเก็บถาวร แก้ไขหรือลบภายหลังไม่ได้
+            </p>
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={adding || !draft.trim()}
+              className="inline-flex h-[30px] shrink-0 items-center gap-[5px] rounded-9e-md bg-9e-navy px-[12px] text-[11px] font-semibold text-9e-ice transition-opacity hover:opacity-90 disabled:opacity-40"
+            >
+              {adding ? <Loader2 aria-hidden="true" className="h-[12px] w-[12px] animate-spin" /> : null}
+              เพิ่มบันทึก
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** The page-level error line. Absent when there is nothing to say. */
 export function DetailError({ message }) {
   if (!message) return null;

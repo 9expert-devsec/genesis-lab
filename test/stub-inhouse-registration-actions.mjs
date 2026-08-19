@@ -19,5 +19,8 @@
 // directions.
 export async function getInhouseRegistrationById() { return null; }
 export async function updateInhouseStatus()        { return { ok: false, error: 'stubbed' }; }
-export async function updateInhouseAdminNotes()    { return { ok: false, error: 'stubbed' }; }
+// `updateInhouseAdminNotes` IS GONE — in-house notes moved to the shared
+// `addInternalNote` in @/lib/actions/registrations. Removed here in the same
+// commit, because a stub offering a retired action is a fixture that lies and
+// stubExportParity asserts set EQUALITY in both directions.
 export async function deleteInhouseRegistration()  { return { ok: false, error: 'stubbed' }; }

@@ -46,18 +46,28 @@ const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
 
 // ── B1: the two plain strings ───────────────────────────────────────────────
 
-test('adminNotes writes the trimmed string, so clearing clears', () => {
-  assert.match(
-    INHOUSE.code,
-    /adminNotes:\s*String\(adminNotes\s*\?\?\s*''\)\.trim\(\)\.slice\(0,\s*2000\)\s*[},]/,
-    'adminNotes is not written as a bare string'
-  );
-  assert.doesNotMatch(
-    INHOUSE.code,
-    /adminNotes:[^,\n}]*\|\|\s*undefined/,
-    'adminNotes fell back to undefined again — Mongoose drops it and the old note survives'
-  );
-});
+/**
+ * ── `adminNotes` IS NO LONGER A CLEARABLE FIELD, AND THAT IS DELIBERATE ─────
+ *
+ * This asserted that `updateInhouseAdminNotes` wrote `String(x ?? '')` rather
+ * than `x || undefined`, so that emptying the box actually cleared the note —
+ * Mongoose drops an undefined value from an update object, so the old note used
+ * to survive the save.
+ *
+ * THE ACTION IS DELETED AND THE FIELD IS NOW AN APPEND-ONLY ARRAY. There is no
+ * box to empty and no way to clear a note, by design: clearing was the overwrite
+ * defect in its mildest form — the second writer erasing the first's work with
+ * no record that it happened.
+ *
+ * So this test is REMOVED rather than re-pointed, because its claim no longer
+ * has a subject. The `|| undefined` lesson it encoded is not lost: the sibling
+ * assertions in this file still hold it for the fields that ARE clearable, and
+ * `addInternalNote` has no `undefined` path at all — it refuses an empty body
+ * instead of storing one, which fs/internalNotesAppendOnly asserts.
+ *
+ * Recorded here rather than deleted silently: "the old test said you could clear
+ * it" is exactly the kind of thing a future reader finds and tries to restore.
+ */
 
 test('registration notes writes the trimmed string, so clearing clears', () => {
   assert.match(

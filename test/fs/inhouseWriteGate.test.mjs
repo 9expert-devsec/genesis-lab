@@ -57,7 +57,6 @@ function actionBody(code, name) {
 }
 
 const STATUS_BODY = actionBody(INHOUSE.code, 'updateInhouseStatus');
-const NOTES_BODY  = actionBody(INHOUSE.code, 'updateInhouseAdminNotes');
 const DELETE_BODY = actionBody(INHOUSE.code, 'deleteInhouseRegistration');
 const SHARED_STATUS_BODY = actionBody(SHARED.code, 'updateRegistrationStatus');
 const SHARED_UPDATE_BODY = actionBody(SHARED.code, 'updateRegistration');
@@ -145,31 +144,34 @@ test('CONTROL: the positional check can distinguish the two orders', () => {
   );
 });
 
-// ── 2. updateInhouseAdminNotes — the action that had NO gate ────────────────
+// ── 2. THE NOTES ACTION MOVED — the gate went with it ───────────────────────
 
-test('updateInhouseAdminNotes refuses a write to a cancelled request, in the FILTER', () => {
-  assert.match(
-    NOTES_BODY,
-    /findOneAndUpdate\(\s*\{\s*_id:\s*id,\s*status:\s*\{\s*\$ne:\s*'cancelled'\s*\}\s*\}/,
-    'the lock must be part of the query filter, not a preceding read'
-  );
-});
-
-test('updateInhouseAdminNotes no longer uses an unconditional by-id update', () => {
-  assert.ok(!NOTES_BODY.includes('findByIdAndUpdate('), 'the ungated update is back');
-});
-
-test('updateInhouseAdminNotes distinguishes not-found from cancelled-and-locked', () => {
-  assert.ok(NOTES_BODY.includes('ไม่พบรายการ'));
-  assert.ok(NOTES_BODY.includes('คำขอนี้ถูกยกเลิกแล้ว'), 'the lock has its own message');
-});
-
-test('the note is still clearable — the empty string survives the gate rewrite', () => {
-  // `''` NOT `|| undefined`: Mongoose drops an undefined value from an update
-  // object, so clearing the box sent nothing and the old note survived. That
-  // fix predates this round and the move to `$set` must not have undone it.
-  assert.match(NOTES_BODY, /String\(adminNotes \?\? ''\)\.trim\(\)\.slice\(0, 2000\)/);
-});
+/**
+ * `updateInhouseAdminNotes` IS DELETED, and its four assertions with it.
+ *
+ * They were about an action that had NO GATE OF ANY KIND in round 1 — an
+ * unconditional `findByIdAndUpdate` on the id alone — and round 2 gave it the
+ * cancellation lock. Round 6 replaces the whole action: in-house internal notes
+ * now go through the SHARED `addInternalNote` in lib/actions/registrations.js,
+ * because a single `$set` of one String let the second writer silently
+ * overwrite the first.
+ *
+ * ── WHAT HAPPENED TO EACH CLAIM, NAMED ────────────────────────────────────
+ *   · refuses a write to a cancelled request, IN THE FILTER
+ *   · no longer uses an unconditional by-id update
+ *   · distinguishes not-found from cancelled-and-locked
+ *       → ALL THREE RE-POINTED at `addInternalNote` in
+ *         test/fs/internalNotesAppendOnly. Not weaker: the same three claims,
+ *         about the action that now does the work, plus the append-only ones
+ *         that could not be made before.
+ *   · the note is still clearable — the empty string survives
+ *       → DELETED WITH ITS SUBJECT, and this one is a real change of behaviour
+ *         rather than a move. THERE IS NO LONGER ANY WAY TO CLEAR A NOTE. That
+ *         is the append-only design, not an oversight: clearing was the
+ *         overwrite defect in its mildest form. Recorded here because "the old
+ *         test asserted you could clear it" is exactly the kind of thing a
+ *         future reader finds and tries to restore.
+ */
 
 test('deleteInhouseRegistration is NOT gated — delete stays available when cancelled', () => {
   // The ruling, same as public. Delete is a different permission from edit,

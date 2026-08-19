@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Trash2, X, Plus, Pencil, Copy, GraduationCap, User, Users, Receipt,
-  CreditCard, StickyNote, Database, ClipboardList, History,
+  CreditCard, StickyNote, Database, ClipboardList, History, Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTHB } from '@/lib/pricing';
@@ -15,6 +15,7 @@ import {
   updateRegistrationStatus,
   updateRegistration,
   deleteRegistration,
+  addInternalNote,
 } from '@/lib/actions/registrations';
 import { refNo } from '@/lib/refNo';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
@@ -25,8 +26,9 @@ import {
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
-  DL, DLRow, QuotedNote, DetailError, EditField, selectCls,
+  DL, DLRow, QuotedNote, DetailError, EditField, selectCls, InternalNotesBody,
 } from './detailShell';
+import { readNotes } from '@/lib/registrations/internalNotes';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -228,7 +230,22 @@ export function RegistrationDetailClient({ doc, history = null }) {
   const [attendeesListProvided, setAttendeesListProvided] = useState(doc.attendeesListProvided ?? true);
   const [attendeesCount, setAttendeesCount] = useState(doc.attendeesCount ?? 1);
   const [attendees,    setAttendees]    = useState(doc.attendees?.length ? [...doc.attendees] : []);
+  // `notes` IS THE CUSTOMER'S. It is editable through updateRegistration and is
+  // shown back to them. Do not confuse it with `internalNotes` below — see the
+  // naming note in lib/registrations/internalNotes.
   const [notes,        setNotes]        = useState(doc.notes ?? '');
+
+  /**
+   * INTERNAL NOTES — APPEND-ONLY, so the state is the LIST plus a DRAFT and
+   * there is no editable copy of any existing entry.
+   *
+   * That is not a simplification, it is the enforcement made visible: there is
+   * no `setInternalNotes(i, …)` because there is nothing that could call it.
+   * The list only ever grows, and it grows by appending what the server
+   * accepted rather than by trusting the draft — see `handleAddNote`.
+   */
+  const [internalNotes, setInternalNotes] = useState(() => readNotes(doc.adminNotes));
+  const [noteDraft,     setNoteDraft]     = useState('');
   const [invoice,      setInvoice]      = useState(
     doc.invoice
       ? { ...doc.invoice,
@@ -276,6 +293,35 @@ export function RegistrationDetailClient({ doc, history = null }) {
           }
         : null);
     }
+  };
+
+  /**
+   * ADD ONE NOTE. The only mutation of `internalNotes` in this file.
+   *
+   * ── THE OPTIMISTIC ENTRY IS BUILT FROM THE DRAFT AND IS NOT THE RECORD ────
+   * The server stamps `authorId`, `authorName` and `createdAt` from the session
+   * — the client cannot and must not supply them. What is appended here is a
+   * local echo so the note appears immediately; the authoritative values arrive
+   * on the next load via `revalidatePath`. `authorName: ''` renders the em dash
+   * for that instant rather than a name the client guessed.
+   *
+   * The draft is cleared ONLY on success. A failed add that emptied the box
+   * would lose what the admin typed, and there is no way to get it back.
+   */
+  const handleAddNote = () => {
+    const body = noteDraft.trim();
+    if (!body) return;
+    setBusy('add-note'); setError(null);
+    startTransition(async () => {
+      const res = await addInternalNote(doc._id, body);
+      if (res.ok) {
+        setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
+        setNoteDraft('');
+      } else {
+        setError(res.error || 'บันทึกไม่สำเร็จ');
+      }
+      setBusy(null);
+    });
   };
 
   // ── Status action ─────────────────────────────────────────────
@@ -777,6 +823,31 @@ export function RegistrationDetailClient({ doc, history = null }) {
               // there is a quotation there.
               <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ไม่มีหมายเหตุ</p>
             )}
+          </SectionCard>
+
+          {/*
+            ── INTERNAL NOTES — APPEND-ONLY, AND NOT THE CARD ABOVE ──────────
+            The หมายเหตุ card above holds `doc.notes`: THE CUSTOMER'S OWN NOTE,
+            written by the public form and quoted back to them in the
+            confirmation email. This card holds `doc.adminNotes`, which the
+            customer must never see. Two fields, two cards, two names — see the
+            naming note in lib/registrations/internalNotes.
+
+            NO `editProps` HERE. The card has no แก้ไข because there is nothing
+            to edit; what it has is a composer, gated on the SAME `readOnly`
+            flag every other card's onEdit is, so a cancelled record renders its
+            existing notes and no way to add another.
+          */}
+          <SectionCard icon={Lock} title="บันทึกภายใน">
+            <InternalNotesBody
+              notes={internalNotes}
+              draft={noteDraft}
+              onDraftChange={setNoteDraft}
+              onAdd={readOnly ? undefined : handleAddNote}
+              adding={busy === 'add-note'}
+              formatDate={fmtDate}
+              emptyLabel="ยังไม่มีบันทึกภายใน"
+            />
           </SectionCard>
 
           <SystemCard icon={Database} title="ข้อมูลระบบ">

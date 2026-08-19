@@ -9,7 +9,6 @@ import {
 import { cn } from '@/lib/utils';
 import {
   updateInhouseStatus,
-  updateInhouseAdminNotes,
   deleteInhouseRegistration,
 } from '@/lib/actions/inhouse-registrations';
 /**
@@ -28,8 +27,9 @@ import {
  * here is a way for an admin to store a tax id or branch code the customer-facing
  * form would have rejected.
  */
-import { updateRegistration } from '@/lib/actions/registrations';
+import { updateRegistration, addInternalNote } from '@/lib/actions/registrations';
 import { onlyDigits } from '@/lib/registration/digitsOnly';
+import { readNotes } from '@/lib/registrations/internalNotes';
 import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { refNo } from '@/lib/refNo';
 import { detailHeading, inhouseHeadingIdentifier } from '@/lib/registrations/detailHeading';
@@ -47,7 +47,7 @@ import {
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
-  EditField, EditArea, EditSelect,
+  EditField, EditArea, EditSelect, InternalNotesBody,
 } from '../../_components/detailShell';
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -279,19 +279,28 @@ export const editableQuotation = (doc) => ({
 /**
  * Every group, keyed by the section name the card passes to `editProps`.
  *
- * `message` and `notes` are single-field cards and are here anyway, so the set
- * this screen can write is ONE object rather than four objects plus two things
- * a reader has to remember. `adminNotes` travels through
- * `updateInhouseAdminNotes` rather than `updateRegistration` — it is listed
- * because the allowlist names it too, and the test asserts the union.
+ * `message` is a single-field card and is here anyway, so the set this screen
+ * can write through `updateRegistration` is ONE object rather than four objects
+ * plus a thing a reader has to remember.
+ *
+ * ── `notes` IS DELIBERATELY ABSENT, AND ITS ABSENCE IS LOAD-BEARING ───────
+ * `adminNotes` was in this map when it was a single editable String. It is now
+ * an APPEND-ONLY ARRAY written exclusively by `addInternalNote` with `$push`,
+ * and it has been removed from `updateRegistration`'s allowlist as well. Both
+ * halves matter: a group here would submit the whole array through a `$set` and
+ * silently overwrite every existing note — the exact failure the append-only
+ * design exists to prevent, arriving through the edit form instead of a menu.
+ *
+ * test/fs/inhouseFieldEditable compares this map against the allowlist in both
+ * directions, so re-adding it here without re-adding it there fails loudly
+ * rather than dropping the write in silence.
  */
 export const INHOUSE_EDITABLE_GROUPS = {
   contact:     editableContact,
   requirement: editableRequirement,
   schedule:    editableSchedule,
   quotation:   editableQuotation,
-  message:     (doc) => ({ message:    doc.message    ?? '' }),
-  notes:       (doc) => ({ adminNotes: doc.adminNotes ?? '' }),
+  message:     (doc) => ({ message: doc.message ?? '' }),
 };
 
 /**
@@ -403,7 +412,20 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
   const router = useRouter();
 
   const [status,      setStatus]      = useState(doc.status);
-  const [adminNotes,  setAdminNotes]  = useState(doc.adminNotes ?? '');
+
+  /**
+   * INTERNAL NOTES — the SAME mechanism the public screen runs, and the same
+   * state shape: the list plus a draft, with no editable copy of any entry.
+   *
+   * `readNotes` is what makes this deploy independent of the migration: it
+   * tolerates the legacy `adminNotes` STRING as well as the array. Measured,
+   * read-only — the field is absent on all 8 in-house documents, so the String
+   * branch will not fire in production; it exists so a rollback strands nothing.
+   */
+  const [internalNotes, setInternalNotes] = useState(
+    () => readNotes(doc.adminNotes, { legacyCreatedAt: doc.updatedAt ?? null }),
+  );
+  const [noteDraft,     setNoteDraft]     = useState('');
 
   /**
    * ── THE FOUR EDITABLE GROUPS, MIRRORING THE FOUR CARDS ────────────────────
@@ -543,12 +565,28 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
     });
   };
 
-  const handleSaveNotes = () => {
-    setBusy('save-notes'); setError(null);
+  /**
+   * ADD ONE NOTE — `addInternalNote`, the SHARED action, with the in-house
+   * source. It replaces `updateInhouseAdminNotes`, which was a `$set` of one
+   * String and is deleted; see the note where it used to live.
+   *
+   * Identical to the public screen's handler apart from the source argument,
+   * which is what "one notes mechanism, not two" means in practice.
+   */
+  const handleAddNote = () => {
+    const body = noteDraft.trim();
+    if (!body) return;
+    setBusy('add-note'); setError(null);
     startTransition(async () => {
-      const res = await updateInhouseAdminNotes(doc._id, adminNotes);
-      if (res.ok) setEditSection(null);
-      else setError(res.error || 'บันทึกไม่สำเร็จ');
+      const res = await addInternalNote(doc._id, body, 'inhouse');
+      if (res.ok) {
+        // A local echo. The server stamps author and timestamp from the session;
+        // those arrive on the next load. The client must not guess them.
+        setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
+        setNoteDraft('');
+      } else {
+        setError(res.error || 'บันทึกไม่สำเร็จ');
+      }
       setBusy(null);
     });
   };
@@ -590,7 +628,9 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
    */
   const cancelEdit = (section) => {
     setEditSection(null);
-    if (section === 'notes')       setAdminNotes(doc.adminNotes ?? '');
+    // NO `notes` BRANCH. Internal notes are append-only — there is no draft of
+    // an existing entry to restore, and the composer's own draft is deliberately
+    // NOT cleared by a cancel on some other card.
     if (section === 'message')     setMessage(doc.message ?? '');
     if (section === 'contact')     setContact(editableContact(doc));
     if (section === 'requirement') setRequirement(editableRequirement(doc));
@@ -1195,28 +1235,27 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
             )}
           </SectionCard>
 
-          <SectionCard
-            icon={StickyNote}
-            title="บันทึกภายในของทีมขาย"
-            {...editProps('notes')}
-            onSave={handleSaveNotes}
-          >
-            {editSection === 'notes' ? (
-              <textarea
-                value={adminNotes}
-                onChange={(e) => setAdminNotes(e.target.value)}
-                maxLength={2000}
-                rows={5}
-                placeholder="บันทึกการติดต่อ ข้อเสนอ การเจรจา ฯลฯ"
-                className="w-full resize-y rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
-              />
-            ) : adminNotes ? (
-              <QuotedNote>{adminNotes}</QuotedNote>
-            ) : (
-              // NOT an empty quoted block — an accent rule beside nothing
-              // asserts there is a quotation there.
-              <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ยังไม่มีบันทึกจากทีมขาย</p>
-            )}
+          {/*
+            ── INTERNAL NOTES — APPEND-ONLY, AND NOT หมายเหตุจากลูกค้า ────────
+            The card above holds `doc.message`: the CUSTOMER'S own words. This
+            holds `doc.adminNotes`, which they must never see. Two fields, two
+            cards — see lib/registrations/internalNotes.
+
+            NO `editProps`. There is no แก้ไข because there is nothing to edit;
+            the composer is gated on the SAME `readOnly` flag every other card's
+            onEdit is, so a cancelled request shows its notes and offers no way
+            to add another.
+          */}
+          <SectionCard icon={StickyNote} title="บันทึกภายในของทีมขาย">
+            <InternalNotesBody
+              notes={internalNotes}
+              draft={noteDraft}
+              onDraftChange={setNoteDraft}
+              onAdd={readOnly ? undefined : handleAddNote}
+              adding={busy === 'add-note'}
+              formatDate={fmtDate}
+              emptyLabel="ยังไม่มีบันทึกจากทีมขาย"
+            />
           </SectionCard>
 
           <SystemCard icon={Database} title="ข้อมูลระบบ">
