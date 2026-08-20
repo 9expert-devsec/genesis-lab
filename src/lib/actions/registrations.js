@@ -1239,6 +1239,86 @@ export async function getRegistrationTotal({
   );
 }
 
+// ── Course options for the filter panel ───────────────────────────
+
+/**
+ * THE COURSES THE FILTER MAY OFFER — DERIVED FROM THE REGISTRATIONS THEMSELVES.
+ *
+ * ══ NOT FROM THE CATALOGUE, AND THAT IS THE WHOLE DECISION ══════════════════
+ *
+ * The obvious source is the live course list. It is the wrong one, and round 6
+ * measured why on the neighbouring field: 26 of 39 registrations hold a ROUND the
+ * schedule endpoint will not return — 66.7% — because the endpoint filters
+ * `>= today` unconditionally. Courses have the same shape of problem: a course
+ * withdrawn, renamed or simply not currently offered disappears from the
+ * catalogue while every registration for it stays in the collection forever.
+ *
+ * A filter built from the catalogue would therefore be UNABLE TO SELECT courses
+ * that plenty of rows actually hold, while looking complete. That is a control
+ * that hides data — the worst kind, because the reader has no way to notice.
+ *
+ * The admin is asking "WHICH OF THESE RECORDS", not "which courses exist". So
+ * the options come from the records, and by construction nothing falls outside
+ * them. `ZZTEST-EXCEL-01` is the live proof: it is in `coursesInterested` on a
+ * real in-house enquiry and it is certainly not in any catalogue.
+ *
+ * ── WHAT IT COSTS, MEASURED RATHER THAN ASSUMED ───────────────────────────
+ * A `distinct` over the whole collection, unindexed — neither collection indexes
+ * any course field (checked: register_public has createdAt_-1_status_1, email_1,
+ * coordinator.email_1, payment.method_1_status_1; register_inhouse has
+ * createdAt_-1_status_1). At 39 and 8 documents that is a collection scan of
+ * nothing, and it runs once per page render inside the existing Promise.all.
+ *
+ * THAT IS A FACT ABOUT TODAY'S SIZE, NOT A PROPERTY OF THE DESIGN. At ten
+ * thousand registrations this becomes a scan per page load and wants either an
+ * index on `courseCode` / `coursesInterested` or a cached option list. Written
+ * down here so the next reader inherits the measurement rather than the
+ * conclusion.
+ *
+ * ── THE TWO SOURCES SHAPE DIFFERENTLY ─────────────────────────────────────
+ * Public carries `courseName` denormalised beside the code, so an option can be
+ * labelled without a second lookup. In-house carries BARE CODES in an array and
+ * no name at all, so the code is the label — accurate, and better than resolving
+ * against a catalogue that may not hold it.
+ */
+export async function getRegistrationCourseOptions({ source = 'public' } = {}) {
+  await requireAdmin('registrations');
+  await dbConnect();
+
+  if (source === 'inhouse') {
+    const codes = await RegisterInhouse.distinct('coursesInterested');
+    return serialize(
+      codes
+        .filter((c) => String(c ?? '').trim())
+        .sort()
+        .map((code) => ({ code: String(code), label: String(code) })),
+    );
+  }
+
+  /**
+   * ONE row per distinct course, carrying the name the registrations hold.
+   *
+   * `$last` on the name rather than `$first`: where the same code has been
+   * stored under two names — an upstream rename between registrations — the
+   * later one is the one staff will recognise. Either is a guess; this one is
+   * the guess that ages correctly.
+   */
+  const rows = await RegisterPublic.aggregate([
+    { $match: { courseCode: { $nin: [null, ''] } } },
+    { $sort: { createdAt: 1 } },
+    { $group: { _id: '$courseCode', name: { $last: '$courseName' } } },
+    { $sort: { _id: 1 } },
+  ]);
+
+  return serialize(rows.map((r) => ({
+    code: String(r._id),
+    // The name where there is one, the code where there is not — never an empty
+    // option, which would render as a blank line the reader cannot choose
+    // meaningfully.
+    label: String(r.name ?? '').trim() || String(r._id),
+  })));
+}
+
 // ── Status counts for stat strip ──────────────────────────────────
 
 export async function getRegistrationStatusCounts({

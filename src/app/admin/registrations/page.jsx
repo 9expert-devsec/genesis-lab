@@ -1,5 +1,11 @@
 import { requirePage } from '@/lib/rbac/guard';
-import { listRegistrations, getRegistrationStatusCounts, getRegistrationTotal } from '@/lib/actions/registrations';
+import {
+  listRegistrations,
+  getRegistrationStatusCounts,
+  getRegistrationTotal,
+  getRegistrationCourseOptions,
+} from '@/lib/actions/registrations';
+import { resolveDateWindow } from '@/lib/registrations/listFilter';
 import { buildCourseNameMap } from '@/lib/api/courseNameMap';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
@@ -80,7 +86,7 @@ export default async function Page({ searchParams }) {
   // not ask for it at all — and it joins the existing Promise.all rather than
   // adding a serial await. So does the other source's total: it is a fourth
   // PARALLEL query, never a sequential await tacked on after the list resolves.
-  const [data, counts, otherTotal, courseNames] = await Promise.all([
+  const [data, counts, otherTotal, courseNames, courseOptions] = await Promise.all([
     // `range` goes to BOTH queries. It used to reach only the counts, so the
     // date chips filtered the summary cards and left the table below them
     // showing everything — see buildRegistrationFilter in
@@ -108,6 +114,21 @@ export default async function Page({ searchParams }) {
     getRegistrationStatusCounts({ q, range, source, from, to, course }),
     getRegistrationTotal({ q, range, source: otherSource, from, to, course }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
+    /**
+     * THE FILTER PANEL'S COURSE OPTIONS — from the REGISTRATIONS, not the
+     * catalogue. See `getRegistrationCourseOptions` for why, and for what it
+     * costs at today's size.
+     *
+     * A FIFTH PARALLEL QUERY, not a serial await tacked on: it joins the
+     * Promise.all like the other source's total did, so the page still makes one
+     * round of queries rather than one more round trip.
+     *
+     * It takes `source` and NOTHING ELSE — deliberately. The options must list
+     * every course the collection holds, not only those matching the current
+     * filters, or narrowing to one course would leave a select containing only
+     * that course and no way back to the others.
+     */
+    getRegistrationCourseOptions({ source }),
   ]);
 
   /**
@@ -220,6 +241,23 @@ export default async function Page({ searchParams }) {
         sourceTotals={{ [source]: counts?.total ?? 0, [otherSource]: otherTotal }}
         lastEdited={lastEdited}
         courseNames={courseNames}
+        /*
+          ── THE CHROME READS THE SAME RESOLVER THE QUERY DOES ────────────────
+          `dateWindow` is `resolveDateWindow`'s return value, not a second
+          opinion formed here: the parsed dates, the preset the chips should
+          light, and whether a backwards range was swapped. The query calls the
+          same function through `buildRegistrationScope`.
+
+          That is the round-2 two-layer rule applied to a value that is not an
+          enum. The page cannot normalise a date against a literal list, so
+          instead of validating it here it shows what the RESOLVER decided —
+          which is by construction what the query did.
+        */
+        from={from}
+        to={to}
+        course={course}
+        dateWindow={resolveDateWindow({ range, from, to })}
+        courseOptions={courseOptions}
       />
     </div>
   );

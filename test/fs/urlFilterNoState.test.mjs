@@ -116,6 +116,33 @@ const FILTER_BEARING_COMPONENTS = [
     component: 'ListPanel',
     filters: ['q'],
   },
+  {
+    /**
+     * ── ADDED IN THE SAME COMMIT THAT CREATED IT — ROUND 8 ──────────────────
+     *
+     * The ตัวกรอง disclosure. It carries THREE filters and it is exactly the
+     * shape this enumeration exists for: a new component holding a filter, on
+     * the screen that shipped wrong chrome over right data from a `useState`
+     * seeded off a prop.
+     *
+     * THE ENUMERATION IS HAND-WRITTEN AND BY PATH, which is its known weakness —
+     * a component nobody adds here is a component nobody checks. That is the same
+     * per-name weakness that let `q` go missing from the counts for four rounds
+     * (see lib/registrations/listFilter's SCOPE_PARAMS). It is not fixed here
+     * because the two lists answer different questions and merging them would
+     * make neither readable; the mitigation is that adding a filter-bearing
+     * component and forgetting this line is now a thing the round's own report
+     * asks about explicitly.
+     *
+     * `course` is the filter name; `from` and `to` are the date pair. All three
+     * arrive as props and none is copied into state — the panel's inputs are
+     * uncontrolled with `defaultValue` + `key`, exactly as the search box beside
+     * it is, and `open` belongs to the `<details>` element rather than to React.
+     */
+    rel: 'src/app/admin/registrations/_components/FilterPanel.jsx',
+    component: 'FilterPanel',
+    filters: ['course', 'window'],
+  },
 ];
 
 for (const { rel, component, filters } of FILTER_BEARING_COMPONENTS) {
@@ -152,10 +179,41 @@ for (const { rel, component, filters } of FILTER_BEARING_COMPONENTS) {
    * the element across a navigation, so the box goes on showing a term the list
    * is no longer filtered by.
    */
-  test(`${component}: the search input is uncontrolled and re-keyed on the term`, () => {
-    assert.match(src, /defaultValue=\{q\}/, 'the search input is not seeded from the q prop');
-    assert.match(src, /key=\{q\}/, 'the search input is not re-keyed on q — it will show a stale term');
-    assert.ok(!/<input[^>]*\svalue=\{/.test(src), 'the search input became controlled');
+  test(`${component}: every filter input is uncontrolled and re-keyed`, () => {
+    /**
+     * ── GENERALISED IN ROUND 8, AND THE OLD FORM WAS PER-NAME ────────────────
+     *
+     * This asserted `defaultValue={q}` and `key={q}` literally, so it applied to
+     * exactly one filter on exactly one component — and it FAILED the moment a
+     * second filter-bearing component was added to the enumeration, because
+     * FilterPanel has no `q`.
+     *
+     * That failure was the right outcome and the wrong reason: the claim is not
+     * about `q`, it is about every filter input on every component in this list.
+     * It is driven by `filters` now, which is the same list the two assertions
+     * above read.
+     *
+     * The claim itself is unchanged and is the half a `useState` scan cannot
+     * see. An input that becomes `value={…}` with no state behind it is not
+     * stale — it is FROZEN, and stops accepting keystrokes. And dropping the
+     * `key` while keeping `defaultValue` reintroduces staleness with no state at
+     * all: React reuses the element across a navigation, so the control goes on
+     * showing a value the list is no longer filtered by.
+     */
+    assert.match(src, /defaultValue=\{/, `${component} has no uncontrolled input at all`);
+
+    for (const f of filters) {
+      // The filter must appear inside a `key=` expression — that is what makes
+      // the control follow a navigation.
+      const keys = [...src.matchAll(/key=\{([^}]*(?:\{[^}]*\})?[^}]*)\}/g)].map((m) => m[1]);
+      assert.ok(keys.some((k) => new RegExp(`\\b${f}\\b`).test(k)),
+        `no control is re-keyed on \`${f}\` — it will show a stale value after a navigation`);
+    }
+
+    // No `<input>` is controlled. `<select>` is exempt: React accepts
+    // `defaultValue` on it and a controlled select is a different failure.
+    assert.ok(!/<input[^>]*\svalue=\{/.test(src),
+      `${component} has a controlled input — it will stop accepting keystrokes`);
   });
 }
 

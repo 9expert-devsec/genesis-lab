@@ -20,21 +20,28 @@ import { cn } from '@/lib/utils';
  * A table dropped in here cannot influence the header or the footer, and the
  * shell cannot render a cell.
  *
- * ── THE ตัวกรอง BUTTON FROM THE MOCKUP IS DELIBERATELY ABSENT ───────────────
- * The design's header right-group is a 390px search field, an 8px gap and a 79px
- * filter button. The button is not built and the search field takes the whole
- * 477px instead.
+ * ── THE ตัวกรอง BUTTON IS BACK, AND ITS OWN CONDITION IS WHY ────────────────
  *
- * The reason is that there is nothing left for it to open. The only filter it
- * could have disclosed is the status chip row, and that row is gone: the
- * overview cards above already ARE the status filter — same statuses, same
- * targets, same selected state, with ทั้งหมด as the reset — and the section's
- * own sub-line says so in words. A 79px control that opens nothing is a dead
- * control, which is precisely the defect this suite's element-level assertions
- * were written to catch after it slipped through text matching twice.
+ * Round 3 removed it. THAT RULING IS NOT REVERSED — IT IS MET. What it said was:
  *
- * If a filter that is NOT a status ever arrives — a course, a custom date range
- * — the button comes back then, attached to something.
+ *   "The reason is that there is nothing left for it to open. The only filter it
+ *    could have disclosed is the status chip row, and that row is gone: the
+ *    overview cards above already ARE the status filter... A 79px control that
+ *    opens nothing is a dead control."
+ *
+ * and it named the condition for its return in the same breath:
+ *
+ *   "If a filter that is NOT a status ever arrives — a course, a custom date
+ *    range — the button comes back then, attached to something."
+ *
+ * Round 8 brought both. So the header right-group is the mockup's 390 + 8 + 79
+ * again — the search field gives its width back — and the button opens onto two
+ * filters that are not statuses. The status cards above are still the status
+ * filter and this panel still does not duplicate them.
+ *
+ * The distinction is written out because the two readings look identical in a
+ * diff: nobody changed their mind about dead controls. `filters` is a NODE slot,
+ * so this shell still cannot know what a filter is.
  *
  * ── THE GEOMETRY IS ABSOLUTE, THE COLUMNS ARE NOT ──────────────────────────
  * Every measurement in this file is a fixed px value written out as a complete
@@ -69,6 +76,10 @@ export function ListPanel({
   q = '',
   placeholder = '',
   onSearch,
+  // The ตัวกรอง disclosure, as a NODE — see the header. `null` renders nothing
+  // and the search field simply takes the width back, which is what a caller
+  // with no non-status filters should get.
+  filters = null,
   page = 1,
   pageSize = 20,
   pageCount = 1,
@@ -102,11 +113,15 @@ export function ListPanel({
         </div>
 
         {/*
-          The right group: 477px wide, 39px tall, right-aligned. In the mockup
-          this is 390 + 8 + 79 (search, gap, ตัวกรอง). The button is not built —
-          see the header of this file — so the search field takes the full width.
+          The right group: 477px wide, 39px tall, right-aligned — the mockup's
+          390 + 8 + 79 (search, gap, ตัวกรอง), which it is again now that the
+          button has something to open. See the header.
+
+          `filters` is a NODE. This shell renders the slot and knows nothing about
+          what is in it — the same seam `children` is for the table.
         */}
-        <form onSubmit={onSearch} className="w-[477px] shrink-0 pr-[18px] pt-[13.5px]">
+        <div className="flex w-[477px] shrink-0 items-start gap-[8px] pr-[18px] pt-[13.5px]">
+        <form onSubmit={onSearch} className="min-w-0 flex-1">
           <div className="relative h-[39px]">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
@@ -132,6 +147,8 @@ export function ListPanel({
             />
           </div>
         </form>
+        {filters}
+        </div>
       </div>
 
       {/* ── The table ────────────────────────────────────────────────────── */}

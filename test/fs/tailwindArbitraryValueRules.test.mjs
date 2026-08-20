@@ -789,6 +789,11 @@ test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
 const REGISTRATION_LAYOUT_FILES = [
   'src/app/admin/registrations/_components/RegistrationsClient.jsx',
   'src/app/admin/registrations/_components/ListPanel.jsx',
+  // The ตัวกรอง disclosure — round 8. It went in because this list caught its
+  // absence exactly as the note above says it would: the panel's classes RENDER,
+  // the compile input did not include the file, and every one of them was
+  // reported dead. Loud and in the right direction.
+  'src/app/admin/registrations/_components/FilterPanel.jsx',
   'src/app/admin/registrations/_components/PublicTable.jsx',
   'src/app/admin/registrations/_components/InhouseTable.jsx',
   // The shared cell atoms — the status chip, the date cell, the chevron.
