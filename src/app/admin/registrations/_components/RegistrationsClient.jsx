@@ -11,6 +11,7 @@ import {
   statusesForSource,
 } from '@/lib/registrations/statuses';
 import { ListPanel } from './ListPanel';
+import { FilterPanel } from './FilterPanel';
 import { PublicTable } from './PublicTable';
 import { InhouseTable } from './InhouseTable';
 
@@ -166,6 +167,21 @@ export function RegistrationsClient({
   // Built server-side in page.jsx and only for source=inhouse; null on a public
   // render, where nothing reads it.
   courseNames = null,
+  /**
+   * ROUND 8'S TWO FILTERS, DERIVED FROM THE URL BY page.jsx AND PASSED AS PROPS
+   * — never copied into state here. See the file header's rule and
+   * test/fs/urlFilterNoState, which enumerates this file BY PATH.
+   *
+   * `from`/`to` arrive as the raw strings; `dateWindow` is the RESOLVED value —
+   * parsed dates, the selected preset, and whether a backwards range was
+   * swapped. The chrome reads the resolver rather than re-deciding what a date
+   * is, which is the same single-source rule the query follows.
+   */
+  from = '',
+  to = '',
+  course = '',
+  dateWindow = { custom: false, preset: 'all', from: null, to: null, swapped: false },
+  courseOptions = [],
 }) {
   const router     = useRouter();
   const pathname   = usePathname();
@@ -174,7 +190,16 @@ export function RegistrationsClient({
 
   const navigate = useCallback((overrides = {}) => {
     const params = new URLSearchParams(searchParams.toString());
-    const next = { page: '1', status, q, source, range, ...overrides };
+    /**
+     * `from`, `to` and `course` JOIN THE SET — round 8.
+     *
+     * Every dimension has to be here, or an override of one would leave the
+     * others in the URL from the previous navigation while the props say
+     * otherwise. The empty string is the default for all three, so the generic
+     * `v !== ''` rule below already deletes them; they are named in `next` so
+     * that an override CAN clear them.
+     */
+    const next = { page: '1', status, q, source, range, from, to, course, ...overrides };
     Object.entries(next).forEach(([k, v]) => {
       const isDefault =
         (k === 'status' && v === 'all') ||
@@ -186,7 +211,7 @@ export function RegistrationsClient({
       else params.delete(k);
     });
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
-  }, [pathname, searchParams, router, status, q, source, range]);
+  }, [pathname, searchParams, router, status, q, source, range, from, to, course]);
 
   // The term is read out of the form, not out of state — see the header.
   const handleSearch = (e) => {
@@ -194,6 +219,39 @@ export function RegistrationsClient({
     const term = String(new FormData(e.currentTarget).get('q') ?? '');
     navigate({ q: term, page: '1' });
   };
+
+  /**
+   * THE FILTER PANEL'S TWO HANDLERS.
+   *
+   * Read out of the FORM, exactly as the search term is, and for the same
+   * reason: nothing about a filter lives in `useState` on this screen. The panel
+   * renders from props and reports what its inputs hold at submit.
+   *
+   * ── APPLYING A CUSTOM RANGE CLEARS `range`, AND THAT IS THE (a) DECISION ──
+   * The chips are PRESETS over one window: `from`/`to` win when either is set,
+   * so leaving a stale `range` in the URL would put a lit chip above a table
+   * filtered to something else. Clearing it is what makes "one value, two ways
+   * in" true in the URL and not only in the resolver.
+   *
+   * Conversely a chip click already clears `from`/`to`, because `RANGE_CHIPS`
+   * navigates with `{ range }` and the generic rule above deletes the empty
+   * defaults — the two directions are symmetric without a second branch.
+   */
+  const handleFilters = (e) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const nextFrom = String(data.get('from') ?? '');
+    const nextTo   = String(data.get('to') ?? '');
+    navigate({
+      from: nextFrom,
+      to: nextTo,
+      course: String(data.get('course') ?? ''),
+      range: (nextFrom || nextTo) ? 'all' : range,
+      page: '1',
+    });
+  };
+
+  const handleClearFilters = () => navigate({ from: '', to: '', course: '', page: '1' });
 
   const { items, page, pageCount, pageSize, total } = initialData;
   // `{}`, not a hand-written zero-filled object. That fallback was a fourth
@@ -321,15 +379,27 @@ export function RegistrationsClient({
           {/* Range chips: a 34px group with 3px padding and 3px gaps, each chip
               28px tall with 11px of horizontal padding. RIGHT-ALIGNED. */}
           <div className="flex h-[34px] shrink-0 items-center gap-[3px] rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] p-[3px]">
+            {/*
+              ── THE CHIPS ARE PRESETS, AND THEY READ THE RESOLVER ────────────
+              `dateWindow.preset`, NOT `range`. There is ONE window and two ways
+              to fill it; when a custom from/to is in force the resolver returns
+              `preset: null` and NO chip is lit. Reading `range` here would leave
+              วันนี้ highlighted above a table filtered to last March — the exact
+              two-controls-one-field disagreement option (a) exists to prevent.
+
+              Clicking a chip clears `from`/`to`: `navigate` names every
+              dimension, so passing the empty strings deletes them from the URL.
+              The two directions are symmetric — see `handleFilters`.
+            */}
             {RANGE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                onClick={() => navigate({ range: opt.value, page: '1' })}
-                aria-pressed={range === opt.value}
+                onClick={() => navigate({ range: opt.value, from: '', to: '', page: '1' })}
+                aria-pressed={dateWindow.preset === opt.value}
                 className={cn(
                   'flex h-[28px] items-center rounded-9e-md px-[11px] text-[11px] font-semibold transition-colors',
-                  range === opt.value
+                  dateWindow.preset === opt.value
                     ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-9e-sm'
                     : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
                 )}
@@ -390,6 +460,21 @@ export function RegistrationsClient({
         total={total ?? 0}
         subLine={panelSubLine}
         q={q}
+        /*
+          THE ตัวกรอง DISCLOSURE, as a node. `ListPanel` is a shell and stays one
+          — it renders the slot and never learns what a filter is, the same seam
+          `children` is for the table. See FilterPanel for why round 3's ruling
+          is SATISFIED here rather than reversed.
+        */
+        filters={(
+          <FilterPanel
+            window={dateWindow}
+            course={course}
+            courseOptions={courseOptions}
+            onApply={handleFilters}
+            onClear={handleClearFilters}
+          />
+        )}
         /*
           THE PLACEHOLDER NAMES THE FIELDS THE FILTER ACTUALLY SEARCHES, and the
           two filters do not search the same ones.

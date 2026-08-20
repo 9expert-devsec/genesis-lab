@@ -36,6 +36,8 @@ const CLIENT = 'src/app/admin/registrations/_components/RegistrationDetailClient
 const SCHEMA = 'src/lib/schemas/register-public.js';
 const SHELL = 'src/app/admin/registrations/_components/detailShell.jsx';
 const PAGE = 'src/app/admin/registrations/page.jsx';
+const CLIENT_LIST = 'src/app/admin/registrations/_components/RegistrationsClient.jsx';
+const FILTERS = 'src/app/admin/registrations/_components/FilterPanel.jsx';
 
 /**
  * Each break names the file, an exact FIND, its REPLACE, and — the part that
@@ -428,6 +430,65 @@ const BREAKS = {
     replace: "export const SCOPE_PARAMS = Object.freeze(['range', 'from', 'to', 'course']);",
   },
 
+  // ── item 5b: the panel ───────────────────────────────────────────────────
+
+  'chips-read-range': {
+    file: CLIENT_LIST,
+    why: 'Light the chips from `range` instead of the resolved preset. วันนี้ stays lit above a table filtered to a custom range — two controls over one field, which is exactly what option (a) exists to prevent.',
+    reddens: [
+      'render/registrationFilterPanel › a CUSTOM range deselects EVERY chip — one value, two ways in',
+    ],
+    find: '                aria-pressed={dateWindow.preset === opt.value}',
+    replace: '                aria-pressed={range === opt.value}',
+  },
+
+  'active-hidden': {
+    file: FILTERS,
+    why: 'Move the active-filter marker OFF the summary. The panel still reports it — but only when open, which is the one state where the reader does not need telling.',
+    reddens: [
+      'render/registrationFilterPanel › an ACTIVE filter shows on the SUMMARY — the part visible when closed',
+      'render/registrationFilterPanel › the badge counts what is actually set — one filter reads 1',
+      'render/registrationFilterPanel › an OPEN-ENDED range still counts and still says which end',
+    ],
+    find: '        {hasActive ? (\n          <span\n            title={active.join(\' · \')}',
+    replace: '        {false ? (\n          <span\n            title={active.join(\' · \')}',
+  },
+
+  'swap-silent': {
+    file: FILTERS,
+    why: 'Swap the reversed range and say nothing. The reader typed one thing, the screen shows another, and nothing explains it — the correction becomes the screen deciding on their behalf.',
+    reddens: [
+      'render/registrationFilterPanel › a REVERSED range is corrected AND the panel says so',
+    ],
+    find: '        {window.swapped ? (',
+    replace: '        {false ? (',
+  },
+
+  'panel-empty': {
+    file: FILTERS,
+    why: 'Remove the course control, leaving a disclosure that opens onto less than it claims. The round-3 ruling forbids a control that opens onto nothing; this is the half-way version.',
+    reddens: [
+      'render/registrationFilterPanel › it opens onto TWO REAL FILTERS — the round-3 condition, asserted',
+      'render/registrationFilterPanel › the course options come from the REGISTRATIONS, not a catalogue',
+    ],
+    find: '              id="reg-filter-course" name="course"',
+    replace: '              id="reg-filter-course" name="course-disabled"',
+  },
+
+  'panel-state': {
+    file: FILTERS,
+    why: 'Copy a filter into useState — the shape that shipped wrong chrome over right data on this very screen.',
+    reddens: [
+      'fs/urlFilterNoState › FilterPanel: no filter is copied into useState',
+    ],
+    find: "import { SlidersHorizontal, X } from 'lucide-react';",
+    replace: "import { useState } from 'react';\nimport { SlidersHorizontal, X } from 'lucide-react';",
+    also: {
+      find: '  const hasActive = active.length > 0;',
+      replace: '  const [, setCourse] = useState(course);\n  const hasActive = active.length > 0;',
+    },
+  },
+
   'wrong-door': {
     file: ACTIONS,
     why: 'Let an UNPAID record through the paid action, so it files a `seats` row whose title claims a money implication that does not exist.',
@@ -518,8 +579,34 @@ if (existsSync(STATE)) {
 }
 
 const brk = BREAKS[name];
+
+/**
+ * ══ EVERY KEY MUST BE KNOWN, AND THAT IS NOT PEDANTRY ═══════════════════════
+ *
+ * `panel-state` declared an `also` — a SECOND edit — and this harness silently
+ * ignored it, applying only the first. The control then reported "stayed green"
+ * for a break that was never fully made, which is the worst possible output from
+ * a tool whose entire job is to tell you whether a guard fires.
+ *
+ * It looked exactly like a vacuous guard and it was a broken harness. So an
+ * unrecognised key is now a hard failure: a control cannot quietly do less than
+ * it says.
+ */
+const KNOWN_KEYS = new Set(['file', 'why', 'reddens', 'staysGreen', 'find', 'replace', 'also']);
+for (const key of Object.keys(brk)) {
+  if (!KNOWN_KEYS.has(key)) {
+    console.error(`${name}: unknown key "${key}". A control that declares something this harness `
+      + 'does not apply reports a weaker break than it claims — see the note above.');
+    process.exit(2);
+  }
+}
+
 const before = read(brk.file);
-const after = spliceOnce(before, brk.find, brk.replace, name);
+let after = spliceOnce(before, brk.find, brk.replace, name);
+// A SECOND SITE, when one edit cannot express the break — e.g. an import plus
+// its use. `spliceOnce` throws if it does not land, so a half-applied control is
+// now impossible rather than merely unlikely.
+if (brk.also) after = spliceOnce(after, brk.also.find, brk.also.replace, `${name} (second site)`);
 
 writeFileSync(path.join(ROOT, brk.file + BACKUP_SUFFIX), before, 'utf8');
 write(brk.file, after);

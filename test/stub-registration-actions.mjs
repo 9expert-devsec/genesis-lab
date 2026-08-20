@@ -33,4 +33,8 @@ export async function updateRegistrationRound()       { return { ok: false, erro
 // every export here.
 export async function updateAttendeesCountPaid()      { return { ok: false, error: 'stubbed' }; }
 export async function getRegistrationStatusCounts()  { return { total: 0, range: 'all', source: 'public' }; }
+// The filter panel's course options. Round 8: derived from the REGISTRATIONS
+// rather than the catalogue — see the action. An empty list is the honest stub:
+// a render with no options must still produce a working select.
+export async function getRegistrationCourseOptions() { return []; }
 export async function getRegistrationTotal()         { return 0; }
