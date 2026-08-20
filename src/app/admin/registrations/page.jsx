@@ -17,6 +17,30 @@ export default async function Page({ searchParams }) {
   const q      = sp.q      ?? '';
   const source = ['public', 'inhouse'].includes(sp.source) ? sp.source : 'public';
   const range  = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
+
+  /**
+   * THE CUSTOM RANGE AND THE COURSE — read raw, normalised by the RESOLVER.
+   *
+   * ── DELIBERATELY NOT VALIDATED HERE, AND THAT IS NOT AN OMISSION ─────────
+   * `status`, `source` and `range` are small closed enums, so the page can
+   * normalise them against a literal list and the CHROME then agrees with the
+   * rows. A date and a course code are not: there is no list of valid dates, and
+   * the valid courses are whatever the collection happens to hold.
+   *
+   * So the two layers split differently for these. The QUERY degrades in
+   * `resolveDateWindow` / `courseClause` — an unparseable date and an empty
+   * course add no clause — and the CHROME reads the same resolver rather than a
+   * second opinion written here. A `parseDateInput` call in this file would be a
+   * third place that decides what a date is.
+   *
+   * They are passed through as strings for that reason. The panel commit renders
+   * the chrome from `resolveDateWindow`'s return value, which is where the
+   * swapped-range flag lives too.
+   */
+  const from   = typeof sp.from   === 'string' ? sp.from   : '';
+  const to     = typeof sp.to     === 'string' ? sp.to     : '';
+  const course = typeof sp.course === 'string' ? sp.course : '';
+
   /**
    * THE SAME TREATMENT `source` AND `range` ALREADY GET, and it was the one
    * param not getting it.
@@ -61,9 +85,28 @@ export default async function Page({ searchParams }) {
     // date chips filtered the summary cards and left the table below them
     // showing everything — see buildRegistrationFilter in
     // src/lib/registrations/listFilter.js.
-    listRegistrations({ page, status, q, source, range }),
-    getRegistrationStatusCounts({ range, source }),
-    getRegistrationTotal({ range, source: otherSource }),
+    listRegistrations({ page, status, q, source, range, from, to, course }),
+    /**
+     * ── `q` REACHES THESE TWO NOW, AND IT NEVER DID BEFORE ──────────────────
+     *
+     * The stat cards and the toggle badges had NEVER followed the search box:
+     * this call was `{ range, source }`. Type a name and the table filtered to
+     * one row under cards still reading 39 — one screen answering one question
+     * two ways, which is the fourth time this list has produced that defect.
+     *
+     * It survived because every guard over this seam ENUMERATED FILTERS BY
+     * NAME — tests that `range` reaches the list, the counts, the total — and
+     * none asked whether the SET was the same in all four places. `SCOPE_PARAMS`
+     * in lib/registrations/listFilter is now that set, and
+     * fs/registrationsFilterWiring reads it instead of naming dimensions.
+     *
+     * THE OTHER SOURCE TAKES IT TOO. Its badge sits beside the selected one and
+     * a raw 8 next to a searched 1 is the same disagreement one control over.
+     * The two sources search DIFFERENT fields — `buildRegistrationScope` picks
+     * them from `source`, so each badge counts what its own table would show.
+     */
+    getRegistrationStatusCounts({ q, range, source, from, to, course }),
+    getRegistrationTotal({ q, range, source: otherSource, from, to, course }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
   ]);
 

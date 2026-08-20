@@ -264,15 +264,41 @@ function searchClauses(source, term) {
  * added here reaches every number on the screen without any of them being
  * edited.
  *
- * ── `q` IS IN HERE AND THE COUNTS DO NOT YET PASS IT ──────────────────────
- * A PRE-EXISTING GAP, found while threading round 8's filters and deliberately
- * not fixed here: page.jsx calls `getRegistrationStatusCounts({ range, source })`
- * with no `q`, so the cards have never followed the search box. That is the same
- * class of defect as the range one this module was created for, and it is one
- * line to fix — but fixing it changes what every card reads on a screen with a
- * search term, which is a visible behaviour change that belongs in its own
- * commit with its own before/after. Reported rather than smuggled in.
+ * ── `q` REACHES EVERY CONSUMER NOW, AND IT DID NOT BEFORE ─────────────────
+ * Until this commit, page.jsx called `getRegistrationStatusCounts({ range,
+ * source })` and `getRegistrationTotal({ range, source })` with no `q` at all —
+ * so the stat cards and the toggle badges had NEVER followed the search box.
+ * Type a name and the table filtered to one row under cards still reading 39.
+ *
+ * Same defect as the range one this module was created for, on a different
+ * dimension, and it survived because every guard over this seam ENUMERATED
+ * FILTERS BY NAME: there were tests that `range` reaches the list, `range`
+ * reaches the counts, `range` reaches the total — and nothing that asked whether
+ * the SET of dimensions was the same in all four places. A dimension nobody
+ * wrote a test for was a dimension with no test.
+ *
+ * `SCOPE_PARAMS` below is the fix for that shape. It is the one list, and the
+ * guard reads it rather than naming dimensions itself.
  */
+
+/**
+ * EVERY DIMENSION OF THE SHARED SCOPE, BY NAME. The single enumeration.
+ *
+ * ── WHY THIS EXISTS RATHER THAN A TEST PER DIMENSION ──────────────────────
+ * The seam this module guards has now leaked twice — `range` in round 2 and `q`
+ * in round 8 — and both times the guards were per-name and hand-written, so the
+ * dimension that leaked was simply not among them. One hand-written list is
+ * still hand-written, but it is ONE, and it lives where a dimension is added:
+ * anyone extending `buildRegistrationScope` edits this line in the same diff, and
+ * test/fs/registrationsFilterWiring asserts every consumer takes every member.
+ *
+ * `source` is deliberately NOT here. It is not a filter — it SELECTS THE
+ * COLLECTION, and the two collections are separate. It appears in the signatures
+ * for a different reason (it decides which fields the search names), and folding
+ * it in would make the guard demand it of callers that already have it by
+ * another route.
+ */
+export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course']);
 export function buildRegistrationScope({
   q = '', source = 'public', range = 'all', from = '', to = '', course = '', now,
 } = {}) {

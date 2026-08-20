@@ -35,6 +35,7 @@ const CONTRACT = 'src/lib/audit/auditContract.js';
 const CLIENT = 'src/app/admin/registrations/_components/RegistrationDetailClient.jsx';
 const SCHEMA = 'src/lib/schemas/register-public.js';
 const SHELL = 'src/app/admin/registrations/_components/detailShell.jsx';
+const PAGE = 'src/app/admin/registrations/page.jsx';
 
 /**
  * Each break names the file, an exact FIND, its REPLACE, and — the part that
@@ -386,6 +387,45 @@ const BREAKS = {
     ],
     find: '  return [name, email, phone].join(COPY_FIELD_SEPARATOR);',
     replace: '  return [name, email, phone].filter(Boolean).join(COPY_FIELD_SEPARATOR);',
+  },
+
+  // ── item 5a: the q defect ────────────────────────────────────────────────
+
+  'q-loose': {
+    file: PAGE,
+    why: 'REPRODUCE THE ORIGINAL DEFECT: stop passing `q` to the cards and the badges. The table filters to one row under cards still reading 39 — and this is the state that shipped until round 8.',
+    reddens: [
+      'fs/registrationsFilterWiring › every SCOPE_PARAM is PASSED by the page to all three',
+    ],
+    find: '    getRegistrationStatusCounts({ q, range, source, from, to, course }),',
+    replace: '    getRegistrationStatusCounts({ range, source, from, to, course }),',
+  },
+
+  'q-dropped-by-builder': {
+    file: 'src/lib/registrations/listFilter.js',
+    why: 'Thread `q` everywhere and then drop it in the builder. Every SOURCE assertion still passes — the parameter is in all four signatures and all four call sites — and no number changes. Only a behaviour test can see this.',
+    reddens: [
+      'pure/listFilterDateCourse › EVERY dimension moves the scope — none is silently ignored',
+      'pure/listFilterDateCourse › the SCOPE is what every number on the screen counts inside',
+      'pure/listFilterDateCourse › a search AND a course both apply',
+      'pure/listFilterDateCourse › every filter dimension composes into ONE query',
+      'pure/registrationRangeFilter (search clauses)',
+    ],
+    staysGreen: [
+      'fs/registrationsFilterWiring › every SCOPE_PARAM is accepted / PASSED — THE MEASUREMENT: a source guard cannot see a dimension that is threaded and then ignored',
+    ],
+    find: '  const term = String(q ?? \'\').trim();\n  if (term) scope.$or = searchClauses(source, term);',
+    replace: '  const term = \'\';\n  if (term) scope.$or = searchClauses(source, term);',
+  },
+
+  'scope-shrunk': {
+    file: 'src/lib/registrations/listFilter.js',
+    why: 'Take `q` out of the ENUMERATION. The guard then stops demanding it of anyone — which is exactly how `q` went missing for four rounds.',
+    reddens: [
+      'fs/registrationsFilterWiring › CONTROL: the enumeration is real, and the probe can miss a dimension',
+    ],
+    find: "export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course']);",
+    replace: "export const SCOPE_PARAMS = Object.freeze(['range', 'from', 'to', 'course']);",
   },
 
   'wrong-door': {
