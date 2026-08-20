@@ -32,6 +32,7 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const ACTIONS = 'src/lib/actions/registrations.js';
 const CONTRACT = 'src/lib/audit/auditContract.js';
+const CLIENT = 'src/app/admin/registrations/_components/RegistrationDetailClient.jsx';
 
 /**
  * Each break names the file, an exact FIND, its REPLACE, and — the part that
@@ -139,6 +140,65 @@ const BREAKS = {
     ],
     find: "  'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',\n  'attendeesCount',",
     replace: "  'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',",
+  },
+
+  // ── the client half ──────────────────────────────────────────────────────
+
+  'send-count': {
+    file: CLIENT,
+    why: 'Post attendeesCount on a paid record too. The server refuses on the KEY being present, so a plain name correction loses the whole save — each half correct alone.',
+    reddens: [
+      'fs/attendeesCountPaidGate › the attendee save OMITS attendeesCount on a paid record',
+    ],
+    find: `  const attendeePayload = countLockedByPayment
+    ? { attendeesListProvided, attendees }
+    : { attendeesListProvided, attendeesCount, attendees };`,
+    replace: '  const attendeePayload = { attendeesListProvided, attendeesCount, attendees };',
+  },
+
+  'always-control': {
+    file: CLIENT,
+    why: 'Offer the paid-only control on every status. Every click on an unpaid record is then refused by the server.',
+    reddens: [
+      'render/seatCountPaidControl › a paid record offers the control; an unpaid one does not',
+      'render/seatCountPaidControl › a CANCELLED record offers neither door, even though it is also paid',
+    ],
+    find: '              {countLockedByPayment && attendeeEdit.onEdit ? (',
+    replace: '              {true ? (',
+  },
+
+  'charged-from-count': {
+    file: CLIENT,
+    why: 'Read the consent copy’s seat figure from attendeesCount instead of pricing.seats — it would tell the admin the money was for the number that is about to change.',
+    reddens: [
+      'render/seatCountPaidControl › the copy names the REAL charged seat count, read from pricing',
+      'fs/attendeesCountPaidGate › the consent copy is a literal in the client, not assembled at runtime',
+    ],
+    find: '  const chargedSeats = doc.pricing?.seats ?? attendeesCount;',
+    replace: '  const chargedSeats = attendeesCount;',
+  },
+
+  'prefill-draft': {
+    file: CLIENT,
+    why: 'Pre-fill the new-count field with the current count, making confirm default to a no-op the server refuses.',
+    reddens: [
+      'render/seatCountPaidControl › the draft starts EMPTY and the confirm button starts disabled',
+    ],
+    find: "  const [seatDraft,     setSeatDraft]     = useState('');",
+    replace: '  const [seatDraft,     setSeatDraft]     = useState(String(doc.attendeesCount ?? 1));',
+  },
+
+  'live-count-input': {
+    file: CLIENT,
+    why: 'Render the count input on a paid record too — the save then carries the key and is refused wholesale.',
+    reddens: [
+      'fs/attendeesCountPaidGate › the count INPUT is absent on a paid record, not disabled',
+    ],
+    find: `                    <p className="flex h-9 items-center text-sm text-[var(--text-primary)]">
+                      {attendeesCount} ท่าน
+                    </p>`,
+    replace: `                    <input type="number" min={1} max={50} value={attendeesCount}
+                      onChange={(e) => setAttendeesCount(parseInt(e.target.value, 10) || 1)} />`,
   },
 
   'wrong-door': {
