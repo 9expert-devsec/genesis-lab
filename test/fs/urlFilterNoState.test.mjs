@@ -36,6 +36,54 @@ import { readSource } from '../sourceScan.mjs';
  */
 
 /**
+ * ══ AN ENUMERATION OF IDENTIFIERS PINS THE NAME, NOT THE REASON FOR IT ══════
+ *
+ * READ THIS BEFORE ADDING A ROW TO EITHER LIST BELOW. It is not a caveat about
+ * this file's coverage; it is a way this file has already caused harm.
+ *
+ * FILTER_BEARING_COMPONENTS carried `filters: ['course', 'window']`, because
+ * FilterPanel's date-range prop was named `window`. That prop SHADOWED THE
+ * BROWSER GLOBAL for the whole component body, and the panel's reposition
+ * effect threw `window.addEventListener is not a function` on mount. The filter
+ * panel could not open at all, from the day it shipped.
+ *
+ * And the assertion below is `the filter arrives as a prop` — it matched
+ * `\bwindow\b` against the component signature and REQUIRED THE NAME TO BE
+ * THERE. So this suite was not merely blind to the defect. It was HOLDING IT IN
+ * PLACE: anyone who renamed the prop correctly would have gone red here, on a
+ * test whose name reads like it is about URL state, and the obvious way to
+ * read that failure is "I broke something" — so the obvious fix is to put the
+ * bad name back.
+ *
+ * ── THE GENERAL SHAPE ─────────────────────────────────────────────────────
+ * A guard that enumerates identifiers asserts THAT THE NAME EXISTS. It cannot
+ * assert that the name is a good one, and it cannot tell the difference between
+ * a rename that breaks the rule and a rename that fixes an unrelated defect.
+ * Every such list therefore votes AGAINST renaming, on every name it holds,
+ * forever — including names that are wrong.
+ *
+ * ── AND IT IS A SECOND FACE OF DEFECT 7 (see test/sourceScan.mjs) ─────────
+ * There, a guard STOPPED BINDING when an expression was reformulated: it went
+ * quiet and tested nothing in either direction. Here, a guard bound TOO TIGHTLY
+ * — so tightly that it defended a name that had to change. Same root: an
+ * assertion attached to the surface form of code rather than to the property
+ * the form was chosen for. One failure mode lets the code drift away from the
+ * guard; the other stops the code from moving when it should.
+ *
+ * ── WHAT TO DO WITH IT, WHICH IS NOT "DELETE THE LISTS" ───────────────────
+ * The lists earn their place — the claim genuinely is per-component and there is
+ * no shape that expresses it. The procedure is the mitigation:
+ *
+ *   WHEN A ROW HERE GOES RED AFTER A RENAME, ESTABLISH WHICH RENAME IT WAS
+ *   before touching the code. If the name changed because the OLD ONE WAS
+ *   WRONG, the row is what is broken — update it. Only if the prop genuinely
+ *   stopped arriving as a prop is the component at fault.
+ *
+ * The prop is `dateWindow` now, and the shadow itself is guarded independently
+ * of any list, by name rather than by path, in test/fs/clientGlobalShadow.
+ */
+
+/**
  * Screens whose filters come from the URL. `filters` are the prop names.
  *
  * MasterclassRegistrationsClient joins this list in the commit that converts it.
@@ -138,10 +186,16 @@ const FILTER_BEARING_COMPONENTS = [
      * arrive as props and none is copied into state — the panel's inputs are
      * uncontrolled with `defaultValue` + `key`, exactly as the search box beside
      * it is, and `open` belongs to the `<details>` element rather than to React.
+     *
+     * ── `dateWindow`, AND IT WAS `window` HERE FOR A WHOLE ROUND ────────────
+     * This row is the one the file-header note is written from: it named the
+     * prop `window`, and in doing so REQUIRED a name that shadowed the browser
+     * global and stopped the panel mounting. Renaming it is what made this row
+     * correct; the row going red was the last thing standing in the way.
      */
     rel: 'src/app/admin/registrations/_components/FilterPanel.jsx',
     component: 'FilterPanel',
-    filters: ['course', 'window'],
+    filters: ['course', 'dateWindow'],
   },
 ];
 

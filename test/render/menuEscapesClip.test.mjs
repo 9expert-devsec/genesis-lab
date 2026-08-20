@@ -40,6 +40,39 @@ import { resolveDateWindow } from '@/lib/registrations/listFilter';
  *     nowhere else. An assertion here that a handler EXISTS in the source would
  *     be exactly the vacuous shape this note is about.
  *
+ * ══ THIS FILE WAS GREEN OVER A VERSION OF THIS CHANGE THAT COULD NOT MOUNT ══
+ *
+ * Recorded here, in the header, because the alternative is a reader inferring
+ * coverage from the file's NAME — and this file is named after the change it
+ * turned out not to cover.
+ *
+ * The move to `position: fixed` has two halves. The sheet escapes the clip, and
+ * — because a fixed sheet does not travel with the content under it — the sheet
+ * REPOSITIONS on scroll and resize. The second half is not a refinement of the
+ * first; without it the change is a regression. FilterPanel's half of that
+ * wiring read:
+ *
+ *     window.addEventListener('scroll', place, true);
+ *
+ * inside a component whose date-range prop was named `window`. The prop shadowed
+ * the global, the effect threw on mount, and the filter panel could not open.
+ *
+ * THIS FILE RENDERED THAT COMPONENT AND PASSED. It builds a real
+ * `RegistrationsClient` a few lines below, walks FilterPanel's real ancestor
+ * chain, asks the compiled stylesheet what each ancestor does, and confirms the
+ * sheet is out of the clip — all of it true, none of it wrong, over a panel that
+ * threw the instant a browser touched it. `renderToStaticMarkup` runs no
+ * effects, so there was nothing here to catch and no assertion that could have
+ * been added to this tier to catch it.
+ *
+ * SO: the green below covers the CLIP half and says nothing whatever about the
+ * REPOSITION half. The reposition is arithmetic in test/pure/anchoredMenu and a
+ * human scroll on the checklist; the effect that connects the two is covered by
+ * no tier at all, because mounting with effects needs `createRoot` and this
+ * suite bans it for leaking `globalThis.window`. What IS now guarded is the
+ * specific cause — a prop shadowing a browser global — in
+ * test/fs/clientGlobalShadow, which closes that one shape and not the class.
+ *
  * ══ THE CHAIN INCLUDES THE ADMIN SHELL, WHICH IS NOT IN EITHER RENDER ═══════
  * `<main>` is where the clip actually is, and it is in src/app/admin/layout.jsx
  * — an async server component that cannot be rendered under this loader. Its
