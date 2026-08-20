@@ -47,8 +47,9 @@ import {
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   TabList, TabPanel, SectionCard, SystemCard, DL, DLRow, QuotedNote, DetailError,
-  EditField, EditArea, EditSelect, InternalNotesBody,
+  EditField, EditArea, EditSelect, InternalNotesBody, CopyAction,
 } from '../../_components/detailShell';
+import { personCopyText } from '@/lib/registrations/copyText';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -902,14 +903,23 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
               </div>
             ) : (
               <DL>
+                {/*
+                  `CopyAction` OWNS THE EMPTY TEST NOW. Every one of these used
+                  to be `action={x ? <CopyButton …/> : null}` — the same guard
+                  written out per row, which is precisely how `DLRow`'s dashes
+                  accumulated before the check moved into the component. One
+                  copy of the rule; a caller cannot forget it.
+                */}
                 <DLRow
                   label={companyDiverges ? 'บริษัท / องค์กร (ที่ติดต่อ)' : 'บริษัท / องค์กร'}
                   value={displayCompany}
-                  action={displayCompany
-                    ? <CopyButton value={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />
-                    : null}
+                  action={<CopyAction text={displayCompany} label={companyDiverges ? 'ชื่อบริษัทที่ติดต่อ' : 'ชื่อบริษัท'} />}
                 />
-                <DLRow label="ชื่อ-นามสกุล" value={contactName} />
+                {/* THE PERSON'S NAME — round 8. `personCopyText` rather than
+                    `contactName`, so the three name shapes on these two screens
+                    copy identically. */}
+                <DLRow label="ชื่อ-นามสกุล" value={contactName}
+                  action={<CopyAction text={personCopyText({ firstName: contact.contactFirstName, lastName: contact.contactLastName })} label="ชื่อผู้ติดต่อ" />} />
                 <DLRow label="ตำแหน่ง / แผนก" value={[contact.contactRole, contact.contactDepartment].filter(Boolean).join(' · ')} />
                 <DLRow label="อีเมล" value={contact.contactEmail
                   ? <a href={`mailto:${contact.contactEmail}`} className="text-9e-action hover:underline">{contact.contactEmail}</a>
@@ -1087,7 +1097,7 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                 */}
                 {schedule.trainingFormat === 'onsite' && (
                   <DLRow label="สถานที่จัดอบรม" value={venue} emptyHint="ยังไม่ได้ระบุ — ต้องสอบถามลูกค้า"
-                    action={venue ? <CopyButton value={venue} label="สถานที่จัดอบรม" /> : null} />
+                    action={<CopyAction text={venue} label="สถานที่จัดอบรม" />} />
                 )}
               </DL>
             )}
@@ -1194,15 +1204,15 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                 {/* Only when it disagrees with the contact company — see companyDiverges. */}
                 {companyDiverges && (
                   <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
-                    action={<CopyButton value={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
+                    action={<CopyAction text={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
                 )}
                 <DLRow label="เลขผู้เสียภาษี" value={quotation.taxId}
-                  action={quotation.taxId ? <CopyButton value={quotation.taxId} label="เลขผู้เสียภาษี" /> : null} />
+                  action={<CopyAction text={quotation.taxId} label="เลขผู้เสียภาษี" />} />
                 {/* Derived at read time. `branch` is legacy read-only and is the
                     fallback for pre-split enquiries — see branchLabel.js. */}
                 <DLRow label="สาขา" value={branchLabel} />
                 <DLRow label="ที่อยู่" value={address}
-                  action={address ? <CopyButton value={address} label="ที่อยู่สำหรับใบเสนอราคา" /> : null} />
+                  action={<CopyAction text={address} label="ที่อยู่สำหรับใบเสนอราคา" />} />
               </DL>
             )}
           </SectionCard>
@@ -1341,48 +1351,10 @@ function CourseList({ courses }) {
  * is ambiguous to a screen reader. The live region announces the outcome,
  * because the icon swap alone is invisible to one.
  */
-function CopyButton({ value, label }) {
-  const [state, setState] = useState('idle'); // 'idle' | 'ok' | 'fail'
-  const timer = useRef(null);
-
-  // The flash is on a timer, and a click that unmounts the row mid-flash would
-  // otherwise set state on a dead component.
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const flash = (next) => {
-    setState(next);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState('idle'), 1800);
-  };
-
-  const handleCopy = async () => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
-      await navigator.clipboard.writeText(value);
-      flash('ok');
-    } catch {
-      flash('fail');
-    }
-  };
-
-  const Icon = state === 'ok' ? Check : state === 'fail' ? X : Copy;
-
-  return (
-    <button
-      type="button"
-      onClick={handleCopy}
-      aria-label={`คัดลอก${label}`}
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-2 py-1 text-[11px] font-medium transition-colors',
-        state === 'ok'   && 'border-9e-brand/40 text-9e-action',
-        state === 'fail' && 'border-9e-accent/40 text-9e-accent',
-        state === 'idle' && 'border-[var(--surface-border)] text-[var(--text-muted)] hover:text-9e-action'
-      )}
-    >
-      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-      <span aria-live="polite">
-        {state === 'ok' ? 'คัดลอกแล้ว' : state === 'fail' ? 'คัดลอกไม่สำเร็จ' : 'คัดลอก'}
-      </span>
-    </button>
-  );
-}
+/*
+ * ── `CopyButton` MOVED TO detailShell IN ROUND 8 ───────────────────────────
+ * The public screen needed it too, and copying it would have put a second
+ * `navigator.clipboard` implementation in the tree — one screen quietly telling
+ * a salesperson the address is on their clipboard when it is not. The docstring
+ * that used to be here, including the can-fail reasoning, went with it.
+ */

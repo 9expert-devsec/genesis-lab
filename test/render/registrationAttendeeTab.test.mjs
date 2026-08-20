@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
+// One source-level claim in this file — see "a copy control writes NO audit row".
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * THE ผู้เข้าอบรม TAB: the summary row, the completeness chip, the per-row menu
@@ -424,13 +426,32 @@ test('a row with NO contact details renders two dashes, one per column', () => {
 // 3. THE PER-ROW "•••"
 // ════════════════════════════════════════════════════════════════════════════
 
-test('an editable row’s menu holds the edit and, when there is one, the email copy', () => {
+test('an editable row’s menu holds the edit and the two copies it has values for', () => {
+  /**
+   * ── RE-POINTED IN ROUND 8: A THIRD ITEM, AND TWO GATES, NOT ONE ──────────
+   * `คัดลอกผู้เข้าอบรม` copies the whole row as name/email/phone. It is the one
+   * MULTI-value copy on these screens, because a roster genuinely goes somewhere
+   * as rows.
+   *
+   * THE TWO COPY ITEMS ARE GATED ON DIFFERENT THINGS, which is the point of
+   * asserting the exact list rather than a count: `คัดลอกอีเมล` needs an EMAIL,
+   * `คัดลอกผู้เข้าอบรม` needs ANY of the three fields. Row 2 is the case that
+   * separates them — see below.
+   */
   const rows = attendeeRows(FULL);
-  assert.deepEqual(rowMenuItems(rows[0]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล']);
-  assert.deepEqual(rowMenuItems(rows[1]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล']);
-  // The blank row has no email, so the copy item is ABSENT rather than a
-  // control that copies an empty string.
+  assert.deepEqual(rowMenuItems(rows[0]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+  assert.deepEqual(rowMenuItems(rows[1]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+
+  // THE BLANK ROW — nothing in any field. NEITHER copy renders: there is no
+  // email, and `attendeeCopyText` returns '' for a row with nothing in it, so
+  // the row copy is absent too. A control that copies an empty string tells the
+  // user nothing happened and reads as broken.
   assert.deepEqual(rowMenuItems(rows[2]), ['แก้ไขรายชื่อ']);
+
+  // THE EMAIL-ONLY ROW — the case that proves the two gates are different. No
+  // name, no phone, but an email: both copies render, and they copy different
+  // things.
+  assert.deepEqual(rowMenuItems(rows[3]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
 });
 
 test('NO row menu is empty, and every item in every one has text', () => {
@@ -506,14 +527,62 @@ test('a cancelled record offers NO edit anywhere in the attendee tab', () => {
   }
 });
 
-test('the row menu still offers the COPY on a cancelled record', () => {
-  // Copying is not an edit and does not go through the write gate, so the
-  // read-only lock has no business removing it. The rows that have an email keep
-  // it; the one that does not has no menu at all.
+test('the row menu still offers BOTH copies on a cancelled record', () => {
+  /**
+   * ══ COPYING IS NOT AN EDIT, AND THAT IS THE WHOLE CLAIM ═══════════════════
+   *
+   * A copy reads; the read-only lock is about writing. Neither copy item goes
+   * near `onEditRow`, so neither can be removed by the cancellation gate — and
+   * `แก้ไขรายชื่อ` is gone from every row, which is what shows the lock IS
+   * working rather than simply absent.
+   *
+   * RE-POINTED for the new row copy, and it covers the same claim over a second
+   * control: if `คัดลอกผู้เข้าอบรม` had been wired to the edit gate by mistake —
+   * the easiest mistake to make, since it sits beside an item that IS gated —
+   * this is what would say so.
+   */
   const rows = attendeeRows(CANCELLED);
-  assert.deepEqual(rowMenuItems(rows[0]), ['คัดลอกอีเมล']);
+  assert.deepEqual(rowMenuItems(rows[0]), ['คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+  assert.ok(!rowMenuItems(rows[0]).includes('แก้ไขรายชื่อ'),
+    'the edit survived the lock — then the copies surviving proves nothing');
+
+  // The blank row has nothing to copy and nothing to edit, so it has no menu at
+  // all — and no trigger, which is the structural half.
   assert.deepEqual(rowMenuItems(rows[2]), []);
   assert.equal(hasRowTrigger(rows[2]), false, 'the blank row on a cancelled record kept its trigger');
+});
+
+test('a copy control writes NO audit row — there is no server call to write one', () => {
+  /**
+   * ══ ASSERTED STRUCTURALLY, BECAUSE THAT IS WHAT MAKES IT TRUE ═════════════
+   *
+   * The requirement is that a copy never files an audit row. The reason it holds
+   * is not that somebody remembered to leave the call out — it is that copying
+   * has NO server action at all: `navigator.clipboard.writeText` is a browser
+   * call and nothing crosses the wire. There is no endpoint to add a
+   * `recordAdminActionAfter` to.
+   *
+   * So what is pinned is the absence of a server import from the copy path, in
+   * the module that owns it. A render assertion cannot see an audit write —
+   * `recordAdminActionAfter` runs on the server, after the response — so this is
+   * the honest form of the claim, and it is a SHAPE guard: stated, per the
+   * standing rule, because it could not be made against behaviour here.
+   */
+  const shell = readSource('src/app/admin/registrations/_components/detailShell.jsx');
+  const start = shell.code.indexOf('export function CopyButton');
+  assert.notEqual(start, -1, 'the copy control is gone');
+  const body = shell.code.slice(start, shell.code.indexOf('export function CopyAction'));
+  assert.ok(body.length > 300, 'the copy body did not parse');
+
+  assert.match(body, /navigator\.clipboard\?\.writeText/, 'the copy no longer uses the browser API');
+  for (const forbidden of ['recordAdminAction', 'updateRegistration', 'await fetch', 'use server']) {
+    assert.equal(body.includes(forbidden), false,
+      `the copy control references \`${forbidden}\` — a read must not reach the server`);
+  }
+  // The whole shell imports no action module, so no copy path anywhere in it
+  // could acquire one without this going red.
+  assert.equal(/from '@\/lib\/actions\//.test(shell.withImports), false,
+    'detailShell imported a server action — the copy controls live in this file');
 });
 
 test('CONTROL: an editable record DOES render both controls', () => {

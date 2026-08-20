@@ -34,6 +34,7 @@ const ACTIONS = 'src/lib/actions/registrations.js';
 const CONTRACT = 'src/lib/audit/auditContract.js';
 const CLIENT = 'src/app/admin/registrations/_components/RegistrationDetailClient.jsx';
 const SCHEMA = 'src/lib/schemas/register-public.js';
+const SHELL = 'src/app/admin/registrations/_components/detailShell.jsx';
 
 /**
  * Each break names the file, an exact FIND, its REPLACE, and — the part that
@@ -329,6 +330,62 @@ const BREAKS = {
     ],
     find: '                        {missing.length ? (',
     replace: '                        {false ? (',
+  },
+
+  // ── item 1: the copy affordance ──────────────────────────────────────────
+
+  'copy-gated': {
+    file: CLIENT,
+    why: 'Wire the attendee row copy to the EDIT gate — the easiest mistake to make, since it sits beside an item that IS gated. Copying is a read and must survive the cancellation lock.',
+    reddens: [
+      'render/registrationCopyAffordance › every copy control survives the cancellation lock, on BOTH screens',
+      'render/registrationAttendeeTab › the row menu still offers BOTH copies on a cancelled record',
+    ],
+    find: '    rowText\n      ? { key: \'copy-row\', icon: Copy, label: \'คัดลอกผู้เข้าอบรม\', onClick: () => copyText(rowText) }\n      : null,',
+    replace: '    rowText && onEditRow\n      ? { key: \'copy-row\', icon: Copy, label: \'คัดลอกผู้เข้าอบรม\', onClick: () => copyText(rowText) }\n      : null,',
+  },
+
+  'copy-empty': {
+    file: SHELL,
+    why: 'Let CopyAction render for an empty value — a control that puts nothing on the clipboard and reads as broken. Round 5’s wrapped-but-empty defeat, at a different surface.',
+    reddens: [
+      'render/registrationCopyAffordance › CopyAction renders NOTHING for an empty or whitespace-only text',
+      'render/registrationCopyAffordance › no copy control renders beside a value that is not there',
+    ],
+    find: "  const value = typeof text === 'string' ? text.trim() : '';\n  if (!value) return null;",
+    replace: "  const value = typeof text === 'string' ? text.trim() : '';",
+  },
+
+  'copy-audits': {
+    file: SHELL,
+    why: 'Reach the server from a copy. The audit log is a record of CHANGES; a read is not one, and filling it with copies buries the changes it exists for.',
+    reddens: [
+      'render/registrationAttendeeTab › a copy control writes NO audit row',
+    ],
+    find: '      await navigator.clipboard.writeText(value);',
+    replace: '      await navigator.clipboard.writeText(value);\n      await fetch(`/api/audit?copied=${encodeURIComponent(label)}`);',
+  },
+
+  'copy-comma': {
+    file: 'src/lib/registrations/copyText.js',
+    why: 'Separate the attendee fields with a comma. It pastes into ONE spreadsheet cell instead of three, and names and addresses contain commas.',
+    reddens: [
+      'pure/copyText › the separator is a TAB, and that is a decision about where this is pasted',
+      'pure/copyText › one attendee is name, email, phone — in that order',
+      'pure/copyText › a MISSING field keeps its column — the trailing tab is the point',
+    ],
+    find: "export const COPY_FIELD_SEPARATOR = '\\t';",
+    replace: "export const COPY_FIELD_SEPARATOR = ', ';",
+  },
+
+  'copy-drop-empty': {
+    file: 'src/lib/registrations/copyText.js',
+    why: 'Drop absent fields instead of emptying them. Columns then shift per row and a pasted roster does not line up — invisible until someone sorts it.',
+    reddens: [
+      'pure/copyText › a MISSING field keeps its column — the trailing tab is the point',
+    ],
+    find: '  return [name, email, phone].join(COPY_FIELD_SEPARATOR);',
+    replace: '  return [name, email, phone].filter(Boolean).join(COPY_FIELD_SEPARATOR);',
   },
 
   'wrong-door': {
