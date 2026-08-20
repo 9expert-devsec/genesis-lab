@@ -327,6 +327,15 @@ export async function updateRegistration(id, data, source = 'public') {
 
   const update = {};
 
+  /**
+   * Set when the payload touches a field that a PAID record may not change on
+   * this path. Only `attendeesCount` sets it today — see the note at that field.
+   * A flag rather than an inline filter edit, because the filter is built once,
+   * far below, and a second `status:` key written there by hand would silently
+   * replace the cancellation lock rather than join it.
+   */
+  let paidGuard = false;
+
   if (source === 'inhouse') {
     /**
      * Inhouse editable fields — AN ALLOWLIST, so a field that is not named here
@@ -406,9 +415,35 @@ export async function updateRegistration(id, data, source = 'public') {
       if (c.phone     !== undefined) update['coordinator.phone']     = String(c.phone).trim();
     }
     if (data.attendeesListProvided !== undefined) update.attendeesListProvided = Boolean(data.attendeesListProvided);
+    /**
+     * ══ attendeesCount IS EDITABLE HERE ONLY WHILE THE RECORD IS UNPAID ═══════
+     *
+     * ── THIS IS CLOSING AN OPEN HOLE, NOT HARDENING A SAFE FIELD ────────────
+     * Until round 8 this branch had NO STATUS GATE AT ALL. The count that drove
+     * the amount charged could be changed on a `paid` registration through the
+     * ordinary field edit, silently, with the trail recording only that "an
+     * edit happened". That was live.
+     *
+     * The rule is now three states:
+     *   · unpaid (pending / confirmed) → editable here, an ordinary field
+     *   · paid                          → REFUSED here; `updateAttendeesCountPaid`
+     *                                     is the only door, and it is deliberate,
+     *                                     confirmed and audited with both numbers
+     *   · cancelled                     → refused, by the filter below, like
+     *                                     every other field (round 1)
+     *
+     * ── THE GATE IS IN THE FILTER, NOT IN A READ-THEN-WRITE ─────────────────
+     * `paidGuard` joins the update FILTER rather than being checked against a
+     * status read first, for the same reason the cancellation lock is a filter:
+     * a read-then-write loses to a charge landing between the two, and the
+     * webhook that writes `paid` is exactly the concurrent writer that would win
+     * that race. The refusal path below already re-reads to tell the two
+     * refusals apart, so there is no extra round trip on success.
+     */
     if (data.attendeesCount !== undefined) {
       const n = parseInt(data.attendeesCount, 10);
       if (!isNaN(n) && n >= 1 && n <= 50) update.attendeesCount = n;
+      paidGuard = true;
     }
     if (data.attendees !== undefined) {
       if (!Array.isArray(data.attendees)) return { ok: false, error: 'รูปแบบข้อมูลผู้เข้าอบรมไม่ถูกต้อง' };
@@ -515,14 +550,28 @@ export async function updateRegistration(id, data, source = 'public') {
    * filter saying so. A per-source ternary here would be a second place for the
    * rule to live and a second place for it to fall behind.
    */
-  const filter = { _id: id, status: { $ne: 'cancelled' } };
+  /**
+   * ONE `status` KEY, built once. `$nin` rather than a second `status:` — an
+   * object literal silently keeps the LAST duplicate key, so writing the paid
+   * rule as its own `status:` line would have DELETED the cancellation lock
+   * while looking like it added to it.
+   */
+  const blocked = paidGuard ? ['cancelled', 'paid'] : ['cancelled'];
+  const filter = { _id: id, status: { $nin: blocked } };
 
   const doc = await Model.findOneAndUpdate(filter, { $set: update }, { new: true, runValidators: false });
   if (!doc) {
     // Same ambiguity as the status gate — no such id, or a locked one. One
-    // extra read on the refusal path only, so the two messages stay distinct.
+    // extra read on the refusal path only, so the three messages stay distinct.
     const existing = await Model.findById(id).select('status').lean();
     if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+    if (paidGuard && existing.status === 'paid') {
+      return {
+        ok: false,
+        error: 'รายการนี้ชำระเงินแล้ว จึงเปลี่ยนจำนวนผู้เข้าอบรมจากหน้าแก้ไขปกติไม่ได้ '
+             + 'กรุณาใช้ "ขอเพิ่มจำนวนผู้เข้าอบรม"',
+      };
+    }
     return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
   }
 
@@ -701,6 +750,168 @@ export async function updateRegistrationRound(id, { classId, attendanceMode } = 
   });
 
   return { ok: true, fields };
+}
+
+// ── The seat count, after payment ──────────────────────────────────
+
+/**
+ * RAISE `attendeesCount` ON A PAID REGISTRATION. Public only.
+ *
+ * ══ WHY THIS IS A SEPARATE ACTION AND NOT A FLAG ON updateRegistration ══════
+ *
+ * The count is the only field on this record that DROVE MONEY. `pricing.seats`
+ * is a snapshot taken from it at charge time and deliberately frozen, so once a
+ * charge has settled the count and the amount are two numbers that agreed once
+ * and need not agree again.
+ *
+ * Letting that happen through the ordinary field edit — which is what shipped
+ * until round 8 — means it can happen by mis-typing a number in a form that also
+ * edits phone numbers, and the trail records "an edit happened". A separate
+ * action makes it a decision: a control the admin has to find, a confirmation
+ * that states the consequence in words, and a row naming both numbers.
+ *
+ * ══ WHAT THIS DOES NOT DO, AND MUST NOT LEARN TO ════════════════════════════
+ *
+ * NO BILLING. It does not recalculate `pricing`, does not touch `payment`, does
+ * not issue a charge or a refund, and does not re-send a receipt. `pricing` is a
+ * snapshot of what was actually taken and rewriting it would destroy the only
+ * record of that. Reconciling the difference is an offline, human job.
+ *
+ * That is the whole reason the confirmation copy has to be specific rather than
+ * "this affects billing": what the admin is consenting to is a DOCUMENT
+ * DISAGREEMENT, permanently, until someone reissues paperwork outside this
+ * system. Vague copy would be consent to something the admin has not been told.
+ *
+ * ══ INCREASE ONLY ═══════════════════════════════════════════════════════════
+ *
+ * The control is `ขอเพิ่มจำนวนผู้เข้าอบรม` and the action matches it. A DECREASE
+ * on a paid registration means the customer paid for seats they are not taking,
+ * which is a refund — and this action cannot issue one, cannot record that one
+ * is owed, and has nowhere to put the obligation. Writing the lower number would
+ * make the system quietly forget money it owes somebody.
+ *
+ * Refusing is the honest answer, and it is not a dead end: cancelling and
+ * re-registering is the path that exists, and it leaves a trail that says so.
+ *
+ * ══ THE FLOOR IS THE ROSTER, NOT 1 ══════════════════════════════════════════
+ *
+ * Round 8's other rule is that the roster may never exceed the count. A count
+ * lowered below the number of people already listed would create an over-capacity
+ * record through a different door than the one that door is guarded on — so the
+ * floor here is `attendees.length`, and it is enforced on the same read that
+ * produces the audit `before`.
+ */
+export async function updateAttendeesCountPaid(id, nextCount) {
+  const session = await requireAdmin('registrations');
+  if (!id) return { ok: false, error: 'Missing id' };
+
+  const n = parseInt(nextCount, 10);
+  if (!Number.isFinite(n)) return { ok: false, error: 'จำนวนผู้เข้าอบรมไม่ถูกต้อง' };
+  // The model's own ceiling, restated rather than imported: this action writes
+  // with `runValidators:false` like every other action here, so the schema max
+  // would not fire. Round 8 reported three different ceilings (zod 20, model 50,
+  // this 50) and deliberately did NOT unify them — adding a fourth number here
+  // is the thing that would make that worse, so this is the model's 50.
+  if (n < 1 || n > 50) return { ok: false, error: 'จำนวนผู้เข้าอบรมต้องอยู่ระหว่าง 1 ถึง 50' };
+
+  await dbConnect();
+
+  /**
+   * One read serves three purposes — the status test, the roster floor, and the
+   * `before` the audit row needs. Same shape as `updateRegistrationRound`.
+   */
+  const doc = await RegisterPublic.findById(id)
+    .select('status attendeesCount attendees')
+    .lean();
+  if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
+
+  if (doc.status === 'cancelled') {
+    return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
+  }
+  /**
+   * NOT PAID ⇒ WRONG DOOR. Refused rather than quietly accepted, because this
+   * action writes a `seats` history row whose title says "หลังชำระเงิน". An
+   * unpaid record edited through here would file a row claiming a money
+   * implication that does not exist, which is the trail lying in the direction
+   * that is hardest to notice.
+   */
+  if (doc.status !== 'paid') {
+    return {
+      ok: false,
+      error: 'รายการนี้ยังไม่ได้ชำระเงิน กรุณาแก้ไขจำนวนผู้เข้าอบรมจากหน้าแก้ไขปกติ',
+    };
+  }
+
+  const current = Number(doc.attendeesCount ?? 0);
+  const roster = Array.isArray(doc.attendees) ? doc.attendees.length : 0;
+
+  if (n === current) return { ok: false, error: 'จำนวนผู้เข้าอบรมไม่เปลี่ยนแปลง' };
+  if (n < current) {
+    return {
+      ok: false,
+      error: 'ลดจำนวนผู้เข้าอบรมหลังชำระเงินไม่ได้ เนื่องจากต้องมีการคืนเงิน '
+           + 'กรุณายกเลิกรายการนี้แล้วลงทะเบียนใหม่',
+    };
+  }
+  if (n < roster) {
+    return { ok: false, error: `มีรายชื่อผู้เข้าอบรมแล้ว ${roster} ท่าน จำนวนที่สมัครต้องไม่น้อยกว่านี้` };
+  }
+
+  /**
+   * The conditional update carries the SAME two tests the read above made, so a
+   * cancel or a concurrent change landing in between cannot be overwritten.
+   * `attendeesCount: current` is the optimistic-concurrency half: two admins
+   * raising the count at once must not both succeed against the same `before`,
+   * or the second row's diff would name a number that was never current.
+   */
+  const written = await RegisterPublic.findOneAndUpdate(
+    { _id: id, status: 'paid', attendeesCount: current },
+    { $set: { attendeesCount: n } },
+    { new: false, runValidators: false },
+  );
+  if (!written) {
+    return { ok: false, error: 'รายการนี้ถูกแก้ไขโดยผู้ใช้อื่น กรุณารีเฟรชหน้าแล้วลองใหม่' };
+  }
+
+  revalidatePath(ADMIN_PATH);
+  revalidatePath(`${ADMIN_PATH}/${id}`);
+
+  /**
+   * ══ THE SECOND EXCEPTION TO THE NO-DIFF RULE. READ BEFORE REMOVING. ════════
+   *
+   * The first is `updateRegistrationRound`, immediately above; its note carries
+   * the full argument and this one is the same argument applied to a different
+   * field. THE TWO ARE NOT AN INCONSISTENCY WITH THE ACTIONS AROUND THEM and a
+   * reader seeing two diff payloads beside `update`'s bare `{}` will want to
+   * reconcile all three. Do not.
+   *
+   * A seat count is an integer between 1 and 50. It names nobody, so it fails
+   * the test that put this pair under a cap in the first place — the cap exists
+   * because the trail is append-only and forever and a customer's phone number
+   * copied into it cannot be redacted on request. A `2` cannot be the subject of
+   * a deletion request.
+   *
+   * And the diff is the entire value of the row. "Somebody changed the seat
+   * count on a paid registration" without the two numbers leaves the only
+   * question anyone will ask — from what, to what — unanswerable, on the one
+   * change on this screen where the record deliberately stops matching the money
+   * taken for it.
+   *
+   * `attendeesCount` is on `ROUND_AND_STATUS_KEYS`, so the writer's reduction
+   * passes it. Every other key handed over here would be dropped, fail-closed.
+   */
+  recordAdminActionAfter({
+    menu:        'registrations',
+    action:      'seats',
+    entity:      'public',
+    recordId:    String(id),
+    recordLabel: '',
+    before:      { attendeesCount: current },
+    after:       { attendeesCount: n },
+    actor:       { id: session.user?.id, name: session.user?.name },
+  });
+
+  return { ok: true, attendeesCount: n };
 }
 
 // ── Internal notes (append-only) ───────────────────────────────────

@@ -256,8 +256,12 @@ test('CONTROL: the function bound really excludes the other actions’ selects',
   // SIX. `updateRegistrationRound` added the sixth: it reads the registration
   // for its courseId and its `before` values in one go. Bumped deliberately, as
   // a floor would stop noticing when the file gains more.
-  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 6,
-    'the actions file no longer has six selects — re-read the scoping note');
+  // SEVEN. Round 8: `updateAttendeesCountPaid` added the seventh — one read
+  // serving three purposes (the paid test, the roster floor, and the `before`
+  // the audit row needs), exactly the shape `updateRegistrationRound` uses.
+  // Still bumped rather than floored, for the reason two notes up.
+  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 7,
+    'the actions file no longer has seven selects — re-read the scoping note');
 });
 
 test('CONTROL: the field matcher would catch an unprojected read', () => {

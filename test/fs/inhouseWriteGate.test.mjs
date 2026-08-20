@@ -190,10 +190,27 @@ test('updateRegistration gates BOTH sources — the public-only branch is gone',
     !/source === 'inhouse'\s*\n?\s*\?\s*\{\s*_id:\s*id\s*\}/.test(SHARED_UPDATE_BODY),
     'the public-only cancellation branch is back'
   );
+  /**
+   * RE-POINTED IN ROUND 8, NOT WEAKENED. The filter became
+   * `status: { $nin: blocked }` so that `attendeesCount` could additionally be
+   * blocked on `paid` — see publicStatusWriteGate for that half.
+   *
+   * THIS file's claim is untouched and is about SOURCE, not status: there is ONE
+   * filter and it covers both collections, rather than the round-1 shape
+   * `source === 'inhouse' ? { _id: id } : …` which left a cancelled in-house
+   * request fully editable. `cancelled` must be blocked unconditionally — the
+   * default arm — or the in-house lock would depend on which fields the payload
+   * happened to name.
+   */
   assert.match(
     SHARED_UPDATE_BODY,
-    /const filter = \{\s*_id:\s*id,\s*status:\s*\{\s*\$ne:\s*'cancelled'\s*\}\s*\}/,
+    /const filter = \{\s*_id:\s*id,\s*status:\s*\{\s*\$nin:\s*blocked\s*\}\s*\}/,
     'one filter must cover both collections'
+  );
+  assert.match(
+    SHARED_UPDATE_BODY,
+    /:\s*\['cancelled'\]/,
+    'the cancellation lock must be the unconditional arm, for both sources'
   );
   assert.match(SHARED_UPDATE_BODY, /findOneAndUpdate\(filter,/,
     'and that filter must be the one the update actually uses');

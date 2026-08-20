@@ -27,5 +27,10 @@ export async function addInternalNote()              { return { ok: false, error
 // The round mover. Takes an id and derives the other three fields server-side —
 // see the action. Stubbed as a refusal like every export here.
 export async function updateRegistrationRound()       { return { ok: false, error: 'stubbed' }; }
+// The paid-path seat-count change. Round 8: `attendeesCount` used to be editable
+// through `updateRegistration` on ANY status including paid, with no gate at
+// all; this is the only door on a paid record now. Stubbed as a refusal like
+// every export here.
+export async function updateAttendeesCountPaid()      { return { ok: false, error: 'stubbed' }; }
 export async function getRegistrationStatusCounts()  { return { total: 0, range: 'all', source: 'public' }; }
 export async function getRegistrationTotal()         { return 0; }
