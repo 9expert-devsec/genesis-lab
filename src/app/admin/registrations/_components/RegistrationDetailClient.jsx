@@ -17,6 +17,7 @@ import {
   deleteRegistration,
   addInternalNote,
   updateRegistrationRound,
+  updateAttendeesCountPaid,
 } from '@/lib/actions/registrations';
 import { storedRoundOption, isHybridRound, formatClassDates } from '@/lib/registrations/roundSelection';
 import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
@@ -292,6 +293,16 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   // Which attendee row's "•••" is open, by index. One at a time, like the
   // status bar's menu — two open sheets on one screen is a state nobody wants.
   const [openAttendeeRow, setOpenAttendeeRow] = useState(null);
+  /**
+   * The post-payment seat-count panel: whether it is disclosed, and its draft.
+   *
+   * The draft starts EMPTY rather than at the current count. A pre-filled number
+   * that already equals the stored one turns "confirm" into a control whose
+   * default action is a no-op, and the admin has to notice that to know they
+   * must change it. Empty makes the field state that a value is required.
+   */
+  const [seatPanelOpen, setSeatPanelOpen] = useState(false);
+  const [seatDraft,     setSeatDraft]     = useState('');
   const [error,        setError]        = useState(null);
   const [busy,         setBusy]         = useState(null);
   const [, startTransition] = useTransition();
@@ -303,6 +314,43 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
       const res = await updateRegistration(doc._id, payload);
       if (res.ok) { setEditSection(null); }
       else { setError(res.error || 'บันทึกไม่สำเร็จ'); }
+      setBusy(null);
+    });
+  };
+
+  /**
+   * RAISE THE SEAT COUNT ON A PAID RECORD.
+   *
+   * ── THE CONSENT IS THE PANEL, NOT A window.confirm ────────────────────────
+   * Every other destructive control on this screen uses `window.confirm`, and
+   * this one deliberately does not. A confirm dialog is read AFTER the number
+   * has been typed and while the reader is already committed; the consequence
+   * here — the registration's headcount permanently disagreeing with the amount
+   * charged — is something they have to weigh BEFORE choosing a number. So the
+   * copy is in the panel, above the input, with both real numbers in it, and the
+   * confirm button is the consent.
+   *
+   * A second `window.confirm` restating it was drafted and dropped: two
+   * confirmations for one act trains people to dismiss both.
+   *
+   * ── THE CLIENT DOES NOT ENFORCE ANYTHING ──────────────────────────────────
+   * The refusals live on the server — not paid, decrease, below the roster, lost
+   * race — and this handler simply reports whatever comes back. The button being
+   * disabled is a courtesy; `updateAttendeesCountPaid` is a POST endpoint.
+   */
+  const handleSeatChange = () => {
+    const next = parseInt(seatDraft, 10);
+    if (!Number.isFinite(next)) { setError('กรุณาระบุจำนวนผู้เข้าอบรมใหม่'); return; }
+    setBusy('seat-change'); setError(null);
+    startTransition(async () => {
+      const res = await updateAttendeesCountPaid(doc._id, next);
+      if (res.ok) {
+        setAttendeesCount(res.attendeesCount);
+        setSeatPanelOpen(false);
+        setSeatDraft('');
+      } else {
+        setError(res.error || 'เปลี่ยนจำนวนผู้เข้าอบรมไม่สำเร็จ');
+      }
       setBusy(null);
     });
   };
@@ -537,6 +585,52 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     saving:    busy === `save-${section}`,
     onCancel:  () => cancelEdit(section),
   });
+
+  /**
+   * ══ THE SEAT COUNT AFTER PAYMENT ════════════════════════════════════════════
+   *
+   * `paid` is the one status where `attendeesCount` may not move through the
+   * ordinary field edit — it drove the amount charged, and `pricing.seats` is a
+   * snapshot of it frozen at charge time. The server refuses it there; this is
+   * the surface that stops an admin walking into that refusal.
+   *
+   * ── DERIVED FROM THE STORED STATUS, NOT FROM A SECOND FLAG ────────────────
+   * One expression, read wherever the question is asked, so the form and the
+   * control cannot disagree about which state the record is in. `readOnly` is
+   * the cancellation lock and is separate: a cancelled record offers neither
+   * path, which falls out of `onEdit` being undefined rather than being restated
+   * here.
+   */
+  const countLockedByPayment = status === 'paid';
+  /** What the customer was actually charged for. Falls back for legacy quote-path records. */
+  const chargedSeats = doc.pricing?.seats ?? attendeesCount;
+
+  /**
+   * ── `attendeesCount` IS OMITTED FROM THE PAYLOAD ON A PAID RECORD ──────────
+   *
+   * NOT a tidy-up, and the two halves are each correct alone — which is why this
+   * needed reading rather than testing to find. The server raises its paid gate
+   * on the PRESENCE of the key (`data.attendeesCount !== undefined`), not on
+   * whether the value changed, because a rule that let an unchanged value
+   * through would be bypassable by echoing the stored number back. So the client
+   * is the side that must not send it: posting the untouched count with the rest
+   * of the card would make the server refuse the WHOLE save, and an admin
+   * correcting a misspelt attendee name on a paid registration would get
+   * "รายการนี้ชำระเงินแล้ว…" and lose their edits to a field they never opened.
+   *
+   * ── A `const`, NOT AN INLINE TERNARY AT THE CALL ──────────────────────────
+   * fs/publicFieldEditable parses `save(...)` to check that every field a card
+   * submits is one the action accepts, and it follows an IDENTIFIER argument to
+   * its declaration — the shape the invoice card already uses for its own
+   * conditional payload. An inline ternary matched the identifier branch, led
+   * the parser to a `const` holding no object literal, and silently emptied the
+   * submitted set: `attendees` and `attendeesListProvided` vanished from it too,
+   * and the guard reported them as unreachable. The first draft here did exactly
+   * that and the parser said so.
+   */
+  const attendeePayload = countLockedByPayment
+    ? { attendeesListProvided, attendees }
+    : { attendeesListProvided, attendeesCount, attendees };
 
   /**
    * The status bar's one-line description — DERIVED, never a map keyed by
@@ -1006,17 +1100,44 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
           icon={Users}
           title="รายชื่อผู้เข้าอบรม"
           {...attendeeEdit}
-          onSave={() => save({ attendeesListProvided, attendeesCount, attendees }, 'save-attendees')}
+          // `attendeePayload` drops `attendeesCount` on a paid record — see its
+          // declaration for why the omission is the client's job and why it is a
+          // const rather than a ternary here.
+          onSave={() => save(attendeePayload, 'save-attendees')}
         >
           {editSection === 'attendees' ? (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-4">
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">จำนวนผู้เข้าอบรม</label>
-                  <input type="number" min={1} max={50} value={attendeesCount}
-                    onChange={(e) => setAttendeesCount(parseInt(e.target.value, 10) || 1)}
-                    className="h-9 w-24 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand" />
-                </div>
+                {/*
+                  ── ON A PAID RECORD THE INPUT IS NOT RENDERED AT ALL ────────
+                  Not disabled, not read-only-styled: ABSENT, replaced by the
+                  number and one line saying where the change lives instead.
+
+                  A disabled input invites the click and explains nothing — the
+                  same reasoning `SectionCard` applies to a greyed-out แก้ไข. And
+                  a live input here would be worse than useless: the save posts
+                  `attendeesCount` with the rest of the card, the server refuses
+                  the WHOLE payload on a paid record, and the admin would lose
+                  their attendee edits to a field they did not mean to touch.
+                */}
+                {countLockedByPayment ? (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">จำนวนผู้เข้าอบรม</label>
+                    <p className="flex h-9 items-center text-sm text-[var(--text-primary)]">
+                      {attendeesCount} ท่าน
+                    </p>
+                    <p className="pt-1 text-[11px] leading-[16px] text-[var(--text-muted)]">
+                      ชำระเงินแล้ว — เปลี่ยนได้ที่ &quot;ขอเพิ่มจำนวนผู้เข้าอบรม&quot;
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">จำนวนผู้เข้าอบรม</label>
+                    <input type="number" min={1} max={50} value={attendeesCount}
+                      onChange={(e) => setAttendeesCount(parseInt(e.target.value, 10) || 1)}
+                      className="h-9 w-24 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand" />
+                  </div>
+                )}
                 <label className="flex cursor-pointer items-center gap-2 pt-5">
                   <input type="checkbox" checked={!attendeesListProvided}
                     onChange={(e) => setAttendeesListProvided(!e.target.checked)}
@@ -1079,6 +1200,85 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
                   </button>
                 ) : null}
               </div>
+
+              {/*
+                ══ ขอเพิ่มจำนวนผู้เข้าอบรม — THE PAID PATH ═══════════════════════
+
+                Rendered only on a PAID record, and gated on `attendeeEdit.onEdit`
+                like every other edit affordance on this screen — so a CANCELLED
+                record shows nothing here, through the same single producer rather
+                than through a second `readOnly` test. Cancelled-and-paid is a real
+                combination and it must offer no door at all.
+
+                ── THE PANEL IS ALWAYS IN THE DOM, HIDDEN BY THE ATTRIBUTE ──────
+                Same reasoning as `OverflowMenu`: `renderToStaticMarkup` cannot
+                click, so a conditionally-rendered panel would put its copy — the
+                consent text, which is the whole point of this control — behind a
+                state the suite cannot reach. `hidden` takes it out of the layout
+                AND the accessibility tree, and reads as state rather than as a
+                styling accident.
+              */}
+              {countLockedByPayment && attendeeEdit.onEdit ? (
+                <div className="pt-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setSeatPanelOpen((v) => !v)}
+                    aria-expanded={seatPanelOpen}
+                    className="inline-flex h-[30px] items-center gap-[5px] rounded-9e-md border border-[var(--surface-border)] px-[10px] text-[11px] font-medium text-[var(--text-secondary)] transition-colors hover:text-9e-action"
+                  >
+                    <Users aria-hidden="true" className="h-[12px] w-[12px] shrink-0" />
+                    ขอเพิ่มจำนวนผู้เข้าอบรม
+                  </button>
+
+                  <div hidden={!seatPanelOpen} className="mt-[10px] rounded-9e-md border border-9e-brand/40 bg-[var(--surface-muted)] p-[14px]">
+                    {/*
+                      ── THE CONSEQUENCE, IN WORDS, WITH THE REAL NUMBERS ──────
+                      "This affects billing" is too vague to consent to. What the
+                      admin is agreeing to is specific and permanent: the amount
+                      charged was computed from `pricing.seats` and STAYS there,
+                      while the registration and its emails start saying something
+                      else. Nothing in this system reconciles the two afterwards.
+                    */}
+                    <p className="text-[12px] font-semibold leading-[18px] text-[var(--text-primary)]">
+                      รายการนี้ชำระเงินแล้ว
+                    </p>
+                    <p className="pt-[6px] text-[12px] leading-[19px] text-[var(--text-secondary)]">
+                      การเพิ่มจำนวนผู้เข้าอบรมจะ<strong className="font-semibold">ไม่คำนวณยอดเงินใหม่ ไม่เรียกเก็บเพิ่ม และไม่คืนเงินโดยอัตโนมัติ</strong>
+                    </p>
+                    <p className="pt-[6px] text-[12px] leading-[19px] text-[var(--text-secondary)]">
+                      ยอดที่ชำระแล้วคำนวณจาก {chargedSeats} ที่นั่ง และจะยังคงเป็น {chargedSeats} ที่นั่งบนใบเสร็จและเอกสารการเงิน
+                      ส่วนใบสมัครและอีเมลจะแสดงจำนวนใหม่ — ตัวเลขทั้งสองจะไม่ตรงกันจนกว่าจะออกเอกสารใหม่นอกระบบ
+                    </p>
+                    <p className="pt-[6px] text-[11px] leading-[16px] text-[var(--text-muted)]">
+                      การเปลี่ยนแปลงนี้จะถูกบันทึกในประวัติการดำเนินการ พร้อมจำนวนก่อนและหลัง
+                    </p>
+
+                    <div className="flex flex-wrap items-end gap-[10px] pt-[12px]">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
+                          จำนวนใหม่ (ปัจจุบัน {attendeesCount} ท่าน)
+                        </label>
+                        <input
+                          type="number"
+                          min={attendeesCount + 1}
+                          max={50}
+                          value={seatDraft}
+                          onChange={(e) => setSeatDraft(e.target.value)}
+                          className="h-9 w-24 rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand focus-visible:ring-1 focus-visible:ring-9e-brand"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSeatChange}
+                        disabled={busy === 'seat-change' || !seatDraft.trim()}
+                        className="inline-flex h-9 items-center gap-[5px] rounded-9e-md bg-9e-navy px-[12px] text-[11px] font-semibold text-9e-ice transition-opacity hover:opacity-90 disabled:opacity-40"
+                      >
+                        ยืนยันเพิ่มจำนวน
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               {!attendeesListProvided ? (
                 <p className="text-[13px] leading-[22px] text-[var(--text-secondary)]">ยังไม่ได้ระบุรายชื่อ — จะแจ้งภายหลัง</p>

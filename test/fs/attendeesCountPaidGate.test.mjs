@@ -242,6 +242,98 @@ test('the history feed has a title for it, so the row does not render a raw enum
     'the title does not distinguish a post-payment change from an ordinary correction');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// 5. THE CLIENT SIDE THE RENDER TIER CANNOT REACH
+// ════════════════════════════════════════════════════════════════════════════
+
+const CLIENT = readSource('src/app/admin/registrations/_components/RegistrationDetailClient.jsx');
+
+test('the attendee save OMITS attendeesCount on a paid record', () => {
+  /**
+   * ══ THE INTERACTION BUG THIS PINS, WHICH NEITHER SIDE SHOWS ALONE ══════════
+   *
+   * The server raises its paid gate on the PRESENCE of the key —
+   * `data.attendeesCount !== undefined` — not on whether the value changed. It
+   * has to: a rule that let an unchanged value through would be bypassable by
+   * echoing the stored number back.
+   *
+   * The attendee card used to post `{ attendeesListProvided, attendeesCount,
+   * attendees }` unconditionally. Put those two facts together and an admin
+   * fixing a misspelt attendee NAME on a paid registration gets the whole save
+   * refused — losing their edits to a field they never opened. Each half is
+   * correct alone, which is why this needed the two read together rather than a
+   * test on either.
+   *
+   * So the CLIENT is the side that drops the key.
+   */
+  assert.match(CLIENT.code, /const attendeePayload = countLockedByPayment/,
+    'the attendee payload is no longer conditional on the paid state');
+  assert.match(CLIENT.code, /\?\s*\{ attendeesListProvided, attendees \}/,
+    'the paid payload still carries attendeesCount — the whole save will be refused');
+  assert.match(CLIENT.code, /:\s*\{ attendeesListProvided, attendeesCount, attendees \}/,
+    'the unpaid payload no longer sends the count — it would become uneditable');
+  assert.match(CLIENT.code, /save\(attendeePayload, 'save-attendees'\)/,
+    'the card does not use the conditional payload');
+});
+
+test('the count INPUT is absent on a paid record, not disabled', () => {
+  /**
+   * Behind `editSection`, so the render tier cannot see it — pinned here, and
+   * render/seatCountPaidControl says so at its head rather than leaving a reader
+   * to conclude the claim is missing.
+   *
+   * ABSENT rather than disabled, for the reason `SectionCard` gives about a
+   * greyed-out แก้ไข: a disabled control invites the click and then explains
+   * nothing. And a LIVE one would be worse than useless here — see the payload
+   * test above.
+   */
+  assert.match(CLIENT.code, /countLockedByPayment \? \(/,
+    'the edit form does not branch on the paid state at all');
+  // The number input still exists for the unpaid branch...
+  assert.match(CLIENT.code, /<input type="number" min=\{1\} max=\{50\} value=\{attendeesCount\}/,
+    'the unpaid count input is gone — the field became uneditable in every state');
+  // ...and exactly one of them, so the paid branch did not simply copy it.
+  assert.equal((CLIENT.code.match(/value=\{attendeesCount\}/g) ?? []).length, 1,
+    'the paid branch renders a second bound count input');
+});
+
+test('the consent copy is a literal in the client, not assembled at runtime', () => {
+  // The wording is the feature. A template built from fragments would be
+  // unreadable in review and unassertable at source, and the render tier only
+  // sees whatever the fixture happened to produce.
+  for (const clause of [
+    'ไม่คำนวณยอดเงินใหม่',
+    'ไม่เรียกเก็บเพิ่ม',
+    'ไม่คืนเงินโดยอัตโนมัติ',
+    'จะไม่ตรงกันจนกว่าจะออกเอกสารใหม่นอกระบบ',
+    'บันทึกในประวัติการดำเนินการ พร้อมจำนวนก่อนและหลัง',
+  ]) {
+    assert.ok(CLIENT.code.includes(clause), `the consent copy lost the clause "${clause}"`);
+  }
+  // And it reads the CHARGED seats rather than the count about to change.
+  assert.match(CLIENT.code, /const chargedSeats = doc\.pricing\?\.seats \?\? attendeesCount/,
+    'the charged-seat figure is not derived from pricing');
+});
+
+test('the client enforces nothing — the refusals are all the server’s', () => {
+  /**
+   * The handler reports whatever comes back and re-implements no rule. A client
+   * that duplicated "no decrease" or "not below the roster" would be a second
+   * place for those rules to live and a second place to fall behind — and the
+   * server is the only one that counts, since every `'use server'` export is a
+   * POST endpoint.
+   */
+  const start = CLIENT.code.indexOf('const handleSeatChange');
+  assert.notEqual(start, -1, 'the seat-change handler is gone');
+  const body = CLIENT.code.slice(start, CLIENT.code.indexOf('const cancelEdit', start));
+  assert.ok(body.length > 200, 'the handler body did not parse');
+  assert.match(body, /updateAttendeesCountPaid\(doc\._id, next\)/, 'the handler does not call the action');
+  for (const rule of ['roster', 'pricing', "'paid'", 'current']) {
+    assert.equal(body.includes(rule), false,
+      `the client re-implements the server rule "${rule}" — two places for one rule`);
+  }
+});
+
 test('CONTROL: the allowlist assertion is not vacuous — the list is real and bounded', () => {
   // `includes` on an empty or enormous array would satisfy the positive half and
   // the negative half respectively.
