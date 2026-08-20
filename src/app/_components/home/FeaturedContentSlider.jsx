@@ -37,24 +37,29 @@ import { FeatureContentStrip } from "./FeatureContentStrip";
  * ── WHERE THE CONTROLS LIVE, AND WHY NOT HERE ───────────────────────────────
  * The Play/Stop and the two arrows are BUILT here — they read auto-slide state
  * that only this component has — but they are RENDERED inside the strip, passed
- * down as the `controls` node. They used to sit at the top right of the section
- * opposite the heading, a featured card's height away from the row they moved,
- * and on a phone above the fold while those cards were cut off below it. State
- * stays where the state is; position follows what the control acts on.
+ * down as the `controls` node, which puts them in the control row the strip
+ * draws ABOVE its cards: between this stage and that strip, which is where both
+ * mockup frames put them. They have been at the top right of the section and
+ * below the strip before now. State stays where the state is; position follows
+ * what the control acts on.
  *
  * ── THE FEATURED CARD HAS TWO LAYOUTS, CHOSEN BY TYPE ───────────────────────
  * FROM lg, `image` records are ARTWORK ONLY — the picture fills the whole card
  * and the whole card is one link. No badge, headline, description or button
  * over it, because the artwork already contains all of that: what looks like a
  * button in these banners is painted into the JPEG. Drawing our own chrome on
- * top would double every element the designer already drew.
+ * top would double every element the designer already drew. That is also what
+ * the desktop mockup draws: its stage (node 38:3038) is one link containing one
+ * image and nothing else.
  *
  * BELOW lg that reasoning does not survive its own measurement, so it does not
- * apply. The artwork renders 341×136 at a 375 viewport, which puts the
- * headline painted inside it at roughly 8–10px tall — present, and unreadable.
- * So a phone gets the badge, title, description and button as REAL TEXT, from
- * the same SlideCopy and SlideAction the split layout uses. The full argument
- * and the numbers are on ImageOnlyCard.
+ * apply. Even at the 16:9 the mobile mockup now asks for, the artwork renders
+ * 341×192 at a 375 viewport, which puts the headline painted inside it at
+ * roughly 11–14px tall — present, and unreadable. So a phone gets the badge,
+ * title, description and button as REAL TEXT, from the same SlideCopy and
+ * SlideAction the split layout uses, exactly as the mobile mockup draws them
+ * (chip 106×31, title, a two-line description, a 136×48 button). The full
+ * argument and the numbers are on ImageOnlyCard.
  *
  * Everything else (`video`, and `course`/`article` when they arrive) keeps the
  * text-left / media-right split at every width, because those records carry
@@ -255,6 +260,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
     // native ones do not.
     <div
       ref={sectionRef}
+      data-fc-slider=""
       className="flex w-full flex-col gap-8"
       // Auto-slide state, reflected into the DOM so it can be OBSERVED rather
       // than inferred from whether a slide happened to move within a timeout.
@@ -412,7 +418,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
           // would be a second thing to keep in step for one boolean.
           reducedMotion={reducedMotion}
           controls={
-            <div className="flex shrink-0 items-center gap-3">
+            <div data-fc-controls="" className="flex shrink-0 items-center gap-[7px] lg:gap-[9px]">
               <SliderButton
                 label={
                   autoPlaying
@@ -448,26 +454,34 @@ export function FeaturedContentSlider({ copy, items = [] }) {
 }
 
 /**
- * THE FEATURED FRAME: height = width / 2.5, capped at 480px.
+ * THE FEATURED FRAME: height = width / 2.4, capped at 500px.
+ *
+ * ── 12:5, AND THE MOCKUP SAYS SO TWICE ──────────────────────────────────────
+ * The desktop frame's stage is 1480 × 617.83 (node 38:3036) = 2.3955, and the
+ * frame's own legend spells the intent out as `Desktop Stage: 12:5` (38:3220).
+ * 12/5 is 2.4 exactly, so the ratio is written as `12/5` rather than as the
+ * measured 2.3955 — the drawn number is the rounding, not the rule.
+ *
+ * It was 2.5:1 before this. On art that is 2.743 the difference is small and
+ * one-directional: `object-cover` takes 12.5% off the width at 2.4 against
+ * 8.9% at 2.5, i.e. 6.25% off each side instead of 4.4%. Measured on all five
+ * live records, nothing readable is lost at either — see the 12:5 rendering in
+ * the crop probe; every headline, price and button survives whole.
  *
  * ── WHY A RATIO AND NOT A FIXED HEIGHT ──────────────────────────────────────
- * A flat 480px was fine at 1280+, where the container is pinned at its 1200px
- * max-width and 1200/480 IS 2.5:1. Below that the container narrows while 480
- * does not, so the frame gets proportionally taller and `object-cover` takes
- * more and more off the SIDES of art that is always 2.743:1. Measured before
- * this change: 4.3% per side at 1280 and up, 8.5% at 1152, 13.4% at 1024.
- *
- * Nothing readable was being lost even at 13.4% — these banners carry ~258px of
- * empty gradient at each end and every one of the five survived the crop. What
- * WAS being lost is that margin: at 1024 the artwork's headline and logo row
- * sat flush against the frame edge with no gutter at all, which reads as a
- * mistake rather than a design. Restoring it is the point.
+ * A flat height is only right at the width it was measured at. Below that the
+ * container narrows while the height does not, so the frame gets proportionally
+ * taller and cover takes more and more off the SIDES. Measured under the old
+ * flat 480: 4.3% per side at 1280 and up, 8.5% at 1152, 13.4% at 1024.
  *
  * ── WHY max-h AND NOT ONLY THE RATIO ────────────────────────────────────────
  * Past 1200px of container the ratio would keep growing the card taller with
- * the viewport, so the cap holds it at the designed 480. The two meet exactly
- * at a 1200px container (1200/2.5 = 480), so there is no step where the rule
- * changes hands — it is one continuous curve that simply stops climbing.
+ * the viewport, so the cap holds it. 1200/2.4 = 500 exactly, so the two meet at
+ * the container's own max-width and there is no step where the rule changes
+ * hands — one continuous curve that simply stops climbing. The cap moved from
+ * 480 to 500 for that reason and no other: leaving it at 480 would have put the
+ * kink at a 1152 container, where the card would stop growing while still
+ * short of the designed ratio.
  *
  * ── BOTH LAYOUTS TAKE THE SAME CLASSES, AND THAT IS THE REQUIREMENT ─────────
  * An image slide and a video slide MUST be the same height at the same width.
@@ -479,7 +493,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
  * quietly grow past the image card at narrow widths — reintroducing exactly
  * the mismatch this exists to prevent.
  */
-const FEATURED_FRAME = "lg:aspect-[2.5/1] lg:max-h-[480px] lg:min-h-0";
+const FEATURED_FRAME = "lg:aspect-[12/5] lg:max-h-[500px] lg:min-h-0";
 
 /**
  * The featured card's corner radius.
@@ -532,17 +546,32 @@ const CARD_RADIUS_BELOW_LG = "max-lg:rounded-[24px]";
 function ImageOnlyCard({ item, active }) {
   const body = (
     <>
-      {/* ONE ratio below lg, and it is the DESKTOP frame's ratio (1200×480 =
-          2.5:1) rather than a phone-shaped one.
-          The first attempt used 16:9 here and it cut the banner's own headline
-          in half: 16:9 onto 2.743:1 art is a 35% width crop, and "EARLY Bird!
-          AI Digital Marketing Creator Masterclass" rendered as "APLY …
-          asterclass". These records carry their message INSIDE the picture, so
-          a crop that eats the message defeats the type.
-          Matching 2.5:1 makes the crop 8.9% of the width at EVERY viewport —
-          the same 4.4% off each side the desktop card takes — instead of
-          something that worsens as the screen narrows. It is a short band on a
-          phone (375/2.5 = 150px) and that is the artwork's real shape. */}
+      {/* ── 16:9 BELOW lg, AND THIS REVERSES THE RULING ABOVE IT ──────────
+          This slot was 2.5:1 — the desktop frame's ratio, applied on a phone so
+          that the crop stayed at the desktop card's 8.9% instead of worsening
+          as the screen narrowed. The reason it was NOT 16:9 is recorded in that
+          decision and is still true: 16:9 onto 2.743 art is a 35.2% width crop,
+          and centred it renders "EARLY Bird! … Masterclass" as "APLY …
+          asterclass".
+
+          The mobile mockup asks for 16:9 anyway — 396 × 222.75 (node 38:3257),
+          1.7778 to four figures, and the frame's legend says `Mobile Media:
+          16:9` — and it says in the same breath how the crop is to be survived:
+          `Card Banner: Cover + Focal Point`. That is the missing half. The
+          objection was never to the ratio, it was to a CENTRED crop of that
+          ratio; a record that carries its own anchor loses the 35% somewhere it
+          can afford to.
+
+          So the ratio changes here and `SlideImage` reads `item.objectPosition`
+          — the record's stored focal point, or the centre when it has none.
+          Every one of the five live records is centre today, so every one of
+          them still loses its first word until the admin control lands. That is
+          a known, named cost of adopting the mockup's shape, not an oversight:
+          the words lost per record are listed in the commit message.
+
+          It also makes the phone stage 375/1.7778 = 211px of artwork instead of
+          150, which is the change that closes most of the empty panel the
+          reserved height used to leave under it. */}
       {/* ── THE ARTWORK ROUNDS ITSELF, BUT ONLY BELOW lg ──────────────────
           From lg the artwork fills the shell (measured: 1198×478 inside a
           1200×480 shell, inset 1px by the border), so it reaches the corners
@@ -561,7 +590,7 @@ function ImageOnlyCard({ item, active }) {
           fill child: a radius on the wrapper alone would not clip it. */}
       <div
         data-fc-art=""
-        className={`relative aspect-[2.5/1] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
+        className={`relative aspect-[16/9] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
       >
         <SlideImage
           item={item}
@@ -603,23 +632,27 @@ function ImageOnlyCard({ item, active }) {
   );
 
   // `max-lg:h-full` + centring: the grid reserves the TALLEST slide's height,
-  // and below lg that is a video card. Measured at 375, and the reservation is
-  // set by ONE record — the longest-titled video, at 567.75px:
+  // and below lg that is a video card. Re-measured at 375 after the artwork
+  // went to 16:9, content heights, ascending:
   //
-  //   video cards          507.97 · 507.97 · 537.86 · 553.86 · 567.75
-  //   image cards, content 290.28 · 320.17 · 350.06 · 350.06 · 409.84
+  //   video cards  453.97 · 453.97 · 483.86 · 499.86 · 513.75
+  //   image cards  345.70 · 375.59 · 405.48 · 405.48 · 465.27
   //
-  // The image card is still the shorter of the two and still stretches to the
-  // track, so it still needs to fill and centre rather than leave raw page
-  // background under a short band. What changed is the size of the gap it is
-  // hiding: the copy block took it from 431px to between 158px and 277px.
+  // THE RESERVATION DID NOT MOVE: 567.75px, the same number as before this
+  // round and the round before it, and it is set by the same record it has
+  // always been set by — the longest-titled video, "Tricks & Talk ครั้งที่ 7".
+  // The 16:9 change added 55.8px to every image card (the artwork went from
+  // 341×136 to 341×192) and every one of them is still short of the video that
+  // sets the track.
   //
-  // THE RESERVATION ITSELF DID NOT MOVE — 567.75 before this change and after
-  // it, and still after a 266-character description is injected into every
-  // image record (worst case then 485.22, comfortably under). The tallest
-  // slide is the same video record it always was. If an image card ever DOES
-  // overtake it, the number changes by itself: the track is a CSS max of the
-  // children, so there is nothing here to keep in sync.
+  // What DID change is how much empty panel the image card is hiding. The gap
+  // under its content was 158–277px; it is now 102–222px. The card is still the
+  // shorter of the two and still stretches to the track, so it still fills and
+  // centres rather than leaving raw page background under a short band.
+  //
+  // If an image card ever DOES overtake the tallest video, the number changes
+  // by itself: the track is a CSS max of the children, so there is nothing here
+  // to keep in sync.
   //
   // From lg the frame's own ratio already governs and every slide is the same
   // height, so none of this applies — and `lg:hidden` on the copy block means
@@ -1131,23 +1164,47 @@ function SlideImage({ item, active, sizes }) {
       alt={item.imageAlt}
       fill
       sizes={sizes}
-      className="object-cover object-center"
+      // `object-center` is gone from the class list and is NOT missing: the
+      // anchor is now per-record and arrives as `objectPosition`, which the
+      // mapper resolves to "50% 50%" when the record has no focal point. A
+      // class saying `object-center` alongside an inline style setting the same
+      // property is a specificity puzzle for the next reader and would win or
+      // lose depending on which one an editor touched last.
+      className="object-cover"
+      style={{ objectPosition: item.objectPosition }}
       onError={() => setFailed(true)}
     />
   );
 }
 
-/** 36px round control, matching the frame. Real <button>s, so Tab / Enter /
- *  Space work natively and the label is announced. The label is passed in
- *  already reflecting state — "หยุด…" vs "เริ่ม…" — because a control whose
- *  name does not change with its function is unusable by screen reader. */
+/**
+ * The round control. Real <button>s, so Tab / Enter / Space work natively and
+ * the label is announced. The label is passed in already reflecting state —
+ * "หยุด…" vs "เริ่ม…" — because a control whose name does not change with its
+ * function is unusable by screen reader.
+ *
+ * ── 44px, 46 FROM lg, AND THE OLD 36 WAS UNDER THE FLOOR ────────────────────
+ * Both mockup frames draw these at a size the shipped control was well under:
+ * 44×44 on mobile (node 38:3288) and 46×46 on desktop (38:3045). 36px is below
+ * every published minimum for a touch target, and these three sit next to each
+ * other with 7px between them on a phone — the size at which a mis-tap lands on
+ * the neighbouring control rather than on nothing.
+ *
+ * These are NOT scaled down with the rest of the mockup's geometry the way the
+ * strip card is. A card width is layout and normalises with the container; a
+ * touch target is a property of the finger, and a finger does not get smaller
+ * because the content column did.
+ *
+ * The gaps are the mockup's own pitch minus the button: 51 − 44 = 7 on mobile,
+ * 55 − 46 = 9 on desktop.
+ */
 function SliderButton({ label, onClick, children }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--9e-fc-control-border)] bg-[var(--9e-fc-control)] text-white transition-colors duration-9e-micro ease-9e hover:border-[var(--9e-fc-accent)] hover:text-[var(--9e-fc-accent)]"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--9e-fc-control-border)] bg-[var(--9e-fc-control)] text-white transition-colors duration-9e-micro ease-9e hover:border-[var(--9e-fc-accent)] hover:text-[var(--9e-fc-accent)] lg:h-[46px] lg:w-[46px]"
     >
       {children}
     </button>

@@ -33,21 +33,28 @@
 export const EDGE_EPSILON = 2;
 
 /**
- * The scroller's three numbers → everything the strip draws from them.
+ * The scroller's three numbers → the edge state the strip draws from them.
  *
- * `overflows` gates BOTH the fades and the position bar, so a strip whose
- * content fits gets neither: no fade, because there is nothing either way, and
- * no bar, because a thumb filling its whole track says "all of it is visible"
- * with more ink than saying nothing does.
+ * `overflows` gates the fades: a strip whose content fits gets neither, because
+ * there is nothing behind either edge.
  *
  * `atStart` / `atEnd` are what make a fade honest — each one is mounted only
  * when its own flag is false.
  *
- * Thumb geometry is in PERCENT of the track, because the track's width is a
- * flex result the component never measures.
+ * ── IT USED TO RETURN A THUMB TOO, AND THAT WAS A DIFFERENT MEASUREMENT ─────
+ * `thumbWidth` / `thumbLeft` described HOW FAR ALONG THE SCROLLER the strip
+ * was. The track above the strip no longer shows that: the Figma names it
+ * `ตำแหน่งสไลด์` — slide position — and draws its fill at exactly 1/3 beside a
+ * `03 / 09` counter, which is the carousel's index, not a scroll offset. On a
+ * nine-card strip the two disagree by a lot (a scroll thumb would read 48%
+ * where the slide bar reads 33%), so keeping both would have been two bars
+ * claiming to be the same fact.
+ *
+ * The scroll geometry went with it rather than being left computed and
+ * unrendered. `slidePosition` below is what the track uses now.
  *
  * Defensive on zero: a scroller that has not been laid out yet reports
- * scrollWidth 0, and dividing by it would put NaN into a style attribute.
+ * scrollWidth 0, and every branch here still answers.
  */
 export function stripScrollState({ scrollLeft = 0, scrollWidth = 0, clientWidth = 0 } = {}) {
   const maxScroll = scrollWidth - clientWidth;
@@ -55,8 +62,44 @@ export function stripScrollState({ scrollLeft = 0, scrollWidth = 0, clientWidth 
     overflows: maxScroll > EDGE_EPSILON,
     atStart: scrollLeft <= EDGE_EPSILON,
     atEnd: scrollLeft >= maxScroll - EDGE_EPSILON,
-    thumbWidth: scrollWidth > 0 ? (clientWidth / scrollWidth) * 100 : 100,
-    thumbLeft: scrollWidth > 0 ? (scrollLeft / scrollWidth) * 100 : 0,
+  };
+}
+
+/**
+ * Where the carousel is, as the control row draws it: a fill percentage and the
+ * `03 / 09` counter beside it.
+ *
+ * ── ONE FUNCTION, BECAUSE THEY MUST AGREE ──────────────────────────────────
+ * The bar and the counter are two renderings of one fact, sitting 1200px apart
+ * on the same row. Computed separately they drift the moment one of them is
+ * changed to be 1-based and the other is not — and a bar that says a third
+ * while the text says `04 / 09` is the kind of defect nobody files because each
+ * half looks right on its own.
+ *
+ * ── THE COUNTER IS 1-BASED AND THE FILL IS TOO ─────────────────────────────
+ * Slide 1 of 9 fills 1/9, not 0. A bar that is empty on the first slide says
+ * "nothing has been seen yet", which is wrong the moment the first card is on
+ * screen — and the last slide then fills it completely, which is the fact.
+ *
+ * ── PADDING IS TWO DIGITS, OR THE WIDTH OF THE TOTAL WHEN THAT IS MORE ──────
+ * The Figma shows `03 / 09` at NINE items, so the leading zero is not the width
+ * of the total — at nine that width is one. It is a floor of two, which is the
+ * convention the label is copying and the thing that stops `9 / 9` reading as a
+ * fragment. The floor alone would print `03 / 100` at a hundred items, mixing
+ * widths inside one label, so the width is the larger of the two: two digits up
+ * to 99, and the total's own width past it.
+ *
+ * An empty or single-item pool returns 0% and no label: the control row does
+ * not mount at all below two items, and a `01 / 01` counter beside a full bar
+ * is ink spent saying there is nothing to move through.
+ */
+export function slidePosition({ index = 0, total = 0 } = {}) {
+  if (!Number.isFinite(total) || total < 2) return { percent: 0, label: null };
+  const at = Math.min(Math.max(Math.trunc(index) || 0, 0), total - 1);
+  const width = Math.max(2, String(total).length);
+  return {
+    percent: ((at + 1) / total) * 100,
+    label: String(at + 1).padStart(width, '0') + ' / ' + String(total).padStart(width, '0'),
   };
 }
 

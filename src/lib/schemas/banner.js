@@ -66,6 +66,22 @@ export const bannerSchema = z.object({
 
   image_url:       z.string().url().optional().or(z.literal('')).default(''),
   image_public_id: z.string().optional().default(''),
+  // The focal point, in percent of the image's own box. `.optional()` with NO
+  // `.default()`, for the reason stated on the four-type block above: the parse
+  // result is handed straight to mongoose, so a default here would begin
+  // writing this key onto every saved banner — including the video records that
+  // have no image. Absent stays absent, and the renderer reads absent as
+  // centre. See the note on `image_focal` in src/models/Banner.js.
+  //
+  // Both coordinates are required TOGETHER when the object is present: a focal
+  // point with only an x is not half a focal point, it is a malformed one, and
+  // accepting it would put `undefined` into an object-position string.
+  image_focal: z
+    .object({
+      x: z.coerce.number().min(0).max(100),
+      y: z.coerce.number().min(0).max(100),
+    })
+    .optional(),
   link_url:        z.string().trim().max(500).optional().default(''),
   link_text:       z.string().trim().max(100).optional().default(''),
   weight:          z.coerce.number().int().default(0),

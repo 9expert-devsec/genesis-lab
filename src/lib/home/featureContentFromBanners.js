@@ -134,6 +134,76 @@ function youtubeThumbnails(id) {
   };
 }
 
+/** The default crop anchor. Named so the fallback is greppable. */
+export const CENTRE = '50% 50%';
+
+/**
+ * The stored focal point as a CSS `object-position` value, or the centre.
+ *
+ * ── THIS IS THE ONE PLACE "ABSENT MEANS CENTRE" IS WRITTEN DOWN ─────────────
+ * Three frames crop these banners — the desktop stage at 12:5 and both 16:9
+ * frames (the mobile stage and the strip card) — and each of them renders this
+ * string. If the fallback lived at the call sites there would be three copies
+ * of it, and the failure when one drifted would be a picture that is cropped
+ * differently in the strip than in the stage it feeds, which reads as a
+ * rendering fault rather than as a missing default.
+ *
+ * ── WHY IT RETURNS THE CSS STRING AND NOT {x, y} ────────────────────────────
+ * `object-position` already takes two percentages in exactly the order and
+ * units the field stores, so there is nothing to convert — and a conversion
+ * step is a place for the two ends to disagree. Components set this straight
+ * onto `style`; none of them does arithmetic on it.
+ *
+ * ── WHY `style` AND NOT A TAILWIND CLASS ────────────────────────────────────
+ * The value is a per-record measurement out of the database. There is no class
+ * for "34% 61%" and Tailwind could not emit one if there were — the same rule
+ * the strip's thumb geometry already follows.
+ *
+ * Both coordinates must be finite numbers. A half-set focal point ({x} with no
+ * {y}) would otherwise produce `object-position: 34% undefined%`, which the
+ * browser drops silently — leaving the crop centred while the record claims
+ * otherwise, which is worse than having no field. zod refuses that shape on the
+ * way in; this refuses it on the way out, because the snapshot is Mixed and can
+ * hold whatever was written before the schema tightened.
+ */
+export function focalPosition(banner) {
+  const x = coordinate(banner?.image_focal?.x);
+  const y = coordinate(banner?.image_focal?.y);
+  if (x === null || y === null) return CENTRE;
+  return x + '% ' + y + '%';
+}
+
+/**
+ * One stored coordinate → a percentage, or null when it is not one.
+ *
+ * ── `Number()` ALONE IS NOT THE TEST, AND THAT IS THE WHOLE FUNCTION ────────
+ * `Number(null)`, `Number('')`, `Number(false)` and `Number([])` are all 0 —
+ * a finite number, in range, indistinguishable from an admin deliberately
+ * anchoring at the left edge. So `{x: null, y: 40}` would render as `0% 40%`:
+ * a confidently wrong crop, from a record that set nothing. Half a focal point
+ * has to fall back to the centre like no focal point at all, which means the
+ * TYPE has to be checked before the value.
+ *
+ * A numeric STRING is still accepted. This reads the `landing_cache` snapshot,
+ * which is a Mixed column and has been through JSON.parse(JSON.stringify(…)) —
+ * and the admin form will post strings. Refusing '30' would make the field work
+ * everywhere except where it is actually written.
+ *
+ * Clamped rather than refused when out of range: a negative object-position is
+ * legal CSS that moves the picture OUT of its box and leaves a strip of panel
+ * showing along one edge. Nothing an admin can type should be able to do that,
+ * and a stored -20 is far more likely to be a slipped decimal than a request.
+ */
+function coordinate(value) {
+  const ok =
+    typeof value === 'number' ||
+    (typeof value === 'string' && value.trim() !== '');
+  if (!ok) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(100, Math.max(0, n));
+}
+
 /**
  * Is this banner live right now?
  *
@@ -418,6 +488,14 @@ function toItem(banner, resolved) {
     // ── Media ──
     ...media,
     imageAlt: title,
+    // Where the crop must keep. Every frame that covers this picture reads it;
+    // absent on the record means the centre. See focalPosition above.
+    //
+    // Set on EVERY type, not only `image`. A course cover and an article cover
+    // are cropped by the same three frames, and a video thumbnail is already
+    // 16:9 so the value is inert there rather than wrong — which is better than
+    // a field that exists on some items and is undefined on others.
+    objectPosition: focalPosition(banner),
 
     // ── Actions ──
     href,

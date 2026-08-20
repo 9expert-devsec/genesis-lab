@@ -5,12 +5,18 @@ import Image from "next/image";
 import {
   isViewerScrollKey,
   isViewerWheel,
+  slidePosition,
   stripScrollState,
 } from "@/lib/home/featureStripScroll";
 
 /**
  * The filmstrip under the featured card: EVERY item in the pool, scrolled
- * horizontally, with the one currently in the featured slot highlighted.
+ * horizontally, with the one currently in the featured slot highlighted — and,
+ * above it, the control row that drives the card.
+ *
+ * Figma: `Desktop Featured Content Carousel Mockup` (38:3012) and
+ * `Mobile Featured Content Carousel Mockup` (38:3231), file
+ * TLKzWZOYVUHl0PHUTseUD9.
  *
  * ── WHAT THIS REPLACED, AND WHY THE MEANING HAD TO CHANGE ───────────────────
  * It used to show "the next three" — a window that moved every five seconds
@@ -45,13 +51,28 @@ import {
  * rather than premature: the collapse path is the one that actually runs in
  * production, so it is worth having under test before anything can fill it.
  *
- * ── IMAGES ARE CONTAINED, NEVER CROPPED ─────────────────────────────────────
- * Same ruling as the featured card. The slot is the design's ~2.56:1, which is
- * close enough to the 1920×700 (2.74) legacy art that those letterbox by only
- * a few percent; a 16:9 YouTube thumbnail pillarboxes instead. The empty space
- * is the card's own panel colour and is meant to be visible — it marks which
- * records still carry legacy sizing, and it disappears by itself once Step C
- * gives the image type a 16:9 upload spec.
+ * ── THE DESCRIPTION LINE IS A DELIBERATE DIVERGENCE FROM THE MOCKUP ─────────
+ * Both carousel frames draw a card body of chip + title and nothing else. This
+ * keeps `cardSubtitle` underneath, on purpose and against the drawing: it is
+ * the only thing on a strip card that distinguishes two records whose titles
+ * begin with the same words, and the pool is now the whole collection rather
+ * than three cards. Everything else on this row follows the mockup.
+ *
+ * ── IMAGES ARE COVERED AND CROPPED. THIS REVERSES A RULING. ─────────────────
+ * The slot used to be the design's ~2.56:1 with `object-contain`, chosen so
+ * that 2.74 banner art letterboxed by a few percent rather than losing any of
+ * itself. The mockup replaces that with a 16:9 frame and says how it is filled:
+ * its own note reads "Card Banner: Cover + Focal Point".
+ *
+ * 16:9 onto 2.743 art is a 35.2% width crop — measured on all five live
+ * records, every one of which is exactly 2.743 — and a CENTRED 35% crop eats
+ * the first word of every banner's headline (see the note on `image_focal` in
+ * src/models/Banner.js for what "EARLY … Masterclass" becomes). That is what
+ * the focal point exists for: `item.objectPosition` is the record's own stored
+ * anchor, or the centre when it has none, resolved once in the mapper.
+ *
+ * A YouTube `maxresdefault` is 1280×720 — 16:9 exactly — so a video card
+ * crops nothing at all and the pillarboxing this slot used to show is gone.
  *
  * ── COLOURS ─────────────────────────────────────────────────────────────────
  * Defined in the "FEATURE CONTENT SECTION" block at the bottom of
@@ -83,8 +104,17 @@ const TONE_CLASSES = {
 const VISIBILITY_EPSILON = 2;
 
 /**
- * The filmstrip, its edge fades, its position bar, and the controls that drive
- * the card above it.
+ * The line under the strip on a phone, from the mobile mockup (node 38:3456).
+ *
+ * Mobile only, and that is what the mockup draws — the desktop frame has no
+ * such line. It is also the honest place for it: the sentence begins with
+ * "ปัดซ้าย–ขวา" (swipe left–right), which is a gesture a mouse does not have.
+ */
+const STRIP_HINT =
+  "ปัดซ้าย–ขวา หรือเลือกการ์ด เพื่อดูการเปลี่ยนระหว่าง Banner และ Video Template";
+
+/**
+ * The filmstrip, the control row above it, its edge fades, and the hint line.
  *
  * `controls` is a NODE, not a set of callbacks: the Play/Stop and arrow buttons
  * are bound to auto-slide state that lives in FeaturedContentSlider, and
@@ -102,15 +132,12 @@ export function FeatureContentStrip({
 }) {
   const stripRef = useRef(null);
 
-  // Edge state drives the two fades; `thumb` drives the position bar. Both are
-  // derived from the same read of the same three numbers, in one place, so they
-  // can never disagree about where the strip is.
+  // Edge state drives the two fades, and now ONLY the two fades — the bar above
+  // is the carousel's position, not the scroller's. See stripScrollState.
   const [scrollState, setScrollState] = useState({
     atStart: true,
     atEnd: true,
     overflows: false,
-    thumbWidth: 100,
-    thumbLeft: 0,
   });
 
   const syncScrollState = useCallback(() => {
@@ -126,8 +153,8 @@ export function FeatureContentStrip({
   // A ResizeObserver on the strip catches the viewport changing and the web
   // font finishing (this section is Thai, and LINE Seed reflows the card titles
   // hard when it lands), either of which changes scrollWidth without a single
-  // scroll event. Without it the fades and the thumb are correct on first paint
-  // and wrong from the first reflow onwards.
+  // scroll event. Without it the fades are correct on first paint and wrong
+  // from the first reflow onwards.
   useLayoutEffect(() => {
     const el = stripRef.current;
     if (!el) return undefined;
@@ -217,6 +244,10 @@ export function FeatureContentStrip({
     // so taking the same number means the programmatic target and the browser's
     // own snap position are the same position by construction — no drift, and
     // one place (the class list below) to change the fade's clearance.
+    //
+    // It costs nothing at the start: card 0 would want a negative scrollLeft to
+    // honour the inset, which clamps to 0 — and the leading fade is not mounted
+    // there anyway.
     const inset = parseFloat(getComputedStyle(el).scrollPaddingLeft) || 0;
     const target = el.scrollLeft + (cardBox.left - stripBox.left) - inset;
     const maxScroll = el.scrollWidth - el.clientWidth;
@@ -277,8 +308,92 @@ export function FeatureContentStrip({
 
   if (items.length < 2) return null;
 
+  const position = slidePosition({ index: activeIndex, total: items.length });
+
   return (
-    <div className="flex flex-col gap-3">
+    <div data-fc-strip-region="" className="flex flex-col gap-3">
+      {/* ── THE CONTROL ROW ──────────────────────────────────────────────────
+          BELOW THE STAGE AND ABOVE THE STRIP, which is where both mockup frames
+          put it (desktop node 38:3043, mobile 38:3286) and which is why it is
+          the FIRST child of this component rather than the last: the slider
+          renders the stage, then this, so "first child here" is "between them"
+          without either component knowing about the other's box.
+
+          It used to sit below the strip, and before that at the top right of
+          the section opposite the heading — a full featured card away from the
+          row it drives, and on a phone above the fold while the cards were cut
+          off below it.
+
+          ── AND THE ARROWS ARE ON THE LEFT AT EVERY WIDTH NOW ───────────────
+          This row used to be `flex-row-reverse … lg:flex-row`, put there
+          because FloatingActionDock is `fixed right-4 … lg:right-8` and owns
+          the bottom-right corner: three controls at the row's right edge parked
+          the next-arrow underneath the chat launcher on a phone, in the state a
+          visitor sees before touching anything.
+
+          The mockup independently puts the buttons at the row's left edge at
+          BOTH widths (desktop x=0 of 1480, mobile x=0 of 398), so the reversal
+          is gone rather than merely still working: one order, no breakpoint,
+          and the collision it was avoiding cannot come back because there is no
+          width at which these controls sit on the right. Nothing else is fixed
+          at the bottom left — the dock is the only fixed corner container. */}
+      <div className="flex items-center gap-3 lg:gap-4">
+        {controls}
+
+        {/* ── THE POSITION BAR ─────────────────────────────────────────────
+            THIS IS THE CAROUSEL'S POSITION, NOT THE SCROLLER'S, and the change
+            of meaning is the point. It used to be a scroll thumb: how far along
+            the strip's own overflow the reader had scrolled. The mockup names
+            this element `ตำแหน่งสไลด์` — slide position — draws its fill at
+            exactly one third beside a `03 / 09` counter, and gives it a fixed
+            5px track (1230×5 desktop, 178×5 mobile). On a nine-card strip a
+            scroll thumb would have read 48% where this reads 33%, so the two
+            were never the same fact drawn twice; they were two facts, one of
+            which nobody asked for.
+
+            aria-hidden, and that is not laziness. The strip already conveys
+            position to assistive tech properly: every card is a real button
+            with a real name, and the active one carries `aria-current`. A
+            screen reader user gets "showing X in the main card, current" —
+            which is the fact. A second announcement of the same fact as a
+            geometric ratio would be noise, and this control cannot be operated
+            by keyboard because it is not interactive at all.
+
+            NOT INTERACTIVE, ON PURPOSE. There is no drag handler. A thumb that
+            looks draggable and is not is worse than a plain indicator, so it
+            gets no grab cursor and no hover state either. */}
+        <div
+          aria-hidden="true"
+          data-fc-position-bar=""
+          className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--9e-fc-control)]"
+        >
+          <div
+            data-fc-position-thumb=""
+            className="h-full rounded-full bg-[var(--9e-fc-accent)] transition-[width] duration-9e-micro ease-9e"
+            // Inline, because this is a continuous measurement of a live index
+            // over a live total. There is no class for "33.3% wide", and
+            // Tailwind could not emit one if there were.
+            style={{ width: `${position.percent}%` }}
+          />
+        </div>
+
+        {/* The counter. `tabular-nums` so the digits do not shift the box as
+            the index advances — the label is fixed-width by construction (both
+            sides padded to the width of the total, see slidePosition) and a
+            proportional font would undo that at the glyph level.
+
+            NOT aria-hidden, unlike the bar: this one says the fact in words,
+            and it is the only place the pool's SIZE is stated. `aria-live` is
+            deliberately absent — an announcement every five seconds during
+            auto-slide would be unusable. */}
+        <span
+          data-fc-counter=""
+          className="shrink-0 text-right text-xs font-semibold tabular-nums text-[var(--9e-fc-text-muted)]"
+        >
+          {position.label}
+        </span>
+      </div>
+
       {/* The fades are absolutely positioned against THIS box, so it has to be
           the one whose edges match the strip's visible edges — including the
           `-mx-4` bleed below md. Putting them inside the scroller instead would
@@ -294,7 +409,9 @@ export function FeatureContentStrip({
           // MOBILE: `-mx-4` on the parent plus `px-4` here bleeds the track to
           // the viewport edge, so a card can scroll all the way out instead of
           // stopping 16px short, while the first card still starts flush with
-          // the heading above.
+          // the heading above. It is also what the mobile mockup draws: its
+          // card row is 414 wide inside a 398 section, i.e. peeking past the
+          // section edge rather than stopping at it.
           //
           // `scroll-pl-12 md:scroll-pl-16` IS THE FADE'S CLEARANCE, and the
           // numbers are the fade's own widths — 48px, 64px from md, matching
@@ -304,20 +421,15 @@ export function FeatureContentStrip({
           // for. The effect above reads this same property back rather than
           // hard-coding it, so the two cannot disagree.
           //
-          // It costs nothing at the start: card 0 would want a negative
-          // scrollLeft to honour the inset, which clamps to 0 — and the leading
-          // fade is not mounted there anyway.
-          //
           // `snap-mandatory` at every width, not just mobile: the programmatic
           // target above is a card's leading edge, which IS a snap point, so
           // snapping has nothing to correct and desktop wheel-scrolling lands
-          // card-aligned instead of mid-card. This is requirement 4 — the
-          // browser's own snapping and its own momentum, with no JS re-implement.
+          // card-aligned instead of mid-card.
           //
           // `scrollbar-hide` is the repo's existing utility (globals.css): the
-          // position bar below is the scroll readout, and a native bar under a
-          // dark panel reads as a rendering fault next to it.
-          className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-12 scroll-pr-4 px-4 pb-1 md:gap-5 md:scroll-pl-16 md:scroll-pr-0 md:px-0"
+          // position bar above is the readout, and a native bar under a dark
+          // panel reads as a rendering fault next to it.
+          className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-pl-12 scroll-pr-4 px-4 pb-1 md:scroll-pl-16 md:scroll-pr-0 md:px-0"
         >
           {items.map((item, index) => {
             const tone = TONE_CLASSES[item.tone] ?? TONE_CLASSES.cyan;
@@ -340,16 +452,40 @@ export function FeatureContentStrip({
                 // a reader with low contrast vision or a bad screen can miss
                 // entirely, and the whole point of the strip is that the marker
                 // is findable at a glance.
-                className={`group flex w-[280px] shrink-0 snap-start flex-col gap-3 overflow-hidden rounded-2xl border p-4 text-left transition-[opacity,border-color,background-color] duration-9e-micro ease-9e md:w-[320px] ${
+                //
+                // ── `lg:w-[22%]` IS THE MOCKUP'S CARD, NOT A TUNED NUMBER ───
+                // The desktop frame is 1920 wide with a 1480 content column and
+                // a 330px card: 330/1480 = 22.3%. This section's content column
+                // is the repo's own `max-w-[1200px]`, not the Figma's 1480 —
+                // the same normalisation the section header already documents
+                // for the previous 1440 artboard — so the card is expressed as
+                // that RATIO rather than as the artboard's pixels.
+                //
+                // A percentage rather than the scaled 264px because it keeps
+                // the mockup's promise at every lg width instead of only at the
+                // 1200 cap. Four cards plus three 16px gaps is 88% + 48px, so
+                // at a 1200 container that is 1152px and leaves 48px — one more
+                // gap and an 80px peek of the fifth card, which is 30% of a
+                // card against the mockup's own 28%. At a 976 container (a 1024
+                // viewport) the same expression still yields four full cards
+                // and a 53px peek. A fixed pixel width gives three at that
+                // width, which is the layout this replaced.
+                //
+                // Below lg the width stays in pixels: a percentage of a 375px
+                // phone would shrink the card as the phone got smaller, which
+                // is the wrong direction — the text inside has a floor.
+                className={`group flex w-[280px] shrink-0 snap-start flex-col gap-3 overflow-hidden rounded-2xl border p-4 text-left transition-[opacity,border-color,background-color] duration-9e-micro ease-9e md:w-[320px] lg:w-[22%] ${
                   active
                     ? "border-[var(--9e-fc-accent)] bg-[var(--9e-fc-panel)] opacity-100"
                     : "border-[var(--9e-fc-panel-border)] bg-[var(--9e-fc-panel)] opacity-60 hover:border-[var(--9e-fc-accent)] hover:opacity-100"
                 }`}
               >
-                {/* aspect-[2.56/1] rather than the Figma's flat 140px height:
-                    the ratio is the thing the ruling fixes, and a fixed height
-                    would drift off it at every card width. */}
-                <div className="relative aspect-[2.56/1] w-full shrink-0 overflow-hidden rounded-lg">
+                {/* 16:9, from both mockup frames — 328×184.5 desktop and
+                    308×173.25 mobile are each 1.7778 to four figures. A ratio
+                    and not a fixed height, because the card width is now a
+                    percentage and a fixed height would drift off the ratio at
+                    every width it is not exactly right at. */}
+                <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-lg">
                   <CardImage item={item} />
                 </div>
 
@@ -408,7 +544,8 @@ export function FeatureContentStrip({
                     </div>
                   ) : null}
 
-                  {/* Collapses on every image record — no slide_text. */}
+                  {/* Kept against the mockup — see the header. Collapses on
+                      every image record, which have no slide_text. */}
                   {item.cardSubtitle ? (
                     <p className="line-clamp-2 text-xs text-[var(--9e-fc-text-muted)] md:truncate">
                       {item.cardSubtitle}
@@ -421,8 +558,8 @@ export function FeatureContentStrip({
         </div>
 
         {/* MOUNTED ONLY WHEN THERE IS SOMETHING BEHIND THEM. `atStart` and
-            `atEnd` are read from the same scroll numbers as the thumb, so the
-            fade and the bar can never disagree — and a strip that fits with no
+            `atEnd` are read from the same scroll numbers as each other, so the
+            two fades can never disagree — and a strip that fits with no
             overflow gets neither, because `overflows` is false and both edge
             flags are true. */}
         {scrollState.overflows && !scrollState.atStart ? (
@@ -441,83 +578,28 @@ export function FeatureContentStrip({
         ) : null}
       </div>
 
-      {/* ── THE BAR ROW ──────────────────────────────────────────────────────
-          The arrows and Play/Stop used to sit at the top right of the section,
-          level with the heading and a full card's height away from the strip
-          they drive — on a phone they were above the fold while the cards were
-          cut off below it, so they read as unrelated chrome. They belong next
-          to the thing they move.
-
-          ── AND BELOW lg THEY GO ON THE LEFT ────────────────────────────────
-          FloatingActionDock is `fixed right-4 … lg:right-8` and describes
-          itself as "the ONE fixed container that owns the bottom-right" — the
-          chat launcher and the scroll-to-top button live in it. Putting these
-          three controls at the row's right edge on a phone parked the
-          next-arrow underneath that dock, and not transiently: the strip sits
-          near the bottom of the first screenful, so the collided state is what
-          a visitor sees before touching anything. Scrolling clears it, which
-          is no defence — it means the control is unusable exactly when it is
-          first offered.
-
-          `flex-row-reverse` rather than a second copy of the controls or an
-          `order-*` on each child: one property, applied once, and DOM order is
-          untouched — which matters because the bar must stay before the
-          controls for anything that reads the tree in order. Nothing is fixed
-          at the bottom LEFT (the dock is the only fixed corner container), so
-          the left edge is genuinely free.
-
-          From lg the dock moves to `right-8`, the section is 1200px wide with
-          the controls nowhere near the viewport edge, and the layout is signed
-          off — so `lg:flex-row` puts it back exactly as it was. */}
-      <div className="flex flex-row-reverse items-center gap-4 lg:flex-row">
-        {/* ── THE POSITION BAR ─────────────────────────────────────────────
-            aria-hidden, and that is not laziness. The strip already conveys
-            position to assistive tech properly: every card is a real button
-            with a real name, and the active one carries `aria-current`. A
-            screen reader user gets "showing X in the main card, current" —
-            which is the fact. A second announcement of the same fact as a
-            geometric ratio would be noise, and this control cannot be operated
-            by keyboard because it is not interactive at all.
-
-            NOT INTERACTIVE, ON PURPOSE, FOR NOW. There is no drag handler. A
-            thumb that looks draggable and is not is worse than a plain
-            indicator, so it gets no grab cursor and no hover state either.
-
-            It disappears entirely when the strip does not overflow: a thumb
-            filling its whole track says "all of it is visible", which is what
-            the absence of a bar already says, with less ink. */}
-        {scrollState.overflows ? (
-          <div
-            aria-hidden="true"
-            data-fc-position-bar=""
-            className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--9e-fc-control)]"
-          >
-            <div
-              data-fc-position-thumb=""
-              className="h-full rounded-full bg-[var(--9e-fc-accent)]"
-              // Inline, because these are continuous measurements of a live
-              // scroll offset. There is no class for "31.4% wide, 12.7% along",
-              // and Tailwind could not emit one if there were.
-              style={{
-                width: `${scrollState.thumbWidth}%`,
-                marginInlineStart: `${scrollState.thumbLeft}%`,
-              }}
-            />
-          </div>
-        ) : (
-          // Keeps the controls at the right of the row when the bar is absent.
-          <div className="min-w-0 flex-1" />
-        )}
-
-        {controls}
-      </div>
+      {/* The mobile mockup's closing line. `lg:hidden` because the desktop
+          frame does not draw it and because it describes a swipe. */}
+      <p
+        data-fc-hint=""
+        className="text-center text-[11px] leading-relaxed text-[var(--9e-fc-text-muted)] lg:hidden"
+      >
+        {STRIP_HINT}
+      </p>
     </div>
   );
 }
 
-/** Contained thumbnail with the same one-shot maxres→hq fallback the featured
+/** Cropped thumbnail with the same one-shot maxres→hq fallback the featured
  *  slot uses. Kept local rather than shared: the two differ in `sizes` and in
  *  nothing else, and a shared component would need both passed in anyway.
+ *
+ *  ── COVER, AND THE ANCHOR COMES FROM THE RECORD ────────────────────────────
+ *  See the header. `object-position` is a per-record measurement out of the
+ *  database, so it is an inline style — there is no class for "34% 61%" and
+ *  Tailwind could not emit one if there were. The mapper resolves it to the
+ *  centre when the record has no focal point, so this never has a fallback of
+ *  its own to drift from that one.
  *
  *  ── LAZY, AND HERE IT ACTUALLY WORKS ───────────────────────────────────────
  *  next/image is lazy by default and this component does not opt out. That was
@@ -537,8 +619,11 @@ function CardImage({ item }) {
       src={src}
       alt={item.imageAlt}
       fill
-      sizes="(min-width: 768px) 320px, 280px"
-      className="object-contain object-center"
+      // 22% of a 1200 container is 264; the two smaller steps are the pixel
+      // widths above. Ordered widest-first, as the spec requires.
+      sizes="(min-width: 1024px) 264px, (min-width: 768px) 320px, 280px"
+      className="object-cover"
+      style={{ objectPosition: item.objectPosition }}
       onError={() => setFailed(true)}
     />
   );

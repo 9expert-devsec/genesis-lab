@@ -5,6 +5,7 @@ import {
   SCROLL_INTENT_KEYS,
   isViewerScrollKey,
   isViewerWheel,
+  slidePosition,
   stripScrollState,
 } from '@/lib/home/featureStripScroll';
 
@@ -77,25 +78,96 @@ test('CONTROL: a pixel beyond the epsilon is NOT the end', () => {
   assert.equal(s.atEnd, false, 'genuinely 10px of scroll left must still show the fade');
 });
 
-test('the thumb is sized to the visible fraction and offset by scroll', () => {
-  const s = stripScrollState({ scrollLeft: 600, scrollWidth: 3000, clientWidth: 1000 });
-  assert.equal(s.thumbWidth, (1000 / 3000) * 100);
-  assert.equal(s.thumbLeft, (600 / 3000) * 100);
-});
-
-test('an unmeasured scroller yields numbers, never NaN', () => {
-  // A scroller that has not been laid out reports 0, and NaN in a style
-  // attribute is a silently broken bar rather than a loud failure.
+test('an unmeasured scroller still answers, and does not claim to overflow', () => {
+  // A scroller that has not been laid out reports 0 for all three numbers.
   const s = stripScrollState({ scrollLeft: 0, scrollWidth: 0, clientWidth: 0 });
-  assert.ok(Number.isFinite(s.thumbWidth), 'thumbWidth must be a number');
-  assert.ok(Number.isFinite(s.thumbLeft), 'thumbLeft must be a number');
   assert.equal(s.overflows, false, 'an unmeasured strip must not claim to overflow');
+  assert.equal(s.atStart, true);
+  assert.equal(s.atEnd, true);
 });
 
 test('called with nothing at all it still returns a usable state', () => {
   const s = stripScrollState();
   assert.equal(s.overflows, false);
-  assert.ok(Number.isFinite(s.thumbWidth));
+  assert.equal(s.atStart, true);
+  assert.equal(s.atEnd, true);
+});
+
+test('it no longer returns a scroll thumb — that bar measures something else', () => {
+  // The track above the strip is the CAROUSEL's position now, not the
+  // scroller's. Leaving the thumb geometry computed here would be a second
+  // answer to "where are we?" that disagrees with the one on screen: on a
+  // nine-card strip at 1200 the scroll thumb reads ~48% where the slide bar
+  // reads 33%. This asserts the retired shape is genuinely gone rather than
+  // merely unused, because an unused-but-present field is what gets wired back
+  // up by accident.
+  const s = stripScrollState({ scrollLeft: 600, scrollWidth: 3000, clientWidth: 1000 });
+  assert.equal('thumbWidth' in s, false);
+  assert.equal('thumbLeft' in s, false);
+  assert.deepEqual(Object.keys(s).sort(), ['atEnd', 'atStart', 'overflows']);
+});
+
+// ── (d) THE SLIDE POSITION: ONE FACT, TWO RENDERINGS ────────────────────────
+//
+// The bar and the `03 / 09` counter sit at opposite ends of a 1200px row and
+// must agree. Computed separately they drift the moment one is made 1-based and
+// the other is not, and each half still looks right on its own — which is why
+// they come out of one function and why that function is tested here.
+
+test('the fill and the label are both 1-based and agree', () => {
+  const p = slidePosition({ index: 2, total: 9 });
+  assert.equal(p.label, '03 / 09', 'the mockup draws exactly this label');
+  assert.equal(p.percent, (3 / 9) * 100);
+});
+
+test('the first slide already fills a share, it is not an empty bar', () => {
+  // A bar that is empty on slide 1 says "nothing has been seen yet", which is
+  // false the moment the first card is on screen.
+  const p = slidePosition({ index: 0, total: 9 });
+  assert.equal(p.label, '01 / 09');
+  assert.ok(p.percent > 0);
+  assert.equal(p.percent, (1 / 9) * 100);
+});
+
+test('the last slide fills the track completely', () => {
+  const p = slidePosition({ index: 8, total: 9 });
+  assert.equal(p.label, '09 / 09');
+  assert.equal(p.percent, 100);
+});
+
+test('padding follows the width of the TOTAL, not a hard-coded two', () => {
+  // `03 / 100` would mix widths inside one label.
+  assert.equal(slidePosition({ index: 2, total: 100 }).label, '003 / 100');
+  assert.equal(slidePosition({ index: 2, total: 9 }).label, '03 / 09');
+  assert.equal(slidePosition({ index: 4, total: 12 }).label, '05 / 12');
+});
+
+test('a pool of one gets no bar and no counter', () => {
+  // The control row does not mount below two items, and `01 / 01` beside a full
+  // bar is ink spent saying there is nothing to move through.
+  const p = slidePosition({ index: 0, total: 1 });
+  assert.equal(p.label, null);
+  assert.equal(p.percent, 0);
+});
+
+test('an empty pool answers rather than dividing by zero', () => {
+  const p = slidePosition({ index: 0, total: 0 });
+  assert.equal(p.label, null);
+  assert.equal(p.percent, 0);
+  assert.ok(Number.isFinite(slidePosition().percent), 'and so does no argument at all');
+});
+
+test('an index past the end clamps instead of overfilling the track', () => {
+  // The slider clamps its own index, so this is defence in depth — but a bar
+  // wider than its track is a visual overflow, not a caught error.
+  const p = slidePosition({ index: 40, total: 9 });
+  assert.equal(p.label, '09 / 09');
+  assert.equal(p.percent, 100);
+});
+
+test('a negative index clamps to the first slide', () => {
+  const p = slidePosition({ index: -3, total: 9 });
+  assert.equal(p.label, '01 / 09');
 });
 
 // ── (c) WHICH SCROLLS ARE THE VIEWER'S ──────────────────────────────────────

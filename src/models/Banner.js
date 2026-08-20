@@ -108,6 +108,44 @@ const bannerSchema = new mongoose.Schema(
     image_url:       { type: String, default: '' },
     image_public_id: { type: String, default: '' },
 
+    // ── WHERE THE PICTURE'S SUBJECT IS, IN PERCENT ───────────────────────────
+    // One uploaded banner is shown in three frames of two different shapes —
+    // the desktop stage at 12:5, the mobile stage at 16:9 and the strip card at
+    // 16:9 — and `object-fit: cover` has to throw away whatever does not fit.
+    // A CENTRE crop is only right when the subject is centred, and on these
+    // records it is not: cropping the live "EARLY Bird! … Masterclass" art to
+    // 16:9 takes 35% off the width and leaves "APLY … asterclass".
+    //
+    // So the record carries the point that must survive: `{x, y}` in percent of
+    // the image's own box, exactly the coordinate space `object-position` uses,
+    // so rendering is `object-position: ${x}% ${y}%` with no conversion step in
+    // between. A conversion is a place for the two ends to disagree.
+    //
+    // ── ABSENT MEANS CENTRE, AND ABSENT IS THE DEFAULT ──────────────────────
+    // No mongoose `default` and `default: undefined` on the subdocument, the
+    // same shape and the same reason as `course_ref` above: a default would
+    // materialise `image_focal: {}` on every save, including video records that
+    // have no uploaded image at all, and it would make "never set" and "set to
+    // centre" indistinguishable the moment anything saves. The reader supplies
+    // 50/50 when the key is missing — see focalPosition() in
+    // src/lib/home/featureContentFromBanners.js, which is the ONE place that
+    // rule is written down.
+    //
+    // NOTHING WRITES THIS YET. The admin control that sets it is a later slice;
+    // this is the column it will write into, added first so the renderer can be
+    // built and proven against the absent case, which is the case every one of
+    // the 22 stored documents is in today.
+    image_focal: {
+      type: new mongoose.Schema(
+        {
+          x: { type: Number, min: 0, max: 100 },
+          y: { type: Number, min: 0, max: 100 },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
+
     // Shared link fields (used by all types)
     link_url:        { type: String, default: '', trim: true },
     link_text:       { type: String, default: '', trim: true, maxlength: 100 },
