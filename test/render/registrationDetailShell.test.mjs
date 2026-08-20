@@ -845,32 +845,66 @@ test('only the two FIXED columns are px; the three content columns are proportio
   const ratios = widths.slice(1, 4).map((w) => Number(/\*\s*([\d.]+)/.exec(w)[1]));
   assert.ok(Math.abs(ratios.reduce((a, b) => a + b, 0) - 1) < 1e-5,
     `the content ratios sum to ${ratios.reduce((a, b) => a + b, 0)}, not 1`);
-  // The measured shares, normalised: 30.8 / 35.2 / 22.0 out of 88.
-  [30.8, 35.2, 22.0].forEach((share, i) => {
+
+  /**
+   * ── THE NUMBERS DID NOT MOVE IN ROUND 8; WHAT THEY DESCRIBE DID ───────────
+   *
+   * This array is the SECOND of the two places the shares live (the first is
+   * `ATTENDEE_COLUMNS` in the client). สถานะข้อมูล was deleted and the phone
+   * became its own column, taking the 22.0 that สถานะข้อมูล had — so the totals
+   * and the normalisation are untouched and THIS TEST WENT ON PASSING through a
+   * column change.
+   *
+   * That is exactly the vacuity mechanism this suite keeps meeting: the
+   * assertion still binds — it really does check the emitted widths — but a
+   * reader would have taken the old comment as evidence the columns were
+   * unchanged. The shares are now NAMED, so the next change to the column set
+   * has to touch this line even when the arithmetic survives.
+   */
+  const SHARES = [
+    ['ชื่อ-นามสกุล', 30.8],
+    ['อีเมล',        35.2],
+    ['เบอร์โทร',      22.0], // round 8: was สถานะข้อมูล, same share
+  ];
+  SHARES.forEach(([label, share], i) => {
     assert.ok(Math.abs(ratios[i] - share / 88) < 1e-5,
-      `column ${i + 1} has ratio ${ratios[i]}, expected ${(share / 88).toFixed(6)}`);
+      `the ${label} column has ratio ${ratios[i]}, expected ${(share / 88).toFixed(6)}`);
   });
+
+  // …and the names are the ones the table actually renders, so this array cannot
+  // drift into describing a column set that no longer exists.
+  const head = table.slice(table.indexOf('<thead'), table.indexOf('</thead>'));
+  const labels = [...head.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)]
+    .map((m) => m[1].replace(/<[^>]*>/g, '').trim());
+  assert.deepEqual(labels.slice(1, 4), SHARES.map(([label]) => label),
+    'the shares above name different columns than the header renders');
 });
 
-test('an attendee with a name and no contact details renders ONE dash, not empty cells', () => {
+test('an attendee with a name and no contact details renders TWO dashes, not empty cells', () => {
   /**
    * A table CELL may not simply vanish — the column would misalign — so the
    * attendee table is the one place on these screens where a dash is right, and
    * this pins that it is a dash rather than a blank.
    *
-   * ── RE-POINTED FROM TWO DASHES TO ONE, AND THAT IS THE COLUMN SET ─────────
-   * Round 4's table had separate อีเมล and เบอร์โทร columns, so a name-only row
-   * showed two dashes. The measured set merges them into ONE ข้อมูลติดต่อ cell
-   * holding the email over the phone, so the same row now shows one. The claim
-   * is unchanged — the cell falls back rather than emptying — and the
-   * empty-element guard over the whole page is what proves the fallback is a
+   * ── RE-POINTED TWICE NOW, AND THE NUMBER IS THE COLUMN SET ───────────────
+   * Round 4's table had separate อีเมล and เบอร์โทร columns → two dashes. The
+   * measured set merged them into one ข้อมูลติดต่อ cell → one dash. Round 8
+   * SPLITS THEM AGAIN, with the phone as its own column → two.
+   *
+   * The claim has never changed: each cell falls back rather than emptying. The
+   * count follows the columns, which is why it is asserted exactly rather than
+   * as a floor — a floor would have survived both changes without noticing
+   * either, and the number is the only thing that tells this table's shape from
+   * the previous one.
+   *
+   * The empty-element guard over the whole page is what proves the fallback is a
    * dash rather than a blank element.
    */
   const table = PUB_SPARSE.slice(PUB_SPARSE.indexOf('<table'), PUB_SPARSE.indexOf('</table>'));
   const body = table.slice(table.indexOf('<tbody'), table.indexOf('</tbody>'));
   assert.ok(body.includes('ปรีชา ตั้งใจ'), 'the attendee name did not render');
-  assert.equal((body.match(/>—</g) ?? []).length, 1,
-    'the missing contact details did not render exactly one dash');
+  assert.equal((body.match(/>—</g) ?? []).length, 2,
+    'the missing email and phone did not render exactly one dash each');
 });
 
 test('the coordinator marker is a suffix inside the name cell, not a line of its own', () => {

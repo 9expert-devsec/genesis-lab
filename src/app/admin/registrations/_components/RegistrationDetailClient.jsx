@@ -24,9 +24,7 @@ import { normalizeScheduleStatus } from '@/lib/scheduleStatus';
 import { refNo } from '@/lib/refNo';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
-import {
-  attendeeInfoState, missingAttendeeFields, rosterState, rosterHasRoom,
-} from '@/lib/registrations/attendeeInfo';
+import { rosterState, rosterHasRoom } from '@/lib/registrations/attendeeInfo';
 
 /**
  * Why the + button is disabled at capacity. ONE literal, read by the button's
@@ -143,42 +141,54 @@ function scheduleLabel(scheduleType, attendanceMode) {
 
 const EMPTY_ATTENDEE = { firstName: '', lastName: '', email: '', phone: '' };
 
-/**
- * The สถานะข้อมูล chip's colours, keyed by the per-attendee completeness state.
+/*
+ * ── INFO_BADGE / INFO_LABEL / INFO_NEUTRAL_BADGE ARE GONE ──────────────────
  *
- * ── THIS IS NOT THE STATUS VOCABULARY AND MUST NEVER JOIN IT ───────────────
- * Its keys are `complete` / `partial` / `empty`, which describe ONE ATTENDEE'S
- * FIELDS. `lib/registrations/statuses` describes what stage a REGISTRATION is
- * at. They share no value and answer no common question, so an entry for one in
- * the other would be a category error — the same ruling `SCHEDULE_BADGE` on the
- * public list table already carries, and a test pins both.
+ * The สถานะข้อมูล chip's two colour maps and its neutral fallback went with the
+ * chip in round 8 — see the note where `AttendeeInfoChip` was. They are named
+ * here rather than silently deleted because their docstring carried a RULING
+ * that outlives them and must not be lost:
  *
- * The fallback is a real colour rather than '': a chip with no background is
- * invisible against the row, so an unrecognised state would read as an EMPTY
- * CELL rather than as a state nobody has styled. Grey says "unknown", blank says
- * "nothing here", and only one of those is true.
+ *   THE PER-ATTENDEE VOCABULARY IS NOT THE STATUS VOCABULARY AND MUST NEVER
+ *   JOIN IT. `complete` / `partial` / `empty` described ONE ATTENDEE'S FIELDS;
+ *   `lib/registrations/statuses` describes what stage a REGISTRATION is at. An
+ *   entry for one in the other is a category error.
+ *
+ * That ruling still binds the SCHEDULE_BADGE map on the public list table and
+ * anything else tempted to extend the status module, and its test is unaffected
+ * by this deletion. If a per-row status chip is ever wanted here again, it needs
+ * its own map for the same reason, not an entry in the status one.
  */
-const INFO_BADGE = {
-  complete: 'bg-emerald-100 text-emerald-700',
-  partial:  'bg-amber-100 text-amber-700',
-  empty:    'bg-slate-100 text-slate-500',
-};
 
-const INFO_LABEL = {
-  complete: 'ข้อมูลครบ',
-  partial:  'ข้อมูลไม่ครบ',
-  empty:    'ยังไม่กรอก',
-};
-
-const INFO_NEUTRAL_BADGE = 'bg-slate-100 text-slate-600';
-
-/** The Thai names of the four attendee fields, for the incomplete row's hint. */
+/** The Thai names of the attendee fields, for the editor's missing-field warning. */
 const FIELD_LABEL = {
   firstName: 'ชื่อ',
   lastName:  'นามสกุล',
   email:     'อีเมล',
   phone:     'เบอร์โทร',
 };
+
+/**
+ * The fields an attendee row MUST have, and the only two the server requires.
+ *
+ * ── IT IS DEFINED HERE, BESIDE THE FORM THAT WARNS ABOUT IT ────────────────
+ * `attendeeInfoState` used to own "what a complete row is" and it was deleted:
+ * its answer was all four fields, which stopped being true the moment email and
+ * phone became optional. This is the replacement and it is deliberately NOT a
+ * general "completeness" notion — it is exactly the server's refusal condition
+ * in `updateRegistration`, restated for the one surface that has to warn BEFORE
+ * the save rather than after it.
+ *
+ * Two copies of one rule is the risk, and it is taken knowingly: the server's is
+ * the enforcement and this one only decides whether a warning shows. The pairing
+ * is asserted in test/fs/rosterSeatLock — "the EDITOR agrees with the server
+ * about which fields are required" — so they cannot drift silently.
+ */
+const REQUIRED_ATTENDEE_FIELDS = ['firstName', 'lastName'];
+
+/** Which required fields this row is missing, in form order. */
+const missingRequired = (a) =>
+  REQUIRED_ATTENDEE_FIELDS.filter((f) => String(a?.[f] ?? '').trim() === '');
 
 /**
  * A monospace identifier — or NOTHING, so `DLRow` can drop the row.
@@ -1192,23 +1202,63 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
 
               {attendeesListProvided && (
                 <div className="space-y-3">
-                  {attendees.map((a, i) => (
-                    <div key={i} className="rounded-9e-md border border-[var(--surface-border)] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-[var(--text-secondary)]">ท่านที่ {i + 1}</span>
-                        <button type="button" onClick={() => removeAttendee(i)}
-                          className="flex items-center gap-1 text-xs text-[var(--text-muted)] transition-colors hover:text-9e-accent">
-                          <X aria-hidden="true" className="h-3.5 w-3.5" />ลบ
-                        </button>
+                  {attendees.map((a, i) => {
+                    const missing = missingRequired(a);
+                    return (
+                      <div key={i} className={cn(
+                        'rounded-9e-md border p-3',
+                        // The row itself carries the warning state, so an
+                        // incomplete row is findable by scrolling rather than by
+                        // reading every field of every row.
+                        missing.length ? 'border-9e-accent/50' : 'border-[var(--surface-border)]',
+                      )}>
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-[var(--text-secondary)]">ท่านที่ {i + 1}</span>
+                          <button type="button" onClick={() => removeAttendee(i)}
+                            className="flex items-center gap-1 text-xs text-[var(--text-muted)] transition-colors hover:text-9e-accent">
+                            <X aria-hidden="true" className="h-3.5 w-3.5" />ลบ
+                          </button>
+                        </div>
+                        {/*
+                          ══ THE WARNING RENDERS AT THE POINT OF EDITING ═══════
+                          Above the fields, in the row it is about, while the
+                          editor is open — NOT after the save comes back.
+
+                          The server refuses a nameless row and `DetailError`
+                          would show that refusal, but a page-level message after
+                          a failed save does not say WHICH of up to fifty rows is
+                          at fault, and the admin has already left the field. This
+                          says it before the click, beside the empty box.
+
+                          ── IT IS NOT THE ENFORCEMENT ─────────────────────────
+                          `updateRegistration` refuses the payload regardless of
+                          what renders here; this cannot be the thing that holds,
+                          because it is a client. What it prevents is the failure
+                          mode that has shipped on this screen twice: a save that
+                          LOOKS successful. It does not disable บันทึก either —
+                          a disabled save with fifty rows on screen is a button
+                          that refuses and explains nothing.
+                        */}
+                        {missing.length ? (
+                          <p className="mb-2 text-[11px] leading-[16px] text-9e-accent">
+                            ต้องกรอก{missing.map((f) => FIELD_LABEL[f] ?? f).join(' และ ')} — บันทึกไม่ได้จนกว่าจะกรอกครบ
+                          </p>
+                        ) : null}
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {/*
+                            `required` ON THE FIRST TWO ONLY. Round 8: email and
+                            phone are optional on the admin path, and a red
+                            asterisk beside a field the server accepts empty is
+                            the screen contradicting the server.
+                          */}
+                          <EditField label="ชื่อ" required value={a.firstName} onChange={(v) => updateAttendee(i, 'firstName', v)} />
+                          <EditField label="นามสกุล" required value={a.lastName} onChange={(v) => updateAttendee(i, 'lastName', v)} />
+                          <EditField label="อีเมล" type="email" value={a.email} onChange={(v) => updateAttendee(i, 'email', v)} />
+                          <EditField label="เบอร์โทร" type="tel" value={a.phone} onChange={(v) => updateAttendee(i, 'phone', v)} />
+                        </div>
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <EditField label="ชื่อ" required value={a.firstName} onChange={(v) => updateAttendee(i, 'firstName', v)} />
-                        <EditField label="นามสกุล" required value={a.lastName} onChange={(v) => updateAttendee(i, 'lastName', v)} />
-                        <EditField label="อีเมล" type="email" required value={a.email} onChange={(v) => updateAttendee(i, 'email', v)} />
-                        <EditField label="เบอร์โทร" type="tel" required value={a.phone} onChange={(v) => updateAttendee(i, 'phone', v)} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {/*
                     THE SECOND DOOR, AND IT READS THE SAME ANSWER. A lock on the
                     read view's button alone would be bypassed by opening the
@@ -1423,6 +1473,35 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
  * between them are exactly as specified — which is the requirement, because the
  * admin sidebar collapses and an absolute px content width would not survive it.
  */
+/**
+ * ══ ROUND 8: สถานะข้อมูล IS DELETED AND PHONE IS ITS OWN COLUMN ═════════════
+ *
+ * Two changes, and they are related. `ข้อมูลติดต่อ` held the email over the
+ * phone in one cell; `สถานะข้อมูล` held a chip saying whether all four fields
+ * were present. Both are gone, and the phone is a column.
+ *
+ * THE CHIP HAD LOST ITS SUBJECT. It reported `complete` when all FOUR fields
+ * were filled — but round 8 makes email and phone OPTIONAL on the admin path, so
+ * a row with a name and nothing else is now a perfectly valid record and the
+ * chip would have called it `partial` forever. A status that reports every
+ * legitimate row as deficient is not a status. See the note where
+ * `attendeeInfoState` used to live.
+ *
+ * AND WITH THE PHONE IN ITS OWN COLUMN the chip's remaining job is done by the
+ * table: whether a row has an email and whether it has a phone are now two
+ * cells a reader can see directly, each falling back to a dash. The chip was
+ * summarising two columns that are now visible.
+ *
+ * ── THE SHARES: 30.8 / 35.2 / 22.0, AND THE TOTAL IS UNCHANGED ────────────
+ * The phone takes the share สถานะข้อมูล had, and `ชื่อ-นามสกุล` and the email
+ * keep theirs exactly. So the three content columns still total 88.0% and the
+ * normalisation arithmetic below is untouched — nothing moved except which
+ * column the 22.0 belongs to. A redistribution would have been a second change
+ * riding on this one, and the widths were measured.
+ *
+ * THE PROPORTIONS EXIST IN TWO PLACES and both move in the same commit: here,
+ * and the expected array in test/render/registrationDetailShell's width test.
+ */
 const ATTENDEE_COLUMNS = [
   { key: 'n',       label: '#',              px: 30 },
   // HYPHEN, not the frame's en dash. Every other "ชื่อ-นามสกุล" on these two
@@ -1430,8 +1509,8 @@ const ATTENDEE_COLUMNS = [
   // uses a hyphen, and one table header spelling the same label a second way is
   // the screen being inconsistent with itself over a character nobody asked for.
   { key: 'name',    label: 'ชื่อ-นามสกุล',   share: 30.8 },
-  { key: 'contact', label: 'ข้อมูลติดต่อ',    share: 35.2 },
-  { key: 'info',    label: 'สถานะข้อมูล',    share: 22.0 },
+  { key: 'email',   label: 'อีเมล',          share: 35.2 },
+  { key: 'phone',   label: 'เบอร์โทร',        share: 22.0 },
   { key: 'menu',    label: '',               px: 32 },
 ];
 
@@ -1497,7 +1576,6 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
         {attendees.map((a, i) => {
           const name = `${a.firstName ?? ''} ${a.lastName ?? ''}`.trim();
           const isCoord = i === 0 && coordinatorAttending;
-          const info = attendeeInfoState(a);
           const pad = (idx) => ({
             paddingLeft:  idx === 0 ? `${ATTENDEE_EDGE}px` : undefined,
             paddingRight: idx === ATTENDEE_COLUMNS.length - 1 ? `${ATTENDEE_EDGE}px` : '10px',
@@ -1521,35 +1599,37 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
               </td>
 
               {/*
-                ข้อมูลติดต่อ — the email as a mailto link over the phone.
+                ── TWO CELLS NOW, NOT ONE STACKED PAIR ─────────────────────
+                A TABLE CELL MAY NOT VANISH — the column would misalign — so
+                each falls back to a dash rather than emptying. That is the one
+                place on these screens where a dash is right, and it is the same
+                rule `CoordinatorCell` on the list tables is held to.
 
-                EVERY LINE IS CONDITIONAL and the whole cell falls back to a
-                dash. A row with an email and no phone must render ONE line, not
-                one line and an empty one — the same rule `CoordinatorCell` on
-                the list tables is held to, and the same reason.
+                The dash matters more now than it did: email and phone are
+                OPTIONAL from round 8, so an absent one is an ordinary record
+                rather than a defect, and these two cells are where a reader
+                sees which fields a row actually holds — the job the deleted
+                สถานะข้อมูล chip was doing by summary.
               */}
               <td className="align-middle" style={pad(2)}>
-                {a.email || a.phone ? (
-                  <>
-                    {a.email ? (
-                      <a href={`mailto:${a.email}`}
-                        className="block truncate text-[13px] leading-[17.25px] text-9e-action hover:underline">
-                        {a.email}
-                      </a>
-                    ) : null}
-                    {a.phone ? (
-                      <span className="block truncate text-[12px] leading-[17px] text-[var(--text-muted)]">
-                        {a.phone}
-                      </span>
-                    ) : null}
-                  </>
+                {a.email ? (
+                  <a href={`mailto:${a.email}`}
+                    className="block truncate text-[13px] leading-[17.25px] text-9e-action hover:underline">
+                    {a.email}
+                  </a>
                 ) : (
                   <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
                 )}
               </td>
 
               <td className="align-middle" style={pad(3)}>
-                <AttendeeInfoChip attendee={a} state={info} />
+                {a.phone ? (
+                  <span className="block truncate text-[13px] leading-[17.25px] text-[var(--text-primary)]">
+                    {a.phone}
+                  </span>
+                ) : (
+                  <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
+                )}
               </td>
 
               <td className="align-middle" style={pad(4)}>
@@ -1569,35 +1649,31 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
   );
 }
 
-/**
- * The สถานะข้อมูล chip — 21.5px tall, 8px of left padding.
+/*
+ * ── `AttendeeInfoChip` IS GONE. DO NOT REINTRODUCE IT ──────────────────────
  *
- * ── THE THREE BRANCHES ARE THE DATA'S, NOT THE FRAME'S ────────────────────
- * The frame draws one state, `✓ ข้อมูลครบ`. `attendeeInfoState` enumerates what
- * the record can actually hold — complete, partial, empty — and every one is
- * reachable because the admin save runs with `runValidators: false` and the
- * editor's `+` appends four empty strings. See the module for the measurement.
+ * The สถานะข้อมูล chip — 21.5px, three states from `attendeeInfoState` — was
+ * deleted in round 8 along with its column, its two colour maps and its
+ * derivation. Recorded here because "the design has a สถานะข้อมูล column" is
+ * true and the removal is a ruling against it, so the next reader comparing the
+ * two will otherwise file it as missing work.
  *
- * The PARTIAL branch names WHICH fields are missing, in the title attribute
- * rather than in the chip: the chip is 21.5px in a 22% column and a list of
- * field names does not fit, while "ข้อมูลไม่ครบ" with no way to learn what is
- * missing is a chip that reports a problem and hides it. The dashes in the cell
- * next door say it too, for the two fields that cell shows.
+ * WHY, and it is not tidying: THE CHIP'S DEFINITION OF "COMPLETE" STOPPED BEING
+ * TRUE. It meant all four of firstName/lastName/email/phone. Round 8 made email
+ * and phone optional on the admin path, so a row holding a name and nothing else
+ * became a valid record that the chip would have labelled `ข้อมูลไม่ครบ`
+ * permanently. A status that reports every legitimate row as deficient tells the
+ * reader nothing except to ignore it.
+ *
+ * Re-pointing it at the new definition was considered and rejected: with only
+ * two required fields, "complete" means "has a name", and a row with no name is
+ * already refused by the server and warned about in the editor. The chip would
+ * have had one reachable state.
+ *
+ * WHAT IT ACTUALLY SHOWED NOW LIVES IN THE TABLE. Whether a row has an email and
+ * whether it has a phone are two columns, each falling back to a dash. That is
+ * the same information, at the resolution a reader wanted it.
  */
-function AttendeeInfoChip({ attendee, state }) {
-  const missing = state === 'partial' ? missingAttendeeFields(attendee) : [];
-  return (
-    <span
-      title={missing.length ? `ยังขาด: ${missing.map((f) => FIELD_LABEL[f] ?? f).join(', ')}` : undefined}
-      className={cn(
-        'inline-flex h-[21.5px] w-fit items-center whitespace-nowrap rounded-full pl-[8px] pr-[8px] text-[11px] font-semibold',
-        INFO_BADGE[state] ?? INFO_NEUTRAL_BADGE,
-      )}
-    >
-      {INFO_LABEL[state] ?? state}
-    </span>
-  );
-}
 
 /**
  * The per-row "•••".

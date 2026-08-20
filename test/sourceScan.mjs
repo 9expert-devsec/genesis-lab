@@ -27,6 +27,50 @@
  * lesson is encoded as a control in sourceScan.test.mjs instead: bound a
  * statement match on `;`, never on `)`.
  *
+ * ══ DEFECT 7, AND IT IS A STANDING PROCEDURE RATHER THAN A FIX ══════════════
+ *
+ * THE MECHANISM, NAMED: an assertion bound to the SHAPE OF AN EXPRESSION
+ * silently stops applying when that expression is REFORMULATED — even though the
+ * code stays correct, the guard is untouched, and nothing goes red.
+ *
+ * The instance that named it (round 8): `publicStatusWriteGate` asserted that
+ * `updateRegistration` must NOT gate on paid, as
+ *
+ *     !/status:\s*\{\s*\$nin:\s*\[[^\]]*'paid'/.test(UPDATE_BODY)
+ *
+ * The action later gated exactly one field on paid, and the literal moved out of
+ * the `$nin:` position into `const blocked = paidGuard ? ['cancelled','paid'] :
+ * ['cancelled']`. The regex could no longer see it. The guard stayed GREEN while
+ * both the rule it named and the code beneath it had changed — it had stopped
+ * testing anything in either direction.
+ *
+ * This is NOT the same as defects 1-6. Those are the matcher reading the wrong
+ * TEXT. This is the matcher reading the right text, correctly, at a place the
+ * expression no longer lives. No reader can remove it, because the assertion is
+ * about a shape and shapes are what source guards have.
+ *
+ * ── THE PROCEDURE ─────────────────────────────────────────────────────────
+ * Whenever you MOVE or REFORMULATE an expression that any fs assertion reads —
+ * NOT ONLY when you change its meaning — go and re-read the assertions over it
+ * and establish whether each still BINDS. Extracting a literal into a const,
+ * inlining a const, turning a condition into a ternary, hoisting a filter clause
+ * and renaming a variable are all reformulations, and all of them are invisible
+ * to the suite.
+ *
+ * Six consecutive rounds have produced a vacuity finding. Five were caught by
+ * controls; this one was caught by a control too, and the controls are why any
+ * of them are known. WRITE A CONTROL FOR THE REFORMULATED SHAPE, not only for
+ * the broken behaviour.
+ *
+ * ── AND PREFER BEHAVIOUR WHERE IT IS AVAILABLE ────────────────────────────
+ * A guard that runs the code and checks what it DOES cannot be defeated by
+ * reformulation. Where a claim can be made in the pure or render tier against
+ * behaviour, make it there and leave the fs guard for what only text can see —
+ * absences, allowlists, and the shape of things that never execute in tests
+ * (server actions, which have no database in this suite). When a claim can ONLY
+ * be made against shape, say so at the assertion, so the next reader knows it is
+ * a compromise rather than a preference.
+ *
  * WHAT IT STILL CANNOT SEE, and no text scanner can:
  *   - computed access: `doc['pinOrder']`, `obj[field]`, `await import(name)`
  *   - anything generated at build or run time

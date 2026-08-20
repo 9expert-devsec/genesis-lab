@@ -215,6 +215,112 @@ test('the WIZARD’s zod is UNCHANGED and still demands all four', () => {
     'a wizard attendee field became optional — that changes what a CUSTOMER may submit');
 });
 
+test('the EDITOR agrees with the server about which fields are required', () => {
+  /**
+   * ══ TWO COPIES OF ONE RULE, PAIRED SO THEY CANNOT DRIFT SILENTLY ═══════════
+   *
+   * `REQUIRED_ATTENDEE_FIELDS` in the detail client decides whether the editor
+   * shows a warning; `updateRegistration` decides whether the save lands. The
+   * client's copy exists because a page-level error AFTER a failed save cannot
+   * say WHICH of up to fifty rows is at fault, and the admin has already left
+   * the field.
+   *
+   * Two copies is a real risk and it is taken knowingly, so this is the pairing:
+   * both name exactly firstName and lastName, and neither names email or phone.
+   *
+   * ── AND A GAP THIS CLOSES, FOUND BY RE-READING RATHER THAN BY A FAILURE ───
+   * Removing `required` from the email and phone `EditField`s bound NOTHING —
+   * no assertion anywhere read those props. The screen could have gone on
+   * showing a red asterisk beside a field the server accepts empty, which is the
+   * screen contradicting the server, and every test would have stayed green.
+   */
+  assert.match(CLIENT.code, /const REQUIRED_ATTENDEE_FIELDS = \['firstName', 'lastName'\]/,
+    'the editor no longer names its required fields, or names different ones');
+
+  // The asterisk follows the same two. Bounded to the attendee editor's four
+  // controls, because `required` is also correct on the coordinator's fields.
+  const start = CLIENT.code.indexOf('const missing = missingRequired(a);');
+  assert.notEqual(start, -1, 'the attendee editor no longer computes its missing fields');
+  const editor = CLIENT.code.slice(start, CLIENT.code.indexOf('</div>', CLIENT.code.indexOf('เบอร์โทร', start)));
+  assert.match(editor, /label="ชื่อ" required/, 'ชื่อ lost its required marker');
+  assert.match(editor, /label="นามสกุล" required/, 'นามสกุล lost its required marker');
+  assert.match(editor, /label="อีเมล" type="email" value=/,
+    'the attendee email still carries `required` — the screen contradicts the server');
+  assert.match(editor, /label="เบอร์โทร" type="tel" value=/,
+    'the attendee phone still carries `required` — the screen contradicts the server');
+});
+
+test('the warning renders in the ROW, before the save, and does not disable it', () => {
+  /**
+   * "It must not be a silent save that looks successful" — the failure mode that
+   * has shipped on this screen twice. The warning is in the row it is about,
+   * above the fields, while the editor is open.
+   *
+   * It deliberately does NOT disable บันทึก: a disabled save with fifty rows on
+   * screen is a button that refuses and explains nothing, and the server refusal
+   * is the thing that actually holds.
+   *
+   * ══ THIS CLAIM IS MADE AGAINST SHAPE, AND HERE IS WHY IT COULD NOT BE MADE
+   *    AGAINST BEHAVIOUR ═════════════════════════════════════════════════════
+   *
+   * The attendee EDITOR is behind `editSection`, which a click sets and which
+   * `renderToStaticMarkup` cannot reach — and `createRoot` is banned in this
+   * suite (isolation:'none' leaks globalThis.window and once broke twenty-eight
+   * render tests). So no tier here can render the warning and read it. Stated
+   * rather than left implicit, because a shape guard is a compromise and the
+   * next reader should know this one was not a preference.
+   *
+   * ── AND THE CONTROL CAUGHT THIS TEST BEING VACUOUS ───────────────────────
+   * The first version asserted that the warning's STRINGS were in the file —
+   * `บันทึกไม่ได้จนกว่าจะกรอกครบ` and the `border-9e-accent/50` class. The
+   * `silent-save` control changes the CONDITION to `{false ? (`, leaving every
+   * one of those strings exactly where it was, and the test STAYED GREEN on a
+   * screen that no longer warns about anything.
+   *
+   * That is the standing mechanism: an assertion bound to the presence of a
+   * token stops applying when the expression AROUND the token is reformulated.
+   * So what is pinned now is the CONDITION — that the warning is rendered on
+   * `missing.length` — not merely that its words exist somewhere in the file.
+   */
+  assert.match(CLIENT.code, /const missingRequired = \(a\) =>/, 'the per-row check is gone');
+  assert.match(CLIENT.code, /const missing = missingRequired\(a\);/,
+    'the editor row no longer computes its own missing fields');
+
+  // THE CONDITION, not the strings: the warning must be gated on there BEING
+  // something missing, and the row's border on the same expression.
+  assert.match(CLIENT.code, /\{missing\.length \? \(\s*\n\s*<p className="mb-2 text-\[11px\]/,
+    'the row warning is not rendered on `missing.length` — it may be dead behind a constant');
+  assert.match(CLIENT.code, /missing\.length \? 'border-9e-accent\/50'/,
+    'an incomplete row is not marked in the layout');
+
+  // …and the words are still the words, which the condition alone does not say.
+  assert.ok(CLIENT.code.includes('บันทึกไม่ได้จนกว่าจะกรอกครบ'),
+    'the row warning does not say the save will be refused');
+  assert.ok(CLIENT.code.includes('ต้องกรอก'), 'the row warning does not name what is missing');
+
+  // …and nothing disables the card's save on it.
+  assert.equal(/disabled=\{[^}]*missing/.test(CLIENT.code), false,
+    'the missing-field state disables a control — it is a warning, not a gate');
+});
+
+test('CONTROL: the condition probe rejects a warning gated on a constant', () => {
+  /**
+   * The exact shape `silent-save` produces. Without this, the assertion above is
+   * a regex nobody has watched reject anything, and the token-presence version
+   * it replaced looked just as convincing.
+   */
+  const dead = '{false ? (\n                          <p className="mb-2 text-[11px] leading-[16px] text-9e-accent">';
+  assert.equal(/\{missing\.length \? \(\s*\n\s*<p className="mb-2 text-\[11px\]/.test(dead), false,
+    'the probe accepts a warning that can never render');
+  // …and it DOES accept the live shape, so it is not rejecting everything.
+  const live = '{missing.length ? (\n                          <p className="mb-2 text-[11px] leading-[16px] text-9e-accent">';
+  assert.ok(/\{missing\.length \? \(\s*\n\s*<p className="mb-2 text-\[11px\]/.test(live),
+    'the probe cannot see the shape it is written for');
+  // The old, defeated form would have passed BOTH — which is the finding.
+  assert.ok(dead.includes('text-9e-accent') && live.includes('text-9e-accent'),
+    'the control is inert — the token must be present in both, or it was never the trap');
+});
+
 test('CONTROL: the two parsers really are reading two different files', () => {
   // Four absences and four presences across two sources is the shape that
   // passes when one of the reads returned an empty string.

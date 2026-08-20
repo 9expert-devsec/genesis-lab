@@ -278,6 +278,59 @@ const BREAKS = {
     replace: "  return { state: named >= count ? 'complete' : 'incomplete', named, count };",
   },
 
+  // ── item 2: the columns and the required-field warning ───────────────────
+
+  'chip-back': {
+    file: CLIENT,
+    why: 'Reinstate the สถานะข้อมูล column in ATTENDEE_COLUMNS. The header set and the body cells then disagree by one — the exact defect the derived-header guard exists for.',
+    reddens: [
+      'render/registrationAttendeeTab › the table has five columns: #, name, email, phone, menu',
+      'render/registrationDetailShell › the attendee table’s body rows have exactly as many cells as its header',
+      'render/registrationDetailShell › the colgroup has one <col> per header cell',
+      'render/registrationDetailShell › only the two FIXED columns are px',
+    ],
+    find: "  { key: 'phone',   label: 'เบอร์โทร',        share: 22.0 },",
+    replace: "  { key: 'phone',   label: 'เบอร์โทร',        share: 22.0 },\n  { key: 'info',    label: 'สถานะข้อมูล',    share: 22.0 },",
+  },
+
+  'merge-contact': {
+    file: CLIENT,
+    why: 'Put the phone back inside the email cell, so a name-only row falls back once instead of twice.',
+    reddens: [
+      'render/registrationAttendeeTab › email and phone are separate cells, each falling back to its own dash',
+      'render/registrationAttendeeTab › a row with NO contact details renders two dashes, one per column',
+      'render/registrationDetailShell › an attendee with a name and no contact details renders TWO dashes',
+    ],
+    find: `                {a.phone ? (
+                  <span className="block truncate text-[13px] leading-[17.25px] text-[var(--text-primary)]">
+                    {a.phone}
+                  </span>
+                ) : (
+                  <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
+                )}`,
+    replace: '                {a.phone}',
+  },
+
+  'asterisk-back': {
+    file: CLIENT,
+    why: 'Put `required` back on the attendee email — the screen claiming a field the server accepts empty. THE GAP THIS CLOSES: before round 8 added its pairing test, this change bound nothing at all.',
+    reddens: [
+      'fs/rosterSeatLock › the EDITOR agrees with the server about which fields are required',
+    ],
+    find: '                          <EditField label="อีเมล" type="email" value={a.email} onChange={(v) => updateAttendee(i, \'email\', v)} />',
+    replace: '                          <EditField label="อีเมล" type="email" required value={a.email} onChange={(v) => updateAttendee(i, \'email\', v)} />',
+  },
+
+  'silent-save': {
+    file: CLIENT,
+    why: 'Remove the per-row warning, leaving only the page-level error AFTER a failed save — which cannot say which of fifty rows is at fault.',
+    reddens: [
+      'fs/rosterSeatLock › the warning renders in the ROW, before the save, and does not disable it',
+    ],
+    find: '                        {missing.length ? (',
+    replace: '                        {false ? (',
+  },
+
   'wrong-door': {
     file: ACTIONS,
     why: 'Let an UNPAID record through the paid action, so it files a `seats` row whose title claims a money implication that does not exist.',

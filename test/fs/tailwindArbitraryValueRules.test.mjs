@@ -1537,7 +1537,13 @@ test('the measured geometry really is in the harvest, not merely a large count',
     // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
     'h-[75.85px]', // the three-cell summary row
     'h-[48.3px]',  // one attendee row
-    'h-[21.5px]',  // the สถานะข้อมูล chip
+    // `h-[21.5px]` — THE สถานะข้อมูล CHIP — is deliberately absent. Round 8
+    // deleted the column, the chip and `attendeeInfoState` with it: the chip's
+    // definition of "complete" was all four attendee fields, and email and phone
+    // became optional, so it would have reported every valid two-field row as
+    // deficient. Named rather than silently dropped, for the same reason
+    // `h-[93px]` and `gap-x-[36px]` are named above — a reader comparing this
+    // list to the design file needs to know which of the two is out of date.
     'w-[92.6px]',  // the + เพิ่มผู้เข้าอบรม button
     'h-[32.6px]',  // ...and its height
     'h-[28px]',    // the compact per-row "•••" trigger

@@ -944,6 +944,28 @@ export async function updateAttendeesCountPaid(id, nextCount) {
   const roster = Array.isArray(doc.attendees) ? doc.attendees.length : 0;
 
   if (n === current) return { ok: false, error: 'จำนวนผู้เข้าอบรมไม่เปลี่ยนแปลง' };
+  /**
+   * ── INCREASE ONLY. THIS IS A RULING, NOT AN UNFINISHED FEATURE. ───────────
+   *
+   * Stated AT the refusal because a one-directional control reads as an
+   * oversight from here — the next reader sees `n < current` rejected, assumes
+   * the decrease branch was never written, and adds it.
+   *
+   * A LOWER COUNT ON A PAID REGISTRATION MEANS THE CUSTOMER PAID FOR SEATS THEY
+   * ARE NOT TAKING. That is a refund, and this action:
+   *   · cannot issue one — it does not touch `payment` and must not learn to;
+   *   · cannot record that one is OWED — there is no field for an obligation,
+   *     and inventing one here would put a ledger in a registration document;
+   *   · has nowhere to put it — `pricing` is a frozen snapshot of what was
+   *     actually taken, so writing the lower number would leave the system
+   *     quietly forgetting money it owes somebody, with the only trace being an
+   *     audit row saying the count went down.
+   *
+   * Refusing is therefore the honest shape, and it is not a dead end: cancel and
+   * re-register is the path that exists, it moves the money question to the
+   * people who can answer it, and it leaves a trail that says so. The message
+   * names that path rather than stopping at "no".
+   */
   if (n < current) {
     return {
       ok: false,

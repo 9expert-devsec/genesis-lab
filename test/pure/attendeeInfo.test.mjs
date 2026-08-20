@@ -1,9 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ATTENDEE_FIELDS,
-  attendeeInfoState,
-  missingAttendeeFields,
   isNamedAttendee,
   rosterState,
   rosterHasRoom,
@@ -11,13 +8,20 @@ import {
 } from '@/lib/registrations/attendeeInfo';
 
 /**
- * THE TWO ATTENDEE QUESTIONS, AT THEIR FUNCTIONS.
+ * THE ROSTER, AT ITS FUNCTIONS.
  *
- * The module's premise is that "is this ROW complete" and "is this REGISTRATION's
- * roster complete" are different questions that had started to be answered by
- * two independent derivations three inches apart on one page. These tests pin
- * both, and pin the disagreements between them — because the day they stop being
- * able to disagree is the day one of them is wrong.
+ * ── THIS FILE COVERED TWO QUESTIONS AND NOW COVERS ONE ────────────────────
+ * The module's premise was that "is this ROW complete" and "is this
+ * REGISTRATION's roster complete" are different questions, answered by two
+ * derivations three inches apart on one page. Round 8 DELETED the first: its
+ * definition of complete was all four attendee fields, and email and phone
+ * became optional, so it would have reported every valid two-field row as
+ * deficient. See lib/registrations/attendeeInfo.
+ *
+ * What remains is the roster question plus the two rules round 8 added to it —
+ * the seat lock (`rosterHasRoom`) and the duplicate rule
+ * (`firstDuplicateAttendee`). Both are per-REGISTRATION, so this file is
+ * coherent rather than half-empty.
  *
  * Pure tier: the module imports nothing, so it loads here with nothing stubbed.
  */
@@ -25,63 +29,36 @@ import {
 const FULL  = { firstName: 'สมชาย', lastName: 'ใจดี', email: 'a@b.c', phone: '0812345678' };
 const EMPTY = { firstName: '', lastName: '', email: '', phone: '' };
 
-// ── 1. The per-attendee state: all three branches ───────────────────────────
+/*
+ * ── SECTION 1 IS DELETED WITH ITS SUBJECT. ROUND 8. ────────────────────────
+ *
+ * Eight tests covered `attendeeInfoState` and `missingAttendeeFields` — the
+ * per-ATTENDEE question. Both functions are gone: their definition of "complete"
+ * was all FOUR fields, and round 8 made email and phone optional on the admin
+ * path, so a valid row would have been reported `partial` forever. See the note
+ * in lib/registrations/attendeeInfo for why re-pointing them was rejected.
+ *
+ * WHAT WENT WITH THEM, named rather than silently dropped:
+ *   · all four fields present → complete; none → empty; one missing → partial
+ *   · every single-field-missing case, so a guard on `email` could not be
+ *     silent about `phone`
+ *   · whitespace is not a value
+ *   · a malformed attendee object does not throw
+ *   · it does NOT validate — a malformed email is still a filled field
+ *
+ * THE LAST TWO CARRIED CLAIMS THAT OUTLIVE THE FUNCTIONS, and both are now the
+ * server's rather than a display derivation's:
+ *   · whitespace — `updateRegistration` refuses on `!a.firstName?.trim()`, so
+ *     a space bar is still not a name. Pinned in fs/rosterSeatLock.
+ *   · presence-not-validation — the admin path checks presence only and the
+ *     customer form's zod remains the only thing entitled to an opinion about
+ *     the SHAPE of an email. Pinned in fs/rosterSeatLock's asymmetry tests,
+ *     which assert the wizard still carries `.email(` and `thaiPhoneRegex`.
+ *
+ * Nothing was retained under a new name and nothing is being quietly kept alive.
+ */
 
-test('a row with all four fields is complete', () => {
-  assert.equal(attendeeInfoState(FULL), 'complete');
-  assert.deepEqual(missingAttendeeFields(FULL), []);
-});
-
-test('a row with none of the four is empty', () => {
-  assert.equal(attendeeInfoState(EMPTY), 'empty');
-  assert.deepEqual(missingAttendeeFields(EMPTY), ATTENDEE_FIELDS);
-});
-
-test('EVERY single-field-missing row is partial, and names the field it lacks', () => {
-  // Not one representative case: each of the four fields must be able to be the
-  // missing one, or a guard written against `email` would be silent about a
-  // missing `phone`.
-  for (const field of ATTENDEE_FIELDS) {
-    const row = { ...FULL, [field]: '' };
-    assert.equal(attendeeInfoState(row), 'partial', `a row missing ${field} is not partial`);
-    assert.deepEqual(missingAttendeeFields(row), [field]);
-  }
-});
-
-test('a row with exactly one field filled is partial, not empty', () => {
-  for (const field of ATTENDEE_FIELDS) {
-    const row = { ...EMPTY, [field]: 'x' };
-    assert.equal(attendeeInfoState(row), 'partial', `a row holding only ${field} is not partial`);
-  }
-});
-
-test('whitespace is not a value', () => {
-  // The admin editor writes what was typed. A space bar is not a phone number,
-  // and treating it as one would report a row complete that a certificate cannot
-  // be printed from.
-  assert.equal(attendeeInfoState({ ...FULL, phone: '   ' }), 'partial');
-  assert.equal(attendeeInfoState({ firstName: ' ', lastName: '\t', email: '', phone: '' }), 'empty');
-});
-
-test('a missing or malformed attendee object does not throw', () => {
-  // `attendees` comes off a lean() document; a legacy row could be anything.
-  assert.equal(attendeeInfoState(undefined), 'empty');
-  assert.equal(attendeeInfoState(null), 'empty');
-  assert.equal(attendeeInfoState({}), 'empty');
-});
-
-test('it does NOT validate — a malformed email is still a filled field', () => {
-  /**
-   * Presence only, deliberately. `partial` means "an admin started this row and
-   * stopped"; making it also mean "this email is not RFC-shaped" would put a
-   * validation rule in a display derivation, and the customer form's zod schema
-   * is the only thing entitled to an opinion about the shape of an email.
-   */
-  assert.equal(attendeeInfoState({ ...FULL, email: 'not-an-email' }), 'complete');
-  assert.equal(attendeeInfoState({ ...FULL, phone: '1' }), 'complete');
-});
-
-// ── 2. The roster state: all three branches ─────────────────────────────────
+// ── 2. The roster state: all four branches ──────────────────────────────────
 
 test('an opted-out roster is not-provided regardless of the numbers', () => {
   // `buildAttendees` writes an EMPTY array in this state, so there is nothing to
@@ -276,36 +253,30 @@ test('`attendeesListProvided` undefined behaves as provided', () => {
   assert.equal(r.state, 'complete');
 });
 
-// ── 3. The two questions genuinely differ ───────────────────────────────────
+// ── 3. Membership is not completeness ───────────────────────────────────────
+//
+// This section was "the two questions genuinely differ", and four of its five
+// tests compared `rosterState` against `attendeeInfoState` — a comparison with
+// only one side left. They are not retained under new names.
+//
+// WHAT SURVIVES IS THE HALF THAT WAS NEVER ABOUT THE CHIP: `isNamedAttendee`
+// decides who COUNTS toward the roster, and it is deliberately not "has every
+// field". That claim now stands on its own terms rather than by contrast, and
+// it matters MORE than it did — email and phone are optional, so rows with two
+// fields are ordinary and must still count as people.
 
-test('a COMPLETE roster can hold an INCOMPLETE attendee', () => {
+test('a row counts toward the roster on a name OR an email, never on how full it is', () => {
   /**
-   * The disagreement that makes the split necessary. Both people are on the
-   * list, so the roster is `ครบ 2/2`; one of them has no phone number, so that
-   * row's chip says ข้อมูลไม่ครบ. A single derivation would have to answer both
-   * and would be wrong about one of them.
-   */
-  const partial = { ...FULL, phone: '' };
-  const r = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL, partial] });
-  assert.equal(r.state, 'complete');
-  assert.equal(attendeeInfoState(partial), 'partial');
-});
-
-test('an INCOMPLETE roster can hold only COMPLETE attendees', () => {
-  // The other direction: one person named against a declared three, and that
-  // person's record is perfect.
-  const r = rosterState({ attendeesListProvided: true, attendeesCount: 3, attendees: [FULL] });
-  assert.equal(r.state, 'incomplete');
-  assert.equal(attendeeInfoState(FULL), 'complete');
-});
-
-test('a row counts toward the roster on a name OR an email, not on completeness', () => {
-  /**
-   * `isNamedAttendee` is deliberately NOT `state === 'complete'`. An attendee
-   * with a name and no phone IS a named attendee, and counting them as missing
-   * would make a registration read `ยังไม่ครบ 1/2` when both people are on the
-   * list and one is short a field — which is precisely what the per-attendee
-   * chip is for.
+   * ── RE-POINTED, AND THE ARGUMENT CHANGED UNDER IT ─────────────────────────
+   * This used to read "not on completeness", where completeness meant
+   * `attendeeInfoState`. With that gone the claim is stated directly: membership
+   * is identity, not richness. A person with a name and no contact details is a
+   * person on a roster.
+   *
+   * The old wording justified it by pointing at the per-attendee chip — "which is
+   * precisely what the chip is for". That justification is gone with the chip;
+   * the rule is not, and its reason is now simply that a seat is occupied by
+   * whoever is in it.
    */
   assert.ok(isNamedAttendee({ ...EMPTY, firstName: 'สมชาย' }));
   assert.ok(isNamedAttendee({ ...EMPTY, lastName: 'ใจดี' }));
@@ -316,28 +287,56 @@ test('a row counts toward the roster on a name OR an email, not on completeness'
   assert.equal(isNamedAttendee(undefined), false);
 });
 
-test('CONTROL: the roster count and the completeness count are different numbers', () => {
-  // If `isNamedAttendee` ever became "all four fields", this array would produce
-  // the same number both ways and every disagreement test above would be vacuous.
-  const rows = [FULL, { ...FULL, phone: '' }, EMPTY];
-  const named = rows.filter(isNamedAttendee).length;
-  const complete = rows.filter((a) => attendeeInfoState(a) === 'complete').length;
-  assert.equal(named, 2);
-  assert.equal(complete, 1);
-  assert.notEqual(named, complete, 'the two counts agree — the split is no longer doing anything');
+test('a two-field row still occupies a seat — the case round 8 made ordinary', () => {
+  /**
+   * THE ASSERTION THE DELETION MADE NECESSARY. Before round 8 every stored row
+   * had all four fields, so "does a two-field row count" was a question about a
+   * shape the customer form could not produce. The admin path can now produce it
+   * deliberately, and if `isNamedAttendee` had ever been tightened to "complete"
+   * the seat lock would have miscounted every such roster — letting a full one
+   * accept more names.
+   */
+  const nameOnly = { firstName: 'ปรีชา', lastName: 'ตั้งใจ', email: '', phone: '' };
+  assert.ok(isNamedAttendee(nameOnly));
+  const r = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL, nameOnly] });
+  assert.equal(r.state, 'complete', 'a two-field row did not count toward the roster');
+  assert.equal(r.named, 2);
+  assert.equal(rosterHasRoom({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL, nameOnly] }),
+    false, 'the seat lock would let a full roster take another name');
 });
 
-test('the `not-provided` state has NO per-attendee counterpart', () => {
+test('CONTROL: membership and "has every field" are genuinely different counts', () => {
   /**
-   * The clearest evidence the two questions differ, asserted rather than argued.
-   * `attendeeInfoState` has three branches and none of them is `not-provided` —
-   * that state means the ARRAY IS EMPTY, so there is no row to ask about.
+   * If `isNamedAttendee` were ever tightened to require all four, this array
+   * would give the same number both ways and the test above would be vacuous.
+   * The second count is written out HERE rather than imported, because the
+   * function that used to supply it is deleted — and a control that depends on
+   * the thing it is controlling for is not a control.
    */
-  const states = new Set([FULL, { ...FULL, phone: '' }, EMPTY].map(attendeeInfoState));
-  assert.deepEqual([...states].sort(), ['complete', 'empty', 'partial']);
-  assert.ok(!states.has('not-provided'), 'a per-attendee state claims a per-registration one');
+  const rows = [FULL, { ...FULL, phone: '' }, EMPTY];
+  const named = rows.filter(isNamedAttendee).length;
+  const allFour = rows.filter((a) =>
+    ['firstName', 'lastName', 'email', 'phone'].every((f) => String(a?.[f] ?? '').trim() !== '')).length;
+  assert.equal(named, 2);
+  assert.equal(allFour, 1);
+  assert.notEqual(named, allFour, 'membership has collapsed into completeness');
+});
 
+test('the `not-provided` state means the array is EMPTY, not that rows are thin', () => {
+  /**
+   * Kept, with its subject narrowed. The old version proved `not-provided` had
+   * no per-attendee counterpart by enumerating `attendeeInfoState`'s branches.
+   * What it was really pinning is that `not-provided` is a statement about the
+   * REGISTRATION — the coordinator opted out and `buildAttendees` wrote an empty
+   * array — and cannot be inferred from any row, because there are none.
+   */
   const optedOut = rosterState({ attendeesListProvided: false, attendeesCount: 2, attendees: [] });
   assert.equal(optedOut.state, 'not-provided');
   assert.equal(optedOut.named, 0, 'there are rows in a state whose whole meaning is that there are none');
+
+  // …and a roster of THIN rows is not the same state. It is `complete`, because
+  // two people are named; their fields are not this derivation's question.
+  const thin = { firstName: 'ก', lastName: 'ข', email: '', phone: '' };
+  const stated = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [thin, thin] });
+  assert.equal(stated.state, 'complete', 'thin rows were mistaken for an opted-out roster');
 });
