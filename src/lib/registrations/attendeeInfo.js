@@ -32,51 +32,47 @@
  * attendee. That asymmetry is the clearest evidence the two questions differ.
  */
 
-/** The four fields an attendee row is made of, in the order the table shows them. */
-export const ATTENDEE_FIELDS = ['firstName', 'lastName', 'email', 'phone'];
-
-/**
- * Is this attendee's information complete, partial, or not filled in at all?
+/*
+ * ══ `attendeeInfoState`, `missingAttendeeFields` AND `ATTENDEE_FIELDS` ARE
+ *    DELETED. ROUND 8. READ THIS BEFORE RE-ADDING ANY OF THEM. ══════════════
  *
- * ── ALL THREE BRANCHES ARE REACHABLE, AND THAT WAS CHECKED RATHER THAN
- *    ASSUMED ───────────────────────────────────────────────────────────────
+ * They answered the per-ATTENDEE question this module's header describes: does
+ * THIS row hold the four things a name badge and a certificate need? The answer
+ * drove the สถานะข้อมูล chip, and only that chip — checked before deleting, not
+ * assumed: `attendeeInfoState` had exactly one caller in `src/`
+ * (RegistrationDetailClient's table body), `missingAttendeeFields` exactly one
+ * (the chip's title attribute), and `ATTENDEE_FIELDS` was read only by those
+ * two. The ผู้เข้าอบรม TAB BADGE renders `attendeesCount` and the LIST SCREEN
+ * derives nothing per-attendee — its projection carries no attendees array at
+ * all, which is the ruling round 5 recorded.
  *
- * Every one of the four fields is `required: true` on RegisterPublic's
- * AttendeeSchema AND required by `attendeeSchema` in lib/schemas/register-public,
- * so a row written by the CUSTOMER FORM is always complete. Read that alone and
- * `partial` and `empty` look like dead branches.
+ * ── THE DEFINITION STOPPED BEING TRUE, WHICH IS WHY IT IS DELETED RATHER
+ *    THAN LEFT UNUSED ───────────────────────────────────────────────────────
  *
- * They are not, and the admin screen is why:
+ * "Complete" meant all FOUR fields. Round 8 makes email and phone OPTIONAL on
+ * the admin path (see AttendeeSchema and `updateRegistration`), so a row with a
+ * name and nothing else is now a valid record — and `attendeeInfoState` would
+ * have called it `partial` forever.
  *
- *   · `updateRegistration` writes with `runValidators: false` — deliberately, so
- *     an admin can correct a record the schema would now reject — so the
- *     sub-schema's `required` never runs on an admin save;
- *   · the attendee editor's `+ เพิ่มผู้เข้าอบรม` appends `EMPTY_ATTENDEE`, four
- *     empty strings, and nothing stops the admin saving with it half filled.
+ * A module that defines a rule nothing applies is the thing a future reader
+ * picks up and re-wires to the wrong meaning: the name says "is this attendee's
+ * information complete", it reads as authoritative, and its answer would be
+ * wrong for every record the admin screen can now legitimately create. Leaving
+ * it as dead code would have been worse than the chip.
  *
- * So `partial` is "an admin started a row and stopped" and `empty` is "an admin
- * added a slot and typed nothing". Both are states a reader has to be able to
- * see, and a fixture covers each.
+ * RE-POINTING IT AT THE NEW DEFINITION WAS CONSIDERED AND REJECTED. With two
+ * required fields, "complete" collapses to "has a name" — one reachable state
+ * for a three-state enum, guarding a condition the server already refuses and
+ * the editor already warns about. The replacement is
+ * `REQUIRED_ATTENDEE_FIELDS` in the detail client, which is deliberately not a
+ * "completeness" notion: it is the server's refusal condition restated for the
+ * one surface that must warn before the save.
  *
- * ── AND WHY THIS DOES NOT VALIDATE ─────────────────────────────────────────
- * Presence only. A malformed email is not `partial` — that would be this module
- * inventing a rule the record does not carry, and the customer form's zod schema
- * is the only thing entitled to have an opinion about the SHAPE of an email.
- *
- * @param {object} attendee
- * @returns {'complete'|'partial'|'empty'}
+ * THE TWO-QUESTIONS SPLIT IN THIS FILE'S HEADER IS THEREFORE NOW A ONE-QUESTION
+ * MODULE. The header is kept because the DISTINCTION is still the reason the
+ * roster derivation lives here rather than at a call site, and because a reader
+ * arriving from the git history needs to know where the other half went.
  */
-export function attendeeInfoState(attendee) {
-  const filled = ATTENDEE_FIELDS.filter((f) => String(attendee?.[f] ?? '').trim() !== '');
-  if (filled.length === ATTENDEE_FIELDS.length) return 'complete';
-  if (filled.length === 0) return 'empty';
-  return 'partial';
-}
-
-/** Which of the four fields this row is missing, in table order. */
-export function missingAttendeeFields(attendee) {
-  return ATTENDEE_FIELDS.filter((f) => String(attendee?.[f] ?? '').trim() === '');
-}
 
 /**
  * Does this row carry a person at all?

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
-import { attendeeInfoState } from '@/lib/registrations/attendeeInfo';
 
 /**
  * THE ผู้เข้าอบรม TAB: the summary row, the completeness chip, the per-row menu
@@ -344,78 +343,81 @@ test('CONTROL: the tone appears ONLY on the over-capacity cell', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. THE สถานะข้อมูล CHIP — every branch, with a fixture each
+// 2. THE COLUMNS — สถานะข้อมูล IS DELETED, PHONE IS ITS OWN
 // ════════════════════════════════════════════════════════════════════════════
+//
+// FIVE TESTS WERE DELETED HERE, not re-pointed, because their subject is gone.
+// Named with what happened to each claim:
+//
+//   · each of the three chip states renders on its own row
+//   · CONTROL: the fixtures really are in three different states
+//   · CONTROL: the chip extractor lands on the สถานะข้อมูล column
+//   · the partial chip names the missing fields in its title
+//   · the chip constrains its own width (w-fit, h-[21.5px])
+//       → DELETED OUTRIGHT. All five are about the chip's own rendering. The
+//         chip is gone, `attendeeInfoState` with it, and there is no surviving
+//         surface that answers "is this row complete" — because after round 8
+//         a two-field row IS complete. See lib/registrations/attendeeInfo.
+//
+//   · the chip colours are their own vocabulary, not the status module's
+//       → THE COLOURS ARE GONE, THE RULING IS NOT. "A per-attendee vocabulary
+//         may never join the status module" still binds SCHEDULE_BADGE on the
+//         public list table, and its own test there is untouched. The ruling is
+//         recorded in the client where INFO_BADGE used to be defined, so the
+//         next person wanting a per-row chip finds it. Nothing is retained here
+//         under a new name, because there is no per-attendee vocabulary left to
+//         make the claim about.
 
-test('each of the three states renders its own chip, on its own row', () => {
-  const rows = attendeeRows(FULL);
-  assert.equal(rows.length, 4, `expected 4 attendee rows, found ${rows.length}`);
-
-  const chip = (i) => textOf(cellsOf(rows[i])[3]);
-  assert.equal(chip(0), 'ข้อมูลครบ',   'the complete row is not labelled complete');
-  assert.equal(chip(1), 'ข้อมูลไม่ครบ', 'the row missing a phone is not labelled incomplete');
-  assert.equal(chip(2), 'ยังไม่กรอก',   'the entirely empty row is not labelled unfilled');
-  assert.equal(chip(3), 'ข้อมูลไม่ครบ', 'the email-only row is not labelled incomplete');
-});
-
-test('CONTROL: the fixtures really are in three different states', () => {
-  // If two of them collapsed to one state, the assertion above would be checking
-  // one branch three times and the other two would be untested.
-  const states = [COMPLETE, PARTIAL, BLANK, NO_NAME].map(attendeeInfoState);
-  assert.deepEqual(states, ['complete', 'partial', 'empty', 'partial']);
-  assert.equal(new Set(states).size, 3, 'the fixtures do not cover three distinct states');
-});
-
-test('CONTROL: the chip extractor lands on the สถานะข้อมูล column', () => {
-  // Off-by-one would assert the shape of a different cell — and the contact cell
-  // next door also holds one element on a sparse row, so the count would pass
-  // while proving nothing.
-  const cells = cellsOf(attendeeRows(FULL)[0]);
-  assert.equal(cells.length, 5, `expected 5 cells, found ${cells.length}`);
-  assert.ok(cells[1].includes('สมชาย ใจดี'), 'cell 1 is not the name cell');
-  assert.ok(cells[2].includes('somchai@example.com'), 'cell 2 is not the contact cell');
-  assert.ok(cells[3].includes('rounded-full'), 'cell 3 does not hold a chip');
-});
-
-test('the partial chip names the missing fields where a reader can reach them', () => {
-  // The chip is 21.5px in a 22% column and cannot hold a list of field names, so
-  // they go in the title. "ข้อมูลไม่ครบ" with no way to learn WHAT is missing is a
-  // chip that reports a problem and hides it.
-  const row = attendeeRows(FULL)[1];
-  assert.match(row, /title="ยังขาด: เบอร์โทร"/, 'the partial chip does not say what is missing');
-  // And the complete row carries no title at all — an empty one would be a
-  // tooltip that opens onto nothing.
-  assert.ok(!/title="/.test(cellsOf(attendeeRows(FULL)[0])[3]), 'the complete chip carries a title');
-});
-
-test('the chip colours are their own vocabulary, not the status module’s', () => {
+test('the table has five columns: #, name, email, phone, menu', () => {
   /**
-   * `complete` / `partial` / `empty` describe ONE ATTENDEE'S FIELDS;
-   * lib/registrations/statuses describes what stage a REGISTRATION is at. They
-   * share no value and answer no common question, so an entry for one in the
-   * other would be a category error — the same ruling the public list table's
-   * SCHEDULE_BADGE already carries.
+   * The header set, asserted by LABEL rather than by count alone — a count of
+   * five was also true before this round, with ข้อมูลติดต่อ and สถานะข้อมูล in
+   * place of อีเมล and เบอร์โทร. This is the assertion that can tell the two
+   * five-column tables apart.
    */
-  const rows = attendeeRows(FULL);
-  const chipClasses = (i) => /class="([^"]*rounded-full[^"]*)"/.exec(cellsOf(rows[i])[3])[1];
-  assert.match(chipClasses(0), /bg-emerald-100/, 'the complete chip lost its colour');
-  assert.match(chipClasses(1), /bg-amber-100/,   'the partial chip lost its colour');
-  assert.match(chipClasses(2), /bg-slate-100/,   'the empty chip lost its colour');
-  // Every chip has a background: a chip with none is invisible against the row
-  // and would read as an empty cell rather than as an unstyled state.
-  for (let i = 0; i < rows.length; i += 1) {
-    assert.match(chipClasses(i), /\bbg-/, `row ${i}'s chip has no background`);
+  const table = FULL.slice(FULL.indexOf('<table'), FULL.indexOf('</table>'));
+  const head = table.slice(table.indexOf('<thead'), table.indexOf('</thead>'));
+  const labels = [...head.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/g)].map((m) => textOf(m[1]));
+  assert.deepEqual(labels, ['#', 'ชื่อ-นามสกุล', 'อีเมล', 'เบอร์โทร', 'การดำเนินการ']);
+
+  // The deleted column is gone from the whole page, not merely from the header.
+  assert.ok(!FULL.includes('สถานะข้อมูล'), 'the สถานะข้อมูล column is still rendered');
+  assert.ok(!FULL.includes('ข้อมูลติดต่อ'), 'the merged contact column survived the split');
+  for (const label of ['ข้อมูลครบ', 'ข้อมูลไม่ครบ', 'ยังไม่กรอก']) {
+    assert.ok(!FULL.includes(label), `the chip vocabulary "${label}" is still on the page`);
   }
 });
 
-test('the chip constrains its own width', () => {
-  // It is a direct child of a `<td>` rather than a flex column, so it is not
-  // blockified the way the list tables' chips were — but `w-fit` is what makes
-  // that independent of the cell, and the compiled-CSS sweep in the fs tier is
-  // what proves the class paints.
-  const classes = /class="([^"]*rounded-full[^"]*)"/.exec(cellsOf(attendeeRows(FULL)[0])[3])[1];
-  assert.ok(classes.split(/\s+/).includes('w-fit'), `the chip does not size to its content: [${classes}]`);
-  assert.ok(classes.split(/\s+/).includes('h-[21.5px]'), 'the chip is not the measured 21.5px');
+test('email and phone are separate cells, each falling back to its own dash', () => {
+  /**
+   * ── RE-POINTED FROM "ONE DASH" TO "TWO", AND THAT IS THE COLUMN SPLIT ─────
+   * A name-only row used to show ONE dash, because email and phone shared a cell
+   * that fell back once. They are two cells now, so it shows two — and that is
+   * the change working rather than a regression. A TABLE CELL MAY NOT VANISH,
+   * which is why each falls back rather than emptying.
+   */
+  const rows = attendeeRows(FULL);
+  const cells = cellsOf(rows[0]);
+  assert.equal(cells.length, 5, `expected 5 cells, found ${cells.length}`);
+  assert.ok(cells[1].includes('สมชาย ใจดี'), 'cell 1 is not the name cell');
+  assert.ok(cells[2].includes('somchai@example.com'), 'cell 2 is not the email cell');
+  assert.ok(cells[2].includes('mailto:'), 'the email cell is not a mailto link');
+  assert.ok(cells[3].includes('0812345678'), 'cell 3 is not the phone cell');
+  assert.ok(!cells[3].includes('mailto:'), 'the phone cell links as an email');
+
+  // The row with an email and no phone: one real value, one dash, in the right
+  // cells — the ordering claim a page-wide dash count cannot make.
+  const emailOnly = cellsOf(rows[3]);
+  assert.ok(emailOnly[2].includes('@'), 'the email-only row lost its email');
+  assert.equal(textOf(emailOnly[3]), '—', 'the missing phone did not fall back to a dash');
+});
+
+test('a row with NO contact details renders two dashes, one per column', () => {
+  const blank = cellsOf(attendeeRows(FULL)[2]);
+  assert.equal(textOf(blank[2]), '—', 'the missing email did not fall back');
+  assert.equal(textOf(blank[3]), '—', 'the missing phone did not fall back');
+  // And neither cell is EMPTY, which is the defect the dash exists to prevent.
+  assert.ok(textOf(blank[2]).length > 0 && textOf(blank[3]).length > 0);
 });
 
 // ════════════════════════════════════════════════════════════════════════════

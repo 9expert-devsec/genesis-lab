@@ -93,6 +93,36 @@ export function buildPublicPaidReceiptModel({
     vat_amount: formatTHB(pricing.vatAmount ?? 0),
     total: formatTHB(pricing.total ?? 0),
 
+    /**
+     * ══ KNOWN DEFECT: THIS AND `seats` ABOVE CAN DISAGREE, AND BOTH ARE RIGHT ══
+     *
+     * `seats` (line ~69) is `pricing.seats` — the number the MONEY was computed
+     * from, frozen at checkout and never recomputed. `total_participants` is
+     * `attendeesCount` — the number the registration currently says are coming.
+     *
+     * THEY WERE THE SAME NUMBER AT CHARGE TIME and nothing keeps them equal
+     * afterwards. So a receipt re-sent for a record whose count changed since
+     * payment states a headcount that disagrees with its own total, on the same
+     * page, with no explanation.
+     *
+     * ── WHAT CHANGED IN ROUND 8, AND WHY THAT RAISES THE STAKES ──────────────
+     * Before round 8, `attendeesCount` was editable on ANY status with no gate,
+     * so an admin could STUMBLE into this by mistyping a number in a form that
+     * also edits phone numbers. Round 8 closed that: the count now moves on a
+     * paid record only through `updateAttendeesCountPaid`, behind a panel that
+     * states this exact consequence in words and an audit row naming both
+     * numbers.
+     *
+     * So the divergence is no longer accidental — an admin is walked up to it
+     * and consents. That makes it MORE likely to occur and better understood
+     * when it does, but it does not make the document correct: this line and
+     * `seats` still contradict each other with nothing on the page saying so.
+     *
+     * NOT FIXED HERE, and deliberately not papered over by making one read the
+     * other — that would silently pick a winner. The open question is which
+     * number a receipt should quote, and whether it should show both with a
+     * note. It is a decision about documents, not a bug in this mapper.
+     */
     total_participants: doc?.attendeesCount ?? seats,
     attendee_list,
     attendee_later,
