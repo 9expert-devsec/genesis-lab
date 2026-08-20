@@ -449,27 +449,62 @@ test('all three roster branches still render — on the surface that survived', 
    * list projection carries neither, and `getRegistrationById` is
    * `findById(id).lean()` with no projection at all. Nothing is widened.
    */
+  /**
+   * ── RE-POINTED AGAIN IN ROUND 8, ONTO เพิ่มรายชื่อแล้ว ─────────────────────
+   *
+   * Round 6 moved this off the deleted dark strip and onto the summary row's
+   * THIRD cell, ความครบถ้วน. Round 8 deletes that cell — once the second cell
+   * reads `M/N` the third stated the same fact again — so the claim moves to
+   * cell 1, which is the one that now carries both numbers.
+   *
+   * THE CLAIM IS STILL THE SAME ONE AND IS STILL NOT WEAKER: the roster
+   * derivation has branches, every one is reachable, and every one is worded.
+   * Only the element carrying it moved, for the second time.
+   *
+   * It is STRONGER by one branch: round 8 adds `over`, which round 6 could not
+   * have asserted because the derivation did not distinguish it — an
+   * over-capacity roster reported `complete`.
+   */
   const cellOf = (markup) => {
     const start = markup.indexOf('h-[75.85px]');
     assert.notEqual(start, -1, 'no attendee summary row in the render');
     const region = markup.slice(start, start + 1800);
     const cells = [...region.matchAll(/<div class="[^"]*pt-\[15px\][^"]*">([\s\S]*?)(?=<div class="[^"]*pt-\[15px\]|$)/g)]
       .map((m) => m[1]);
-    assert.equal(cells.length, 3, 'the summary row does not have three cells');
-    assert.ok(cells[2].includes('ความครบถ้วน'), 'cell 2 is not the completeness cell');
-    return cells[2];
+    assert.equal(cells.length, 2, 'the summary row does not have two cells');
+    assert.ok(cells[1].includes('เพิ่มรายชื่อแล้ว'), 'cell 1 is not the named-count cell');
+    return cells[1];
   };
 
-  assert.ok(cellOf(PUB_FULL).includes('>ครบ 2/2<'), 'a complete roster does not say so');
-  assert.ok(cellOf(PUB_SPARSE).includes('>ยังไม่ครบ 1/3<'), 'an incomplete roster does not say so');
+  assert.ok(cellOf(PUB_FULL).includes('>2/2 คน<'), 'a complete roster does not say so');
+  assert.ok(cellOf(PUB_SPARSE).includes('>1/3 คน<'), 'an incomplete roster does not say so');
 
   const optedOut = pub({ ...PUBLIC_FULL, attendeesListProvided: false });
   assert.ok(cellOf(optedOut).includes('>ยังไม่แจ้ง<'), 'an opt-out roster is reported as a count');
-  // Thai negates by PREFIX: `ยังไม่ครบ` CONTAINS `ครบ`, so a bare includes()
-  // cannot tell the two apart. Read the fraction instead — an opted-out roster
-  // has no denominator to be complete against.
+  // An opted-out roster has no denominator to be complete against, so it must
+  // carry no fraction at all.
   assert.ok(!/\d+\/\d+/.test(cellOf(optedOut).replace(/<[^>]*>/g, ' ')),
     'an opt-out roster claims a completeness it cannot have');
+
+  /**
+   * THE FOURTH BRANCH, which round 6 could not reach.
+   *
+   * ── AND A VACUITY THE CONTROL FOUND, RECORDED RATHER THAN PATCHED OVER ────
+   * The first version of this asserted only `>2/1 คน<`. The `flatten-over`
+   * control — which reverts the derivation to `named >= count`, so an
+   * over-capacity roster reports `complete` again — LEFT IT GREEN. The cell
+   * renders `${named}/${count}` straight from the two numbers, so the fraction
+   * is right whether or not the derivation distinguishes the state at all.
+   *
+   * The fraction alone is therefore not a test of the `over` branch. The TONE
+   * is: it is the only thing on this cell that reads `roster.state`.
+   */
+  const over = pub({ ...PUBLIC_FULL, attendeesCount: 1 });
+  assert.ok(cellOf(over).includes('>2/1 คน<'),
+    'an over-capacity roster does not show its two numbers');
+  assert.match(cellOf(over), /text-9e-accent/,
+    'the over-capacity cell is not marked as wrong — the fraction alone passes even when '
+    + 'the derivation has been flattened back to `named >= count`');
 });
 
 test('the in-house headcount reads "15 ท่าน" and never "ประมาณ"', () => {

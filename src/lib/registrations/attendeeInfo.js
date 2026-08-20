@@ -112,12 +112,113 @@ export function isNamedAttendee(attendee) {
  * `รายชื่อครบ 2/2` and the 359px cell shows `ครบ 2/2` — and that is formatting,
  * which is the caller's. What may not differ is the STATE and the two numbers.
  *
+ * ══ `over` IS A FOURTH STATE, ADDED IN ROUND 8, AND IT WAS HIDING ═══════════
+ *
+ * This used to read `named >= count ? 'complete' : 'incomplete'`, so a roster
+ * with MORE people than seats reported `complete` — the same word as a roster
+ * that matches exactly. Round 8 introduces the rule that a roster may not exceed
+ * `attendeesCount`, and a screen that cannot tell those two apart cannot show a
+ * record breaking it.
+ *
+ * IT IS NOT HYPOTHETICAL. Measured against production before the rule was
+ * written (scripts/_probe-roster-over-capacity.mjs): of 39 public registrations,
+ * ONE holds 2 attendees against a count of 1. Every one of those documents
+ * reported `complete` until this change.
+ *
+ * ── AND THE VACUITY THIS CREATES, STATED ──────────────────────────────────
+ * `complete` is now STRICTLY `named === count`. Any assertion that read
+ * `state === 'complete'` for an over-capacity fixture was passing for the wrong
+ * reason and now fails, which is the change working. Any assertion that reads
+ * `'complete'` for an EXACT roster is unaffected — checked, not assumed.
+ *
  * @param {{attendeesListProvided?: boolean, attendeesCount?: number, attendees?: object[]}} doc
- * @returns {{state: 'not-provided'|'complete'|'incomplete', named: number, count: number}}
+ * @returns {{state: 'not-provided'|'complete'|'incomplete'|'over', named: number, count: number}}
  */
 export function rosterState({ attendeesListProvided, attendeesCount, attendees } = {}) {
   const count = Number(attendeesCount ?? 0);
   const named = (attendees ?? []).filter(isNamedAttendee).length;
   if (attendeesListProvided === false) return { state: 'not-provided', named, count };
-  return { state: named >= count ? 'complete' : 'incomplete', named, count };
+  if (named > count) return { state: 'over', named, count };
+  return { state: named === count ? 'complete' : 'incomplete', named, count };
+}
+
+/**
+ * IS THERE ROOM FOR ANOTHER NAME?
+ *
+ * The one place the seat lock's question is answered, so the disabled button,
+ * the dashed add-row inside the editor and any future caller cannot disagree
+ * about it. The SERVER enforces the rule independently — see
+ * `updateRegistration` — because a disabled button is a courtesy and every
+ * `'use server'` export is a POST endpoint.
+ *
+ * `count > 0` guards the degenerate document: `attendeesCount` is `required`
+ * with a default of 1 on the schema, but one production record has it missing
+ * entirely (measured, same probe), and `0 >= 0` would otherwise lock that record
+ * out of ever gaining a name.
+ */
+export function rosterHasRoom({ attendeesListProvided, attendeesCount, attendees } = {}) {
+  const { named, count } = rosterState({ attendeesListProvided, attendeesCount, attendees });
+  if (count <= 0) return true;
+  return named < count;
+}
+
+/**
+ * THE DUPLICATE RULE, AND WHAT IT DOES WHEN THERE IS NO EMAIL.
+ *
+ * ══ EMAIL FIRST, BECAUSE IT IS THE ONLY IDENTIFIER THE RECORD CARRIES ═══════
+ *
+ * Two rows with the same non-empty email are the same person entered twice.
+ * Compared case-insensitively and trimmed, because the schema lowercases on the
+ * customer path and `updateRegistration` lowercases on the admin path, but a
+ * legacy row may hold either.
+ *
+ * ══ AND WHEN EMAIL IS ABSENT — A CHOICE, NOT A FALLBACK ═════════════════════
+ *
+ * Round 8 makes email OPTIONAL on the admin path, so "match on email" stops
+ * being a total rule. The three options were:
+ *
+ *   · MATCH ON NOTHING — a row with no email can never collide. Rejected: it
+ *     makes the rule bypassable by clearing a field, and permits unlimited
+ *     identical blank-email rows, which is exactly the double-entry the rule
+ *     exists to catch.
+ *   · MATCH ON NAME ALWAYS — rejected in the other direction: two people really
+ *     can share a name, and a roster is the one place a company sends two
+ *     staff called สมชาย. Blocking that would make the admin fabricate a
+ *     difference to get past a validator.
+ *   · MATCH ON NAME ONLY BETWEEN ROWS THAT BOTH LACK AN EMAIL. Chosen.
+ *
+ * The third is the narrowest rule that still closes the hole. A row WITH an
+ * email never collides with a row without one — they are distinguishable, and
+ * treating them as the same would block the ordinary flow of adding a name now
+ * and its email later. Two rows that carry NOTHING but the same name are
+ * indistinguishable in the record itself, and on a roster of at most 50 for one
+ * session that is a double-entry far more often than it is twins.
+ *
+ * The failure mode is stated rather than hidden: this DOES refuse two genuinely
+ * different people with the same name and no email addresses. The admin's way
+ * past is to give one of them an email, which is the field that would have told
+ * them apart in the first place.
+ *
+ * @returns {number} the index of the first row that duplicates an earlier one, or -1
+ */
+export function firstDuplicateAttendee(attendees = []) {
+  const seenEmail = new Set();
+  const seenNamelessName = new Set();
+
+  for (let i = 0; i < attendees.length; i += 1) {
+    const a = attendees[i] ?? {};
+    const email = String(a.email ?? '').trim().toLowerCase();
+    if (email) {
+      if (seenEmail.has(email)) return i;
+      seenEmail.add(email);
+      continue;
+    }
+    // No email: compare on the full name, and ONLY against other emailless rows.
+    const name = `${String(a.firstName ?? '').trim()} ${String(a.lastName ?? '').trim()}`
+      .trim().toLowerCase().replace(/\s+/g, ' ');
+    if (!name) continue; // an empty slot is not a duplicate of another empty slot
+    if (seenNamelessName.has(name)) return i;
+    seenNamelessName.add(name);
+  }
+  return -1;
 }

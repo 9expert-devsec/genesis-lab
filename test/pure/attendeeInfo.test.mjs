@@ -6,6 +6,8 @@ import {
   missingAttendeeFields,
   isNamedAttendee,
   rosterState,
+  rosterHasRoom,
+  firstDuplicateAttendee,
 } from '@/lib/registrations/attendeeInfo';
 
 /**
@@ -100,13 +102,170 @@ test('fewer named rows than declared is incomplete', () => {
   assert.deepEqual(r, { state: 'incomplete', named: 1, count: 3 });
 });
 
-test('MORE named rows than declared is complete, not an error', () => {
-  // An admin can add rows past the declared count. `named >= count` rather than
-  // `===`, so a registration with three people against a declared two reads as
-  // complete rather than as some fourth state nobody has designed.
+test('MORE named rows than declared is `over` — the fourth state now exists', () => {
+  /**
+   * ══ RE-POINTED IN ROUND 8, AND THE OLD RULING IS WITHDRAWN ON PURPOSE ══════
+   *
+   * This test used to read "MORE named rows than declared is complete, not an
+   * error", and its comment said `named >= count` rather than `===` so that an
+   * over-capacity roster "reads as complete rather than as some fourth state
+   * nobody has designed".
+   *
+   * SOMEBODY HAS NOW DESIGNED IT. Round 8 makes the roster's not exceeding
+   * `attendeesCount` a rule, and a derivation that reports the breach with the
+   * same word as compliance cannot drive a screen that shows it.
+   *
+   * ── THE OLD ASSERTION WAS TRUE AND HID A LIVE DEFECT ─────────────────────
+   * Not a hypothetical fourth state: measured against production before the rule
+   * was written, ONE of 39 public registrations holds 2 attendees against a
+   * count of 1. It reported `complete` for as long as this test asserted it
+   * should. See scripts/_probe-roster-over-capacity.mjs.
+   */
   const r = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL, FULL, FULL] });
-  assert.equal(r.state, 'complete');
+  assert.equal(r.state, 'over');
   assert.equal(r.named, 3);
+  assert.equal(r.count, 2);
+});
+
+test('`complete` is now STRICT — exactly as many names as seats', () => {
+  // The other half of the split. Without this, `over` could have been introduced
+  // by a bug that reported it for the EXACT case too, and every assertion above
+  // would still pass.
+  const exact = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL, FULL] });
+  assert.equal(exact.state, 'complete');
+  const under = rosterState({ attendeesListProvided: true, attendeesCount: 2, attendees: [FULL] });
+  assert.equal(under.state, 'incomplete');
+});
+
+test('the production shape reproduces: 2 named against a count of 1', () => {
+  // The exact record the probe found, as a fixture. A rule written for a state
+  // nobody has an example of is a rule nobody has tested.
+  const r = rosterState({ attendeesListProvided: true, attendeesCount: 1, attendees: [FULL, FULL] });
+  assert.deepEqual(r, { state: 'over', named: 2, count: 1 });
+});
+
+// ── The seat lock's question ────────────────────────────────────────────────
+
+test('rosterHasRoom says no at capacity and beyond, yes below it', () => {
+  const room = (count, n) => rosterHasRoom({
+    attendeesListProvided: true, attendeesCount: count, attendees: Array(n).fill(FULL),
+  });
+  assert.equal(room(3, 1), true,  'a roster below capacity has room');
+  assert.equal(room(3, 2), true);
+  assert.equal(room(3, 3), false, 'a full roster has no room');
+  assert.equal(room(1, 2), false, 'an ALREADY-OVER roster has no room — it does not get more');
+});
+
+test('a document with no attendeesCount is not locked out of gaining a name', () => {
+  /**
+   * The degenerate shape, and it is real: `attendeesCount` is `required` with a
+   * default of 1, and ONE production record has it missing entirely. Without the
+   * `count <= 0` guard `0 >= 0` would be "full" and that record could never gain
+   * an attendee — a rule locking a document out of being fixed.
+   */
+  assert.equal(rosterHasRoom({ attendeesListProvided: true, attendees: [] }), true);
+  assert.equal(rosterHasRoom({ attendeesListProvided: true, attendeesCount: 0, attendees: [FULL] }), true);
+});
+
+test('an opted-out roster still has room — nothing to be full of', () => {
+  // `attendeesListProvided: false` means buildAttendees wrote an EMPTY array, so
+  // the coordinator can still start listing people later.
+  assert.equal(rosterHasRoom({ attendeesListProvided: false, attendeesCount: 3, attendees: [] }), true);
+});
+
+// ── The duplicate rule ──────────────────────────────────────────────────────
+
+const person = (over = {}) => ({ firstName: 'สมชาย', lastName: 'ใจดี', email: 'a@b.c', phone: '08', ...over });
+
+test('the same EMAIL twice is a duplicate, whatever the names say', () => {
+  // Email is the only identifier the record carries, so it wins outright — two
+  // rows with one address are one person entered twice even if the names differ
+  // (a married name, a typo, a nickname).
+  const rows = [person(), person({ firstName: 'สมหญิง', lastName: 'ดีใจ' })];
+  assert.equal(firstDuplicateAttendee(rows), 1);
+});
+
+test('email comparison is trimmed and case-insensitive', () => {
+  // The customer path lowercases and so does updateRegistration, but a legacy
+  // row may hold either — so the comparison cannot assume normalisation.
+  assert.equal(firstDuplicateAttendee([person({ email: 'A@B.C' }), person({ email: ' a@b.c ' })]), 1);
+});
+
+test('two DIFFERENT people are not a duplicate', () => {
+  // Without this, a rule that returned 1 for everything would satisfy the tests
+  // above and block every roster of more than one person.
+  assert.equal(firstDuplicateAttendee([person(), person({ email: 'c@d.e' })]), -1);
+  assert.equal(firstDuplicateAttendee([person()]), -1);
+  assert.equal(firstDuplicateAttendee([]), -1);
+});
+
+test('with NO email, the same full name is a duplicate', () => {
+  /**
+   * The case round 8 created by making email optional. Matching on nothing would
+   * make the rule bypassable by clearing a field and would permit unlimited
+   * identical blank rows.
+   */
+  const rows = [person({ email: '' }), person({ email: '' })];
+  assert.equal(firstDuplicateAttendee(rows), 1);
+});
+
+test('a row WITH an email never collides with a row without one', () => {
+  /**
+   * The deliberate narrowing. The two are distinguishable in the record, and
+   * treating them as the same would block the ordinary flow of adding a name now
+   * and its email later — on the very screen whose job is filling gaps in.
+   */
+  assert.equal(firstDuplicateAttendee([person(), person({ email: '' })]), -1);
+  assert.equal(firstDuplicateAttendee([person({ email: '' }), person()]), -1);
+});
+
+test('two DIFFERENT emailless people are not a duplicate', () => {
+  assert.equal(firstDuplicateAttendee([
+    person({ email: '' }),
+    person({ email: '', firstName: 'สมหญิง' }),
+  ]), -1);
+});
+
+test('an empty SLOT is not a duplicate of another empty slot', () => {
+  /**
+   * The + button appends four empty strings. Two untouched slots would otherwise
+   * collide on the empty name and refuse a save the admin has not made yet —
+   * the validator firing on the act of making room to type.
+   */
+  const blank = { firstName: '', lastName: '', email: '', phone: '' };
+  assert.equal(firstDuplicateAttendee([blank, blank, blank]), -1);
+});
+
+test('THE COORDINATOR SEAT: attendees[0] being the coordinator is NOT a duplicate', () => {
+  /**
+   * ── BOTH DIRECTIONS OF THE CASE THE BRIEF NAMES ───────────────────────────
+   *
+   * When `coordinator.isAttending` is true, `buildAttendees` copies the
+   * coordinator into `attendees[0]` — so their email is legitimately IN the
+   * roster, once. The rule must not fire on that, or every attending
+   * coordinator's registration would be unsaveable.
+   *
+   * It must fire when that same person is added a SECOND time, which is the
+   * commonest way this duplicate actually happens: the admin does not realise
+   * the coordinator already occupies a seat.
+   *
+   * The rule is `within the attendees array`, so both fall out of one check
+   * rather than needing a coordinator-shaped exception.
+   */
+  const coordinator = person({ email: 'coord@x.co' });
+  assert.equal(firstDuplicateAttendee([coordinator]), -1,
+    'the coordinator occupying their own seat reads as a duplicate');
+  assert.equal(firstDuplicateAttendee([coordinator, person({ email: 'other@x.co' })]), -1,
+    'the coordinator plus a second person reads as a duplicate');
+  assert.equal(firstDuplicateAttendee([coordinator, { ...coordinator }]), 1,
+    'the coordinator added twice is NOT caught — the commonest form of this mistake');
+});
+
+test('the INDEX returned is the second occurrence, so the message can name it', () => {
+  // A boolean would leave the error saying "there is a duplicate somewhere" on a
+  // roster of up to 50. The index is what lets it say which row.
+  const rows = [person({ email: 'a@x' }), person({ email: 'b@x' }), person({ email: 'a@x' })];
+  assert.equal(firstDuplicateAttendee(rows), 2, 'the FIRST occurrence was blamed instead of the second');
 });
 
 test('`attendeesListProvided` undefined behaves as provided', () => {

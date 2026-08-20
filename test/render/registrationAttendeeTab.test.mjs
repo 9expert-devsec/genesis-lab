@@ -114,17 +114,31 @@ const hasRowTrigger = (row) => /aria-haspopup="menu"/.test(row);
 // 1. THE SUMMARY ROW
 // ════════════════════════════════════════════════════════════════════════════
 
-test('the summary row has THREE equal cells, and they read the roster', () => {
+test('the summary row has TWO cells — ความครบถ้วน is DELETED, not re-labelled', () => {
+  /**
+   * ══ RE-POINTED IN ROUND 8 ═══════════════════════════════════════════════════
+   *
+   * This asserted THREE cells, the third being ความครบถ้วน reading
+   * `ยังไม่ครบ 3/4`. That cell is gone — removed, not renamed — because once the
+   * second cell reads `M/N` it stated the same fact a third time. The one thing
+   * it added, a word for the opted-out case, moved into the second cell.
+   *
+   * The claim that survives is that both cells READ THE ROSTER rather than the
+   * raw document, and it is unchanged. What is asserted additionally is the
+   * ABSENCE, because a re-label would have satisfied a bare count of two.
+   */
   const cells = summaryCells(FULL);
-  assert.equal(cells.length, 3, `expected 3 summary cells, found ${cells.length}`);
+  assert.equal(cells.length, 2, `expected 2 summary cells, found ${cells.length}`);
   assert.ok(cells[0].includes('จำนวนที่สมัคร'), 'cell 0 is not จำนวนที่สมัคร');
-  assert.ok(cells[0].includes('>4 ท่าน<'), 'the declared count is wrong');
-  assert.ok(cells[1].includes('แจ้งรายชื่อแล้ว'), 'cell 1 is not แจ้งรายชื่อแล้ว');
+  assert.ok(cells[0].includes('>4 คน<'), 'the declared count is wrong');
+  assert.ok(cells[1].includes('เพิ่มรายชื่อแล้ว'), 'cell 1 is not เพิ่มรายชื่อแล้ว');
   // THREE named, not four: BLANK carries nothing, so it is a slot rather than a
   // person. NO_NAME has an email and IS counted — see the pure tier.
-  assert.ok(cells[1].includes('>3 ท่าน<'), 'the named count does not follow isNamedAttendee');
-  assert.ok(cells[2].includes('ความครบถ้วน'), 'cell 2 is not ความครบถ้วน');
-  assert.ok(cells[2].includes('>ยังไม่ครบ 3/4<'), 'the completeness cell does not read the roster');
+  assert.ok(cells[1].includes('>3/4 คน<'), 'the named cell does not read the roster as M/N');
+
+  // The deleted cell is gone from the whole page, not merely from this row.
+  assert.ok(!FULL.includes('ความครบถ้วน'), 'the ความครบถ้วน cell is still rendered somewhere');
+  assert.ok(!FULL.includes('ยังไม่ครบ'), 'the ครบ / ยังไม่ครบ vocabulary survived the delete');
 });
 
 test('the summary cells are EQUAL width', () => {
@@ -142,7 +156,10 @@ test('the summary cells are EQUAL width', () => {
   const start = FULL.indexOf('h-[75.85px]');
   const region = FULL.slice(start, start + 1400);
   const cells = [...region.matchAll(/<div class="([^"]*pt-\[15px\][^"]*)"/g)].map((m) => m[1]);
-  assert.equal(cells.length, 3);
+  // TWO since round 8 — ความครบถ้วน was deleted. `flex-1` is what makes the
+  // remaining pair equal, and it is the same requirement at any cell count; the
+  // 359.46px figure in the docstring was the measurement at three.
+  assert.equal(cells.length, 2);
   for (const classes of cells) {
     assert.ok(classes.split(/\s+/).includes('flex-1'),
       `a summary cell does not take an equal share: [${classes}]`);
@@ -173,19 +190,157 @@ test('the ความครบถ้วน cell and the card sentence agree, in
    * tab agrees with one inside it. That cross-page claim has no subject any
    * more. It is not being quietly retained under a new name.
    */
-  assert.ok(summaryCells(FULL)[2].includes('ยังไม่ครบ 3/4'), 'the tab cell does not carry the roster');
+  /**
+   * ── RE-POINTED AGAIN IN ROUND 8, ONTO THE CELL THAT REPLACED IT ───────────
+   * The pair is now the เพิ่มรายชื่อแล้ว CELL (`3/4 คน`) and the same card
+   * SENTENCE. The claim is untouched — two surfaces, one derivation, different
+   * wordings — and only the cell carrying one half moved. Note it is now
+   * `cells[1]`, because the cell this test was originally written about is the
+   * one that was deleted.
+   */
+  assert.ok(summaryCells(FULL)[1].includes('3/4 คน'), 'the tab cell does not carry the roster');
   assert.ok(FULL.includes('ยังขาดอีก 1 ท่าน จากที่สมัครไว้ 4 ท่าน'),
     'the card sentence does not carry the same roster');
 
   // And on the opted-out record BOTH say so, neither invents a denominator.
-  assert.ok(summaryCells(OPTED_OUT)[2].includes('>ยังไม่แจ้ง<'), 'the cell claims a count on an opted-out roster');
+  assert.ok(summaryCells(OPTED_OUT)[1].includes('>ยังไม่แจ้ง<'), 'the cell claims a count on an opted-out roster');
   assert.ok(OPTED_OUT.includes('ผู้ประสานงานยังไม่ประสงค์แจ้งรายชื่อ'),
     'the card sentence claims a count on an opted-out roster');
   // No fraction, read from the cell's TEXT rather than its markup — the markup
   // is full of `/` from closing tags and the first draft of this line matched
   // every one of them.
-  assert.ok(!/\d+\/\d+/.test(textOf(summaryCells(OPTED_OUT)[2])),
+  assert.ok(!/\d+\/\d+/.test(textOf(summaryCells(OPTED_OUT)[1])),
     'the opted-out cell rendered a fraction it has no denominator for');
+});
+
+test('an ALREADY-OVER roster shows M > N, and shows it as wrong', () => {
+  /**
+   * ── THE PRODUCTION SHAPE, AS A FIXTURE ────────────────────────────────────
+   * One of 39 public registrations holds 2 attendees against a count of 1
+   * (scripts/_probe-roster-over-capacity.mjs). It must render AS IT IS: nothing
+   * truncates the roster, no attendee is deleted to satisfy a rule invented
+   * after the data, and the numbers are shown disagreeing because they DO
+   * disagree.
+   *
+   * The tone is the signal. `text-9e-accent` on that one cell is what separates
+   * "2/1, which the reader must notice" from "2/1, rendered as calmly as 2/2" —
+   * and it is the caller's, because EqualSummaryRow picks no colours.
+   */
+  const over = render({ attendeesCount: 1 });
+  const cells = summaryCells(over);
+  assert.equal(cells.length, 2);
+  assert.ok(cells[0].includes('>1 คน<'), 'the declared count is not the stored one');
+  // THREE named against one seat, not four: the fixture's BLANK row carries
+  // nothing, so it is a slot rather than a person — `isNamedAttendee`, the same
+  // member test the count has always used. The ROW count below is four, and the
+  // two numbers differing is the distinction, not a discrepancy.
+  assert.ok(cells[1].includes('>3/1 คน<'), 'the over-capacity roster is not shown as M/N');
+  assert.match(cells[1], /text-9e-accent/, 'the over-capacity cell is not marked as wrong');
+
+  // Every attendee is still on the page — the record is not truncated to fit.
+  assert.equal(attendeeRows(over).length, 4, 'an over-capacity roster lost rows');
+
+  // …and the card sentence says so in words rather than claiming completeness.
+  assert.ok(over.includes('รายชื่อเกินจำนวนที่สมัคร'), 'the sentence does not report the breach');
+});
+
+// ── The seat lock, as the reader meets it ───────────────────────────────────
+
+/** The read view's + button, by its measured width. */
+function addButton(markup) {
+  const m = /<button[^>]*w-\[92\.6px\][^>]*>[\s\S]*?<\/button>/.exec(markup);
+  return m ? m[0] : null;
+}
+
+/**
+ * IS THE BUTTON REALLY DISABLED?
+ *
+ * ── `/\bdisabled\b/` IS NOT THE TEST, AND IT REDDENED ON CORRECT MARKUP ────
+ *
+ * The button carries `disabled:cursor-not-allowed disabled:opacity-40
+ * disabled:hover:bg-transparent` — Tailwind VARIANT classes, which contain the
+ * word "disabled" and are present whether or not the control is disabled. A word
+ * match therefore reported EVERY render as disabled, including the one with a
+ * seat still free, and the "below capacity it is live" assertion failed on code
+ * that was working.
+ *
+ * That is the vacuity pattern in its purest form: a probe that was true for a
+ * reason unrelated to its name. It has to read the ATTRIBUTE — React emits a
+ * true boolean attribute as `disabled=""` — which cannot appear inside a class
+ * list.
+ */
+const isDisabled = (tag) => /\sdisabled=""/.test(tag);
+
+test('at capacity the + button is DISABLED and states why — never hidden', () => {
+  /**
+   * "Disabled with a reason, never hidden." A control that VANISHES reads as a
+   * bug: the admin looks for it, does not find it, and has no way to learn why.
+   *
+   * Both halves matter. `disabled` alone is a control that refuses silently;
+   * `title` alone is a control that explains only to a pointer. The visible
+   * sentence beside it carries the same words for everyone else.
+   */
+  const full = render({ attendeesCount: 3 }); // 3 named against 3 seats
+  const btn = addButton(full);
+  assert.ok(btn, 'the + button is gone at capacity — it must be disabled, not hidden');
+  assert.ok(isDisabled(btn), 'the + button is still live at capacity');
+  assert.match(btn, /title="เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว"/, 'the disabled button does not say why');
+  assert.ok(full.includes('เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว'),
+    'the reason is nowhere in the layout — a title alone reaches only a pointer');
+});
+
+test('below capacity the same button is live and carries no reason', () => {
+  // Without this, "disabled at capacity" passes on a button disabled always.
+  const btn = addButton(FULL); // 3 named against 4 seats
+  assert.ok(btn, 'the + button is missing below capacity');
+  assert.equal(isDisabled(btn), false, 'the + button is disabled with a seat still free');
+  assert.equal(/title=/.test(btn), false, 'a live button carries a reason it does not need');
+  assert.ok(!FULL.includes('เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว'),
+    'the at-capacity sentence renders below capacity');
+});
+
+test('CONTROL: the disabled probe is not fooled by the `disabled:` variant classes', () => {
+  /**
+   * The exact confusion that reddened a correct render. The button carries three
+   * `disabled:*` Tailwind classes in EVERY state, so a word match reports every
+   * render as disabled and the "it is live below capacity" claim becomes
+   * unfalsifiable.
+   */
+  const variantsOnly = '<button type="button" class="disabled:opacity-40 disabled:cursor-not-allowed">x</button>';
+  const reallyOff    = '<button type="button" disabled="" class="disabled:opacity-40">x</button>';
+  assert.equal(isDisabled(variantsOnly), false, 'the probe is fooled by the variant classes');
+  assert.equal(isDisabled(reallyOff), true, 'the probe cannot see a genuinely disabled control');
+  // …and the naive form really would have been fooled, which is why this exists.
+  assert.equal(/\bdisabled\b/.test(variantsOnly), true,
+    'the control is inert — the naive matcher must fire here, or it was never the trap');
+});
+
+test('an ALREADY-OVER roster disables it too — it does not get more room', () => {
+  const btn = addButton(render({ attendeesCount: 1 }));
+  assert.ok(btn, 'the + button is gone on an over-capacity record');
+  assert.ok(isDisabled(btn), 'an over-capacity roster can still be added to');
+});
+
+test('a CANCELLED record renders NO + button — a different question', () => {
+  /**
+   * Absence here is right, and it is not the seat lock: there is nothing to edit
+   * rather than no room to edit it. The two gates are separate — `onEdit` and
+   * `seatsAvailable` — and this is what keeps them from being confused.
+   */
+  assert.equal(addButton(CANCELLED), null, 'a cancelled record kept the + button');
+  assert.ok(!CANCELLED.includes('เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว'),
+    'a cancelled record explains the seat lock, which is not why its button is gone');
+});
+
+test('CONTROL: the tone appears ONLY on the over-capacity cell', () => {
+  // Otherwise `text-9e-accent` might be on every cell, or on none, and the
+  // assertion above would pass for a reason unrelated to the roster.
+  for (const cell of summaryCells(FULL)) {
+    assert.ok(!/text-9e-accent/.test(cell), 'a within-capacity cell is marked as wrong');
+  }
+  for (const cell of summaryCells(OPTED_OUT)) {
+    assert.ok(!/text-9e-accent/.test(cell), 'an opted-out cell is marked as wrong');
+  }
 });
 
 // ════════════════════════════════════════════════════════════════════════════

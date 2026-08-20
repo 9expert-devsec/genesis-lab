@@ -33,6 +33,7 @@ const ROOT = process.cwd();
 const ACTIONS = 'src/lib/actions/registrations.js';
 const CONTRACT = 'src/lib/audit/auditContract.js';
 const CLIENT = 'src/app/admin/registrations/_components/RegistrationDetailClient.jsx';
+const SCHEMA = 'src/lib/schemas/register-public.js';
 
 /**
  * Each break names the file, an exact FIND, its REPLACE, and — the part that
@@ -199,6 +200,82 @@ const BREAKS = {
                     </p>`,
     replace: `                    <input type="number" min={1} max={50} value={attendeesCount}
                       onChange={(e) => setAttendeesCount(parseInt(e.target.value, 10) || 1)} />`,
+  },
+
+  // ── item 3: the seat lock ────────────────────────────────────────────────
+
+  'client-unlock': {
+    file: CLIENT,
+    why: 'THE ONE THAT MATTERS: remove BOTH client guards, so nothing on screen stops an over-capacity roster. The SERVER assertions must stay green — that is what proves the button was never the enforcement.',
+    reddens: [
+      'render/registrationAttendeeTab › at capacity the + button is DISABLED and states why',
+      'render/registrationAttendeeTab › an ALREADY-OVER roster disables it too',
+      'fs/rosterSeatLock › both + buttons read the SAME seatsAvailable, derived once',
+    ],
+    staysGreen: [
+      'fs/rosterSeatLock › the roster ceiling is enforced in updateRegistration, both cases — THE MEASUREMENT: the lock survives the UI being gone',
+    ],
+    find: '  const seatsAvailable = rosterHasRoom({ attendeesListProvided, attendeesCount, attendees });',
+    replace: '  const seatsAvailable = true;',
+  },
+
+  'no-server-lock': {
+    file: ACTIONS,
+    why: 'Remove the server ceiling entirely, leaving only the disabled button. The mirror of client-unlock.',
+    reddens: [
+      'fs/rosterSeatLock › the roster ceiling is enforced in updateRegistration, both cases',
+      'fs/rosterSeatLock › the refusal NAMES the seat lock rather than blaming cancellation',
+    ],
+    find: "      filter.$expr = { $gte: ['$attendeesCount', rosterLength] };",
+    replace: '      void rosterLength;',
+  },
+
+  'dup-off': {
+    file: ACTIONS,
+    why: 'Accept a duplicate attendee. The rule is the only thing standing between a roster and the same person entered twice.',
+    reddens: [
+      'fs/rosterSeatLock › the duplicate rule is imported, not re-implemented in the action',
+    ],
+    find: '      const dup = firstDuplicateAttendee(update.attendees);',
+    replace: '      const dup = -1;',
+  },
+
+  'require-four': {
+    file: ACTIONS,
+    why: 'Put email and phone back on the admin path — the tightening direction of the asymmetry.',
+    reddens: [
+      'fs/rosterSeatLock › the ADMIN path requires only ชื่อ and นามสกุล',
+    ],
+    find: '        if (!a.firstName?.trim() || !a.lastName?.trim()) {',
+    replace: '        if (!a.firstName?.trim() || !a.lastName?.trim() || !a.email?.trim() || !a.phone?.trim()) {',
+  },
+
+  'loosen-wizard': {
+    file: SCHEMA,
+    why: 'Loosen the CUSTOMER wizard to two fields — the other direction, and the one a reader "tidying the inconsistency" would reach for. It changes what the public form accepts.',
+    reddens: [
+      'fs/rosterSeatLock › the WIZARD’s zod is UNCHANGED and still demands all four',
+    ],
+    find: `  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
+  phone:     z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+});`,
+    replace: `  email:     z.string().optional(),
+  phone:     z.string().optional(),
+});`,
+  },
+
+  'flatten-over': {
+    file: 'src/lib/registrations/attendeeInfo.js',
+    why: 'Revert the roster derivation to `named >= count`, so an over-capacity roster reports `complete` again — exactly the state that hid one production record for three rounds.',
+    reddens: [
+      'pure/attendeeInfo › MORE named rows than declared is `over`',
+      'pure/attendeeInfo › the production shape reproduces: 2 named against a count of 1',
+      'render/registrationAttendeeTab › an ALREADY-OVER roster shows M > N, and shows it as wrong',
+      'render/registrationDetailShell › all three roster branches still render',
+    ],
+    find: `  if (named > count) return { state: 'over', named, count };
+  return { state: named === count ? 'complete' : 'incomplete', named, count };`,
+    replace: "  return { state: named >= count ? 'complete' : 'incomplete', named, count };",
   },
 
   'wrong-door': {
