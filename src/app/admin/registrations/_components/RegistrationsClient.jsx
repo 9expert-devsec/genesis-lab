@@ -468,7 +468,7 @@ export function RegistrationsClient({
         */
         filters={(
           <FilterPanel
-            window={dateWindow}
+            dateWindow={dateWindow}
             course={course}
             courseOptions={courseOptions}
             onApply={handleFilters}

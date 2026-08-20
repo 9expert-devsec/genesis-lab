@@ -103,29 +103,47 @@ import { anchoredMenuPosition } from '@/lib/anchoredMenu';
  * `resolveDateWindow` — and a correction the reader cannot see is still the
  * screen deciding on their behalf.
  */
-function activeSummary({ window, course, courseLabel }) {
+function activeSummary({ dateWindow, course, courseLabel }) {
   const parts = [];
 
-  if (window.custom) {
+  if (dateWindow.custom) {
     const d = (date) => date.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' });
-    if (window.from && window.to)      parts.push(`${d(window.from)} – ${d(window.to)}`);
-    else if (window.from)              parts.push(`ตั้งแต่ ${d(window.from)}`);
-    else if (window.to)                parts.push(`ถึง ${d(window.to)}`);
+    if (dateWindow.from && dateWindow.to) parts.push(`${d(dateWindow.from)} – ${d(dateWindow.to)}`);
+    else if (dateWindow.from)             parts.push(`ตั้งแต่ ${d(dateWindow.from)}`);
+    else if (dateWindow.to)               parts.push(`ถึง ${d(dateWindow.to)}`);
   }
   if (course) parts.push(courseLabel || course);
 
   return parts;
 }
 
+/*
+ * ── THE DATE WINDOW IS `dateWindow`, AND MUST NEVER BE `window` AGAIN ───────
+ *
+ * It was `window` when this landed, and that name SHADOWED THE GLOBAL for the
+ * whole component body. The reposition effect below then threw
+ * `window.addEventListener is not a function` on mount — the prop is a plain
+ * `{from,to,custom,swapped}` object, which is a real object that simply has no
+ * such method. The panel could not mount at all.
+ *
+ * The `viewport:` read in `place` was wrong in the same way and QUIETLY: it saw
+ * `undefined` innerWidth/innerHeight, so the geometry was NaN rather than
+ * thrown. That is why the fix is the rename and not a `typeof` guard around the
+ * listeners — a guard silences the loud half and leaves the silent half broken.
+ *
+ * No test tier could see this. The render tier is `renderToStaticMarkup`, which
+ * never runs an effect, and `createRoot` is banned here for leaking
+ * globalThis.window. The check that exists is this name.
+ */
 export function FilterPanel({
-  window,
+  dateWindow,
   course = '',
   courseOptions = [],
   onApply,
   onClear,
 }) {
   const active = activeSummary({
-    window,
+    dateWindow,
     course,
     courseLabel: courseOptions.find((o) => o.code === course)?.label,
   });
@@ -243,7 +261,7 @@ export function FilterPanel({
           than returning nothing; this is where it says so. Without it the panel
           silently shows the reader different dates than they typed.
         */}
-        {window.swapped ? (
+        {dateWindow.swapped ? (
           <p className="mb-[10px] rounded-9e-sm bg-9e-accent/10 px-[8px] py-[6px] text-[11px] leading-[16px] text-9e-accent">
             วันที่เริ่มต้นอยู่หลังวันที่สิ้นสุด — ระบบสลับให้แล้ว
           </p>
@@ -264,14 +282,14 @@ export function FilterPanel({
             <div className="flex items-center gap-[8px]">
               <input
                 type="date" name="from"
-                defaultValue={inputValue(window.from)} key={`from-${inputValue(window.from)}`}
+                defaultValue={inputValue(dateWindow.from)} key={`from-${inputValue(dateWindow.from)}`}
                 aria-label="ตั้งแต่วันที่"
                 className="h-[34px] w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-[8px] text-[12px] text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand"
               />
               <span className="shrink-0 text-[12px] text-[var(--text-muted)]">–</span>
               <input
                 type="date" name="to"
-                defaultValue={inputValue(window.to)} key={`to-${inputValue(window.to)}`}
+                defaultValue={inputValue(dateWindow.to)} key={`to-${inputValue(dateWindow.to)}`}
                 aria-label="ถึงวันที่"
                 className="h-[34px] w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] px-[8px] text-[12px] text-[var(--text-primary)] focus-visible:outline-none focus-visible:border-9e-brand"
               />
