@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
 import { computePricing, formatTHB } from "@/lib/pricing";
+import { isQuoteEnabled } from "@/lib/masterclass/quoteAccess";
 import { CountdownTimer } from "../../../_components/CountdownTimer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -988,6 +989,7 @@ export function MasterclassRegisterClient({ course, batch }) {
   }, []);
 
   const licenseEnabled = Boolean(course.license_options?.enabled);
+  const quoteEnabled = isQuoteEnabled(batch);
   const pricing = computePricing(
     batch.effective_price,
     formState.attendeesCount ?? 1,
@@ -1666,6 +1668,9 @@ export function MasterclassRegisterClient({ course, batch }) {
     // Quote always needs billing data for the invoice — reveal the form inline
     // on first press, then validate + register on the second.
     if (method === "quote") {
+      // The radio is already disabled in this case; this guards a stale
+      // `method` surviving a toggle flip mid-session. The API rejects it too.
+      if (!quoteEnabled) return;
       if (!formState.request_invoice && !quoteNeedsInvoice) {
         setQuoteNeedsInvoice(true);
         setOpenSections((p) => ({ ...p, invoice: true }));
@@ -2696,14 +2701,20 @@ export function MasterclassRegisterClient({ course, batch }) {
                         />
                         <MethodRadio
                           selected={method === "quote"}
+                          disabled={!quoteEnabled}
                           onClick={() => {
+                            if (!quoteEnabled) return;
                             setMethod("quote");
                             setChannel(null);
                             setWantsDoc(null);
                             setQuoteNeedsInvoice(true);
                           }}
                           title="ขอใบเสนอราคา"
-                          subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                          subtitle={
+                            quoteEnabled
+                              ? "เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                              : "รุ่นนี้ไม่เปิดรับการขอใบเสนอราคา กรุณาเลือกชำระทันที"
+                          }
                         />
                       </div>
                     </div>
