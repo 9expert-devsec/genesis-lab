@@ -260,8 +260,13 @@ test('CONTROL: the function bound really excludes the other actions’ selects',
   // serving three purposes (the paid test, the roster floor, and the `before`
   // the audit row needs), exactly the shape `updateRegistrationRound` uses.
   // Still bumped rather than floored, for the reason two notes up.
-  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 7,
-    'the actions file no longer has seven selects — re-read the scoping note');
+  // BACK TO SIX. That action was removed — a paid registration's seat count can
+  // no longer be changed by any path — and its three-purpose read went with it.
+  // The number moving DOWN is the same deliberate bump in reverse, and it is
+  // the reason this is an equality: a floor would have sat silently at `>= 4`
+  // through all four of these changes and told the next reader nothing.
+  assert.equal((ACTIONS.code.match(/\.select\(/g) ?? []).length, 6,
+    'the actions file no longer has six selects — re-read the scoping note');
 });
 
 test('CONTROL: the field matcher would catch an unprojected read', () => {

@@ -122,28 +122,31 @@ export const ROUND_AND_STATUS_POLICY = 'round_and_status';
  * depend on a product module for its own safety rule, or a refactor over there
  * silently widens what the trail may carry.
  *
- * ══ `attendeesCount` IS THE SECOND EXCEPTION, AND IT IS NOT AN INCONSISTENCY ══
+ * ══ `attendeesCount` WAS HERE FOR ONE ROUND AND HAS BEEN REMOVED ═══════════
  *
- * Round 8. Read this before "tidying" it out, exactly as the round fields' own
- * note asks — the whole hazard here is that a reader sees two carve-outs in a
- * PII allowlist, reads them as drift, and removes them together.
+ * Round 8 added it, reviewed and agreed: a seat count is not personal data, and
+ * a count changing after payment was among the most worth-tracing events on the
+ * screen. Both halves of that were true.
  *
- * The two tests this list applies are the same two the round fields passed:
+ * IT IS GONE BECAUSE ITS ONLY WRITER IS GONE. `updateAttendeesCountPaid` was
+ * the sole action that ever handed `attendeesCount` to the reduction, and a
+ * paid record's count can no longer be changed by any path. A key on this list
+ * with no writer is not harmless: this is a SAFETY ALLOWLIST, and its whole
+ * value is that it says exactly what may reach the trail. A dead entry invites
+ * the next reader to assume something still uses it.
  *
- *   1. IS IT PERSONAL DATA? No. A seat count is a small integer between 1 and
- *      50. It names nobody, and unlike a name, an email or a tax id it cannot be
- *      the subject of a deletion request — which is the property that made the
- *      cap necessary, since this trail is append-only and presently forever.
+ * REMOVING IT CANNOT AFFECT THE ROWS ALREADY WRITTEN. The reduction runs in
+ * `recordAdminAction` at WRITE time only — nothing re-filters a stored row on
+ * read — so historical `seats` rows keep the diff they were filed with. Their
+ * title is retired-but-kept in `registrationHistory` for the same reason, and
+ * that asymmetry is the point: the writer list shrinks, the reader list does
+ * not.
  *
- *   2. IS THE CHANGE WORTH TRACING? On a PAID registration it is among the most
- *      worth tracing events on the screen. The count drove the amount charged —
- *      `pricing.seats` is a frozen snapshot taken from it at charge time — so
- *      changing it afterwards makes the registration's own headcount disagree
- *      with the money that was taken for it. That disagreement is deliberate and
- *      permitted (see `updateAttendeesCountPaid`), which is exactly why it must
- *      leave a trace naming BOTH numbers. Without the diff the row would say
- *      "somebody changed the seat count" and the one fact anybody would ask for
- *      — from what, to what — would be gone.
+ * THE REVIEW MECHANISM WORKED IN BOTH DIRECTIONS. `test/pure/auditContract`
+ * keeps a second copy of this allowlist so that WIDENING it goes red until a
+ * human agrees. Narrowing it went red too, which is exactly right — shrinking a
+ * safety list is still a change to a safety list, and this note is the
+ * agreement.
  *
  * ── WHY THE POLICY IS STILL CALLED `round_and_status` ──────────────────────
  * Because the NAME is not the mechanism and renaming it mid-round would edit a
@@ -157,7 +160,6 @@ export const ROUND_AND_STATUS_POLICY = 'round_and_status';
  */
 export const ROUND_AND_STATUS_KEYS = Object.freeze([
   'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',
-  'attendeesCount',
 ]);
 
 /** Every legal value of the `diff` field. */

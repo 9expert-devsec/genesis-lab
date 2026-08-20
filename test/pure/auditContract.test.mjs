@@ -309,25 +309,34 @@ test('the PII entities are capped below a full diff — §5.2 made executable', 
    */
   const SAFE_OFF_SCALE = {
     /**
-     * Status enum + the four coupled round fields + the seat count. None of the
-     * six is personal data; the reduction drops every other key, so the cap on
-     * names/emails/phones is untouched.
+     * Status enum + the four coupled round fields. None of the five is personal
+     * data; the reduction drops every other key, so the cap on names/emails/
+     * phones is untouched.
      *
-     * ── `attendeesCount` WAS REVIEWED AND ADDED IN ROUND 8, NOT INHERITED ────
-     * That is the whole function of this list: it is a SECOND place the
-     * allowlist is written down, so widening the real one goes red here until a
-     * human has read the new key and agreed it is not personal data. It did go
-     * red, and this is the agreement.
+     * ── `attendeesCount` WAS ADDED IN ROUND 8 AND HAS NOW BEEN REMOVED ───────
+     * This list is a SECOND place the real allowlist is written down, so that
+     * changing it goes red here until a human has read the change and agreed to
+     * it. It has now done that job TWICE, in opposite directions, which is worth
+     * recording because only the first direction is the obvious one.
      *
-     * A seat count is an integer between 1 and 50. It names nobody and cannot be
-     * the subject of a deletion request, which is the property the cap exists to
-     * protect. See `updateAttendeesCountPaid` for why the diff is worth keeping
-     * at all — on a paid registration the count deliberately stops matching the
-     * money taken for it, and a row without both numbers cannot say so.
+     * Round 8 WIDENED it: `updateAttendeesCountPaid` needed a before/after diff
+     * naming both seat counts, and a seat count is an integer between 1 and 50
+     * that names nobody. That was read and agreed.
+     *
+     * The reversal NARROWED it: that action is gone — a paid record's count can
+     * no longer be changed by any path — and it was the only writer that ever
+     * handed `attendeesCount` to the reduction. SHRINKING A SAFETY LIST IS
+     * STILL A CHANGE TO A SAFETY LIST, so it went red here too, and this is that
+     * agreement. A key with no writer is not harmless on a list whose entire
+     * value is saying exactly what may reach an append-only trail.
+     *
+     * Removing it does not touch rows already filed: the reduction runs at WRITE
+     * time in `recordAdminAction` and nothing re-filters a stored row on read.
+     * The retired `seats` TITLE stays for those rows — see
+     * lib/audit/registrationHistory.
      */
     round_and_status: [
       'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',
-      'attendeesCount',
     ],
   };
 

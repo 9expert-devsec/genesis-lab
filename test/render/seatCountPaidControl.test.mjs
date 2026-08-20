@@ -5,23 +5,54 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
 
 /**
- * THE ขอเพิ่มจำนวนผู้เข้าอบรม CONTROL, AND THE COPY THE ADMIN CONSENTS TO.
+ * THERE IS NO ขอเพิ่มจำนวนผู้เข้าอบรม CONTROL, ON ANY STATUS.
  *
- * ══ WHY THE PANEL IS ALWAYS IN THE DOM ══════════════════════════════════════
+ * ══ WHAT THIS FILE USED TO ASSERT ═══════════════════════════════════════════
  *
- * `renderToStaticMarkup` cannot click, so a conditionally-rendered panel would
- * put its copy behind a state this tier cannot reach — and the copy IS the
- * feature. The panel therefore ships hidden by the `hidden` ATTRIBUTE, the same
- * decision `OverflowMenu` made for the same reason, and every assertion about
- * the wording below is possible because of it.
+ * Round 8 shipped a disclosure below the attendee list on a PAID record: a
+ * ขอเพิ่มจำนวนผู้เข้าอบรม button opening a panel whose copy stated, in words and
+ * with both real numbers, that raising the count would NOT recalculate the
+ * amount, NOT charge more and NOT refund — and that the receipt and the
+ * registration would disagree until someone reissued paperwork outside the
+ * system. The admin consented to that by pressing ยืนยันเพิ่มจำนวน.
  *
- * ══ WHAT THIS TIER CANNOT SEE, STATED ═══════════════════════════════════════
+ * This file asserted every clause of that copy, because the copy WAS the
+ * control: the panel existed to make a consequential act deliberate.
+ *
+ * ══ THE CONTROL IS GONE, AND THIS FILE NOW GUARDS ITS ABSENCE ═══════════════
+ *
+ * Raising the count on a paid registration is not something this team does in
+ * this system. When a customer asks for more seats after paying, the whole
+ * thing is handled outside; the system only records that the contact happened.
+ * So the panel, its action and its audit row were removed, and a paid record's
+ * count can no longer be changed by any path, in either direction.
+ *
+ * ── WHY THE FILE SURVIVES INSTEAD OF BEING DELETED ────────────────────────
+ * A deleted UI leaves no trace of why it is not there, and this one is easy to
+ * re-derive: an admin asks for it, the shape is obvious, and the copy above is
+ * genuinely careful. WITHOUT THIS FILE the next person to rebuild it would find
+ * nothing arguing against, and the argument is not in the code — it is that the
+ * WORKFLOW does not run here and the panel bought us a receipt permanently
+ * disagreeing with its own registration.
+ *
+ * So the assertions are inverted rather than removed. Re-adding the panel turns
+ * this file red, and the header is what the red points at.
+ *
+ * ══ WHY THE RENDER TIER, FOR AN ABSENCE ═════════════════════════════════════
+ *
+ * fs/attendeesCountPaidGate already asserts the tokens are gone from the SOURCE.
+ * This is the different claim: that nothing REACHES THE SCREEN on any status —
+ * which catches a rebuild that uses different identifiers, different copy, or a
+ * different component, and would be invisible to a token scan.
+ *
+ * ══ WHAT THIS TIER STILL CANNOT SEE, STATED ═════════════════════════════════
  *
  * The attendee card's EDIT form sits behind `editSection`, which a click sets.
- * So "the count input is absent on a paid record" is not assertable here and is
- * pinned at source in fs/attendeesCountPaidGate instead. Saying so rather than
- * quietly omitting it, because a reader looking for that claim should find where
- * it lives rather than conclude it is missing.
+ * So "the count input is absent on a paid record" and the ชำระเงินแล้ว lock line
+ * that replaced it are not assertable here and are pinned at source in
+ * fs/attendeesCountPaidGate instead. Saying so rather than quietly omitting it,
+ * because a reader looking for those claims should find where they live rather
+ * than conclude they are missing.
  *
  * ══ NO REACT ROOT ═══════════════════════════════════════════════════════════
  * renderToStaticMarkup only — `createRoot` over jsdom leaks globalThis.window
@@ -57,152 +88,117 @@ const PAID_EXTRA = {
 const render = (extra) => renderToStaticMarkup(
   createElement(RegistrationDetailClient, { doc: { ...BASE, ...extra }, history: null }));
 
-const PAID      = render(PAID_EXTRA);
-const PENDING   = render({ status: 'pending' });
-const CANCELLED = render({ ...PAID_EXTRA, status: 'cancelled' });
+const RENDERS = {
+  paid:      render(PAID_EXTRA),
+  pending:   render({ status: 'pending' }),
+  confirmed: render({ status: 'confirmed' }),
+  // Cancelled-and-paid is a real combination and was the one state round 8's
+  // panel had to be gated twice to exclude. It is kept because a rebuild would
+  // have to get it right again.
+  cancelled: render({ ...PAID_EXTRA, status: 'cancelled' }),
+};
 
 const textOf = (html) => html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 
-/** The disclosure button, by its label — the control the brief names. */
+/** The disclosure button's label, and the confirm button's. */
 const CONTROL = 'ขอเพิ่มจำนวนผู้เข้าอบรม';
+const CONFIRM = 'ยืนยันเพิ่มจำนวน';
+
+/**
+ * Every clause of the consent copy. Asserted ABSENT one clause at a time rather
+ * than as one blob: a rebuild that keeps the mechanism but rewords the copy is
+ * still the mechanism, and a single-string check would miss it.
+ */
+const CONSENT_CLAUSES = [
+  'ไม่คำนวณยอดเงินใหม่',
+  'ไม่เรียกเก็บเพิ่ม',
+  'ไม่คืนเงินโดยอัตโนมัติ',
+  'จะไม่ตรงกันจนกว่าจะออกเอกสารใหม่นอกระบบ',
+  'บันทึกในประวัติการดำเนินการ พร้อมจำนวนก่อนและหลัง',
+];
 
 // ════════════════════════════════════════════════════════════════════════════
-// 1. THE CONTROL APPEARS ON EXACTLY ONE STATE
+// 1. THE CONTROL REACHES NO STATE
 // ════════════════════════════════════════════════════════════════════════════
 
-test('a paid record offers the control; an unpaid one does not', () => {
-  /**
-   * Both directions. "The control is on a paid record" alone would pass on a
-   * screen that showed it always — which would be a control that refuses on
-   * every click, since the server sends an unpaid record back to the ordinary
-   * edit path.
-   */
-  assert.ok(PAID.includes(CONTROL), 'a paid record does not offer the seat-change control');
-  assert.ok(!PENDING.includes(CONTROL),
-    'an unpaid record offers the paid-only control — every click would be refused');
-  // …and the unpaid record still edits its count the ordinary way, so this is
-  // not passing because the card lost its edit affordance altogether.
-  assert.ok(PENDING.includes('>แก้ไข<'), 'the unpaid record has no edit affordance at all');
-});
-
-test('a CANCELLED record offers neither door, even though it is also paid', () => {
-  /**
-   * Cancelled-and-paid is a real combination and it is the one where a
-   * second gate would be forgotten. The control is gated on
-   * `attendeeEdit.onEdit` — the SAME single producer every แก้ไข reads — rather
-   * than on its own `readOnly` test, so this cannot drift from round 1's rule.
-   */
-  assert.ok(!CANCELLED.includes(CONTROL), 'a cancelled record still offers the seat-change control');
-  assert.equal((CANCELLED.match(/>แก้ไข</g) ?? []).length, 0, 'a cancelled record kept a แก้ไข button');
-  assert.ok(CANCELLED.includes('ลบใบสมัครนี้'), 'delete did not survive — the fixture is wrong');
-  // The record still RENDERS; the absences above are not a blank page.
-  assert.ok(CANCELLED.includes('Power BI Advanced'), 'the cancelled record lost its content');
-});
-
-// ════════════════════════════════════════════════════════════════════════════
-// 2. THE CONSENT COPY — THE WHOLE POINT OF THE CONTROL
-// ════════════════════════════════════════════════════════════════════════════
-
-/** The panel: the element the disclosure button controls. */
-function panel(markup) {
-  const at = markup.indexOf(CONTROL);
-  assert.notEqual(at, -1, 'the control is not on this render');
-  const start = markup.indexOf('<div hidden', at);
-  assert.notEqual(start, -1, 'the panel is not in the DOM — it must ship hidden, not unrendered');
-  return markup.slice(start, start + 3000);
+for (const [status, html] of Object.entries(RENDERS)) {
+  test(`no ${status} record offers the seat-count control`, () => {
+    const text = textOf(html);
+    assert.equal(text.includes(CONTROL), false,
+      `a ${status} record still renders the ขอเพิ่มจำนวนผู้เข้าอบรม disclosure`);
+    assert.equal(text.includes(CONFIRM), false,
+      `a ${status} record still renders the ยืนยันเพิ่มจำนวน confirm button`);
+  });
 }
 
-test('the panel is in the DOM and hidden by the ATTRIBUTE, not by a class', () => {
-  // A `hidden` CLASS reads as a styling accident and leaves the panel in the
-  // accessibility tree. The attribute is state.
-  const p = panel(PAID);
-  assert.match(p, /^<div hidden/, 'the panel is not hidden by the attribute');
-  assert.ok(!/class="[^"]*\bhidden\b/.test(p.slice(0, 200)), 'the panel is hidden by a class instead');
-
+test('the consent copy reaches no state either', () => {
   /**
-   * The trigger says so too — asserted by EXTRACTING THE BUTTON rather than by
-   * proximity. The first draft matched `aria-expanded="false"` within 200
-   * characters of the label and reddened on correct markup: the lucide icon
-   * between them renders ~470 characters of inline `<svg>`, so the window was
-   * never going to reach. A distance is not a relationship; the element is.
+   * The copy is checked separately from the buttons because the two can be
+   * removed apart, and half a removal is the worse outcome: consent text with
+   * no control is confusing, and a control with no consent text is the exact
+   * thing the copy existed to prevent.
    */
-  const trigger = [...PAID.matchAll(/<button[^>]*>[\s\S]*?<\/button>/g)]
-    .find((m) => m[0].includes(CONTROL));
-  assert.ok(trigger, 'the disclosure trigger is not a button');
-  assert.match(trigger[0], /aria-expanded="false"/, 'the disclosure trigger does not report its state');
+  for (const [status, html] of Object.entries(RENDERS)) {
+    const text = textOf(html);
+    for (const clause of CONSENT_CLAUSES) {
+      assert.equal(text.includes(clause), false,
+        `a ${status} record still renders the consent clause "${clause}"`);
+    }
+  }
 });
 
-test('the copy states the consequence in words, not as "this affects billing"', () => {
+test('no state renders a second number input for the seat count', () => {
   /**
-   * ── WHAT THE ADMIN IS ACTUALLY CONSENTING TO ──────────────────────────────
-   * Not "something to do with money". Specifically: the amount charged was
-   * computed from `pricing.seats` and STAYS there, the registration and its
-   * emails start saying something else, and nothing in this system reconciles
-   * the two afterwards. Each clause is asserted because each is a separate
-   * thing a reader could be surprised by later.
+   * The panel's input was `min={attendeesCount + 1}` — the increase-only floor,
+   * and the shape most likely to survive a partial rebuild because it looks
+   * like an ordinary field. The unpaid count input lives behind `editSection`
+   * and is not rendered at this tier at all, so the correct count here is ZERO
+   * on every status.
    */
-  const t = textOf(panel(PAID));
-
-  assert.ok(t.includes('ไม่คำนวณยอดเงินใหม่'), 'the copy does not say the total is not recalculated');
-  assert.ok(t.includes('ไม่เรียกเก็บเพิ่ม'), 'the copy does not say nothing further is charged');
-  assert.ok(t.includes('ไม่คืนเงินโดยอัตโนมัติ'), 'the copy does not say nothing is refunded');
-  assert.ok(t.includes('จะไม่ตรงกัน'), 'the copy does not say the two numbers will disagree');
-  assert.ok(t.includes('บันทึกในประวัติการดำเนินการ'), 'the copy does not say the change is traced');
+  for (const [status, html] of Object.entries(RENDERS)) {
+    assert.equal((html.match(/<input[^>]*type="number"/g) ?? []).length, 0,
+      `a ${status} record renders a number input outside the edit form`);
+  }
 });
 
-test('the copy names the REAL charged seat count, read from pricing', () => {
+// ════════════════════════════════════════════════════════════════════════════
+// 2. CONTROLS — an absence test passes on a render that produced nothing
+// ════════════════════════════════════════════════════════════════════════════
+
+test('CONTROL: every render is real and reached the attendee section', () => {
   /**
-   * The number is what makes the sentence a consent rather than a warning. It
-   * comes from `pricing.seats` — what was actually charged for — and NOT from
-   * `attendeesCount`, which is the thing about to change.
+   * THE FAILURE MODE THIS FILE IS MOST EXPOSED TO. Sixteen `includes(...) ===
+   * false` assertions all pass on an empty string, on a crashed render, and on
+   * a render that stopped before the section the control used to sit in.
    *
-   * The fixture below is the case that separates them: a record charged for 3
-   * seats whose count has since been raised to 5 by some earlier route. A copy
-   * reading `attendeesCount` would tell the admin the money was for 5.
+   * So each render is checked to be substantial AND to contain the attendee
+   * material the panel was rendered beside — the tab label and the roster the
+   * fixture supplies. If a future change moves the attendee list behind a click,
+   * this control goes red and tells the next reader that the absence assertions
+   * above have stopped meaning anything, instead of letting them pass forever.
    */
-  const divergent = render({
-    ...PAID_EXTRA,
-    attendeesCount: 5,
-    pricing: { ...PAID_EXTRA.pricing, seats: 3 },
-  });
-  const t = textOf(panel(divergent));
-  assert.ok(t.includes('จาก 3 ที่นั่ง'), `the copy does not name the charged seat count: ${t.slice(0, 300)}`);
-  assert.ok(t.includes('ปัจจุบัน 5 ท่าน'), 'the input label does not name the current count');
-  assert.ok(!t.includes('จาก 5 ที่นั่ง'), 'the copy sourced the charged count from attendeesCount');
+  for (const [status, html] of Object.entries(RENDERS)) {
+    assert.ok(html.length > 5000, `the ${status} render produced ${html.length} chars`);
+    const text = textOf(html);
+    assert.ok(text.includes('ผู้เข้าอบรม'),
+      `the ${status} render never reached the attendee section — the absence checks are vacuous`);
+    assert.ok(text.includes('สมหญิง'),
+      `the ${status} render does not contain the fixture roster — it stopped early`);
+  }
 });
 
-test('CONTROL: the charged-seat probe would read the wrong field if it were wired that way', () => {
-  // Proves the assertion above discriminates rather than passing on any number.
-  // Where the two agree, both readings produce the same string — so the
-  // divergent fixture is the only one that can tell them apart, and this is the
-  // check that the agreeing case is genuinely ambiguous.
-  const t = textOf(panel(PAID));
-  assert.ok(t.includes('จาก 3 ที่นั่ง') && t.includes('ปัจจุบัน 3 ท่าน'),
-    'the agreeing fixture does not have both numbers at 3 — it cannot show the probe is ambiguous here');
-});
+test('CONTROL: the probes DO fire on markup that contains the control', () => {
+  // The matchers themselves, pointed at the shape they are meant to catch —
+  // as the removed panel actually rendered it.
+  const rebuilt = '<button type="button">' + CONTROL + '</button>'
+    + '<p>การเพิ่มจำนวนผู้เข้าอบรมจะไม่คำนวณยอดเงินใหม่ ไม่เรียกเก็บเพิ่ม และไม่คืนเงินโดยอัตโนมัติ</p>'
+    + '<input type="number" min="4" max="50" value="" />'
+    + '<button type="button">' + CONFIRM + '</button>';
 
-// ════════════════════════════════════════════════════════════════════════════
-// 3. THE FORM INSIDE THE PANEL
-// ════════════════════════════════════════════════════════════════════════════
-
-test('the draft starts EMPTY and the confirm button starts disabled', () => {
-  /**
-   * A field pre-filled with the current count makes "confirm" a control whose
-   * default action is a no-op the server will refuse — and the admin has to
-   * notice the number is unchanged to know that. Empty states that a value is
-   * required, and the disabled button says the same thing again.
-   */
-  const p = panel(PAID);
-  assert.match(p, /<input[^>]*type="number"[^>]*value=""/,
-    'the new-count field is pre-filled — confirm would default to a no-op');
-  assert.match(p, /<button[^>]*disabled[^>]*>[\s\S]{0,120}ยืนยันเพิ่มจำนวน/,
-    'the confirm button is enabled with no value typed');
-});
-
-test('the input floors at one above the current count — the control only adds', () => {
-  // The server refuses a decrease outright; the input agrees rather than
-  // inviting one and then explaining. `min` is the current count + 1.
-  const p = panel(PAID);
-  assert.match(p, /<input[^>]*min="4"/, 'the new-count input does not floor above the current 3');
-  assert.match(p, /<input[^>]*max="50"/, 'the new-count input has no ceiling');
+  const text = textOf(rebuilt);
+  assert.ok(text.includes(CONTROL), 'the disclosure probe is blind');
+  assert.ok(text.includes(CONFIRM), 'the confirm probe is blind');
+  assert.ok(text.includes('ไม่คำนวณยอดเงินใหม่'), 'the consent-copy probe is blind');
+  assert.equal((rebuilt.match(/<input[^>]*type="number"/g) ?? []).length, 1,
+    'the number-input probe is blind');
 });

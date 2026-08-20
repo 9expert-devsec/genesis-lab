@@ -661,23 +661,29 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 //
 // MEASURED against this tree, not derived: the pins were left at their old
 // values, the walk was run, and 171 / 165 are the numbers it reported.
-// ── 171 → 172, and the depth-0 figure 165 → 166: round 8 ──────────────────
-// ONE mutating export added to src/lib/actions/registrations.js:
-// `updateAttendeesCountPaid`, the only door through which a PAID registration's
-// seat count may change. It writes Mongo directly in its own body
-// (RegisterPublic.findOneAndUpdate), so the FILE-LOCAL classifier sees it and
-// BOTH pins move by the same +1 — REACHED_THROUGH_IMPORT is unchanged and the
-// difference stays 6.
+// ── 171 → 172 → 171, and the depth-0 figure 165 → 166 → 165 ───────────────
+// ROUND 8 added ONE mutating export to src/lib/actions/registrations.js:
+// `updateAttendeesCountPaid`, the sanctioned door through which a PAID
+// registration's seat count could be raised. It wrote Mongo directly in its own
+// body (RegisterPublic.findOneAndUpdate), so the FILE-LOCAL classifier saw it
+// and BOTH pins moved by the same +1.
 //
-// It is NOT a new capability being audited into existence: `attendeesCount` was
-// already writable, through `updateRegistration`, on any status including paid,
-// with no gate. Round 8 moved that one field onto a deliberate action so the
-// change is confirmed and leaves a diff. The count going UP therefore records a
-// path being narrowed, not widened.
+// THE REVERSAL REMOVES IT, AND BOTH PINS MOVE BACK. Raising the count on a paid
+// registration is handled entirely outside this system, so the action was built
+// for a workflow that does not run here. The gate in `updateRegistration` stays
+// and is now the whole rule rather than half of one.
 //
-// MEASURED against this tree, not derived: the pins were left at their old
-// values, the walk was run, and 172 / 166 are the numbers it reported.
-const MUTATING_EXPORT_COUNT = 172;
+// ── WHAT THE COUNT GOING DOWN DOES *NOT* MEAN ─────────────────────────────
+// Not a capability that escaped the audit. This pin counts MUTATING EXPORTS,
+// and the mutation itself is gone: there is no longer any path by which a paid
+// record's seat count changes, so there is nothing left to audit. That is the
+// OPPOSITE of the usual reason this number falls — a write quietly slipping out
+// of the walk's sight — and the two are indistinguishable from the number
+// alone, which is why it is written down here rather than in a commit message.
+//
+// MEASURED against this tree, not derived: the pins were left at their round-8
+// values, the walk was run, and 171 / 165 are the numbers it reported.
+const MUTATING_EXPORT_COUNT = 171;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -858,7 +864,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 166,
+    zero, 165,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -879,7 +885,11 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'so REACHED_THROUGH_IMPORT is unchanged and the delta below stays 6. ' +
     'ROUND 8: 165 → 166, +1 — updateAttendeesCountPaid added to registrations.js. ' +
     'It calls RegisterPublic.findOneAndUpdate in its own body, so depth 0 sees it ' +
-    'and both pins move together; the delta stays 6.'
+    'and both pins move together; the delta stays 6. ' +
+    'REVERSED: 166 → 165, -1 — that action was removed, so a paid registration\'s ' +
+    'seat count can no longer be changed by any path. The MUTATION is gone, not ' +
+    'its audit: the gate in updateRegistration stays and refuses the field ' +
+    'outright. Both pins move together and the delta stays 6.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
