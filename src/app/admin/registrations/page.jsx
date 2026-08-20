@@ -40,6 +40,21 @@ export default async function Page({ searchParams }) {
    * this feature.
    */
   const active = readSourceFilters(sp, source);
+  /**
+   * THE SOURCE THAT IS NOT SELECTED, so its toggle tab can carry a count too.
+   *
+   * `getRegistrationStatusCounts` already answers this for the SELECTED source
+   * — the toggle reads `counts.total` — so only the other one needs asking, and
+   * it needs exactly one number rather than a per-status breakdown.
+   *
+   * ── IT NO LONGER TAKES THE SAME `range`, AND THAT NOTE WAS WRONG BEFORE IT
+   *    WAS DELETED ─────────────────────────────────────────────────────────
+   * This declaration used to sit sixty lines further down, carrying a note
+   * saying "IT TAKES THE SAME `range`" — true when the two sides shared one set
+   * of filters, and false from the moment they stopped. It is folded up here,
+   * corrected, rather than left where it was: see the `getRegistrationTotal`
+   * call for why the badge now reads the OTHER side's own range.
+   */
   const otherSource = source === 'inhouse' ? 'public' : 'inhouse';
   const other  = readSourceFilters(sp, otherSource);
 
@@ -101,21 +116,6 @@ export default async function Page({ searchParams }) {
    * the pair mean two different things.
    */
   const otherRange = ['today', 'week', 'month', 'all'].includes(other.range) ? other.range : 'all';
-
-  /**
-   * THE SOURCE THAT IS NOT SELECTED, so its toggle tab can carry a count too.
-   *
-   * `getRegistrationStatusCounts` already answers this for the SELECTED source
-   * — the toggle reads `counts.total` — so only the other one needs asking, and
-   * it needs exactly one number rather than a per-status breakdown.
-   *
-   * IT TAKES THE SAME `range`. The mockup shows raw totals in the toggle, and a
-   * badge reading 8 beside a ทั้งหมด card reading 1 under "7 วัน" is the screen
-   * giving two answers to one question — the defect class this page has shipped
-   * twice already. See getRegistrationTotal's own note.
-   */
-  const otherSource = source === 'inhouse' ? 'public' : 'inhouse';
-
   // The course map is only wanted by the in-house body, so a public render does
   // not ask for it at all — and it joins the existing Promise.all rather than
   // adding a serial await. So does the other source's total: it is a fourth
