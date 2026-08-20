@@ -25,8 +25,16 @@ import { refNo } from '@/lib/refNo';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import {
-  attendeeInfoState, missingAttendeeFields, rosterState,
+  attendeeInfoState, missingAttendeeFields, rosterState, rosterHasRoom,
 } from '@/lib/registrations/attendeeInfo';
+
+/**
+ * Why the + button is disabled at capacity. ONE literal, read by the button's
+ * `title`, by the visible sentence beside it, and by the editor's dashed
+ * add-row — three surfaces stating one rule, which must not drift into three
+ * wordings of it.
+ */
+const SEATS_FULL_REASON = 'เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว';
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
@@ -756,24 +764,60 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
    * the opted-out case, because there is no denominator to be complete against —
    * `buildAttendees` writes an empty array in that state.
    */
+  /**
+   * TWO CELLS, NOT THREE. ความครบถ้วน IS DELETED — removed, not re-labelled.
+   *
+   * It asked "is the roster complete" in words (ครบ / ยังไม่ครบ / ยังไม่แจ้ง)
+   * over the top of two cells that already carried both numbers. Once the second
+   * cell reads `M/N` the third is the same fact a third time, and the one thing
+   * it added — a word for the not-provided case — moves into that cell.
+   *
+   * `เพิ่มรายชื่อแล้ว: M/N คน` is the seat lock made visible. It is also the
+   * place an ALREADY-OVER record shows itself: M simply exceeds N, which looks
+   * wrong because it IS wrong, and the tone below says so without hiding it.
+   */
   const attendeeSummaryCells = [
-    { key: 'declared', label: 'จำนวนที่สมัคร',   value: `${roster.count} ท่าน` },
-    { key: 'named',    label: 'แจ้งรายชื่อแล้ว', value: `${roster.named} ท่าน` },
+    { key: 'declared', label: 'จำนวนที่สมัคร',   value: `${roster.count} คน` },
     {
-      key:   'complete',
-      label: 'ความครบถ้วน',
-      value: roster.state === 'not-provided'
-        ? 'ยังไม่แจ้ง'
-        : `${roster.state === 'complete' ? 'ครบ' : 'ยังไม่ครบ'} ${roster.named}/${roster.count}`,
+      key:   'named',
+      label: 'เพิ่มรายชื่อแล้ว',
+      value: roster.state === 'not-provided' ? 'ยังไม่แจ้ง' : `${roster.named}/${roster.count} คน`,
+      // The one cell that can report a broken invariant. `tone` is the caller's;
+      // EqualSummaryRow picks no colours — see its docstring.
+      tone: roster.state === 'over' ? 'text-9e-accent' : undefined,
     },
   ];
 
-  /** The same three states as a sentence, for the card's 49.6px second row. */
+  /**
+   * ── THE DISABLED + BUTTON'S REASON, AND WHY IT IS AGENTLESS ───────────────
+   *
+   * `เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว` — "names have been added to match the
+   * number registered". It deliberately names no actor.
+   *
+   * The coordinator OCCUPIES A SEAT when `coordinator.isAttending` is true:
+   * `buildAttendees` writes them into `attendees[0]`, so on a one-seat
+   * registration the roster is full the moment it is created and the admin has
+   * added nobody. A message like "คุณได้เพิ่มรายชื่อครบแล้ว" would be telling
+   * them they did something they did not do, and the first question would be who
+   * did. The agentless form is true in both cases.
+   */
   const rosterSentence = roster.state === 'not-provided'
     ? 'ผู้ประสานงานยังไม่ประสงค์แจ้งรายชื่อ — จะแจ้งภายหลัง'
-    : roster.state === 'complete'
-      ? `แจ้งรายชื่อครบตามจำนวนที่สมัครแล้ว (${roster.named}/${roster.count} ท่าน)`
-      : `ยังขาดอีก ${roster.count - roster.named} ท่าน จากที่สมัครไว้ ${roster.count} ท่าน`;
+    : roster.state === 'over'
+      ? `รายชื่อเกินจำนวนที่สมัคร (${roster.named}/${roster.count} ท่าน) — กรุณาตรวจสอบ`
+      : roster.state === 'complete'
+        ? SEATS_FULL_REASON
+        : `ยังขาดอีก ${roster.count - roster.named} ท่าน จากที่สมัครไว้ ${roster.count} ท่าน`;
+
+  /**
+   * Is there room for another name? ONE question, one answer, read by the read
+   * view's + button AND by the dashed add-row inside the editor — a second
+   * derivation is how the two come to disagree and the lock is bypassed through
+   * whichever one was forgotten.
+   *
+   * The SERVER enforces this independently. See `updateRegistration`.
+   */
+  const seatsAvailable = rosterHasRoom({ attendeesListProvided, attendeesCount, attendees });
 
   const tabs = TABS
     .filter((t) => t.key !== 'history' || history)
@@ -1165,11 +1209,29 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
                       </div>
                     </div>
                   ))}
+                  {/*
+                    THE SECOND DOOR, AND IT READS THE SAME ANSWER. A lock on the
+                    read view's button alone would be bypassed by opening the
+                    editor and using this one — which is the door an admin
+                    actually reaches for, since the editor is already open.
+                    `seatsAvailable` is derived once, above.
+
+                    ── IT READS THE DRAFT, NOT THE STORED RECORD ─────────────
+                    `attendees` here is the editor's working array, so removing a
+                    row inside the form re-enables this immediately, which is the
+                    "removing a name re-enables it" requirement. That falls out
+                    of the derivation reading state rather than props.
+                  */}
                   <button type="button" onClick={addAttendee}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-9e-md border border-dashed border-[var(--surface-border)] py-2.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-9e-brand hover:text-9e-brand">
+                    disabled={!seatsAvailable}
+                    title={seatsAvailable ? undefined : SEATS_FULL_REASON}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-9e-md border border-dashed border-[var(--surface-border)] py-2.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-9e-brand hover:text-9e-brand disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[var(--surface-border)] disabled:hover:text-[var(--text-secondary)]">
                     <Plus aria-hidden="true" className="h-3.5 w-3.5" />
                     เพิ่มผู้เข้าอบรม
                   </button>
+                  {!seatsAvailable ? (
+                    <p className="text-[11px] leading-[16px] text-[var(--text-muted)]">{SEATS_FULL_REASON}</p>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1189,11 +1251,26 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
                 <p className="min-w-0 truncate text-[12px] leading-[17px] text-[var(--text-secondary)]">
                   {rosterSentence}
                 </p>
+                {/*
+                  ── DISABLED WITH A REASON, NEVER HIDDEN ────────────────────
+                  At capacity the control stays on screen and stops working. A
+                  button that VANISHES reads as a bug — the admin looks for it,
+                  does not find it, and has no way to learn why. `title` carries
+                  the reason for a pointer, and the sentence to the left carries
+                  it in the layout for everyone else; both read SEATS_FULL_REASON
+                  so the two cannot drift.
+
+                  The `onEdit` gate is unchanged and is a DIFFERENT question: a
+                  cancelled record renders no button at all, because there is
+                  nothing to edit rather than no room to edit it.
+                */}
                 {attendeeEdit.onEdit ? (
                   <button
                     type="button"
                     onClick={() => { attendeeEdit.onEdit(); addAttendee(); }}
-                    className="inline-flex h-[32.6px] w-[92.6px] shrink-0 items-center justify-center gap-[4px] rounded-9e-md border border-9e-brand/40 text-[11px] font-semibold text-9e-action transition-colors hover:bg-9e-brand/5"
+                    disabled={!seatsAvailable}
+                    title={seatsAvailable ? undefined : SEATS_FULL_REASON}
+                    className="inline-flex h-[32.6px] w-[92.6px] shrink-0 items-center justify-center gap-[4px] rounded-9e-md border border-9e-brand/40 text-[11px] font-semibold text-9e-action transition-colors hover:bg-9e-brand/5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
                   >
                     <Plus aria-hidden="true" className="h-[12px] w-[12px] shrink-0" />
                     เพิ่มผู้เข้าอบรม

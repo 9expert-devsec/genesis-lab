@@ -341,7 +341,20 @@ export function EqualSummaryRow({ cells }) {
         {cells.map((cell) => (
           <div key={cell.key} className="min-w-0 flex-1 px-[17px] pt-[15px]">
             <p className="truncate text-[11px] leading-[15px] text-[var(--text-muted)]">{cell.label}</p>
-            <p className="h-[30px] truncate text-[24px] font-bold leading-[30px] text-[var(--text-primary)]">
+            {/*
+              `tone` IS THE CALLER'S, like every other colour in this file. Round
+              8 added it so the เพิ่มรายชื่อแล้ว cell can report a roster that
+              exceeds its seat count — a broken invariant, which must LOOK broken.
+              This file does not know what a seat count is and must not learn:
+              picking the colour here would put a product rule in the frame.
+
+              Absent tone keeps --text-primary, so every existing cell is
+              unchanged.
+            */}
+            <p className={cn(
+              'h-[30px] truncate text-[24px] font-bold leading-[30px]',
+              cell.tone ?? 'text-[var(--text-primary)]',
+            )}>
               {cell.value}
             </p>
           </div>

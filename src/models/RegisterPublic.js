@@ -6,12 +6,42 @@ import { InternalNoteSchema } from './internalNoteSchema';
  * When coordinator.isAttending === true, attendees[0] is a copy of
  * the coordinator's info (merged server-side on create).
  */
+/**
+ * ══ ONLY ชื่อ AND นามสกุล ARE REQUIRED HERE. READ BEFORE "FIXING" THE ASYMMETRY ══
+ *
+ * `email` and `phone` were `required: true` until round 8 and are not any more,
+ * while `attendeeSchema` in lib/schemas/register-public STILL DEMANDS ALL FOUR.
+ * That difference is deliberate and it is the kind a reader tidies into
+ * consistency, so the reason is written at both sites.
+ *
+ * THIS SCHEMA IS THE STORAGE FLOOR. It must accept everything any legitimate
+ * writer may legitimately write, and round 8 made the admin screen one of those
+ * writers: an admin correcting a record — a walk-in whose email nobody took, a
+ * name given over the phone — may now store an attendee with two fields. A floor
+ * that refused it would contradict the writer above it.
+ *
+ * THE WIZARD'S ZOD IS A PRODUCT DECISION, and it is deliberately STRICTER than
+ * the floor: what we accept from a CUSTOMER is all four, because a public
+ * registration with no way to contact the attendee is a different product from
+ * the one we sell. An admin correcting a record and a customer submitting one
+ * are different decisions and they are allowed to have different rules.
+ *
+ * Tightening this back to four, or loosening the wizard's zod to two, both go
+ * RED — test/fs/rosterSeatLock asserts the asymmetry in both directions rather
+ * than only the direction that was changed.
+ *
+ * (`updateRegistration` writes with `runValidators: false`, so these `required`
+ * flags would not have fired on an admin save anyway. They are relaxed all the
+ * same: a declaration that contradicts its writer is a trap for whoever turns
+ * validators on, and it would have been a one-word change to break the admin
+ * path.)
+ */
 const AttendeeSchema = new mongoose.Schema(
   {
     firstName: { type: String, trim: true, required: true },
     lastName:  { type: String, trim: true, required: true },
-    email:     { type: String, trim: true, lowercase: true, required: true },
-    phone:     { type: String, trim: true, required: true },
+    email:     { type: String, trim: true, lowercase: true, default: '' },
+    phone:     { type: String, trim: true, default: '' },
   },
   { _id: false }
 );

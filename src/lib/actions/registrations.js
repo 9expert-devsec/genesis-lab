@@ -17,6 +17,10 @@ import {
 import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
 import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
 import { ROUND_FIELDS, roundFieldsFor } from '@/lib/registrations/roundSelection';
+// The duplicate rule lives beside the roster derivation, not here — the screens
+// and the server must agree about what "the same attendee twice" means, and a
+// second copy is how they come to disagree.
+import { firstDuplicateAttendee } from '@/lib/registrations/attendeeInfo';
 import { PUBLIC_SCHEDULE_STATUSES, listSchedulesByCourse } from '@/lib/api/schedules';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
 
@@ -336,6 +340,13 @@ export async function updateRegistration(id, data, source = 'public') {
    */
   let paidGuard = false;
 
+  /**
+   * How many attendee rows this payload writes, or null if it writes none.
+   * Feeds the seat lock below — see the note there for why it is carried out
+   * rather than checked inline.
+   */
+  let rosterLength = null;
+
   if (source === 'inhouse') {
     /**
      * Inhouse editable fields — AN ALLOWLIST, so a field that is not named here
@@ -447,17 +458,48 @@ export async function updateRegistration(id, data, source = 'public') {
     }
     if (data.attendees !== undefined) {
       if (!Array.isArray(data.attendees)) return { ok: false, error: 'รูปแบบข้อมูลผู้เข้าอบรมไม่ถูกต้อง' };
+      /**
+       * ── ONLY ชื่อ AND นามสกุล ARE REQUIRED HERE. ROUND 8. ─────────────────
+       *
+       * Email and phone were required on this path too. They are not any more,
+       * and the asymmetry with the customer form is DELIBERATE — see the note
+       * on `attendeeSchema` in lib/schemas/register-public, which still demands
+       * all four.
+       *
+       * THE MODEL IS THE STORAGE FLOOR and must accept everything any legitimate
+       * writer may write; the wizard's zod is a PRODUCT DECISION about what we
+       * accept from a customer and is deliberately stricter. An admin correcting
+       * a record — a walk-in whose email nobody took, a name given over the
+       * phone — is a different decision from a customer submitting one.
+       */
       for (const a of data.attendees) {
-        if (!a.firstName?.trim() || !a.lastName?.trim() || !a.email?.trim() || !a.phone?.trim()) {
-          return { ok: false, error: 'กรุณากรอกข้อมูลผู้เข้าอบรมให้ครบทุกช่อง' };
+        if (!a.firstName?.trim() || !a.lastName?.trim()) {
+          return { ok: false, error: 'กรุณากรอกชื่อและนามสกุลผู้เข้าอบรมให้ครบทุกท่าน' };
         }
       }
       update.attendees = data.attendees.map((a) => ({
         firstName: String(a.firstName).trim(),
         lastName:  String(a.lastName).trim(),
-        email:     String(a.email).trim().toLowerCase(),
-        phone:     String(a.phone).trim(),
+        email:     String(a.email ?? '').trim().toLowerCase(),
+        phone:     String(a.phone ?? '').trim(),
       }));
+
+      /**
+       * ── NO DUPLICATE ATTENDEE ────────────────────────────────────────────
+       * On EMAIL where there is one, on the full name between rows that have
+       * none. `firstDuplicateAttendee` carries the argument for that choice and
+       * the failure mode it accepts.
+       */
+      const dup = firstDuplicateAttendee(update.attendees);
+      if (dup !== -1) {
+        const a = update.attendees[dup];
+        return {
+          ok: false,
+          error: `ผู้เข้าอบรมท่านที่ ${dup + 1} (${a.firstName} ${a.lastName}) ซ้ำกับรายชื่อก่อนหน้า`,
+        };
+      }
+
+      rosterLength = update.attendees.length;
     }
     if (data.invoice !== undefined) {
       if (data.invoice === null) {
@@ -559,12 +601,68 @@ export async function updateRegistration(id, data, source = 'public') {
   const blocked = paidGuard ? ['cancelled', 'paid'] : ['cancelled'];
   const filter = { _id: id, status: { $nin: blocked } };
 
+  /**
+   * ══ THE SEAT LOCK — ENFORCED HERE, NOT BY A DISABLED BUTTON ════════════════
+   *
+   * The roster may not exceed `attendeesCount`. The client disables its + button
+   * at capacity, but that is a courtesy: every `'use server'` export is a POST
+   * endpoint and this is the only thing that actually holds.
+   *
+   * ── TWO CASES, AND THE SECOND NEEDS NO EXTRA READ ─────────────────────────
+   *
+   *   · The payload sets the COUNT as well as the rows — compare the two in JS,
+   *     because the new count is what the roster must fit inside, not the stored
+   *     one.
+   *   · The payload sets only the ROWS — the ceiling is the STORED count, and it
+   *     is compared IN THE FILTER with `$expr`. That keeps the check atomic: a
+   *     read-then-write would lose to a concurrent seat change landing between
+   *     the two, and it costs no round trip.
+   *
+   * ── WHY NOT `$expr` FOR BOTH ──────────────────────────────────────────────
+   * Because in the first case the count in the document is about to be replaced
+   * by the one in this very update, and `$expr` sees the document as it is
+   * BEFORE the write. It would compare against a number that is on its way out.
+   *
+   * ── THE ALREADY-OVER RECORD IS NOT TOUCHED ────────────────────────────────
+   * This refuses a payload that WOULD leave the roster over capacity. It does
+   * not truncate, and nothing anywhere deletes an attendee to satisfy a rule
+   * invented after the data — one production record is already over (2 against
+   * a count of 1) and it keeps both people. Saving that record unchanged still
+   * fails this check, which is correct and is the only honest outcome: the way
+   * out is to raise the count, not to lose a name.
+   */
+  if (rosterLength !== null) {
+    if (update.attendeesCount !== undefined) {
+      if (rosterLength > update.attendeesCount) {
+        return {
+          ok: false,
+          error: `มีรายชื่อผู้เข้าอบรม ${rosterLength} ท่าน เกินจำนวนที่สมัครไว้ ${update.attendeesCount} ท่าน`,
+        };
+      }
+    } else {
+      filter.$expr = { $gte: ['$attendeesCount', rosterLength] };
+    }
+  }
+
   const doc = await Model.findOneAndUpdate(filter, { $set: update }, { new: true, runValidators: false });
   if (!doc) {
     // Same ambiguity as the status gate — no such id, or a locked one. One
     // extra read on the refusal path only, so the three messages stay distinct.
-    const existing = await Model.findById(id).select('status').lean();
+    const existing = await Model.findById(id).select('status attendeesCount').lean();
     if (!existing) return { ok: false, error: 'ไม่พบรายการ' };
+    /**
+     * THE SEAT LOCK'S REFUSAL, NAMED. Without this the `$expr` clause above
+     * would surface as "ใบสมัครนี้ถูกยกเลิกแล้ว" — a message about a completely
+     * different rule, on a record that is not cancelled. Checked BEFORE the
+     * cancellation branch for exactly that reason.
+     */
+    if (rosterLength !== null && existing.status !== 'cancelled'
+        && rosterLength > Number(existing.attendeesCount ?? 0)) {
+      return {
+        ok: false,
+        error: `มีรายชื่อผู้เข้าอบรม ${rosterLength} ท่าน เกินจำนวนที่สมัครไว้ ${existing.attendeesCount} ท่าน`,
+      };
+    }
     if (paidGuard && existing.status === 'paid') {
       return {
         ok: false,
