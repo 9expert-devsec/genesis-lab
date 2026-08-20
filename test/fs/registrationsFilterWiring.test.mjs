@@ -27,6 +27,29 @@ const ACTIONS = readSource('src/lib/actions/registrations.js').code;
 const PAGE    = readSource('src/app/admin/registrations/page.jsx').code;
 const CLIENT  = readSource('src/app/admin/registrations/_components/RegistrationsClient.jsx').code;
 
+/**
+ * One exported action's body, bounded at the NEXT export.
+ *
+ * ── NOT `/export async function X\([\s\S]*?\n\}/`, AND THAT IS MEASURED ────
+ * That was the shape here until round 8, and it broke the moment three of these
+ * actions took multi-line destructured parameters: the non-greedy `\n}` stops at
+ * the PARAMS' closing brace, so the "body" became the signature and every
+ * assertion inside it failed on correct code.
+ *
+ * A second instance of the standing mechanism in test/sourceScan.mjs — an
+ * assertion bound to the shape of an expression stops applying when the
+ * expression is reformulated, and a signature spread over three lines is a
+ * reformulation. Bounding on the next `export` is what the other guard files in
+ * this suite already do, for this reason.
+ */
+function actionBody(name) {
+  const start = ACTIONS.indexOf(`export async function ${name}(`);
+  assert.notEqual(start, -1, `${name} not found in the actions file`);
+  const rest = ACTIONS.slice(start + 1);
+  const next = rest.indexOf('export async function ');
+  return next === -1 ? rest : rest.slice(0, next);
+}
+
 // ── 1. The range reaches the LIST query ─────────────────────────────────────
 
 test('listRegistrations accepts a `range` argument', () => {
@@ -80,11 +103,35 @@ test('the toggle badge follows the SAME range filter as everything else', () => 
     'the badge query does not ask for the OTHER source — it would duplicate counts.total');
 });
 
-test('getRegistrationTotal applies the shared date derivation', () => {
-  const body = /export async function getRegistrationTotal\([\s\S]*?\n\}/.exec(ACTIONS);
-  assert.ok(body, 'getRegistrationTotal not found in the actions file');
-  assert.match(body[0], /rangeToDateFilter\(\s*range\s*\)/,
-    'the total action hand-rolls its window instead of sharing the list query’s');
+test('getRegistrationTotal applies the shared SCOPE, not just the shared date', () => {
+  /**
+   * ══ RE-POINTED IN ROUND 8, AND THE CLAIM GOT STRONGER ═════════════════════
+   *
+   * This asserted `rangeToDateFilter(range)`. Round 8 added a custom date range
+   * and a course filter, so the date stopped being the only shared dimension —
+   * and a toggle badge reading 39 beside a table filtered to one course is the
+   * same defect this test was written for, arriving through a dimension it could
+   * not see.
+   *
+   * The claim is therefore widened rather than moved: the total must share the
+   * list query's WHOLE non-status scope, which is `buildRegistrationScope`. A
+   * date-only assertion would now pass on an action that ignored the course.
+   *
+   * ── AND IT WENT RED WHEN THE EXPRESSION MOVED, WHICH IS THE POINT ────────
+   * This is the standing vacuity case (test/sourceScan.mjs, defect 7) behaving
+   * as it should for once: an fs assertion bound to the shape of an expression
+   * SHOULD go red when that expression is reformulated, so a human re-reads it.
+   * It did, and this is the re-read.
+   */
+  const body = actionBody('getRegistrationTotal');
+  assert.match(body, /buildRegistrationScope\(/,
+    'the total action hand-rolls its window instead of sharing the list query’s scope');
+  // Every dimension reaches it — a scope call that forgot one would still match
+  // the line above.
+  for (const dim of ['range', 'from', 'to', 'course', 'source']) {
+    assert.match(body, new RegExp(`\\b${dim}\\b`),
+      `the total action does not take \`${dim}\` — its badge would ignore that filter`);
+  }
 });
 
 test('CONTROL: the Promise.all extractor really reads the array, not the file', () => {
@@ -99,9 +146,43 @@ test('CONTROL: the Promise.all extractor really reads the array, not the file', 
   assert.match(all[1], /listRegistrations\(/);
 });
 
-test('getRegistrationStatusCounts derives its window from the SAME helper', () => {
-  assert.match(ACTIONS, /rangeToDateFilter\(\s*range\s*\)/,
-    'the counts action no longer shares the list query’s date derivation');
+test('getRegistrationStatusCounts derives its scope from the SAME helper', () => {
+  /**
+   * RE-POINTED with `getRegistrationTotal` above, for the same reason and onto
+   * the same helper. The cards, the toggle badges and the table now share every
+   * non-status dimension rather than only the date.
+   *
+   * ── ASSERTED INSIDE THE ACTION, NOT PAGE-WIDE ─────────────────────────────
+   * The old form matched anywhere in the file, so it would have been satisfied
+   * by any other action using the helper. Bounded now, because after this change
+   * there are two callers and a page-wide match cannot tell which one it found.
+   */
+  const body = actionBody('getRegistrationStatusCounts');
+  assert.match(body, /buildRegistrationScope\(/,
+    'the counts action no longer shares the list query’s scope derivation');
+  for (const dim of ['range', 'from', 'to', 'course']) {
+    assert.match(body, new RegExp(`\\b${dim}\\b`),
+      `the counts action does not take \`${dim}\` — its cards would ignore that filter`);
+  }
+});
+
+test('the shared scope reaches the LIST query too, or the three disagree', () => {
+  /**
+   * The third consumer. Two of the three sharing a helper while the list built
+   * its own is the original defect: cards reading ทั้งหมด 1 above a table listing
+   * every row. `buildRegistrationFilter` is the scope PLUS a status clause, so
+   * this is asserted at the builder rather than at the action.
+   */
+  const list = actionBody('listRegistrations');
+  assert.match(list, /buildRegistrationFilter\(\{[^}]*\bcourse\b[^}]*\}\)/,
+    'the list query does not pass the course — the table would ignore it');
+  assert.match(list, /buildRegistrationFilter\(\{[^}]*\bfrom\b[^}]*\}\)/,
+    'the list query does not pass the custom range');
+
+  // And `rangeToDateFilter` is no longer reachable from this file at all, so a
+  // narrower second derivation cannot creep back beside the shared one.
+  assert.equal(/rangeToDateFilter\(/.test(ACTIONS), false,
+    'the narrower date-only helper is back in the actions file');
 });
 
 /**
