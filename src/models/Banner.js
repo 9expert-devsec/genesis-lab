@@ -1,11 +1,32 @@
 import mongoose from 'mongoose';
-import { ALL_TYPE_IDS } from '@/lib/banners/bannerTypes';
+import {
+  ALL_TYPE_IDS,
+  COURSE_KIND_IDS,
+  COURSE_KINDS,
+} from '@/lib/banners/bannerTypes';
+import { isRefBackedBannerType } from '@/lib/banners/bannerFormFields';
 
 const bannerSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: true,
+      // ── REQUIRED ONLY WHERE IT IS THE ONLY SOURCE OF A HEADLINE ─────────
+      // `video` and `image` have no other name to fall back on, so an empty
+      // title on one of those is a card with a blank headline. `course` and
+      // `article` DO have one — the mapper reads
+      // `text(banner.title) ?? courseName ?? article.title` — so on those two
+      // an empty title means "use the referenced record's own name", and
+      // demanding a value would force the admin to copy a name that already
+      // exists upstream and will go stale the moment it is renamed there.
+      //
+      // A FUNCTION, and mongoose calls it with `this` bound to the document,
+      // so it can read `this.type`. It runs on `create()` and `save()`;
+      // `findByIdAndUpdate` does not run validators unless asked, which is
+      // why the same rule is ALSO in the zod schema — that one runs on every
+      // path into this collection.
+      required: function required() {
+        return !isRefBackedBannerType(this.type);
+      },
       trim: true,
       maxlength: 200,
     },
@@ -28,7 +49,8 @@ const bannerSchema = new mongoose.Schema(
     youtube_id:      { type: String, default: '' },
 
     // ── slide_text: LIVE DATA. DO NOT RENAME. ────────────────────────────────
-    // Five active youtube records hold 187–340 characters here. A rename is a
+    // SIX stored youtube records hold 187–340 characters here (measured; an
+    // earlier note said five).
     // write to every one of them, which is a migration, not a schema edit. The
     // replacement is `description` below; readers use `description ?? slide_text`
     // until the migration copies the values across. Both fields coexist on
@@ -52,21 +74,35 @@ const bannerSchema = new mongoose.Schema(
     title_line2:     { type: String, trim: true, maxlength: 200 },
     title_highlight: { type: String, trim: true, maxlength: 200 },
 
-    // Designed slots with no source on video/image/article (only `course` has
-    // an upstream equivalent, in course_teaser / MSDB's `title`).
-    subtitle:        { type: String, trim: true, maxlength: 300 },
+    // ── subtitle: NO UPSTREAM SOURCE ON ANY OF THE FOUR TYPES ──────────────
+    // An earlier note here said a course's equivalent lived in
+    // `course_teaser` / "MSDB's `title`". THERE IS NO `title` FIELD ON AN MSDB
+    // COURSE. Measured: the union of keys across all 79 live public-course rows
+    // is 39 names and `title` is not among them. `course_name` is the short
+    // name (~36 characters) and `course_teaser` is the description (~363).
+    //
+    // So a course has no upstream subtitle at all, and the ruling is that the
+    // ADMIN TYPES IT — BannerForm gives course records a real subtitle input
+    // rather than hiding the slot. `description` stays hidden on course and
+    // article, because those two DO have a source (`course_teaser` / `excerpt`)
+    // and an admin-typed one would shadow it permanently and silently.
     description:     { type: String, trim: true, maxlength: 2000 },
 
     // ── course type ──
     // BOTH identifiers, because a course code MOVES. `upstreamId` is MSDB's
     // `_id` and is stable; `courseId` is the human code and is what breaks —
-    // upstream `?course_id=` is exact-match case-sensitive and five public
-    // courses carry mixed-case ids (Power-Apps, SQL-PG-Query, SQL-ADM-Tuning,
-    // MS-SQL-19-Prov, SQL-ADM-Secure), plus one online id ships with a LEADING
-    // SPACE (" ONL-MSE-PQ-PM"). Resolution goes upstreamId first, then the
-    // trimmed + case-folded code — and a miss must drop the item, never render
-    // a card with a dead link. Same two-key shape as CourseExtension, and for
-    // the same reason.
+    // upstream `?course_id=` is exact-match case-sensitive. MEASURED against
+    // the live feed rather than remembered: FOUR public ids are mixed-case —
+    // SQL-PG-Query, SQL-ADM-Tuning, MS-SQL-19-Prov, SQL-ADM-Secure — and
+    // `Power-Apps`, which every older note in this repo lists as a fifth, has
+    // been fixed upstream to POWER-APPS. TWO online ids ship with a LEADING
+    // SPACE, not one: " ONL-CYS" and " ONL-MSE-PQ-PM". Both counts are derived
+    // by scripts/audit-course-id-casing and by the S6a probe; do not re-copy
+    // either list from a comment.
+    //
+    // Resolution goes upstreamId first, then the trimmed + case-folded code —
+    // and a miss must drop the item, never render a card with a dead link.
+    // Same two-key shape as CourseExtension, and for the same reason.
     //
     // `default: undefined` on the subdocument: without it mongoose materialises
     // `course_ref: {}` on every new save, including video and image records
@@ -76,7 +112,20 @@ const bannerSchema = new mongoose.Schema(
         {
           upstreamId: { type: String, default: '', trim: true },
           courseId:   { type: String, default: '', trim: true },
-          kind:       { type: String, enum: ['inclass', 'online'], default: 'inclass' },
+          // The list, not a copy of it. The same two strings are spelled by the
+          // zod enum and by the admin picker; COURSE_KIND_IDS is what stops the
+          // three drifting into a `kind` this enum rejects.
+          //
+          // `default` STAYS, and it is not in tension with the zod enum having
+          // none: this default only fires for a document written without a kind
+          // at all, which the form can no longer produce. It is the reading for
+          // any pre-existing subdocument, and it matches what `collectFeatureRefs`
+          // already assumes when `ref.kind` is absent (`=== ONLINE ? online : inclass`).
+          kind: {
+            type: String,
+            enum: COURSE_KIND_IDS,
+            default: COURSE_KINDS.INCLASS,
+          },
         },
         { _id: false }
       ),

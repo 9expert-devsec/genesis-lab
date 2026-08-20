@@ -142,3 +142,44 @@ export function warnBlockedBannerLink(banner) {
       `Fix the URL in /admin/banners.`
   );
 }
+
+/**
+ * Hostnames that mean "this URL IS the video", not "this URL is a page about
+ * the video". Anchored on a dot or the start, so `notyoutube.com` and
+ * `youtube.com.evil.example` do not match.
+ */
+const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtu\.be)$/i;
+
+/**
+ * Is this `link_url` pointing at YouTube?
+ *
+ * ── WHY THIS MOVED HERE, AND WHY BOTH ENDS NOW SHARE IT ─────────────────────
+ * It lived privately in src/lib/home/featureContentFromBanners.js, where it
+ * decides that a video banner's `link_url` is the VIDEO rather than a details
+ * page — every stored `youtube` record's link_url is the watch URL for the id
+ * already in `youtube_id`, so treating it as a details link puts two buttons on
+ * one card that go to exactly the same place, and the mapper drops it.
+ *
+ * The admin form now has to ask the SAME question, one step earlier: refusing
+ * the URL at save time is the difference between "you typed a link that does
+ * nothing" and silence. Two copies of a host test is precisely how one end
+ * starts accepting what the other rejects, so there is one, here, in the module
+ * that already owns every other question about `link_url`.
+ *
+ * ── PARSED WITH `URL`, NEVER MATCHED AS A SUBSTRING ─────────────────────────
+ * `?next=youtube.com` and `https://evil.example/youtube.com` both CONTAIN the
+ * string and neither is YouTube. A parse failure returns false: a malformed URL
+ * is not a video link, and resolveBannerLink above already owns the separate
+ * question of whether a malformed link should reach the browser at all.
+ *
+ * A bare path (`/watch?v=x`) also returns false — `new URL` throws on it — which
+ * is right: an internal path cannot be YouTube.
+ */
+export function isYouTubeLinkUrl(url) {
+  if (typeof url !== 'string') return false;
+  try {
+    return YOUTUBE_HOSTS.test(new URL(url.trim()).hostname);
+  } catch {
+    return false;
+  }
+}

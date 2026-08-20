@@ -50,7 +50,20 @@ export function AdminBannerList({ banners }) {
               className="border-b border-[var(--surface-border)] last:border-0 hover:bg-9e-ice/50 transition-colors"
             >
               <td className="px-4 py-3 text-9e-slate-dp-50 text-center">{b.weight}</td>
-              <td className="px-4 py-3 font-medium text-9e-navy">{b.title}</td>
+              <td className="px-4 py-3 font-medium text-9e-navy">
+                {/* `title` is OPTIONAL on course and article records — it is an
+                    override of the referenced record's own name, and leaving it
+                    blank is the non-stale choice (see the note on `title` in
+                    models/Banner.js). So this column can legitimately receive an
+                    empty string, and rendering it bare would give a nameless row
+                    with no clue why. Say what the record will actually show
+                    instead of showing nothing. */}
+                {b.title || (
+                  <span className="text-9e-slate-dp-50 font-normal italic">
+                    (ใช้ชื่อจากคอร์ส/บทความที่อ้างถึง)
+                  </span>
+                )}
+              </td>
               <td className="px-4 py-3 text-9e-slate-dp-50">
                 {TYPE_LABELS[b.type] ?? b.type}
               </td>

@@ -39,10 +39,14 @@
 import {
   BANNER_TYPE_IDS,
   BANNER_TYPES,
-  LEGACY_TO_NEW,
   LEGACY_TYPES,
+  normaliseBannerType,
 } from '@/lib/banners/bannerTypes';
-import { resolveBannerLink, warnBlockedBannerLink } from '@/lib/bannerLinkUrl';
+import {
+  isYouTubeLinkUrl,
+  resolveBannerLink,
+  warnBlockedBannerLink,
+} from '@/lib/bannerLinkUrl';
 import { coursePriceLabel, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
 import { courseHref } from '@/lib/utils';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
@@ -86,8 +90,6 @@ const POOL_TYPES = [
   ...BANNER_TYPE_IDS,
 ];
 
-const YOUTUBE_HOSTS = /(^|\.)(youtube\.com|youtu\.be)$/i;
-
 /** Trim, and turn "nothing" into null rather than ''. See the header. */
 function text(value) {
   const s = typeof value === 'string' ? value.trim() : '';
@@ -95,26 +97,15 @@ function text(value) {
 }
 
 /**
- * Is this URL pointing at YouTube?
+ * Is this `link_url` the video itself rather than a page about it?
  *
- * Used to decide that a `link_url` is the VIDEO target rather than a details
- * page. On all five live youtube records `link_url` is the watch URL for the
- * same id already in `youtube_id`, so treating it as a details link would put
- * two buttons on the card that go to exactly the same place.
- *
- * Parsed with `URL`, not matched with a substring: `?next=youtube.com` and
- * `https://evil.example/youtube.com` both contain the string and neither is
- * YouTube. A parse failure returns false — a malformed URL is not a video
- * link, and bannerLinkUrl.js already owns the question of whether a malformed
- * link should reach the browser at all.
+ * THE PREDICATE MOVED TO src/lib/bannerLinkUrl.js and is imported rather than
+ * re-spelled here. The admin form now has to refuse exactly the URLs this
+ * mapper silently drops — that is the whole point of enforcing the rule at
+ * SAVE time instead of only at render time — and two host tests is precisely
+ * how one end starts accepting what the other rejects. The reasoning for
+ * parsing with `URL` rather than matching a substring travelled with it.
  */
-function isYouTubeUrl(url) {
-  try {
-    return YOUTUBE_HOSTS.test(new URL(url).hostname);
-  } catch {
-    return false;
-  }
-}
 
 /**
  * YouTube's own thumbnail for a video id, plus the fallback.
@@ -437,7 +428,7 @@ function toItem(banner, resolved) {
   // under a new id passes through unchanged. Nothing here does a substring test
   // on a type string: `startsWith('image')` answers true for four different
   // legacy ids AND for the new one, which is the bug that shape always becomes.
-  const type = LEGACY_TO_NEW[banner.type] ?? banner.type;
+  const type = normaliseBannerType(banner.type);
   const isVideo = type === BANNER_TYPES.VIDEO;
   const isCourse = type === BANNER_TYPES.COURSE;
   const isArticle = type === BANNER_TYPES.ARTICLE;
@@ -496,7 +487,7 @@ function toItem(banner, resolved) {
   // page and /articles/<slug>. A stored link_url still wins -- an admin who
   // typed a promo landing page meant it -- but its absence is not a reason to
   // render a card with no way through to the thing it advertises.
-  let detailsUrl = link && !isYouTubeUrl(link) ? link : null;
+  let detailsUrl = link && !isYouTubeLinkUrl(link) ? link : null;
   if (!detailsUrl && isCourse) {
     detailsUrl = online
       ? onlineCourseHref(course)

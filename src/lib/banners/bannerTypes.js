@@ -181,3 +181,74 @@ export function isCurrentBannerType(value) {
 export function isLegacyBannerType(value) {
   return typeof value === 'string' && LEGACY_TYPE_IDS.includes(value);
 }
+
+/**
+ * Any stored type id — legacy or new — as one of the four current ids.
+ *
+ * ── THIS IS THE REPLACEMENT FOR EVERY SUBSTRING TEST ────────────────────────
+ * `type.startsWith('image')` was true for four legacy ids AND for the new
+ * `image`, and `type.includes('button')` read a NAMING CONVENTION rather than a
+ * field. Both looked right and both were accidents: `startsWith('image')` also
+ * answers true for anything anyone ever names `image_*`, and neither can be
+ * asked about `course` or `article` at all — `'course'.startsWith('image')` is
+ * false, which is the right answer for the wrong reason, and the moment a type
+ * called `image_course` exists the accident becomes a defect.
+ *
+ * So: normalise ONCE, then compare with `===` against a named id. A legacy
+ * record and a migrated one take the same branch by construction rather than by
+ * two tests that have to be kept in agreement.
+ *
+ * An unknown id passes through unchanged rather than becoming a default: a
+ * record carrying a type nothing knows should fall out of every explicit
+ * branch and be visible as unhandled, not be silently treated as an image.
+ */
+export function normaliseBannerType(type) {
+  return LEGACY_TO_NEW[type] ?? type ?? null;
+}
+
+/**
+ * The two course namespaces, and they are DISJOINT IN FIELD NAMES.
+ *
+ * ── WHY THIS MOVED HERE FROM featureContentRefs ─────────────────────────────
+ * It is vocabulary of the stored `course_ref`, not of the resolver: the mongoose
+ * enum, the zod enum, the admin picker and the resolver all need it, and three
+ * of those four cannot import the resolver — it reaches Mongo and the upstream
+ * adapter, so pulling it into a client component would drag a database driver
+ * into the browser bundle. bannerTypes.js has no imports at all, which is what
+ * makes it the only module all four can share. featureContentRefs re-exports
+ * it, so every existing import keeps working and there is still only one
+ * definition.
+ *
+ * ── AND WHY `kind` IS NEVER INFERRED ────────────────────────────────────────
+ * An in-class course carries `course_id` / `course_name` / `course_teaser`; an
+ * online one carries `o_course_id` / `o_course_name` / `o_course_teaser`. No key
+ * is shared, so a guess does not degrade — it resolves to NOTHING, and the
+ * banner is dropped from the pool with a console warning the admin never sees.
+ * The form therefore demands the choice; see BannerCoursePicker.
+ */
+export const COURSE_KINDS = Object.freeze({
+  INCLASS: 'inclass',
+  ONLINE: 'online',
+});
+
+export const COURSE_KIND_IDS = Object.freeze([
+  COURSE_KINDS.INCLASS,
+  COURSE_KINDS.ONLINE,
+]);
+
+/** Admin-facing names for the two namespaces. Thai, like the type labels. */
+export const COURSE_KIND_LABELS = Object.freeze({
+  [COURSE_KINDS.INCLASS]: 'คอร์สในห้องเรียน (In-class)',
+  [COURSE_KINDS.ONLINE]: 'คอร์สออนไลน์ (Online)',
+});
+
+/** Short form, for the one-line summary a picker row shows. */
+export const COURSE_KIND_SHORT_LABELS = Object.freeze({
+  [COURSE_KINDS.INCLASS]: 'In-class',
+  [COURSE_KINDS.ONLINE]: 'Online',
+});
+
+/** Is `value` one of the two namespaces? */
+export function isCourseKind(value) {
+  return typeof value === 'string' && COURSE_KIND_IDS.includes(value);
+}

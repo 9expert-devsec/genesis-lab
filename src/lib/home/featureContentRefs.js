@@ -38,13 +38,26 @@ import {
   isHiddenCourse,
   normaliseCourseKey,
 } from '@/lib/courses/hiddenCourses';
-import { BANNER_TYPES, LEGACY_TO_NEW } from '@/lib/banners/bannerTypes';
+import {
+  BANNER_TYPES,
+  COURSE_KINDS,
+  normaliseBannerType,
+} from '@/lib/banners/bannerTypes';
 
-/** The two course namespaces. `kind` on `course_ref` selects one. */
-export const COURSE_KINDS = Object.freeze({
-  INCLASS: 'inclass',
-  ONLINE: 'online',
-});
+/**
+ * RE-EXPORTED, not redefined.
+ *
+ * The two namespaces moved to src/lib/banners/bannerTypes.js because three of
+ * the four things that need them cannot import THIS module: the mongoose enum,
+ * the zod enum and the admin picker. This file reaches Mongo and the upstream
+ * adapter, so a client component importing it would drag a database driver into
+ * the browser bundle. bannerTypes.js has no imports at all, which is what makes
+ * it the only module all four can share.
+ *
+ * The export stays here so every existing import — and every test that names it
+ * from this path — keeps working against ONE definition rather than two.
+ */
+export { COURSE_KINDS };
 
 /** Trim → null, so '' and '   ' are both "absent" rather than a key. */
 function text(value) {
@@ -52,9 +65,15 @@ function text(value) {
   return s.length ? s : null;
 }
 
-/** The normalised type, never `banner.type` directly. */
+/**
+ * The normalised type, never `banner.type` directly.
+ *
+ * Delegates to the shared normaliser so the resolver, the mapper and the admin
+ * form all fold the five legacy ids onto the four current ones the SAME way. It
+ * stays exported because callers and tests name it from here.
+ */
 export function bannerType(banner) {
-  return LEGACY_TO_NEW[banner?.type] ?? banner?.type ?? null;
+  return normaliseBannerType(banner?.type);
 }
 
 /** A stable key for "which banner is this", matching the mapper's `id`. */

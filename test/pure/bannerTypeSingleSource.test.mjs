@@ -114,6 +114,19 @@ const BANNER_SURFACES = [
   'src/app/admin/banners/_components/BannerForm.jsx',
   'src/app/admin/banners/_components/AdminBannerList.jsx',
   'src/app/_components/home/HeroBannerCarousel.jsx',
+  // ── ADDED BY THE PER-TYPE ADMIN FORM SLICE ────────────────────────────────
+  // Every one of these decides something FROM a banner type, or writes a banner
+  // field, which is this file's own definition of a banner surface. Listed the
+  // moment they were written rather than the next time someone remembers: SCAN 2
+  // covers only what is named here, and an unlisted surface is exactly the gap
+  // the header calls out as this guard's real limit.
+  'src/lib/banners/bannerFormFields.js',
+  'src/lib/banners/bannerFormPayload.js',
+  'src/lib/banners/pickerOptions.js',
+  'src/lib/banners/pickerMatch.js',
+  'src/app/admin/banners/_components/SearchPicker.jsx',
+  'src/app/admin/banners/_components/BannerCoursePicker.jsx',
+  'src/app/admin/banners/_components/BannerArticlePicker.jsx',
 ];
 
 /** The ids no other domain in this repo can mean. */
