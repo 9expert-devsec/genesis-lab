@@ -6,6 +6,7 @@ import {
   resolveDateWindow,
   courseClause,
   buildRegistrationFilter,
+  buildRegistrationScope,
 } from '@/lib/registrations/listFilter';
 
 /**
@@ -237,6 +238,81 @@ test('a search AND a course both apply — neither silently drops the other', ()
   assert.ok(filter.$or.some((c) => c.courseName), 'the $or is not the search clause');
   assert.ok(Array.isArray(filter.$and), 'the course clause was lost');
   assert.deepEqual(filter.$and, [{ $or: [{ courseCode: 'MSE-L2' }, { courseId: 'MSE-L2' }] }]);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 6. ONE SET — THE CARDS, THE BADGES, THE HEADER AND THE PAGER
+// ════════════════════════════════════════════════════════════════════════════
+
+test('the SCOPE is what every number on the screen counts inside', () => {
+  /**
+   * ══ THE `q` DEFECT, AS A BEHAVIOUR ASSERTION ══════════════════════════════
+   *
+   * The stat cards, the toggle badges, the "N รายการ" header and the pager must
+   * all count the SAME SET. Three of the four read `buildRegistrationScope`
+   * directly; the header and the pager derive from the list query's own `total`,
+   * which is `buildRegistrationFilter` — the scope PLUS a status clause.
+   *
+   * So the claim reduces to: the filter is the scope plus status, and NOTHING
+   * ELSE. If a dimension reached one and not the other, the table and the cards
+   * would answer differently — which is exactly what `q` did until this commit,
+   * and `range` did before it.
+   *
+   * Asserted against BEHAVIOUR (the objects the builders return) rather than
+   * against the shape of the call sites, which is what fs/registrationsFilterWiring
+   * covers. The two together are the seam.
+   */
+  const dims = { q: 'สมชาย', range: 'all', from: '2026-08-01', to: '2026-08-31', course: 'MSE-L2' };
+  const scope = buildRegistrationScope({ ...dims, source: 'public', now: NOW });
+  const filter = buildRegistrationFilter({ ...dims, status: 'all', source: 'public', now: NOW });
+
+  assert.deepEqual(filter, scope,
+    'with no status, the list filter and the shared scope are not the same query — '
+    + 'a dimension reaches one and not the other');
+
+  // …and with a status, the filter is the scope plus exactly that one key.
+  const withStatus = buildRegistrationFilter({ ...dims, status: 'pending', source: 'public', now: NOW });
+  const extra = Object.keys(withStatus).filter((k) => !(k in scope));
+  assert.deepEqual(extra, ['status'], `the filter adds ${extra.join(', ')} beyond the scope and a status`);
+});
+
+test('EVERY dimension moves the scope — none is silently ignored', () => {
+  /**
+   * The set check in fs/registrationsFilterWiring proves each dimension is
+   * PASSED. This proves each one DOES something: a parameter threaded through
+   * four call sites and then dropped by the builder would satisfy every source
+   * assertion and change no number at all.
+   *
+   * `q` is the reason this exists. It was in the builder's signature and in the
+   * scope the whole time — page.jsx simply never sent it — so a test that only
+   * read the builder would have called the screen correct.
+   */
+  const base = buildRegistrationScope({ source: 'public', now: NOW });
+  assert.deepEqual(base, {}, 'the empty scope is not empty — something filters by default');
+
+  const moves = {
+    q:      { q: 'สมชาย' },
+    range:  { range: 'today' },
+    from:   { from: '2026-08-01' },
+    to:     { to: '2026-08-31' },
+    course: { course: 'MSE-L2' },
+  };
+  for (const [dim, input] of Object.entries(moves)) {
+    const scope = buildRegistrationScope({ ...input, source: 'public', now: NOW });
+    assert.notDeepEqual(scope, base, `\`${dim}\` changed nothing — it is threaded but ignored`);
+  }
+});
+
+test('CONTROL: the search dimension really differs BY SOURCE', () => {
+  // The badge for the other source counts what ITS table would show. If the
+  // search clause ignored `source`, a public search term would be matched
+  // against public field names on the in-house collection and the badge would
+  // read 0 for every search.
+  const pub = buildRegistrationScope({ q: 'สมชาย', source: 'public', now: NOW });
+  const inh = buildRegistrationScope({ q: 'สมชาย', source: 'inhouse', now: NOW });
+  assert.notDeepEqual(pub.$or, inh.$or, 'both sources search the same fields');
+  assert.ok(pub.$or.some((c) => c.courseName), 'the public search does not name a public field');
+  assert.ok(inh.$or.some((c) => c.companyName), 'the in-house search does not name an in-house field');
 });
 
 test('every filter dimension composes into ONE query', () => {

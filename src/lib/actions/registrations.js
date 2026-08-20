@@ -1219,7 +1219,7 @@ export async function deleteRegistration(id, source = 'public') {
  * which is what the ทั้งหมด chip is for.
  */
 export async function getRegistrationTotal({
-  range = 'all', source = 'public', from = '', to = '', course = '',
+  q = '', range = 'all', source = 'public', from = '', to = '', course = '',
 } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
@@ -1235,28 +1235,30 @@ export async function getRegistrationTotal({
    * exists to prevent. One function; every number inside it.
    */
   return getModel(source).countDocuments(
-    buildRegistrationScope({ source, range, from, to, course }),
+    buildRegistrationScope({ q, source, range, from, to, course }),
   );
 }
 
 // ── Status counts for stat strip ──────────────────────────────────
 
 export async function getRegistrationStatusCounts({
-  range = 'all', source = 'public', from = '', to = '', course = '',
+  q = '', range = 'all', source = 'public', from = '', to = '', course = '',
 } = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
   /**
-   * THE SAME SCOPE the list query uses — the date, the course and (when a caller
-   * passes one) the search, minus the status this action supplies per card.
+   * THE SAME SCOPE the list query uses — the search, the date and the course,
+   * minus the status this action supplies once per card.
    *
-   * The variable keeps its name because every `{ ...dateFilter, status }` below
-   * reads correctly either way, but it is no longer only a date. See
-   * `buildRegistrationScope` for why the split exists and for the note about `q`,
-   * which page.jsx still does not pass here.
+   * ── RENAMED FROM `dateFilter`, AND THE NAME MATTERED ─────────────────────
+   * It was `dateFilter` while the date was the only shared dimension, and the
+   * name is part of why `q` went missing for so long: every `{ ...dateFilter,
+   * status }` below READS AS COMPLETE, and a reader checking whether the cards
+   * follow the search box sees a variable that says it is about dates and moves
+   * on. `scope` is what it is.
    */
-  const dateFilter = buildRegistrationScope({ source, range, from, to, course });
+  const scope = buildRegistrationScope({ q, source, range, from, to, course });
   const Model = getModel(source);
 
   if (source === 'inhouse') {
@@ -1283,9 +1285,9 @@ export async function getRegistrationStatusCounts({
      * find the migrated ones. After --apply the extra members match nothing.
      */
     const [total, ...perStatus] = await Promise.all([
-      Model.countDocuments(dateFilter),
+      Model.countDocuments(scope),
       ...INHOUSE_STATUS_VALUES.map((value) =>
-        Model.countDocuments({ ...dateFilter, status: { $in: storedValuesForFilter(value, 'inhouse') } })
+        Model.countDocuments({ ...scope, status: { $in: storedValuesForFilter(value, 'inhouse') } })
       ),
     ]);
 
@@ -1307,9 +1309,9 @@ export async function getRegistrationStatusCounts({
      * key and the URL filter value.
      */
     const [total, ...perStatus] = await Promise.all([
-      Model.countDocuments(dateFilter),
+      Model.countDocuments(scope),
       ...PUBLIC_STATUS_VALUES.map((value) =>
-        Model.countDocuments({ ...dateFilter, status: value })
+        Model.countDocuments({ ...scope, status: value })
       ),
     ]);
 

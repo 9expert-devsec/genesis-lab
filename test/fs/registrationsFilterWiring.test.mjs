@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
+// The ONE enumeration of the shared scope's dimensions. Imported rather than
+// restated: a second copy here would be a second place to forget a dimension,
+// which is the entire defect this file now guards against.
+import { SCOPE_PARAMS } from '@/lib/registrations/listFilter';
 
 /**
  * THE SEAM THE PURE TESTS CANNOT SEE.
@@ -50,7 +54,83 @@ function actionBody(name) {
   return next === -1 ? rest : rest.slice(0, next);
 }
 
+// ── 0. EVERY DIMENSION REACHES EVERY CONSUMER ───────────────────────────────
+//
+// ══ THE GUARD THAT SHOULD HAVE CAUGHT `q`, AND DID NOT ══════════════════════
+//
+// This file's original tests are all of the form "`range` reaches X". Three of
+// them, one per consumer, hand-written after the range defect was found. They
+// were correct and they were useless against the NEXT dimension: nothing here
+// ever asked whether the SET of filter dimensions was the same in all four
+// places, so `q` — which the cards and the badges had never received — was not
+// absent from the code by accident so much as absent from the ENUMERATION.
+//
+// A dimension nobody wrote a test for was a dimension with no test. That is the
+// standing vacuity mechanism in its per-name costume: the guards were bound to
+// the names that existed when they were written.
+//
+// So the set is derived from ONE source — `SCOPE_PARAMS`, exported beside
+// `buildRegistrationScope` — and these tests read it. Adding a sixth dimension
+// to the scope without threading it reddens here, with no test written for it.
+
+test('every SCOPE_PARAM is accepted by all three query actions', () => {
+  const sig = (name) => {
+    const at = ACTIONS.indexOf(`export async function ${name}(`);
+    assert.notEqual(at, -1, `${name} not found`);
+    const open = ACTIONS.indexOf('{', at);
+    const close = ACTIONS.indexOf('}', open);
+    return ACTIONS.slice(open, close);
+  };
+  for (const action of ['listRegistrations', 'getRegistrationStatusCounts', 'getRegistrationTotal']) {
+    const params = sig(action);
+    for (const dim of SCOPE_PARAMS) {
+      assert.match(params, new RegExp(`\\b${dim}\\b`),
+        `${action} does not accept \`${dim}\` — that filter cannot reach it, and the number it `
+        + 'produces will disagree with every other number on the screen');
+    }
+  }
+});
+
+test('every SCOPE_PARAM is PASSED by the page to all three', () => {
+  /**
+   * Accepting a parameter and being given one are different facts, and the `q`
+   * defect was the second: both actions had a `q` in scope through the builder
+   * the whole time — page.jsx simply never sent it.
+   */
+  for (const call of ['listRegistrations', 'getRegistrationStatusCounts', 'getRegistrationTotal']) {
+    const m = new RegExp(`${call}\\(\\{([^}]*)\\}\\)`).exec(PAGE);
+    assert.ok(m, `${call} call not found in page.jsx`);
+    for (const dim of SCOPE_PARAMS) {
+      assert.match(m[1], new RegExp(`\\b${dim}\\b`),
+        `page.jsx drops \`${dim}\` on the way to ${call} — the numbers it feeds would ignore that filter`);
+    }
+  }
+});
+
+test('CONTROL: the enumeration is real, and the probe can miss a dimension', () => {
+  /**
+   * Two ways this pair could be vacuous: an EMPTY `SCOPE_PARAMS` satisfies every
+   * loop above, and a matcher that matches anything satisfies them on a call
+   * site that passes nothing.
+   */
+  assert.ok(SCOPE_PARAMS.length >= 5, `SCOPE_PARAMS holds only ${SCOPE_PARAMS.length} dimensions`);
+  assert.ok(SCOPE_PARAMS.includes('q'), 'the dimension that leaked is not in the enumeration');
+  assert.ok(!SCOPE_PARAMS.includes('source'),
+    '`source` is in the enumeration — it selects the collection and is not a filter');
+
+  // The matcher really would miss one: a call site naming four of the five.
+  const short = 'q, range, from, to';
+  assert.equal(/\bcourse\b/.test(short), false, 'the probe cannot see a missing dimension');
+  assert.ok(/\bq\b/.test(short), 'the probe cannot see a present one either — it matches nothing');
+});
+
 // ── 1. The range reaches the LIST query ─────────────────────────────────────
+//
+// The original per-name tests are KEPT below rather than folded into the set
+// check above. They are redundant with it by construction — but each names the
+// SYMPTOM its dimension produced, and the set check names none. A future reader
+// hitting a red set check learns that `course` is missing; these say what that
+// looked like on screen the last time it happened.
 
 test('listRegistrations accepts a `range` argument', () => {
   const sig = /export async function listRegistrations\(\{([^}]*)\}/.exec(ACTIONS);
