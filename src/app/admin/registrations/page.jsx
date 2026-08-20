@@ -7,6 +7,7 @@ import {
 } from '@/lib/actions/registrations';
 import { resolveDateWindow } from '@/lib/registrations/listFilter';
 import { buildCourseNameMap } from '@/lib/api/courseNameMap';
+import { readSourceFilters } from '@/lib/registrations/filterScope';
 import { readLastEditedMap } from '@/lib/audit/readAuditLog';
 import { RefreshOnNavigate } from '@/components/admin/RefreshOnNavigate';
 import { RegistrationsClient } from './_components/RegistrationsClient';
@@ -19,10 +20,32 @@ export default async function Page({ searchParams }) {
   const session = await requirePage('registrations');
 
   const sp     = (await searchParams) ?? {};
-  const page   = Math.max(1, parseInt(sp.page ?? '1', 10) || 1);
-  const q      = sp.q      ?? '';
   const source = ['public', 'inhouse'].includes(sp.source) ? sp.source : 'public';
-  const range  = ['today', 'week', 'month', 'all'].includes(sp.range) ? sp.range : 'all';
+
+  /**
+   * ══ EACH SOURCE'S FILTERS COME OUT OF ITS OWN NAMESPACE — ROUND 10 ══════════
+   *
+   * Public keeps the BARE parameter names and in-house is prefixed, so
+   * `?q=excel&inhouse.q=acme&source=inhouse` holds both sets at once and
+   * switching source is a one-parameter change that moves no values. See
+   * lib/registrations/filterScope for why the namespace keys on source IDENTITY
+   * rather than on which side is active, and what that costs.
+   *
+   * EVERY EXISTING LINK STILL WORKS: `?q=…&status=…&range=…` is public's, which
+   * is exactly what it meant before.
+   *
+   * ── BOTH SETS ARE READ, NOT ONLY THE ACTIVE ONE ──────────────────────────
+   * The toggle badge for the other side has to count under THAT side's filters —
+   * see the `getRegistrationTotal` call below, where the reasoning changed with
+   * this feature.
+   */
+  const active = readSourceFilters(sp, source);
+  const otherSource = source === 'inhouse' ? 'public' : 'inhouse';
+  const other  = readSourceFilters(sp, otherSource);
+
+  const page   = Math.max(1, parseInt(active.page ?? '1', 10) || 1);
+  const q      = active.q;
+  const range  = ['today', 'week', 'month', 'all'].includes(active.range) ? active.range : 'all';
 
   /**
    * THE CUSTOM RANGE AND THE COURSE — read raw, normalised by the RESOLVER.
@@ -43,9 +66,9 @@ export default async function Page({ searchParams }) {
    * the chrome from `resolveDateWindow`'s return value, which is where the
    * swapped-range flag lives too.
    */
-  const from   = typeof sp.from   === 'string' ? sp.from   : '';
-  const to     = typeof sp.to     === 'string' ? sp.to     : '';
-  const course = typeof sp.course === 'string' ? sp.course : '';
+  const from   = active.from;
+  const to     = active.to;
+  const course = active.course;
 
   /**
    * THE SAME TREATMENT `source` AND `range` ALREADY GET, and it was the one
@@ -66,7 +89,18 @@ export default async function Page({ searchParams }) {
    * different subsets, so `?status=paid&source=inhouse` is unrecognised while
    * `?status=paid` alone is fine.
    */
-  const status = normaliseStatusParam(sp.status ?? 'all', source);
+  const status = normaliseStatusParam(active.status ?? 'all', source);
+
+  /**
+   * The other side's RANGE, normalised against the other side's own value.
+   *
+   * Its `status` is deliberately NOT read here: `getRegistrationTotal` takes no
+   * status and never has. The badge is a SCOPE total — the same number the
+   * ทั้งหมด card shows for the active side — and the status chip narrows the
+   * table below it. Applying a status to one badge and not the other would make
+   * the pair mean two different things.
+   */
+  const otherRange = ['today', 'week', 'month', 'all'].includes(other.range) ? other.range : 'all';
 
   /**
    * THE SOURCE THAT IS NOT SELECTED, so its toggle tab can carry a count too.
@@ -112,7 +146,40 @@ export default async function Page({ searchParams }) {
      * them from `source`, so each badge counts what its own table would show.
      */
     getRegistrationStatusCounts({ q, range, source, from, to, course }),
-    getRegistrationTotal({ q, range, source: otherSource, from, to, course }),
+    /**
+     * ══ THE OTHER SIDE'S BADGE NOW COUNTS UNDER THE OTHER SIDE'S FILTERS ══════
+     *
+     * REVERSED IN ROUND 10, and the old reasoning is worth stating because it
+     * was right at the time. This used to take the ACTIVE source's `q`, `range`,
+     * `from`, `to` and `course` — deliberately — so that a badge reading 8 could
+     * not sit beside a ทั้งหมด card reading 1 under "7 วัน". One screen, one
+     * question, one answer.
+     *
+     * With per-source filters that argument INVERTS. The badge is a promise
+     * about what you will see if you click it, and clicking it now shows the
+     * other side under ITS OWN remembered filters. Feeding it this side's
+     * filters would make it count a set that no click can produce.
+     *
+     * The disagreement the old note feared is gone rather than tolerated: the
+     * two badges answer two questions now, and each is labelled with the source
+     * it belongs to.
+     *
+     * ── EVERY DIMENSION IS NAMED, NOT SPREAD, AND THAT IS ON PURPOSE ─────────
+     * `{ ...other, source: otherSource }` would be shorter and would make
+     * fs/registrationsFilterWiring VACUOUS: it reads this call's object literal
+     * looking for each SCOPE_PARAM by name, and a spread satisfies the property
+     * while defeating the matcher. That is defect 7 exactly — the guard would go
+     * quiet without going red. Named keys keep it binding, and there is now an
+     * assertion that no spread appears here.
+     */
+    getRegistrationTotal({
+      q:      other.q,
+      range:  otherRange,
+      source: otherSource,
+      from:   other.from,
+      to:     other.to,
+      course: other.course,
+    }),
     source === 'inhouse' ? buildCourseNameMap() : Promise.resolve(null),
     /**
      * THE FILTER PANEL'S COURSE OPTIONS — from the REGISTRATIONS, not the
@@ -130,6 +197,51 @@ export default async function Page({ searchParams }) {
      */
     getRegistrationCourseOptions({ source }),
   ]);
+
+  /**
+   * ══ THE IN-HOUSE DROPDOWN SHOWS NAMES — ROUND 10 ════════════════════════════
+   *
+   * In-house documents store CODES only (`coursesInterested` holds `course_id`
+   * values), unlike public which carries `courseName` denormalised — so
+   * `getRegistrationCourseOptions` can only return `label === code` for that
+   * side, and the dropdown read as a list of SKUs.
+   *
+   * ── THE LABEL CHANGES; THE VALUE DOES NOT ────────────────────────────────
+   * `code` is untouched. It is what the documents hold, what `?course=` means
+   * and what `courseClause` matches — changing it would break every existing
+   * link and every bookmark for a cosmetic gain.
+   *
+   * ── WHAT IT COSTS: NOTHING NEW ───────────────────────────────────────────
+   * ZERO additional lookups. `buildCourseNameMap` is ALREADY fetched above for
+   * the in-house table's course column, in the same `Promise.all`, and it is
+   * ONE `listPublicCourses()` covering the whole catalogue — never one
+   * `getCourseByCode` per distinct code, which at today's 7 would be 7 live
+   * requests per render and up to a second each on a case miss. This is a join
+   * against a map already in hand.
+   *
+   * ── A CODE THAT DOES NOT RESOLVE STILL APPEARS ───────────────────────────
+   * Labelled with its code. `ZZTEST-EXCEL-01` is the live case — in the
+   * registrations, not in the catalogue — and round 6 measured the general shape
+   * at 26 of 39 registrations holding a round the schedule endpoint would not
+   * return. AN OPTION LIST THAT DROPS WHAT IT CANNOT NAME HIDES ROWS WHILE
+   * LOOKING COMPLETE, which is the worst available outcome: the rows exist, the
+   * filter cannot reach them, and nothing says so.
+   *
+   * ── AND AN OUTAGE DEGRADES TO CODES, NOT TO AN EMPTY LIST ────────────────
+   * `buildCourseNameMap` catches its own failure and returns `{}`, so every
+   * label falls back to its code and the dropdown still works. It cannot block
+   * the page: it is one member of a `Promise.all` that already cannot reject.
+   *
+   * Lower-cased key, matching how the map is built — see `resolveCourseNames`
+   * for why a case-insensitive LOCAL lookup is safe and is not the upstream
+   * casing bug.
+   */
+  const labelledCourseOptions = source === 'inhouse' && courseNames
+    ? courseOptions.map((o) => ({
+        ...o,
+        label: courseNames[String(o.code).toLowerCase()] || o.code,
+      }))
+    : courseOptions;
 
   /**
    * ONE audit query for the whole page, never one per row — and NONE AT ALL on
@@ -257,7 +369,7 @@ export default async function Page({ searchParams }) {
         to={to}
         course={course}
         dateWindow={resolveDateWindow({ range, from, to })}
-        courseOptions={courseOptions}
+        courseOptions={labelledCourseOptions}
       />
     </div>
   );

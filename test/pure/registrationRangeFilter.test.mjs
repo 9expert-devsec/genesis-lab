@@ -187,7 +187,8 @@ test('the search term is trimmed before it becomes a regex', () => {
  */
 test('in-house search names company/contact fields and no public field', () => {
   const keys = buildRegistrationFilter({ q: 'x', source: 'inhouse' }).$or.map((c) => Object.keys(c)[0]);
-  assert.deepEqual(keys, ['companyName', 'contactFirstName', 'contactLastName', 'contactEmail']);
+  assert.deepEqual(keys,
+    ['companyName', 'contactFirstName', 'contactLastName', 'contactEmail', 'coursesInterested']);
 });
 
 test('public search names course/coordinator fields and no in-house field', () => {
@@ -195,9 +196,65 @@ test('public search names course/coordinator fields and no in-house field', () =
   assert.deepEqual(keys, ['courseName', 'coordinator.firstName', 'coordinator.lastName', 'coordinator.email']);
 });
 
-test('in-house search does NOT match coursesInterested — it holds codes, not names', () => {
-  const keys = buildRegistrationFilter({ q: 'Power BI', source: 'inhouse' }).$or.map((c) => Object.keys(c)[0]);
-  assert.ok(!keys.includes('coursesInterested'));
+/**
+ * ══ REVERSED IN ROUND 10, AND THE OLD CLAIM WAS RIGHT WHEN IT WAS WRITTEN ════
+ *
+ * This asserted that in-house search does NOT match `coursesInterested`, and the
+ * reason was sound: the field holds CODES, so a clause over it would make typing
+ * "Excel" find nothing while typing "ZZTEST-EXCEL-01" worked — a search box that
+ * fails silently at a field its placeholder names.
+ *
+ * Round 10 offers หลักสูตร properly, which means the clause arrives WITH the
+ * resolution rather than instead of it. So the claim is not dropped, it is
+ * SPLIT: the raw term still goes at the code, and the codes a NAME resolved to
+ * arrive separately, from `inhouseCourseCodes`.
+ *
+ * The old test's warning survives as the second assertion below — a name-shaped
+ * term with nothing resolved must not produce a `$in`, because that is the state
+ * where the box would look like it searched names and had not.
+ */
+test('in-house search matches coursesInterested by CODE, always', () => {
+  const clauses = buildRegistrationFilter({ q: 'ZZTEST-EXCEL-01', source: 'inhouse' }).$or;
+  const raw = clauses.find((c) => c.coursesInterested?.$regex);
+  assert.ok(raw, 'the raw term is not matched against the stored code');
+  assert.equal(raw.coursesInterested.$regex, 'ZZTEST-EXCEL-01');
+  assert.equal(raw.coursesInterested.$options, 'i');
+});
+
+test('in-house search matches RESOLVED codes by name, as a separate $in clause', () => {
+  const clauses = buildRegistrationFilter({
+    q: 'Power BI', source: 'inhouse', courseCodes: ['PBI-101', 'PBI-301'],
+  }).$or;
+  const byName = clauses.find((c) => c.coursesInterested?.$in);
+  assert.ok(byName, 'the resolved codes never reach the query');
+  assert.deepEqual(byName.coursesInterested.$in, ['PBI-101', 'PBI-301']);
+
+  // The code clause is STILL there — the two are additive, not alternatives.
+  assert.ok(clauses.some((c) => c.coursesInterested?.$regex), 'the code clause was replaced rather than joined');
+});
+
+test('an unresolvable name adds no $in, and does not empty the rest of the query', () => {
+  /**
+   * THE DEGRADE PATH, which is the whole risk in this feature. A term that
+   * resolves to no course must leave the other clauses untouched — a search for
+   * "acme" is not affected by the fact that no course is called "acme".
+   */
+  const clauses = buildRegistrationFilter({ q: 'acme', source: 'inhouse', courseCodes: [] }).$or;
+  assert.equal(clauses.some((c) => c.coursesInterested?.$in), false,
+    'an empty resolution still emitted an $in clause');
+  assert.deepEqual(
+    clauses.map((c) => Object.keys(c)[0]),
+    ['companyName', 'contactFirstName', 'contactLastName', 'contactEmail', 'coursesInterested'],
+    'the company and contact clauses did not survive an unresolved course term',
+  );
+});
+
+test('public search is untouched by courseCodes — it has a stored name to match', () => {
+  // The resolution is an in-house workaround for a field public does not need.
+  // Feeding it to a public query must add nothing at all.
+  const keys = buildRegistrationFilter({ q: 'x', source: 'public', courseCodes: ['PBI-101'] })
+    .$or.map((c) => Object.keys(c)[0]);
+  assert.deepEqual(keys, ['courseName', 'coordinator.firstName', 'coordinator.lastName', 'coordinator.email']);
 });
 
 test('status, search and range compose into one filter', () => {
@@ -207,7 +264,10 @@ test('status, search and range compose into one filter', () => {
     status: 'pending', q: 'cpn', source: 'inhouse', range: 'month', now: NOW,
   });
   assert.deepEqual(filter.status.$in.sort(), ['contacted', 'new', 'pending']);
-  assert.equal(filter.$or.length, 4);
+  // FIVE since round 10: the in-house search gained a `coursesInterested` code
+  // clause. Bumped deliberately rather than relaxed to a floor — the count is
+  // what says the clause list is the one this file enumerates above.
+  assert.equal(filter.$or.length, 5);
   assert.equal(filter.createdAt.$gte.getDate(), 1);
 });
 

@@ -93,9 +93,36 @@ import { readSource } from '../sourceScan.mjs';
  */
 const FILTER_SCREENS = [
   {
+    /**
+     * ══ `source` MOVED OUT OF `filters` IN ROUND 10 — READ BEFORE MOVING IT BACK ══
+     *
+     * It is still URL-derived, still a prop, still forbidden from `useState`. It
+     * is no longer a FILTER, and `navigate` no longer serialises it.
+     *
+     * Round 10 gave each source its own filter namespace in the URL — public
+     * keeps the bare names, in-house is prefixed `inhouse.` — so `navigate`
+     * writes the CURRENT source's namespace and switching source became a
+     * one-parameter change with its own navigator, `switchSource`. `source`
+     * selects which namespace is on screen; it is not a value inside one. That
+     * is the same distinction `SCOPE_PARAMS` already draws for the query scope.
+     *
+     * ── AND THIS IS THE SECOND TIME THIS LIST HAS HAD TO BE RE-READ ─────────
+     * The file header records the first: it required a prop named `window`,
+     * which shadowed the browser global. This is the milder version of the same
+     * shape — the list named `source` as a filter, `source` stopped being one
+     * for a good reason, and the serialisation assertion went red for a change
+     * that was correct.
+     *
+     * THE PROPERTY IS UNCHANGED: every URL-derived value reaches the next URL
+     * from the props, never from state. What changed is WHICH FUNCTION carries
+     * `source` there. So it is listed under `selectors` below, which asserts
+     * exactly that and asserts it is NOT in `navigate` — a stronger claim than
+     * the one it replaces, because it pins the split rather than tolerating it.
+     */
     rel: 'src/app/admin/registrations/_components/RegistrationsClient.jsx',
     component: 'RegistrationsClient',
-    filters: ['status', 'q', 'source', 'range'],
+    filters: ['status', 'q', 'range', 'from', 'to', 'course'],
+    selectors: ['source'],
   },
   {
     rel: 'src/app/admin/masterclass/registrations/_components/MasterclassRegistrationsClient.jsx',
@@ -440,7 +467,8 @@ test('CONTROL: the next-object matcher finds a key at BOTH ends, and rejects a n
   assert.ok(!FIRST_CLASS_KEY('q').test(' program, type '), 'a missing key at neither end was accepted');
 });
 
-for (const { rel, component, filters } of FILTER_SCREENS) {
+for (const entry of FILTER_SCREENS) {
+  const { rel, component, filters } = entry;
   const src = readSource(rel).code;
 
   test(`${component}: the filters arrive as props`, () => {
@@ -519,6 +547,56 @@ for (const { rel, component, filters } of FILTER_SCREENS) {
       );
     }
   });
+
+  /**
+   * ══ SELECTORS: URL-DERIVED, BUT NOT A VALUE INSIDE THE FILTER SET ══════════
+   *
+   * A selector chooses WHICH set of filters is on screen. `source` is the only
+   * one today: it picks the collection and, since round 10, the URL namespace
+   * the filters live in.
+   *
+   * It is held to EVERY rule a filter is held to except one — it must not be in
+   * `navigate`'s serialised object, because `navigate` writes the current
+   * source's namespace and a selector change is not a write into that namespace.
+   *
+   * The last assertion is the load-bearing one and it is why this is not simply
+   * "drop `source` from the list". Removing it would have left NOTHING checking
+   * that the collection selector still reaches the URL from its props — the
+   * exact stale-value defect this whole file exists for, on the one value whose
+   * staleness rendered in-house columns over public documents.
+   */
+  const selectors = entry.selectors ?? [];
+  if (selectors.length) {
+    test(`${component}: every selector is a prop, never state`, () => {
+      const sig = new RegExp(`export function ${component}\\(\\{([\\s\\S]*?)\\n\\}\\)`);
+      const m = sig.exec(src);
+      assert.ok(m, `${component} signature not found`);
+      for (const s of selectors) {
+        assert.match(m[1], new RegExp(`\\b${s}\\b`), `${s} is not a prop of ${component}`);
+        assert.ok(!new RegExp(`\\bset${s[0].toUpperCase()}${s.slice(1)}\\b`).test(src),
+          `${component} still has a set${s} setter — the selector is state again`);
+      }
+      for (const arg of useStateArgs(src)) {
+        for (const s of selectors) {
+          assert.ok(!new RegExp(`\\b${s}\\b`, 'i').test(arg),
+            `useState(${arg}) seeds the ${s} selector into state — it will survive a navigation`);
+        }
+      }
+    });
+
+    test(`${component}: a selector is written to the URL, and NOT by navigate`, () => {
+      const next = /const next = \{([^}]*)\}/.exec(src);
+      assert.ok(next, `${component}: navigate's next-object not found`);
+      for (const s of selectors) {
+        assert.doesNotMatch(next[1], FIRST_CLASS_KEY(s),
+          `navigate serialises the selector \`${s}\` — it would write the current namespace `
+          + 'while the page renders the other one');
+        // It still has to reach the URL, from somewhere in this file.
+        assert.match(src, new RegExp(`params\\.(?:set|delete)\\(\\s*'${s}'`),
+          `nothing in ${component} writes \`${s}\` to the query string — the selector cannot change`);
+      }
+    });
+  }
 }
 
 /**
