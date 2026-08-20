@@ -14,7 +14,12 @@ import {
   allowedFromStates,
   statusLabel,
 } from '@/lib/registrations/statuses';
-import { buildRegistrationFilter, rangeToDateFilter } from '@/lib/registrations/listFilter';
+// `rangeToDateFilter` is no longer imported: round 8 moved the counts and the
+// toggle total onto `buildRegistrationScope`, which is the shared non-status
+// half of the list filter. Importing it here again would be a second, narrower
+// derivation beside the shared one — which is precisely the shape that let the
+// cards and the table disagree before this module existed.
+import { buildRegistrationFilter, buildRegistrationScope } from '@/lib/registrations/listFilter';
 import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
 import { ROUND_FIELDS, roundFieldsFor } from '@/lib/registrations/roundSelection';
 // The duplicate rule lives beside the roster derivation, not here — the screens
@@ -78,7 +83,10 @@ function entityForSource(source) {
 
 // ── List (paginated + filtered) ────────────────────────────────────
 
-export async function listRegistrations({ page = 1, status = 'all', q = '', source = 'public', range = 'all' } = {}) {
+export async function listRegistrations({
+  page = 1, status = 'all', q = '', source = 'public', range = 'all',
+  from = '', to = '', course = '',
+} = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
@@ -94,7 +102,7 @@ export async function listRegistrations({ page = 1, status = 'all', q = '', sour
    * `rangeToDateFilter` in lib/registrations/listFilter.js, so a date window
    * that applies to one and not the other is no longer expressible.
    */
-  const filter = buildRegistrationFilter({ status, q, source, range });
+  const filter = buildRegistrationFilter({ status, q, source, range, from, to, course });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
   const total = await Model.countDocuments(filter);
@@ -1210,22 +1218,45 @@ export async function deleteRegistration(id, source = 'public') {
  * enquiries exist in total" is answered by selecting In-house with ทั้งหมด —
  * which is what the ทั้งหมด chip is for.
  */
-export async function getRegistrationTotal({ range = 'all', source = 'public' } = {}) {
+export async function getRegistrationTotal({
+  range = 'all', source = 'public', from = '', to = '', course = '',
+} = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
-  // The SAME derivation the list query and the counts use — see listRegistrations.
-  return getModel(source).countDocuments(rangeToDateFilter(range));
+  /**
+   * THE SAME SCOPE the list query and the counts use — not `rangeToDateFilter`
+   * any more.
+   *
+   * It read the date alone until round 8, which was correct while the date was
+   * the only shared dimension and became a defect the moment there were three: a
+   * toggle badge reading 39 beside a table filtered to one course is the screen
+   * answering one question two ways, which is the failure this whole module
+   * exists to prevent. One function; every number inside it.
+   */
+  return getModel(source).countDocuments(
+    buildRegistrationScope({ source, range, from, to, course }),
+  );
 }
 
 // ── Status counts for stat strip ──────────────────────────────────
 
-export async function getRegistrationStatusCounts({ range = 'all', source = 'public' } = {}) {
+export async function getRegistrationStatusCounts({
+  range = 'all', source = 'public', from = '', to = '', course = '',
+} = {}) {
   await requireAdmin('registrations');
   await dbConnect();
 
-  // The SAME derivation the list query uses — see listRegistrations.
-  const dateFilter = rangeToDateFilter(range);
+  /**
+   * THE SAME SCOPE the list query uses — the date, the course and (when a caller
+   * passes one) the search, minus the status this action supplies per card.
+   *
+   * The variable keeps its name because every `{ ...dateFilter, status }` below
+   * reads correctly either way, but it is no longer only a date. See
+   * `buildRegistrationScope` for why the split exists and for the note about `q`,
+   * which page.jsx still does not pass here.
+   */
+  const dateFilter = buildRegistrationScope({ source, range, from, to, course });
   const Model = getModel(source);
 
   if (source === 'inhouse') {

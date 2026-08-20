@@ -72,6 +72,148 @@ export function rangeToDateFilter(range, now = new Date()) {
 }
 
 /**
+ * ══ THE CUSTOM DATE RANGE, AND ITS RELATIONSHIP TO THE CHIPS ════════════════
+ *
+ * Round 8 adds a from/to range to a screen that already had ทั้งหมด / วันนี้ /
+ * 7 วัน / เดือนนี้ chips over THE SAME FIELD. Two independent controls over one
+ * field is a screen where the chips say one thing and the panel says another and
+ * neither is wrong, so they are not independent:
+ *
+ *   THE CHIPS ARE PRESETS. There is ONE resolved window, and two ways to fill
+ *   it. `from`/`to` WIN when either is present, and a chip is shown selected
+ *   only when neither is — so picking a custom range deselects the chips and
+ *   picking a chip is what clears the custom range.
+ *
+ * That keeps every existing `?range=today` bookmark working: `range` is still
+ * the parameter the presets use, and the new pair is additive.
+ *
+ * ── WHICH DATE. `createdAt`. ──────────────────────────────────────────────
+ * The date the list ALREADY SHOWS in its first column — วันที่สมัคร on public,
+ * วันที่ส่งคำขอ on in-house. Both are `createdAt` on their collection.
+ *
+ * NOT the training round's dates. `classDate` is a LABEL STRING ('12 - 13 ส.ค.
+ * 2569'), not a date, and `coursesInterested` has no dates at all — so a filter
+ * over "when is the course" is not merely a different question, it is one this
+ * data cannot answer. A control labelled วันที่สมัคร that filtered the round
+ * would be the quiet kind of wrong this screen has shipped before.
+ */
+
+/**
+ * `YYYY-MM-DD` → a local Date, or null for anything else.
+ *
+ * ── PARSED BY HAND RATHER THAN BY `new Date(s)` ───────────────────────────
+ * `new Date('2026-08-13')` parses as UTC MIDNIGHT and then reads back in local
+ * time, so in Bangkok it is 07:00 on the 13th — which silently drops every
+ * registration made before 07:00 from a range that names that day. The whole
+ * point of `setHours(0,0,0,0)` elsewhere in this file is that these boundaries
+ * are LOCAL, and a `<input type="date">` value has no timezone to honour.
+ *
+ * Rejects anything that is not exactly ten characters of the right shape,
+ * including `new Date('nonsense')` (Invalid Date) and partials like `2026-08`,
+ * so the caller can treat null as "no bound" — which is what makes an
+ * unparseable date degrade to UNFILTERED rather than to a clause matching
+ * nothing.
+ */
+export function parseDateInput(value) {
+  const s = String(value ?? '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const [, y, mo, d] = m.map(Number);
+  const date = new Date(y, mo - 1, d, 0, 0, 0, 0);
+  // Round-trip, so 2026-02-31 is rejected rather than rolling into March.
+  if (date.getFullYear() !== y || date.getMonth() !== mo - 1 || date.getDate() !== d) return null;
+  return date;
+}
+
+/**
+ * THE ONE RESOLVED DATE WINDOW. Every caller reads this and nothing else.
+ *
+ * @returns {{ clause: object, preset: string|null, from: Date|null, to: Date|null,
+ *             custom: boolean, swapped: boolean }}
+ *   `clause` spreads into a Mongo filter; `preset` is the chip to show selected,
+ *   or null when a custom range is in force.
+ *
+ * ── OPEN ENDS ARE ALLOWED, BOTH WAYS ──────────────────────────────────────
+ * `from` alone means "since"; `to` alone means "up to". Both are ordinary
+ * questions — "everything since the campaign started", "everything before the
+ * price change" — and refusing them would make the reader type a bound they do
+ * not have an opinion about.
+ *
+ * ── A REVERSED RANGE IS SWAPPED, NOT OBEYED AND NOT IGNORED ───────────────
+ * `from` after `to` describes an empty interval, and honouring it returns an
+ * empty table — which is indistinguishable from "there are no records" and is
+ * the exact failure this screen's degrade rules exist to prevent.
+ *
+ * Ignoring it silently would be the other kind of wrong: the reader asked for
+ * something and got the unfiltered list with no sign their input was dropped.
+ *
+ * So the two bounds are SWAPPED — which is what a reader who typed them the
+ * wrong way round meant — and `swapped` is returned so the UI can SAY SO. A
+ * correction the reader cannot see is still a screen deciding on their behalf.
+ *
+ * ── `to` IS INCLUSIVE ─────────────────────────────────────────────────────
+ * A range ending on the 13th includes the 13th. `$lte` at 23:59:59.999 local
+ * rather than `$lt` at the next midnight: both are correct, and this one reads
+ * as the same day in a query log.
+ */
+export function resolveDateWindow({ range = 'all', from = '', to = '', now = new Date() } = {}) {
+  let f = parseDateInput(from);
+  let t = parseDateInput(to);
+
+  if (!f && !t) {
+    const clause = rangeToDateFilter(range, now);
+    // An unrecognised range degrades to unfiltered AND to no chip being lit, so
+    // the chrome cannot claim a filter the query is not applying.
+    const preset = RANGE_VALUES.includes(range) ? range : 'all';
+    return { clause, preset, from: null, to: null, custom: false, swapped: false };
+  }
+
+  let swapped = false;
+  if (f && t && f.getTime() > t.getTime()) {
+    [f, t] = [t, f];
+    swapped = true;
+  }
+
+  const createdAt = {};
+  if (f) createdAt.$gte = f;
+  if (t) {
+    const end = new Date(t);
+    end.setHours(23, 59, 59, 999);
+    createdAt.$lte = end;
+  }
+
+  return { clause: { createdAt }, preset: null, from: f, to: t, custom: true, swapped };
+}
+
+/**
+ * ══ THE COURSE FILTER ═══════════════════════════════════════════════════════
+ *
+ * ── THE TWO SOURCES REFERENCE COURSES DIFFERENTLY, SO THE CLAUSE DOES TOO ──
+ * Public carries the REGISTERED course as `courseCode`/`courseId` scalars (and
+ * `courseName` denormalised beside them). In-house carries COURSES OF INTEREST
+ * as an ARRAY of codes in `coursesInterested`. A single clause over one field
+ * name would match nothing on one of the two collections while looking correct.
+ *
+ * Mongo matches an array field against a scalar by element, so `{
+ * coursesInterested: 'MSE-L2' }` finds an enquiry listing it among several —
+ * which is the intended meaning of "show me the in-house requests interested in
+ * this course".
+ *
+ * ── PUBLIC MATCHES `courseCode` OR `courseId` ─────────────────────────────
+ * Measured, not assumed: on all 39 production registrations the two hold the
+ * same value. They are separate fields on the schema and nothing enforces that,
+ * so matching only one would silently miss any document where they diverge —
+ * and a filter that hides rows is worse than one that does not exist.
+ */
+export function courseClause(course, source) {
+  const code = String(course ?? '').trim();
+  if (!code || code === 'all') return {};
+  return source === 'inhouse'
+    ? { coursesInterested: code }
+    : { $or: [{ courseCode: code }, { courseId: code }] };
+}
+
+/**
  * The search `$or` for a source.
  *
  * The two sources search DIFFERENT fields and that is not an oversight: an
@@ -102,6 +244,52 @@ function searchClauses(source, term) {
 }
 
 /**
+ * EVERYTHING EXCEPT THE STATUS — the scope the whole screen counts inside.
+ *
+ * ══ WHY THIS IS SPLIT OUT ═══════════════════════════════════════════════════
+ *
+ * Requirement: the stat cards, the toggle badges, the "N รายการ" header and the
+ * pager must all count the SAME SET. They cannot all call
+ * `buildRegistrationFilter`, because the counts action runs ONE COUNT PER
+ * STATUS and therefore supplies its own status clause.
+ *
+ * Before round 8 that was expressed as the counts calling `rangeToDateFilter`
+ * directly while the list called the full builder — two call sites that HAPPENED
+ * to agree because the date was the only shared dimension. Adding two more
+ * dimensions to one of them and not the other is exactly how this screen
+ * previously came to show cards reading 29 above a table filtered to 3.
+ *
+ * So the shared part is a function. `buildRegistrationFilter` is this plus a
+ * status clause, and the counts action spreads this beside its own — a dimension
+ * added here reaches every number on the screen without any of them being
+ * edited.
+ *
+ * ── `q` IS IN HERE AND THE COUNTS DO NOT YET PASS IT ──────────────────────
+ * A PRE-EXISTING GAP, found while threading round 8's filters and deliberately
+ * not fixed here: page.jsx calls `getRegistrationStatusCounts({ range, source })`
+ * with no `q`, so the cards have never followed the search box. That is the same
+ * class of defect as the range one this module was created for, and it is one
+ * line to fix — but fixing it changes what every card reads on a screen with a
+ * search term, which is a visible behaviour change that belongs in its own
+ * commit with its own before/after. Reported rather than smuggled in.
+ */
+export function buildRegistrationScope({
+  q = '', source = 'public', range = 'all', from = '', to = '', course = '', now,
+} = {}) {
+  const scope = {};
+
+  const term = String(q ?? '').trim();
+  if (term) scope.$or = searchClauses(source, term);
+
+  Object.assign(scope, resolveDateWindow({ range, from, to, now }).clause);
+
+  const byCourse = courseClause(course, source);
+  if (Object.keys(byCourse).length) scope.$and = [byCourse];
+
+  return scope;
+}
+
+/**
  * The complete filter for one list query.
  *
  * `source` is NOT a filter field — it selects the COLLECTION, and the two
@@ -121,6 +309,9 @@ export function buildRegistrationFilter({
   q = '',
   source = 'public',
   range = 'all',
+  from = '',
+  to = '',
+  course = '',
   now,
 } = {}) {
   const filter = {};
@@ -157,14 +348,20 @@ export function buildRegistrationFilter({
     if (values.length) filter.status = { $in: values };
   }
 
-  const term = String(q ?? '').trim();
-  if (term) {
-    filter.$or = searchClauses(source, term);
-  }
-
-  // Spread, not assign: `rangeToDateFilter` returns {} for 'all', so this adds
-  // nothing rather than adding an undefined key that Mongo would reject.
-  Object.assign(filter, rangeToDateFilter(range, now));
+  /**
+   * EVERYTHING ELSE COMES FROM THE SHARED SCOPE — the search, the date window
+   * and the course. See `buildRegistrationScope`: the same object feeds the stat
+   * cards and the toggle totals, so a dimension cannot reach the table and miss
+   * the numbers above it.
+   *
+   * ── THE COURSE IS `$and`, NOT A SECOND `$or`, AND THAT IS LOAD-BEARING ──
+   * The public course clause is itself an `$or` (courseCode OR courseId), and
+   * the search sets `$or` too. Assigning the second would REPLACE the first — a
+   * screen where typing a name and picking a course quietly ignores the name —
+   * and an object literal cannot hold two `$or` keys anyway. `$and` composes
+   * them, each keeping its own internal `$or`. That is done in the scope.
+   */
+  Object.assign(filter, buildRegistrationScope({ q, source, range, from, to, course, now }));
 
   return filter;
 }
