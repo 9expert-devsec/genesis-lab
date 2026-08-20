@@ -86,21 +86,52 @@ try {
   t.eq(stillZero.length, 0,
     'still zero after landing ON a video slide — the facade is the resting state');
 
-  await page.eval(() =>
-    document.querySelector('[data-fc-slide="active"] [data-fc-card="split"] button').click());
+  // ── PRESS PLAY ON THE SLIDE THAT IS ACTIVE *NOW* ─────────────────────────
+  // Read the active slide's id first and pin every later query to it. The
+  // previous version re-resolved `[data-fc-slide="active"]` at each step, so if
+  // the active slide changed between the click and the check it silently
+  // examined a DIFFERENT card and reported "the iframe is not in the tree" —
+  // which reads as the facade being broken. Measured: 13/13 in isolation, 11/13
+  // once inside the full six-script run. Pinning the id makes the two cases
+  // distinguishable instead of merging them into one confusing failure.
+  const playedOn = await page.eval(() => {
+    const slide = document.querySelector('[data-fc-slide="active"]');
+    const btn = slide.querySelector('[data-fc-card="split"] button');
+    btn.click();
+    return slide.getAttribute('data-fc-slide-id')
+      ?? [...document.querySelectorAll('[data-fc-slide]')].indexOf(slide);
+  });
   await page.wait(3500);
 
   const after = page.requests.filter((u) => PLAYER.test(u));
   t.ok(after.length > 0, 'pressing play DOES mount the player', `${after.length} requests`);
   t.ok(after.some((u) => /youtube-nocookie\.com/.test(u)),
     'and it is the nocookie host, not youtube.com');
-  const iframe = await page.eval(() => {
+
+  const state = await page.eval((at) => {
+    const slides = [...document.querySelectorAll('[data-fc-slide]')];
     const f = document.querySelector('[data-feature-video]');
-    return f ? { src: f.getAttribute('src'), title: Boolean(f.getAttribute('title')) } : null;
-  });
-  t.ok(iframe, 'the iframe is in the tree');
-  t.ok(iframe?.src.includes('autoplay=1'),
-    'autoplay is honest — the mount only happened because someone pressed play');
+    return {
+      iframe: f ? { src: f.getAttribute('src'), title: Boolean(f.getAttribute('title')) } : null,
+      stillActive: slides[at]?.getAttribute('data-fc-slide') === 'active',
+      activeNow: slides.findIndex((s) => s.getAttribute('data-fc-slide') === 'active'),
+      playedOn: at,
+      paused: document.querySelector('[data-fc-slider]').getAttribute('data-fc-paused'),
+      autoplay: document.querySelector('[data-fc-slider]').getAttribute('data-fc-autoplay'),
+    };
+  }, playedOn);
+
+  // The diagnosis travels WITH the assertion. A bare "the iframe is in the
+  // tree" failure cannot tell you whether the facade broke or the carousel
+  // moved on, and those need opposite fixes.
+  const why = `played on slide ${state.playedOn}, active now ${state.activeNow}, `
+    + `paused=${state.paused} autoplay=${state.autoplay}`;
+  t.ok(state.stillActive,
+    'the slide play was pressed on is STILL the active one', why);
+  t.ok(state.iframe, 'the iframe is in the tree', why);
+  t.ok(state.iframe?.src.includes('autoplay=1'),
+    'autoplay is honest — the mount only happened because someone pressed play',
+    state.iframe ? '' : why);
 
   // ── LEAVING THE SLIDE DESTROYS IT ─────────────────────────────────────────
   await page.eval(() => document.querySelectorAll('[data-fc-controls] button')[2].click());

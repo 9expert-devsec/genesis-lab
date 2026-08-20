@@ -59,6 +59,31 @@ const probe = () => ({
     return { w: +r.width.toFixed(1), h: +r.height.toFixed(1), ratio: r.width / r.height,
              fit: cs?.objectFit ?? null, pos: cs?.objectPosition ?? null };
   })(),
+  // The image card's box, for the flush/top-aligned checks. Null on a video
+  // slide, which has no [data-fc-art] at all.
+  ...(() => {
+    const px = (v) => Number(String(v).replace('px', '')) || 0;
+    const card = document.querySelector('[data-fc-slide="active"] [data-fc-card="image"]');
+    const el = card?.querySelector('[data-fc-art]');
+    if (!card || !el) return {};
+    const cs = getComputedStyle(card);
+    const cb = card.getBoundingClientRect();
+    const ab = el.getBoundingClientRect();
+    const copy = card.querySelector('[data-fc-copy]');
+    const kb = copy?.getBoundingClientRect();
+    return {
+      cardBorderLeft: px(cs.borderLeftWidth),
+      cardBorderRight: px(cs.borderRightWidth),
+      cardBorderTop: px(cs.borderTopWidth),
+      cardInnerW: +(cb.width - px(cs.borderLeftWidth) - px(cs.borderRightWidth)
+        - px(cs.paddingLeft) - px(cs.paddingRight)).toFixed(2),
+      artW: +ab.width.toFixed(2),
+      artInsetLeft: +(ab.left - cb.left).toFixed(2),
+      artInsetRight: +(cb.right - ab.right).toFixed(2),
+      artTop: +(ab.top - cb.top).toFixed(2),
+      spaceBelow: kb ? +(cb.bottom - kb.bottom).toFixed(2) : null,
+    };
+  })(),
   row: (() => {
     const el = document.querySelector('[data-fc-strip-region]')
       .querySelector('[data-fc-position-bar]').parentElement;
@@ -254,6 +279,32 @@ async function mobile() {
   t.eq(Math.round(p.art?.w ?? 0), 341, '@375 …and still full-bleed inside the card');
   t.eq(p.art?.fit, 'cover', '@375 covered');
   t.eq(p.art?.pos, DEFAULT_FOCAL, '@375 …at DEFAULT_FOCAL');
+
+  // ── THE MEDIA IS FLUSH, AND THE REMAINDER IS BELOW IT ───────────────────
+  // The mobile mockup puts a 396-wide media container inside a 396-wide card
+  // (38:3257) with only the copy block inset. Anything other than the card's
+  // own 1px border between them is an inset that should not be there.
+  t.ok(Math.abs(p.artInsetLeft - p.cardBorderLeft) < 0.5,
+    '@375 the artwork is FLUSH to the card\'s left edge',
+    `inset ${p.artInsetLeft}, border ${p.cardBorderLeft}`);
+  t.ok(Math.abs(p.artInsetRight - p.cardBorderRight) < 0.5,
+    '@375 …and to its right edge',
+    `inset ${p.artInsetRight}, border ${p.cardBorderRight}`);
+  t.ok(Math.abs(p.artW - p.cardInnerW) < 0.5,
+    '@375 …so its width IS the card\'s inner width',
+    `art ${p.artW} vs inner ${p.cardInnerW}`);
+
+  // Top-aligned: the artwork starts at the border, and every pixel of the
+  // reserved-height leftover collects underneath in one block.
+  t.ok(p.artTop <= p.cardBorderTop + 0.5,
+    '@375 the artwork sits FLUSH at the top of the card',
+    `${p.artTop}px from the card top, border ${p.cardBorderTop}`);
+  t.ok(p.spaceBelow > 20,
+    '@375 …and the leftover collects BELOW, in one block',
+    `${p.spaceBelow}px under the copy`);
+  t.ok(p.spaceBelow > p.artTop * 4,
+    '@375 CONTROL: it is not split into two bands, which is what centring did',
+    `above ${p.artTop}, below ${p.spaceBelow}`);
   t.ok(p.cards.every((c) => c.pos === DEFAULT_FOCAL),
     '@375 …and so is every strip thumbnail', p.cards[0].pos);
 

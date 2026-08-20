@@ -632,9 +632,9 @@ function ImageOnlyCard({ item, active }) {
     </>
   );
 
-  // `max-lg:h-full` + centring: the grid reserves the TALLEST slide's height,
-  // and below lg that is a video card. Re-measured at 375 after the artwork
-  // went to 16:9, content heights, ascending:
+  // `max-lg:h-full` + TOP alignment: the grid reserves the TALLEST slide's
+  // height, and below lg that is a video card. Re-measured at 375 after the
+  // artwork went to 16:9, content heights, ascending:
   //
   //   video cards  453.97 · 453.97 · 483.86 · 499.86 · 513.75
   //   image cards  345.70 · 375.59 · 405.48 · 405.48 · 465.27
@@ -648,8 +648,31 @@ function ImageOnlyCard({ item, active }) {
   //
   // What DID change is how much empty panel the image card is hiding. The gap
   // under its content was 158–277px; it is now 102–222px. The card is still the
-  // shorter of the two and still stretches to the track, so it still fills and
-  // centres rather than leaving raw page background under a short band.
+  // shorter of the two and still stretches to the track, so it still FILLS it
+  // rather than leaving raw page background under a short band.
+  //
+  // ── WHY THE REMAINDER SITS BELOW, IN ONE BLOCK ──────────────────────────
+  // `justify-start`, not `justify-center`. Centring was chosen here in an
+  // earlier round on the reasoning that splitting the leftover looks tidier
+  // than dumping it at one end. Measured at 375, it does not: the remainder
+  // came out 81.13px above the artwork and 81.14px below the copy, which
+  // frames the picture in equal bands of empty panel and reads as a picture
+  // floating in the middle of a box — a failed render rather than a reserved
+  // space. Collected at the bottom instead, one 161px block below the copy
+  // reads as what it is: room held for a slide that needs it.
+  //
+  // It is also what the mobile mockup draws. `Mobile Featured Content Carousel
+  // Mockup` (38:3231) puts the media container at y=0 inside the card
+  // (node 38:3257), flush with the top edge, with the copy block beneath it.
+  //
+  // THE REMAINDER IS MOSTLY A DATA GAP, NOT A LAYOUT ONE, and it is not tuned
+  // here. No image record carries a description yet, and the tallest-slide
+  // reservation is recomputed by CSS the moment course and article records
+  // exist. Tuning the reservation now would be tuning against a state that
+  // will not ship. This changes only WHERE the leftover collects.
+  //
+  // From lg none of this applies: the frame's own ratio governs, every slide
+  // is the same height, and the copy block is `lg:hidden`.
   //
   // If an image card ever DOES overtake the tallest video, the number changes
   // by itself: the track is a CSS max of the children, so there is nothing here
@@ -662,7 +685,7 @@ function ImageOnlyCard({ item, active }) {
     "block w-full overflow-hidden border border-[var(--9e-fc-panel-border)] " +
     CARD_RADIUS + " " +
     "bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] " +
-    "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:justify-center " +
+    "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:justify-start " +
     FEATURED_FRAME;
 
   // No usable link_url → a plain box. Never an <a> with no href: that is not a

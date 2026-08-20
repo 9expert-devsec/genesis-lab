@@ -166,6 +166,38 @@ test('the stage is 12:5 from lg, and its cap meets the ratio at 1200', () => {
   assert.equal(/lg:aspect-\[2\.5\/1\]/.test(html), false, 'the old 2.5:1 is gone');
 });
 
+test('the image card TOP-aligns its content below lg', () => {
+  /**
+   * `justify-center` here splits the reserved-height leftover into two equal
+   * bands, one above the artwork and one below the copy. Measured at 375 while
+   * it did: 81.13px above, 81.14px below — which frames the picture in empty
+   * panel and reads as a failed render rather than as reserved space.
+   *
+   * `justify-start` collects the whole remainder underneath in one block, and
+   * it is what the mobile mockup draws: the media container sits at y=0 inside
+   * the card (38:3257), flush with its top edge.
+   *
+   * Asserted on the CLASS because that is what survives a tier with no
+   * stylesheet. Where the pixels actually land is measured in test/browser.
+   */
+  const { doc } = renderSlider(pool());
+  const card = doc.querySelector('[data-fc-card="image"]');
+  assert.ok(card, 'no image card rendered');
+  assert.match(card.className, /max-lg:justify-start/);
+  assert.equal(/max-lg:justify-center/.test(card.className), false,
+    'centring is overridden — the leftover collects at the bottom');
+});
+
+test('…while still stretching to fill the reserved height', () => {
+  // The pairing matters: `justify-start` without `h-full` would shrink the card
+  // to its content and leave raw page background under a short slide, which is
+  // the thing the reservation exists to prevent.
+  const { doc } = renderSlider(pool());
+  const card = doc.querySelector('[data-fc-card="image"]');
+  assert.match(card.className, /max-lg:h-full/);
+  assert.match(card.className, /max-lg:flex-col/);
+});
+
 test('the image slide\'s artwork is 16:9 below lg', () => {
   const { doc } = renderSlider(pool());
   const art = doc.querySelector('[data-fc-art]');

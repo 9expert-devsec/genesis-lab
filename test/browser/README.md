@@ -38,8 +38,9 @@ If you add a script, add it to `SCRIPTS` in `run.mjs`. Do not name it
 
 It was rebuilt from scratch three sessions running, because it lived in a temp
 directory that gets wiped. The rebuild was the smaller half of the cost: the
-assertion **counts** changed each time (13→21, 12→15, 46→63), so "no regression
-since last round" could not be compared against anything.
+assertion **counts** changed each time (auto-slide 13→21, seam 12→15, strip
+46→63), so "no regression since last round" could not be compared against
+anything. They are a baseline now, and they move only when a commit says why.
 
 The load-bearing reason is coupling. Every script here asserts on `data-fc-*`
 hooks, class names and layout numbers that the components own. When a component
@@ -53,10 +54,10 @@ repo is what makes that possible.
 
 | script | guards |
 | --- | --- |
-| `strip.mjs` | The carousel's geometry against the two Figma mockups, at 1440 and 375: control row between stage and strip, 12:5 stage, 16:9 thumbnails, four cards visible plus a peek, the fades, the counter and the track agreeing, the controls clear of the fixed dock, the mobile hint. |
+| `strip.mjs` | The carousel's geometry against the two Figma mockups, at 1440 and 375: control row between stage and strip, 12:5 stage, 16:9 thumbnails, four cards visible plus a peek, the fades, the counter and the track agreeing, the controls clear of the fixed dock, the mobile hint — and, on the image card at 375, that the media is flush to the card edges and top-aligned with the reserved-height leftover collected below it. |
 | `autoslide.mjs` | The timer and every one of its pause conditions by name (`data-fc-paused`): hover and focus pause transiently and resume themselves; off-screen pauses; Stop, an arrow and a strip click take control permanently and only Play gives it back; the index wraps. |
 | `click.mjs` | The image card is **one** anchor — no nested anchor, no `<button>`, no focusable descendant — and one tap opens exactly one tab. 375 only, because that is where the copy block exists. |
-| `youtube.mjs` | The facade: **zero** requests to `youtube.com` / `youtube-nocookie.com` before the first click, inactive slides render no `<img>` at all, pressing play mounts the nocookie player, and leaving the slide unmounts it. |
+| `youtube.mjs` | The facade: **zero** requests to `youtube.com` / `youtube-nocookie.com` before the first click, inactive slides render no `<img>` at all, pressing play mounts the nocookie player on the slide it was pressed on (the slide id is pinned, so "the carousel moved on" cannot masquerade as "the facade broke"), and leaving the slide unmounts it. |
 | `seam.mjs` | The hero→section seam: the section is inert so it cannot eat the hero's clicks, the aurora spills rather than clips, no gradient stop is CSS `transparent`, and — measured in pixels across five columns — there is no band. Ends by injecting a band to prove the detector fires. |
 | `scrolly.mjs` | `window.scrollY` is constant across a **full** auto-slide cycle at 1440 and 375, with the strip proven to have scrolled. Slow: ~2 minutes. |
 
@@ -180,6 +181,36 @@ targetInfos.filter((i) => i.type === 'page' && i.url.startsWith(href)).length;
 That is also the *right* instrument for `click.mjs`: the defect it guards is a
 nested control firing the inner activation **and** the outer one, and two
 activations of one `_blank` anchor are two tabs.
+
+---
+
+## Do not edit watched source while a run is in flight
+
+`next dev` Fast Refresh reloads the module graph on save. A run that straddles
+an edit can therefore observe a component tree that was remounted underneath
+it, and client state — which slide is showing, whether a video is playing —
+goes with it.
+
+This has already produced one confusing result: `youtube.mjs` reported 11/13
+with "the iframe is in the tree" failing, while the request to
+`youtube-nocookie.com` had plainly been made. A player that mounts, fetches,
+and then vanishes is what a remount looks like from outside. The same script
+passed 13/13 in four isolated runs before and after, and 14/14 in a clean full
+run; the only thing distinguishing the failing run was a source edit made while
+it was running.
+
+Stated at the honest strength: that is the leading explanation and it was not
+reproduced on demand — a byte-identical rewrite does not trip the watcher at
+all, and a real edit timed by hand kept missing the ~3s window. So the guard
+was instrumented rather than the cause assumed. `youtube.mjs` now pins the slide
+id it pressed play on and asserts that slide is *still* the active one, and
+carries `played on slide N, active now M, paused=…` into the failure detail of
+all three assertions. If it recurs, the output distinguishes "the carousel moved
+on" from "the facade broke" from "the tree was remounted" without another
+investigation.
+
+**The rule: start the run, then keep your hands off `src/`.** If you must edit,
+re-run afterwards rather than trusting the result.
 
 ---
 
