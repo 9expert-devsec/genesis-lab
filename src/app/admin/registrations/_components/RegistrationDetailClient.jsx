@@ -25,6 +25,15 @@ import { refNo } from '@/lib/refNo';
 import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/detailHeading';
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import { rosterState, rosterHasRoom } from '@/lib/registrations/attendeeInfo';
+import { personCopyText, attendeeCopyText } from '@/lib/registrations/copyText';
+import {
+  BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
+  CopyAction, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
+  DL, DLRow, QuotedNote, DetailError, EditField, selectCls, InternalNotesBody,
+} from './detailShell';
+import { readNotes } from '@/lib/registrations/internalNotes';
+
+// ── Constants ──────────────────────────────────────────────────────
 
 /**
  * Why the + button is disabled at capacity. ONE literal, read by the button's
@@ -33,14 +42,6 @@ import { rosterState, rosterHasRoom } from '@/lib/registrations/attendeeInfo';
  * wordings of it.
  */
 const SEATS_FULL_REASON = 'เพิ่มรายชื่อครบตามจำนวนที่สมัครแล้ว';
-import {
-  BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
-  EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
-  DL, DLRow, QuotedNote, DetailError, EditField, selectCls, InternalNotesBody,
-} from './detailShell';
-import { readNotes } from '@/lib/registrations/internalNotes';
-
-// ── Constants ──────────────────────────────────────────────────────
 
 /*
  * NO LOCAL STATUS_BADGE. The chip's colour is vocabulary-shaped — keyed by
@@ -997,9 +998,25 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
               </div>
             ) : (
               <DL>
-                <DLRow label="ชื่อ-นามสกุล" value={`${coordinator.firstName ?? ''} ${coordinator.lastName ?? ''}`.trim()} />
-                <DLRow label="อีเมล"         value={coordinator.email} />
-                <DLRow label="เบอร์โทร"      value={coordinator.phone} />
+                {/*
+                  ── PER-VALUE COPY, NOT A "COPY THIS CARD" CONTROL ──────────
+                  Round 8, and the choice is about what an admin actually
+                  re-types into another system: ONE value at a time — an email
+                  into a mail client, a phone into a dialler, an address into a
+                  quotation. Nobody pastes a card. A per-card control would
+                  produce a labelled block that has to be edited down wherever it
+                  lands, and it would still not give them the single field they
+                  came for.
+
+                  The one multi-value copy is the ATTENDEE, in the row menu, and
+                  it exists because a roster genuinely does go somewhere as rows.
+                */}
+                <DLRow label="ชื่อ-นามสกุล" value={`${coordinator.firstName ?? ''} ${coordinator.lastName ?? ''}`.trim()}
+                  action={<CopyAction text={personCopyText(coordinator)} label="ชื่อผู้ประสานงาน" />} />
+                <DLRow label="อีเมล"         value={coordinator.email}
+                  action={<CopyAction text={coordinator.email} label="อีเมลผู้ประสานงาน" />} />
+                <DLRow label="เบอร์โทร"      value={coordinator.phone}
+                  action={<CopyAction text={coordinator.phone} label="เบอร์โทรผู้ประสานงาน" />} />
                 {/*
                   ── เข้าอบรมด้วย IS REMOVED FROM THE READ VIEW ONLY ─────────
                   DISPLAY ONLY. `coordinator.isAttending` stays on the schema, is
@@ -1706,10 +1723,31 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
  * times, never by review — which is why this is structural.
  */
 function AttendeeRowMenu({ index, attendee, onEditRow, open, onToggle }) {
+  /**
+   * ── THE ONE MULTI-VALUE COPY ON THESE SCREENS ──────────────────────────
+   * `คัดลอกผู้เข้าอบรม` puts the whole row on the clipboard as
+   * `name<TAB>email<TAB>phone`. A roster is the one thing that genuinely goes
+   * somewhere as ROWS — an attendance sheet, a certificate mail-merge — which is
+   * why this is the exception to the per-value rule the field rows follow.
+   *
+   * The shape is `attendeeCopyText`'s, not this file's. See that module for why
+   * tabs, why positional, and why a row with nothing in it returns '' — which is
+   * what makes the item ABSENT rather than putting invisible whitespace on the
+   * clipboard and looking broken.
+   *
+   * BOTH ITEMS SURVIVE THE CANCELLATION LOCK. Only `แก้ไขรายชื่อ` reads
+   * `onEditRow`; copying is not an edit and is gated by the presence of
+   * something to copy and nothing else.
+   */
+  const rowText = attendeeCopyText(attendee);
+
   const items = [
     onEditRow ? { key: 'edit', icon: Pencil, label: 'แก้ไขรายชื่อ', onClick: onEditRow } : null,
     attendee.email
       ? { key: 'copy', icon: Copy, label: 'คัดลอกอีเมล', onClick: () => copyText(attendee.email) }
+      : null,
+    rowText
+      ? { key: 'copy-row', icon: Copy, label: 'คัดลอกผู้เข้าอบรม', onClick: () => copyText(rowText) }
       : null,
   ].filter(Boolean);
 
@@ -2075,7 +2113,11 @@ function InvoiceReadView({ requestInvoice, invoice }) {
         // The whole invoice, not invoice.thaiAddress — the formatter reads
         // invoice.country to choose its branch, so passing the sub-object alone
         // would silently take the Thai path for a foreign address.
-        <DLRow label="ที่อยู่" value={formatBillingAddress(invoice)} />
+        //
+        // THE COPY TAKES WHAT THE ROW RENDERS: the same formatter, so the
+        // clipboard and the screen cannot differ.
+        <DLRow label="ที่อยู่" value={formatBillingAddress(invoice)}
+          action={<CopyAction text={formatBillingAddress(invoice)} label="ที่อยู่ใบเสนอราคา" />} />
       )}
       {invoice.country === 'OTHER' && invoice.internationalAddress && (
         <DLRow label="ที่อยู่"

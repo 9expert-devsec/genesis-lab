@@ -1,7 +1,7 @@
 'use client';
 
-import { Fragment, isValidElement } from 'react';
-import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2 } from 'lucide-react';
+import { Fragment, isValidElement, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2, Copy } from 'lucide-react';
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
@@ -1056,6 +1056,130 @@ export function InternalNotesBody({
       ) : null}
     </div>
   );
+}
+
+// ── Copy ────────────────────────────────────────────────────────────────────
+
+/**
+ * THE COPY CONTROL, FOR BOTH SCREENS.
+ *
+ * ══ MOVED HERE IN ROUND 8, AND IT PASSES THIS FILE'S OWN TEST ═══════════════
+ *
+ * It lived privately in InhouseDetailClient. The header's rule for what belongs
+ * here is "would a change to this be WRONG for one of them", and the answer is
+ * no: a copy button's height, its flash timing and its failure state are a house
+ * style. Copying it into the public screen instead would have put a second
+ * `navigator.clipboard` implementation in the tree, and the failure that
+ * produces is not a crash — it is one screen quietly telling a salesperson the
+ * address is on their clipboard when it is not.
+ *
+ * WHAT IS COPIED is emphatically NOT here. `value` arrives already built, from
+ * lib/registrations/copyText or from the formatter the screen already renders
+ * with, so this file learns nothing about attendees or addresses.
+ *
+ * ══ COPYING IS NOT AN EDIT ══════════════════════════════════════════════════
+ *
+ * It takes no `onEdit`, is gated by nothing, and SURVIVES THE CANCELLATION LOCK
+ * — exactly as `คัดลอกอีเมล` already does on the attendee row menu. A cancelled
+ * registration is read-only, and reading is what this does. Asserted in
+ * test/render/registrationCopyAffordance rather than left as a property of
+ * whoever remembers not to gate it.
+ *
+ * ══ AND IT NEVER WRITES AN AUDIT ROW ════════════════════════════════════════
+ *
+ * There is no server action here at all — `navigator.clipboard.writeText` is a
+ * browser call and nothing crosses the wire. That is the enforcement, and it is
+ * structural rather than a decision anyone has to keep making: there is no
+ * endpoint to add a `recordAdminActionAfter` to.
+ *
+ * The reason it matters: the audit log is a record of CHANGES. A read is not
+ * one, and this control is on every field row on two screens — filling the trail
+ * with copies would bury the changes it exists for under an unbounded number of
+ * events nobody can act on.
+ *
+ * ── IT CAN FAIL, AND THE FAILURE IS VISIBLE ─────────────────────────────────
+ * `writeText` rejects on a denied permission and the API is absent entirely
+ * outside a secure context. Firing the success state optimistically would tell
+ * the reader the value is on their clipboard when it is not, and they would
+ * paste the previous one. So success waits for the promise and a rejection shows
+ * a distinct failed state — the value stays on screen and selectable, which is
+ * the fallback.
+ *
+ * The label names WHAT is being copied; there are several controls on a page and
+ * "คัดลอก" alone is ambiguous to a screen reader. The live region announces the
+ * outcome, because the icon swap alone is invisible to one.
+ */
+export function CopyButton({ value, label }) {
+  const [state, setState] = useState('idle'); // 'idle' | 'ok' | 'fail'
+  const timer = useRef(null);
+
+  // The flash is on a timer, and a click that unmounts the row mid-flash would
+  // otherwise set state on a dead component.
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const flash = (next) => {
+    setState(next);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState('idle'), 1800);
+  };
+
+  const handleCopy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(value);
+      flash('ok');
+    } catch {
+      flash('fail');
+    }
+  };
+
+  const Icon = state === 'ok' ? Check : state === 'fail' ? X : Copy;
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={`คัดลอก${label}`}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-2 py-1 text-[11px] font-medium transition-colors',
+        state === 'ok'   && 'border-9e-brand/40 text-9e-action',
+        state === 'fail' && 'border-9e-accent/40 text-9e-accent',
+        state === 'idle' && 'border-[var(--surface-border)] text-[var(--text-muted)] hover:text-9e-action',
+      )}
+    >
+      <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+      <span aria-live="polite">
+        {state === 'ok' ? 'คัดลอกแล้ว' : state === 'fail' ? 'คัดลอกไม่สำเร็จ' : 'คัดลอก'}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * A COPY CONTROL FOR A FIELD ROW — or NOTHING, when there is nothing to copy.
+ *
+ * ══ THE ABSENT-MEANS-ABSENT RULE, APPLIED TO THE CONTROL ════════════════════
+ *
+ * `DLRow` already drops a row whose value is empty, so most of the time this is
+ * never reached. It exists for the two cases where it IS:
+ *
+ *   · a row with an `emptyHint` — an onsite enquiry with no venue renders, on
+ *     purpose, and must not offer to copy the hint;
+ *   · a row whose value is a NODE built from something else, where the text to
+ *     copy can be empty while the row is not.
+ *
+ * ── AND IT TAKES THE TEXT, NOT THE VALUE ──────────────────────────────────
+ * The emptiness test is on the STRING that would reach the clipboard, which is
+ * the only thing that matters here. `isEmptyValue` recursing into elements is
+ * the right test for whether a ROW renders; it is the wrong test for whether a
+ * COPY has anything to put on the clipboard, because a node can render
+ * perfectly while the text derived from it is ''. Round 5's wrapped-but-empty
+ * defeat came from asking one question with the other's answer.
+ */
+export function CopyAction({ text, label }) {
+  const value = typeof text === 'string' ? text.trim() : '';
+  if (!value) return null;
+  return <CopyButton value={value} label={label} />;
 }
 
 /** The page-level error line. Absent when there is nothing to say. */
