@@ -4,6 +4,7 @@ import { useTransition, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { filterParamKey, isDefaultFilterValue } from '@/lib/registrations/filterScope';
 import {
   buildStatCards,
   isSystemSet,
@@ -188,30 +189,70 @@ export function RegistrationsClient({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
+  /**
+   * EVERY FILTER WRITE GOES INTO THE CURRENT SOURCE'S NAMESPACE — ROUND 10.
+   *
+   * `from`, `to` and `course` joined the set in round 8, and the reason still
+   * holds: every dimension has to be here, or an override of one would leave the
+   * others in the URL from the previous navigation while the props say
+   * otherwise. They are named in `next` so that an override CAN clear them.
+   *
+   * ── `source` HAS LEFT THIS SET, AND THAT IS THE CHANGE ───────────────────
+   * It is not a filter — it selects the collection, the same reasoning
+   * `SCOPE_PARAMS` gives for excluding it from the query scope. It now has its
+   * own navigator below, which touches nothing else.
+   *
+   * ── THE PROPS STAY BARE, AND THE NAMESPACE IS APPLIED HERE ───────────────
+   * `q`, `status`, `range`, `from`, `to` and `course` arrive as ordinary props
+   * with ordinary names; page.jsx did the reading. Only the URL KEY is
+   * namespaced, at the one moment it is written. That is deliberate: the
+   * namespace is a URL concern and prefixing the PROPS would have renamed six
+   * identifiers that fs/urlFilterNoState enumerates, for no gain.
+   */
   const navigate = useCallback((overrides = {}) => {
     const params = new URLSearchParams(searchParams.toString());
-    /**
-     * `from`, `to` and `course` JOIN THE SET — round 8.
-     *
-     * Every dimension has to be here, or an override of one would leave the
-     * others in the URL from the previous navigation while the props say
-     * otherwise. The empty string is the default for all three, so the generic
-     * `v !== ''` rule below already deletes them; they are named in `next` so
-     * that an override CAN clear them.
-     */
-    const next = { page: '1', status, q, source, range, from, to, course, ...overrides };
-    Object.entries(next).forEach(([k, v]) => {
-      const isDefault =
-        (k === 'status' && v === 'all') ||
-        (k === 'q'      && v === '')    ||
-        (k === 'source' && v === 'public') ||
-        (k === 'range'  && v === 'all') ||
-        (k === 'page'   && v === '1');
-      if (!isDefault && v !== '' && v != null) params.set(k, String(v));
-      else params.delete(k);
+    const next = { page: '1', status, q, range, from, to, course, ...overrides };
+    Object.entries(next).forEach(([name, v]) => {
+      const key = filterParamKey(name, source);
+      if (v == null || isDefaultFilterValue(name, v)) params.delete(key);
+      else params.set(key, String(v));
     });
     startTransition(() => router.push(`${pathname}?${params.toString()}`));
   }, [pathname, searchParams, router, status, q, source, range, from, to, course]);
+
+  /**
+   * SWITCHING SOURCE MOVES NO VALUES. It sets one parameter.
+   *
+   * ══ WHY THIS IS ITS OWN FUNCTION AND NOT `navigate({ source })` ═════════════
+   *
+   * `navigate` writes the CURRENT source's namespace from the current props. Ask
+   * it to change `source` too and it would write this side's values into this
+   * side's keys while the page renders the other side — correct by luck, and
+   * wrong the moment anyone adds an override.
+   *
+   * More importantly there is nothing to write. Public's filters live in the
+   * bare names and in-house's live under `inhouse.`, so BOTH SETS ARE ALREADY IN
+   * THE URL and correct. Switching is one key.
+   *
+   * ── WHAT THIS DELETED, AND IT WAS TWO REAL WARTS ─────────────────────────
+   * The toggle used to navigate with `{ source, page: '1', status: 'all' }`.
+   *
+   * `status: 'all'` was there because the two vocabularies are different subsets
+   * and carrying `paid` to in-house produced an empty list — so switching
+   * DESTROYED the public status, and switching back did not bring it home. Each
+   * side now keeps its own and nothing is discarded on the way.
+   *
+   * `page: '1'` was there because page 3 of public is not page 3 of in-house.
+   * `page` is namespaced too, so each side keeps its own place.
+   */
+  const switchSource = useCallback((value) => {
+    const params = new URLSearchParams(searchParams.toString());
+    // 'public' is the default and is absent from the URL, exactly as the default
+    // of every namespaced filter is — one rule for what "not set" looks like.
+    if (value === 'public') params.delete('source');
+    else params.set('source', value);
+    startTransition(() => router.push(`${pathname}?${params.toString()}`));
+  }, [pathname, searchParams, router]);
 
   // The term is read out of the form, not out of state — see the header.
   const handleSearch = (e) => {
@@ -331,7 +372,7 @@ export function RegistrationsClient({
           <button
             key={s.value}
             type="button"
-            onClick={() => navigate({ source: s.value, page: '1', status: 'all' })}
+            onClick={() => switchSource(s.value)}
             aria-pressed={source === s.value}
             className={cn(
               'flex h-[40px] w-[128px] items-center justify-center gap-[6px] rounded-9e-md text-[13px] font-semibold transition-colors',
@@ -479,16 +520,30 @@ export function RegistrationsClient({
           THE PLACEHOLDER NAMES THE FIELDS THE FILTER ACTUALLY SEARCHES, and the
           two filters do not search the same ones.
 
-          Public matches courseName + coordinator name/email, so the original
-          label was correct there and is unchanged. In-house matches companyName
-          + contact name/email and NOT the course — `coursesInterested` holds
-          codes and no $or clause touches it — so 'หลักสูตร' was an invitation to
-          type a course and get nothing back, while the one field that does work
-          (บริษัท) went unnamed. See listRegistrations in
-          src/lib/actions/registrations.js.
+          Public matches courseName + coordinator name/email, so this label has
+          been correct there throughout and is unchanged.
+
+          ── IN-HOUSE GAINS หลักสูตร IN ROUND 10, AND ONLY NOW ─────────────────
+          It was deliberately absent, and the reason it was absent is the reason
+          this line is load-bearing: `coursesInterested` holds CODES, so naming
+          หลักสูตร while no clause could match a typed NAME would have been an
+          invitation to type a course and get nothing back. A placeholder is a
+          promise about what the box does.
+
+          The promise is now kept, and each of the four was checked against
+          `searchClauses` in lib/registrations/listFilter before this string
+          changed — บริษัท → companyName, ชื่อ → contactFirstName/contactLastName,
+          อีเมล → contactEmail, หลักสูตร → coursesInterested by CODE and by
+          resolved NAME. A test asserts the same four, from the same source.
+
+          WHAT IT STILL CANNOT DO is search a course whose name will not resolve
+          — ZZTEST-EXCEL-01 has no name anywhere in this system, so it is
+          findable by code only. That is a gap in the DATA rather than a lie in
+          this label, and it degrades to "no match on that term". See
+          lib/registrations/inhouseCourseSearch.
         */
         placeholder={source === 'inhouse'
-          ? 'ค้นหาบริษัท / ชื่อ / อีเมล'
+          ? 'ค้นหาบริษัท / ชื่อ / อีเมล / หลักสูตร'
           : 'ค้นหาชื่อ / อีเมล / หลักสูตร'}
         onSearch={handleSearch}
         page={page}

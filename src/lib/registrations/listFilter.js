@@ -218,29 +218,56 @@ export function courseClause(course, source) {
  *
  * The two sources search DIFFERENT fields and that is not an oversight: an
  * in-house enquiry has no `courseName` and no `coordinator`, and a public
- * registration has no `companyName`. `coursesInterested` is deliberately absent
- * from the in-house clause — it holds course CODES, so matching a typed course
- * name against it would return nothing while looking like it should work. The
- * placeholder text on the search box names the fields that are actually here.
+ * registration has no `companyName`.
+ *
+ * ══ IN-HOUSE SEARCHES หลักสูตร IN TWO CLAUSES, NOT ONE ══════════════════════
+ *
+ * `coursesInterested` used to be deliberately ABSENT here, and the note said
+ * why: it holds course CODES, so matching a typed course NAME against it would
+ * return nothing while looking like it should work. That reasoning was right and
+ * it is why this is two clauses rather than the one-line addition it looks like.
+ *
+ *   · `{ coursesInterested: rx }` — the RAW text against the code, so someone
+ *     who types `ZZTEST-EXCEL-01` gets what they expect;
+ *   · `{ coursesInterested: { $in: courseCodes } }` — the codes the typed text
+ *     resolved to by NAME, upstream of this function.
+ *
+ * The `$in` clause is OMITTED when nothing resolved, which is what makes an
+ * unresolvable name degrade to "no match on that term" instead of to an empty
+ * result for the whole query: the other four clauses still run. `{$in: []}`
+ * would match nothing, which is harmless inside an `$or` — but omitting it says
+ * what is meant and keeps the query readable in a log.
+ *
+ * THE RESOLUTION IS NOT DONE HERE. It needs the course catalogue, which is an
+ * upstream fetch, and this module is pure and synchronous by design — every
+ * consumer of it is a different action and a fetch in here would happen three
+ * times per render. See `inhouseCourseCodes`, which is the one derivation site.
  *
  * @param {string} source
  * @param {string} term already trimmed and known non-empty
+ * @param {string[]} courseCodes codes the term resolved to by name; may be empty
  */
-function searchClauses(source, term) {
+function searchClauses(source, term, courseCodes = []) {
   const rx = { $regex: term, $options: 'i' };
-  return source === 'inhouse'
-    ? [
-        { companyName:      rx },
-        { contactFirstName: rx },
-        { contactLastName:  rx },
-        { contactEmail:     rx },
-      ]
-    : [
-        { courseName:              rx },
-        { 'coordinator.firstName': rx },
-        { 'coordinator.lastName':  rx },
-        { 'coordinator.email':     rx },
-      ];
+  if (source !== 'inhouse') {
+    return [
+      { courseName:              rx },
+      { 'coordinator.firstName': rx },
+      { 'coordinator.lastName':  rx },
+      { 'coordinator.email':     rx },
+    ];
+  }
+
+  const clauses = [
+    { companyName:      rx },
+    { contactFirstName: rx },
+    { contactLastName:  rx },
+    { contactEmail:     rx },
+    { coursesInterested: rx },
+  ];
+  const codes = (Array.isArray(courseCodes) ? courseCodes : []).filter(Boolean);
+  if (codes.length) clauses.push({ coursesInterested: { $in: codes } });
+  return clauses;
 }
 
 /**
@@ -299,13 +326,27 @@ function searchClauses(source, term) {
  * another route.
  */
 export const SCOPE_PARAMS = Object.freeze(['q', 'range', 'from', 'to', 'course']);
+/**
+ * `courseCodes` is NOT a SCOPE_PARAM, and the distinction is worth one line.
+ *
+ * SCOPE_PARAMS is the set of dimensions the URL carries and the PAGE must hand
+ * to all three actions — fs/registrationsFilterWiring asserts exactly that.
+ * `courseCodes` is not a dimension: it is `q` RESOLVED, derived inside the
+ * actions from the course catalogue, and the page never sees it. Adding it to
+ * SCOPE_PARAMS would make that guard demand the page pass something the page
+ * cannot compute.
+ *
+ * It still has to reach all three actions or the four numbers disagree — that is
+ * the same invariant, and it is guarded separately in the same file.
+ */
 export function buildRegistrationScope({
-  q = '', source = 'public', range = 'all', from = '', to = '', course = '', now,
+  q = '', source = 'public', range = 'all', from = '', to = '', course = '',
+  courseCodes = [], now,
 } = {}) {
   const scope = {};
 
   const term = String(q ?? '').trim();
-  if (term) scope.$or = searchClauses(source, term);
+  if (term) scope.$or = searchClauses(source, term, courseCodes);
 
   Object.assign(scope, resolveDateWindow({ range, from, to, now }).clause);
 
@@ -338,6 +379,7 @@ export function buildRegistrationFilter({
   from = '',
   to = '',
   course = '',
+  courseCodes = [],
   now,
 } = {}) {
   const filter = {};
@@ -387,7 +429,7 @@ export function buildRegistrationFilter({
    * and an object literal cannot hold two `$or` keys anyway. `$and` composes
    * them, each keeping its own internal `$or`. That is done in the scope.
    */
-  Object.assign(filter, buildRegistrationScope({ q, source, range, from, to, course, now }));
+  Object.assign(filter, buildRegistrationScope({ q, source, range, from, to, course, courseCodes, now }));
 
   return filter;
 }

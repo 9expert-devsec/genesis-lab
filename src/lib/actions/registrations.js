@@ -20,6 +20,10 @@ import {
 // derivation beside the shared one — which is precisely the shape that let the
 // cards and the table disagree before this module existed.
 import { buildRegistrationFilter, buildRegistrationScope } from '@/lib/registrations/listFilter';
+// The ONE derivation site for "which course codes does this search term name".
+// All three query actions call it, so the four numbers on the screen cannot
+// disagree about what a search means — see its own header.
+import { inhouseCourseCodes } from '@/lib/registrations/inhouseCourseSearch';
 import { normalizeNoteBody, buildNoteEntry } from '@/lib/registrations/internalNotes';
 import { ROUND_FIELDS, roundFieldsFor } from '@/lib/registrations/roundSelection';
 // The duplicate rule lives beside the roster derivation, not here — the screens
@@ -102,7 +106,8 @@ export async function listRegistrations({
    * `rangeToDateFilter` in lib/registrations/listFilter.js, so a date window
    * that applies to one and not the other is no longer expressible.
    */
-  const filter = buildRegistrationFilter({ status, q, source, range, from, to, course });
+  const courseCodes = await inhouseCourseCodes({ q, source });
+  const filter = buildRegistrationFilter({ status, q, source, range, from, to, course, courseCodes });
 
   const skip  = (Math.max(1, page) - 1) * PAGE_SIZE;
   const total = await Model.countDocuments(filter);
@@ -1087,8 +1092,19 @@ export async function getRegistrationTotal({
    * answering one question two ways, which is the failure this whole module
    * exists to prevent. One function; every number inside it.
    */
+  /**
+   * ── AND THE SAME COURSE-NAME RESOLUTION, FOR THE SAME REASON ─────────────
+   * Round 10 lets an in-house search match a course NAME, which no in-house
+   * document stores. The term is resolved to codes upstream of the builder, and
+   * this badge has to resolve it too — a badge counting only code matches beside
+   * a table counting name matches is the identical disagreement one control
+   * over. `inhouseCourseCodes` is the single derivation site all three actions
+   * share; it returns `[]` for a public source before any fetch.
+   */
+  const courseCodes = await inhouseCourseCodes({ q, source });
+
   return getModel(source).countDocuments(
-    buildRegistrationScope({ q, source, range, from, to, course }),
+    buildRegistrationScope({ q, source, range, from, to, course, courseCodes }),
   );
 }
 
@@ -1191,7 +1207,8 @@ export async function getRegistrationStatusCounts({
    * follow the search box sees a variable that says it is about dates and moves
    * on. `scope` is what it is.
    */
-  const scope = buildRegistrationScope({ q, source, range, from, to, course });
+  const courseCodes = await inhouseCourseCodes({ q, source });
+  const scope = buildRegistrationScope({ q, source, range, from, to, course, courseCodes });
   const Model = getModel(source);
 
   if (source === 'inhouse') {

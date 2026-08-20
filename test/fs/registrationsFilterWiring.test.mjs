@@ -174,13 +174,75 @@ test('the other source’s total is fetched IN the Promise.all, not awaited afte
     'the toggle badge query is not inside the Promise.all — it is a serial await');
 });
 
-test('the toggle badge follows the SAME range filter as everything else', () => {
-  const call = /getRegistrationTotal\(\{([^}]*)\}\)/.exec(PAGE);
+/**
+ * ══ RE-POINTED IN ROUND 10 — THE MATCHER COULD NOT SEE THE CHANGE ═══════════
+ *
+ * This read `the toggle badge follows the SAME range filter as everything else`
+ * and asserted `/\brange\b/` against the call's arguments.
+ *
+ * Round 10 INVERTED the property. The badge used to take the ACTIVE source's
+ * range so it could not disagree with the cards beside it; with per-source
+ * filters it must take the OTHER source's own range, because the badge is a
+ * promise about what a click produces and a click now shows that side under its
+ * own remembered filters.
+ *
+ * THE TEST STAYED GREEN THROUGH THAT INVERSION. `range` is the KEY in both
+ * shapes — `range,` before and `range: otherRange` after — so the probe matched
+ * the key and never looked at the value, which is the only thing that changed.
+ * A guard describing the exact opposite of the code beneath it, passing.
+ *
+ * Renaming it would not have helped: the matcher still could not distinguish the
+ * two, so it would only have been honestly named about the wrong thing. So the
+ * assertion is re-pointed at THE VALUE, which is what actually differs.
+ *
+ * ── IT ACCEPTS EVERY SPELLING OF "THE OTHER SOURCE'S RANGE" ────────────────
+ * `otherRange` is the normalised local; `other.range` is the raw value. Both
+ * satisfy the property. Binding to only the first would make this face TWO of
+ * defect 7 — a guard so tight it forbids a correct reformulation — while fixing
+ * face three. There is a control for each direction below.
+ */
+test('the toggle badge reads the OTHER source’s own range, not the active one', () => {
+  const call = /getRegistrationTotal\(\{([\s\S]*?)\}\)/.exec(PAGE);
   assert.ok(call, 'getRegistrationTotal call not found in page.jsx');
-  assert.match(call[1], /\brange\b/,
-    'the toggle badge is fetched without `range` — it would show a raw total beside range-filtered cards');
-  assert.match(call[1], /source:\s*otherSource/,
+  const args = call[1];
+
+  assert.match(args, /range:\s*(?:otherRange|other\.range)\b/,
+    'the badge does not take the OTHER source’s range — it would count a set no click can produce');
+
+  // …and NOT the active source's, in either of the two ways that is written:
+  // the shorthand `range,` and the explicit `range: range`.
+  assert.doesNotMatch(args, /(?:^|[{,\s])range\s*(?:,|\}|$)/,
+    'the badge takes the ACTIVE source’s range by shorthand — that is the pre-round-10 meaning');
+  assert.doesNotMatch(args, /range:\s*range\b/,
+    'the badge takes the ACTIVE source’s range explicitly');
+
+  assert.match(args, /source:\s*otherSource/,
     'the badge query does not ask for the OTHER source — it would duplicate counts.total');
+});
+
+test('CONTROL: the badge matcher can tell the two meanings apart, both ways', () => {
+  /**
+   * The whole point of the re-point. The OLD probe is shown to be blind and the
+   * NEW one is shown to discriminate — on the two shapes as they are actually
+   * written, rather than on the real file, so this control keeps working after
+   * page.jsx changes again.
+   */
+  const before = "q, range, source: otherSource, from, to, course";        // active's — wrong now
+  const after  = "q: other.q, range: otherRange, source: otherSource";     // other's — right
+  const alt    = "q: other.q, range: other.range, source: otherSource";    // other's, spelled differently
+
+  const OLD = /\brange\b/;
+  assert.ok(OLD.test(before) && OLD.test(after),
+    'the old probe is meant to match BOTH — that is why it could not see the inversion');
+
+  const NEW = /range:\s*(?:otherRange|other\.range)\b/;
+  assert.equal(NEW.test(before), false, 'the new probe still passes the pre-round-10 shape');
+  assert.ok(NEW.test(after),  'the new probe rejects the shape that is correct');
+  assert.ok(NEW.test(alt),    'the new probe rejects a correct reformulation — that is face two');
+
+  const ACTIVE = /(?:^|[{,\s])range\s*(?:,|\}|$)/;
+  assert.ok(ACTIVE.test(before), 'the shorthand probe cannot see an active-range shorthand');
+  assert.equal(ACTIVE.test(after), false, 'the shorthand probe fires on the correct shape');
 });
 
 test('getRegistrationTotal applies the shared SCOPE, not just the shared date', () => {

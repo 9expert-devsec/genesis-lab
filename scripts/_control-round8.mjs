@@ -357,8 +357,14 @@ const BREAKS = {
     staysGreen: [
       'fs/registrationsFilterWiring › every SCOPE_PARAM is accepted / PASSED — THE MEASUREMENT: a source guard cannot see a dimension that is threaded and then ignored',
     ],
-    find: '  const term = String(q ?? \'\').trim();\n  if (term) scope.$or = searchClauses(source, term);',
-    replace: '  const term = \'\';\n  if (term) scope.$or = searchClauses(source, term);',
+    // RE-POINTED IN ROUND 10. `searchClauses` gained a third argument — the
+    // course codes an in-house term resolved to — so the call in the FIND text
+    // moved and this anchor went stale. Found by `verify`, not by anyone
+    // reaching for the control: nothing in `npm test` imports this file, which
+    // is the whole reason `verify` exists. The BREAK is unchanged — blank the
+    // term so the builder silently drops `q`.
+    find: '  const term = String(q ?? \'\').trim();\n  if (term) scope.$or = searchClauses(source, term, courseCodes);',
+    replace: '  const term = \'\';\n  if (term) scope.$or = searchClauses(source, term, courseCodes);',
   },
 
   'scope-shrunk': {

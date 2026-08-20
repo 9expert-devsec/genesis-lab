@@ -57,6 +57,57 @@
  * and renaming a variable are all reformulations, and all of them are invisible
  * to the suite.
  *
+ * ══ DEFECT 7 HAS THREE FACES. THEY FAIL IN DIFFERENT DIRECTIONS. ════════════
+ *
+ * The mechanism above is face one. Two more have since been found on this
+ * codebase, and they are worth naming separately because the SYMPTOM differs and
+ * only one of the three announces itself.
+ *
+ * ── FACE ONE: THE GUARD STOPS BINDING ────────────────────────────────────
+ * An expression MOVES and the matcher can no longer see it. The guard goes
+ * quiet — it tests nothing, in either direction, while looking untouched.
+ * Instance: `publicStatusWriteGate`, above.
+ *
+ * ── FACE TWO: THE GUARD BINDS TOO TIGHTLY, AND DEFENDS A WRONG NAME ───────
+ * An enumeration names IDENTIFIERS, so it asserts that a name EXISTS. It cannot
+ * tell a rename that breaks the rule from a rename that fixes a defect, so it
+ * votes against renaming forever — including names that must change.
+ * Instance: `urlFilterNoState` required a prop named `window`, which shadowed
+ * the browser global and stopped FilterPanel mounting. Renaming it correctly
+ * went RED on a test about URL state, and the obvious reading of that red is "I
+ * broke something". The suite was holding the defect in place. Written up in
+ * that file's own header.
+ * SYMPTOM: a red that punishes a correct change.
+ *
+ * ── FACE THREE: THE GUARD BINDS TO TOKENS THAT SURVIVE THE CHANGE ─────────
+ * The matcher reads a token that appears on BOTH sides of a change in meaning,
+ * so the guard keeps passing while the property it names INVERTS.
+ * Instance (round 10): `registrationsFilterWiring` asserted that the toggle
+ * badge "follows the SAME range filter as everything else", via `/\brange\b/`
+ * over the call's arguments. Per-source filters inverted that requirement — the
+ * badge must now read the OTHER source's range — and the probe never noticed,
+ * because `range` is the KEY in both shapes and only the VALUE changed. The
+ * guard sat green describing the opposite of the code beneath it.
+ *
+ * THIS IS THE DANGEROUS ONE. Faces one and three are both silent, but face one
+ * leaves a guard asserting nothing, while face three leaves a guard asserting
+ * something FALSE — and a green test is read as evidence the old property still
+ * holds. A reviewer checking "did the badge stay consistent?" would have found a
+ * passing test that said yes.
+ *
+ * ── THE PROCEDURE FACE THREE ADDS ─────────────────────────────────────────
+ *
+ *   WHEN A BEHAVIOUR CHANGES AND A GUARD OVER IT STAYS GREEN, DO NOT CONCLUDE
+ *   THAT THE OLD PROPERTY STILL HOLDS. Establish first whether the matcher CAN
+ *   DISTINGUISH THE BEFORE FROM THE AFTER AT ALL. If it cannot, its green means
+ *   nothing in either direction, and renaming it is not the fix — re-point it at
+ *   whatever actually differs.
+ *
+ * And write the control as a DISCRIMINATION test: the old shape and the new one
+ * as literals, with the assertion that the probe rejects one and accepts the
+ * other. That is the only form that cannot itself develop face three, because it
+ * fails the moment the two stop being distinguishable.
+ *
  * Six consecutive rounds have produced a vacuity finding. Five were caught by
  * controls; this one was caught by a control too, and the controls are why any
  * of them are known. WRITE A CONTROL FOR THE REFORMULATED SHAPE, not only for
