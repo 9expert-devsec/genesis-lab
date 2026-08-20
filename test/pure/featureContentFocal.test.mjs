@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CENTRE,
+  CSS_DEFAULT_CENTRE,
+  DEFAULT_FOCAL,
   focalPosition,
   mapBannersToFeatureContent,
 } from '@/lib/home/featureContentFromBanners';
@@ -14,20 +15,28 @@ import {
  * stage at 12:5, the mobile stage at 16:9, and the strip card at 16:9 — and
  * `object-fit: cover` throws away whatever does not fit. Measured on all five
  * live image records, every one of which is 2.743:1: a 16:9 frame keeps 64.8%
- * of the width, so a CENTRED crop takes 17.6% off each side and renders
- * "EARLY Bird! … Masterclass" as "APLY … asterclass".
+ * of the width, so a CENTRED crop opens the window 17.6% in and renders
+ * "EARLY Bird! … Masterclass" as "APLY … asterclass". That is why the fallback
+ * below is not the centre.
  *
  * `image_focal` is the record's answer to "then which 64.8%". This file pins
- * the two halves that are easy to get wrong and impossible to see going wrong:
+ * the three halves that are easy to get wrong and impossible to see going
+ * wrong:
  *
- *   1. ABSENT MEANS CENTRE, in exactly one place. Three frames render this
- *      value; a fallback repeated at each of them drifts, and the failure is a
- *      picture cropped differently in the strip than in the stage that strip
- *      feeds — which reads as a rendering fault, not as a missing default.
- *   2. A HALF-SET POINT IS NOT A POINT. `{x: 34}` with no y would produce
+ *   1. ABSENT MEANS ONE NAMED DEFAULT, resolved in exactly one place. Three
+ *      frames render this value; a fallback repeated at each of them drifts,
+ *      and the failure is a picture cropped differently in the strip than in
+ *      the stage that strip feeds — which reads as a rendering fault, not as a
+ *      missing default.
+ *   2. THAT DEFAULT IS NOT THE CENTRE, and the tests say so out loud. It is
+ *      40% 50%, because this corpus sets its headline against the left margin;
+ *      the sweep behind the number is on DEFAULT_FOCAL. Left unguarded, "50%
+ *      50%" is exactly the value a reader restores while tidying up, and the
+ *      damage is invisible in code review and visible only in the artwork.
+ *   3. A HALF-SET POINT IS NOT A POINT. `{x: 34}` with no y would produce
  *      `object-position: 34% undefined%`, which the browser drops silently —
- *      leaving the crop centred while the record claims otherwise. That is
- *      worse than having no field, because it looks configured.
+ *      leaving the crop at the CSS default while the record claims otherwise.
+ *      That is worse than having no field, because it looks configured.
  *
  * ── WHAT THIS TIER CANNOT SEE ───────────────────────────────────────────────
  * That the string reaches an element, and that the element is the one being
@@ -47,26 +56,67 @@ const imageBanner = (over = {}) => ({
   ...over,
 });
 
-// ── (1) ABSENT MEANS CENTRE ─────────────────────────────────────────────────
+// ── (1) ABSENT MEANS THE ONE NAMED DEFAULT ──────────────────────────────────
 
-test('a record with no focal point is anchored at the centre', () => {
-  assert.equal(focalPosition({}), CENTRE);
-  assert.equal(focalPosition({ image_focal: undefined }), CENTRE);
-  assert.equal(focalPosition({ image_focal: null }), CENTRE);
+test('a record with no focal point falls back to DEFAULT_FOCAL', () => {
+  assert.equal(focalPosition({}), DEFAULT_FOCAL);
+  assert.equal(focalPosition({ image_focal: undefined }), DEFAULT_FOCAL);
+  assert.equal(focalPosition({ image_focal: null }), DEFAULT_FOCAL);
 });
 
-test('and so is no record at all — the reader never receives undefined', () => {
+test('and so does no record at all — the reader never returns undefined', () => {
   // The snapshot is Mixed and a mapper caller can pass anything; a crash here
   // would take the whole section down for a malformed row.
-  assert.equal(focalPosition(undefined), CENTRE);
-  assert.equal(focalPosition(null), CENTRE);
+  assert.equal(focalPosition(undefined), DEFAULT_FOCAL);
+  assert.equal(focalPosition(null), DEFAULT_FOCAL);
 });
 
-test('CENTRE is a real CSS object-position value, not a sentinel', () => {
+test('DEFAULT_FOCAL is a real CSS object-position value, not a sentinel', () => {
   // It is set straight onto `style`, with no conversion step — so if this were
-  // 'center' or {x:50,y:50} the fallback would render nothing at all.
-  assert.match(CENTRE, /^\d+% \d+%$/);
-  assert.equal(CENTRE, '50% 50%');
+  // 'left' or {x:40,y:50} the fallback would render nothing at all.
+  assert.match(DEFAULT_FOCAL, /^\d+% \d+%$/);
+});
+
+// ── (2) AND IT IS DELIBERATELY NOT THE CENTRE ───────────────────────────────
+
+test('the default is LEFT-BIASED, and it is not 50% 50%', () => {
+  /**
+   * THE POINT OF THIS TEST IS TO BE ANNOYING TO DELETE.
+   *
+   * `40% 50%` reads as a typo. Restoring it to the centre is a one-character
+   * edit that looks like a cleanup, passes review, and silently decapitates
+   * every banner on the home page — the damage shows up only in the artwork,
+   * where nobody is diffing.
+   *
+   * Measured: a 16:9 frame keeps 64.815% of a 2.743 source, so at x=50 the
+   * window opens 17.59% in, and all five live records set their headline and
+   * their painted CTA between 15% and 17%. At x=40 it opens 14.07% in and all
+   * five survive whole. 46 is where they stop surviving.
+   */
+  assert.notEqual(DEFAULT_FOCAL, CSS_DEFAULT_CENTRE,
+    'the default must not be what CSS would have done anyway');
+  assert.equal(DEFAULT_FOCAL, '40% 50%');
+
+  const x = Number(DEFAULT_FOCAL.split('%')[0]);
+  assert.ok(x < 50, 'it has to be left of centre for this corpus');
+  assert.ok(x >= 35,
+    'and not so far left that the right-hand badge and price go for nothing');
+});
+
+test('the arithmetic behind the number still holds', () => {
+  // Not a restatement of the constant — this is the geometry that CHOSE it, so
+  // it fails if the frame ratio or the source ratio ever moves without the
+  // default being re-swept.
+  const kept = (16 / 9) / (1920 / 700);         // 0.64815 of the width survives
+  const x = Number(DEFAULT_FOCAL.split('%')[0]);
+  const windowLeft = (1 - kept) * (x / 100) * 100;
+  assert.ok(Math.abs(kept - 0.648148) < 1e-5, 'the 16:9 window over 2.743 art');
+  assert.ok(windowLeft < 15,
+    `the window must open left of the corpus's 15% headline margin, opens at ` +
+    `${windowLeft.toFixed(2)}%`);
+  const centred = (1 - kept) * 0.5 * 100;
+  assert.ok(centred > 17,
+    `CONTROL: a centred window opens at ${centred.toFixed(2)}%, past that margin`);
 });
 
 // ── (2) A STORED POINT IS RENDERED VERBATIM ─────────────────────────────────
@@ -82,7 +132,7 @@ test('fractions survive — the control will not be integer-only', () => {
 test('0 and 100 are legal, and 0 is not mistaken for absent', () => {
   // The trap: a falsy check instead of a finite check sends {x:0,y:0} — the
   // top-left anchor, which is exactly what these left-aligned banners want —
-  // straight back to the centre.
+  // straight back to the default.
   assert.equal(focalPosition({ image_focal: { x: 0, y: 0 } }), '0% 0%');
   assert.equal(focalPosition({ image_focal: { x: 100, y: 100 } }), '100% 100%');
 });
@@ -94,16 +144,16 @@ test('numeric strings are coerced — the snapshot is Mixed, not typed', () => {
 // ── (3) A HALF-SET OR NONSENSE POINT FALLS BACK, IT DOES NOT LEAK ───────────
 
 test('a focal point with only an x is refused, not half-applied', () => {
-  assert.equal(focalPosition({ image_focal: { x: 34 } }), CENTRE);
-  assert.equal(focalPosition({ image_focal: { y: 34 } }), CENTRE);
+  assert.equal(focalPosition({ image_focal: { x: 34 } }), DEFAULT_FOCAL);
+  assert.equal(focalPosition({ image_focal: { y: 34 } }), DEFAULT_FOCAL);
 });
 
 test('an empty object is not a focal point', () => {
-  assert.equal(focalPosition({ image_focal: {} }), CENTRE);
+  assert.equal(focalPosition({ image_focal: {} }), DEFAULT_FOCAL);
 });
 
 test('non-numeric coordinates fall back rather than emitting NaN%', () => {
-  assert.equal(focalPosition({ image_focal: { x: 'left', y: 'top' } }), CENTRE);
+  assert.equal(focalPosition({ image_focal: { x: 'left', y: 'top' } }), DEFAULT_FOCAL);
 });
 
 test('the EMPTY values that Number() turns into 0 are refused too', () => {
@@ -116,9 +166,9 @@ test('the EMPTY values that Number() turns into 0 are refused too', () => {
    */
   for (const empty of [null, '', '   ', false, []]) {
     assert.equal(Number(empty), 0, 'the premise: this really does coerce to 0');
-    assert.equal(focalPosition({ image_focal: { x: empty, y: 40 } }), CENTRE,
+    assert.equal(focalPosition({ image_focal: { x: empty, y: 40 } }), DEFAULT_FOCAL,
       `x: ${JSON.stringify(empty)} must not read as 0`);
-    assert.equal(focalPosition({ image_focal: { x: 40, y: empty } }), CENTRE,
+    assert.equal(focalPosition({ image_focal: { x: 40, y: empty } }), DEFAULT_FOCAL,
       `y: ${JSON.stringify(empty)} must not read as 0`);
   }
 });
@@ -146,11 +196,13 @@ test('the mapper puts objectPosition on the item', () => {
   assert.equal(item.objectPosition, '25% 50%');
 });
 
-test('…and on a record with none, as the centre', () => {
+test('…and on a record with none, as the default', () => {
   const [item] = mapBannersToFeatureContent([imageBanner()], {
     now: new Date('2026-08-20T00:00:00Z'),
   });
-  assert.equal(item.objectPosition, CENTRE);
+  assert.equal(item.objectPosition, DEFAULT_FOCAL);
+  assert.notEqual(item.objectPosition, CSS_DEFAULT_CENTRE,
+    'the view model must carry the left bias, not the CSS default');
 });
 
 test('EVERY type carries the field, video included', () => {

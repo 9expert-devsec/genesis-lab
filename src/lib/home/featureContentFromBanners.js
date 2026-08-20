@@ -134,19 +134,104 @@ function youtubeThumbnails(id) {
   };
 }
 
-/** The default crop anchor. Named so the fallback is greppable. */
-export const CENTRE = '50% 50%';
+/**
+ * THE CROP ANCHOR FOR A RECORD THAT STORES NONE — AND IT IS NOT THE CENTRE.
+ *
+ * ── DO NOT "CORRECT" THIS TO 50% 50% ────────────────────────────────────────
+ * It looks like a mistake. It is a measurement. A 16:9 frame over this corpus's
+ * 2.743 art keeps 64.815% of the width, and where that window lands is decided
+ * entirely by this value:
+ *
+ *     window left = (1 - 0.64815) * x/100        window width = 64.815%
+ *
+ * At x=50 the window starts 17.59% into the source. Every one of the five live
+ * banners sets its headline and its painted CTA between 15% and 17% — so a
+ * centred crop cuts the first glyph off all five. Rendered and read, not
+ * inferred: "EARLY Bird! … Masterclass" becomes "APLY … asterclass",
+ * "Multi-Agent with Microsoft Copilot Studio" becomes "ulti-Agent with
+ * icrosoft Copilot Studio", "THE NEXT HUMANS SKILLS" becomes "HE NEXT UMANS
+ * SKILLS", and the button painted into the artwork loses its left edge on every
+ * single record.
+ *
+ * ── THE SWEEP, AT 16:9 (the mobile stage and every strip card) ──────────────
+ *
+ *     x    window        headlines whole   CTAs whole   given up on the right
+ *     50%  17.6 – 82.4%       0 of 5          0 of 5     least
+ *     45%  15.8 – 80.6%       2 of 5          1 of 5
+ *     40%  14.1 – 78.9%       5 of 5          5 of 5     a badge / price / person
+ *     35%  12.3 – 77.1%       5 of 5          5 of 5     more of the same
+ *     30%  10.6 – 75.4%       5 of 5          5 of 5
+ *     25%   8.8 – 73.6%       5 of 5          5 of 5
+ *     20%   7.0 – 71.9%       5 of 5          5 of 5     most
+ *
+ * 40 is the LARGEST value that keeps every headline and every painted CTA
+ * whole, so it is the one that gives up least on the right while still doing
+ * the job. The boundary was then narrowed: 42 and 44 also hold, 46 does not. So
+ * this sits 4–6 points inside the cliff — roughly 27–41px of slack on a
+ * 1920-wide file, about one more glyph.
+ *
+ * ── WHAT IS GIVEN UP, NAMED ─────────────────────────────────────────────────
+ * The right-hand end of each banner, which across this corpus carries secondary
+ * matter rather than the message: a discount badge, a struck-through price, the
+ * outer edge of a product mock-up, the rightmost person of a group photo. Every
+ * one of those is ALREADY cut at x=50. Moving left enlarges that loss; it does
+ * not introduce a new kind of it.
+ *
+ * ── y STAYS AT 50, AND IS INERT TODAY ───────────────────────────────────────
+ * All five files are 2.743 — wider than both 12:5 and 16:9 — so cover crops the
+ * width and never the height, and y cannot bite on any current record. It is 50
+ * because the moment art narrower than 2.4 is uploaded (the recommended 2:1
+ * spec would be) the desktop stage starts cropping height, and there is no
+ * corpus-wide vertical bias to encode: measured empty margins top/bottom across
+ * the five are 14.6/0.0, 0.1/0.1, 8.6/3.9, 11.7/0.4 and 0.0/0.0 percent. No
+ * pattern, unlike the horizontal one.
+ *
+ * ── IS THIS FITTED TO FIVE FILES? PARTLY, AND KNOWINGLY ─────────────────────
+ * What it encodes is a HOUSE STYLE — headline and CTA set against the left
+ * margin, promotional furniture on the right — which all five follow because
+ * they came from one template, not by coincidence. It will be right for the
+ * next banner cut from that template and WRONG for a centred or right-weighted
+ * composition, where it moves the window away from the subject.
+ *
+ * Three things would retire the guess rather than refine it, in the order they
+ * are worth doing:
+ *   1. the per-record control (S6). Then this only decides records nobody has
+ *      touched, which is the correct scope for any default.
+ *   2. an upload spec nearer 16:9. At the recommended 2:1 the 16:9 crop falls
+ *      from 35.2% of the width to 11.1%, so an anchor 10 points off centre
+ *      moves the window by a third of what it moves it today.
+ *   3. a stated rule for designers — "keep the message inside the middle 65%" —
+ *      which would make 50 correct again for everything authored after it.
+ *
+ * ── SCOPE: APPLIED TO EVERY TYPE, WHICH COSTS NOTHING TODAY ─────────────────
+ * `course` and `article` records render a resolved cover rather than banner
+ * art, and this corpus's left bias says nothing about those. It is still ONE
+ * default rather than two, because a second default is a second thing to keep
+ * in step and because the cost is currently zero twice over: no course or
+ * article record is live, and a cover that is already 16:9 is not cropped by a
+ * 16:9 frame at all, so the anchor has no effect on it. When the first one
+ * lands, confirm 40 against it or give the resolved-cover path its own value.
+ * Do not assume this one transfers.
+ */
+export const DEFAULT_FOCAL = '40% 50%';
 
 /**
- * The stored focal point as a CSS `object-position` value, or the centre.
+ * What CSS would do on its own. A named value only so that the note above and
+ * the tests can say "deliberately not this" without spelling the literal twice.
+ */
+export const CSS_DEFAULT_CENTRE = '50% 50%';
+
+/**
+ * The stored focal point as a CSS `object-position` value, or the default.
  *
- * ── THIS IS THE ONE PLACE "ABSENT MEANS CENTRE" IS WRITTEN DOWN ─────────────
+ * ── THIS IS THE ONE PLACE "ABSENT MEANS THE DEFAULT" IS WRITTEN DOWN ───────
  * Three frames crop these banners — the desktop stage at 12:5 and both 16:9
  * frames (the mobile stage and the strip card) — and each of them renders this
  * string. If the fallback lived at the call sites there would be three copies
  * of it, and the failure when one drifted would be a picture that is cropped
  * differently in the strip than in the stage it feeds, which reads as a
- * rendering fault rather than as a missing default.
+ * rendering fault rather than as a missing default. WHICH default, and why
+ * it is not the centre, is on DEFAULT_FOCAL above.
  *
  * ── WHY IT RETURNS THE CSS STRING AND NOT {x, y} ────────────────────────────
  * `object-position` already takes two percentages in exactly the order and
@@ -169,7 +254,7 @@ export const CENTRE = '50% 50%';
 export function focalPosition(banner) {
   const x = coordinate(banner?.image_focal?.x);
   const y = coordinate(banner?.image_focal?.y);
-  if (x === null || y === null) return CENTRE;
+  if (x === null || y === null) return DEFAULT_FOCAL;
   return x + '% ' + y + '%';
 }
 
@@ -489,7 +574,8 @@ function toItem(banner, resolved) {
     ...media,
     imageAlt: title,
     // Where the crop must keep. Every frame that covers this picture reads it;
-    // absent on the record means the centre. See focalPosition above.
+    // absent on the record means DEFAULT_FOCAL, which is deliberately NOT the
+    // centre — see that constant, which carries the measurement.
     //
     // Set on EVERY type, not only `image`. A course cover and an article cover
     // are cropped by the same three frames, and a video thumbnail is already

@@ -563,11 +563,12 @@ function ImageOnlyCard({ item, active }) {
           can afford to.
 
           So the ratio changes here and `SlideImage` reads `item.objectPosition`
-          — the record's stored focal point, or the centre when it has none.
-          Every one of the five live records is centre today, so every one of
-          them still loses its first word until the admin control lands. That is
-          a known, named cost of adopting the mockup's shape, not an oversight:
-          the words lost per record are listed in the commit message.
+          — the record's stored focal point, or DEFAULT_FOCAL when it has none.
+          That default is 40% 50%, swept against all five live records: at 40
+          every headline and every painted button survives whole, and what is
+          given up instead is the badge or price at the right-hand end. The
+          measurement is on DEFAULT_FOCAL in
+          src/lib/home/featureContentFromBanners.js.
 
           It also makes the phone stage 375/1.7778 = 211px of artwork instead of
           150, which is the change that closes most of the empty panel the
@@ -1166,10 +1167,11 @@ function SlideImage({ item, active, sizes }) {
       sizes={sizes}
       // `object-center` is gone from the class list and is NOT missing: the
       // anchor is now per-record and arrives as `objectPosition`, which the
-      // mapper resolves to "50% 50%" when the record has no focal point. A
-      // class saying `object-center` alongside an inline style setting the same
-      // property is a specificity puzzle for the next reader and would win or
-      // lose depending on which one an editor touched last.
+      // mapper resolves to DEFAULT_FOCAL when the record has no focal point —
+      // and that default is left-biased, not centred, so a stray
+      // `object-center` here would silently undo it. A class setting the same
+      // property as an inline style is also a specificity puzzle for the next
+      // reader, winning or losing on whichever an editor touched last.
       className="object-cover"
       style={{ objectPosition: item.objectPosition }}
       onError={() => setFailed(true)}

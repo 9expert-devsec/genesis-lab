@@ -191,7 +191,8 @@ test('a strip thumbnail is COVERED and anchored, not contained', () => {
   assert.ok(img, 'no thumbnail image');
   assert.match(img.className, /object-cover/, 'the mockup says Cover, not contain');
   assert.equal(/object-contain/.test(img.className), false, 'the old ruling is reversed');
-  assert.equal(img.style.objectPosition, '50% 50%', 'centre, because the record stores none');
+  assert.equal(img.style.objectPosition, '40% 50%',
+    'the left-biased DEFAULT_FOCAL, because the record stores none — NOT 50% 50%');
 });
 
 test('the featured artwork is anchored from the same value', () => {
@@ -199,7 +200,18 @@ test('the featured artwork is anchored from the same value', () => {
   const img = doc.querySelector('[data-fc-art] img');
   assert.ok(img, 'no featured image');
   assert.match(img.className, /object-cover/);
-  assert.equal(img.style.objectPosition, '50% 50%');
+  assert.equal(img.style.objectPosition, '40% 50%');
+});
+
+test('the stage and the strip agree on the default, not just on a stored value', () => {
+  // They are two frames over ONE picture. A default resolved twice is the exact
+  // shape of the bug where a record is cropped one way in the strip and another
+  // way in the card that strip feeds.
+  const { doc } = renderSlider(pool());
+  assert.equal(
+    doc.querySelector('[data-fc-art] img').style.objectPosition,
+    doc.querySelector('[data-fc-strip-card] img').style.objectPosition
+  );
 });
 
 test('a stored focal point reaches BOTH the stage and the strip', () => {

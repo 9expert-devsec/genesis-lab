@@ -121,15 +121,19 @@ const bannerSchema = new mongoose.Schema(
     // so rendering is `object-position: ${x}% ${y}%` with no conversion step in
     // between. A conversion is a place for the two ends to disagree.
     //
-    // ── ABSENT MEANS CENTRE, AND ABSENT IS THE DEFAULT ──────────────────────
+    // ── ABSENT IS THE NORMAL STATE, AND IT IS NOT WRITTEN HERE ──────────────
     // No mongoose `default` and `default: undefined` on the subdocument, the
     // same shape and the same reason as `course_ref` above: a default would
     // materialise `image_focal: {}` on every save, including video records that
     // have no uploaded image at all, and it would make "never set" and "set to
-    // centre" indistinguishable the moment anything saves. The reader supplies
-    // 50/50 when the key is missing — see focalPosition() in
-    // src/lib/home/featureContentFromBanners.js, which is the ONE place that
-    // rule is written down.
+    // the default" indistinguishable the moment anything saves.
+    //
+    // The READER supplies the fallback instead — focalPosition() in
+    // src/lib/home/featureContentFromBanners.js, the ONE place that rule is
+    // written down. Note before assuming it: that fallback is NOT the centre.
+    // It is 40% 50%, because this corpus sets its headline against the left
+    // margin and a centred 16:9 crop decapitates all five. The measurement and
+    // the sweep behind that number are on DEFAULT_FOCAL in the same file.
     //
     // NOTHING WRITES THIS YET. The admin control that sets it is a later slice;
     // this is the column it will write into, added first so the renderer can be

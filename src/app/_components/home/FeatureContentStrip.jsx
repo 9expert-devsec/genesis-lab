@@ -66,10 +66,14 @@ import {
  *
  * 16:9 onto 2.743 art is a 35.2% width crop — measured on all five live
  * records, every one of which is exactly 2.743 — and a CENTRED 35% crop eats
- * the first word of every banner's headline (see the note on `image_focal` in
- * src/models/Banner.js for what "EARLY … Masterclass" becomes). That is what
- * the focal point exists for: `item.objectPosition` is the record's own stored
- * anchor, or the centre when it has none, resolved once in the mapper.
+ * the first word of every banner's headline. That is what the focal point
+ * exists for: `item.objectPosition` is the record's own stored anchor, or
+ * DEFAULT_FOCAL when it has none, resolved once in the mapper.
+ *
+ * That default is 40% 50%, not the centre, and it was swept rather than
+ * guessed — see DEFAULT_FOCAL in src/lib/home/featureContentFromBanners.js. At
+ * 40 every one of the five keeps its headline and its painted button whole; at
+ * 46 none of them does.
  *
  * A YouTube `maxresdefault` is 1280×720 — 16:9 exactly — so a video card
  * crops nothing at all and the pillarboxing this slot used to show is gone.
@@ -597,9 +601,9 @@ export function FeatureContentStrip({
  *  ── COVER, AND THE ANCHOR COMES FROM THE RECORD ────────────────────────────
  *  See the header. `object-position` is a per-record measurement out of the
  *  database, so it is an inline style — there is no class for "34% 61%" and
- *  Tailwind could not emit one if there were. The mapper resolves it to the
- *  centre when the record has no focal point, so this never has a fallback of
- *  its own to drift from that one.
+ *  Tailwind could not emit one if there were. The mapper resolves the fallback
+ *  for a record that stores nothing, so this never has one of its own to drift
+ *  from that one — and the fallback is deliberately not the centre.
  *
  *  ── LAZY, AND HERE IT ACTUALLY WORKS ───────────────────────────────────────
  *  next/image is lazy by default and this component does not opt out. That was
