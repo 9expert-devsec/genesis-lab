@@ -105,23 +105,37 @@ export function buildPublicPaidReceiptModel({
      * payment states a headcount that disagrees with its own total, on the same
      * page, with no explanation.
      *
-     * ── WHAT CHANGED IN ROUND 8, AND WHY THAT RAISES THE STAKES ──────────────
+     * ── THE HISTORY, BECAUSE IT EXPLAINS WHY THE SHAPE LOOKS UNFINISHED ─────
      * Before round 8, `attendeesCount` was editable on ANY status with no gate,
      * so an admin could STUMBLE into this by mistyping a number in a form that
-     * also edits phone numbers. Round 8 closed that: the count now moves on a
-     * paid record only through `updateAttendeesCountPaid`, behind a panel that
-     * states this exact consequence in words and an audit row naming both
-     * numbers.
+     * also edits phone numbers. Round 8 closed that hole — and then opened a
+     * narrow, deliberate one beside it: `updateAttendeesCountPaid`, a panel
+     * that stated this exact consequence in words and took the admin's consent
+     * to it. For one round, the divergence was a supported outcome.
      *
-     * So the divergence is no longer accidental — an admin is walked up to it
-     * and consents. That makes it MORE likely to occur and better understood
-     * when it does, but it does not make the document correct: this line and
-     * `seats` still contradict each other with nothing on the page saying so.
+     * ── THAT DOOR IS NOW GONE, AND THIS DEFECT IS MOSTLY CLOSED WITH IT ──────
+     * A paid record's count cannot be changed by any path, in either direction.
+     * `pricing.seats` is frozen at charge and `attendeesCount` is frozen by the
+     * gate, so on a paid registration the two numbers agree at charge time and
+     * NOTHING IN THIS SYSTEM CAN SEPARATE THEM AFTERWARDS. The re-sent receipt
+     * that contradicts itself is no longer reachable through the admin screen.
      *
-     * NOT FIXED HERE, and deliberately not papered over by making one read the
-     * other — that would silently pick a winner. The open question is which
-     * number a receipt should quote, and whether it should show both with a
-     * note. It is a decision about documents, not a bug in this mapper.
+     * ── THE WINDOW THAT REMAINS, STATED RATHER THAN CLAIMED CLOSED ───────────
+     * `paid` is written by the Omise webhook, not by checkout. Between the
+     * charge being computed into `pricing.seats` and that webhook landing, the
+     * record is still `pending`/`confirmed` and the count is still an ordinary
+     * editable field. An edit inside that window separates the two numbers
+     * permanently, and the gate never sees it because the status has not
+     * flipped yet.
+     *
+     * That is a real race and it is not fixed here. It is much narrower than
+     * what round 8 found — seconds to minutes, not the record's whole life —
+     * and closing it belongs with the webhook, not with a receipt mapper.
+     *
+     * STILL NOT PAPERED OVER by making one field read the other: that would
+     * silently pick a winner. If the two ever do disagree, the open question is
+     * which number a receipt should quote and whether it should show both with
+     * a note. That is a decision about documents, not a bug in this mapper.
      */
     total_participants: doc?.attendeesCount ?? seats,
     attendee_list,

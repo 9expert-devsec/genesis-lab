@@ -82,16 +82,27 @@ export const PUBLIC_ACTION_TITLES = Object.freeze({
    */
   round:  'ย้ายรอบอบรม',
   /**
-   * ── THE SECOND ROW CARRYING A BEFORE/AFTER DIFF ──────────────────────────
-   * Round 8. `updateAttendeesCountPaid` records the seat count on both sides,
-   * and ONLY that action writes this — the ordinary edit path files `update`
-   * like every other field.
+   * ══ RETIRED. NOTHING WRITES THIS ANY MORE, AND IT MUST STAY. ══════════════
    *
-   * The title names the paid state on purpose. A seat count changing before
-   * payment is an ordinary correction and is not distinguished in the feed; one
-   * changing AFTER payment means the registration's headcount no longer matches
-   * the amount charged for it, and a reader scanning the history should not have
-   * to open the row to see which of the two happened.
+   * Round 8's `updateAttendeesCountPaid` wrote it — the second row carrying a
+   * before/after diff, naming the seat count on both sides. That action has
+   * been removed: raising the count on a paid registration is handled outside
+   * this system, so the door it opened is closed.
+   *
+   * THE ROWS IT ALREADY WROTE ARE STILL IN THE TRAIL, AND THE TRAIL IS
+   * APPEND-ONLY. Deleting this entry would not delete them; it would make
+   * `auditRowTitle` fall through to its raw-value branch and render the bare
+   * English token `seats` in a Thai history feed, on real paid registrations,
+   * forever. Retiring a WRITER does not retire its ROWS, and the reader is the
+   * side that has to remember that.
+   *
+   * So this is a READER-ONLY entry. `test/render/registrationHistoryFeed`
+   * asserts that titles and writers do not drift apart, and it now carries an
+   * explicit RETIRED set naming this key — deliberately narrow, so the next
+   * unwritten title is still caught.
+   *
+   * The wording keeps `(หลังชำระเงิน)` because that is what the historical rows
+   * MEAN. It describes events that happened, not a capability that exists.
    */
   seats:  'เปลี่ยนจำนวนผู้เข้าอบรม (หลังชำระเงิน)',
   delete: 'ลบใบสมัคร',

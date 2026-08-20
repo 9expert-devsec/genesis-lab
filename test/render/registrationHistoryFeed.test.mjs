@@ -268,8 +268,37 @@ test('(b) the vocabulary carries EXACTLY the actions that are written', () => {
   const shared = actionsByEntity('src/lib/actions/registrations.js');
   const inhouseOwn = actionsByEntity('src/lib/actions/inhouse-registrations.js');
 
+  /**
+   * ══ RETIRED ACTIONS: A TITLE MAY OUTLIVE ITS WRITER, AND MUST ══════════════
+   *
+   * This assertion used to be "titles ≡ writers", full stop. That is right in
+   * one direction and WRONG IN THE OTHER, and the reversal is what exposed it.
+   *
+   * `updateAttendeesCountPaid` filed `seats` rows against real paid
+   * registrations. The action has been removed — a paid record's count can no
+   * longer be changed by any path — but THE TRAIL IS APPEND-ONLY and those rows
+   * are still in it. `auditRowTitle` falls through to the RAW ACTION VALUE for
+   * an action it has not been taught, so deleting the title would print the
+   * bare English token `seats` in a Thai feed, on real records, forever.
+   *
+   * So a retired writer keeps its title. The set below is the exception, and it
+   * is DELIBERATELY NARROW — an explicit key at a time, never a predicate — so
+   * that the defect this test was written for still fires: an action that WRITES
+   * with no title is still red, and a title for an event nothing ever wrote is
+   * still red unless it is named here as retired.
+   *
+   * TO ADD A KEY HERE you must have removed a writer, not merely failed to write
+   * one. The question to answer first: could a row with this action already be
+   * in the trail? If no, the title is a label for an event nothing wrote, which
+   * is the original defect and not an exception to it.
+   */
+  const RETIRED_PUBLIC = new Set([
+    // Round 8's `updateAttendeesCountPaid`, removed in the reversal.
+    'seats',
+  ]);
+
   const publicWrites  = new Set([...shared.both, ...shared.public,
-    ...inhouseOwn.public]);
+    ...inhouseOwn.public, ...RETIRED_PUBLIC]);
   const inhouseWrites = new Set([...shared.both, ...shared.inhouse,
     ...inhouseOwn.both, ...inhouseOwn.inhouse]);
 
@@ -278,6 +307,16 @@ test('(b) the vocabulary carries EXACTLY the actions that are written', () => {
     publicWrites,
     'the public titles and the public actions have drifted apart',
   );
+
+  // The exception must stay an exception. Every retired key needs a title (that
+  // is the entire reason it is retained) and must genuinely have NO writer left
+  // — otherwise it is not retired and the note above is describing fiction.
+  for (const retired of RETIRED_PUBLIC) {
+    assert.ok(PUBLIC_ACTION_TITLES[retired],
+      `\`${retired}\` is listed as retired but has no title — retiring it is what keeps the title`);
+    assert.equal(shared.both.has(retired) || shared.public.has(retired), false,
+      `\`${retired}\` is listed as retired but something still writes it`);
+  }
   assert.deepEqual(
     new Set(Object.keys(INHOUSE_ACTION_TITLES)),
     inhouseWrites,

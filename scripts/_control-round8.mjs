@@ -6,9 +6,33 @@
  * seen rather than trusted, and puts it back.
  *
  *   node scripts/_control-round8.mjs list
+ *   node scripts/_control-round8.mjs verify
  *   node scripts/_control-round8.mjs apply <name>
  *   node test/run.mjs
  *   node scripts/_control-round8.mjs revert
+ *
+ * ── TEN CONTROLS WERE RETIRED WITH THE PATH THEY BROKE ─────────────────────
+ * Round 8 built a sanctioned door through the paid gate — `updateAttendeesCountPaid`
+ * and its ขอเพิ่มจำนวนผู้เข้าอบรม panel — and these controls broke it in ten
+ * ways: `allow-decrease`, `no-roster-floor`, `recalc`, `race`, `drop-diff`,
+ * `unlist-key`, `always-control`, `charged-from-count`, `prefill-draft` and
+ * `wrong-door`.
+ *
+ * That door has been removed: a paid record's seat count cannot be changed by
+ * any path. A control whose FIND text is gone is not a weaker control, it is a
+ * TRAP — `spliceOnce` throws "the source has moved on", which reads like the
+ * script has rotted rather than like the feature was deleted on purpose. So the
+ * ten are deleted and named here instead.
+ *
+ * THE GATE ITSELF STILL HAS ITS CONTROLS. `ungate`, `wide-gate` and `dup-status`
+ * break the rule that survived, and it survived STRICTER than it was written.
+ *
+ * ── `verify` EXISTS BECAUSE NOTHING ELSE RUNS THIS FILE ────────────────────
+ * `npm test` never imports it, so a FIND that stops matching is invisible until
+ * a human reaches for that control — which is exactly when they are relying on
+ * it. `verify` resolves every FIND against the real tree and reports the ones
+ * that no longer identify exactly one site. Run it after any change to the
+ * files these controls point at.
  *
  * ── WHY A SCRIPT AND NOT A HAND EDIT ───────────────────────────────────────
  * A hand edit is not reproducible by the next reader, so "I checked it goes red"
@@ -47,12 +71,28 @@ const FILTERS = 'src/app/admin/registrations/_components/FilterPanel.jsx';
 const BREAKS = {
   ungate: {
     file: ACTIONS,
-    why: 'Remove the paid gate entirely — the exact state that shipped before round 8.',
+    why: 'Remove the paid gate entirely — the exact state that shipped before round 8. Since the reversal there is no second door, so this restores an UNGUARDED count on a paid record rather than moving it to another path.',
     reddens: [
       'fs/attendeesCountPaidGate › updateRegistration raises the paid gate for attendeesCount and no other field',
-      'fs/attendeesCountPaidGate › the gate is in the FILTER, and it does not replace the cancellation lock',
       'fs/publicStatusWriteGate › the paid gate reaches attendeesCount ONLY',
     ],
+    /**
+     * ── ONE CLAIM WAS REMOVED FROM THIS LIST, MEASURED RATHER THAN REASONED ──
+     *
+     * It also named `fs/attendeesCountPaidGate › the gate is in the FILTER, and
+     * it does not replace the cancellation lock`. That test STAYS GREEN under
+     * this break, and the run that proved it is why the line is gone.
+     *
+     * It is not a weak test. The two claims are genuinely separable: this break
+     * deletes `paidGuard = true`, while that test asserts the SHAPE of `blocked`
+     * and of the filter — which is untouched. A gate can be correctly shaped and
+     * never raised, and that is exactly the state this break produces.
+     *
+     * Per run.mjs's own note on controls that fire nothing, the honest move is
+     * to SAY the claims are not separable by this break rather than to widen the
+     * break until the number matches. The filter shape has no control of its
+     * own; `dup-status` breaks it the other way, by making the list wrong.
+     */
     find: '      if (!isNaN(n) && n >= 1 && n <= 50) update.attendeesCount = n;\n      paidGuard = true;',
     replace: '      if (!isNaN(n) && n >= 1 && n <= 50) update.attendeesCount = n;',
   },
@@ -80,73 +120,6 @@ const BREAKS = {
     replace: "  const filter = { _id: id, status: { $ne: 'cancelled' }, status: { $ne: 'paid' } };",
   },
 
-  'allow-decrease': {
-    file: ACTIONS,
-    why: 'Permit lowering the count on a paid record — the system quietly forgetting money it owes.',
-    reddens: [
-      'fs/attendeesCountPaidGate › a DECREASE is refused, and the refusal says why rather than failing silently',
-    ],
-    find: `  if (n < current) {
-    return {
-      ok: false,
-      error: 'ลดจำนวนผู้เข้าอบรมหลังชำระเงินไม่ได้ เนื่องจากต้องมีการคืนเงิน '
-           + 'กรุณายกเลิกรายการนี้แล้วลงทะเบียนใหม่',
-    };
-  }`,
-    replace: '',
-  },
-
-  'no-roster-floor': {
-    file: ACTIONS,
-    why: 'Drop the roster floor, so the count can duck under round 8 item 3 through a door that lock does not watch.',
-    reddens: [
-      'fs/attendeesCountPaidGate › the floor is the ROSTER, so the count cannot duck under the seat lock',
-    ],
-    find: '  if (n < roster) {\n    return { ok: false, error: `มีรายชื่อผู้เข้าอบรมแล้ว ${roster} ท่าน จำนวนที่สมัครต้องไม่น้อยกว่านี้` };\n  }',
-    replace: '',
-  },
-
-  recalc: {
-    file: ACTIONS,
-    why: 'Recalculate the money — the one thing this action was explicitly told not to learn to do.',
-    reddens: [
-      'fs/attendeesCountPaidGate › the action touches neither pricing nor payment',
-    ],
-    find: '    { $set: { attendeesCount: n } },',
-    replace: "    { $set: { attendeesCount: n, 'pricing.seats': n, 'pricing.subtotal': n * 1000 } },",
-  },
-
-  race: {
-    file: ACTIONS,
-    why: 'Drop the optimistic-concurrency clause. Two admins raising the count at once both succeed, and the second audit row names a `before` that was never current.',
-    reddens: [
-      'fs/attendeesCountPaidGate › the write is conditional on BOTH the status and the count it read',
-    ],
-    find: "    { _id: id, status: 'paid', attendeesCount: current },",
-    replace: "    { _id: id, status: 'paid' },",
-  },
-
-  'drop-diff': {
-    file: ACTIONS,
-    why: 'File the row without the two numbers — the act recorded, the only question anyone will ask unanswerable.',
-    reddens: [
-      'fs/attendeesCountPaidGate › the row carries the before and after counts, under its own action name',
-    ],
-    find: '    before:      { attendeesCount: current },\n    after:       { attendeesCount: n },',
-    replace: '',
-  },
-
-  'unlist-key': {
-    file: CONTRACT,
-    why: 'Take the seat count off the audit allowlist. THE SILENT ONE: the writer REDUCES rather than rejects, so the action still files its row with before/after quietly emptied — correct-looking code, correct-looking history, no numbers.',
-    reddens: [
-      'fs/attendeesCountPaidGate › `attendeesCount` is on the audit allowlist, or the diff would be dropped',
-      'pure/auditContract › the PII entities are capped below a full diff',
-    ],
-    find: "  'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',\n  'attendeesCount',",
-    replace: "  'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',",
-  },
-
   // ── the client half ──────────────────────────────────────────────────────
 
   'send-count': {
@@ -159,38 +132,6 @@ const BREAKS = {
     ? { attendeesListProvided, attendees }
     : { attendeesListProvided, attendeesCount, attendees };`,
     replace: '  const attendeePayload = { attendeesListProvided, attendeesCount, attendees };',
-  },
-
-  'always-control': {
-    file: CLIENT,
-    why: 'Offer the paid-only control on every status. Every click on an unpaid record is then refused by the server.',
-    reddens: [
-      'render/seatCountPaidControl › a paid record offers the control; an unpaid one does not',
-      'render/seatCountPaidControl › a CANCELLED record offers neither door, even though it is also paid',
-    ],
-    find: '              {countLockedByPayment && attendeeEdit.onEdit ? (',
-    replace: '              {true ? (',
-  },
-
-  'charged-from-count': {
-    file: CLIENT,
-    why: 'Read the consent copy’s seat figure from attendeesCount instead of pricing.seats — it would tell the admin the money was for the number that is about to change.',
-    reddens: [
-      'render/seatCountPaidControl › the copy names the REAL charged seat count, read from pricing',
-      'fs/attendeesCountPaidGate › the consent copy is a literal in the client, not assembled at runtime',
-    ],
-    find: '  const chargedSeats = doc.pricing?.seats ?? attendeesCount;',
-    replace: '  const chargedSeats = attendeesCount;',
-  },
-
-  'prefill-draft': {
-    file: CLIENT,
-    why: 'Pre-fill the new-count field with the current count, making confirm default to a no-op the server refuses.',
-    reddens: [
-      'render/seatCountPaidControl › the draft starts EMPTY and the confirm button starts disabled',
-    ],
-    find: "  const [seatDraft,     setSeatDraft]     = useState('');",
-    replace: '  const [seatDraft,     setSeatDraft]     = useState(String(doc.attendeesCount ?? 1));',
   },
 
   'live-count-input': {
@@ -460,7 +401,12 @@ const BREAKS = {
     reddens: [
       'render/registrationFilterPanel › a REVERSED range is corrected AND the panel says so',
     ],
-    find: '        {window.swapped ? (',
+    // `window` → `dateWindow`: the prop was renamed because the old name
+    // shadowed the browser global and stopped FilterPanel mounting. This FIND
+    // went stale in that commit and nothing said so — `npm test` does not import
+    // this file. It is what `verify` was added for, and it found it on the first
+    // run.
+    find: '        {dateWindow.swapped ? (',
     replace: '        {false ? (',
   },
 
@@ -489,15 +435,6 @@ const BREAKS = {
     },
   },
 
-  'wrong-door': {
-    file: ACTIONS,
-    why: 'Let an UNPAID record through the paid action, so it files a `seats` row whose title claims a money implication that does not exist.',
-    reddens: [
-      'fs/attendeesCountPaidGate › updateAttendeesCountPaid is admin-guarded and refuses every wrong state',
-    ],
-    find: "  if (doc.status !== 'paid') {",
-    replace: "  if (false) {",
-  },
 };
 
 // ── Apply / revert ──────────────────────────────────────────────────────────
@@ -554,6 +491,40 @@ if (!cmd || cmd === 'list') {
     console.log('');
   }
   process.exit(0);
+}
+
+if (cmd === 'verify') {
+  /**
+   * Every FIND, resolved against the real tree. Reports rather than throws on
+   * the first failure: one stale anchor usually means several, and a reader
+   * fixing them wants the whole list.
+   *
+   * `also` blocks are checked too — a two-part control with one live half is
+   * the same trap in a costume.
+   */
+  const stale = [];
+  for (const [key, brk] of Object.entries(BREAKS)) {
+    const source = read(brk.file);
+    const crlf = source.includes('\r\n');
+    for (const [part, spec] of [['find', brk], ['also', brk.also]].filter(([, s]) => s)) {
+      const needle = crlf ? spec.find.replace(/\n/g, '\r\n') : spec.find;
+      const first = source.indexOf(needle);
+      if (first === -1) stale.push(`${key}${part === 'also' ? '.also' : ''}: FIND is gone from ${brk.file}`);
+      else if (source.indexOf(needle, first + needle.length) !== -1) {
+        stale.push(`${key}${part === 'also' ? '.also' : ''}: FIND matches more than once in ${brk.file}`);
+      }
+    }
+  }
+  const total = Object.keys(BREAKS).length;
+  if (stale.length === 0) {
+    console.log(`all ${total} controls resolve to exactly one site each.`);
+    process.exit(0);
+  }
+  console.error(`${stale.length} of ${total} controls no longer identify one site:\n`);
+  for (const line of stale) console.error(`  ${line}`);
+  console.error('\nEither the source moved (re-point the FIND) or the feature was removed '
+    + '(delete the control and name it in the header, as the round-8 seat-count ten are).');
+  process.exit(1);
 }
 
 if (cmd === 'revert') {

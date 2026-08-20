@@ -445,11 +445,31 @@ export async function updateRegistration(id, data, source = 'public') {
      *
      * The rule is now three states:
      *   · unpaid (pending / confirmed) → editable here, an ordinary field
-     *   · paid                          → REFUSED here; `updateAttendeesCountPaid`
-     *                                     is the only door, and it is deliberate,
-     *                                     confirmed and audited with both numbers
+     *   · paid                          → REFUSED, and there is NO OTHER DOOR
      *   · cancelled                     → refused, by the filter below, like
      *                                     every other field (round 1)
+     *
+     * ── THERE WAS A SECOND DOOR FOR ONE ROUND. IT IS GONE. ──────────────────
+     * Round 8 shipped `updateAttendeesCountPaid`: a separate action behind a
+     * ขอเพิ่มจำนวนผู้เข้าอบรม panel that raised the count on a paid record,
+     * increase-only, with consent copy and an audit row naming both numbers.
+     *
+     * It was removed because RAISING THE COUNT ON A PAID REGISTRATION IS NOT
+     * SOMETHING THIS TEAM DOES IN THIS SYSTEM. When a customer asks for more
+     * seats after paying, the whole thing is handled outside; the system only
+     * records that the contact happened. The action was built for a workflow
+     * that does not run here, and it carried real cost — a receipt whose
+     * headcount disagrees with its own total, a rule about which document reads
+     * which field, and a standing path for the record to drift away from what
+     * Omise recorded.
+     *
+     * So the gate below is now the whole answer rather than half of one, and it
+     * is STRICTER than when it was written, not looser: a paid record's count
+     * cannot be changed by any path, in either direction.
+     *
+     * DO NOT RE-ADD A SECOND DOOR without a decision about the receipt, the
+     * refund obligation a decrease creates, and reconciliation. Those were the
+     * three unanswered questions the first one shipped around.
      *
      * ── THE GATE IS IN THE FILTER, NOT IN A READ-THEN-WRITE ─────────────────
      * `paidGuard` joins the update FILTER rather than being checked against a
@@ -671,11 +691,28 @@ export async function updateRegistration(id, data, source = 'public') {
         error: `มีรายชื่อผู้เข้าอบรม ${rosterLength} ท่าน เกินจำนวนที่สมัครไว้ ${existing.attendeesCount} ท่าน`,
       };
     }
+    /**
+     * ── THE MESSAGE STOPS AT "NO", AND THAT IS THE WHOLE MESSAGE ────────────
+     *
+     * It used to end `กรุณาใช้ "ขอเพิ่มจำนวนผู้เข้าอบรม"`, naming the second
+     * door. That door is gone, so the sentence would now send an admin looking
+     * for a control that does not exist — the worst kind of stale copy, because
+     * it reads as a working instruction.
+     *
+     * AND IT DELIBERATELY DOES NOT SAY "ยกเลิกแล้วลงทะเบียนใหม่". The removed
+     * action's own refusal did say that, and it should not have: nobody has
+     * established what cancelling a PAID registration does to reconciliation,
+     * so this system must not route anyone down that path. Offering a next step
+     * we have not thought through is worse than offering none — it converts an
+     * admin's question into an action, and the question is the correct outcome.
+     *
+     * "จากหน้าแก้ไขปกติ" is gone for the same reason: qualifying the refusal by
+     * WHICH page implies another page exists.
+     */
     if (paidGuard && existing.status === 'paid') {
       return {
         ok: false,
-        error: 'รายการนี้ชำระเงินแล้ว จึงเปลี่ยนจำนวนผู้เข้าอบรมจากหน้าแก้ไขปกติไม่ได้ '
-             + 'กรุณาใช้ "ขอเพิ่มจำนวนผู้เข้าอบรม"',
+        error: 'รายการนี้ชำระเงินแล้ว จึงเปลี่ยนจำนวนผู้เข้าอบรมไม่ได้',
       };
     }
     return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
@@ -856,190 +893,6 @@ export async function updateRegistrationRound(id, { classId, attendanceMode } = 
   });
 
   return { ok: true, fields };
-}
-
-// ── The seat count, after payment ──────────────────────────────────
-
-/**
- * RAISE `attendeesCount` ON A PAID REGISTRATION. Public only.
- *
- * ══ WHY THIS IS A SEPARATE ACTION AND NOT A FLAG ON updateRegistration ══════
- *
- * The count is the only field on this record that DROVE MONEY. `pricing.seats`
- * is a snapshot taken from it at charge time and deliberately frozen, so once a
- * charge has settled the count and the amount are two numbers that agreed once
- * and need not agree again.
- *
- * Letting that happen through the ordinary field edit — which is what shipped
- * until round 8 — means it can happen by mis-typing a number in a form that also
- * edits phone numbers, and the trail records "an edit happened". A separate
- * action makes it a decision: a control the admin has to find, a confirmation
- * that states the consequence in words, and a row naming both numbers.
- *
- * ══ WHAT THIS DOES NOT DO, AND MUST NOT LEARN TO ════════════════════════════
- *
- * NO BILLING. It does not recalculate `pricing`, does not touch `payment`, does
- * not issue a charge or a refund, and does not re-send a receipt. `pricing` is a
- * snapshot of what was actually taken and rewriting it would destroy the only
- * record of that. Reconciling the difference is an offline, human job.
- *
- * That is the whole reason the confirmation copy has to be specific rather than
- * "this affects billing": what the admin is consenting to is a DOCUMENT
- * DISAGREEMENT, permanently, until someone reissues paperwork outside this
- * system. Vague copy would be consent to something the admin has not been told.
- *
- * ══ INCREASE ONLY ═══════════════════════════════════════════════════════════
- *
- * The control is `ขอเพิ่มจำนวนผู้เข้าอบรม` and the action matches it. A DECREASE
- * on a paid registration means the customer paid for seats they are not taking,
- * which is a refund — and this action cannot issue one, cannot record that one
- * is owed, and has nowhere to put the obligation. Writing the lower number would
- * make the system quietly forget money it owes somebody.
- *
- * Refusing is the honest answer, and it is not a dead end: cancelling and
- * re-registering is the path that exists, and it leaves a trail that says so.
- *
- * ══ THE FLOOR IS THE ROSTER, NOT 1 ══════════════════════════════════════════
- *
- * Round 8's other rule is that the roster may never exceed the count. A count
- * lowered below the number of people already listed would create an over-capacity
- * record through a different door than the one that door is guarded on — so the
- * floor here is `attendees.length`, and it is enforced on the same read that
- * produces the audit `before`.
- */
-export async function updateAttendeesCountPaid(id, nextCount) {
-  const session = await requireAdmin('registrations');
-  if (!id) return { ok: false, error: 'Missing id' };
-
-  const n = parseInt(nextCount, 10);
-  if (!Number.isFinite(n)) return { ok: false, error: 'จำนวนผู้เข้าอบรมไม่ถูกต้อง' };
-  // The model's own ceiling, restated rather than imported: this action writes
-  // with `runValidators:false` like every other action here, so the schema max
-  // would not fire. Round 8 reported three different ceilings (zod 20, model 50,
-  // this 50) and deliberately did NOT unify them — adding a fourth number here
-  // is the thing that would make that worse, so this is the model's 50.
-  if (n < 1 || n > 50) return { ok: false, error: 'จำนวนผู้เข้าอบรมต้องอยู่ระหว่าง 1 ถึง 50' };
-
-  await dbConnect();
-
-  /**
-   * One read serves three purposes — the status test, the roster floor, and the
-   * `before` the audit row needs. Same shape as `updateRegistrationRound`.
-   */
-  const doc = await RegisterPublic.findById(id)
-    .select('status attendeesCount attendees')
-    .lean();
-  if (!doc) return { ok: false, error: 'ไม่พบรายการ' };
-
-  if (doc.status === 'cancelled') {
-    return { ok: false, error: 'ใบสมัครนี้ถูกยกเลิกแล้ว จึงแก้ไขข้อมูลไม่ได้' };
-  }
-  /**
-   * NOT PAID ⇒ WRONG DOOR. Refused rather than quietly accepted, because this
-   * action writes a `seats` history row whose title says "หลังชำระเงิน". An
-   * unpaid record edited through here would file a row claiming a money
-   * implication that does not exist, which is the trail lying in the direction
-   * that is hardest to notice.
-   */
-  if (doc.status !== 'paid') {
-    return {
-      ok: false,
-      error: 'รายการนี้ยังไม่ได้ชำระเงิน กรุณาแก้ไขจำนวนผู้เข้าอบรมจากหน้าแก้ไขปกติ',
-    };
-  }
-
-  const current = Number(doc.attendeesCount ?? 0);
-  const roster = Array.isArray(doc.attendees) ? doc.attendees.length : 0;
-
-  if (n === current) return { ok: false, error: 'จำนวนผู้เข้าอบรมไม่เปลี่ยนแปลง' };
-  /**
-   * ── INCREASE ONLY. THIS IS A RULING, NOT AN UNFINISHED FEATURE. ───────────
-   *
-   * Stated AT the refusal because a one-directional control reads as an
-   * oversight from here — the next reader sees `n < current` rejected, assumes
-   * the decrease branch was never written, and adds it.
-   *
-   * A LOWER COUNT ON A PAID REGISTRATION MEANS THE CUSTOMER PAID FOR SEATS THEY
-   * ARE NOT TAKING. That is a refund, and this action:
-   *   · cannot issue one — it does not touch `payment` and must not learn to;
-   *   · cannot record that one is OWED — there is no field for an obligation,
-   *     and inventing one here would put a ledger in a registration document;
-   *   · has nowhere to put it — `pricing` is a frozen snapshot of what was
-   *     actually taken, so writing the lower number would leave the system
-   *     quietly forgetting money it owes somebody, with the only trace being an
-   *     audit row saying the count went down.
-   *
-   * Refusing is therefore the honest shape, and it is not a dead end: cancel and
-   * re-register is the path that exists, it moves the money question to the
-   * people who can answer it, and it leaves a trail that says so. The message
-   * names that path rather than stopping at "no".
-   */
-  if (n < current) {
-    return {
-      ok: false,
-      error: 'ลดจำนวนผู้เข้าอบรมหลังชำระเงินไม่ได้ เนื่องจากต้องมีการคืนเงิน '
-           + 'กรุณายกเลิกรายการนี้แล้วลงทะเบียนใหม่',
-    };
-  }
-  if (n < roster) {
-    return { ok: false, error: `มีรายชื่อผู้เข้าอบรมแล้ว ${roster} ท่าน จำนวนที่สมัครต้องไม่น้อยกว่านี้` };
-  }
-
-  /**
-   * The conditional update carries the SAME two tests the read above made, so a
-   * cancel or a concurrent change landing in between cannot be overwritten.
-   * `attendeesCount: current` is the optimistic-concurrency half: two admins
-   * raising the count at once must not both succeed against the same `before`,
-   * or the second row's diff would name a number that was never current.
-   */
-  const written = await RegisterPublic.findOneAndUpdate(
-    { _id: id, status: 'paid', attendeesCount: current },
-    { $set: { attendeesCount: n } },
-    { new: false, runValidators: false },
-  );
-  if (!written) {
-    return { ok: false, error: 'รายการนี้ถูกแก้ไขโดยผู้ใช้อื่น กรุณารีเฟรชหน้าแล้วลองใหม่' };
-  }
-
-  revalidatePath(ADMIN_PATH);
-  revalidatePath(`${ADMIN_PATH}/${id}`);
-
-  /**
-   * ══ THE SECOND EXCEPTION TO THE NO-DIFF RULE. READ BEFORE REMOVING. ════════
-   *
-   * The first is `updateRegistrationRound`, immediately above; its note carries
-   * the full argument and this one is the same argument applied to a different
-   * field. THE TWO ARE NOT AN INCONSISTENCY WITH THE ACTIONS AROUND THEM and a
-   * reader seeing two diff payloads beside `update`'s bare `{}` will want to
-   * reconcile all three. Do not.
-   *
-   * A seat count is an integer between 1 and 50. It names nobody, so it fails
-   * the test that put this pair under a cap in the first place — the cap exists
-   * because the trail is append-only and forever and a customer's phone number
-   * copied into it cannot be redacted on request. A `2` cannot be the subject of
-   * a deletion request.
-   *
-   * And the diff is the entire value of the row. "Somebody changed the seat
-   * count on a paid registration" without the two numbers leaves the only
-   * question anyone will ask — from what, to what — unanswerable, on the one
-   * change on this screen where the record deliberately stops matching the money
-   * taken for it.
-   *
-   * `attendeesCount` is on `ROUND_AND_STATUS_KEYS`, so the writer's reduction
-   * passes it. Every other key handed over here would be dropped, fail-closed.
-   */
-  recordAdminActionAfter({
-    menu:        'registrations',
-    action:      'seats',
-    entity:      'public',
-    recordId:    String(id),
-    recordLabel: '',
-    before:      { attendeesCount: current },
-    after:       { attendeesCount: n },
-    actor:       { id: session.user?.id, name: session.user?.name },
-  });
-
-  return { ok: true, attendeesCount: n };
 }
 
 // ── Internal notes (append-only) ───────────────────────────────────

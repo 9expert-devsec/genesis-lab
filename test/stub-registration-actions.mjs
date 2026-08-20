@@ -31,7 +31,6 @@ export async function updateRegistrationRound()       { return { ok: false, erro
 // through `updateRegistration` on ANY status including paid, with no gate at
 // all; this is the only door on a paid record now. Stubbed as a refusal like
 // every export here.
-export async function updateAttendeesCountPaid()      { return { ok: false, error: 'stubbed' }; }
 export async function getRegistrationStatusCounts()  { return { total: 0, range: 'all', source: 'public' }; }
 // The filter panel's course options. Round 8: derived from the REGISTRATIONS
 // rather than the catalogue — see the action. An empty list is the honest stub:
