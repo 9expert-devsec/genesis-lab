@@ -308,10 +308,27 @@ test('the PII entities are capped below a full diff — §5.2 made executable', 
    * a policy to a PII pair now requires editing this list, which is the point.
    */
   const SAFE_OFF_SCALE = {
-    // Status enum + the four coupled round fields. A round id, a date label and
-    // two short enums are not personal data; the reduction drops every other
-    // key, so the cap on names/emails/phones is untouched.
-    round_and_status: ['status', 'classId', 'classDate', 'scheduleType', 'attendanceMode'],
+    /**
+     * Status enum + the four coupled round fields + the seat count. None of the
+     * six is personal data; the reduction drops every other key, so the cap on
+     * names/emails/phones is untouched.
+     *
+     * ── `attendeesCount` WAS REVIEWED AND ADDED IN ROUND 8, NOT INHERITED ────
+     * That is the whole function of this list: it is a SECOND place the
+     * allowlist is written down, so widening the real one goes red here until a
+     * human has read the new key and agreed it is not personal data. It did go
+     * red, and this is the agreement.
+     *
+     * A seat count is an integer between 1 and 50. It names nobody and cannot be
+     * the subject of a deletion request, which is the property the cap exists to
+     * protect. See `updateAttendeesCountPaid` for why the diff is worth keeping
+     * at all — on a paid registration the count deliberately stops matching the
+     * money taken for it, and a row without both numbers cannot say so.
+     */
+    round_and_status: [
+      'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',
+      'attendeesCount',
+    ],
   };
 
   for (const [menu, entity] of PII) {

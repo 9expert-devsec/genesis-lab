@@ -121,9 +121,43 @@ export const ROUND_AND_STATUS_POLICY = 'round_and_status';
  * policy, rather than imported from lib/registrations — the audit layer must not
  * depend on a product module for its own safety rule, or a refactor over there
  * silently widens what the trail may carry.
+ *
+ * ══ `attendeesCount` IS THE SECOND EXCEPTION, AND IT IS NOT AN INCONSISTENCY ══
+ *
+ * Round 8. Read this before "tidying" it out, exactly as the round fields' own
+ * note asks — the whole hazard here is that a reader sees two carve-outs in a
+ * PII allowlist, reads them as drift, and removes them together.
+ *
+ * The two tests this list applies are the same two the round fields passed:
+ *
+ *   1. IS IT PERSONAL DATA? No. A seat count is a small integer between 1 and
+ *      50. It names nobody, and unlike a name, an email or a tax id it cannot be
+ *      the subject of a deletion request — which is the property that made the
+ *      cap necessary, since this trail is append-only and presently forever.
+ *
+ *   2. IS THE CHANGE WORTH TRACING? On a PAID registration it is among the most
+ *      worth tracing events on the screen. The count drove the amount charged —
+ *      `pricing.seats` is a frozen snapshot taken from it at charge time — so
+ *      changing it afterwards makes the registration's own headcount disagree
+ *      with the money that was taken for it. That disagreement is deliberate and
+ *      permitted (see `updateAttendeesCountPaid`), which is exactly why it must
+ *      leave a trace naming BOTH numbers. Without the diff the row would say
+ *      "somebody changed the seat count" and the one fact anybody would ask for
+ *      — from what, to what — would be gone.
+ *
+ * ── WHY THE POLICY IS STILL CALLED `round_and_status` ──────────────────────
+ * Because the NAME is not the mechanism and renaming it mid-round would edit a
+ * safety constant, its guard in fs/roundCouplingGate, and two pure tests, for a
+ * cosmetic gain. THE ALLOWLIST IS THE MECHANISM and it is exact. The name is
+ * stale and is recorded as such rather than quietly left to mislead; renaming it
+ * is a clean follow-up, not a thing to do while adding an entry to it.
+ *
+ * The reduction stays fail-closed either way: a key not named here is dropped,
+ * including one a future action hands over by mistake.
  */
 export const ROUND_AND_STATUS_KEYS = Object.freeze([
   'status', 'classId', 'classDate', 'scheduleType', 'attendanceMode',
+  'attendeesCount',
 ]);
 
 /** Every legal value of the `diff` field. */

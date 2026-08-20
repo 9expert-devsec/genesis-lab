@@ -81,6 +81,19 @@ export const PUBLIC_ACTION_TITLES = Object.freeze({
    * reasoning; this entry is only its title.
    */
   round:  'ย้ายรอบอบรม',
+  /**
+   * ── THE SECOND ROW CARRYING A BEFORE/AFTER DIFF ──────────────────────────
+   * Round 8. `updateAttendeesCountPaid` records the seat count on both sides,
+   * and ONLY that action writes this — the ordinary edit path files `update`
+   * like every other field.
+   *
+   * The title names the paid state on purpose. A seat count changing before
+   * payment is an ordinary correction and is not distinguished in the feed; one
+   * changing AFTER payment means the registration's headcount no longer matches
+   * the amount charged for it, and a reader scanning the history should not have
+   * to open the row to see which of the two happened.
+   */
+  seats:  'เปลี่ยนจำนวนผู้เข้าอบรม (หลังชำระเงิน)',
   delete: 'ลบใบสมัคร',
 });
 
