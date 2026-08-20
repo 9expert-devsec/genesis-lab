@@ -1,9 +1,28 @@
 'use client';
 
-import { Fragment, isValidElement, useEffect, useRef, useState } from 'react';
+import { Fragment, isValidElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2, Copy } from 'lucide-react';
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
+import { anchoredMenuPosition } from '@/lib/anchoredMenu';
+
+/**
+ * `useLayoutEffect` in the browser, `useEffect` on the server.
+ *
+ * The menu below MUST position itself before paint — an effect that runs after
+ * it shows the sheet at its unpositioned spot for one frame, which on the last
+ * row of the roster is precisely the wrong place and reads as a flicker into
+ * position. `useLayoutEffect` runs before paint and is the correct hook.
+ *
+ * It also WARNS on the server, where it does nothing, and this file is rendered
+ * by `renderToStaticMarkup` in ~40 tests. The warning would be noise in every
+ * one of them and the standing instruction in this suite is that noise gets
+ * read as signal eventually. The branch is on `window` rather than on a state
+ * flag because the choice is per-ENVIRONMENT, not per-render: both branches are
+ * called unconditionally from the same position in the hook order, so this is
+ * not a conditional hook.
+ */
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 /**
  * THE REGISTRATION DETAIL SHELL — the frame both detail screens are drawn in.
@@ -270,11 +289,184 @@ export function PrimaryAction({ children, title, onClick, disabled, busy }) {
  *
  * Both class strings are written out in full rather than composed, because
  * Tailwind scans source TEXT and an interpolated size compiles to nothing.
+ *
+ * ══ THE SHEET IS `position: fixed`, AND HERE IS THE DEFECT THAT MADE IT SO ══
+ *
+ * It was `absolute right-0 top-[30px]` inside the `relative` wrapper, and on
+ * the LAST attendee row it opened downward past the bottom of the screen with
+ * no way to reach the rest of it.
+ *
+ * ── WHAT WAS ACTUALLY CLIPPING IT, MEASURED RATHER THAN ASSUMED ────────────
+ * The obvious reading is that a card gained `overflow-hidden` and started
+ * clipping a descendant meant to escape. THAT IS NOT WHAT HAPPENED, and it is
+ * worth writing down because it is the first place the next reader will look.
+ * The ancestor chain of `role="menu"` was walked against the real render, and
+ * from the sheet up to the client's own root —
+ *
+ *     div.mx-auto.max-w-[1080px] > div[role=tabpanel] > section(SectionCard)
+ *       > div.pt-[17px] > table > tbody > tr > td > div.relative > div[role=menu]
+ *
+ * — NOT ONE ancestor carries `overflow-hidden`. `SectionCard` never has. The
+ * round-3 `overflow-hidden` a reader is thinking of is on `StatCard` in
+ * RegistrationsClient, so the accent bar's corners follow the card's radius;
+ * that card is on the LIST screen and is not an ancestor of any menu. It is
+ * untouched by this change and must stay that way.
+ *
+ * The clip is the ADMIN SHELL. src/app/admin/layout.jsx pins the chrome with
+ * `div.flex.h-screen.overflow-hidden` and gives `<main>` `h-screen
+ * overflow-y-auto`, so `<main>` is the only scrollport on the screen and the
+ * document itself has no scrollbar at all — by design, and the layout says so.
+ * An `absolute` sheet laid out below that scrollport's bottom edge is outside
+ * the only thing that scrolls, which is exactly the reported symptom: clipped,
+ * and the page cannot be scrolled to reach the rest.
+ *
+ * `position: fixed` resolves against the VIEWPORT rather than against any
+ * ancestor's scrollport, so the sheet simply stops being in the clipped
+ * coordinate space. Nothing about the clip changed; the sheet left.
+ *
+ * THE CAVEAT, and it is the one that would silently undo this: a fixed
+ * descendant IS trapped by an ancestor with `transform`, `filter`,
+ * `perspective`, `backdrop-filter`, `will-change` on any of those, or
+ * `contain: paint|layout|strict|content`. None is on either chain today —
+ * `transition-colors`/`transition-shadow` set transition-property and create
+ * nothing. test/render/menuEscapesClip asserts that, against the COMPILED
+ * stylesheet rather than against class names, so the day someone adds a
+ * `hover:scale-` to a card the guard says which box did it.
+ *
+ * ── AND IT FLIPS ───────────────────────────────────────────────────────────
+ * Escaping the clip while still opening downward would move the same defect
+ * one box outward — off the viewport instead of off the scrollport — so the
+ * placement is measured. See src/lib/anchoredMenu.js, which is where the
+ * arithmetic lives and where it is tested; this component measures and
+ * applies, and decides nothing.
+ *
+ * ── NO POPOVER LIBRARY, AND NO PORTAL EITHER ───────────────────────────────
+ * `@radix-ui/react-dropdown-menu` is in package.json and is deliberately not
+ * used here, for the reason round 3 gave for the ตัวกรอง disclosure: keyboard
+ * and dismissal come from native elements. `position: fixed` is the whole
+ * escape mechanism, which means THE DOM DOES NOT MOVE — same parent, same
+ * React subtree, same document order. That is not incidental, it is what keeps
+ * the four things a portal would have put at risk:
+ *
+ *   · the items still bubble their clicks to handlers written above them;
+ *   · the sheet still follows its trigger in the tab order, with no focus trap
+ *     to write and get wrong;
+ *   · `hidden` + always-in-the-DOM survives untouched, so every assertion this
+ *     suite makes about what is IN the menu is still reachable;
+ *   · the full-viewport backdrop is still a plain `<button>` and still the
+ *     outside-click target it always was.
+ *
+ * WHAT IT COSTS: a fixed sheet does not move with the content under it, so
+ * this reposition on scroll and resize rather than letting it drift. Those
+ * listeners are the price, and `capture: true` on the scroll one is not
+ * optional — the scroll that moves the row happens on `<main>`, and a
+ * non-capturing window listener never hears it.
  */
 export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, compact = false, children }) {
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const [pos, setPos] = useState(null);
+  /** Whether the LAST render had the sheet open — the focus-return trigger. */
+  const wasOpen = useRef(false);
+
+  /*
+   * The gap between the trigger's bottom edge and the sheet's top one, in the
+   * two sizes this component ships. These ARE the old `top-[30px]` and
+   * `top-[42px]` — 30 less the 28px compact trigger, 42 less the 38px one —
+   * carried across rather than re-derived, so the measured geometry survives
+   * the change of positioning scheme.
+   */
+  const gap = compact ? 2 : 4;
+
+  useIsomorphicLayoutEffect(() => {
+    if (!open) return undefined;
+
+    const place = () => {
+      const trigger = triggerRef.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const next = anchoredMenuPosition({
+        trigger: trigger.getBoundingClientRect(),
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        // scrollHeight, not offsetHeight: the sheet may already be carrying a
+        // maxHeight from a previous placement, and measuring the CLAMPED box
+        // would let one tight placement pin every later one.
+        height: menu.scrollHeight,
+        gap,
+      });
+      if (!next) return;
+      // Same place as last frame is the common case during a scroll that does
+      // not move this row — a fresh object every tick would re-render the whole
+      // sheet on every frame of a flick for no visible change.
+      setPos((prev) => (prev
+        && prev.top === next.top && prev.bottom === next.bottom
+        && prev.right === next.right && prev.maxHeight === next.maxHeight
+        ? prev : next));
+    };
+
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, gap]);
+
+  /*
+   * ESC CLOSES. It did not before — the backdrop was the only way out that was
+   * not choosing an item, and a sheet that swallows Esc is worse than one that
+   * never looked dismissable. Same ruling FilterPanel already applies to its
+   * `<details>`, applied here for the same reason.
+   *
+   * On `document` rather than on the sheet, because focus is not necessarily
+   * inside it: the reader who opened this with the mouse still has focus on
+   * the trigger, and a keydown handler on the sheet would never fire for them.
+   */
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return;
+      event.stopPropagation();
+      onToggle();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open, onToggle]);
+
+  /*
+   * FOCUS RETURNS TO THE TRIGGER on close — every close, whichever of the three
+   * dismissals it was.
+   *
+   * Guarded on where focus actually is, and the guard matters. The parent owns
+   * `open` and closes this sheet for reasons of its own (opening another row's
+   * menu, a save landing), and an unguarded refocus would yank the caret out of
+   * whatever the reader had moved on to. So: only when focus is still inside
+   * the sheet, or has fallen to `<body>` because the element holding it was
+   * just hidden.
+   */
+  useEffect(() => {
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
+    const menu = menuRef.current;
+    const active = document.activeElement;
+    if (!menu) return;
+    if (active === document.body || menu.contains(active)) triggerRef.current?.focus();
+  }, [open]);
+
   return (
-    <div className="relative">
+    /*
+     * NOT `relative` any more, and that is a deletion rather than an omission:
+     * the sheet is `fixed` and no longer positions against this box, so a
+     * `relative` left here would tell the next reader the opposite.
+     */
+    <div>
       <button
+        ref={triggerRef}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
@@ -296,13 +488,26 @@ export function OverflowMenu({ open, onToggle, triggerLabel, closeLabel, compact
         </button>
       ) : null}
 
+      {/*
+        `overflow-y-auto` where this was `overflow-hidden`. It still clips the
+        items to the sheet's radius — `overflow-y: auto` forces the x axis to
+        `auto` too, so the corners are as clean as they were — and it is what
+        makes the maxHeight above USABLE rather than another way to hide items.
+        `overscroll-contain` so a flick inside a scrolling sheet does not chain
+        out to <main> and drag the row out from under it.
+
+        The offsets are inline `style` and not classes, because they are runtime
+        pixels: a class built from a measurement compiles to nothing at all —
+        Tailwind scans source text and never evaluates it — which is the exact
+        shape test/fs/tailwindArbitraryValueRules exists to catch. Everything
+        that CAN be a literal class still is.
+      */}
       <div
+        ref={menuRef}
         role="menu"
         hidden={!open}
-        className={cn(
-          'absolute right-0 z-50 w-[200px] overflow-hidden rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-[4px] shadow-9e-md',
-          compact ? 'top-[30px]' : 'top-[42px]',
-        )}
+        style={pos ? { top: pos.top, bottom: pos.bottom, right: pos.right, maxHeight: pos.maxHeight } : undefined}
+        className="fixed z-50 w-[200px] overflow-y-auto overscroll-contain rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-[4px] shadow-9e-md"
       >
         {children}
       </div>

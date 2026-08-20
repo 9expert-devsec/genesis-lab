@@ -2,11 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postcss from 'postcss';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { readSource } from '../sourceScan.mjs';
-import tailwindcss from 'tailwindcss';
 
 /**
  * CLASSES WHOSE PAINT DEPENDS ON A RUNTIME VARIABLE MUST COMPILE TO A REAL RULE.
@@ -169,106 +167,17 @@ const CASES = [
   },
 ];
 
-/** Compile Tailwind's utilities over `content` and return the CSS. */
-async function compile(content) {
-  const config = {
-    presets: [require_(path.join(ROOT, 'tailwind.config.js'))],
-    content,
-  };
-  const result = await postcss([tailwindcss(config)]).process(
-    '@tailwind utilities;',
-    { from: undefined },
-  );
-  return result.css;
-}
-
-/** CJS require from an ESM test — tailwind.config.js is `module.exports`. */
-function require_(p) {
-  // eslint-disable-next-line no-undef
-  return globalThis.__twRequire(p);
-}
-
-// node:test runs ESM; tailwind.config.js is CJS. One createRequire, reused.
-const { createRequire } = await import('node:module');
-globalThis.__twRequire = createRequire(import.meta.url);
-
-/**
- * All declarations for `className` in `css`, as `prop: value` strings.
+/*
+ * `compile`, `escapeClass` and `declarationsFor` USED TO LIVE HERE and now live in
+ * test/twCompile.mjs. They moved when test/render/menuEscapesClip needed the same
+ * instrument — the second consumer, which is the point at which test/zScale.mjs was
+ * extracted for the same reason. Nothing about them changed; the comments recording
+ * why each is shaped as it is went with the code.
  *
- * ── A STRING SCAN, NOT A BUILT REGEXP ───────────────────────────────────────
- * Tailwind writes the selector in ESCAPED form — `.hover\:bg-\[var\(--x\)\]:hover`
- * — so the class has to be escaped the same way to be found. The first version of
- * this built a RegExp from that escaped string and had to escape it a second time
- * for the regex grammar; the two escapings collided and produced
- * "Range out of order in character class", i.e. the matcher never ran at all.
- *
- * Since the only thing needed is an exact selector, `indexOf` is both simpler and
- * strictly more precise. The escape table is Tailwind's own for the characters
- * these classes actually contain.
+ * This file keeps everything that is ABOUT the classes — CASES, the file list, the
+ * harvest — and imports only the machinery.
  */
-function escapeClass(className) {
-  return className.replace(/[:[\]()./%#]/g, (c) => `\\${c}`);
-}
-
-function declarationsFor(css, className) {
-  const selector = `.${escapeClass(className)}`;
-  const out = [];
-  let from = 0;
-  for (;;) {
-    const at = css.indexOf(selector, from);
-    if (at === -1) break;
-    from = at + selector.length;
-
-    /**
-     * The class name must END here.
-     *
-     * A Tailwind class selector continues with `[A-Za-z0-9_-]` or a backslash
-     * escape, so any of those means we matched a PREFIX of a longer class
-     * (`w-0` inside `w-0\.5`) rather than the class itself. This replaced an
-     * explicit tail pattern that enumerated the shapes a selector may end with
-     * — see the note below for why enumerating was wrong.
-     */
-    if (/[A-Za-z0-9_\\-]/.test(css[from] ?? '')) continue;
-
-    /**
-     * ── WHY THIS NO LONGER ENUMERATES THE ALLOWED TAILS ────────────────────
-     *
-     * It used to require `^((?::[a-z-]+)*)\s*[{,]` — pseudo-classes, then a
-     * brace or a comma. That is not the full grammar of what Tailwind puts
-     * between a class and its rule body, and the gap was MEASURED rather than
-     * reasoned about: `space-y-[22px]` compiles perfectly well and was reported
-     * as producing NO RULE, because Tailwind emits it as
-     *
-     *     .space-y-\[22px\] > :not([hidden]) ~ :not([hidden]) { … }
-     *
-     * and a child combinator is not a pseudo-class. Every `space-y-*`,
-     * `divide-*` and `group-*` utility has this shape, so the enumeration was
-     * about to report a whole family of working classes as dead — a guard that
-     * cries wolf gets relaxed, and the relaxation is what would have cost the
-     * real coverage.
-     *
-     * So the tail is now bounded rather than enumerated: whatever sits between
-     * the class and the `{` is the rest of the selector — pseudo-classes,
-     * combinators, descendants, or a comma joining a selector list — and the
-     * only thing that disqualifies it is a `}`, which would mean the class did
-     * not occur in a selector at all and we are about to read some other rule's
-     * body. The exactness that mattered is preserved by the character check
-     * above, which is where it always belonged.
-     */
-    const open = css.indexOf('{', from);
-    if (open === -1) continue;
-    if (css.slice(from, open).includes('}')) continue;
-
-    const close = css.indexOf('}', open);
-    if (close === -1) continue;
-
-    for (const decl of css.slice(open + 1, close).split(';')) {
-      const t = decl.trim();
-      if (t) out.push(t);
-    }
-  }
-  return out;
-}
+import { compile, declarationsFor, require_ } from '../twCompile.mjs';
 
 for (const { what, file, className, property, referencesVar } of CASES) {
   test(`${what}: "${className}" compiles to a ${property} rule`, async () => {

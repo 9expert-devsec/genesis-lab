@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { anchoredMenuPosition } from '@/lib/anchoredMenu';
 
 /**
  * THE ตัวกรอง DISCLOSURE — the date range and the course.
@@ -52,6 +54,38 @@ import { cn } from '@/lib/utils';
  * applied value is what stops the box disagreeing with the URL after a
  * navigation. `open` is the element's, not React's, so there is no filter state
  * here at all.
+ *
+ * ══ THE PANEL IS `position: fixed`, AND IT WAS GENUINELY BEING CLIPPED ══════
+ *
+ * Checked alongside the attendee row menu rather than assumed to share its
+ * problem, and the two are NOT the same defect:
+ *
+ *   · the row menu has no `overflow-hidden` ancestor at all — it was clipped by
+ *     the admin shell's scrollport, see OverflowMenu in detailShell;
+ *   · THIS one has a real one. The ancestor chain, walked against the render:
+ *
+ *         div.space-y-[22px] > div.overflow-hidden.rounded-9e-lg   ← ListPanel
+ *           > div.h-[66px] > div.w-[477px] > details > div[absolute]
+ *
+ *     ListPanel's card carries `overflow-hidden` so the table's corners follow
+ *     the card's radius — the same reasoning as the accent bar's clip, and it
+ *     is CORRECT. A 340px panel dropping out of a 66px header row is clipped
+ *     at that card's bottom edge, which is invisible while the table is long
+ *     and cuts the panel in half on a short or empty result set. That is the
+ *     worst possible shape for it: the state where the reader most needs the
+ *     filter is the state where the table has nothing in it.
+ *
+ * So the clip stays exactly where it is and the panel leaves, by the same
+ * mechanism and through the same arithmetic — src/lib/anchoredMenu.js, so
+ * there is one flip rule on this screen rather than two that must agree.
+ *
+ * ── STILL NO REACT STATE, AND THAT IS THE SAME RULING AS `open` ────────────
+ * The coordinates are written onto the DOM node in the `toggle` handler, not
+ * held in `useState`. The element already owns whether it is open; having React
+ * own where it is drawn would put half of one fact on each side of the seam.
+ * The no-filter-in-useState rule above is about FILTER VALUES and a pixel
+ * offset is not one — but the honest reason there is no state here is that
+ * none is needed, not that a loophole was found.
  */
 
 /**
@@ -104,9 +138,63 @@ export function FilterPanel({
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   };
 
+  const detailsRef = useRef(null);
+  const panelRef = useRef(null);
+
+  /**
+   * Put the panel where it fits, reading the summary's box and the panel's own
+   * height. A no-op while shut, which is what lets the listeners below be
+   * attached ONCE at mount rather than keyed on an `open` this component
+   * deliberately does not hold.
+   *
+   * Measurable while open because `toggle` fires AFTER the element has opened,
+   * so the panel is displayed by the time this runs. `scrollHeight` rather than
+   * `offsetHeight` for the same reason OverflowMenu uses it: a maxHeight from a
+   * previous placement must not pin the next one.
+   */
+  const place = () => {
+    const details = detailsRef.current;
+    const panel = panelRef.current;
+    if (!details || !panel || !details.open) return;
+    const summary = details.querySelector('summary');
+    if (!summary) return;
+    const next = anchoredMenuPosition({
+      trigger: summary.getBoundingClientRect(),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      height: panel.scrollHeight,
+      // 6px: the old `top-[45px]` less the 39px summary. Measured geometry,
+      // carried across rather than harmonised with the menus' 2 and 4.
+      gap: 6,
+    });
+    if (!next) return;
+    panel.style.top = next.top == null ? '' : `${next.top}px`;
+    panel.style.bottom = next.bottom == null ? '' : `${next.bottom}px`;
+    panel.style.right = `${next.right}px`;
+    panel.style.maxHeight = `${next.maxHeight}px`;
+  };
+
+  /*
+   * A fixed panel does not move with the content under it. `capture: true` on
+   * the scroll listener because the scroll that moves this header happens on
+   * <main>, and a non-capturing window listener never hears it.
+   */
+  useEffect(() => {
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <details
-      className="group relative shrink-0"
+      ref={detailsRef}
+      onToggle={place}
+      // NOT `relative` any more: the panel is `fixed` and no longer positions
+      // against this box, so leaving it would say the opposite of what is true.
+      className="group shrink-0"
       onKeyDown={(e) => {
         // Esc closes. `<details>` does not do this natively — see the header.
         if (e.key === 'Escape' && e.currentTarget.open) {
@@ -141,7 +229,15 @@ export function FilterPanel({
         ) : null}
       </summary>
 
-      <div className="absolute right-0 top-[45px] z-40 w-[340px] rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] p-[14px] shadow-9e-md">
+      {/*
+        The offsets are runtime pixels and so are an inline `style`, written by
+        `place` above — a class built from a measurement compiles to nothing.
+        Everything that can be a literal class still is.
+      */}
+      <div
+        ref={panelRef}
+        className="fixed z-40 w-[340px] overflow-y-auto overscroll-contain rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] p-[14px] shadow-9e-md"
+      >
         {/*
           THE SWAP, ANNOUNCED. The resolver corrects a backwards range rather
           than returning nothing; this is where it says so. Without it the panel
