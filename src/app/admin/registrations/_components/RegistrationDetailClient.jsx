@@ -29,6 +29,7 @@ import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   CopyAction, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
   DL, DLRow, QuotedNote, DetailError, EditField, selectCls, InternalNotesBody,
+  DETAIL_FIELD_VALUE,
 } from './detailShell';
 import { readNotes } from '@/lib/registrations/internalNotes';
 
@@ -203,7 +204,15 @@ const missingRequired = (a) =>
  * So the emptiness decision happens BEFORE the wrapper, in one place, and a
  * caller cannot re-introduce it by styling a field that turns out to be optional.
  */
-const mono = (value) => (value ? <span className="font-mono text-[11px]">{value}</span> : '');
+/*
+  ── IT CARRIES NO SIZE OF ITS OWN, AND THAT IS ROUND 11 ────────────────────
+  It used to be `font-mono text-[11px]`. The 11px was a SECOND place a field
+  value's size lived, and it survived round 11's rescale by ignoring it — an
+  id at 11px in a card whose every other value is 16px. Dropping the class is
+  not a size change written here, it is the removal of one: the `<dd>` sets the
+  size once and the mono face is the only thing left that is this helper's.
+*/
+const mono = (value) => (value ? <span className="font-mono">{value}</span> : '');
 
 /**
  * THE TABS. Local state, and that is not the URL-filter rule being broken.
@@ -348,12 +357,31 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   /**
    * ADD ONE NOTE. The only mutation of `internalNotes` in this file.
    *
-   * ── THE OPTIMISTIC ENTRY IS BUILT FROM THE DRAFT AND IS NOT THE RECORD ────
-   * The server stamps `authorId`, `authorName` and `createdAt` from the session
-   * — the client cannot and must not supply them. What is appended here is a
-   * local echo so the note appears immediately; the authoritative values arrive
-   * on the next load via `revalidatePath`. `authorName: ''` renders the em dash
-   * for that instant rather than a name the client guessed.
+   * ══ WHAT IS APPENDED IS THE SERVER'S OWN ENTRY — ROUND 13 ═════════════════
+   *
+   * This used to append a local echo the client had built:
+   *
+   *     { body, authorId: '', authorName: '', createdAt: null }
+   *
+   * and the comment here said the authoritative values "arrive on the next load
+   * via revalidatePath". THEY NEVER ARRIVED. `internalNotes` is
+   * `useState(() => readNotes(doc.adminNotes))` and a `useState` INITIALISER
+   * RUNS ONCE PER MOUNT — a revalidated `doc` prop does not re-run it. The
+   * empty echo was therefore on screen until the admin navigated away and back,
+   * which is the reported defect: a saved note showing a bare em dash where its
+   * author and time belong.
+   *
+   * THE DATA WAS NEVER MISSING. Measured read-only with
+   * `scripts/audit-internal-note-bylines.mjs`: the one stored note carries
+   * `authorName`, `authorId` and `createdAt`, all populated. This was a display
+   * defect in the optimistic path and nothing else.
+   *
+   * ── THE CLIENT STILL SUPPLIES NOTHING BUT THE BODY ────────────────────────
+   * `addInternalNote` now returns the entry it stamped, and it goes through
+   * `readNotes` — the SAME reader the initial load uses — so the appended entry
+   * and a reloaded one cannot differ in shape. If a reply somehow arrives
+   * without a note, `readNotes` builds one from the body alone and the byline
+   * renders NO ELEMENT rather than a dash.
    *
    * The draft is cleared ONLY on success. A failed add that emptied the box
    * would lose what the admin typed, and there is no way to get it back.
@@ -365,7 +393,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     startTransition(async () => {
       const res = await addInternalNote(doc._id, body);
       if (res.ok) {
-        setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
+        setInternalNotes((prev) => [...prev, ...readNotes([res.note ?? { body }])]);
         setNoteDraft('');
       } else {
         setError(res.error || 'บันทึกไม่สำเร็จ');
@@ -1013,8 +1041,12 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
           </SectionCard>
 
           {/*
-            การเงินและเอกสาร — the design's name for this card, over the invoice
-            fields it has always held.
+            ข้อมูลสำหรับออกใบเสนอราคา — round 11's name for this card, over the
+            invoice fields it has always held. It was การเงินและเอกสาร, which
+            named a DEPARTMENT rather than the contents: the card holds the party
+            a quotation is addressed to — customer type, name, tax id, address —
+            and holds nothing about money at all. The money is the card next
+            door, การชำระเงิน (Omise), which is a different record with no แก้ไข.
 
             ── เลขที่ใบเสนอราคา IS NOT BUILT ──────────────────────────────────
             The design shows a QT-2026-0814 row here. RULED OUT: no such field
@@ -1031,7 +1063,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
           */}
           <SectionCard
             icon={Receipt}
-            title="การเงินและเอกสาร"
+            title="ข้อมูลสำหรับออกใบเสนอราคา"
             {...editProps('invoice')}
             onSave={handleSaveInvoice}
           >
@@ -1503,8 +1535,34 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                 {i + 1}
               </td>
 
+              {/*
+                ── (c) THE CELLS FOLLOW THE FIELD ROWS. THE CHROME DOES NOT ──
+                Round 7 scoped this table out of the label-left/value-right work
+                and round 11 puts its three VALUE cells back in, through the same
+                constant rather than through three literals here: a name, an
+                email and a phone are values a reader scans alongside the cards
+                two inches above, and a roster set three points smaller than the
+                ผู้ประสานงาน card holding the same person reads as a different
+                screen.
+
+                The table's CHROME is deliberately left where it was — the `#`
+                counter, the column headers and the (ผู้ประสานงาน) marker are not
+                values and have their own row geometry.
+
+                ── AND `leading-[17.25px]` HAD TO GO WITH IT ─────────────────
+                MEASURED. `truncate` is `overflow:hidden`, and LINE Seed Sans TH
+                wants 1.584em of line box; 17.25px is 1.23em at 14px, so the box
+                was already clipping the top of a stacked Thai vowel before this
+                round — by ~1.4px, and by ~2.9px had the size gone to 16px inside
+                the old leading. `DETAIL_FIELD_VALUE`'s 28px clears it. The row
+                is `h-[48.3px]` and unchanged: 28px of line box still fits.
+                `tableParts`' `CoordinatorCell` carries the identical 14px/17.25px
+                pair and is NOT fixed here — it is on the list screens, which this
+                round does not touch. Named so it is a known finding rather than
+                a miss.
+              */}
               <td className="align-middle" style={pad(1)}>
-                <p className="truncate text-[14px] font-bold leading-[17.25px] text-[var(--text-primary)]">
+                <p className={cn('truncate font-bold text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
                   {name || '—'}
                   {/* The coordinator marker is a SUFFIX inside the same line, not
                       an element of its own: a second element would be empty on
@@ -1527,24 +1585,47 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                 sees which fields a row actually holds — the job the deleted
                 สถานะข้อมูล chip was doing by summary.
               */}
+              {/*
+                ══ THE EMAIL CELL IS PLAIN TEXT WITH A COPY — ROUND 13 ════════
+
+                It was a `mailto:` anchor. See the in-house contact card for why
+                every link on both screens went: a salesperson pastes these
+                values, and a handoff to whatever the OS has registered is not
+                that.
+
+                ── THE DASH STAYS, AND THAT IS NOT A CONTRADICTION ───────────
+                A TABLE CELL MAY NOT VANISH — the column would misalign — so the
+                fallback is still an em dash here, which is the one place on
+                these screens where a dash is right. The no-dash rule round 5
+                settled is about a BYLINE and a field ROW, both of which can be
+                dropped entirely. A `<td>` cannot.
+
+                ── THE CONTROL IS INSIDE THE CELL, AND THE TEXT KEEPS min-w-0 ──
+                `CopyAction` is `shrink-0`, so without `min-w-0` on the address
+                the flex row would take its minimum from the email's unbroken
+                width and push the button out of the cell. Same mechanism the
+                field row's `<dd>` documents at length.
+              */}
               <td className="align-middle" style={pad(2)}>
                 {a.email ? (
-                  <a href={`mailto:${a.email}`}
-                    className="block truncate text-[13px] leading-[17.25px] text-9e-action hover:underline">
-                    {a.email}
-                  </a>
+                  <div className="flex min-w-0 items-center gap-[8px]">
+                    <span className={cn('min-w-0 truncate text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
+                      {a.email}
+                    </span>
+                    <CopyAction text={a.email} label={`อีเมลผู้เข้าอบรมท่านที่ ${i + 1}`} />
+                  </div>
                 ) : (
-                  <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
+                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>—</span>
                 )}
               </td>
 
               <td className="align-middle" style={pad(3)}>
                 {a.phone ? (
-                  <span className="block truncate text-[13px] leading-[17.25px] text-[var(--text-primary)]">
+                  <span className={cn('block truncate text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
                     {a.phone}
                   </span>
                 ) : (
-                  <span className="text-[13px] leading-[17.25px] text-[var(--text-muted)]">—</span>
+                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>—</span>
                 )}
               </td>
 
@@ -1640,11 +1721,36 @@ function AttendeeRowMenu({ index, attendee, onEditRow, open, onToggle }) {
    */
   const rowText = attendeeCopyText(attendee);
 
+  /**
+   * ══ `คัดลอกอีเมล` IS GONE — ROUND 13, AND IT CANNOT EMPTY THIS MENU ═══════
+   *
+   * The email cell now carries its own copy control, so the menu item copied a
+   * value the row is already offering one click closer. This menu exists for
+   * actions the ROW CANNOT SHOW — editing the whole entry, and taking the three
+   * fields as one spreadsheet line — and a duplicate of a visible affordance is
+   * not one of those.
+   *
+   * ── THE NO-EMPTY-MENU GUARD IS NOT AT RISK, AND IT IS PROVABLE ───────────
+   * `OverflowMenu` must never render with nothing in it; the `items.length === 0`
+   * return below is that guard. Removing an item is exactly the change that
+   * could break it, so:
+   *
+   *   `attendeeCopyText` returns '' ONLY when name, email AND phone are all
+   *   empty. So `attendee.email` being truthy IMPLIES `rowText` is truthy.
+   *
+   * The email item therefore could never have been the last one standing — any
+   * row that had it also had `คัดลอกผู้เข้าอบรม`. The states after the removal:
+   *
+   *   editable + any content   → แก้ไขรายชื่อ + คัดลอกผู้เข้าอบรม   (2)
+   *   CANCELLED + any content  → คัดลอกผู้เข้าอบรม                  (1)
+   *   CANCELLED + empty row    → none, and the menu returns null    (0, already
+   *                              the case before this change, because an empty
+   *                              row has no email either)
+   *
+   * Asserted in render/registrationAttendeeTab rather than left as an argument.
+   */
   const items = [
     onEditRow ? { key: 'edit', icon: Pencil, label: 'แก้ไขรายชื่อ', onClick: onEditRow } : null,
-    attendee.email
-      ? { key: 'copy', icon: Copy, label: 'คัดลอกอีเมล', onClick: () => copyText(attendee.email) }
-      : null,
     rowText
       ? { key: 'copy-row', icon: Copy, label: 'คัดลอกผู้เข้าอบรม', onClick: () => copyText(rowText) }
       : null,
@@ -1990,6 +2096,27 @@ function InvoiceReadView({ requestInvoice, invoice }) {
   if (!requestInvoice || !invoice) {
     return <p className="text-[13px] italic leading-[22px] text-[var(--text-muted)]">ไม่ได้ขอใบเสนอราคา</p>;
   }
+  /*
+    ── ROUND 11: THE NAME AND THE TAX ID GAIN THE COPY ที่อยู่ ALREADY HAD ────
+    Same three values a salesperson re-types into a quotation, and the address
+    was the only one of them that could be taken in one click.
+
+    THE NAME IS BUILT ONCE, HERE, and both the row and the clipboard read the
+    same `const`. Spelling the join a second time inside `action=` is how the
+    screen and the clipboard start to disagree — the same reasoning the address
+    row already carries, which passes `formatBillingAddress(invoice)` to both.
+
+    `personCopyText` is the shared join, so this name copies identically to the
+    coordinator's and the in-house contact's rather than being a fourth spelling
+    of "first and last, trimmed".
+
+    NOTHING GATES THESE. Copying is not an edit: no `readOnly`, no `onEdit`, and
+    no server action to write an audit row with. `CopyAction` itself decides the
+    empty case — it tests the STRING bound for the clipboard, not the truthiness
+    of the node, which is the distinction round 5's wrapped-but-empty defeat
+    turned on.
+  */
+  const invoiceName = personCopyText({ firstName: invoice.firstName, lastName: invoice.lastName });
   return (
     <DL>
       <DLRow
@@ -1997,7 +2124,8 @@ function InvoiceReadView({ requestInvoice, invoice }) {
         value={`${invoice.type === 'corporate' ? 'นิติบุคคล / บริษัท' : 'บุคคลทั่วไป'} · ${invoice.country === 'OTHER' ? 'ต่างประเทศ' : 'ไทย'}`}
       />
       {invoice.type === 'individual' ? (
-        <DLRow label="ชื่อ-นามสกุล" value={`${invoice.firstName ?? ''} ${invoice.lastName ?? ''}`.trim()} />
+        <DLRow label="ชื่อ-นามสกุล" value={invoiceName}
+          action={<CopyAction text={invoiceName} label="ชื่อ-นามสกุลใบเสนอราคา" />} />
       ) : (
         <>
           <DLRow label="ชื่อบริษัท" value={invoice.companyName} />
@@ -2007,7 +2135,8 @@ function InvoiceReadView({ requestInvoice, invoice }) {
           <DLRow label="สาขา" value={formatInvoiceBranchLabel(invoice)} />
         </>
       )}
-      <DLRow label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId} />
+      <DLRow label="เลขประจำตัวผู้เสียภาษี" value={invoice.taxId}
+        action={<CopyAction text={invoice.taxId} label="เลขประจำตัวผู้เสียภาษี" />} />
       {invoice.country === 'TH' && invoice.thaiAddress && (
         // The whole invoice, not invoice.thaiAddress — the formatter reads
         // invoice.country to choose its branch, so passing the sub-object alone
@@ -2066,7 +2195,7 @@ function PaymentInfoCard({ payment, pricing, consent }) {
           label="Omise Charge ID"
           value={payment.omiseChargeId ? (
             <a href={chargeUrl} target="_blank" rel="noopener noreferrer"
-              className="font-mono text-[11px] text-9e-action hover:underline">
+              className="font-mono text-9e-action hover:underline">
               {payment.omiseChargeId}
             </a>
           ) : ''}

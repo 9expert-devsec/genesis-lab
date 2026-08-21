@@ -403,7 +403,18 @@ test('email and phone are separate cells, each falling back to its own dash', ()
   assert.equal(cells.length, 5, `expected 5 cells, found ${cells.length}`);
   assert.ok(cells[1].includes('สมชาย ใจดี'), 'cell 1 is not the name cell');
   assert.ok(cells[2].includes('somchai@example.com'), 'cell 2 is not the email cell');
-  assert.ok(cells[2].includes('mailto:'), 'the email cell is not a mailto link');
+  /*
+    ── RE-POINTED IN ROUND 13: IT WAS `includes('mailto:')` ─────────────────
+    The cell was an anchor and is now plain text with a copy control. The
+    assertion is INVERTED rather than deleted, because "is this cell a link"
+    remains exactly the question — the answer changed. Asserting the copy
+    control in the same breath is what stops the inversion passing on a cell
+    that lost the link and gained nothing.
+  */
+  assert.ok(!cells[2].includes('mailto:'), 'the email cell is a mailto link again');
+  assert.ok(!cells[2].includes('<a '), 'the email cell is an anchor of some other kind');
+  assert.match(cells[2], /aria-label="คัดลอกอีเมลผู้เข้าอบรมท่านที่ 1"/,
+    'the email cell lost the copy control that replaced its link');
   assert.ok(cells[3].includes('0812345678'), 'cell 3 is not the phone cell');
   assert.ok(!cells[3].includes('mailto:'), 'the phone cell links as an email');
 
@@ -426,21 +437,43 @@ test('a row with NO contact details renders two dashes, one per column', () => {
 // 3. THE PER-ROW "•••"
 // ════════════════════════════════════════════════════════════════════════════
 
-test('an editable row’s menu holds the edit and the two copies it has values for', () => {
+test('an editable row’s menu holds the edit and the ONE copy the row cannot show', () => {
   /**
-   * ── RE-POINTED IN ROUND 8: A THIRD ITEM, AND TWO GATES, NOT ONE ──────────
-   * `คัดลอกผู้เข้าอบรม` copies the whole row as name/email/phone. It is the one
-   * MULTI-value copy on these screens, because a roster genuinely goes somewhere
-   * as rows.
+   * ── RE-POINTED IN ROUND 13: `คัดลอกอีเมล` IS GONE ────────────────────────
    *
-   * THE TWO COPY ITEMS ARE GATED ON DIFFERENT THINGS, which is the point of
-   * asserting the exact list rather than a count: `คัดลอกอีเมล` needs an EMAIL,
-   * `คัดลอกผู้เข้าอบรม` needs ANY of the three fields. Row 2 is the case that
-   * separates them — see below.
+   * The email CELL now carries its own copy control, so the menu item duplicated
+   * a visible affordance one click further away. This menu is for actions the
+   * ROW CANNOT SHOW, and `คัดลอกผู้เข้าอบรม` — the three fields as one
+   * spreadsheet line — is the only copy that qualifies.
+   *
+   * The exact list is still asserted rather than a count, and the reason is
+   * unchanged: the two remaining items are gated on DIFFERENT things, `แก้ไข`
+   * on the cancellation lock and the row copy on there being any content at all.
+   * Rows 2 and 3 below are what separate them.
+   *
+   * ROUND 8'S CLAIM ABOUT TWO DIFFERENT GATES ON THE TWO COPIES IS RETIRED, not
+   * quietly dropped: there is one copy item now, so there is one gate, and the
+   * case that separated them (an email with no name) is covered instead by the
+   * cell-level control asserted above.
+   *
+   * ══ THE ORDER IS PINNED, AND THAT IS NOW A DECISION ══════════════════════
+   *
+   * `deepEqual` on an array is ORDER-SENSITIVE, so this has always pinned the
+   * order as well as the membership — accidentally. `_control-round13.mjs apply
+   * menu-item-reordered` moves the edit item below the row copy without changing
+   * the set, and this test reddens; the control was written expecting nothing to
+   * move, and the run said otherwise.
+   *
+   * It is kept ordered rather than loosened to a Set, and the reason is stated
+   * here so the constraint is deliberate instead of incidental: THE EDIT COMES
+   * FIRST BECAUSE IT IS THE ONE ITEM THAT CHANGES THE RECORD. A reader scanning
+   * a menu reads top-down, and the item that writes should not be sitting under
+   * two that only read. A Set would also lose the ability to see a duplicated
+   * item, which is a real failure mode for a list built by `.filter(Boolean)`.
    */
   const rows = attendeeRows(FULL);
-  assert.deepEqual(rowMenuItems(rows[0]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
-  assert.deepEqual(rowMenuItems(rows[1]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+  assert.deepEqual(rowMenuItems(rows[0]), ['แก้ไขรายชื่อ', 'คัดลอกผู้เข้าอบรม']);
+  assert.deepEqual(rowMenuItems(rows[1]), ['แก้ไขรายชื่อ', 'คัดลอกผู้เข้าอบรม']);
 
   // THE BLANK ROW — nothing in any field. NEITHER copy renders: there is no
   // email, and `attendeeCopyText` returns '' for a row with nothing in it, so
@@ -451,7 +484,28 @@ test('an editable row’s menu holds the edit and the two copies it has values f
   // THE EMAIL-ONLY ROW — the case that proves the two gates are different. No
   // name, no phone, but an email: both copies render, and they copy different
   // things.
-  assert.deepEqual(rowMenuItems(rows[3]), ['แก้ไขรายชื่อ', 'คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+  assert.deepEqual(rowMenuItems(rows[3]), ['แก้ไขรายชื่อ', 'คัดลอกผู้เข้าอบรม']);
+
+  /*
+    ── AND THE REMOVAL COULD NEVER HAVE EMPTIED A MENU ──────────────────────
+    The guard this screen is held to is that a "•••" trigger never opens onto an
+    empty sheet, and removing an item is the change that could break it. It
+    cannot here, and the reason is structural rather than lucky:
+
+      `attendeeCopyText` returns '' ONLY when name, email AND phone are all
+      empty, so an email implies a row copy.
+
+    Every row that carried `คัดลอกอีเมล` therefore also carried
+    `คัดลอกผู้เข้าอบรม`. Asserted over the fixtures rather than argued.
+  */
+  for (const [i, row] of rows.entries()) {
+    const hasEmail = ['somchai@example.com', 'somying@example.com', 'lonely@example.com']
+      .some((e) => cellsOf(row)[2].includes(e));
+    if (hasEmail) {
+      assert.ok(rowMenuItems(row).includes('คัดลอกผู้เข้าอบรม'),
+        `row ${i} has an email but no row copy — the implication the removal relied on is false`);
+    }
+  }
 });
 
 test('NO row menu is empty, and every item in every one has text', () => {
@@ -527,7 +581,7 @@ test('a cancelled record offers NO edit anywhere in the attendee tab', () => {
   }
 });
 
-test('the row menu still offers BOTH copies on a cancelled record', () => {
+test('the row menu still offers its copy on a cancelled record', () => {
   /**
    * ══ COPYING IS NOT AN EDIT, AND THAT IS THE WHOLE CLAIM ═══════════════════
    *
@@ -542,9 +596,14 @@ test('the row menu still offers BOTH copies on a cancelled record', () => {
    * this is what would say so.
    */
   const rows = attendeeRows(CANCELLED);
-  assert.deepEqual(rowMenuItems(rows[0]), ['คัดลอกอีเมล', 'คัดลอกผู้เข้าอบรม']);
+  // RE-POINTED IN ROUND 13 — one copy item, not two. The claim is unchanged and
+  // is now made over the item that remains, plus the CELL control, which is the
+  // affordance that replaced the one removed and must survive the lock too.
+  assert.deepEqual(rowMenuItems(rows[0]), ['คัดลอกผู้เข้าอบรม']);
   assert.ok(!rowMenuItems(rows[0]).includes('แก้ไขรายชื่อ'),
-    'the edit survived the lock — then the copies surviving proves nothing');
+    'the edit survived the lock — then the copy surviving proves nothing');
+  assert.match(cellsOf(rows[0])[2], /aria-label="คัดลอกอีเมลผู้เข้าอบรมท่านที่ 1"/,
+    'the email cell lost its copy control on a cancelled record');
 
   // The blank row has nothing to copy and nothing to edit, so it has no menu at
   // all — and no trigger, which is the structural half.
@@ -625,8 +684,22 @@ test('a row with an email and no phone renders ONE contact line, not one and a b
   const contact = cellsOf(attendeeRows(FULL)[1])[2];
   assert.ok(contact.includes('somying@example.com'), 'the email line did not render');
   assert.equal(EMPTY_ELEMENT.exec(contact), null, 'the missing phone left an empty element');
-  assert.equal((contact.match(/<(a|span)\b/g) ?? []).length, 1,
+  /*
+    ── RE-POINTED IN ROUND 13, AND THE COUNT HAD TO MOVE ────────────────────
+    This counted every `<a>` and `<span>` in the cell and expected exactly one.
+    The cell now holds a value span AND a copy control, and the control is a
+    `<button>` containing its own live-region `<span>` — so the raw count is 2
+    on correct markup.
+
+    Counting the VALUE side only keeps the claim the test was making: one line of
+    content, no blank second one. The control is sliced off first rather than
+    added to the expected number, because "2" would silently accept a second
+    VALUE line appearing while the control disappeared.
+  */
+  const valueSide = contact.slice(0, contact.indexOf('<button') === -1 ? undefined : contact.indexOf('<button'));
+  assert.equal((valueSide.match(/<(a|span)\b/g) ?? []).length, 1,
     'the contact cell renders more than the one line it has content for');
+  assert.ok(contact.includes('<button'), 'the email cell lost its copy control — the slice above proves nothing');
 });
 
 test('the opted-out tab renders a sentence, not an empty table', () => {

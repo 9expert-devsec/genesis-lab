@@ -1448,6 +1448,50 @@ test('the measured geometry really is in the harvest, not merely a large count',
     'lg:grid-cols-[22%_1fr]', // the label column at 22%, the value column filling
     'lg:gap-x-[1%]',          // ...so the value column's left edge lands at 23%
     'py-[11px]',              // the row's own rhythm, between the hairlines
+    // ── ROUND 11'S TYPE SCALE ─────────────────────────────────────────────
+    // The value at 16px, the label at 13px and the card heading at 14px, each
+    // with the line box Thai needs at that size. THESE BELONG IN THE HARVEST
+    // MORE THAN ANYTHING ELSE ON THIS LIST, because a type scale is exactly the
+    // kind of change that produces perfect markup over no stylesheet: the class
+    // reaches the `<dd>` whatever happens, and a value silently falling back to
+    // the inherited size looks like a design decision rather than a dead rule.
+    //
+    // `leading-[21px]` is NOT here and that is not an oversight: it is the
+    // label's STACKED line box, which only renders below `lg`, and the class is
+    // in the same literal as `text-[13px]` so it cannot arrive without it. The
+    // `lg:` one below is the responsive half and DOES reach every render.
+    //
+    // FOUR of these rounds' decisions are deliberately NOT in this list, for the
+    // same reason `h-[93px]` and `gap-x-[36px]` are named above rather than
+    // dropped. A screen emitting any of them would be one that had brought an
+    // old scale back:
+    //   `text-[15px]`        the card heading before round 11
+    //   `leading-[17.25px]`  the attendee name cell's line box, BELOW the font's
+    //                        own and clipping Thai upper marks inside a truncate
+    //   `leading-[48px]`     the H1's line box before round 12 — 1.200em against
+    //                        a 1.584em floor, ink 4.7px above the box and 6.7px
+    //                        below it ON ONE LINE
+    //   `h-[48px]`           the H1's fixed height, which is what turned a wrap
+    //                        into a three-way overlap
+    // ── ROUND 12'S PAGE HEADING ───────────────────────────────────────────
+    // `text-[40px]` was always rendered and always compiled; what changed is
+    // `leading-[48px]` → `leading-[64px]`, and the OLD one is named as
+    // deliberately absent below rather than dropped.
+    //
+    // `h-[48px]` is deliberately absent too, and for a stronger reason than the
+    // others on this list: it is not a measurement that moved, it is a FIXED
+    // HEIGHT that was the defect. Two 48px lines in a 48px box with
+    // `items-center` put 24px of heading above the block and 24px below, which
+    // is how the H1 came to overlap the chip row and the subtitle at once.
+    'text-[40px]',            // the page H1
+    'leading-[64px]',         // ...and the line box 40px Thai needs (1.584em floor)
+    'min-h-[25px]',           // the chip row and the subtitle, which may now grow
+    'text-[16px]',            // every value on both screens
+    'leading-[28px]',         // ...and the line box 16px Thai needs
+    'text-[13px]',            // the label, taking the size the value vacated
+    'lg:leading-[28px]',      // ...sharing the value's line box once the split is on
+    'text-[14px]',            // the shared card heading
+    'leading-[23px]',         // ...unchanged, and it still clears the font's floor
     // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
     'h-[75.85px]', // the three-cell summary row
     'h-[48.3px]',  // one attendee row
