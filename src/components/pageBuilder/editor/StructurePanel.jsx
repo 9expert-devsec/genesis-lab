@@ -1,12 +1,15 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import {
   GripVertical, Eye, EyeOff, ChevronUp, ChevronDown, Copy, Trash2, Plus, Ban,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { slotsOf, MAX_SECTION_DEPTH } from '@/lib/pageBuilder/containerSlots';
 import { labelOf, sectionSummary, sectionRendersEmpty } from '@/lib/pageBuilder/sectionLabels';
+import { countDescendants } from '@/lib/pageBuilder/sectionDescendants';
 import { newSection } from '@/lib/pageBuilder/newSection';
 import { useEditor } from './EditorProvider';
 import { depthOfPath } from './pagePath';
@@ -85,9 +88,100 @@ function CapBadge() {
   );
 }
 
+/**
+ * Delete confirmation — EVERY delete, not only containers.
+ *
+ * ── WHY THE FRICTION, AND WHEN IT MAY BE RELAXED (round 1) ────────────────
+ * There is NO UNDO anywhere in this editor: editorReducer.js keeps no history,
+ * and autosave writes the tree shortly after the dispatch. So a single stray
+ * click on a 3.5×3.5 icon is a permanent loss of authored work, and for a
+ * container it silently takes every descendant with it.
+ *
+ * The confirm is therefore deliberate friction standing in for the undo that
+ * does not exist yet. ROUND 1 is where undo (a history stack in
+ * editorReducer.js) is expected to land; whoever writes it should come back
+ * here and decide whether this can be relaxed to containers-only — or dropped
+ * for leaves entirely — because at that point the loss becomes recoverable and
+ * the friction stops paying for itself. Until then it applies to everything,
+ * on purpose: "only containers are dangerous" is false when nothing can be
+ * taken back.
+ *
+ * ── Radix Dialog, NOT window.confirm and NOT AlertDialog ──────────────────
+ * Same primitive and same shape as SectionPicker (focus trap / Escape / aria
+ * are what a hand-rolled modal gets subtly wrong). @radix-ui/react-alert-dialog
+ * is not a dependency of this repo and this is not worth adding one for —
+ * Dialog gives the same trap; what AlertDialog would add on top is the default
+ * focus placement, which is set explicitly below.
+ *
+ * ── The destructive button is NOT autofocused ─────────────────────────────
+ * Radix focuses the first tabbable child on open. That would put focus on a
+ * button where Enter — the key someone rattling through the keyboard is most
+ * likely to hit next — destroys the section, turning the confirm into a second
+ * click rather than a decision. Focus goes to ยกเลิก instead, and Escape (the
+ * Dialog's own) cancels.
+ */
+function ConfirmDeleteDialog({ pending, onCancel, onConfirm }) {
+  const cancelRef = useRef(null);
+  const nested = pending ? countDescendants(pending.section) : 0;
+
+  return (
+    <Dialog.Root open={Boolean(pending)} onOpenChange={(o) => { if (!o) onCancel(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Content
+          onOpenAutoFocus={(e) => { e.preventDefault(); cancelRef.current?.focus(); }}
+          className={cn(
+            'fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]',
+            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
+            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl'
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden />
+            <div className="min-w-0">
+              <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">
+                ลบ “{labelOf(pending?.section?.type)}” ?
+              </Dialog.Title>
+              <Dialog.Description className="mt-1 text-xs text-9e-slate-dp-50">
+                {nested > 0
+                  ? `section ที่ซ้อนอยู่ข้างในอีก ${nested} รายการจะถูกลบไปพร้อมกันทั้งหมด`
+                  : 'section นี้จะถูกลบออกจากหน้า'}
+              </Dialog.Description>
+              {/* Says why it asks at all — the same reason the block comment
+                  above gives, in the author's language. */}
+              <p className="mt-2 text-xs text-9e-slate-dp-50">
+                ตัวแก้ไขยังไม่มีปุ่มเลิกทำ — ลบแล้วกู้คืนไม่ได้
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <Dialog.Close asChild>
+              <button
+                ref={cancelRef}
+                type="button"
+                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                ยกเลิก
+              </button>
+            </Dialog.Close>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="rounded-9e-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+            >
+              ลบ
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 function SectionNode({ section, path, siblingCount }) {
   const { dispatch, selection } = useEditor();
-  const { getRowProps, isDragging, isDropTarget } = useStructure();
+  const { getRowProps, isDragging, isDropTarget, requestDelete } = useStructure();
 
   const index = path[path.length - 1];
   const slots = slotsOf(section?.type);
@@ -148,7 +242,9 @@ function SectionNode({ section, path, siblingCount }) {
           <IconButton label="ทำซ้ำ" onClick={() => dispatch({ type: 'DUPLICATE_SECTION', path })}>
             <Copy className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton label="ลบ" danger onClick={() => dispatch({ type: 'REMOVE_SECTION', path })}>
+          {/* Asks; it does NOT dispatch. REMOVE_SECTION is reached only from
+              the confirm dialog below — see requestDelete / ConfirmDeleteDialog. */}
+          <IconButton label="ลบ" danger onClick={() => requestDelete(path, section)}>
             <Trash2 className="h-3.5 w-3.5" />
           </IconButton>
         </span>
@@ -251,6 +347,11 @@ export function StructurePanel() {
 
   // { parentPath, index } while the picker is open, else null.
   const [target, setTarget] = useState(null);
+  // { path, section } while a delete is awaiting confirmation, else null. The
+  // SECTION is captured here, not re-read at confirm time: the dialog names what
+  // it is about to delete and counts what goes with it, and both must describe
+  // the row that was clicked.
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const onMove = useCallback(
     (path, to) => dispatch({ type: 'MOVE_SECTION', path, to }),
@@ -259,6 +360,15 @@ export function StructurePanel() {
   const drag = useTreeDrag(onMove); // already a stable object — see useTreeDrag.js
 
   const openPicker = useCallback((parentPath, index) => setTarget({ parentPath, index }), []);
+
+  // The ONLY path to REMOVE_SECTION. A row's ลบ button opens this; the dispatch
+  // happens in confirmDelete below, never at the click.
+  const requestDelete = useCallback((path, section) => setPendingDelete({ path, section }), []);
+  const confirmDelete = useCallback(() => {
+    if (!pendingDelete) return;
+    dispatch({ type: 'REMOVE_SECTION', path: pendingDelete.path });
+    setPendingDelete(null);
+  }, [dispatch, pendingDelete]);
 
   const onPick = useCallback((type) => {
     if (!target) return;
@@ -278,12 +388,17 @@ export function StructurePanel() {
   // Stable identity or every row re-renders on any panel render — useTreeDrag
   // memoizes for that reason, and spreading it into a fresh object here would
   // throw that away.
-  const ctx = useMemo(() => ({ ...drag, openPicker }), [drag, openPicker]);
+  const ctx = useMemo(() => ({ ...drag, openPicker, requestDelete }), [drag, openPicker, requestDelete]);
 
   return (
     <StructureContext.Provider value={ctx}>
       <SectionList sections={sections} basePath={['sections']} />
       <SectionPicker open={Boolean(target)} onClose={() => setTarget(null)} onPick={onPick} />
+      <ConfirmDeleteDialog
+        pending={pendingDelete}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
     </StructureContext.Provider>
   );
 }
