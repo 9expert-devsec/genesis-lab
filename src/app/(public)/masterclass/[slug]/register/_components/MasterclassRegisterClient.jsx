@@ -2215,23 +2215,19 @@ export function MasterclassRegisterClient({ course, batch }) {
                           title="ชำระทันที"
                           subtitle="ชำระผ่าน PromptPay QR หรือบัตรเครดิต/เดบิต"
                         />
-                        <MethodRadio
-                          selected={method === "quote"}
-                          disabled={!quoteEnabled}
-                          onClick={() => {
-                            if (!quoteEnabled) return;
-                            setMethod("quote");
-                            setChannel(null);
-                            setWantsDoc(null);
-                            setQuoteNeedsInvoice(true);
-                          }}
-                          title="ขอใบเสนอราคา"
-                          subtitle={
-                            quoteEnabled
-                              ? "เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
-                              : "รุ่นนี้ไม่เปิดรับการขอใบเสนอราคา กรุณาเลือกชำระทันที"
-                          }
-                        />
+                        {quoteEnabled && (
+                          <MethodRadio
+                            selected={method === "quote"}
+                            onClick={() => {
+                              setMethod("quote");
+                              setChannel(null);
+                              setWantsDoc(null);
+                              setQuoteNeedsInvoice(true);
+                            }}
+                            title="ขอใบเสนอราคา"
+                            subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                          />
+                        )}
                       </div>
                     </div>
 
