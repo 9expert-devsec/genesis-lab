@@ -117,32 +117,97 @@ export function BackLink({ label, onClick }) {
 // ── Header ──────────────────────────────────────────────────────────────────
 
 /**
- * The 98px header: a 25px row, a 48px H1 block, a 25px subtitle block.
+ * The page header: a 25px chip row, the H1, a 25px subtitle block.
  *
  * `badge` and `timestamp` share row 1 on one baseline with about 10px between
  * them. `subtitle` is optional and its BLOCK disappears with it — a 25px empty
- * paragraph is the defect described in the file header, and the header would be
- * 98px of which 25px said nothing.
+ * paragraph is the defect described in the file header, and the header would
+ * carry 25px that said nothing.
  *
- * `refNo` arrives as a node rather than a string so the screen can style the
- * reference number without this component learning what a reference number is.
+ * ══ ROUND 12: THE H1 COLLIDED WITH BOTH NEIGHBOURS, AND FOR TWO REASONS ═════
+ *
+ * It shipped as `flex h-[48px] items-center text-[40px] leading-[48px]`, and at
+ * any width where the title wrapped it overlapped the chip row above AND the
+ * subtitle below. Reproduced identically in light and dark, so nothing about
+ * this is a theme question.
+ *
+ * TWO INDEPENDENT CAUSES. A fix for either one alone leaves the other, and one
+ * of them was already firing on a SINGLE line:
+ *
+ *   1. `h-[48px]` IS A FIXED HEIGHT, AND `items-center` CENTRES THE OVERFLOW.
+ *      Two lines of 48px is 96px of content in a 48px box; `align-items:center`
+ *      splits the 48px difference and puts 24px ABOVE the box and 24px BELOW.
+ *      That is the three-way collision, and it is symmetric because centring is.
+ *      The neighbours are 25px blocks hard against it with no gap, so 24px eats
+ *      each of them whole.
+ *
+ *   2. `leading-[48px]` AT 40px IS 1.200em, AND THE FACE NEEDS 1.584em.
+ *      LINE Seed Sans TH declares ascent 1144 / descent −440 / lineGap 0 over
+ *      1000 units. 48px is 15.4px UNDER that floor, so half-leading is −7.7px
+ *      and the glyph box grows out of its own line box. Measured with
+ *      `node scripts/_probe-thai-type-metrics.mjs`, the ink lands
+ *
+ *          4.7px ABOVE the line box   and   6.7px BELOW it
+ *
+ *      ON ONE LINE, with nothing wrapped. So even a short heading was bleeding
+ *      into the 25px rows on either side; the wrap only made it obvious.
+ *
+ * ── WHAT REPLACED THEM ────────────────────────────────────────────────────
+ *
+ * The height is GONE rather than raised — an `h-` that has to be recomputed
+ * whenever the copy changes is the same defect waiting for a longer name, and
+ * `min-h-` would be inert here because one line is already taller than 48px.
+ * `flex items-center` went with it: with no fixed height there is nothing to
+ * centre in, and a flex container around a wrapping heading only obscures that.
+ * It is a plain block, and it is as tall as its lines.
+ *
+ * The leading is `leading-[64px]` = 1.600em. At that box every extreme of the
+ * face falls INSIDE the line box — 3.3px of clearance at the top and 1.3px at
+ * the bottom — so a wrapped line cannot touch the line above it and the block
+ * cannot touch its neighbours. THE CONSEQUENCE, STATED: a one-line header is
+ * now 25 + 64 + 25 = 114px where it was 98px. That is not a design change
+ * smuggled in — it is what 40px of this face costs, and 48px was never paying
+ * it.
+ *
+ * ── AND THE TWO SIBLING BLOCKS ARE `min-h-`, NOT `h-` ─────────────────────
+ *
+ * They carry the SAME fixed-height shape: a timestamp or a course name that
+ * wraps overflows a 25px box by 8.5px each way, and the subtitle's overflow
+ * points UP at the heading — so a fix that hardened only the H1 would have left
+ * the collision reachable from the other side. `min-h-` is identical to `h-` for
+ * every content that fits, so this can only ever prevent an overlap and never
+ * cause one. Their LEADINGS are left alone; see the note in the round-12 test
+ * about the three pairs in this file that sit under the floor by less than a
+ * pixel of ink.
+ *
+ * ── NOT max-width, NOT truncate ───────────────────────────────────────────
+ * The heading carries a person's name by ruling — round 6 put it there so a
+ * human can identify the record at a glance, and the reference number left the
+ * heading to make room for it. Truncating defeats the reason it exists. It
+ * wraps, and wrapping is safe at every width.
+ *
+ * `break-words` is the backstop for the one case wrapping alone cannot solve:
+ * Thai has no spaces, so a browser without a Thai line-breaking dictionary
+ * cannot break `ข้อมูลการลงทะเบียน` at all — and that label ALONE is 323px at
+ * 40px against 327px of content width at a 375px viewport. It only ever engages
+ * where the alternative is horizontal overflow.
  */
 export function DetailHeader({ badge, timestamp, title, subtitle }) {
   return (
     <div>
-      <div className="flex h-[25px] items-center gap-[10px]">
+      <div className="flex min-h-[25px] items-center gap-[10px]">
         {badge}
         {timestamp ? (
           <span className="text-[12px] leading-[17px] text-[var(--text-muted)]">{timestamp}</span>
         ) : null}
       </div>
 
-      <h1 className="flex h-[48px] items-center text-[40px] font-bold leading-[48px] text-[var(--text-primary)]">
+      <h1 className={cn('break-words text-[var(--text-primary)]', DETAIL_PAGE_HEADING)}>
         {title}
       </h1>
 
       {subtitle ? (
-        <p className="flex h-[25px] items-center text-[14px] leading-[21px] text-[var(--text-secondary)]">
+        <p className="flex min-h-[25px] items-center text-[14px] leading-[21px] text-[var(--text-secondary)]">
           {subtitle}
         </p>
       ) : null}
@@ -948,6 +1013,26 @@ export function TabPanel({ id, labelledBy, hidden, children }) {
  *     name, held at 11px so it still matches the in-house LIST cell, which this
  *     round does not touch.
  */
+/**
+ * ── ROUND 12 ADDED THE PAGE HEADING TO THIS BLOCK, AND HERE IS WHY ─────────
+ *
+ * The H1 was `text-[40px] leading-[48px]` written inline in `DetailHeader`, and
+ * it was 15.4px under the font's floor — the exact defect round 11's field-row
+ * work measured and removed, sitting untouched forty lines above the constants
+ * that removed it. It was never in this block because round 7 scoped the page
+ * header out of the label-left/value-right work, and nothing has looked at it
+ * since.
+ *
+ * It is here now so that the floor test DERIVES it. That is not tidiness: round
+ * 11's `leading-under-the-floor` control proved a floor test iterating a
+ * hand-written list stays green through a real regression, because the list is
+ * not the thing that ships. A pair that lives anywhere but here is a pair the
+ * test cannot see.
+ *
+ *   40px / 64px = 1.600em against a 1.584em floor. All ink inside the box:
+ *   3.3px of clearance at the top, 1.3px at the bottom.
+ */
+export const DETAIL_PAGE_HEADING = 'text-[40px] font-bold leading-[64px]';
 export const DETAIL_FIELD_VALUE = 'text-[16px] leading-[28px]';
 export const DETAIL_FIELD_LABEL = 'text-[13px] leading-[21px] lg:leading-[28px]';
 export const DETAIL_CARD_HEADING = 'text-[14px] font-bold leading-[23px]';

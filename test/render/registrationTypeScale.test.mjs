@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
 import { InhouseDetailClient } from '@/app/admin/registrations/inhouse/_components/InhouseDetailClient';
 import {
-  DETAIL_FIELD_VALUE, DETAIL_FIELD_LABEL, DETAIL_CARD_HEADING,
+  DETAIL_FIELD_VALUE, DETAIL_FIELD_LABEL, DETAIL_CARD_HEADING, DETAIL_PAGE_HEADING,
 } from '@/app/admin/registrations/_components/detailShell';
 import { readSource } from '../sourceScan.mjs';
 import {
@@ -213,6 +213,7 @@ test('the sizes under test are the ones this file names', () => {
    * assertion in this file a claim about a SPECIFIC scale rather than about
    * whatever the component happens to export.
    */
+  assert.equal(DETAIL_PAGE_HEADING, 'text-[40px] font-bold leading-[64px]');
   assert.equal(DETAIL_FIELD_VALUE, 'text-[16px] leading-[28px]');
   assert.equal(DETAIL_FIELD_LABEL, 'text-[13px] leading-[21px] lg:leading-[28px]');
   assert.equal(DETAIL_CARD_HEADING, 'text-[14px] font-bold leading-[23px]');
@@ -349,7 +350,8 @@ test('no CARD file carries a detail type size of its own', () => {
    */
   for (const rel of DETAIL_SOURCES.filter((r) => !r.endsWith('detailShell.jsx'))) {
     const code = readSource(rel).code;
-    for (const literal of ['text-[16px]', 'text-[14px]', 'leading-[28px]', 'leading-[21px]', 'leading-[23px]']) {
+    for (const literal of ['text-[40px]', 'text-[16px]', 'text-[14px]',
+      'leading-[64px]', 'leading-[28px]', 'leading-[21px]', 'leading-[23px]']) {
       assert.equal(occurrences(code, literal), 0,
         `${rel} spells ${literal} itself — import the constant from detailShell instead`);
     }
@@ -414,20 +416,21 @@ const systemCardHeading = () => {
 };
 
 const shippedPairs = () => [
+  ...pairsIn('page heading', DETAIL_PAGE_HEADING),
   ...pairsIn('field value', DETAIL_FIELD_VALUE),
   ...pairsIn('field label', DETAIL_FIELD_LABEL),
   ...pairsIn('card heading', DETAIL_CARD_HEADING),
   ...pairsIn('system-card heading', systemCardHeading()),
 ];
 
-test('the derived pair list is real — four sources, four sizes, no empty parse', () => {
+test('the derived pair list is real — five sources, five sizes, no empty parse', () => {
   /**
    * Every assertion in §3 loops over `shippedPairs()`, and a loop over an
    * empty array passes. This is the only thing standing between a broken parser
    * and four silently vacuous tests.
    */
-  assert.equal(shippedPairs().length, 5,
-    `expected 5 pairs (value, label × 2 widths, card heading, system heading), got `
+  assert.equal(shippedPairs().length, 6,
+    `expected 6 pairs (page heading, value, label × 2 widths, card heading, system heading), got `
     + `${shippedPairs().map(([w, p, l]) => `${w} ${p}/${l}`).join(', ')}`);
   assert.ok(systemCardHeading().includes('text-['), `SystemCard's heading did not parse: "${systemCardHeading()}"`);
   for (const [what, px, leading] of shippedPairs()) {
@@ -779,4 +782,215 @@ test('the internal-notes entries do NOT follow either', () => {
     'the customer note did not follow the field value');
   assert.ok(quotedBody.length > 100 && quotedBody.length < 2000,
     `the QuotedNote slice is ${quotedBody.length} bytes — the bounds are wrong, not the code`);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// §5  THE PAGE HEADING — ROUND 12
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ══ WHAT THIS SECTION CAN AND CANNOT SAY ════════════════════════════════════
+ *
+ * The defect was a COLLISION: at a narrow viewport the wrapped H1 overlapped the
+ * chip row above it and the subtitle below it. Nothing in this tier can see a
+ * collision. `renderToStaticMarkup` has no layout engine, no viewport, no font
+ * and no boxes — it produces a string.
+ *
+ * SO NOTHING BELOW ASSERTS THAT THE COLLISION IS GONE, and no test in this file
+ * should ever be read as saying so. What is asserted is the two PROPERTIES whose
+ * absence caused it, each of which IS visible here:
+ *
+ *   1. the H1 declares no fixed height, so a second line has somewhere to go;
+ *   2. its line box clears the font's own, so its ink stays inside it.
+ *
+ * Both are necessary. Neither is sufficient. The sufficient check is a person at
+ * a 768px viewport, and it is on the human checklist where it belongs.
+ *
+ * The measurements are in `node scripts/_probe-thai-type-metrics.mjs`, which
+ * also prints the width at which each heading wraps — the public one below
+ * 1024px, the in-house one at EVERY width once a real company name is in it.
+ */
+
+/**
+ * A FIXED block height — `h-[48px]` — and NOT `min-h-[48px]` or `max-h-[48px]`.
+ *
+ * ── THE LOOKBEHIND IS LOAD-BEARING, AND A FAILING TEST IS WHY IT IS HERE ───
+ * Written first as `/\bh-\[[0-9.]+px\]/`, which MATCHES INSIDE `min-h-[25px]`:
+ * `-` is a non-word character and `h` is a word character, so `\b` sits happily
+ * between them. The `min-h-` this round introduced therefore read as the fixed
+ * height it replaced, and the assertion failed on correct code — face two, in
+ * miniature. `(?![\w-])` guards the tail for the same class of reason.
+ */
+const FIXED_BLOCK_HEIGHT = /(?<![\w-])h-\[[0-9.]+px\](?![\w-])/;
+
+const headerMarkup = (markup) => {
+  const at = markup.indexOf('<h1');
+  assert.notEqual(at, -1, 'no <h1> in the render');
+  return markup.slice(0, markup.indexOf('</h1>', at) + 5);
+};
+const h1Class = (markup) => {
+  const tag = headerMarkup(markup).slice(headerMarkup(markup).indexOf('<h1'));
+  return (tag.match(/class="([^"]*)"/) ?? [, ''])[1];
+};
+
+test('the page heading carries the one shared heading class, on BOTH screens', () => {
+  for (const [name, markup] of Object.entries(SCREENS)) {
+    const cls = h1Class(markup);
+    assert.ok(cls.includes('text-[40px]'), `${name}: the H1 is not 40px — "${cls}"`);
+    assert.ok(cls.includes('leading-[64px]'), `${name}: the H1 lost its line box — "${cls}"`);
+    assert.ok(cls.includes('font-bold'), `${name}: the H1 lost its weight — "${cls}"`);
+  }
+});
+
+test('CONTROL: twMerge did NOT eat the size against the colour token', () => {
+  /**
+   * ── NOT PARANOIA. THE SAME SHAPE HAS BITTEN THIS SUITE ────────────────────
+   *
+   * The H1 is `cn('break-words text-[var(--text-primary)]', DETAIL_PAGE_HEADING)`
+   * and twMerge has to decide whether `text-[…]` is a FONT SIZE or a TEXT
+   * COLOUR. It classifies by the arbitrary value, and `var(--text-primary)` is
+   * exactly the ambiguous case. If it guessed wrong, one of the two would be
+   * dropped, the markup would look sane, and the page would render at the
+   * inherited size — or in the inherited colour.
+   *
+   * So both survivors are asserted together, which is the only form that catches
+   * it: either alone is satisfied by the class that won.
+   */
+  const cls = h1Class(SCREENS['public/corporate']);
+  assert.ok(cls.includes('text-[var(--text-primary)]') && cls.includes('text-[40px]'),
+    `twMerge collapsed the H1's size and colour into one — "${cls}"`);
+});
+
+test('the H1 declares NO fixed height — a second line has somewhere to go', () => {
+  /**
+   * ══ CAUSE ONE, AS A PROPERTY ══════════════════════════════════════════════
+   *
+   * It was `flex h-[48px] items-center`. Two 48px lines is 96px of content in a
+   * 48px box, and `align-items:center` splits the overflow — 24px ABOVE the box
+   * and 24px BELOW. The neighbours are 25px blocks hard against it, so each was
+   * eaten whole. That is the three-way collision, and it is symmetric because
+   * centring is.
+   *
+   * A fixed height is banned rather than resized: an `h-` that has to be
+   * recomputed whenever the copy changes is the same defect waiting for a longer
+   * name. `min-h-` is not accepted here either, and that is deliberate — it
+   * would be inert (one line is already 64px) while reading like a guarantee.
+   */
+  for (const [name, markup] of Object.entries(SCREENS)) {
+    const cls = h1Class(markup);
+    assert.ok(!FIXED_BLOCK_HEIGHT.test(cls), `${name}: the H1 has a fixed height again — "${cls}"`);
+    assert.ok(!/\bmax-h-/.test(cls), `${name}: the H1 has a maximum height — "${cls}"`);
+  }
+});
+
+test('CONTROL: that probe DOES find a fixed height where one exists', () => {
+  // The assertion above is an absence, and an absence passes against a matcher
+  // that finds nothing. These are the exact strings it must reject and accept.
+  const probe = (cls) => FIXED_BLOCK_HEIGHT.test(cls);
+  assert.equal(probe('flex h-[48px] items-center text-[40px]'), true, 'the pre-round-12 class is accepted');
+  assert.equal(probe('break-words text-[40px] font-bold leading-[64px]'), false, 'the shipped class is rejected');
+  // …and it does not fire on the LINE box or on a WIDTH, which are not heights.
+  assert.equal(probe('leading-[64px]'), false, 'leading read as a height');
+  // THE ONE THAT BIT. `\bh-\[` matches inside `min-h-[25px]` because `-` is a
+  // non-word character, so the round-12 sibling fix read as the defect it
+  // replaced and this assertion failed on correct code.
+  assert.equal(probe('flex min-h-[25px] items-center'), false, 'min-h read as a fixed height');
+  assert.equal(probe('max-h-[25px]'), false, 'max-h read as a fixed height');
+  assert.equal(probe('w-[48px]'), false, 'a width read as a height');
+  // …and it genuinely reaches the shipped markup rather than an empty string.
+  assert.ok(h1Class(SCREENS['public/corporate']).length > 20, 'the H1 class did not parse');
+});
+
+test('the heading WRAPS — it is not truncated, clamped or held to a width', () => {
+  /**
+   * ══ A RULING, NOT A STYLE ═════════════════════════════════════════════════
+   *
+   * Round 6 put a person's NAME in this heading and moved the reference number
+   * out of it, so that a human can identify the record at a glance. Every
+   * mechanism that makes a long heading fit by hiding part of it defeats the
+   * reason the heading holds a name at all — and each of them is the obvious
+   * first reach for a collision like this one.
+   *
+   * `break-words` is the backstop, and it is the opposite of a limit: Thai has
+   * no spaces, so a browser without a Thai line-breaking dictionary cannot break
+   * `ข้อมูลการลงทะเบียน` at any point — and that label ALONE is 323px at 40px
+   * against 327px of content width at a 375px viewport. It engages only where
+   * the alternative is horizontal overflow.
+   */
+  for (const [name, markup] of Object.entries(SCREENS)) {
+    const cls = h1Class(markup);
+    for (const banned of ['truncate', 'line-clamp-', 'text-ellipsis', 'whitespace-nowrap', 'overflow-hidden', 'max-w-']) {
+      assert.ok(!cls.includes(banned),
+        `${name}: the H1 carries ${banned}. The heading holds a person's name by ruling; `
+        + 'hiding part of it defeats the reason it is there. It must wrap.');
+    }
+    assert.ok(cls.includes('break-words'), `${name}: the H1 lost its unbreakable-Thai backstop — "${cls}"`);
+  }
+});
+
+test('the H1 really is carrying an identifier, so the ruling above is not abstract', () => {
+  // Every assertion in this section is about a heading. If the heading had
+  // silently gone back to the bare label — or to a reference number — the whole
+  // section would still pass while the thing it protects had gone.
+  assert.ok(SCREENS['public/corporate'].includes('ข้อมูลการลงทะเบียน : สมชาย ใจดี'),
+    'the public heading no longer names the coordinator');
+  // The CONTACT company, not the quotation one: this fixture makes the two
+  // diverge on purpose (it is what renders the longest label on either screen)
+  // and `inhouseHeadingIdentifier` follows `displayCompany`'s precedence, which
+  // prefers the contact company when they disagree. Named exactly rather than
+  // matched loosely, because "the heading contains บริษัท" would pass on either.
+  assert.ok(SCREENS.inhouse.includes('ข้อมูลการลงทะเบียน : บริษัท ทดสอบ จำกัด'),
+    'the in-house heading no longer names the company');
+});
+
+test('the H1’s two neighbours cannot clip either — min-h, not h', () => {
+  /**
+   * ══ THE COLLISION WAS REACHABLE FROM BOTH SIDES ═══════════════════════════
+   *
+   * The chip row and the subtitle carry the SAME `h-[25px] flex items-center`
+   * shape the H1 had. A course name or a timestamp that wraps is 42px of content
+   * in a 25px box, so it overflows 8.5px each way — and the subtitle's overflow
+   * points UP, at the heading. Hardening only the H1 would have left the overlap
+   * reachable from underneath it.
+   *
+   * `min-h-` is identical to `h-` for every content that fits, so this can only
+   * prevent an overlap and never cause one.
+   *
+   * ── WHAT IS NOT CHANGED, AND IS NOT AN OVERSIGHT ─────────────────────────
+   * Their LEADINGS. The timestamp is 12px/17px, the subtitle 14px/21px and the
+   * back link 13px/20px, and all three are under the font's floor — by 0.7px,
+   * 0.4px and 0.0px of ink respectively, against the H1's 6.7px. They are named
+   * in the round-12 report rather than fixed here, because this round was scoped
+   * to the heading and a sub-pixel overshoot is a different conversation from a
+   * 24px overlap.
+   */
+  const shell = readSource('src/app/admin/registrations/_components/detailShell.jsx').code;
+  const from = shell.indexOf('export function DetailHeader');
+  const body = shell.slice(from, shell.indexOf('export function TypeBadge'));
+  assert.ok(body.length > 200, 'the DetailHeader slice is empty — the bounds moved, not the code');
+  assert.equal(occurrences(body, 'min-h-[25px]'), 2,
+    'the chip row and the subtitle do not both use min-h-[25px]');
+  assert.ok(!FIXED_BLOCK_HEIGHT.test(body),
+    'DetailHeader still fixes a block height somewhere — a wrapped line will overflow it');
+
+  // CONTROL: `TypeBadge` — the next component down, and deliberately NOT
+  // converted — still fixes its own height. The chip is a pill that never wraps
+  // (`whitespace-nowrap`), so a fixed 25px is right there, and this is what says
+  // the assertion above is about BLOCKS rather than about the word `h-`.
+  const badge = shell.slice(shell.indexOf('export function TypeBadge'), shell.indexOf('export function StatusBar'));
+  assert.ok(badge.includes('h-[25px]'), 'the chip lost its fixed height — the control above proves nothing');
+  assert.ok(badge.includes('whitespace-nowrap'), 'the chip can wrap now, and its fixed height is wrong');
+});
+
+test('the page heading is a literal in exactly ONE place, like the other three', () => {
+  const code = DETAIL_SOURCES.map((rel) => readSource(rel).code).join('\n');
+  assert.equal(occurrences(code, DETAIL_PAGE_HEADING), 1,
+    `"${DETAIL_PAGE_HEADING}" appears ${occurrences(code, DETAIL_PAGE_HEADING)} times, expected 1`);
+  for (const literal of ['text-[40px]', 'leading-[64px]']) {
+    assert.equal(occurrences(code, literal), 1,
+      `${literal} appears ${occurrences(code, literal)} times across the detail tree, not once`);
+  }
+  // And the pair it replaced is GONE rather than merely outnumbered.
+  assert.equal(occurrences(code, 'leading-[48px]'), 0, 'the pre-round-12 H1 line box is still in the tree');
+  assert.equal(occurrences(code, 'h-[48px]'), 0, 'the pre-round-12 H1 fixed height is still in the tree');
 });

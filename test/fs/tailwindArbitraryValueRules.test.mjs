@@ -1393,12 +1393,31 @@ test('the measured geometry really is in the harvest, not merely a large count',
     // in the same literal as `text-[13px]` so it cannot arrive without it. The
     // `lg:` one below is the responsive half and DOES reach every render.
     //
-    // Two more of the round's decisions are deliberately NOT in this list, for
-    // the same reason `h-[93px]` and `gap-x-[36px]` are named above rather than
-    // dropped: `text-[15px]` (the card heading before this round) and
-    // `leading-[17.25px]` (the attendee name cell's line box, which was BELOW
-    // the font's own and clipped Thai upper marks inside a `truncate`). A screen
-    // emitting either would be one that had brought the old scale back.
+    // FOUR of these rounds' decisions are deliberately NOT in this list, for the
+    // same reason `h-[93px]` and `gap-x-[36px]` are named above rather than
+    // dropped. A screen emitting any of them would be one that had brought an
+    // old scale back:
+    //   `text-[15px]`        the card heading before round 11
+    //   `leading-[17.25px]`  the attendee name cell's line box, BELOW the font's
+    //                        own and clipping Thai upper marks inside a truncate
+    //   `leading-[48px]`     the H1's line box before round 12 — 1.200em against
+    //                        a 1.584em floor, ink 4.7px above the box and 6.7px
+    //                        below it ON ONE LINE
+    //   `h-[48px]`           the H1's fixed height, which is what turned a wrap
+    //                        into a three-way overlap
+    // ── ROUND 12'S PAGE HEADING ───────────────────────────────────────────
+    // `text-[40px]` was always rendered and always compiled; what changed is
+    // `leading-[48px]` → `leading-[64px]`, and the OLD one is named as
+    // deliberately absent below rather than dropped.
+    //
+    // `h-[48px]` is deliberately absent too, and for a stronger reason than the
+    // others on this list: it is not a measurement that moved, it is a FIXED
+    // HEIGHT that was the defect. Two 48px lines in a 48px box with
+    // `items-center` put 24px of heading above the block and 24px below, which
+    // is how the H1 came to overlap the chip row and the subtitle at once.
+    'text-[40px]',            // the page H1
+    'leading-[64px]',         // ...and the line box 40px Thai needs (1.584em floor)
+    'min-h-[25px]',           // the chip row and the subtitle, which may now grow
     'text-[16px]',            // every value on both screens
     'leading-[28px]',         // ...and the line box 16px Thai needs
     'text-[13px]',            // the label, taking the size the value vacated

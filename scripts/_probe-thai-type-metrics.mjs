@@ -196,8 +196,19 @@ export const DETAIL_LABELS = [
   'จำนวนผู้เข้าอบรม', 'Request ID',
 ];
 
-/** The type pairs round 11 ships, as [what, px, leading]. */
+/**
+ * The type pairs the detail screens ship, as [what, px, leading].
+ *
+ * PRINTED HERE FOR A HUMAN; NOT LOAD-BEARING. `registrationTypeScale` derives
+ * the same list out of the exported constants and holds THIS against THAT, in
+ * both directions — because a hand-written table is exactly what
+ * `_control-round11.mjs apply leading-under-the-floor` sailed through.
+ */
 export const DETAIL_TYPE_PAIRS = [
+  // Round 12. It was 40/48 — 1.200em against a 1.584em floor, the worst pair on
+  // either screen by a factor of three, and the only one whose ink escaped its
+  // line box far enough to reach the blocks above and below it.
+  ['page heading', 40, 64],
   ['field value', 16, 28],
   ['field label (lg)', 13, 28],
   ['field label (stacked)', 13, 21],
@@ -241,6 +252,23 @@ if (process.argv[1]?.endsWith('_probe-thai-type-metrics.mjs')) {
       + `12px ${(em * 12).toFixed(1).padStart(6)}  13px ${at13.toFixed(1).padStart(6)}  `
       + `14px ${(em * 14).toFixed(1).padStart(6)}   ${label}`
       + `${at13 > NARROWEST_LABEL_TRACK_PX ? '   <- OVERFLOWS at 13px' : ''}`);
+  }
+
+  console.log('\nPAGE HEADINGS at 40px — where each one wraps.');
+  console.log('The H1 has the full content width: viewport − 256 sidebar (md and up) − 48 page padding.');
+  const WIDTHS = [[375, 0], [430, 0], [768, 256], [1024, 256], [1280, 256], [1440, 256]];
+  const avail = WIDTHS.map(([vp, side]) => [vp, vp - side - 48]);
+  console.log('    ' + avail.map(([vp, w]) => `${vp}:${w}`.padStart(10)).join(''));
+  for (const title of [
+    'ข้อมูลการลงทะเบียน',
+    'ข้อมูลการลงทะเบียน : สมชาย ใจดี',
+    'ข้อมูลการลงทะเบียน : ปรีชา ตั้งใจมั่นคง',
+    'ข้อมูลการลงทะเบียน : บริษัท ทดสอบ จำกัด',
+    'ข้อมูลการลงทะเบียน : บริษัท ทดสอบระบบการอบรมและพัฒนาบุคลากร จำกัด',
+  ]) {
+    const px = textWidthEm(title, m) * 40;
+    const cells = avail.map(([, w]) => (px <= w ? '     1 line' : '    WRAPS  ').padStart(10));
+    console.log(`  ${px.toFixed(0).padStart(5)}px ${cells.join('')}   ${title}`);
   }
 
   console.log('\ncard headings at 14px (the h2 truncates, so this is about the card, not the row):');
