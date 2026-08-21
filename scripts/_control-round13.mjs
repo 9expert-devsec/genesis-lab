@@ -23,12 +23,20 @@
  * A suite that only guarded the half that failed would be blind to the half
  * that did not — and the two halves are one keystroke apart in the same action.
  *
- * ══ TWO ARE EXPECTED TO REDDEN NOTHING ══════════════════════════════════════
+ * ══ ONE REDDENS NOTHING, AND ONE WAS PREDICTED TO AND DID NOT ═══════════════
  *
- * `dash-in-a-comment` and `menu-item-reordered` both change text that no rule
- * covers, and their green is the measurement: the first says the guards read
- * CODE rather than prose, the second says the menu assertion is bound to the
- * SET of items rather than to their order.
+ * `dash-in-a-comment` writes both banned literals into a COMMENT and reddens
+ * nothing, which is the measurement: the source guards read CODE, not prose.
+ * That is the defect this suite has now shipped in six costumes, and
+ * `readSource(...).code` is the answer to it.
+ *
+ * `menu-item-reordered` was written expecting the same result and DID redden.
+ * `deepEqual` on an array is order-sensitive, so the attendee menu assertion had
+ * been pinning a presentation order nobody had ever decided — a correct
+ * reordering would have gone red with no rule to point at, which is face two.
+ * The fix was to DECIDE the order rather than to loosen the test; it is stated
+ * at the assertion now. Recorded here because a prediction that was wrong is
+ * more useful than one that was right.
  */
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
@@ -49,6 +57,7 @@ const BREAKS = {
     reddens: [
       'fs/internalNoteAuthorStamp › NEITHER client constructs a note entry of its own',
       'fs/internalNoteAuthorStamp › both clients append the SERVER entry, through the SAME reader as the load',
+      'fs/internalNoteAuthorStamp › CONTROL: the probe reads CODE, and can find what it claims to look for — MEASURED, AND CORRECT: that meta-control asserts the banned literal is in the RAW source and NOT in the stripped code. With the echo restored it is in both, so the control reddens. It is telling the truth — it just cannot distinguish "the stripper broke" from "the literal came back", and the two assertions above are what do.',
     ],
     staysGreen: [
       'render/registrationPlainContact › every byline assertion — THE MEASUREMENT, AND IT IS THE WHOLE REASON THIS DEFECT SHIPPED. The echo only exists AFTER a click, and renderToStaticMarkup never clicks. No render assertion in this suite can reach the optimistic path; the guard has to be on the SHAPE of the code that produces it.',
@@ -77,10 +86,10 @@ const BREAKS = {
     why: 'Render the em dash again when there is nothing to show. ROUND 5\'S RULE, REVERSED: a dash asserts "we looked and there is nothing", which in the reported case was false — the author was in the database the whole time and a rendering bug was wearing the costume of missing data.',
     reddens: [
       'render/registrationPlainContact › a note with NEITHER renders the body and NO byline element at all',
-      'render/registrationPlainContact › a partial byline renders what it has, with no dangling separator',
       'render/registrationPlainContact › CONTROL: the <p> count DOES move, so the assertion above is a real constraint',
     ],
     staysGreen: [
+      'render/registrationPlainContact › a partial byline renders what it has, with no dangling separator — MEASURED GREEN, AND PREDICTED WRONG. `noteByline(...) || dash` only reaches the dash when the byline is EMPTY, so a name-with-no-time is unaffected. The partial case and the empty case are separate branches, and only one of them is what the dash is about.',
       'pure/internalNoteByline › a note with NEITHER returns the empty string — never a dash — THE MEASUREMENT: `noteByline` is untouched and still returns \'\'. The dash is the COMPONENT deciding what to do with that, so the pure tier cannot see this at all, and the two tiers are not redundant.',
     ],
     find: '              {noteByline(note, formatDate) ? (\n                <p className="pt-[6px] text-[11px] leading-[16px] text-[var(--text-muted)]">\n                  {noteByline(note, formatDate)}\n                </p>\n              ) : null}',
@@ -111,6 +120,7 @@ const BREAKS = {
     why: 'Take the author from the BODY argument instead of the session — the shape where a caller chooses who a note is from. Every `use server` export is a POST endpoint, so this is not a hypothetical; it is the same class of hole round 1 closed on the status action. The write path was never broken, and this is how the guard over it is known to fire.',
     reddens: [
       'fs/internalNoteAuthorStamp › the stamped fields come off the SESSION, not off an argument',
+      'fs/internalNotesAppendOnly › authorName is stamped from the SESSION at write time — a guard that predates this round and fires on the same break, which is worth knowing: the new file is not the only thing standing between this action and a client-supplied byline.',
     ],
     find: '          authorName: session.user?.name,',
     replace: '          authorName: body?.authorName ?? session.user?.name,',
@@ -121,6 +131,7 @@ const BREAKS = {
     why: 'Re-resolve the byline from `authorId` at write time — the "fix" round 6 predicted a future reader would reach for, with the symptom it predicted: a departed admin resolves to nothing and the byline goes blank. It is worth a control precisely because the reported defect LOOKED like this one.',
     reddens: [
       'fs/internalNoteAuthorStamp › the action never re-resolves authorName from authorId',
+      'fs/internalNotesAppendOnly › nothing looks authorName up from authorId at read time — round 6 left its own guard here, and it fires on the same break. Two guards on one decision is not redundancy: this one reads the ACTION and that one sweeps wider.',
     ],
     find: '  const stored = doc.adminNotes?.[doc.adminNotes.length - 1];',
     replace: '  await Model.populate(doc, { path: \'adminNotes.authorId\' });\n  const stored = doc.adminNotes?.[doc.adminNotes.length - 1];',
@@ -136,9 +147,10 @@ const BREAKS = {
       'render/registrationPlainContact › a pre-split enquiry falls back to the contact company rather than dropping the row',
       'render/registrationPlainContact › the company sits ABOVE the tax id, the branch and the address',
       'render/registrationPlainContact › สาขา gained a copy control, and it is the same shared component',
-      'render/registrationPlainContact › no new control names a label another already uses',
+      'render/registrationPlainContact › every new control is ABSENT when its value is empty',
     ],
     staysGreen: [
+      'render/registrationPlainContact › no new control names a label another already uses — MEASURED GREEN, AND PREDICTED WRONG. Losing a control cannot create a COLLISION; that assertion only ever moves when a label is duplicated, which is the opposite failure. Worth recording, because a uniqueness check reads like coverage of "the controls are right" and is coverage of one specific way they can be wrong.',
       'render/registrationPlainContact › it shows the QUOTATION company, never the contact one — THE MEASUREMENT: that test runs on the DIVERGING fixture, which is the one document shape the gate lets through. A suite whose only in-house fixture diverged would have passed straight over this defect for as long as it existed, which is how it survived.',
     ],
     find: '                <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompanyDisplay}\n                  action={<CopyAction text={quotationCompanyDisplay} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />',
@@ -177,8 +189,9 @@ const BREAKS = {
     reddens: [
       'render/registrationPlainContact › NO mailto: or tel: href is rendered by either detail screen',
       'render/registrationPlainContact › …and NO mailto:/tel: literal survives in either client’s CODE',
+      'render/registrationPlainContact › CONTROL: the comment stripper is why the source half passes — it asserts the literal is absent from the stripped code, so a real one reddens it. Correct, and the same shape as echo-restored’s meta-control.',
       'render/registrationPlainContact › each de-linked value gained a copy control',
-      'render/registrationPlainContact › no new control names a label another already uses',
+      'render/registrationPlainContact › สาขา gained a copy control, and it is the same shared component — the shape comparison walks every control on the in-house screen against the address one, so a control that VANISHES reddens it too.',
     ],
     staysGreen: [
       'render/registrationPlainContact › the values a link used to carry are still ON SCREEN, in plain text — THE MEASUREMENT: that assertion is satisfied by a linked value too. It exists to stop the absence tests passing on a screen that dropped the email entirely, and it correctly cannot tell a link from plain text.',
@@ -197,6 +210,7 @@ const BREAKS = {
       'render/registrationAttendeeTab › email and phone are separate cells, each falling back to its own dash',
       'render/registrationAttendeeTab › the row menu still offers its copy on a cancelled record',
       'render/registrationAttendeeTab › a row with an email and no phone renders ONE contact line, not one and a blank',
+      'render/registrationPlainContact › no new control names a label another already uses — the attendee control disappears and the remaining set is still unique, so this fires on the COUNT floor rather than on a collision. Recorded because it is the one assertion in that test whose floor does real work.',
     ],
     find: '                    <span className={cn(\'min-w-0 truncate text-[var(--text-primary)]\', DETAIL_FIELD_VALUE)}>\n                      {a.email}\n                    </span>\n                    <CopyAction text={a.email} label={`อีเมลผู้เข้าอบรมท่านที่ ${i + 1}`} />',
     replace: '                    <a href={`mailto:${a.email}`} className={cn(\'min-w-0 truncate text-9e-action\', DETAIL_FIELD_VALUE)}>\n                      {a.email}\n                    </a>',
@@ -230,9 +244,11 @@ const BREAKS = {
   'menu-item-reordered': {
     file: PUBLIC,
     why: 'Put the edit item AFTER the row copy instead of before it. The SET of menu items is unchanged and only the order moves. NOTHING SHOULD REDDEN — the menu assertions are `deepEqual` against an ordered array, so if they are genuinely order-bound this reddens and the guard is stricter than the claim it makes.',
-    reddens: [],
+    reddens: [
+      'render/registrationAttendeeTab › an editable row’s menu holds the edit and the ONE copy the row cannot show — IT DID REDDEN, AND I PREDICTED IT WOULD NOT. `deepEqual` on an array is order-sensitive, so the assertion had been pinning a presentation order that nobody had ever decided: a correct reordering of the menu would have gone red with no rule to point at. FIXED BY DECIDING IT rather than by loosening the test — the edit item comes first because it is the one item that WRITES, and a reader scanning top-down should not meet it under two read-only items. Stated in the test now, so the constraint is deliberate. A Set would have dropped the order AND the ability to see a duplicated item, which a `.filter(Boolean)` list can genuinely produce.',
+    ],
     staysGreen: [
-      'render/registrationAttendeeTab › an editable row’s menu holds the edit and the ONE copy the row cannot show — see the run. THIS ONE IS A GENUINE QUESTION rather than a rhetorical one: `deepEqual` on an array IS order-sensitive, so if it reddens the assertion is pinning a presentation order nobody decided. Whichever way it goes is recorded here rather than predicted.',
+      'render/registrationAttendeeTab › the row menu still offers its copy on a cancelled record — the cancelled fixture has no edit item at all, so its list is one long and cannot be reordered. The two menu assertions are not duplicates: one covers the editable order, the other the locked membership.',
     ],
     find: '    onEditRow ? { key: \'edit\', icon: Pencil, label: \'แก้ไขรายชื่อ\', onClick: onEditRow } : null,\n    rowText',
     replace: '    rowText',

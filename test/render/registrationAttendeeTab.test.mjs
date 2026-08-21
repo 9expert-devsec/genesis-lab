@@ -455,6 +455,21 @@ test('an editable row’s menu holds the edit and the ONE copy the row cannot sh
    * quietly dropped: there is one copy item now, so there is one gate, and the
    * case that separated them (an email with no name) is covered instead by the
    * cell-level control asserted above.
+   *
+   * ══ THE ORDER IS PINNED, AND THAT IS NOW A DECISION ══════════════════════
+   *
+   * `deepEqual` on an array is ORDER-SENSITIVE, so this has always pinned the
+   * order as well as the membership — accidentally. `_control-round13.mjs apply
+   * menu-item-reordered` moves the edit item below the row copy without changing
+   * the set, and this test reddens; the control was written expecting nothing to
+   * move, and the run said otherwise.
+   *
+   * It is kept ordered rather than loosened to a Set, and the reason is stated
+   * here so the constraint is deliberate instead of incidental: THE EDIT COMES
+   * FIRST BECAUSE IT IS THE ONE ITEM THAT CHANGES THE RECORD. A reader scanning
+   * a menu reads top-down, and the item that writes should not be sitting under
+   * two that only read. A Set would also lose the ability to see a duplicated
+   * item, which is a real failure mode for a list built by `.filter(Boolean)`.
    */
   const rows = attendeeRows(FULL);
   assert.deepEqual(rowMenuItems(rows[0]), ['แก้ไขรายชื่อ', 'คัดลอกผู้เข้าอบรม']);
