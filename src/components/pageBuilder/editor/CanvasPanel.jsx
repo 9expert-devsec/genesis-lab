@@ -62,9 +62,13 @@ function canvasCss(hoverKey, selKey) {
   return rules.join('\n');
 }
 
-// Device-preview widths. The clamp is an OUTER container's max-width — the real
-// render inside reflows under real media queries at that width, exactly as it
-// will in production. desktop = no clamp (full width, unchanged).
+// Device-preview widths. The clamp is an OUTER container's max-width, and that
+// is ALL it is: the same real render, narrowed. It does NOT change which media
+// queries apply — Tailwind's sm:/md:/lg: ask the browser VIEWPORT, not this box,
+// so a 3-column grid stays 3 columns here and settings.visibility inverts
+// (mobile_only vanishes, desktop_only shows). The toolbar says so out loud when
+// a clamp is on; the measurement lives in lib/pageBuilder/previewViewportCaveat.js
+// and the real check is the Preview link. desktop = no clamp (full width).
 const VIEWPORT_MAXW = { desktop: null, tablet: 768, mobile: 390 };
 
 export function CanvasPanel() {
@@ -106,9 +110,11 @@ export function CanvasPanel() {
   // Device preview is a WIDTH CLAMP on the SAME real render — the outer container
   // centres it and caps its max-width; the inner `data-pb-canvas` render (through
   // the real SectionRenderer, real theme wrapper, click-to-select and hover, all
-  // acting on the same DOM) is untouched at every width. `px-4` when clamped gives
-  // a visible gutter; the transition makes switching feel intentional. NOT an
-  // iframe, NOT a re-render.
+  // acting on the same DOM) is untouched at every width. That last word is the
+  // honest one: untouched includes its BREAKPOINTS, which still follow the browser
+  // window (see VIEWPORT_MAXW above). `px-4` when clamped gives a visible gutter;
+  // the transition makes switching feel intentional. NOT an iframe, NOT a
+  // re-render — and, for the same reason, not a device preview.
   return (
     <div className={cn('mx-auto transition-[max-width] duration-300 ease-9e', clampWidth && 'px-4')}
       style={clampWidth ? { maxWidth: clampWidth } : undefined}
