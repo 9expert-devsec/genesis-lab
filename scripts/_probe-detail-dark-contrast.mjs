@@ -123,9 +123,33 @@ const PAIRS = [
   ['CopyButton idle', 11, false, (t) => t.textMuted, (t) => t.surface, 'token'],
   ['CopyButton ok', 11, false, () => NINE_E.action, (t) => t.surface, 'NO DARK VARIANT'],
   ['CopyButton fail', 11, false, () => NINE_E.accent, (t) => t.surface, 'NO DARK VARIANT'],
+  // Round 13's new controls. They are the SAME component as the ones already
+  // listed, so they add no new colour pair — recorded so the table's row count
+  // is the set of distinct pairs rather than a headcount of controls.
+  ['in-house email value', 16, false, (t) => t.textPrimary, (t) => t.surface, 'round 13: was a link'],
+  ['in-house phone value', 16, false, (t) => t.textPrimary, (t) => t.surface, 'round 13: was a link'],
 
   // ── links and actions ─────────────────────────────────────────────────────
-  ['mailto / tel link', 16, false, () => NINE_E.action, (t) => t.surface, 'NO DARK VARIANT'],
+  //
+  // ══ ROUND 13 REMOVED TWO ROWS FROM THIS TABLE ═══════════════════════════
+  //
+  // `mailto / tel link` and `attendee email link` were both `text-9e-action` on
+  // `--surface` at 2.92:1, and both are GONE rather than fixed: every mailto:
+  // and tel: on the two detail screens became plain text with a copy control.
+  // The values now render in `--text-primary` (14.75:1 in dark) and the copy
+  // control they gained is `CopyButton idle`, which is ALREADY a row here — so
+  // the removals are not offset by anything new.
+  //
+  // They are named rather than silently deleted, for the same reason
+  // `h-[93px]` and `gap-x-[36px]` are named in the harvest's measured list: a
+  // reader comparing this table to round 12's report needs to know which of the
+  // two is out of date. THE COUNT MOVED FROM 16 TO 14 IN DARK AND 4 TO 4 IN
+  // LIGHT — the two removed rows passed in light, so the light figure is
+  // unchanged and only the dark one improves.
+  //
+  // `Omise charge link` STAYS. It is a link to dashboard.omise.co, an external
+  // system, which is a genuine navigation rather than a value to re-type — the
+  // distinction that decided which anchors went.
   ['Omise charge link', 16, false, () => NINE_E.action, (t) => t.surface, 'NO DARK VARIANT'],
   ['ยอดสุทธิ total', 16, true, () => NINE_E.action, (t) => t.surface, 'NO DARK VARIANT'],
   ['DetailError line', 12, false, () => NINE_E.accent, (t) => t.pageBg, 'NO DARK VARIANT'],
@@ -148,7 +172,9 @@ const PAIRS = [
 
   // ── the attendee table ────────────────────────────────────────────────────
   ['attendee name', 16, true, (t) => t.textPrimary, (t) => t.surface, 'token'],
-  ['attendee email link', 16, false, () => NINE_E.action, (t) => t.surface, 'NO DARK VARIANT'],
+  // `attendee email link` was here at 2.92:1 and is gone with the anchor — the
+  // cell renders `--text-primary` now. See the note above the links block.
+  ['attendee email (plain)', 16, false, (t) => t.textPrimary, (t) => t.surface, 'round 13: was a link'],
   ['attendee dash', 16, false, (t) => t.textMuted, (t) => t.surface, 'token'],
   ['attendee # counter', 12, false, (t) => t.textMuted, (t) => t.surfaceMuted, 'token'],
   ['attendee col header', 11, false, (t) => t.textSecondary, (t) => t.surfaceMuted, 'token'],

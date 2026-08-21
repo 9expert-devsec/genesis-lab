@@ -80,8 +80,16 @@ const BREAKS = {
       'render/registrationTypeScale › EVERY value cell on BOTH screens carries the one shared value class — THE MEASUREMENT: the markup is unchanged, so a render assertion cannot distinguish a shared constant from a copy of it. That is what the source guard is for.',
       'fs/tailwindArbitraryValueRules › every arbitrary-value class the DETAIL screens RENDER compiles to a rule — the class is still a complete literal, so it still compiles.',
     ],
-    find: "                    className={cn('block truncate text-9e-action hover:underline', DETAIL_FIELD_VALUE)}>",
-    replace: '                    className="block truncate text-9e-action hover:underline text-[16px] leading-[28px]">',
+    // RE-POINTED IN ROUND 13. The anchor was the attendee email cell's `<a>`,
+    // and round 13 removed every mailto: on both screens — the cell is a plain
+    // `<span>` with a copy control beside it now. `verify` caught the stale FIND
+    // the moment the round landed, which is the whole reason `verify` exists:
+    // the suite never imports this file, so a dead anchor is invisible until
+    // somebody reaches for the control, which is exactly when they are relying
+    // on it. The BREAK is unchanged — spell the shared size inline instead of
+    // importing it — and so is everything it measures.
+    find: "                    <span className={cn('min-w-0 truncate text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>",
+    replace: '                    <span className="min-w-0 truncate text-[var(--text-primary)] text-[16px] leading-[28px]">',
   },
 
   'heading-not-smaller': {
