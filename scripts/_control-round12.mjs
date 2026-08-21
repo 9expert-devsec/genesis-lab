@@ -59,7 +59,8 @@ const BREAKS = {
     why: 'Put the 48px box and `items-center` back on the H1 while LEAVING the good line box. A one-line heading is then 64px of content centred in a 48px box — 8px out of each end — and a two-line one is 128px in 48px, so 40px lands on the chip row and 40px on the subtitle. The class is a complete literal and compiles; nothing about the markup reads as wrong.',
     reddens: [
       'render/registrationTypeScale › the H1 declares NO fixed height — a second line has somewhere to go',
-      'fs/tailwindArbitraryValueRules › the measured geometry really is in the harvest, not merely a large count',
+      'render/registrationTypeScale › the H1’s two neighbours cannot clip either — min-h, not h',
+      'render/registrationTypeScale › the page heading is a literal in exactly ONE place, like the other three',
     ],
     staysGreen: [
       'render/registrationTypeScale › every type pair this round ships clears LINE Seed Sans TH’s own line box — THE MEASUREMENT: the LINE BOX is untouched, so the floor test cannot see this at all. That is why the two causes have two assertions rather than one.',
@@ -78,13 +79,14 @@ const BREAKS = {
       'render/registrationTypeScale › the sizes under test are the ones this file names',
       'render/registrationTypeScale › the page heading carries the one shared heading class, on BOTH screens',
       'render/registrationTypeScale › every type pair this round ships clears LINE Seed Sans TH’s own line box',
+      'render/registrationTypeScale › …and clears the ink extremes too — MEASURED: at 40px the 48px box is under the INK extent (59.4px) as well as under the floor (63.4px), so both checks fire. They part company only near the margin; round 11’s leading-under-the-floor is where only one of them did.',
       'render/registrationTypeScale › the probe’s printed table IS the scale the components ship',
       'render/registrationTypeScale › the page heading is a literal in exactly ONE place, like the other three',
       'fs/tailwindArbitraryValueRules › the measured geometry really is in the harvest, not merely a large count',
     ],
     staysGreen: [
       'render/registrationTypeScale › the H1 declares NO fixed height — the block still grows with its lines. The other half of the defect, untouched, which is what makes these two controls a pair rather than a duplicate.',
-      'render/registrationTypeScale › …and clears the ink extremes too — 48px still clears the 59.4px ink? NO: check the run. If this one DOES redden, the ink and floor checks agree here and only disagree at the margin — see round 11’s note.',
+      'render/registrationTypeScale › the heading WRAPS — nothing here hides text.',
     ],
     find: "export const DETAIL_PAGE_HEADING = 'text-[40px] font-bold leading-[64px]';",
     replace: "export const DETAIL_PAGE_HEADING = 'text-[40px] font-bold leading-[48px]';",
@@ -97,11 +99,12 @@ const BREAKS = {
       'render/registrationTypeScale › the sizes under test are the ones this file names',
       'render/registrationTypeScale › the page heading carries the one shared heading class, on BOTH screens',
       'render/registrationTypeScale › every type pair this round ships clears LINE Seed Sans TH’s own line box',
+      'render/registrationTypeScale › …and clears the ink extremes too, so two wrapped lines cannot touch',
       'render/registrationTypeScale › the page heading is a literal in exactly ONE place, like the other three',
       'fs/tailwindArbitraryValueRules › the measured geometry really is in the harvest, not merely a large count',
     ],
     staysGreen: [
-      'render/registrationTypeScale › the probe’s printed table IS the scale the components ship — THE MEASUREMENT, AND THE WHOLE POINT: the table now agrees with the code, so the sync check is silent. If the FLOOR test were still reading that table, this break would be invisible and the suite would be green over a shipped regression. It reddens because round 11 made it derive.',
+      'render/registrationTypeScale › the probe’s printed table IS the scale the components ship — MEASURED GREEN, AND THE WHOLE POINT: the table now agrees with the code, so the sync check is silent. If the FLOOR test were still reading that table, this break would be invisible and the suite would be green over a shipped regression. It reddens because round 11 made it derive.',
     ],
     find: "export const DETAIL_PAGE_HEADING = 'text-[40px] font-bold leading-[64px]';",
     replace: "export const DETAIL_PAGE_HEADING = 'text-[40px] font-bold leading-[48px]';",
@@ -166,10 +169,10 @@ const BREAKS = {
     why: 'Put `h-[25px]` back on the subtitle. A course name that wraps is 42px of content in a 25px box, so `items-center` pushes 8.5px UP — into the heading — and 8.5px down. Hardening only the H1 leaves the overlap reachable from underneath it, which is the shape of a fix that assumed one cause.',
     reddens: [
       'render/registrationTypeScale › the H1’s two neighbours cannot clip either — min-h, not h',
-      'fs/tailwindArbitraryValueRules › the measured geometry really is in the harvest, not merely a large count',
     ],
     staysGreen: [
       'render/registrationTypeScale › the H1 declares NO fixed height — THE MEASUREMENT: the H1 is untouched, so every assertion about the H1 is silent. The neighbours needed their own assertion for exactly this reason.',
+      'fs/tailwindArbitraryValueRules › the measured geometry — MEASURED, AND PREDICTED WRONG FIRST TIME. the min-h-[25px] class is on the measured list, and the CHIP ROW still renders it, so the list is satisfied by one of the two siblings. A harvest that asks "is this class anywhere in the render" cannot count them, which is why the neighbours assertion counts occurrences in the SOURCE instead.',
     ],
     find: '        <p className="flex min-h-[25px] items-center text-[14px] leading-[21px] text-[var(--text-secondary)]">',
     replace: '        <p className="flex h-[25px] items-center text-[14px] leading-[21px] text-[var(--text-secondary)]">',
@@ -180,7 +183,9 @@ const BREAKS = {
     why: 'Put `h-[25px]` back on the chip row. The timestamp is an ordinary wrapping span in a flex row; at a narrow width it takes two lines and overflows the box downward, INTO the heading. The other direction of the same defect.',
     reddens: [
       'render/registrationTypeScale › the H1’s two neighbours cannot clip either — min-h, not h',
-      'fs/tailwindArbitraryValueRules › the measured geometry really is in the harvest, not merely a large count',
+    ],
+    staysGreen: [
+      'fs/tailwindArbitraryValueRules › the measured geometry — the SUBTITLE still renders min-h-[25px], so the harvest is satisfied. See the note on subtitle-fixed-height.',
     ],
     find: '      <div className="flex min-h-[25px] items-center gap-[10px]">',
     replace: '      <div className="flex h-[25px] items-center gap-[10px]">',
