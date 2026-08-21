@@ -63,11 +63,18 @@ const render = (coordinator) =>
  * restyle of the card cannot silently unbound it — and both ends are asserted,
  * because an `indexOf` that returns -1 would slice a region that is not this
  * card and every absence assertion would pass for the wrong reason.
+ *
+ * ── RE-POINTED IN ROUND 11, NOT WEAKENED ──────────────────────────────────
+ * The closing bound was `>การเงินและเอกสาร<`; that card is now
+ * `>ข้อมูลสำหรับออกใบเสนอราคา<`. The bound is the NEXT CARD'S HEADING either
+ * way, the `notEqual(-1)` on both ends is unchanged, and the region sliced is
+ * byte-for-byte the one it was. Nothing here is looser than it was: the string
+ * moved, the claim did not.
  */
 function coordinatorCard(markup) {
   const start = markup.indexOf('>ผู้ประสานงาน<');
   assert.notEqual(start, -1, 'the coordinator card heading is missing');
-  const end = markup.indexOf('>การเงินและเอกสาร<', start);
+  const end = markup.indexOf('>ข้อมูลสำหรับออกใบเสนอราคา<', start);
   assert.notEqual(end, -1, 'the card after the coordinator card is missing — the region is unbounded');
   return markup.slice(start, end);
 }

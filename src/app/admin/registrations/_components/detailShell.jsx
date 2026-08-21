@@ -851,6 +851,108 @@ export function TabPanel({ id, labelledBy, hidden, children }) {
 // ── Section cards ───────────────────────────────────────────────────────────
 
 /**
+ * ══ THE TYPE SCALE — ROUND 11, AND IT IS THREE CONSTANTS, NOT A SWEEP ═══════
+ *
+ * Every VALUE on both detail screens is 16px and every CARD HEADING is smaller
+ * than it was. Both live HERE, in the shared row and the shared card header, for
+ * the same reason `FIELD_ROW_COLUMNS` does: a size walked across the cards as a
+ * literal is a size that drifts one card at a time, and nothing on screen says
+ * which card is the odd one out.
+ *
+ * ── THE LADDER, AND THE MEASUREMENT UNDER IT ───────────────────────────────
+ *
+ *            was                     now
+ *   value    text-[13px]/25px        text-[16px]/28px
+ *   label    text-[11px]/16px,       text-[13px]/21px,
+ *            lg:25px                 lg:28px
+ *   heading  text-[15px]/23px        text-[14px]/23px
+ *
+ * 16 / 14 / 13 — three distinct steps. The heading is SMALLER than the value on
+ * purpose: it is bold, coloured `--text-primary`, and preceded by a 29px icon
+ * box, and those three carry it. The value is the content and now outweighs its
+ * own heading, which is the point of the round.
+ *
+ * ── (a) THE LABEL COLUMN WAS NOT LEFT WHERE IT WAS ─────────────────────────
+ *
+ * A label held at 11px against a 16px value is 0.69 of it and stops reading as
+ * one half of a pair — it reads as a caption. The old ratio was 11/13 = 0.85;
+ * 13/16 = 0.81 keeps it. So the LABEL TAKES THE SIZE THE VALUE VACATED, which
+ * is a size already shipping on this screen and already legible in Thai at this
+ * column width.
+ *
+ * 13px is also the LARGEST step the label column can carry, and that is
+ * measured rather than preferred — `node scripts/_probe-thai-type-metrics.mjs`
+ * reads LINE Seed Sans TH's own tables and prints the advance width of every
+ * label on both screens:
+ *
+ *   บริษัท / องค์กร (ที่ติดต่อ)  10.124em  →  131.6px at 13px  ← THE LONGEST
+ *   ชื่อบริษัท (ใบเสนอราคา)      9.457em  →  122.9px at 13px
+ *   เลขประจำตัวผู้เสียภาษี        8.845em  →  115.0px at 13px
+ *
+ * The narrowest place the split is ever drawn is viewport 1024 (`lg`, sidebar
+ * open) → card inner width 676 → the 22% track = 148.7px. The longest label is
+ * 131.6px of that 148.7px — 88% of the track, and still ONE line. At 14px it is
+ * 141.7px, which is 95% and no margin at all for the GPOS the probe cannot
+ * apply; at 15px it overflows outright. 13px is the last step with room in it.
+ *
+ * (The longest label is the IN-HOUSE contact card's divergence spelling, not the
+ * tax id the old docstring named. Worth stating: the label that decides this
+ * column is on the screen the round's rename does not touch, and it only appears
+ * on legacy documents where the two company names disagree.)
+ *
+ * (The docstring on `FIELD_ROW_COLUMNS` said เลขประจำตัวผู้เสียภาษี "needs
+ * roughly 130px at 11px". THE MEASUREMENT SAYS 97.3px. The `lg` conclusion it
+ * supported is unchanged — 22% clears 97px well below lg — but the number was an
+ * estimate and is corrected there.)
+ *
+ * ── (d) THAI RENDERS TALLER THAN LATIN, AND THE FONT SAYS BY HOW MUCH ──────
+ *
+ * LINE Seed Sans TH, read from the file rather than assumed:
+ *
+ *   unitsPerEm 1000 · hhea ascent 1144 · descent −440 · lineGap 0
+ *   → its OWN line box is 1.584em
+ *   head yMax 1070 · yMin −415  → the ink can span 1.485em
+ *
+ * That 1.584em is a HARD FLOOR, not a preference. A `leading-` below it gives
+ * NEGATIVE half-leading: the glyph box grows out of its own line box, and any
+ * ancestor that clips — `truncate` is `overflow:hidden` — takes the upper marks
+ * off the top. That is round 3's 27px-in-a-30px-block defect, stated in em.
+ *
+ *   16px value    floor 25.3px   →  28px   (1.75), 2.7px over the floor and
+ *                                            4.2px clear of the ink extremes
+ *   13px label    floor 20.6px   →  21px stacked, 28px at lg to match the value
+ *   14px heading  floor 22.2px   →  23px, UNCHANGED — it already clears, and the
+ *                                            43px header row is measured geometry
+ *
+ * The old 13px/25px row was 1.92 and the new 16px/28px row is 1.75, so the ratio
+ * falls while the absolute clearance stays within a pixel and a half of what it
+ * was (5.7px → 4.2px). The row grows from 47px to 50px, which is `py-[11px]`
+ * twice plus the line box, unchanged arithmetic.
+ *
+ * ── WHAT FOLLOWS AND WHAT IS DELIBERATELY DIFFERENT ────────────────────────
+ *
+ * A value inside `DLRow`'s `<dd>` with NO size of its own INHERITS — the two
+ * mailto/tel links, the `ยอดสุทธิ` bold span, `emptyHint`, every plain string.
+ * Nothing had to be visited for those.
+ *
+ * `QuotedNote` takes `DETAIL_FIELD_VALUE` directly: the customer's note is the
+ * VALUE of its card, and it is in this file, so it can.
+ *
+ * Deliberately NOT following, each for a reason and not by omission:
+ *   · `InternalNotesBody` — an append-only feed with its own body/byline
+ *     hierarchy, which is the history feed's argument, not a field row's.
+ *   · `SystemCard`'s 12px heading — already the quietest heading on the page.
+ *     Shrinking it further would put it UNDER the 13px label and invert the
+ *     hierarchy the round is trying to establish.
+ *   · the in-house `CourseList`'s mono course CODE — the annotation under the
+ *     name, held at 11px so it still matches the in-house LIST cell, which this
+ *     round does not touch.
+ */
+export const DETAIL_FIELD_VALUE = 'text-[16px] leading-[28px]';
+export const DETAIL_FIELD_LABEL = 'text-[13px] leading-[21px] lg:leading-[28px]';
+export const DETAIL_CARD_HEADING = 'text-[14px] font-bold leading-[23px]';
+
+/**
  * A content section card.
  *
  * Header row 22px in and 20px down, 43px tall: a 29x29 icon box, the heading at
@@ -878,7 +980,10 @@ export function SectionCard({ icon: Icon, title, editLabel, onEdit, editing, sav
         <span className="flex h-[29px] w-[29px] shrink-0 items-center justify-center rounded-9e-md bg-[var(--surface-muted)] text-[var(--text-secondary)]">
           <Icon aria-hidden="true" className="h-[15px] w-[15px]" />
         </span>
-        <h2 className="min-w-0 truncate text-[15px] font-bold leading-[23px] text-[var(--text-primary)]">
+        {/* THE ONLY CARD HEADING ON EITHER SCREEN. Its size is
+            `DETAIL_CARD_HEADING` and never a literal here — see the type-scale
+            note above. `SystemCard` is the stated exception and says so. */}
+        <h2 className={cn('min-w-0 truncate text-[var(--text-primary)]', DETAIL_CARD_HEADING)}>
           {title}
         </h2>
 
@@ -988,9 +1093,21 @@ export function SectionCard({ icon: Icon, title, editLabel, onEdit, editing, sav
  *    1024px  lg           →  inner 676  →  22% = 149px
  *    1440px  capped 1080  →  inner 1036 →  22% = 228px
  *
- * The longest label on either screen is `เลขประจำตัวผู้เสียภาษี`, which needs
- * roughly 130px at 11px. 22% clears that only once the inner width passes ~600px,
- * i.e. viewport ≥ ~948px, and `lg` is the first Tailwind step above it.
+ * ── CORRECTED IN ROUND 11, BY MEASUREMENT ──────────────────────────────────
+ * This paragraph used to say the longest label is `เลขประจำตัวผู้เสียภาษี` and
+ * "needs roughly 130px at 11px". Both halves were estimates and both are wrong.
+ * `node scripts/_probe-thai-type-metrics.mjs` reads the advance widths out of
+ * LINE Seed Sans TH itself:
+ *
+ *   บริษัท / องค์กร (ที่ติดต่อ)  10.124em  ← the longest, and it is in-house
+ *   เลขประจำตัวผู้เสียภาษี        8.845em  = 97.3px at 11px, not 130
+ *
+ * The CONCLUSION is unaffected — `lg` is still the right breakpoint, and by a
+ * wider margin than the old arithmetic claimed. What the correction changes is
+ * the headroom the label column turned out to have, which is what let round 11
+ * take the label from 11px to 13px: 10.124em is 131.6px at 13px against the
+ * 148.7px the 22% track is worth at the narrowest `lg` width. See the type-scale
+ * note above `SectionCard`.
  *
  * `md` is the WRONG answer and the table above is why: the content area is at its
  * narrowest just ABOVE md, not below it, because that is where the 256px sidebar
@@ -1087,7 +1204,7 @@ export function DLRow({ label, value, emptyHint = '', action = null }) {
 
   return (
     <div className={cn('py-[11px]', FIELD_ROW_COLUMNS)}>
-      <dt className="text-[11px] leading-[16px] text-[var(--text-muted)] lg:leading-[25px]">{label}</dt>
+      <dt className={cn('text-[var(--text-muted)]', DETAIL_FIELD_LABEL)}>{label}</dt>
       {/*
         `min-w-0` IS LOAD-BEARING — see the note on FIELD_ROW_COLUMNS. Without it
         the `1fr` track takes its minimum from the value's min-content width, so
@@ -1095,7 +1212,7 @@ export function DLRow({ label, value, emptyHint = '', action = null }) {
         column out of alignment with every other card on the page. That is the
         one thing (1) cannot survive.
       */}
-      <dd className="flex min-w-0 items-start justify-between gap-[10px] text-[13px] leading-[25px] text-[var(--text-primary)]">
+      <dd className={cn('flex min-w-0 items-start justify-between gap-[10px] text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
         {empty
           ? <span className="min-w-0 italic text-[var(--text-muted)]">{emptyHint}</span>
           : <span className="min-w-0">{value}</span>}
@@ -1139,7 +1256,22 @@ export function SystemCard({ icon: Icon, title, children }) {
           <span className="flex h-[25px] w-[25px] shrink-0 items-center justify-center rounded-9e-sm bg-[var(--surface)] text-[var(--text-muted)]">
             <Icon aria-hidden="true" className="h-[13px] w-[13px]" />
           </span>
-          <h2 className="text-[12px] font-bold leading-[17px] text-[var(--text-secondary)]">{title}</h2>
+          {/*
+            ── 12px, AND DELIBERATELY NOT `DETAIL_CARD_HEADING` ──────────────
+            Round 11 shrank the shared card heading to 14px and this one is left
+            at 12. It is already the quietest heading on the page — `--text-
+            secondary`, in the muted last card — and taking it below the 13px
+            field LABEL would invert the hierarchy the round exists to build.
+            Stated here rather than left as an omission.
+
+            THE LEADING DID MOVE, and that is a defect fix rather than a restyle:
+            17px is 1.42em, BELOW LINE SEED SANS TH'S OWN 1.584em line box, so
+            the glyph box was growing out of its line box. 20px clears it. No
+            geometry changes — the 25px icon box beside it is taller than either
+            value, so the row height was never this text's to set.
+            `node scripts/_probe-thai-type-metrics.mjs` prints the arithmetic.
+          */}
+          <h2 className="text-[12px] font-bold leading-[20px] text-[var(--text-secondary)]">{title}</h2>
         </div>
         <div className="pt-[14px]">
           <DL>{children}</DL>
@@ -1160,7 +1292,7 @@ export function SystemCard({ icon: Icon, title, children }) {
  */
 export function QuotedNote({ children }) {
   return (
-    <blockquote className="border-l-[3px] border-l-9e-brand/40 pl-[15px] text-[13px] leading-[22px] text-[var(--text-primary)]">
+    <blockquote className={cn('border-l-[3px] border-l-9e-brand/40 pl-[15px] text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
       <p className="whitespace-pre-wrap">{children}</p>
     </blockquote>
   );

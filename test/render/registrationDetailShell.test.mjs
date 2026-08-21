@@ -919,7 +919,7 @@ test('the coordinator marker is a suffix inside the name cell, not a line of its
 // 6. THE TWO THINGS THE FIGMA FILE SHOWS THAT ARE RULED OUT
 // ════════════════════════════════════════════════════════════════════════════
 
-test('the public การเงินและเอกสาร card carries NO quotation number', () => {
+test('the public ข้อมูลสำหรับออกใบเสนอราคา card carries NO quotation number', () => {
   /**
    * RULED OUT. No such field exists on RegisterPublic and none is being added —
    * quotation numbers are produced outside the system today, so a row here would
@@ -928,7 +928,22 @@ test('the public การเงินและเอกสาร card carries N
    * The card itself IS present, so this is not passing because the card is gone.
    */
   for (const [name, markup] of Object.entries({ PUB_FULL, PUB_SPARSE })) {
-    assert.ok(markup.includes('การเงินและเอกสาร'), `${name}: the finance card is gone`);
+    /*
+      ── RE-POINTED IN ROUND 11, AND THE `>…<` IS NOT DECORATION ────────────
+      This read `markup.includes('การเงินและเอกสาร')`, a bare substring, which
+      was safe only because no other string on the page contained it. The new
+      name does NOT have that property: `ข้อมูลสำหรับออกใบเสนอราคา` and the row
+      this test forbids, `เลขที่ใบเสนอราคา`, share the tail `ใบเสนอราคา`, and the
+      in-house screen has a `ชื่อบริษัท (ใบเสนอราคา)` label besides. So the
+      presence half is anchored on the HEADING ELEMENT — `>…<` — which is the
+      same anchor `coordinatorCardRows` uses, and is STRICTER than what it
+      replaced rather than looser.
+
+      The absence half is left as a bare substring on purpose: it must fire
+      wherever a quotation-number row appears, heading or not.
+    */
+    assert.ok(markup.includes('>ข้อมูลสำหรับออกใบเสนอราคา<'), `${name}: the quotation card is gone`);
+    assert.ok(!markup.includes('การเงินและเอกสาร'), `${name}: the old card name is back`);
     assert.ok(!markup.includes('เลขที่ใบเสนอราคา'), `${name}: a quotation-number row is back`);
     assert.ok(!/QT-\d{4}-\d{4}/.test(markup), `${name}: a quotation number is rendered`);
   }

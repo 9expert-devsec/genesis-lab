@@ -163,7 +163,15 @@ const TRAINING_FORMAT_LABEL = {
  * guard on the restyled screens found it. The emptiness decision happens BEFORE
  * the wrapper, in one place.
  */
-const mono = (value) => (value ? <span className="font-mono text-[11px]">{value}</span> : '');
+/*
+  ── IT CARRIES NO SIZE OF ITS OWN, AND THAT IS ROUND 11 ────────────────────
+  It used to be `font-mono text-[11px]`. The 11px was a SECOND place a field
+  value's size lived, and it survived round 11's rescale by ignoring it — an
+  id at 11px in a card whose every other value is 16px. Dropping the class is
+  not a size change written here, it is the removal of one: the `<dd>` sets the
+  size once and the mono face is the only thing left that is this helper's.
+*/
+const mono = (value) => (value ? <span className="font-mono">{value}</span> : '');
 
 const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 
@@ -1318,7 +1326,12 @@ function CourseList({ courses }) {
     <ul className="space-y-1.5">
       {courses.map(({ code, name }) => (
         <li key={code}>
-          <span className="block text-[13px] text-[var(--text-primary)]">{name || code}</span>
+          {/* The NAME is the value and takes the row's size from the `<dd>`. The
+              CODE below it is deliberately left at 11px: it is the annotation,
+              and it is the same 11px the in-house LIST cell uses — the agreement
+              this component's docstring claims. Round 11 does not touch the list
+              screens, so following the value here would have broken it. */}
+          <span className="block text-[var(--text-primary)]">{name || code}</span>
           {name && <span className="block font-mono text-[11px] text-[var(--text-muted)]">{code}</span>}
         </li>
       ))}

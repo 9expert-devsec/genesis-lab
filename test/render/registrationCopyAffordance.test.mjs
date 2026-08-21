@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
 import { InhouseDetailClient } from '@/app/admin/registrations/inhouse/_components/InhouseDetailClient';
 import { CopyAction } from '@/app/admin/registrations/_components/detailShell';
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * THE COPY AFFORDANCE, ON BOTH SCREENS.
@@ -63,6 +64,39 @@ const PUBLIC_BARE = {
   invoice: null,
 };
 
+/**
+ * ROUND 11'S TWO NEW CONTROLS — ชื่อ-นามสกุล and เลขประจำตัวผู้เสียภาษี.
+ *
+ * The name row is on the INDIVIDUAL branch of the quotation card and the
+ * corporate fixture above never renders it, so it needs a document of its own.
+ * A tax id is on both branches.
+ */
+const PUBLIC_INDIVIDUAL = {
+  ...PUBLIC_DOC,
+  _id: 'dddddddddddddddddddd0004',
+  invoice: {
+    ...PUBLIC_DOC.invoice,
+    type: 'individual',
+    firstName: 'สมชาย', lastName: 'ใจดี',
+    companyName: undefined,
+  },
+};
+
+/**
+ * THE INDIVIDUAL BRANCH WITH BOTH NEW VALUES EMPTY, which is the branch the
+ * empty rule actually has to survive. `firstName`/`lastName` absent joins to
+ * '' and the tax id is absent outright.
+ */
+const PUBLIC_INDIVIDUAL_BARE = {
+  ...PUBLIC_INDIVIDUAL,
+  _id: 'eeeeeeeeeeeeeeeeeeee0005',
+  invoice: {
+    ...PUBLIC_INDIVIDUAL.invoice,
+    firstName: '', lastName: '   ', // whitespace — see the wrapped-but-empty note
+    taxId: '',
+  },
+};
+
 const INHOUSE_DOC = {
   _id: 'cccccccccccccccccccc0003',
   status: 'pending',
@@ -85,6 +119,9 @@ const inh = (doc) => renderToStaticMarkup(
 
 const PUB       = pub(PUBLIC_DOC);
 const BARE      = pub(PUBLIC_BARE);
+const INDIV     = pub(PUBLIC_INDIVIDUAL);
+const INDIV_BARE = pub(PUBLIC_INDIVIDUAL_BARE);
+const INDIV_CANCELLED = pub({ ...PUBLIC_INDIVIDUAL, status: 'cancelled' });
 const CANCELLED = pub({ ...PUBLIC_DOC, status: 'cancelled' });
 const INH       = inh(INHOUSE_DOC);
 const INH_CANCELLED = inh({ ...INHOUSE_DOC, status: 'cancelled' });
@@ -112,9 +149,133 @@ const copyLabels = (markup) =>
 
 test('the public screen offers a copy on each value worth re-typing', () => {
   const labels = copyLabels(PUB);
-  for (const expected of ['ชื่อผู้ประสานงาน', 'อีเมลผู้ประสานงาน', 'เบอร์โทรผู้ประสานงาน', 'ที่อยู่ใบเสนอราคา']) {
+  for (const expected of ['ชื่อผู้ประสานงาน', 'อีเมลผู้ประสานงาน', 'เบอร์โทรผู้ประสานงาน',
+    'ที่อยู่ใบเสนอราคา', 'เลขประจำตัวผู้เสียภาษี']) {
     assert.ok(labels.includes(expected), `no copy control for ${expected}: [${labels.join(', ')}]`);
   }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// 1b. ROUND 11 — THE QUOTATION CARD'S OTHER TWO VALUES
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * ══ WHAT WAS ADDED, AND WHY THESE THREE ARE NOW A SET ═══════════════════════
+ *
+ * ชื่อ-นามสกุล and เลขประจำตัวผู้เสียภาษี get the control ที่อยู่ already had. All
+ * three are values a salesperson re-types into a quotation in another system,
+ * and the address being the only copyable one of them was the odd arrangement:
+ * the two values that are HARDEST to re-type by hand — a Thai name and a
+ * thirteen-digit tax id — were the two you had to select with the mouse.
+ *
+ * They go through `CopyAction` → `CopyButton`, the SAME shared components, with
+ * the same `คัดลอก{label}` accessible name and the same three visible states.
+ * Nothing about them is a new shape, which is the point: a second copy
+ * implementation is how one screen ends up telling a salesperson the tax id is
+ * on their clipboard when it is not.
+ */
+
+test('the quotation card offers a copy on its name, its tax id and its address', () => {
+  const labels = copyLabels(INDIV);
+  for (const expected of ['ชื่อ-นามสกุลใบเสนอราคา', 'เลขประจำตัวผู้เสียภาษี', 'ที่อยู่ใบเสนอราคา']) {
+    assert.ok(labels.includes(expected), `no copy control for ${expected}: [${labels.join(', ')}]`);
+  }
+});
+
+test('the two new controls are the SAME component, not a second implementation', () => {
+  /**
+   * ── ASSERTED ON THE MARKUP, NOT ON THE IMPORT LINE ────────────────────────
+   * An import proves a symbol is in scope; it does not prove these two rows use
+   * it. So the two new buttons' rendered attributes are compared against the
+   * ADDRESS control that already shipped. If either row grew a button of its
+   * own, the shapes diverge here.
+   */
+  const button = (markup, label) => {
+    const at = markup.indexOf(`aria-label="คัดลอก${label}"`);
+    assert.notEqual(at, -1, `no control for ${label}`);
+    const open = markup.lastIndexOf('<button', at);
+    return markup.slice(open, markup.indexOf('</button>', at) + 9);
+  };
+  const shapeOf = (html) => ({
+    typed: /^<button[^>]*type="button"/.test(html),
+    classes: (html.match(/class="([^"]*)"/) ?? [, ''])[1],
+    live: html.includes('aria-live="polite"'),
+    text: html.includes('>คัดลอก<'),
+  });
+
+  const reference = shapeOf(button(INDIV, 'ที่อยู่ใบเสนอราคา'));
+  for (const label of ['ชื่อ-นามสกุลใบเสนอราคา', 'เลขประจำตัวผู้เสียภาษี']) {
+    assert.deepEqual(shapeOf(button(INDIV, label)), reference,
+      `the ${label} control is not the same button as the address one`);
+  }
+  // …and the reference really is a control rather than an empty match.
+  assert.ok(reference.typed && reference.live && reference.text,
+    'the address control did not parse — the comparison above proves nothing');
+});
+
+test('NEITHER new control appears on a row whose value is empty', () => {
+  /**
+   * ══ THE RULE THAT HAS BEEN DEFEATED ONCE ══════════════════════════════════
+   *
+   * A wrapped-but-empty value is TRUTHY, so `value && <CopyButton/>` renders a
+   * control beside nothing. `CopyAction` asks the only question that matters —
+   * is the STRING bound for the clipboard empty — and the fixture here is built
+   * to reach it: the name parts are `''` and `'   '`, which join to WHITESPACE
+   * rather than to nothing, and the tax id is `''`.
+   *
+   * `DLRow` drops both rows too, so this is belt and braces by design; the
+   * `copy-empty` control in scripts/_control-round11.mjs is what says which of
+   * the two guards is actually holding.
+   */
+  const labels = copyLabels(INDIV_BARE);
+  assert.ok(!labels.includes('ชื่อ-นามสกุลใบเสนอราคา'),
+    'a copy control rendered for a name that is only whitespace');
+  assert.ok(!labels.includes('เลขประจำตัวผู้เสียภาษี'),
+    'a copy control rendered for an absent tax id');
+  // …and the address, which this fixture DOES hold, keeps its control — so the
+  // absences above are about the two values and not about an empty page.
+  assert.ok(labels.includes('ที่อยู่ใบเสนอราคา'),
+    'the bare individual fixture rendered no controls at all');
+});
+
+test('both new controls survive the cancellation lock', () => {
+  // The claim §3 makes for the whole screen, made for these two BY NAME so a
+  // future `readOnly` threaded through the quotation card is caught here and not
+  // only inside a set comparison someone has to read carefully.
+  const labels = copyLabels(INDIV_CANCELLED);
+  for (const expected of ['ชื่อ-นามสกุลใบเสนอราคา', 'เลขประจำตัวผู้เสียภาษี']) {
+    assert.ok(labels.includes(expected), `${expected} lost its copy control on a cancelled record`);
+  }
+  assert.deepEqual(copyLabels(INDIV_CANCELLED), copyLabels(INDIV),
+    'the individual screen lost or gained a copy control when cancelled');
+  assert.equal((INDIV_CANCELLED.match(/>แก้ไข</g) ?? []).length, 0,
+    'the cancelled individual fixture is not actually locked');
+});
+
+test('neither new control can write an audit row — there is no action to write one', () => {
+  /**
+   * ══ STRUCTURAL, WHICH IS THE ONLY WAY THIS CAN BE ASSERTED FROM HERE ══════
+   *
+   * A copy is `navigator.clipboard.writeText`. Nothing crosses the wire, so
+   * there is no endpoint anyone could later attach a `recordAdminActionAfter`
+   * to — the enforcement is the ABSENCE of a server action, not a decision
+   * someone has to keep making.
+   *
+   * Read as: `CopyButton`'s body calls no imported action and no `fetch`. The
+   * render tier cannot observe a network call that does not happen, so this is a
+   * shape claim and it says so.
+   */
+  const shell = readSource('src/app/admin/registrations/_components/detailShell.jsx');
+  const from = shell.code.indexOf('export function CopyButton');
+  const body = shell.code.slice(from, shell.code.indexOf('export function CopyAction'));
+  assert.ok(body.includes('navigator.clipboard'), 'CopyButton no longer copies — the slice is wrong');
+  for (const forbidden of ['fetch(', 'recordAdminAction', 'useTransition', 'router.refresh']) {
+    assert.ok(!body.includes(forbidden), `CopyButton reaches for ${forbidden} — a copy became a write`);
+  }
+  // …and the two new call sites hand it a STRING, never an action.
+  const client = readSource('src/app/admin/registrations/_components/RegistrationDetailClient.jsx').code;
+  assert.ok(client.includes('label="เลขประจำตัวผู้เสียภาษี"'), 'the tax-id control is gone from the source');
+  assert.ok(client.includes('label="ชื่อ-นามสกุลใบเสนอราคา"'), 'the name control is gone from the source');
 });
 
 test('the in-house screen offers one on its person and its addresses', () => {

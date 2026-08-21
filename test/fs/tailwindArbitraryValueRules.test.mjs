@@ -1380,6 +1380,31 @@ test('the measured geometry really is in the harvest, not merely a large count',
     'lg:grid-cols-[22%_1fr]', // the label column at 22%, the value column filling
     'lg:gap-x-[1%]',          // ...so the value column's left edge lands at 23%
     'py-[11px]',              // the row's own rhythm, between the hairlines
+    // ── ROUND 11'S TYPE SCALE ─────────────────────────────────────────────
+    // The value at 16px, the label at 13px and the card heading at 14px, each
+    // with the line box Thai needs at that size. THESE BELONG IN THE HARVEST
+    // MORE THAN ANYTHING ELSE ON THIS LIST, because a type scale is exactly the
+    // kind of change that produces perfect markup over no stylesheet: the class
+    // reaches the `<dd>` whatever happens, and a value silently falling back to
+    // the inherited size looks like a design decision rather than a dead rule.
+    //
+    // `leading-[21px]` is NOT here and that is not an oversight: it is the
+    // label's STACKED line box, which only renders below `lg`, and the class is
+    // in the same literal as `text-[13px]` so it cannot arrive without it. The
+    // `lg:` one below is the responsive half and DOES reach every render.
+    //
+    // Two more of the round's decisions are deliberately NOT in this list, for
+    // the same reason `h-[93px]` and `gap-x-[36px]` are named above rather than
+    // dropped: `text-[15px]` (the card heading before this round) and
+    // `leading-[17.25px]` (the attendee name cell's line box, which was BELOW
+    // the font's own and clipped Thai upper marks inside a `truncate`). A screen
+    // emitting either would be one that had brought the old scale back.
+    'text-[16px]',            // every value on both screens
+    'leading-[28px]',         // ...and the line box 16px Thai needs
+    'text-[13px]',            // the label, taking the size the value vacated
+    'lg:leading-[28px]',      // ...sharing the value's line box once the split is on
+    'text-[14px]',            // the shared card heading
+    'leading-[23px]',         // ...unchanged, and it still clears the font's floor
     // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
     'h-[75.85px]', // the three-cell summary row
     'h-[48.3px]',  // one attendee row
