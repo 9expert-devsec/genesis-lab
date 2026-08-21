@@ -67,8 +67,25 @@ export function EditorShell() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty, conflict]);
 
+  // ── WHERE THE HEIGHT COMES FROM ──────────────────────────────────────────
+  // The chain, read off the files rather than guessed:
+  //   admin/layout.jsx:49  <div class="flex h-screen overflow-hidden">
+  //   admin/layout.jsx:59    <main class="h-screen flex-1 overflow-y-auto">
+  //   AdminContentWrapper      <div>  ← no padding on /admin/pages/builder/*
+  //   builder route            PageBuilderEditor → EditorProvider → (this)
+  // Nothing between `main` and here adds height, so the shell fills `main`
+  // exactly at 100dvh — the same number CourseForm, ArticleForm and
+  // CustomPageForm already state for the same reason.
+  //
+  // It used to say `calc(100dvh-4rem)`. There is no 4rem on this route: the
+  // admin chrome is a SIDEBAR, beside `main` rather than above it, and there is
+  // no top bar to subtract. The two numbers happened to coexist without a
+  // doubled scrollbar only because the wrapper's p-6 (48px) was eating into the
+  // 64px the calc had reserved — a near-miss, not a design. With this route now
+  // in FULL_HEIGHT_ROUTES the padding is gone, so keeping the 4rem would leave a
+  // 64px dead band under the shell.
   return (
-    <div className="flex h-[calc(100dvh-4rem)] flex-col">
+    <div className="flex h-[100dvh] flex-col">
       <EditorTopBar
         onSave={saveNow}
         onOpenSettings={() => setDialog('settings')}

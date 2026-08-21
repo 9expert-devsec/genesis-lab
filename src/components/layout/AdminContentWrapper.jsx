@@ -55,6 +55,32 @@ const FULL_HEIGHT_ROUTES = [
    * clever about.
    */
   (path) => /^\/admin\/courses\/new\/?$/.test(path),
+  /**
+   * …and the Page Builder editor: `/admin/pages/builder/new` and
+   * `/admin/pages/builder/[id]/edit`.
+   *
+   * A PREFIX IS SAFE HERE, for the same reason `/admin/articles/` is and
+   * `/admin/courses/` is not: EVERY route under `/admin/pages/builder/` is the
+   * editor. Both of them render `PageBuilderEditor → EditorProvider →
+   * EditorShell` and nothing else — no list, no linear form, nothing above the
+   * shell that would want padding. A third builder route added later is another
+   * editor by construction, which is what makes this a rule rather than a
+   * coincidence about today's two files.
+   *
+   * THE SIBLING `/admin/pages` ROUTES ARE DELIBERATELY NOT MATCHED. `/admin/pages`
+   * is the list of both page kinds and wants its `p-6`; `/admin/pages/new` and
+   * `/admin/pages/[id]/edit` are the older Tiptap `CustomPageForm` and are left
+   * exactly as this file already treats them. Anchoring on `/admin/pages/builder/`
+   * instead of `/admin/pages/` is what keeps them out — the same
+   * three-pages-broken-to-fix-one arithmetic as the courses note above.
+   *
+   * (Measured while adding this, and NOT acted on here: `CustomPageForm` itself
+   * declares `flex h-[100dvh] flex-col`, so those two Tiptap routes are already
+   * the 100dvh-inside-p-6 shape this file exists to prevent. That is a separate
+   * finding about a different editor, not something to fix by widening a matcher
+   * in a Page Builder commit.)
+   */
+  (path) => path.startsWith('/admin/pages/builder/'),
 ];
 
 export function AdminContentWrapper({ children }) {
