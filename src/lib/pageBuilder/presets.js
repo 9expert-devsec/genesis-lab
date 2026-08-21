@@ -37,6 +37,14 @@ import {
   MOBILE_BEHAVIORS, VISIBILITY, ACCENTS, CARD_STYLES, BUTTON_STYLES,
 } from '@/lib/schemas/sections/base';
 import { PAGE_THEMES } from '@/lib/schemas/pageBuilder';
+// ADDED beside the statements above rather than folded into either — the
+// standing rule in this repo. Round 39: the author-colour half.
+import { customBackgroundStyle, hasCustomBackground, hexOrNull } from '@/lib/pageBuilder/customColor';
+// ADDED beside the statement above rather than folded into it. `accentContrastOk`
+// picks --pb-accent-on: a custom accent dark enough to read light text on gets
+// the light token, and a pale one gets the dark token. Same question the
+// contrast warning asks, so the control and the render cannot disagree.
+import { accentContrastOk } from '@/lib/pageBuilder/customColor';
 
 // ── settings.containerWidth → inner max-width ────────────────────────
 const CONTAINER_WIDTH_CLASS = {
@@ -278,6 +286,107 @@ export function accentVars(accent) {
     '--pb-accent-text': a.text,
     '--pb-accent-on':   a.on,
   };
+}
+
+/**
+ * ── ROUND 39: THE TWO MODES, RESOLVED HERE ────────────────────────────────
+ *
+ * Everything above resolves a PRESET to a token. These three resolve the pair
+ * (mode, value) to what the renderer applies, and they exist here rather than
+ * in the renderer for round 20's reason: this module serves BOTH the published
+ * page and the editor canvas, and a resolution rule that lived in one of them
+ * would be a rule the other did not have.
+ *
+ * ── THE PRESET PATH IS NOT TOUCHED, AND THAT IS THE CLAIM ─────────────────
+ * `backgroundClass`, `isDarkBackground` and `accentVars` above are byte-for-
+ * byte what they were. Each function below asks ONE question first — did the
+ * author choose `custom`? — and when the answer is no it hands back exactly
+ * what the old call site would have produced. A section stored before this
+ * round has no `backgroundMode` and no `accentMode`, so it takes the `no`
+ * branch on every render, for ever, without anything having to migrate it.
+ */
+
+/**
+ * The background class for a section — '' when a custom colour is taking over.
+ *
+ * The class has to be SUPPRESSED rather than merely overridden: `bg-white` sets
+ * `background-color`, and a custom GRADIENT sets `background-image`, so the two
+ * would both apply and the preset would show through wherever the gradient did
+ * not paint. Two things owning one surface is the shape this codebase keeps
+ * removing; the mode decides which one owns it.
+ */
+export function backgroundClassFor(settings) {
+  return hasCustomBackground(settings) ? '' : backgroundClass(settings?.background);
+}
+
+/**
+ * The inline background style, or undefined.
+ *
+ * `undefined` rather than `{}` so the renderer can spread it without emitting a
+ * `style` attribute on every section that has no custom colour.
+ */
+export function backgroundStyleFor(settings) {
+  return hasCustomBackground(settings) ? customBackgroundStyle(settings.backgroundCustom) : undefined;
+}
+
+/**
+ * Does this section need light text on its background?
+ *
+ * A CUSTOM background answers NO — always, whatever its luminance.
+ *
+ * That is D4 stated as code. Deriving the answer from the author's colour would
+ * make the section's text colour a function of its background, which is a
+ * SECOND AUTHORITY beside the theme — the exact thing rounds 21-25 spent four
+ * rounds removing from container.jsx, arriving somewhere new. The preset list
+ * is a hand-made judgement about six known colours and stays one; a custom
+ * colour gets the theme's text and a warning at the control.
+ */
+export function isDarkBackgroundFor(settings) {
+  return hasCustomBackground(settings) ? false : isDarkBackground(settings?.background);
+}
+
+/**
+ * The three accent variables for a section — preset bundle, custom hex, or
+ * undefined when the section sets no accent at all.
+ *
+ * ── WHY A CUSTOM ACCENT STILL FILLS ALL THREE ─────────────────────────────
+ * The variables are a contract with twelve components, and a partial bundle
+ * would leave some of them reading the page-level value while their siblings
+ * read the section's — one accent painting two colours inside one section.
+ *
+ *   fill — the author's colour, verbatim. This is what they chose.
+ *   text — the author's colour, verbatim, AND NOT DEGRADED. The preset table
+ *          degrades purple because purple is a known value someone judged;
+ *          a custom colour is not knowable in advance, so the author is warned
+ *          at the control and their choice is honoured. Silently painting a
+ *          different colour than the one they picked is worse than an
+ *          unreadable one they were told about.
+ *   on   — one of the two theme text tokens, chosen by luminance.
+ *
+ * `on` is the one computed value in this round and it is NOT what D4 forbids.
+ * D4 is about the page's TEXT colour being derived from its BACKGROUND, which
+ * would take a decision away from the theme. `--pb-accent-on` is text placed on
+ * the ACCENT FILL — a surface the theme has never owned and that the preset
+ * table above already decides by hand, per accent. Extending that same decision
+ * to a value the table cannot enumerate is continuing one authority, not
+ * creating a second: without it every `primary` button in the section renders
+ * its label in a colour nobody chose.
+ */
+export function accentVarsFor(style) {
+  if (style?.accentMode === 'custom') {
+    const hex = hexOrNull(style?.accentCustom);
+    // An invalid stored value falls all the way back to the preset path — which
+    // for a section that only ever set a custom colour means no override at all,
+    // i.e. the page default. Never a broken style, never a partial bundle.
+    if (hex) {
+      return {
+        '--pb-accent-fill': hex,
+        '--pb-accent-text': hex,
+        '--pb-accent-on': accentContrastOk(hex) ? 'var(--9e-ice)' : 'var(--9e-navy)',
+      };
+    }
+  }
+  return style?.accentColor ? accentVars(style.accentColor) : undefined;
 }
 
 /** Theme surface class + whether the theme is dark. */

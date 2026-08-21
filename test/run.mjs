@@ -151,6 +151,7 @@ import { register } from 'node:module';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reportSuite } from './reportSuite.mjs';
 
 register(new URL('./loader.mjs', import.meta.url));
 const { run } = await import('node:test');
@@ -190,16 +191,6 @@ const undiscovered = onDisk.filter((f) => !enumerated.has(f));
 // the runner is not reporting failures. Manual by design — see the case file.
 if (process.env.CANARY) files.push(path.join(TEST_DIR, 'canary.case.mjs'));
 
-let pass = 0, fail = 0;
-// Per-file counts, so "this file ran" can be distinguished from "this file was
-// listed". A file that imports cleanly but defines no test contributes nothing
-// and, under a total-only check, is indistinguishable from one that was never
-// written — which is exactly the shape of a silently-deleted suite.
-const perFile = new Map(files.map((f) => [f, 0]));
-const bump = (e) => {
-  const f = e?.file;
-  if (f && perFile.has(f)) perFile.set(f, perFile.get(f) + 1);
-};
 const stream = run({ files, isolation: 'none', concurrency: true });
 stream.on('test:pass', (e) => { pass += 1; bump(e); });
 stream.on('test:fail', (e) => { fail += 1; bump(e); });
@@ -230,38 +221,6 @@ stream.on('close', () => {
   //
   // Raising the floor is optional under these semantics. Lowering it, or watching
   // it drift far below the real total, gives the check less and less to do.
-  //
-  // ── THE RE-BASE, AND WHAT THE UNIT ACTUALLY IS ──────────────────────────────
-  // FLOOR counts EXACTLY what the summary line below prints: one per `test:pass`
-  // or `test:fail` event across the *.test.mjs files in pure/fs/render. Same
-  // unit, same number. That is worth stating because 1608 against a 5000-test
-  // suite reads like two different units, and it was not -- it was one unit and
-  // a stale value. Cross-checked: 4722 top-level `test(` calls are authored
-  // across the three tiers, and the runner reports ~5030 events, the difference
-  // being tests defined inside loops and helpers. Not a different quantity.
-  //
-  // The ledger in the FLOOR comment above is hand-maintained, and it stopped
-  // matching the executed total a long time ago: at 9aee841 it read 1608 while
-  // the suite ran 4983. So the "N after <slice>" numbers are a record of tests
-  // deliberately added, not a running total, and reading them as a total is how
-  // the drift went unnoticed for so long.
-  //
-  // Re-based to 5000 against a measured 5031. THE SLACK IS 31 AND IT IS
-  // DELIBERATE. What that buys: the check now fires when more than 0.6% of the
-  // suite disappears, where before it needed 68% to vanish first. What it still
-  // cannot see, stated rather than implied: the median test file holds 11 tests
-  // (largest 79), so DELETING one small file stays under the slack and is caught
-  // by neither this nor the two guards below -- discovery only sees a file on
-  // disk that nothing ran, and per-file counts only see an enumerated file that
-  // contributed zero. A deleted file is enumerated by nothing and on disk
-  // nowhere. Closing that would mean an exact count, which this check has
-  // already decided against on purpose, one paragraph up.
-  //
-  // The browser tier (test/browser) is NOT in this number and must never be:
-  // it needs a running dev server and a real Chrome, and `npm test` has to pass
-  // without either. It is enumerated only by test/browser/run.mjs, and nothing
-  // in it is named *.test.mjs, so neither the manifest nor the discovery guard
-  // picks it up.
   if (total < FLOOR) {
     problems.push(
       `expected AT LEAST ${FLOOR} tests, ran ${total}. `

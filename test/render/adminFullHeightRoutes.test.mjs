@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { __setPathname } from 'next/navigation';
 import { AdminContentWrapper } from '@/components/layout/AdminContentWrapper';
+import { readSource } from '../sourceScan.mjs';
 
 /**
  * A viewport-height page must not sit inside a padded, scrolling wrapper.
@@ -79,6 +80,102 @@ test('the full-height matcher covers the course editor and the article editor', 
   }
 });
 
+test('the full-height matcher covers the Page Builder editor', () => {
+  // Added in the SAME commit as the FULL_HEIGHT_ROUTES entry and as
+  // EditorShell's height, for the reason the /admin/courses/new note above
+  // gives: an assertion about padding that is left to be flipped later fails
+  // mysteriously, at a moment when nobody is holding the reason in their head.
+  //
+  // EditorShell declares `h-[100dvh]`, so the same arithmetic applies here as to
+  // CourseForm and ArticleForm — 100dvh inside p-6 is 100dvh + 48px, and `main`
+  // grows the second scrollbar this file exists to prevent. Before this round
+  // the shell said `calc(100dvh-4rem)`, which had no referent on this route (the
+  // admin chrome is a sidebar, not a top bar) and merely happened to leave 16px
+  // of slack over the padding rather than overflowing. That near-miss is why
+  // this went unreported, and is not a reason to keep either number.
+  for (const path of [
+    '/admin/pages/builder/new',
+    '/admin/pages/builder/692d39b52ee07293c9131fd8/edit',
+  ]) {
+    assert.equal(padded(wrapperFor(path)), false, `${path} is still padded`);
+  }
+});
+
+test('CONTROL: the builder prefix does not reach the sibling /admin/pages routes', () => {
+  // The negative case, and the reason the entry is anchored on
+  // `/admin/pages/builder/` rather than `/admin/pages/`. `/admin/pages` is the
+  // list of both page kinds; a prefix on `/admin/pages/` would strip its padding
+  // — the same three-pages-broken-to-fix-one regression the courses control
+  // above guards against.
+  assert.equal(padded(wrapperFor('/admin/pages')), true, '/admin/pages lost its padding');
+  assert.equal(padded(wrapperFor('/admin/pages/')), true, '/admin/pages/ lost its padding');
+});
+
+test('CONTROL: a path merely CONTAINING "builder" is not opted out', () => {
+  // `startsWith` is the anchor. A custom page whose id or slug contains the word
+  // must not lose its padding, and a sibling segment that begins with it must
+  // not either.
+  assert.equal(padded(wrapperFor('/admin/pages/builder-notes')), true);
+  assert.equal(padded(wrapperFor('/admin/articles/page-builder')), false); // articles prefix, not this one
+  assert.equal(padded(wrapperFor('/admin/media/builder/x')), true);
+});
+
+test('the builder shell states 100dvh, and the wrapper is what makes that fit', () => {
+  // THE PAIR, asserted together for the same reason the registrations case below
+  // asserts its own: two numbers in two files with nothing mechanical holding
+  // them together. `h-[100dvh]` is only correct while this route is unpadded,
+  // and the route being unpadded is only worth doing while the shell declares a
+  // viewport height. Either one changing alone is the defect.
+  const shell = readSource('src/components/pageBuilder/editor/EditorShell.jsx').code;
+  assert.match(shell, /h-\[100dvh\]/,
+    'EditorShell no longer declares a viewport height — if it went back to auto '
+    + 'height, opting the route out of p-6 is now just missing padding');
+  assert.doesNotMatch(shell, /calc\(100dvh-4rem\)/,
+    'the 4rem is back. There is no 4rem on this route: the admin chrome is a '
+    + 'sidebar beside <main>, not a bar above it, so the subtraction has no '
+    + 'referent and now leaves a 64px dead band under the shell');
+  assert.equal(padded(wrapperFor('/admin/pages/builder/new')), false,
+    'the wrapper pads the builder route again — the shell’s 100dvh is now '
+    + '100dvh + 48px and <main> has a second scrollbar');
+});
+
+test('CONTROL: the height probe reads the shell, and can tell the two forms apart', () => {
+  // Discrimination rather than existence: `h-[calc(100dvh-4rem)]` CONTAINS
+  // `100dvh`, so a naive /100dvh/ match would have passed happily on the old
+  // file and this guard would have been green about nothing.
+  const before = '<div className="flex h-[calc(100dvh-4rem)] flex-col">';
+  const after = '<div className="flex h-[100dvh] flex-col">';
+  assert.match(before, /100dvh/);                    // both contain it…
+  assert.match(after, /100dvh/);
+  assert.doesNotMatch(before, /h-\[100dvh\]/);       // …only the probe used above separates them
+  assert.match(after, /h-\[100dvh\]/);
+  assert.match(before, /calc\(100dvh-4rem\)/);
+  assert.doesNotMatch(after, /calc\(100dvh-4rem\)/);
+});
+
+/**
+ * ── MEASURED AND DELIBERATELY NOT PINNED ───────────────────────────────────
+ *
+ * `/admin/pages/new` and `/admin/pages/[id]/edit` render the older Tiptap
+ * `CustomPageForm`, and that component declares `flex h-[100dvh] flex-col` —
+ * the same 100dvh-inside-p-6 shape this whole file exists to prevent. So by the
+ * criterion used for CourseForm and ArticleForm they LOOK like full-height
+ * routes that were never listed.
+ *
+ * They are not asserted either way here, in either direction, on purpose:
+ *
+ *   · asserting they KEEP their padding would write a defect down as a
+ *     requirement, and this file's own history is what that costs — the
+ *     `/admin/courses/new` assertion above was correct when written and had to
+ *     be flipped later;
+ *   · asserting they LOSE it would be a layout change to a different editor,
+ *     smuggled in through a Page Builder commit and verified by nobody clicking
+ *     it.
+ *
+ * Recorded here because this is where the next person will look. It wants its
+ * own round, with a browser pass on the Tiptap form.
+ */
+
 // ── THE CONTROL: everything else keeps its padding ──────────────────────────
 
 test('CONTROL: the other course routes KEEP their padding', () => {
@@ -123,8 +220,11 @@ test('CONTROL: an unrelated admin page keeps its padding', () => {
  * this file is the right home because it already owns the claim that
  * `/admin/registrations` is padded at all.
  */
-test('the registrations page cancels the shell’s top padding, and the two numbers agree', async () => {
-  const { readSource } = await import('../sourceScan.mjs');
+// `readSource` is a static import now (the builder height guard above needs it
+// too). This case no longer awaits, which is what the header asks of every case
+// in this file: no await can interleave between setting the pathname and
+// rendering.
+test('the registrations page cancels the shell’s top padding, and the two numbers agree', () => {
   const page = readSource('src/app/admin/registrations/page.jsx').code;
 
   // The page cancels the top…

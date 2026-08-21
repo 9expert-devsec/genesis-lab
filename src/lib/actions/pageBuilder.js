@@ -30,13 +30,51 @@ import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 import { reidSection, stripImageOwnership } from '@/lib/pageBuilder/reidSection';
 import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
 import { recordAudit, snapshotVersion } from '@/lib/pages/pageAudit';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { backupDraftVersion } from '@/lib/pages/pageAudit';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
+import { draftContentSchema } from '@/lib/schemas/pageBuilder';
+import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS, STATUS_KEYS } from '@/lib/schemas/pageBuilder';
+import { stripDraft, effectiveContent, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
+// Round 38, ADDED beside the statements above rather than folded into any —
+// the standing rule in this repo.
+import PageAuditLog from '@/models/PageAuditLog';
+// ROUND 43, ADDED beside the statements above rather than folded into any of
+// them — the standing rule in this file. Round 42's conversion, reused: it
+// already owns "the last instant of this named day, in Asia/Bangkok", and it
+// already refuses a calendar date that does not exist.
+import { windowEndFromInput } from '@/lib/pageBuilder/publishWindow';
+import {
+  AUDIT_TRAIL_PAGE_SIZE, AUDIT_TRAIL_SORT, AUDIT_TRAIL_FIELDS,
+  buildPageAuditQuery, encodeAuditTrailCursor,
+} from '@/lib/pageBuilder/auditTrail';
 
 const ADMIN_PATH = '/admin/pages';
-// pageAudit prunes to the newest 20 per page; listing more would always be empty.
+// DISPLAY cap for the admin history list only — how many rows the UI shows,
+// not how many are kept. Retention is now unbounded: pageAudit no longer
+// prunes, because pruning strands Cloudinary assets (see snapshotVersion).
+// The VALUE is unchanged; only the reason for it is, because the old comment
+// justified it by a prune that no longer exists.
 const MAX_VERSION_ROWS = 20;
 const AUDIT_TYPE = 'builder'; // pageType stamped on every PageBuilder audit row
 const PUBLISH_STATES = ['published', 'scheduled'];
+
+// zod's .pick() wants a { key: true } mask; the key lists are arrays. One
+// converter, so no pick in this file ever restates a list that already exists.
+const maskOf = (keys) => Object.fromEntries(keys.map((k) => [k, true]));
+// The live-only status/date window publishPageStatus accepts. PICKED from the
+// page schema, never re-declared, so the nullable-date coercion ('' -> null)
+// and the status vocabulary have exactly one definition — the same rule as
+// draftContentSchema on the other half of the partition.
+const statusSchema = pageBuilderSchema.pick(maskOf(STATUS_KEYS));
+
+// The live-only IDENTITY fields updatePageIdentity accepts. PICKED from the
+// page schema for the same reason draftContentSchema and statusSchema are:
+// the slug regex, the pageType vocabulary and the promotionOrder integer rule
+// have exactly one definition, and a rule change reaches this surface with no
+// second edit. Together the three picks cover all seventeen editable keys.
+const identitySchema = pageBuilderSchema.pick(maskOf(IDENTITY_KEYS));
 
 /**
  * Shown when a save is rejected because the stored doc moved since the client
@@ -169,20 +207,129 @@ export async function getPageVersions(id) {
   await requireAdmin('pages');
   await dbConnect();
   const rows = await PageVersion.find({ pageId: String(id) })
-    .select('label actor createdAt')   // NOT snapshot — see above
+    .select('label actor createdAt versionNumber')   // NOT snapshot — see above
     .sort({ createdAt: -1 })
     .limit(MAX_VERSION_ROWS)
     .lean();
   return serialize(rows);
 }
 
-/** Published-only read for the public renderer (Phase 2). */
+/**
+ * ONE version's snapshot, by version id. The read `getPageVersions` refuses.
+ *
+ * ── WHY A SECOND ACTION AND NOT A WIDER PROJECTION ─────────────────────────
+ * Round 33 measured the alternative rather than arguing it. Against this
+ * database: the metadata `getPageVersions` ships is 153 B per row; the snapshot
+ * beside it is 5.0 KB median and 6.7 KB at the top — the snapshot is ~33x the
+ * row that displays it. `getPageVersions` returns up to MAX_VERSION_ROWS and
+ * fires on EVERY dialog open, including the common one where the author only
+ * reads the list; a fetch-one fires on an explicit click, once, for the version
+ * actually chosen. Widening the list would pay 20x the snapshot cost every open
+ * to serve the one case that needs it.
+ *
+ * That ratio is a floor, not a ceiling: a snapshot is the whole page document,
+ * dominated by `sections`, and each section carries `advanced.customHtml` and
+ * `advanced.customCss` — unbounded free text a developer-tier author types by
+ * hand. The pages measured are small ones.
+ *
+ * **getPageVersions' projection is deliberately UNCHANGED.** Avoiding that edit
+ * is the entire reason this function exists; test/fs/pageBuilderVersionSnapshot
+ * pins it so a later round cannot quietly widen the list and leave this here.
+ *
+ * ── WHY IT STRIPS `.draft` ON READ, AND IT IS NOT BELT AND BRACES ──────────
+ * Round 2 strips at WRITE time — but only at one of the three `snapshotVersion`
+ * call sites. `updatePageBuilderPage` and `updatePageStatus` both snapshot
+ * `doc.toObject()` raw, and although round 3 left both without a live caller,
+ * the rows they wrote before that are still stored. So "no snapshot carries a
+ * draft" is a claim about HISTORY, and history is not enforced by today's code.
+ *
+ * Measured, read-only, before this was written: 3 of 3 stored rows carry no
+ * draft, so nothing is being repaired here. It is stripped anyway because the
+ * guarantee this action owes its caller is "what was once PUBLIC", the two
+ * writers that could break it are still in this file, and a restore that
+ * promoted somebody's stale unpublished edit would look exactly like a
+ * successful restore.
+ *
+ * Returns null for a missing id or a missing row — a version can be read from a
+ * dialog that has been open across a delete.
+ */
+export async function getPageVersionSnapshot(versionId) {
+  if (!versionId) return null;
+  await requireAdmin('pages');
+  await dbConnect();
+  const row = await PageVersion.findById(String(versionId))
+    .select('snapshot label actor createdAt versionNumber')
+    .lean();
+  if (!row) return null;
+  return serialize({ ...row, snapshot: stripDraft(row.snapshot) });
+}
+
+/**
+ * One page of one page's ACTIVITY TRAIL — READ ONLY. Newest first.
+ *
+ * Round 2 has written a `PageAuditLog` row on every mutation here since the
+ * draft/published split, and until now nothing read one back. This is that
+ * read, and it is deliberately narrow: every rule it obeys lives in
+ * `lib/pageBuilder/auditTrail.js`, which is pure and carries the measurement
+ * behind each one. If you are about to add a condition here, it belongs there.
+ *
+ * ── WHAT IT DOES NOT RETURN, AND WHY THAT IS THE POINT ────────────────────
+ * `AUDIT_TRAIL_FIELDS` is `action actor createdAt`. `before`/`after` are
+ * withheld because they are PRESENCE FLAGS rather than field-level values —
+ * measured: 18 of 20 `draft.save` rows are `{hadDraft:true} -> {hasDraft:true}`
+ * and 23 of 25 `update` rows have the two halves identical. Shipping them would
+ * invite a caller to render a change arrow between two identical strings while
+ * the edit that actually happened stayed invisible, which is the round-18
+ * failure: a surface claiming something nothing can verify. `sectionId`/`field`
+ * are withheld because they are empty on every stored row.
+ *
+ * ── PAGINATED, NOT CAPPED ─────────────────────────────────────────────────
+ * Unlike `getPageVersions`, which takes `MAX_VERSION_ROWS` off the top of a
+ * list that grows once per publish. This collection grows once per AUTOSAVE
+ * TICK and nothing prunes it — there is no equivalent of the prune round 2
+ * removed from `PageVersion`, because there never was one. So the older half of
+ * a busy page's trail has to be reachable rather than silently cut off.
+ *
+ * `AUDIT_TRAIL_PAGE_SIZE + 1` rows are fetched to learn whether a next page
+ * exists without a second `countDocuments` — the `readAuditLog.js` precedent,
+ * and the reason it gives: counting a growing append-only collection is what
+ * cursor pagination exists to avoid.
+ *
+ * Empty is a NORMAL state, not a failure — a page created before round 2, or
+ * one whose rows were never written because `recordAudit` swallows its own
+ * errors by design.
+ */
+export async function getPageAuditLog(id, { cursor = null } = {}) {
+  const filter = buildPageAuditQuery({ pageId: id, cursor });
+  if (!filter) return { rows: [], nextCursor: null };
+  await requireAdmin('pages');
+  await dbConnect();
+  const docs = await PageAuditLog.find(filter)
+    .select(AUDIT_TRAIL_FIELDS)          // NOT before/after — see above
+    .sort(AUDIT_TRAIL_SORT)
+    .limit(AUDIT_TRAIL_PAGE_SIZE + 1)
+    .lean();
+  const hasMore = docs.length > AUDIT_TRAIL_PAGE_SIZE;
+  const rows = hasMore ? docs.slice(0, AUDIT_TRAIL_PAGE_SIZE) : docs;
+  return {
+    rows: serialize(rows),
+    nextCursor: hasMore ? encodeAuditTrailCursor(rows[rows.length - 1]) : null,
+  };
+}
+
+/**
+ * Published-only read for the public renderer (Phase 2).
+ *
+ * `-draft` is a PROJECTION, not a post-filter: an unpublished draft must never
+ * leave the database on a public read, and the cheapest place to guarantee that
+ * is the query. Every public read of a builder page carries the same guard.
+ */
 export async function getPageBuilderPageBySlug(slug) {
   if (!slug) return null;
   await dbConnect();
   let key = String(slug);
   try { key = decodeURIComponent(key); } catch { /* malformed → use raw */ }
-  return serialize(await PageBuilder.findOne({ slug: key, status: 'published' }).lean());
+  return serialize(await PageBuilder.findOne({ slug: key, status: 'published' }).select('-draft').lean());
 }
 
 /** Any-status read — admin preview / redirect lookup. */
@@ -228,6 +375,31 @@ export async function getPageBuilderPagesByPromotionIds(ids) {
 
 // ── page mutations ───────────────────────────────────────────────────
 
+/**
+ * Create a page. Its authored CONTENT lands in `.draft`, never live.
+ *
+ * ── CREATING A PAGE NEVER PUBLISHES IT ─────────────────────────────────────
+ * `status` is hardcoded to 'draft' and is NOT read from the input. Under the
+ * draft/published split, publish is always a separate, later promotion through
+ * publishPageStatus — including a page's very first one. That removes a whole
+ * class of question ("was this created published, or promoted?") and means the
+ * snapshot history has exactly one writer.
+ *
+ * The old "created straight into published → snapshot it" branch is GONE rather
+ * than kept behind a comment. It is not the picker's 'soon' branch, which stays
+ * because a schema type outside the registry is genuinely reachable and a test
+ * MEASURES that gap. Here `status` is a literal in this function: no input can
+ * reach the branch, so a test "proving" it is never invoked would be asserting
+ * a tautology about a constant rather than anything about a caller.
+ *
+ * ── WHY `title` IS THE ONE CONTENT FIELD ALSO WRITTEN LIVE ─────────────────
+ * Not a hedge — the model requires it (`title: { required: true }`), so a
+ * document whose title exists only inside `.draft` fails validation on
+ * create(). Since nothing is published yet there is nothing for it to
+ * contradict: the live title seeds the admin list with the name the author
+ * typed, and every LATER edit of it goes to the draft like the other eight
+ * keys. See the note in models/PageBuilder.js.
+ */
 export async function createPageBuilderPage(input) {
   const session = await requireAdmin('pages');
   await dbConnect();
@@ -247,24 +419,40 @@ export async function createPageBuilderPage(input) {
   }
 
   const user = session.user;
-  const data = sanitizePageForTier(parsed.data, null, canUseAdvanced(user));
-  data.status = coercePublishStatus(data.status, user);
-  data.sections = renumberSections(data.sections);
-
   const stamp = await currentUserStamp(session);
 
+  // The content half, through the SAME pipeline every later saveDraftContent
+  // applies. A freshly created page must not get a draft that skipped the tier
+  // gate — that would be one authored payload in the whole system that never
+  // met sanitizePageForTier, and it would be the first one.
+  const content = {};
+  for (const key of DRAFT_CONTENT_KEYS) content[key] = parsed.data[key];
+  const sanitized = sanitizePageForTier(content, null, canUseAdvanced(user));
+  sanitized.sections = renumberSections(sanitized.sections);
+
   try {
-    const doc = await PageBuilder.create({ ...data, createdBy: stamp, updatedBy: stamp });
+    const doc = await PageBuilder.create({
+      // Identity, live and immediate — exactly what updatePageIdentity owns.
+      slug: parsed.data.slug,
+      pageType: parsed.data.pageType,
+      promotionId: parsed.data.promotionId,
+      promotionOrder: parsed.data.promotionOrder,
+      status: 'draft',
+      title: sanitized.title, // required by the model — see the note above
+      draft: { ...sanitized, savedAt: new Date(), savedBy: stamp },
+      createdBy: stamp,
+      updatedBy: stamp,
+    });
     bustCaches(doc);
     await recordAudit({
       pageId: String(doc._id), pageType: AUDIT_TYPE, action: 'create',
       after: { slug: doc.slug, title: doc.title, status: doc.status, pageType: doc.pageType },
       actor: stamp,
     });
-    // A page created straight into `published` is a publish — snapshot it.
-    if (doc.status === 'published') {
-      await snapshotVersion({ pageId: String(doc._id), snapshot: doc.toObject(), label: 'publish', actor: stamp });
-    }
+    // NO snapshot here. A snapshot records what was once actually PUBLIC, and a
+    // page created into 'draft' never was. The first snapshot is written by the
+    // first publishPageStatus call.
+    //
     // `updatedAt` is the optimistic-concurrency token for the caller's NEXT
     // save. The editor adopts the created id in place (history.replaceState,
     // no navigation) rather than redirecting, so there is no reload to re-read
@@ -419,7 +607,18 @@ export async function duplicatePageBuilderPage(id) {
   if (!slug) return { ok: false, error: 'ไม่สามารถสร้าง slug สำเนาได้' };
 
   const stamp = await currentUserStamp(session);
-  const { _id, createdAt, updatedAt, slugHistory, preview, ...rest } = src;
+  // `draft` is dropped here for the same reason the ownership tokens are
+  // stripped below: a copy must not silently inherit someone else's
+  // UNREVIEWED pending edit. The duplicate starts with no draft at all, so its
+  // first publish ships what the copier can actually see on screen.
+  // `publishedVersion` joins this list for the same reason `draft` is in it: a
+  // copy has published NOTHING, so it must not inherit a counter. Left in
+  // `rest`, a duplicate of a page at version 9 would start at 9 and its first
+  // publish would mint version 10 — a page whose history has one row numbered
+  // ten. The copy starts at the field's default of 0.
+  const {
+    _id, createdAt, updatedAt, slugHistory, preview, draft, publishedVersion, ...rest
+  } = src;
 
   try {
     const doc = await PageBuilder.create({
@@ -453,6 +652,34 @@ export async function duplicatePageBuilderPage(id) {
   }
 }
 
+/**
+ * Set a page's status and nothing else.
+ *
+ * ── NO LIVE CALLER, as of the draft/published split round 3 ───────────────
+ * Kept as a narrow primitive; unmodified in behaviour. Its last caller was
+ * the admin list's publish/unpublish toggle, now pointed at
+ * publishPageStatus. Nothing in the app reaches this any more, and that is
+ * deliberate rather than an oversight — read the two traps below before
+ * wiring anything to it, because the name sounds like exactly what you want
+ * and it has already misled twice.
+ *
+ *   1. NO CONFLICT CHECK. It writes a bare $set: { status } against whatever
+ *      is stored, with no expectedUpdatedAt. Every other mutation in this
+ *      file takes one. A caller that read the page, thought about it, and
+ *      then called this will happily stamp a status onto a document someone
+ *      else has since rewritten.
+ *   2. IT WOULD SNAPSHOT A PENDING DRAFT. On status === 'published' it
+ *      snapshots doc.toObject(), which since round 1 includes `draft`. A
+ *      PageVersion row records what was once actually PUBLIC; one carrying
+ *      an unpublished edit is a lie in the history, and the rollback that
+ *      reads it would restore content that was never live. It also does not
+ *      PROMOTE that draft, so it publishes the stale content while archiving
+ *      the new — wrong in both directions at once. This is the precise trap
+ *      publishPageStatus was built to avoid, and why the list moved.
+ *
+ * Prefer publishPageStatus from anything that changes status, and
+ * updatePageBuilderPage from anything holding a working tree.
+ */
 export async function updatePageStatus(id, status) {
   const session = await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
@@ -488,6 +715,462 @@ export async function updatePageStatus(id, status) {
     await snapshotVersion({ pageId: id, snapshot: doc.toObject(), label: 'publish', actor });
   }
   return { ok: true, status: doc.status };
+}
+
+
+// ── draft / publish (the draft-published split, round 2) ─────────────
+//
+// These three ship ALONGSIDE createPageBuilderPage / updatePageBuilderPage /
+// updatePageStatus, which are unchanged and still the only thing the editor
+// calls. Round 3 rewires the client; nothing below has a caller yet.
+//
+// THE RULE THEY IMPLEMENT: a published page must not change when the author
+// edits it. Autosave writes DRAFT_CONTENT_KEYS into `draft` on the same
+// document (saveDraftContent); pressing เผยแพร่ promotes that draft onto the
+// live fields in the SAME write that sets the status (publishPageStatus).
+// Live-only fields — slug, status, the publish window, promotionId,
+// promotionOrder, pageType, slugHistory — keep taking effect immediately,
+// exactly as they do today. See lib/schemas/pageBuilder.js for the partition
+// and why slug in particular can never be drafted.
+
+/**
+ * The optimistic-concurrency check the three actions below share.
+ *
+ * Deliberately a separate helper rather than a refactor of
+ * updatePageBuilderPage's inline copy: that action is in use by the live
+ * editor and this round does not touch it. Returns an error object to return,
+ * or null when the caller may proceed.
+ */
+function draftConflict(existing, expectedUpdatedAt) {
+  const expectedMs = new Date(expectedUpdatedAt).getTime();
+  const actualMs = existing.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+  if (Number.isNaN(expectedMs) || expectedMs !== actualMs) {
+    return { ok: false, conflict: true, error: CONFLICT_MESSAGE };
+  }
+  return null;
+}
+
+/**
+ * Save the page's CONTENT as an unpublished draft. The live page does not move.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT DO, and each omission is the feature:
+ *   - no bustCaches. Revalidating a public path on a draft save would push the
+ *     edit to the public page, which is the exact thing this whole split
+ *     exists to prevent. A draft save must be invisible from outside.
+ *   - no snapshot. PageVersion records what was once actually PUBLIC; a draft
+ *     never was.
+ *   - no status change, no slug write, no date write. It sets one field.
+ *
+ * UNIFORM: every page writes a draft, including one that has never been
+ * published. There is no status-dependent branch here on purpose — a branch
+ * would mean the save path behaves differently on the day a page first goes
+ * live, which is the day nobody is watching the save path.
+ */
+export async function saveDraftContent(id, patch, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  const parsed = draftContentSchema.safeParse(patch);
+  if (!parsed.success) return { ok: false, error: firstZodMessage(parsed.error) };
+
+  const user = session.user;
+
+  // TIER SANITISATION, with the baseline that makes it correct.
+  //
+  // sanitizePageForTier reads only `jsonLd` and `sections` off both arguments,
+  // and both are draft-content keys — so it runs on a nine-key object with no
+  // adaptation. The real decision is what counts as "already stored, and this
+  // actor may not change it". That is the page's EFFECTIVE content, not its
+  // live fields: if a developer saved a draft carrying an advanced section and
+  // an editor saves next, baselining against the live doc would silently
+  // replace the developer's PENDING work with whatever is live.
+  // effectiveContent falls back to the live fields when no draft exists, so the
+  // same call is right in both cases.
+  const baseline = effectiveContent(existing);
+  const sanitized = sanitizePageForTier(parsed.data, baseline, canUseAdvanced(user));
+  // Same realignment live saves get — the editor reorders the ARRAY and leaves
+  // sortOrder stale, and the renderer sorts by sortOrder. See tierSanitize.js.
+  sanitized.sections = renumberSections(sanitized.sections);
+
+  const actor = await currentUserStamp(session);
+  // savedAt/savedBy are SERVER-managed and deliberately outside
+  // draftContentSchema — the same reasoning that keeps `preview` out of
+  // pageBuilderSchema. A client cannot submit them.
+  const draft = { ...sanitized, savedAt: new Date(), savedBy: actor };
+
+  try {
+    const updated = await PageBuilder.findByIdAndUpdate(
+      id, { $set: { draft } }, { new: true, runValidators: true }
+    );
+    if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+    // before/after stay a PRESENCE FLAG, never the content: this file's own
+    // convention is that an audit row holds a status or a {slug,title} pair,
+    // never a whole doc — and a draft is a whole doc's worth of body.
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'draft.save',
+      before: { hadDraft: hasUnpublishedDraft(existing) },
+      after:  { hasDraft: true },
+      actor,
+    });
+    return { ok: true, updatedAt: updated.updatedAt?.toISOString() };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'บันทึกฉบับร่างไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Set the live status/date window and, on a publish target, promote the pending
+ * draft onto the live fields — in ONE document write.
+ *
+ * WHY ONE WRITE and not "save the draft, then flip the status": the second call
+ * would carry an `expectedUpdatedAt` the first call had already invalidated, so
+ * it would trip this action's own precondition. That is the failure the
+ * updatePageStatus note in this file already warns about, and splitting the
+ * publish across two writes walks straight into it.
+ *
+ * `statusPatch` is `{ status, publishStartDate, publishEndDate }` — the same
+ * object PublishDialog already computes.
+ */
+export async function publishPageStatus(id, statusPatch, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  if (!PAGE_STATUSES.includes(statusPatch?.status)) {
+    return { ok: false, error: 'สถานะไม่ถูกต้อง' };
+  }
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  // The status/date window, validated by the SAME rules the page schema uses —
+  // picked from it rather than re-declared, so '' coerces to null exactly once.
+  const patch = statusSchema.safeParse(statusPatch);
+  if (!patch.success) return { ok: false, error: firstZodMessage(patch.error) };
+
+  const user = session.user;
+  // Coerce rather than error, so a tier-limited actor keeps their date edits.
+  const coercedStatus = coercePublishStatus(patch.data.status, user, existing.status);
+  const isPublishTarget = PUBLISH_STATES.includes(coercedStatus);
+
+  const set = {
+    status: coercedStatus,
+    publishStartDate: patch.data.publishStartDate,
+    publishEndDate: patch.data.publishEndDate,
+  };
+
+  if (isPublishTarget) {
+    // Promote the pending draft. A null draft is a REPUBLISH with no content
+    // change — still a valid publish, and still snapshotted below.
+    if (hasUnpublishedDraft(existing)) Object.assign(set, effectiveContent(existing));
+    set.draft = null;
+  }
+
+  // The document as it WILL be. Everything below judges this, never `existing`:
+  // a page can be correctly blocked, or correctly cleared, by what the draft
+  // contains, and reading the stale live content gets that wrong in BOTH
+  // directions — clearing a publish that the draft breaks, and blocking one the
+  // draft fixes.
+  const resulting = { ...existing, ...set };
+
+  if (isPublishTarget) {
+    // DEFENCE IN DEPTH on top of round 1's exact-partition guarantee, not a
+    // substitute for it. The draft is stored as a Mixed blob; nothing in the
+    // database enforces its shape, and a draft written by an older or looser
+    // path would otherwise be promoted onto the live fields unchecked. This is
+    // the last point at which that is still catchable.
+    const revalidated = pageBuilderSchema.safeParse(stripDraft(resulting));
+    if (!revalidated.success) return { ok: false, error: firstZodMessage(revalidated.error) };
+  }
+
+  // No-op for draft/closed/archived (publishBlockers returns [] for those), so
+  // this runs unconditionally exactly as the whole-page save does.
+  const notReady = publishBlockers(resulting, coercedStatus);
+  if (notReady.length) return { ok: false, error: notReady[0].message };
+
+  const actor = await currentUserStamp(session);
+
+  try {
+    /**
+     * ── ONE WRITE, NOW CARRYING THE COUNTER ────────────────────────────────
+     * `$inc` rides the SAME findByIdAndUpdate rounds 2-4 built. It is not a
+     * second round-trip and must not become one: a separate increment would
+     * carry an `expectedUpdatedAt` this write has already invalidated — the
+     * exact failure the "why one write" note above this function describes —
+     * and would leave a window where the page is published but unnumbered.
+     *
+     * The ordering is: expectedUpdatedAt is checked on `existing` far above,
+     * this write applies status + promoted draft + the increment atomically,
+     * and the snapshot below reads the POST-increment value off the result. So
+     * the number a row carries is the one the document actually reached, not
+     * one computed alongside it.
+     *
+     * ── ONE CONDITION FOR BOTH, ON PURPOSE ────────────────────────────────
+     * `isPublishTarget` gates the increment and the snapshot, and it is the
+     * same name in both places rather than two equivalent tests. See the
+     * snapshot block for why they must never drift apart.
+     */
+    const update = { $set: set };
+    if (isPublishTarget) update.$inc = { publishedVersion: 1 };
+
+    const updated = await PageBuilder.findByIdAndUpdate(
+      id, update, { new: true, runValidators: true }
+    );
+    if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+    bustCaches(updated, existing.slug);
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE,
+      action: isPublishTarget ? 'publish' : 'status',
+      before: { status: existing.status, hadDraft: hasUnpublishedDraft(existing) },
+      after:  { status: updated.status, hasDraft: hasUnpublishedDraft(updated) },
+      actor,
+    });
+    if (isPublishTarget) {
+      // EVERY publish, not just the transition into published — a republish of
+      // an already-published page is still a moment something became public,
+      // and the old "only on the transition" rule left every later publish
+      // with no recoverable record.
+      //
+      // stripDraft because a snapshot is a record of what was once actually
+      // PUBLIC. It must never carry a pending edit — and on this branch the
+      // draft has just been cleared anyway, so this is belt and braces against
+      // the field ever arriving some other way.
+      //
+      // ── EVERY PUBLISH IS A VERSION, INCLUDING A REPUBLISH ───────────────
+      // The number is stamped on the SAME condition that writes the row, from
+      // the same `isPublishTarget`, and that pairing is the rule rather than a
+      // coincidence: one PageVersion row is one version number, always.
+      //
+      // The alternative — "a republish with no content change is not a new
+      // version" — was considered and rejected. It does not merely produce
+      // fewer numbers; it produces two rows sharing one, because round 2
+      // already snapshots every publish-state call and that is not being
+      // changed. A repeated number is a worse failure than a number that
+      // increments for a no-op, because "never reused" is the property the
+      // whole design is built to guarantee. Skipping the SNAPSHOT instead
+      // would trade it for a publish with no recoverable record, which round 2
+      // fixed on purpose.
+      //
+      // So: the counter counts publishes, not content changes. A republish is
+      // a moment something became public, which is what a version is here.
+      await snapshotVersion({
+        pageId: id, snapshot: stripDraft(updated.toObject()), label: 'publish', actor,
+        versionNumber: updated.publishedVersion,
+      });
+    }
+    return { ok: true, status: updated.status, updatedAt: updated.updatedAt?.toISOString() };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'อัปเดตสถานะไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Preserve the current draft as a Draft Backup. Round 37, requirement §6/§9.
+ *
+ * ── TWO EFFECTS, TWO WRITES, AND THE ORDER IS THE SAFETY ──────────────────
+ * "Back up the draft" and "replace it with an older version" touch DIFFERENT
+ * collections — page_versions and page_builder_pages — so they cannot be one
+ * write without a transaction, and this deployment has no replica set to run
+ * one on. Two writes it is, and the only question that matters is which order
+ * fails safe:
+ *
+ *   backup THEN replace — if the replace fails, the author still has their
+ *     draft, untouched, plus one redundant row. Untidy, fully recoverable.
+ *   replace THEN backup — if the backup fails, the draft is already gone and
+ *     there is nothing left to write. That is the loss this round exists to
+ *     prevent.
+ *
+ * So the backup goes first, in its own action, and the caller does not proceed
+ * unless it succeeded. That is also why backupDraftVersion throws rather than
+ * swallowing like everything else in pageAudit: a swallowed failure here would
+ * report a safety net that is not there.
+ *
+ * ── IT DOES NOT TOUCH THE PAGE DOCUMENT, WHICH IS WHAT MAKES TWO CALLS SAFE ─
+ * Writing to page_versions leaves the page's own `updatedAt` alone, so the
+ * caller's `expectedUpdatedAt` is STILL VALID for the saveDraftContent that
+ * follows. The two calls therefore cannot race each other's token, and no new
+ * conflict window is opened by splitting them.
+ *
+ * NOTHING TO BACK UP IS A SUCCESS, not an error: restoring onto a page with no
+ * pending draft destroys nothing, and the caller should carry on. It answers
+ * `{ ok: true, backedUp: false }` so the caller can tell the two apart.
+ *
+ * This action writes NO draft. saveDraftContent remains the single write path
+ * into `.draft` — round 8's shape, counted in test/render/publishedViewEntry.
+ */
+export async function backupDraftBeforeRestore(id, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  // The SAME optimistic check every other draft-surface write makes. A restore
+  // must not be the one path that backs up a document that has since moved.
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  if (!hasUnpublishedDraft(existing)) return { ok: true, backedUp: false };
+
+  const actor = await currentUserStamp(session);
+  try {
+    // effectiveContent, not `existing.draft`: it picks exactly
+    // DRAFT_CONTENT_KEYS and drops the server-set savedAt/savedBy stamps, which
+    // are not content and must not travel into a snapshot. It is also the same
+    // shape the restore reads back out, so a backup round-trips through the
+    // path a published version already uses.
+    const { id: versionId } = await backupDraftVersion({
+      pageId: id, content: effectiveContent(existing), actor,
+    });
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'draft.backup',
+      before: { hadDraft: true }, after: { backupVersionId: versionId }, actor,
+    });
+    return { ok: true, backedUp: true, versionId };
+  } catch (err) {
+    // Surfaced, never swallowed — the caller must NOT go on to overwrite.
+    return { ok: false, error: err?.message ?? 'สำรองฉบับร่างไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Throw away the pending draft; the live page is untouched.
+ *
+ * No bustCaches (nothing public changes) and no snapshot (a draft was never
+ * public). Idempotent: discarding when there is no draft is a no-op that still
+ * succeeds, because the client cannot always know whether one exists.
+ */
+export async function discardDraftContent(id, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  const actor = await currentUserStamp(session);
+  try {
+    const updated = await PageBuilder.findByIdAndUpdate(
+      id, { $set: { draft: null } }, { new: true, runValidators: true }
+    );
+    if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'draft.discard',
+      before: { hadDraft: hasUnpublishedDraft(existing) },
+      after:  { hasDraft: false },
+      actor,
+    });
+    return { ok: true, updatedAt: updated.updatedAt?.toISOString() };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'ยกเลิกฉบับร่างไม่สำเร็จ' };
+  }
+}
+
+
+/**
+ * Change the page's IDENTITY: slug, pageType, promotionId, promotionOrder.
+ *
+ * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * Round 2 split the editor's single full-document save into two narrower
+ * writes: saveDraftContent (the nine DRAFT_CONTENT_KEYS) and publishPageStatus
+ * (status + the date window). Between them they cover thirteen of the
+ * seventeen editable keys. These four are the remainder — live-only fields
+ * that are not status fields — and nothing else can write them. Without this,
+ * rewiring the editor would make a slug or pageType rename impossible.
+ *
+ * These take effect IMMEDIATELY, draft or no draft, which is the whole reason
+ * they are live-only: slug is identity (a unique index, a slugHistory trail, a
+ * cross-collection guard and two public routes), and pageType is routing
+ * (/promotions queries it, and it gates both the cross-collection slug guard
+ * and promotionMode). See lib/schemas/pageBuilder.js for the partition.
+ *
+ * DOES NOT touch `.draft` — a pending edit survives a rename untouched — and
+ * DOES NOT snapshot: a snapshot records what was once actually PUBLIC, and
+ * renaming a slug is not a publish. Both are asserted, not assumed.
+ */
+export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  const parsed = identitySchema.safeParse(patch);
+  if (!parsed.success) return { ok: false, error: firstZodMessage(parsed.error) };
+
+  // BOTH slug guards, exactly as the whole-page save runs them today. The
+  // second is scoped to promotion pages because only they claim
+  // /promotions/<slug>, a namespace the general guard does not cover — and it
+  // is keyed off the RESULTING pageType, so a page becoming a promotion in the
+  // same call is checked as one.
+  const slugCheck = await checkSlugAvailable(parsed.data.slug, { excludeBuilderId: id });
+  if (!slugCheck.ok) return slugCheck;
+  if (parsed.data.pageType === 'promotion') {
+    const promoSlugCheck = await checkPromotionSlugAvailable(parsed.data.slug);
+    if (!promoSlugCheck.ok) return promoSlugCheck;
+  }
+
+  const set = {
+    slug: parsed.data.slug,
+    pageType: parsed.data.pageType,
+    promotionId: parsed.data.promotionId,
+    promotionOrder: parsed.data.promotionOrder,
+  };
+
+  // Retire the old slug into history on a rename (deduped; the NEW slug never
+  // lingers in its own history, or the 301 lookup would resolve to itself).
+  // Byte-identical to the whole-page save's rule — one behaviour, two callers.
+  if (set.slug !== existing.slug) {
+    const history = new Set(existing.slugHistory ?? []);
+    history.add(existing.slug);
+    history.delete(set.slug);
+    set.slugHistory = [...history];
+  }
+
+  const actor = await currentUserStamp(session);
+
+  try {
+    const updated = await PageBuilder.findByIdAndUpdate(
+      id, { $set: set }, { new: true, runValidators: true }
+    );
+    if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+    // The OLD slug too: on a rename the previous public URL must be
+    // revalidated or it keeps serving the page from cache under a slug that no
+    // longer resolves. Same call shape the whole-page save uses.
+    bustCaches(updated, existing.slug);
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'update',
+      before: { slug: existing.slug, status: existing.status },
+      after:  { slug: updated.slug, status: updated.status },
+      actor,
+    });
+    return { ok: true, slug: updated.slug, updatedAt: updated.updatedAt?.toISOString() };
+  } catch (err) {
+    if (err?.code === 11000) return { ok: false, error: 'Slug นี้ถูกใช้แล้ว' };
+    return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
+  }
 }
 
 // ── section mutations ────────────────────────────────────────────────
@@ -764,6 +1447,44 @@ export async function getPreviewState(id) {
   });
 }
 
+/**
+ * ── ROUND 43: THE EXPIRY DAY IS A DAY, AND IT IS A BANGKOK ONE ────────────
+ * This read `const d = new Date(expireDate)` on the bare `YYYY-MM-DD` the
+ * dialog sends. Two things followed, and the first is the reported defect:
+ *
+ *   1. THE DATE-ONLY FORM PARSES AS UTC MIDNIGHT. So an author who set the
+ *      link to expire "28 Aug" got `2026-08-28T00:00:00.000Z`, which is
+ *      07:00 that same Bangkok MORNING. The link died before most of the day
+ *      it named. Same family as round 42's publish-window bug, opposite
+ *      mechanism: that one was a date-TIME form parsed in the runtime's zone,
+ *      this one is a date-ONLY form pinned to the wrong zone.
+ *
+ *   2. `Number.isNaN` WAS THE ONLY VALIDATION, and it lets most junk through.
+ *      Measured against this exact call: '2026-02-31' becomes 3 March,
+ *      '2026-02-29' becomes 1 March, '2026-08' becomes 1 August, '2026'
+ *      becomes 1 January, and '2026-8-28' falls back to the implementation's
+ *      own parser and is read as LOCAL time. Five of eight junk inputs stored
+ *      a real date nobody typed. That matters more here than in a dialog: this
+ *      is a server action, so the client is not its only caller.
+ *
+ * Both are fixed by handing the value to round 42's conversion, which already
+ * owns "the last instant of this named day, in the site's zone" and already
+ * refuses a date that does not exist. It is IMPORTED rather than adapted —
+ * one definition of end-of-day for the whole codebase is the entire point, and
+ * a second copy here is exactly the drift lib/articlePublishTime.js's header
+ * was written about.
+ *
+ * WHY THE COMPARISONS ARE UNTOUCHED. All three places that ask "has this link
+ * expired" — verifyPreviewPassword below, the public preview route, and
+ * previewSession's TTL cap — test `stored < now`, which makes the stored
+ * instant the LAST VALID one. That is already the right rule for an end-of-day
+ * value; it was the value that was wrong. Round 42 left `isPubliclyVisible`
+ * byte-identical for the same reason.
+ *
+ * WHAT AN EMPTY BOX MEANS IS UNCHANGED: no expiry. What changed is that a
+ * NON-EMPTY box which is not a real calendar date is now an error rather than
+ * a silent roll-over.
+ */
 export async function setPreviewExpiry(id, expireDate) {
   const session = await requireAdmin('pages');
   if (!requirePreviewTier(session)) return { ok: false, error: 'ต้องมีสิทธิ์ marketing ขึ้นไป' };
@@ -772,9 +1493,9 @@ export async function setPreviewExpiry(id, expireDate) {
   await dbConnect();
   let when = null;
   if (expireDate) {
-    const d = new Date(expireDate);
-    if (Number.isNaN(d.getTime())) return { ok: false, error: 'วันหมดอายุไม่ถูกต้อง' };
-    when = d;
+    const iso = windowEndFromInput(expireDate);
+    if (!iso) return { ok: false, error: 'วันหมดอายุไม่ถูกต้อง' };
+    when = new Date(iso);
   }
   const expired = when && when.getTime() < Date.now();
   const doc = await setPreview(id, {

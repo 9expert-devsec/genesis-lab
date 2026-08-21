@@ -48,6 +48,18 @@ export const STUBS = {
   // webhook handler/route code can be exercised under this loader.
   'next/cache': path.join(ROOT, 'test', 'stub-next-cache.mjs'),
   'next/server': path.join(ROOT, 'test', 'stub-next-server.mjs'),
+  // cookies() reads Next's per-request async context and throws outside a
+  // request. Round 36 drives /preview/[slug] directly to prove what it renders
+  // in each state, which is not something a source scan can establish.
+  'next/headers': path.join(ROOT, 'test', 'stub-next-headers.mjs'),
+  // PreviewGate calls useActionState (React 19; installed React is 18.3.1) and
+  // imports an action whose graph reaches the db layer. See the stub for what
+  // stubbing it costs and what covers the gap.
+  // Keyed on the RELATIVE specifier the route actually writes, and only that:
+  // an '@/...' key would be a second entry nothing resolves through, and
+  // stubExportParity would then try to import the real module to compare it —
+  // which is the very thing that cannot load here.
+  './_components/PreviewGate': path.join(ROOT, 'test', 'stub-preview-gate.mjs'),
   // The header's nav-preview server actions import @/lib/db/connect, which
   // throws at module load with no MONGODB_URI. They are never called during a
   // server render — see the stub for the full note.
@@ -84,6 +96,38 @@ export const STUBS = {
   // the lines above — and see the stub's own note on why it throws rather than
   // returning a benign result.
   '@/lib/actions/cache-console': path.join(ROOT, 'test', 'stub-cache-console-actions.mjs'),
+
+  // ── The PageBuilder action-execution harness (round 2) ────────────────
+  // Everything below exists so a test can CALL a server action instead of
+  // reading its source. Until round 2 nothing in this repo executed one, and
+  // source-scanning cannot express the claims the draft/published split turns
+  // on — that a publish promotes the draft EXACTLY once, that a snapshot never
+  // carries one. See test/fakeDb.mjs, which holds all the state: these stubs
+  // export ONLY the real modules' names, because stubExportParity rejects a
+  // stub that carries anything the real module does not.
+  //
+  // The models are stubbed rather than the modules that query them, so the
+  // real slugGuard / pageAudit / action logic all still runs for real.
+  '@/models/PageBuilder':   path.join(ROOT, 'test', 'stub-model-page-builder.mjs'),
+  '@/models/PageVersion':   path.join(ROOT, 'test', 'stub-model-page-version.mjs'),
+  '@/models/PageAuditLog':  path.join(ROOT, 'test', 'stub-model-page-audit-log.mjs'),
+  // slugGuard reaches these three on create/duplicate. A real model here would
+  // buffer its query against a connection that does not exist and HANG the
+  // suite — since round 0 removed the runner's force-exit, a leaked handle is
+  // a hang rather than a kill.
+  '@/models/CustomPage':      path.join(ROOT, 'test', 'stub-model-custom-page.mjs'),
+  '@/models/Promotion':       path.join(ROOT, 'test', 'stub-model-promotion.mjs'),
+  '@/models/PromotionConfig': path.join(ROOT, 'test', 'stub-model-promotion-config.mjs'),
+  // dbConnect opens a real mongoose connection from MONGODB_URI; the fake
+  // models need none, and a test must never reach the network.
+  '@/lib/db/connect':       path.join(ROOT, 'test', 'stub-db-connect.mjs'),
+  // requireAdmin reaches next-auth (and the mongodb adapter) at import time.
+  '@/lib/actions/auth':     path.join(ROOT, 'test', 'stub-actions-auth.mjs'),
+  // The NextAuth config CALLS NextAuth() at import time. Reached transitively
+  // from any admin client that imports a page action module.
+  '@/lib/auth/options':     path.join(ROOT, 'test', 'stub-auth-options.mjs'),
+  // The Cloudinary SDK configures itself from env at import time.
+  '@/lib/cloudinary':       path.join(ROOT, 'test', 'stub-cloudinary.mjs'),
   // BannerForm imports createBanner/updateBanner for its submit handler and
   // AdminBannerList imports deleteBanner for its row button; that chain reaches
   // next-auth → next/headers AND mongoose. Same reasoning as every line above.

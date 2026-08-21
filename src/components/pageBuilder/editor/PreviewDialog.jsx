@@ -1,15 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { X, Copy, Check, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { Copy, Check, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   enablePreviewLink, regeneratePreviewPassword, setPreviewExpiry, revokePreviewAccess,
   getPreviewState,
 } from '@/lib/actions/pageBuilder';
 import { Field, Group, TextInput, Warn, INPUT_CLASS } from './fields';
-import { useEditor } from './EditorProvider';
+// ROUND 43, ADDED beside the statements above rather than folded into one —
+// the standing rule in this directory.
+import { toDateInput } from '@/lib/pageBuilder/publishWindow';
 
 /**
  * Preview link management (item 6). Wires the existing preview actions —
@@ -30,8 +31,16 @@ import { useEditor } from './EditorProvider';
  * preview cookie's HMAC covers passwordHash + passwordUpdatedAt), which is the
  * property that makes revoke meaningful rather than cosmetic.
  */
-export function PreviewDialog({ open, onClose }) {
-  const { page, pageId, tier } = useEditor();
+/**
+ * The dialog BODY, taking plain props — same split, and the same reason, as
+ * PageSettingsBody. Radix renders a portal, which produces NOTHING under
+ * renderToStaticMarkup, so the wrapper is the half no render test can reach.
+ *
+ * All the state and every handler live here rather than in the wrapper: they
+ * are what the body renders from, and moving them would have been an edit
+ * rather than a move. No action call shape changed.
+ */
+export function PreviewBody({ page, pageId, tier, open, onState }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   // Only a GENERATED password lands here — the admin never types it, so it is
@@ -52,10 +61,23 @@ export function PreviewDialog({ open, onClose }) {
   // The working tree's `preview` is a mount-time snapshot the preview actions
   // never update — reading it would report a revoked link as active. Always ask
   // the server, and re-ask after every mutation.
+  /**
+   * `onState` is the write-back the MENU's status dot rides on (round 28).
+   *
+   * The settings dialog reads the status once when it opens, so the dot is
+   * right before this section is ever visited. Every read AFTER that happens
+   * here — on mount, and after each of the five actions — so without handing
+   * them back, revoking a link would leave the dot lit beside a section already
+   * saying the link is off. It is a notification, not a second source: the
+   * server remains the only authority, and this is what stops the menu's copy
+   * of its answer going stale.
+   */
   const refresh = useCallback(() => {
     if (!pageId) return;
-    getPreviewState(pageId).then(setState).catch(() => setState(null));
-  }, [pageId]);
+    getPreviewState(pageId)
+      .then((s) => { setState(s); onState?.(s); })
+      .catch(() => { setState(null); onState?.(null); });
+  }, [pageId, onState]);
 
   useEffect(() => {
     if (open) { refresh(); return undefined; }
@@ -116,24 +138,7 @@ export function PreviewDialog({ open, onClose }) {
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
-          )}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ลิงก์พรีวิว</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-              <X className="h-4 w-4" />
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">จัดการลิงก์พรีวิวที่ป้องกันด้วยรหัสผ่าน</Dialog.Description>
+    <>
 
           {!pageId && <Warn>ต้องบันทึกหน้านี้ก่อนจึงจะสร้างลิงก์พรีวิวได้</Warn>}
           {!slug && pageId && <Warn>ต้องตั้ง URL (slug) ก่อนจึงจะมีลิงก์พรีวิว</Warn>}
@@ -141,7 +146,7 @@ export function PreviewDialog({ open, onClose }) {
           {error && <Warn tone="red">{error}</Warn>}
 
           {notice && !generated && (
-            <p className="mb-3 rounded-9e-md bg-9e-ice px-2 py-1.5 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white">
+            <p className="mb-3 rounded-9e-sm bg-[var(--surface-hover)] px-2.5 py-2 text-xs text-9e-navy dark:text-white">
               {notice}
             </p>
           )}
@@ -151,7 +156,7 @@ export function PreviewDialog({ open, onClose }) {
               this is the single chance to capture it; copy works without ever
               revealing it on screen. */}
           {generated && (
-            <div className="mb-3 rounded-9e-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+            <div className="mb-3 rounded-9e-sm border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
               <p className="mb-1 font-bold">รหัสผ่านใหม่ (แสดงครั้งเดียว)</p>
               <div className="flex items-center gap-1">
                 <code className="min-w-0 flex-1 truncate rounded bg-white/60 px-1.5 py-1 font-mono dark:bg-black/20">
@@ -164,35 +169,66 @@ export function PreviewDialog({ open, onClose }) {
                 </button>
                 <button type="button" onClick={copyPassword} aria-label="คัดลอกรหัสผ่าน"
                   className="rounded p-1 hover:bg-white/50 dark:hover:bg-black/20">
-                  {pwCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  {pwCopied ? <Check className="h-3.5 w-3.5 text-9e-green-50" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
               </div>
               <p className="mt-1">คัดลอกเก็บไว้ตอนนี้ — ระบบเก็บเฉพาะค่าที่เข้ารหัสแล้ว จะดูซ้ำไม่ได้</p>
             </div>
           )}
 
+          {/* ── THE DESIGN'S STATUS CARD, CARRYING THE STATUS THAT WAS ALREADY HERE
+              The Figma draws a card: a 29px circle, a bold state line, and a
+              second line reading "สร้างโดย Yanisa P. · แก้ไขล่าสุดวันนี้ 09:42".
+              The card and the circle are geometry and are taken; the second
+              line is NOT, because PageAuditLog is write-only — the actor is
+              recorded and cannot be read back, so that line could only be
+              invented. This restyles the status paragraph that already stood
+              here; it adds no control and reads no new state.
+
+              The tone is CONDITIONAL. The design drew only the enabled case,
+              and painting a revoked link in the success colour is the exact
+              class of ornament this arc keeps refusing. */}
           {state && (
-            <p className="mb-3 text-[11px] text-9e-slate-dp-50">
-              สถานะ:{' '}
-              <span className={cn('font-bold', state.status === 'active' ? 'text-green-700 dark:text-green-400' : 'text-9e-navy dark:text-white')}>
-                {state.status === 'active' ? 'เปิดใช้งานอยู่' : state.status === 'expired' ? 'หมดอายุแล้ว' : 'ปิดอยู่'}
+            <div
+              data-testid="preview-status-card"
+              className={cn(
+                'mb-3 flex items-center gap-2.5 rounded-9e-sm border p-2.5',
+                state.status === 'active'
+                  ? 'border-9e-green-800 bg-9e-green-900 dark:border-9e-green-800 dark:bg-9e-green-900'
+                  : 'border-[var(--surface-border)] bg-[var(--surface-hover)]'
+              )}
+            >
+              <span
+                className={cn(
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full',
+                  state.status === 'active' ? 'bg-9e-green-50 text-white' : 'bg-9e-slate-dp-50 text-white'
+                )}
+              >
+                {state.status === 'active' ? <Check className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
               </span>
-              {state.expireDate && ` · หมดอายุ ${String(state.expireDate).slice(0, 10)}`}
-            </p>
+              <span className="min-w-0">
+                <span className="block text-xs font-bold text-9e-navy dark:text-white">
+                  {state.status === 'active' ? 'เปิดใช้งานอยู่' : state.status === 'expired' ? 'หมดอายุแล้ว' : 'ปิดอยู่'}
+                </span>
+                <span className="block text-xs text-9e-slate-dp-50">
+                  {state.expireDate ? `หมดอายุ ${toDateInput(state.expireDate)}` : 'ไม่มีวันหมดอายุ'}
+                </span>
+              </span>
+            </div>
           )}
 
           {url && (
             <Group title="ลิงก์">
               <div className="flex items-center gap-1">
-                <code className="min-w-0 flex-1 truncate rounded-9e-md bg-9e-ice px-2 py-1 font-mono text-[10px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white">
+                <code className="min-w-0 flex-1 truncate rounded-9e-sm bg-[var(--surface-hover)] px-2.5 py-2 font-mono text-xs text-9e-navy dark:text-white">
                   {url}
                 </code>
                 <button type="button" onClick={copy} aria-label="คัดลอกลิงก์"
-                  className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                  className="rounded-9e-sm p-1 text-9e-slate-dp-50 hover:bg-[var(--surface-hover)]">
+                  {copied ? <Check className="h-3.5 w-3.5 text-9e-green-50" /> : <Copy className="h-3.5 w-3.5" />}
                 </button>
                 <a href={url} target="_blank" rel="noopener noreferrer" aria-label="เปิดลิงก์"
-                  className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+                  className="rounded-9e-sm p-1 text-9e-slate-dp-50 hover:bg-[var(--surface-hover)]">
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               </div>
@@ -200,7 +236,7 @@ export function PreviewDialog({ open, onClose }) {
           )}
 
           <Group title="รหัสผ่าน">
-            <p className="mb-2 text-[10px] text-9e-slate-dp-50">
+            <p className="mb-2 text-xs text-9e-slate-dp-50">
               ปุ่มในส่วนนี้บันทึกลงเซิร์ฟเวอร์ทันที ไม่ต้องกด “บันทึกฉบับร่าง”
             </p>
             <Field label="ตั้งรหัสผ่านใหม่" hint="อย่างน้อย 8 ตัวอักษร (หรือกด “สุ่มรหัสใหม่” เพื่อรหัสที่ปลอดภัย)">
@@ -219,26 +255,54 @@ export function PreviewDialog({ open, onClose }) {
               </button>
               <button type="button" onClick={onRevoke}
                 disabled={!pageId || !tier?.canManagePreview || Boolean(busy)}
-                className={cn(INPUT_CLASS, 'w-auto cursor-pointer text-red-600 disabled:opacity-40')}>
+                className={cn('flex h-9 w-auto cursor-pointer items-center gap-1.5 rounded-9e-sm border border-red-200 bg-red-50 px-3 text-xs font-bold text-red-600 disabled:opacity-40', 'dark:border-red-900 dark:bg-red-950/40 dark:text-red-400')}>
                 {busy === 'revoke' ? <Loader2 className="h-3 w-3 animate-spin" /> : 'ปิดการเข้าถึง'}
               </button>
             </div>
-            <p className="mt-1.5 text-[10px] text-9e-slate-dp-50">
+            <p className="mt-1.5 text-xs text-9e-slate-dp-50">
               การสุ่มรหัสใหม่หรือปิดการเข้าถึงจะทำให้ลิงก์ที่เปิดค้างไว้ใช้ไม่ได้ทันที
             </p>
           </Group>
 
+          {/*
+            ── ROUND 43: THE READ GOES THROUGH THE SAME MODULE AS THE WRITE ──
+            Both places above and below read `String(v).slice(0, 10)`, which is
+            the UTC calendar date. That is NOT a defect here and was not one
+            before: the values this surface can hold are UTC midnight (the old
+            writer) and 16:59:59.999Z (the new one), and the UTC day of both is
+            the Bangkok day the author typed. It agreed by arithmetic.
+
+            It now agrees by CONSTRUCTION. The slice is only ever right for a
+            positive UTC offset and an end-of-day anchor; `toDateInput` asks
+            the question the label is actually making a claim about — which
+            Bangkok day is this instant in — and it is the same function that
+            reads the publish window back into its own date box.
+          */}
           <Group title="วันหมดอายุ">
-            <Field label="หมดอายุเมื่อ" hint="เว้นว่าง = ไม่มีวันหมดอายุ">
+            <Field label="หมดอายุเมื่อ" hint="เว้นว่าง = ไม่มีวันหมดอายุ · ใช้ได้ถึงสิ้นวันนั้น (เวลาไทย)">
               <input type="date" className={INPUT_CLASS}
                 key={state?.expireDate ?? 'none'}   // re-seed when the fresh read lands
-                defaultValue={state?.expireDate ? String(state.expireDate).slice(0, 10) : ''}
+                defaultValue={toDateInput(state?.expireDate)}
                 disabled={!pageId || !tier?.canManagePreview}
                 onChange={(e) => onExpiry(e.target.value)} />
             </Field>
           </Group>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    </>
   );
 }
+
+/*
+ * ── THE DIALOG WRAPPER LIVED HERE, AND ROUND 27 ABSORBED IT ───────────────
+ * Preview link management is now a SECTION of the page-settings dialog
+ * (PreviewSection in PageSettingsDialog.jsx), not a dialog of its own. The
+ * two were already siblings opened from one `dialog` state in EditorShell, so
+ * this is a change of destination and nothing else.
+ *
+ * The body above is untouched — every action call shape included. The top
+ * bar's preview button still exists and is still tier-gated; it now opens the
+ * settings dialog AT this section instead of a second dialog.
+ *
+ * The file keeps its name because the body is what it always was, and moving
+ * the code as well as the entry point would have made the diff a rewrite
+ * rather than a relocation.
+ */

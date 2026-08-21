@@ -9,7 +9,7 @@ import {
 } from '@/lib/actions/customPages';
 import {
   deletePageBuilderPage,
-  updatePageStatus,
+  publishPageStatus,
 } from '@/lib/actions/pageBuilder';
 
 function formatDate(iso) {
@@ -77,16 +77,58 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
+  // BUILDER rows go through publishPageStatus (the draft/published split,
+  // round 2), not updatePageStatus. Three reasons, in order of how badly the
+  // old path failed:
+  //
+  //   1. updatePageStatus snapshots doc.toObject() on publish, which since
+  //      round 1 carries `draft`. Publishing from this list would archive an
+  //      unpublished edit into PageVersion as though it had once been live —
+  //      while NOT promoting it, so the stale content went public at the same
+  //      time. publishPageStatus promotes the draft and strips it from the
+  //      snapshot.
+  //   2. It had no conflict check at all. The row carries the updatedAt it
+  //      was listed with, so a toggle against a page someone else has since
+  //      edited is now rejected instead of silently stamping over it.
+  //   3. The response carries the fresh updatedAt, so a second toggle on the
+  //      same row works without a reload.
+  //
+  // The DATES ARE PASSED THROUGH DELIBERATELY. publishPageStatus validates
+  // the whole { status, publishStartDate, publishEndDate } window, and those
+  // two fields default to null when absent — so omitting them would silently
+  // WIPE a scheduled page's window on an unrelated status toggle. The list
+  // reads whole documents, so it already holds both.
+  //
+  // The advanced_html branch is untouched: CustomPage has no draft, no
+  // snapshot and no conflict token, and toggleCustomPageStatus stays its path.
   function handleToggleStatus(p) {
     const next = p.status === 'published' ? 'draft' : 'published';
     setBusyId(p._id);
     setActionError(null);
     startTransition(async () => {
       const res = p._type === 'builder'
-        ? await updatePageStatus(p._id, next)
+        ? await publishPageStatus(
+          p._id,
+          {
+            status: next,
+            publishStartDate: p.publishStartDate ?? null,
+            publishEndDate: p.publishEndDate ?? null,
+          },
+          p.updatedAt,
+        )
         : await toggleCustomPageStatus(p._id, next);
       if (res?.ok) {
-        setRows((cur) => cur.map((r) => (rowKey(r) === rowKey(p) ? { ...r, status: next } : r)));
+        // publishPageStatus COERCES a publish the actor's tier does not allow
+        // rather than erroring (it preserves their other edits). The old
+        // action returned an explicit Thai message instead, so say so here
+        // rather than let the row quietly snap back to its old badge.
+        const applied = res.status ?? next;
+        if (applied !== next) {
+          setActionError('ต้องมีสิทธิ์ marketing ขึ้นไปเพื่อเผยแพร่/ตั้งเวลา');
+        }
+        setRows((cur) => cur.map((r) => (rowKey(r) === rowKey(p)
+          ? { ...r, status: applied, updatedAt: res.updatedAt ?? r.updatedAt }
+          : r)));
       } else {
         setActionError(res?.error ?? 'อัปเดตสถานะไม่สำเร็จ');
       }
@@ -243,6 +285,24 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
                     <span className={'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' + badge.cls}>
                       {badge.label}
                     </span>
+                    {/* A pending unpublished draft, marked next to the status
+                        rather than as a column: the row already says what the
+                        PUBLIC sees, and this says the server is holding
+                        something it does not. Builder rows only — CustomPage
+                        has no draft field, and `isBuilder` gates it rather
+                        than a truthiness check on `p.draft`, so a field-name
+                        collision on an advanced_html row could never light
+                        this up. No query change: the list reads whole
+                        documents (getPageBuilderPages has no .select()). */}
+                    {isBuilder && p.draft != null && (
+                      <span
+                        data-testid="pending-draft-dot"
+                        title="มีฉบับร่างที่ยังไม่เผยแพร่"
+                        className="ml-1.5 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                      >
+                        ฉบับร่างรอเผยแพร่
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {formatDate(p.updatedAt)}

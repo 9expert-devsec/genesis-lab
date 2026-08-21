@@ -683,7 +683,41 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 //
 // MEASURED against this tree, not derived: the pins were left at their round-8
 // values, the walk was run, and 171 / 165 are the numbers it reported.
-const MUTATING_EXPORT_COUNT = 171;
+//
+// DRAFT/PUBLISHED SPLIT ROUND 2: 171 -> 174 and 165 -> 168, +3 on BOTH pins —
+// saveDraftContent, publishPageStatus and discardDraftContent added to
+// pageBuilder.js. Each writes Mongo directly in its own body
+// (PageBuilder.findByIdAndUpdate), so the file-local classifier at depth 0
+// sees all three and the two pins move together; REACHED_THROUGH_IMPORT is
+// unchanged and the delta stays 6. They ship ALONGSIDE the actions the editor
+// still calls — createPageBuilderPage, updatePageBuilderPage and
+// updatePageStatus are untouched — so this is an addition, not a replacement,
+// and the count rising by exactly three is the whole of it. All three record
+// an audit row ('draft.save' | 'publish' | 'status' | 'draft.discard'), which
+// is why only the COUNT pins moved and no coverage case did.
+//
+// ROUND 3: 174 -> 175 and 168 -> 169, +1 on BOTH pins — updatePageIdentity
+// added to pageBuilder.js. It writes Mongo directly in its own body
+// (PageBuilder.findByIdAndUpdate), so depth 0 sees it and the two pins move
+// together; REACHED_THROUGH_IMPORT is unchanged and the delta stays 6. It
+// records an audit row under the existing 'update' label — the same label and
+// shape the whole-page save already uses for exactly this class of change —
+// so only the COUNT pins moved and no coverage case did.
+//
+// Round 3 also RETIRED a caller without removing a function: the admin list's
+// toggle moved from updatePageStatus to publishPageStatus. updatePageStatus
+// is still exported and still counted here, which is correct — this pin
+// counts mutating EXPORTS, not reachable ones. An export nothing calls is
+// still a POST endpoint.
+//
+// ROUND 37: 175 -> 176 — backupDraftBeforeRestore added to pageBuilder.js. It
+// writes through backupDraftVersion (pageAudit.js), which the file-local
+// classifier sees the same way it sees snapshotVersion, so the pin moves by one
+// and REACHED_THROUGH_IMPORT is unchanged. It records an audit row under a NEW
+// label, 'draft.backup' — a backup is a distinct event from 'draft.save' and
+// filing it under that one would make the trail unable to tell an autosave from
+// the moment a draft was preserved before being overwritten.
+const MUTATING_EXPORT_COUNT = 176;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -691,6 +725,36 @@ const REACHED_THROUGH_IMPORT = Object.freeze({
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
   'src/lib/actions/previewAccess.js': { submitPreviewPassword: 'src/lib/actions/pageBuilder.js#verifyPreviewPassword' },
+  /**
+   * ROUND 37. backupDraftBeforeRestore writes NOTHING in its own body — its
+   * domain write is PageVersion.create inside the imported backupDraftVersion —
+   * so it is invisible at depth 0 and belongs here rather than in that figure.
+   * It is the FIRST pageBuilder.js export in this map; the four draft actions
+   * before it all call PageBuilder.findByIdAndUpdate directly.
+   *
+   * ── THE CHAIN SAYS recordAudit, AND THAT IS A REAL FINDING ───────────────
+   * whyMutating walks the named imports IN ORDER and stops at the first that
+   * writes. `recordAudit` is imported on an earlier line than
+   * `backupDraftVersion`, and pageAudit's recordAudit DOES write
+   * (PageAuditLog.create) — so the classifier attributes the mutation to the
+   * audit call rather than to the backup.
+   *
+   * That is exactly the circularity W-t guards against one module over: an
+   * export whose ONLY write is its audit row would classify as mutating, and
+   * the coverage rule would then demand an audit row of a function that has
+   * nothing else to declare. W-t pins `recordAdminActionAfter` (the admin
+   * scheduler) and says nothing about pageAudit's recordAudit, because until
+   * now every pageBuilder action also wrote locally, so `local` won and the
+   * import loop was never reached. This export is the first to expose it.
+   *
+   * Recorded AS REPORTED rather than as one wishes it read: bending the
+   * expectation to name backupDraftVersion would assert a chain the walk does
+   * not produce, and the assertion exists to notice when the chain moves.
+   * Whether pageAudit's recordAudit should be excluded from the walk is a
+   * decision of its own — it would change how several modules classify — and it
+   * is not being made incidentally inside a Draft Backup round.
+   */
+  'src/lib/actions/pageBuilder.js': { backupDraftBeforeRestore: 'src/lib/pages/pageAudit.js#recordAudit' },
   // Round 4. `applySnapshotOverride` writes nothing itself — it re-runs the
   // landing sync with the downgrade guard bypassed for one call, so the write
   // is syncLandingData's. The import is STATIC precisely so this walk can see
@@ -864,7 +928,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 165,
+    zero, 169,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -889,7 +953,18 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'REVERSED: 166 → 165, -1 — that action was removed, so a paid registration\'s ' +
     'seat count can no longer be changed by any path. The MUTATION is gone, not ' +
     'its audit: the gate in updateRegistration stays and refuses the field ' +
-    'outright. Both pins move together and the delta stays 6.'
+    'outright. Both pins move together and the delta stays 6. ' +
+    'DRAFT/PUBLISHED SPLIT ROUND 2: 165 -> 168, +3 — saveDraftContent, ' +
+    'publishPageStatus and discardDraftContent added to pageBuilder.js, each ' +
+    'calling PageBuilder.findByIdAndUpdate in its own body, so depth 0 sees all ' +
+    'three and the delta stays 6. ' +
+    'ROUND 3: 168 -> 169, +1 — updatePageIdentity added to pageBuilder.js, ' +
+    'writing through PageBuilder.findByIdAndUpdate in its own body. ' +
+    'ROUND 37: UNCHANGED at 169, and that is the point — backupDraftBeforeRestore ' +
+    'was added to pageBuilder.js but writes ONLY through the imported ' +
+    'backupDraftVersion, so depth 0 cannot see it. The DELTA moved instead, ' +
+    '6 -> 7, via a new REACHED_THROUGH_IMPORT entry. First time these two pins ' +
+    'moved apart rather than together, which is exactly what the sum below is for.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

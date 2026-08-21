@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useReducer, useState } f
 import { editorReducer, initialEditorState } from './editorReducer';
 import { getAt } from './pagePath';
 import { dataRefSignature } from '@/lib/pageBuilder/dataRefs';
+import { isSaving } from '@/lib/pageBuilder/editorStatus';
 import { resolveBuilderSectionData } from '@/lib/actions/pageBuilder';
 
 /**
@@ -30,10 +31,15 @@ import { resolveBuilderSectionData } from '@/lib/actions/pageBuilder';
  */
 const EditorContext = createContext(null);
 
-export function EditorProvider({ children, page, pageId = null, updatedAt = null, tier }) {
+export function EditorProvider({
+  children, page, pageId = null, updatedAt = null, tier, currentUserName = '',
+}) {
   const [state, dispatch] = useReducer(
     editorReducer,
-    { page, pageId, updatedAt },
+    // currentUserName rides the seed rather than being read from a session hook
+    // here: this file is client-only and the routes already resolve the session
+    // for the tier flags. See initialEditorState for what it is FOR.
+    { page, pageId, updatedAt, currentUserName },
     initialEditorState
   );
 
@@ -68,6 +74,19 @@ export function EditorProvider({ children, page, pageId = null, updatedAt = null
   const value = useMemo(
     () => ({
       ...state,
+      // DERIVED, never stored: the reducer keeps the two real flags
+      // (contentDirty / identityDirty) and this is their OR. Consumers that
+      // only care whether anything is unsaved — the leave guard, the top
+      // bar's "ยังไม่ได้บันทึก" — keep reading one boolean and did not change.
+      // Computing it here rather than keeping a third field in the reducer
+      // means it cannot drift out of step with the two it summarises.
+      dirty: state.contentDirty || state.identityDirty,
+      // DERIVED for the same reason `dirty` is: `saving` brackets one call and
+      // a publish is two, so the raw flag reads false for the whole
+      // promote-to-live write. Overriding it here means every consumer —
+      // including EditorShell's useLeaveGuard({ dirty, saving, conflict }),
+      // which needs no edit — sees the truthful one.
+      saving: isSaving(state),
       dispatch,
       tier, // { canUseAdvanced, canPublish, canManagePreview } — server-resolved
       resolvedData, // id-keyed data map for data-backed sections (2C.2a)

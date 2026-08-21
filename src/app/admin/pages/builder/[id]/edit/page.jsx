@@ -27,6 +27,7 @@ export default async function EditBuilderPage({ params }) {
       page={page}
       pageId={id}
       updatedAt={page.updatedAt ?? null}
+      currentUserName={user?.name ?? ''}
       tier={{
         canUseAdvanced: canUseAdvanced(user),
         canPublish: canPublish(user),

@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Trash2, Upload, Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, Upload, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { safeUrl } from '@/lib/pageBuilder/safeUrl';
 import { isContainer } from '@/lib/pageBuilder/containerSlots';
 import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
 import { isKnownIconName } from '@/lib/pageBuilder/lucideIcon';
 import { embedSrc } from '@/lib/pageBuilder/embedSrc';
-import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+import { moveInArray } from './pagePath';
+import { IconPicker } from './IconPicker';
+import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
 
 /**
@@ -37,7 +39,7 @@ const NOTICE_VARIANTS = ['info', 'success', 'warning', 'error'];
 const NOTICE_LABELS = { info: 'ข้อมูล', success: 'สำเร็จ', warning: 'คำเตือน', error: 'ข้อผิดพลาด' };
 const EMBED_PROVIDERS = ['youtube', 'vimeo', 'iframe'];
 const EMBED_PROVIDER_LABELS = { youtube: 'YouTube', vimeo: 'Vimeo', iframe: 'iframe (โค้ดฝัง)' };
-const ICON_HINT = 'ชื่อไอคอน Lucide แบบ PascalCase เช่น Rocket, Users — ดูรายชื่อที่ lucide.dev/icons';
+const ICON_HINT = 'ค้นหาด้วยชื่อภาษาอังกฤษ เช่น rocket, users';
 
 // ── heading ──────────────────────────────────────────────────────────
 function HeadingEditor({ content, patch }) {
@@ -256,7 +258,7 @@ function StatCardEditor({ content, patch }) {
       </Field>
       {empty && <Warn>ต้องมีตัวเลขหรือคำอธิบายอย่างน้อยหนึ่งอย่าง — ไม่งั้นการ์ดนี้จะไม่แสดงผล</Warn>}
       <Field label="ไอคอน (ไม่บังคับ)" hint={ICON_HINT}>
-        <TextInput value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
       </Field>
       {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
     </>
@@ -273,7 +275,7 @@ function IconCardEditor({ content, patch }) {
   return (
     <>
       <Field label="ไอคอน" hint={ICON_HINT}>
-        <TextInput value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
       </Field>
       {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
       <Field label="หัวข้อ">
@@ -569,18 +571,101 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
   const remove = (i) => set(list.filter((_, j) => j !== i));
   const add = () => set([...list, Object.fromEntries(fields.map((f) => [f.key, f.type === 'check' ? true : '']))]);
 
+  /**
+   * ── KEEPING THE KEYBOARD ON THE ITEM, NOT ON THE ROW ────────────────────
+   * Pressing ขึ้น moves the item away from the button that was pressed, and
+   * because the rows are keyed by position that button now belongs to a
+   * DIFFERENT item. Without this, a second press would move a different item —
+   * so holding the key to walk an item up a list would shuffle the list
+   * instead. The move records where the item landed, and the effect puts focus
+   * on the same control in its new row, so repeat presses keep moving the one
+   * item the author started with.
+   *
+   * At the ends the same-direction button is disabled and cannot take focus,
+   * so focus falls to the opposite one — the row keeps the keyboard either way
+   * rather than dropping it to the document.
+   */
+  const containerRef = useRef(null);
+  const pendingFocus = useRef(null);
+  useEffect(() => {
+    const want = pendingFocus.current;
+    pendingFocus.current = null;
+    if (!want || !containerRef.current) return;
+    const at = (dir) => containerRef.current.querySelector(`[data-move="${dir}"][data-row="${want.index}"]`);
+    const target = at(want.dir);
+    const fallback = at(want.dir === 'up' ? 'down' : 'up');
+    const el = target && !target.disabled ? target : fallback;
+    if (el && !el.disabled) el.focus();
+  });
+
+  const move = (i, dir) => {
+    const to = dir === 'up' ? i - 1 : i + 1;
+    // The ends are refused HERE, not in moveInArray. That helper clamps a
+    // destination rather than rejecting it, so asking it to move item 0 to -1
+    // hands back a NEW array in the SAME order — which would pass an identity
+    // check and dirty the page for a press that changed nothing. The buttons at
+    // the ends are disabled, so this is the second line of defence; it is also
+    // what keeps the shared helper a pure extraction, unchanged for the tree.
+    if (to < 0 || to >= list.length) return;
+    pendingFocus.current = { index: to, dir };
+    const next = moveInArray(list, i, to);
+    if (next === list) return;
+    set(next);
+  };
+
   return (
-    <>
+    <div ref={containerRef}>
+      {/* ── THE INDEX KEY, AND WHY REORDERING DOES NOT BREAK IT ─────────────
+          Index keys plus mutable order is a known way to carry an input's
+          state to the wrong row, so it was checked rather than left standing.
+          It is safe HERE, and for a reason that can stop being true:
+
+          the hazard needs state that React PRESERVES because the key matched.
+          These rows have none. Every field is fully controlled — TextInput and
+          TextArea render `value` straight from `item[f.key]`, there is no
+          defaultValue and no uncontrolled input anywhere in fields.jsx, and
+          neither the row nor the field components hold any state of their own.
+          After a move, row i re-renders with the next item's props and every
+          value is re-derived from those props rather than retained.
+
+          The one thing a matched key DOES retain is focus, which is why the
+          move handler above moves focus to where the item went.
+
+          SO: give a row local state, or an uncontrolled input, and this stops
+          being safe and the rows need a stable identity instead. The items
+          carry no id to key on today, so that would mean adding one. */}
       {list.map((item, i) => (
         <div key={i} className="mb-2 rounded-9e-md border border-[var(--surface-border)] p-2">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-[10px] font-bold text-9e-slate-dp-50">#{i + 1}</span>
-            <button
-              type="button" aria-label={`ลบรายการที่ ${i + 1}`} onClick={() => remove(i)}
-              className="rounded p-0.5 text-9e-slate-dp-50 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
+            <span className="flex items-center gap-0.5">
+              {/* Buttons rather than drag-and-drop, and the keyboard is the
+                  reason. Native HTML5 dragging has no keyboard path at all, so
+                  a drag build would need a second mechanism next to it for
+                  keyboard users — and that second mechanism is this one. The
+                  ends are disabled rather than wrapping: an author walking an
+                  item up stops at the top instead of finding it at the bottom. */}
+              <button
+                type="button" data-move="up" data-row={i} disabled={i === 0}
+                aria-label={`ย้ายรายการที่ ${i + 1} ขึ้น`} onClick={() => move(i, 'up')}
+                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
+              >
+                <ChevronUp className="h-3 w-3" />
+              </button>
+              <button
+                type="button" data-move="down" data-row={i} disabled={i === list.length - 1}
+                aria-label={`ย้ายรายการที่ ${i + 1} ลง`} onClick={() => move(i, 'down')}
+                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
+              >
+                <ChevronDown className="h-3 w-3" />
+              </button>
+              <button
+                type="button" aria-label={`ลบรายการที่ ${i + 1}`} onClick={() => remove(i)}
+                className="rounded p-0.5 text-9e-slate-dp-50 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </span>
           </div>
           {fields.map((f) => (
             f.type === 'check' ? (
@@ -612,7 +697,7 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
       >
         <Plus className="h-3 w-3" /> {addLabel}
       </button>
-    </>
+    </div>
   );
 }
 
@@ -663,20 +748,14 @@ export function SectionContentEditor({ type, content, patch, advanced, resolved 
   if (!Editor) {
     // Containers hold child sections, not content — the tree edits those.
     return isContainer(type) ? (
-      <Group title="เนื้อหา">
-        <p className="text-[11px] text-9e-slate-dp-50">
-          section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”
-        </p>
-      </Group>
+      <p className="text-[11px] text-9e-slate-dp-50">
+        section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”
+      </p>
     ) : null;
   }
   // `advanced` is read only by CustomCssEditor; `resolved` (the fetched
   // course/instructor, or list) only by the 2C.2a data-backed editors — it is
   // what turns the edit-time fetch into a fail-closed warning instead of a
   // placeholder. The rest ignore both.
-  return (
-    <Group title="เนื้อหา">
-      <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />
-    </Group>
-  );
+  return <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />;
 }
