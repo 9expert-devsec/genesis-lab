@@ -375,41 +375,78 @@ test('CONTROL: those literals are ones the probe could actually find', () => {
 // §3  THAI VERTICAL METRICS — measured against the font file itself
 // ════════════════════════════════════════════════════════════════════════════
 
-test('the probe’s table of type pairs IS the scale the components ship', () => {
-  /**
-   * ══ THE PROBE PRINTS A TABLE, AND A TABLE CAN GO STALE ════════════════════
-   *
-   * `DETAIL_TYPE_PAIRS` is a hand-written list in the probe script, and every
-   * assertion below reads it. If it drifted from the constants the components
-   * actually export, the floor tests would go on passing about a scale nobody
-   * ships — face three of defect 7, in the instrument rather than in the code.
-   *
-   * So the three pairs the constants define are DERIVED here and matched against
-   * the probe's list. What is left in the probe and not derivable — the
-   * ข้อมูลระบบ heading, which is a literal in `SystemCard` on purpose — is
-   * asserted to be exactly one entry, so the list cannot quietly grow either.
-   */
-  const pairsIn = (cls) => {
-    const px = Number(cls.match(/text-\[([0-9.]+)px\]/)[1]);
-    return [...cls.matchAll(/(?:^|\s)(?:lg:)?leading-\[([0-9.]+)px\]/g)]
-      .map((m) => [px, Number(m[1])]);
-  };
-  const fromComponents = [
-    ...pairsIn(DETAIL_FIELD_VALUE),
-    ...pairsIn(DETAIL_FIELD_LABEL),
-    ...pairsIn(DETAIL_CARD_HEADING),
-  ].map(([px, leading]) => `${px}/${leading}`).sort();
+/**
+ * EVERY (size, line box) PAIR THE DETAIL SCREENS SHIP, DERIVED FROM THE SOURCE.
+ *
+ * ══ THE FIRST DRAFT READ THE PROBE'S OWN TABLE, AND A CONTROL CAUGHT IT ═════
+ *
+ * `DETAIL_TYPE_PAIRS` is a hand-written list inside the probe script. The floor
+ * tests below iterated it, which read perfectly and asserted nothing about the
+ * components: `_control-round11.mjs apply leading-under-the-floor` put the value
+ * back into a 25px box — the exact defect these tests exist for — and BOTH of
+ * them stayed GREEN, because the probe's list still said 28. Face three of
+ * defect 7, in the instrument rather than in the code.
+ *
+ * So the pairs are derived HERE: three from the exported constants, one parsed
+ * out of `SystemCard`'s heading, which spells its own size on purpose. The
+ * probe's list is then held against this rather than the other way round, so it
+ * can go on printing a table for a human without being load-bearing.
+ */
+const pairsIn = (what, cls) => {
+  const size = cls.match(/text-\[([0-9.]+)px\]/);
+  // NO THROW HERE, and that is not laziness. A `system-heading-follows` control
+  // makes this string stop parsing, and an assertion at MODULE scope turns that
+  // into an import failure that takes all twenty-four tests in the file with it
+  // — one opaque red where five specific ones were wanted. An empty list is the
+  // honest return; the "derived pair list is real" test below is what refuses it.
+  if (!size) return [];
+  return [...cls.matchAll(/(?:^|\s)(?:lg:)?leading-\[([0-9.]+)px\]/g)]
+    .map((m) => [what, Number(size[1]), Number(m[1])]);
+};
 
-  const inProbe = DETAIL_TYPE_PAIRS.map(([, px, leading]) => `${px}/${leading}`);
-  for (const pair of fromComponents) {
-    assert.ok(inProbe.includes(pair),
-      `the components ship ${pair} and the probe's table does not list it — `
-      + `[${inProbe.join(' ')}]`);
+/** `SystemCard`'s heading, which is the one pair no shared constant defines. */
+const systemCardHeading = () => {
+  const shell = readSource('src/app/admin/registrations/_components/detailShell.jsx').code;
+  const from = shell.indexOf('export function SystemCard');
+  if (from === -1) return '';
+  const h2 = shell.slice(shell.indexOf('<h2', from), shell.indexOf('</h2>', from));
+  return (h2.match(/className="([^"]*)"/) ?? [, ''])[1];
+};
+
+const shippedPairs = () => [
+  ...pairsIn('field value', DETAIL_FIELD_VALUE),
+  ...pairsIn('field label', DETAIL_FIELD_LABEL),
+  ...pairsIn('card heading', DETAIL_CARD_HEADING),
+  ...pairsIn('system-card heading', systemCardHeading()),
+];
+
+test('the derived pair list is real — four sources, four sizes, no empty parse', () => {
+  /**
+   * Every assertion in §3 loops over `shippedPairs()`, and a loop over an
+   * empty array passes. This is the only thing standing between a broken parser
+   * and four silently vacuous tests.
+   */
+  assert.equal(shippedPairs().length, 5,
+    `expected 5 pairs (value, label × 2 widths, card heading, system heading), got `
+    + `${shippedPairs().map(([w, p, l]) => `${w} ${p}/${l}`).join(', ')}`);
+  assert.ok(systemCardHeading().includes('text-['), `SystemCard's heading did not parse: "${systemCardHeading()}"`);
+  for (const [what, px, leading] of shippedPairs()) {
+    assert.ok(px > 0 && leading > 0, `${what}: parsed ${px}/${leading}`);
   }
-  const extra = inProbe.filter((p) => !fromComponents.includes(p));
-  assert.deepEqual(extra, ['12/20'],
-    `the probe lists pairs no shared constant defines: [${extra.join(' ')}]. `
-    + 'The only legitimate one is the ข้อมูลระบบ heading, which SystemCard spells itself.');
+});
+
+test('the probe’s printed table IS the scale the components ship', () => {
+  /**
+   * The probe prints a table a human reads when deciding a size, and a stale
+   * table is a wrong decision taken with confidence. Set equality in BOTH
+   * directions: a pair the components ship and the table omits, and a pair the
+   * table lists and nothing ships.
+   */
+  const shipped = [...new Set(shippedPairs().map(([, px, l]) => `${px}/${l}`))].sort();
+  const printed = [...new Set(DETAIL_TYPE_PAIRS.map(([, px, l]) => `${px}/${l}`))].sort();
+  assert.deepEqual(printed, shipped,
+    'scripts/_probe-thai-type-metrics.mjs prints a scale the components do not ship. '
+    + `DETAIL_TYPE_PAIRS says [${printed.join(' ')}]; the source says [${shipped.join(' ')}].`);
 });
 
 test('every type pair this round ships clears LINE Seed Sans TH’s own line box', () => {
@@ -431,7 +468,7 @@ test('every type pair this round ships clears LINE Seed Sans TH’s own line box
   assert.ok(Math.abs(m.naturalLineEm - 1.584) < 0.001,
     `the font's natural line box moved to ${m.naturalLineEm} — every leading below needs re-deciding`);
 
-  for (const [what, px, leading] of DETAIL_TYPE_PAIRS) {
+  for (const [what, px, leading] of shippedPairs()) {
     const floor = px * m.naturalLineEm;
     assert.ok(leading >= floor,
       `${what}: ${px}px in a ${leading}px line box is BELOW the font's own ${floor.toFixed(1)}px. `
@@ -443,7 +480,7 @@ test('…and clears the ink extremes too, so two wrapped lines cannot touch', ()
   // The address and the customer note are the live multi-line cases. The floor
   // above stops a single line being sheared; this stops two lines colliding.
   const m = fontMetrics();
-  for (const [what, px, leading] of DETAIL_TYPE_PAIRS) {
+  for (const [what, px, leading] of shippedPairs()) {
     const ink = px * m.inkEm;
     assert.ok(leading > ink,
       `${what}: ${leading}px of line box against ${ink.toFixed(1)}px of possible ink — `
@@ -607,6 +644,39 @@ test('the mono ids and the Omise link FOLLOW — they carry no size of their own
       assert.ok(!/text-\[[0-9.]+px\]/.test(cls), `${name}: a mono value sets its own size — "${cls}"`);
     }
   }
+});
+
+test('the in-house course CODE keeps its 11px — the exception is pinned, not tolerated', () => {
+  /**
+   * ══ ADDED BECAUSE A CONTROL REDDENED NOTHING ══════════════════════════════
+   *
+   * `_control-round11.mjs apply course-code-follows` removes the 11px from the
+   * code line so it inherits the row's 16px, and the whole suite stayed GREEN.
+   * The test above only catches a mono value GAINING a size; a stated exception
+   * LOSING its size was invisible, so the exception was documented and unguarded
+   * — which is the same thing as not having decided it.
+   *
+   * The reason it is 11px is not aesthetic: the in-house LIST cell renders the
+   * same name-over-code pair at the same size, and this round does not touch the
+   * list screens. Following the value here silently breaks an agreement between
+   * two screens that a reader of either one cannot see.
+   */
+  const markup = SCREENS.inhouse;
+  const at = markup.indexOf('EXC-201');
+  assert.notEqual(at, -1, 'the course code did not render — the fixture resolves no course');
+  const span = markup.slice(markup.lastIndexOf('<span', at), at);
+  assert.ok(span.includes('font-mono'), `the course code is not the mono line: "${span}"`);
+  assert.ok(span.includes('text-[11px]'),
+    `the in-house course code lost its 11px — "${span}". It is the annotation under the `
+    + 'name and it matches the in-house LIST cell, which this round does not touch.');
+
+  // …and the NAME above it did follow, so this is a claim about the two lines
+  // being deliberately different rather than about the component being frozen.
+  const nameAt = markup.indexOf('Excel Advanced');
+  assert.notEqual(nameAt, -1, 'the resolved course name did not render');
+  const nameSpan = markup.slice(markup.lastIndexOf('<span', nameAt), nameAt);
+  assert.ok(!/text-\[[0-9.]+px\]/.test(nameSpan),
+    `the course NAME kept a size of its own — "${nameSpan}"`);
 });
 
 test('the ATTENDEE TABLE cells follow; its chrome deliberately does not', () => {
