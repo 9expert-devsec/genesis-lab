@@ -357,12 +357,31 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
   /**
    * ADD ONE NOTE. The only mutation of `internalNotes` in this file.
    *
-   * ── THE OPTIMISTIC ENTRY IS BUILT FROM THE DRAFT AND IS NOT THE RECORD ────
-   * The server stamps `authorId`, `authorName` and `createdAt` from the session
-   * — the client cannot and must not supply them. What is appended here is a
-   * local echo so the note appears immediately; the authoritative values arrive
-   * on the next load via `revalidatePath`. `authorName: ''` renders the em dash
-   * for that instant rather than a name the client guessed.
+   * ══ WHAT IS APPENDED IS THE SERVER'S OWN ENTRY — ROUND 13 ═════════════════
+   *
+   * This used to append a local echo the client had built:
+   *
+   *     { body, authorId: '', authorName: '', createdAt: null }
+   *
+   * and the comment here said the authoritative values "arrive on the next load
+   * via revalidatePath". THEY NEVER ARRIVED. `internalNotes` is
+   * `useState(() => readNotes(doc.adminNotes))` and a `useState` INITIALISER
+   * RUNS ONCE PER MOUNT — a revalidated `doc` prop does not re-run it. The
+   * empty echo was therefore on screen until the admin navigated away and back,
+   * which is the reported defect: a saved note showing a bare em dash where its
+   * author and time belong.
+   *
+   * THE DATA WAS NEVER MISSING. Measured read-only with
+   * `scripts/audit-internal-note-bylines.mjs`: the one stored note carries
+   * `authorName`, `authorId` and `createdAt`, all populated. This was a display
+   * defect in the optimistic path and nothing else.
+   *
+   * ── THE CLIENT STILL SUPPLIES NOTHING BUT THE BODY ────────────────────────
+   * `addInternalNote` now returns the entry it stamped, and it goes through
+   * `readNotes` — the SAME reader the initial load uses — so the appended entry
+   * and a reloaded one cannot differ in shape. If a reply somehow arrives
+   * without a note, `readNotes` builds one from the body alone and the byline
+   * renders NO ELEMENT rather than a dash.
    *
    * The draft is cleared ONLY on success. A failed add that emptied the box
    * would lose what the admin typed, and there is no way to get it back.
@@ -374,7 +393,7 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
     startTransition(async () => {
       const res = await addInternalNote(doc._id, body);
       if (res.ok) {
-        setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
+        setInternalNotes((prev) => [...prev, ...readNotes([res.note ?? { body }])]);
         setNoteDraft('');
       } else {
         setError(res.error || 'บันทึกไม่สำเร็จ');
@@ -1566,12 +1585,35 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                 sees which fields a row actually holds — the job the deleted
                 สถานะข้อมูล chip was doing by summary.
               */}
+              {/*
+                ══ THE EMAIL CELL IS PLAIN TEXT WITH A COPY — ROUND 13 ════════
+
+                It was a `mailto:` anchor. See the in-house contact card for why
+                every link on both screens went: a salesperson pastes these
+                values, and a handoff to whatever the OS has registered is not
+                that.
+
+                ── THE DASH STAYS, AND THAT IS NOT A CONTRADICTION ───────────
+                A TABLE CELL MAY NOT VANISH — the column would misalign — so the
+                fallback is still an em dash here, which is the one place on
+                these screens where a dash is right. The no-dash rule round 5
+                settled is about a BYLINE and a field ROW, both of which can be
+                dropped entirely. A `<td>` cannot.
+
+                ── THE CONTROL IS INSIDE THE CELL, AND THE TEXT KEEPS min-w-0 ──
+                `CopyAction` is `shrink-0`, so without `min-w-0` on the address
+                the flex row would take its minimum from the email's unbroken
+                width and push the button out of the cell. Same mechanism the
+                field row's `<dd>` documents at length.
+              */}
               <td className="align-middle" style={pad(2)}>
                 {a.email ? (
-                  <a href={`mailto:${a.email}`}
-                    className={cn('block truncate text-9e-action hover:underline', DETAIL_FIELD_VALUE)}>
-                    {a.email}
-                  </a>
+                  <div className="flex min-w-0 items-center gap-[8px]">
+                    <span className={cn('min-w-0 truncate text-[var(--text-primary)]', DETAIL_FIELD_VALUE)}>
+                      {a.email}
+                    </span>
+                    <CopyAction text={a.email} label={`อีเมลผู้เข้าอบรมท่านที่ ${i + 1}`} />
+                  </div>
                 ) : (
                   <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>—</span>
                 )}
@@ -1679,11 +1721,36 @@ function AttendeeRowMenu({ index, attendee, onEditRow, open, onToggle }) {
    */
   const rowText = attendeeCopyText(attendee);
 
+  /**
+   * ══ `คัดลอกอีเมล` IS GONE — ROUND 13, AND IT CANNOT EMPTY THIS MENU ═══════
+   *
+   * The email cell now carries its own copy control, so the menu item copied a
+   * value the row is already offering one click closer. This menu exists for
+   * actions the ROW CANNOT SHOW — editing the whole entry, and taking the three
+   * fields as one spreadsheet line — and a duplicate of a visible affordance is
+   * not one of those.
+   *
+   * ── THE NO-EMPTY-MENU GUARD IS NOT AT RISK, AND IT IS PROVABLE ───────────
+   * `OverflowMenu` must never render with nothing in it; the `items.length === 0`
+   * return below is that guard. Removing an item is exactly the change that
+   * could break it, so:
+   *
+   *   `attendeeCopyText` returns '' ONLY when name, email AND phone are all
+   *   empty. So `attendee.email` being truthy IMPLIES `rowText` is truthy.
+   *
+   * The email item therefore could never have been the last one standing — any
+   * row that had it also had `คัดลอกผู้เข้าอบรม`. The states after the removal:
+   *
+   *   editable + any content   → แก้ไขรายชื่อ + คัดลอกผู้เข้าอบรม   (2)
+   *   CANCELLED + any content  → คัดลอกผู้เข้าอบรม                  (1)
+   *   CANCELLED + empty row    → none, and the menu returns null    (0, already
+   *                              the case before this change, because an empty
+   *                              row has no email either)
+   *
+   * Asserted in render/registrationAttendeeTab rather than left as an argument.
+   */
   const items = [
     onEditRow ? { key: 'edit', icon: Pencil, label: 'แก้ไขรายชื่อ', onClick: onEditRow } : null,
-    attendee.email
-      ? { key: 'copy', icon: Copy, label: 'คัดลอกอีเมล', onClick: () => copyText(attendee.email) }
-      : null,
     rowText
       ? { key: 'copy-row', icon: Copy, label: 'คัดลอกผู้เข้าอบรม', onClick: () => copyText(rowText) }
       : null,

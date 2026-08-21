@@ -151,6 +151,41 @@ export function readNotes(stored, { legacyCreatedAt = null } = {}) {
 }
 
 /**
+ * THE BYLINE STRING FOR ONE NOTE — or '' when there is nothing to say.
+ *
+ * ══ IT RETURNS '' RATHER THAN A DASH, AND THAT IS ROUND 5'S RULE ════════════
+ *
+ * `update — → —` was the instance that settled it: a dash asserts "we looked and
+ * there is nothing there", and the caller renders NO ELEMENT rather than making
+ * that claim on the screen's behalf. The same rule applies here for the opposite
+ * reason — there the emptiness was deliberate (field diffs carry PII), here it
+ * is never deliberate, because a byline is the whole point of an append-only
+ * log. Either way the rendering is the same: nothing, not a placeholder.
+ *
+ * ── PARTIAL IS A REAL CASE AND IS NOT COLLAPSED ───────────────────────────
+ * A name with no time, and a time with no name, both render what they have.
+ * Joining on ' · ' after filtering means a missing half never leaves a dangling
+ * separator, which is `detailHeading`'s trailing-colon defect in miniature.
+ *
+ * ── AND IT DOES NOT INVENT AN AUTHOR ──────────────────────────────────────
+ * There is no "the current admin" fallback and there must not be. A note whose
+ * author was never recorded is unattributed, and attributing it to whoever
+ * happens to be looking would make the record say something false. The only
+ * synthesised name in this module is `LEGACY_AUTHOR_NAME`, which is applied by
+ * `readNotes` to the pre-migration STRING shape alone and says out loud that it
+ * does not know.
+ *
+ * @param {{authorName?: string, createdAt?: *}} note
+ * @param {(d: *) => string} formatDate the screen's own formatter, injected so
+ *        this module learns nothing about locales or timezones
+ */
+export function noteByline(note, formatDate) {
+  const who = String(note?.authorName ?? '').trim();
+  const when = note?.createdAt ? String(formatDate(note.createdAt) ?? '').trim() : '';
+  return [who, when].filter(Boolean).join(' · ');
+}
+
+/**
  * Is the stored value still in the pre-migration String shape?
  *
  * Used by the migration to decide what to touch, and by a test to prove the

@@ -1013,7 +1013,34 @@ export async function addInternalNote(id, body, source = 'public') {
     actor:       { id: session.user?.id, name: session.user?.name },
   });
 
-  return { ok: true };
+  /**
+   * ══ THE STAMPED ENTRY GOES BACK TO THE CALLER — ROUND 13 ═══════════════════
+   *
+   * It used to return `{ ok: true }` and nothing else, and BOTH detail screens
+   * then appended a local echo they had built themselves:
+   *
+   *     { body, authorId: '', authorName: '', createdAt: null }
+   *
+   * The docstrings at both call sites said the real values "arrive on the next
+   * load via revalidatePath". THEY NEVER ARRIVE. `internalNotes` is
+   * `useState(() => readNotes(doc.adminNotes))`, and a `useState` INITIALISER
+   * RUNS ONCE PER MOUNT — a revalidated `doc` prop does not re-run it. So the
+   * empty echo was on screen not "for an instant" but until the admin navigated
+   * away and back, which is exactly what the defect report showed.
+   *
+   * The fix is not to sync state from props. It is to stop guessing: the server
+   * has just written the entry and knows every field of it, so it hands it back
+   * and the client appends THAT. The client still supplies nothing but the body,
+   * which is the property that mattered — `authorId`, `authorName` and
+   * `createdAt` remain the session's, stamped here.
+   *
+   * ── AND THIS IS NOT THE AUDIT-ROW RULE BEING BENT ─────────────────────────
+   * The body never reaching an audit row is about the append-only TRAIL, which
+   * cannot be redacted. This is a reply to the admin who typed the body one
+   * moment ago, on the screen they typed it into. Different question.
+   */
+  const stored = doc.adminNotes?.[doc.adminNotes.length - 1];
+  return { ok: true, note: serialize(stored) };
 }
 
 // ── Delete ─────────────────────────────────────────────────────────

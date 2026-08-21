@@ -5,6 +5,10 @@ import { ArrowLeft, MoreHorizontal, Pencil, Check, X, Loader2, Copy } from 'luci
 import { cva } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 import { anchoredMenuPosition } from '@/lib/anchoredMenu';
+// The byline is a pure string decision — who, when, or nothing — so it lives
+// beside the rest of the note vocabulary and is driven from the `pure` tier
+// without a DOM. See its docstring for why it never returns a dash.
+import { noteByline } from '@/lib/registrations/internalNotes';
 
 /**
  * `useLayoutEffect` in the browser, `useEffect` on the server.
@@ -1429,17 +1433,36 @@ export function InternalNotesBody({
               <p className="whitespace-pre-wrap text-[13px] leading-[22px] text-[var(--text-primary)]">
                 {note.body}
               </p>
-              <p className="pt-[6px] text-[11px] leading-[16px] text-[var(--text-muted)]">
-                {/*
-                  WHO, then WHEN. `authorName` is the name AT THE TIME OF
-                  WRITING and is stored on the note — it is never re-resolved
-                  from `authorId`. An entry with no name renders the em dash
-                  rather than an empty span, because a byline that collapses to
-                  nothing is invisible to every text assertion.
-                */}
-                {note.authorName || '—'}
-                {note.createdAt ? ` · ${formatDate(note.createdAt)}` : ''}
-              </p>
+              {/*
+                ══ WHO, THEN WHEN — AND NO ELEMENT AT ALL WHEN NEITHER ═════════
+                `authorName` is the name AT THE TIME OF WRITING, stored on the
+                note and never re-resolved from `authorId`. That decision is
+                round 6's and it survived; see lib/registrations/internalNotes.
+
+                ── THE EM DASH IS GONE, AND ROUND 5 IS WHY ────────────────────
+                This was `{note.authorName || '—'}`, and the comment defending it
+                said a byline that collapses to nothing is invisible to a text
+                assertion. That is true and it is the wrong trade: the dash was
+                on screen for a real note, written by a real admin, whose author
+                and time were sitting in the database the whole time — it was the
+                CLIENT's own optimistic echo that had neither, and the dash made
+                a rendering bug look like a missing author.
+
+                Round 5 settled the rule on `update — → —`: WHATEVER CANNOT BE
+                SHOWN RENDERS NO ELEMENT, NEVER A DASH. A dash asserts "we looked
+                and there is nothing"; absence asserts nothing at all, which is
+                the honest claim when the reason is unknown.
+
+                THE ASSERTION PROBLEM IS SOLVED THE OTHER WAY. A test that wants
+                to know a byline is missing counts `<p>` elements inside the
+                entry rather than looking for a character — see
+                render/internalNoteByline.
+              */}
+              {noteByline(note, formatDate) ? (
+                <p className="pt-[6px] text-[11px] leading-[16px] text-[var(--text-muted)]">
+                  {noteByline(note, formatDate)}
+                </p>
+              ) : null}
             </li>
           ))}
         </ol>

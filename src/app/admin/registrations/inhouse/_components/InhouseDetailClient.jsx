@@ -589,9 +589,11 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
     startTransition(async () => {
       const res = await addInternalNote(doc._id, body, 'inhouse');
       if (res.ok) {
-        // A local echo. The server stamps author and timestamp from the session;
-        // those arrive on the next load. The client must not guess them.
-        setInternalNotes((prev) => [...prev, { body, authorId: '', authorName: '', createdAt: null }]);
+        // THE SERVER'S OWN ENTRY, through the SAME reader the initial load uses
+        // — not a local echo. See the public client's `handleAddNote` for the
+        // full reasoning: the echo's empty author was never replaced, because a
+        // `useState` initialiser does not re-run when `doc` is revalidated.
+        setInternalNotes((prev) => [...prev, ...readNotes([res.note ?? { body }])]);
         setNoteDraft('');
       } else {
         setError(res.error || 'บันทึกไม่สำเร็จ');
@@ -695,6 +697,20 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
   const quotationCompany = (quotation.quotationCompany ?? '').trim();
   const companyDiverges  = Boolean(contactCompany && quotationCompany && contactCompany !== quotationCompany);
   const displayCompany   = companyDiverges ? contactCompany : (quotationCompany || contactCompany);
+  /**
+   * THE PARTY THE QUOTATION IS ADDRESSED TO — the quotation card's subject.
+   *
+   * `displayCompany` above is the CONTACT card's answer and prefers the contact
+   * company when the two diverge. This one is its opposite number and always
+   * prefers the QUOTATION company; the two are deliberately different functions
+   * of the same pair, because the two cards are answering different questions.
+   *
+   * The fallback fires only on a pre-split enquiry that never had
+   * `quotationCompany` written, where the contact company is what a quotation
+   * would have been addressed to. `DLRow` drops the row entirely if both are
+   * empty, and `CopyAction` drops the control with it.
+   */
+  const quotationCompanyDisplay = quotationCompany || contactCompany;
 
   const isThaiQuotation = quotation.quotationCountry !== 'OTHER';
 
@@ -929,12 +945,38 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                 <DLRow label="ชื่อ-นามสกุล" value={contactName}
                   action={<CopyAction text={personCopyText({ firstName: contact.contactFirstName, lastName: contact.contactLastName })} label="ชื่อผู้ติดต่อ" />} />
                 <DLRow label="ตำแหน่ง / แผนก" value={[contact.contactRole, contact.contactDepartment].filter(Boolean).join(' · ')} />
-                <DLRow label="อีเมล" value={contact.contactEmail
-                  ? <a href={`mailto:${contact.contactEmail}`} className="text-9e-action hover:underline">{contact.contactEmail}</a>
-                  : ''} />
-                <DLRow label="เบอร์โทร" value={contact.contactPhone
-                  ? <a href={`tel:${contact.contactPhone}`} className="text-9e-action hover:underline">{contact.contactPhone}</a>
-                  : ''} />
+                {/*
+                  ══ PLAIN TEXT AND A COPY CONTROL — NOT mailto: / tel: ════════
+
+                  Both rows were anchors. Round 13 removes every one of them on
+                  both detail screens, and the copy control is what replaces the
+                  affordance rather than merely what is left behind.
+
+                  ── WHAT A LINK ACTUALLY DID HERE ────────────────────────────
+                  `mailto:` hands off to whatever the operating system has
+                  registered, which on an office machine is frequently nothing,
+                  or Outlook when the admin works in a webmail tab. `tel:` on a
+                  desktop is worse — it either does nothing or opens an
+                  application nobody asked for. What a salesperson does with
+                  these values is PASTE THEM somewhere else, which is the thing
+                  the row could not do and now can.
+
+                  ── AND THE VALUE STOPS BEING A NODE ────────────────────────
+                  It is a plain string now, so `DLRow`'s absent-means-absent rule
+                  applies to it DIRECTLY rather than through `isEmptyValue`
+                  recursing into an element. Round 5's wrapped-but-empty defeat
+                  came from exactly that indirection.
+
+                  ── A DARK-MODE FAILURE GOES WITH IT ────────────────────────
+                  Round 12 measured `text-9e-action` on `--surface` at 2.92:1 in
+                  dark against a 4.5 bar, with no `dark:` counterpart. These two
+                  anchors were two of the five pairs on that list. They are not
+                  fixed here — they are GONE, which removes them from it.
+                */}
+                <DLRow label="อีเมล" value={contact.contactEmail}
+                  action={<CopyAction text={contact.contactEmail} label="อีเมลผู้ติดต่อ" />} />
+                <DLRow label="เบอร์โทร" value={contact.contactPhone}
+                  action={<CopyAction text={contact.contactPhone} label="เบอร์โทรผู้ติดต่อ" />} />
                 <DLRow label="LINE ID" value={contact.contactLine} />
               </DL>
             )}
@@ -1221,12 +1263,55 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
               </div>
             ) : (
               <DL>
+                {/*
+                  ── ประเทศ IS FIRST BECAUSE IT IS THE CLASSIFICATION ──────────
+                  It decides which address shape and which branch vocabulary the
+                  rows below it use, which is the same job ประเภทลูกค้า does as
+                  the PUBLIC card's first row. The two cards were given one name
+                  and one tax-id spelling in round 11; this keeps their first row
+                  playing the same part.
+                */}
                 <DLRow label="ประเทศ" value={countryLabel} />
-                {/* Only when it disagrees with the contact company — see companyDiverges. */}
-                {companyDiverges && (
-                  <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
-                    action={<CopyAction text={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
-                )}
+                {/*
+                  ══ THE COMPANY IS UNCONDITIONAL NOW — ROUND 13 ═══════════════
+
+                  IT WAS GATED ON `companyDiverges`, so the card named the party
+                  the quotation is addressed to ONLY on legacy documents where
+                  the two company fields disagree. On every document written
+                  since the form was split — which is the normal case, and the
+                  case where the two names are simply the same — THE QUOTATION
+                  CARD SHOWED NO COMPANY AT ALL. A quotation card that does not
+                  say who the quotation is for is missing its subject.
+
+                  The guard was not wrong about divergence, it was answering a
+                  different question: "is this worth a SECOND row" is not "should
+                  this card have a company". The contact card upstairs shows
+                  `displayCompany`; this one shows the QUOTATION company, always.
+
+                  ── IT SITS SECOND, ABOVE THE TAX ID, THE BRANCH AND THE ADDRESS
+                  Because those three are attributes OF this company — a tax id
+                  belongs to an entity, a branch is a branch of one, an address
+                  is where it is. A card whose subject appears below its own
+                  attributes reads as a list of facts about nothing. Nothing else
+                  moved; the row that was conditional simply became the row that
+                  is always there.
+
+                  ── THE FIELD IS `quotationCompany`, AND IT IS A REAL, SEPARATE
+                  COLUMN. `RegisterInhouse` carries BOTH: `companyName`, which
+                  the model's own docstring calls "NOT A FORM FIELD ANY MORE — a
+                  legacy-compat MIRROR of quotationCompany", and
+                  `quotationCompany`, which the edit form writes. They CAN
+                  differ, on documents written before the split, and this card
+                  must never show the contact one.
+
+                  The fallback to `contactCompany` fires only when
+                  `quotationCompany` was never written at all — a pre-split
+                  enquiry — where the contact company IS what a quotation would
+                  have been addressed to. It is a read-time fallback, not a
+                  write: nothing here changes what is stored.
+                */}
+                <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompanyDisplay}
+                  action={<CopyAction text={quotationCompanyDisplay} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
                 {/* เลขประจำตัวผู้เสียภาษี, not เลขผู้เสียภาษี — the public card's
                     spelling, which is also the legal one. Round 11 aligned the
                     two screens' vocabulary along with the card name; the same
@@ -1240,7 +1325,8 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                   action={<CopyAction text={quotation.taxId} label="เลขประจำตัวผู้เสียภาษี" />} />
                 {/* Derived at read time. `branch` is legacy read-only and is the
                     fallback for pre-split enquiries — see branchLabel.js. */}
-                <DLRow label="สาขา" value={branchLabel} />
+                <DLRow label="สาขา" value={branchLabel}
+                  action={<CopyAction text={branchLabel} label="สาขาสำหรับใบเสนอราคา" />} />
                 <DLRow label="ที่อยู่" value={address}
                   action={<CopyAction text={address} label="ที่อยู่สำหรับใบเสนอราคา" />} />
               </DL>
