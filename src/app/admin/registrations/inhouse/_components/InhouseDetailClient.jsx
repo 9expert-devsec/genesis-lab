@@ -1111,9 +1111,22 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
             )}
           </SectionCard>
 
+          {/*
+            ── ROUND 11: THE SAME NAME AS THE PUBLIC CARD, DELIBERATELY ───────
+            Both cards hold the party a quotation is addressed to — country,
+            company, tax id, branch, address — and nothing else. Two names for one
+            thing told a reader moving between the screens that they were looking
+            at different cards.
+
+            The public one was การเงินและเอกสาร, which named a DEPARTMENT; this one
+            was ข้อมูลใบเสนอราคา, which reads as "the quotation's data" and invites
+            the เลขที่ใบเสนอราคา row that is ruled out on both screens.
+            ข้อมูลสำหรับออกใบเสนอราคา names what it is: what you need IN ORDER TO
+            ISSUE one.
+          */}
           <SectionCard
             icon={Receipt}
-            title="ข้อมูลใบเสนอราคา"
+            title="ข้อมูลสำหรับออกใบเสนอราคา"
             {...editProps('quotation')}
             onSave={() => save(quotation, 'save-quotation')}
           >
@@ -1214,8 +1227,17 @@ export function InhouseDetailClient({ doc, courses = [], history = null }) {
                   <DLRow label="ชื่อบริษัท (ใบเสนอราคา)" value={quotationCompany}
                     action={<CopyAction text={quotationCompany} label="ชื่อบริษัทสำหรับใบเสนอราคา" />} />
                 )}
-                <DLRow label="เลขผู้เสียภาษี" value={quotation.taxId}
-                  action={<CopyAction text={quotation.taxId} label="เลขผู้เสียภาษี" />} />
+                {/* เลขประจำตัวผู้เสียภาษี, not เลขผู้เสียภาษี — the public card's
+                    spelling, which is also the legal one. Round 11 aligned the
+                    two screens' vocabulary along with the card name; the same
+                    field spelled two ways is the shape `ชื่อ-นามสกุล` was already
+                    held to on the attendee table's header. THREE OTHER SURFACES
+                    still say เลขผู้เสียภาษี and are deliberately untouched: the
+                    public in-house ENQUIRY form, the career-path screens, and the
+                    two customer emails. Each is a different audience and the
+                    emails are copy a customer has already received. */}
+                <DLRow label="เลขประจำตัวผู้เสียภาษี" value={quotation.taxId}
+                  action={<CopyAction text={quotation.taxId} label="เลขประจำตัวผู้เสียภาษี" />} />
                 {/* Derived at read time. `branch` is legacy read-only and is the
                     fallback for pre-split enquiries — see branchLabel.js. */}
                 <DLRow label="สาขา" value={branchLabel} />

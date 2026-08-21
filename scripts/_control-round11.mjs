@@ -232,7 +232,31 @@ const BREAKS = {
     replace: '            title="ข้อมูลสำหรับออกใบเสนอราคาของลูกค้า"',
   },
 
-  // ── item 2: the two new copy controls ────────────────────────────────────
+  'inhouse-rename-reverted': {
+    file: INHOUSE,
+    why: 'Put the in-house card back to ข้อมูลใบเสนอราคา while the public one keeps the new name. THE HALF-SWEPT RENAME — each screen reads correctly on its own and the two disagree about what one card is called, which is the state this round was asked to check for rather than create.',
+    reddens: [
+      'render/inhouseCancelledReadOnly › a pending request keeps its edit control — on EVERY editable card',
+      'render/inhouseCancelledReadOnly › the cancellation lock removes every one of those, not merely some',
+    ],
+    find: '            title="ข้อมูลสำหรับออกใบเสนอราคา"\n            {...editProps(\'quotation\')}',
+    replace: '            title="ข้อมูลใบเสนอราคา"\n            {...editProps(\'quotation\')}',
+  },
+
+  'taxid-vocabulary-splits': {
+    file: INHOUSE,
+    why: 'Put เลขผู้เสียภาษี back on the in-house row while the public screen says เลขประจำตัวผู้เสียภาษี. One field, two spellings, three inches apart in a reader’s workflow — the shape round 3 removed from the attendee table’s ชื่อ-นามสกุล header and the shape the vocabulary alignment exists to prevent.',
+    reddens: [
+      'render/registrationCopyAffordance › the in-house screen offers one on its person and its addresses',
+    ],
+    staysGreen: [
+      'render/registrationTypeScale › the 13px label still sets on ONE line in the narrowest label track — THE MEASUREMENT: เลขผู้เสียภาษี is SHORTER (5.216em vs 8.845em), so a width check is blind in this direction. Nothing in the suite pins a row LABEL’s wording except through the copy control’s accessible name, which is why the assertion that reddens is in the copy file rather than in a vocabulary one.',
+    ],
+    find: '                <DLRow label="เลขประจำตัวผู้เสียภาษี" value={quotation.taxId}\n                  action={<CopyAction text={quotation.taxId} label="เลขประจำตัวผู้เสียภาษี" />} />',
+    replace: '                <DLRow label="เลขผู้เสียภาษี" value={quotation.taxId}\n                  action={<CopyAction text={quotation.taxId} label="เลขผู้เสียภาษี" />} />',
+  },
+
+  // ── item 2: the two new copy controls ────────────────────────────────────────────────
 
   'copy-empty': {
     file: SHELL,

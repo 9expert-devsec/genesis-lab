@@ -225,7 +225,11 @@ const EDITABLE_CARDS = [
   'ผู้ประสานงาน & บริษัท',
   'Training Requirement',
   'ตารางเวลา & รูปแบบการอบรม',
-  'ข้อมูลใบเสนอราคา',
+  // RE-POINTED in round 11, not weakened: this card is now called
+  // ข้อมูลสำหรับออกใบเสนอราคา, matching the public screen's. It is still the
+  // quotation card, still one of the five that carry แก้ไข, and the list is
+  // still exact rather than a floor.
+  'ข้อมูลสำหรับออกใบเสนอราคา',
   'หมายเหตุจากลูกค้า',
 ];
 

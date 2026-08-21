@@ -280,7 +280,10 @@ test('neither new control can write an audit row — there is no action to write
 
 test('the in-house screen offers one on its person and its addresses', () => {
   const labels = copyLabels(INH);
-  for (const expected of ['ชื่อผู้ติดต่อ', 'ชื่อบริษัท', 'เลขผู้เสียภาษี']) {
+  // เลขประจำตัวผู้เสียภาษี since round 11 — the in-house screen took the public
+  // one's spelling along with its card name. Re-pointed, and the `rename-inhouse`
+  // control is what proves the new string is the one that binds.
+  for (const expected of ['ชื่อผู้ติดต่อ', 'ชื่อบริษัท', 'เลขประจำตัวผู้เสียภาษี']) {
     assert.ok(labels.includes(expected), `no copy control for ${expected}: [${labels.join(', ')}]`);
   }
 });

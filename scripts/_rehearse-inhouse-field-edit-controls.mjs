@@ -126,8 +126,8 @@ const CASES = [
     why: 'this is the exact state round 6 found — a card that displays fields and cannot edit them',
     edits: [{
       file: CLIENT,
-      find: "            title=\"ข้อมูลใบเสนอราคา\"\n            {...editProps('quotation')}\n            onSave={() => save(quotation, 'save-quotation')}",
-      replace: '            title="ข้อมูลใบเสนอราคา"',
+      find: "            title=\"ข้อมูลสำหรับออกใบเสนอราคา\"\n            {...editProps('quotation')}\n            onSave={() => save(quotation, 'save-quotation')}",
+      replace: '            title="ข้อมูลสำหรับออกใบเสนอราคา"',
     }],
     files: [READO],
     mustFail: [
