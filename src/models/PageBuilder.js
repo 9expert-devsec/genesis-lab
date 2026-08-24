@@ -158,6 +158,40 @@ const PageBuilderSchema = new mongoose.Schema(
     // Slug history for 301 redirects (consumed by the public route later).
     slugHistory: [String],
 
+    // ── The unpublished draft ─────────────────────────────────────────
+    // A published page must not change when the author edits it. Autosave
+    // writes the CONTENT surface here; pressing เผยแพร่ promotes it onto the
+    // live fields above. It holds exactly DRAFT_CONTENT_KEYS —
+    //
+    //   title, sections, theme, showHeader, showFooter, showStickyCta,
+    //   seo, jsonLd, promotionCover
+    //
+    // — plus the server-set stamps savedAt/savedBy. Everything else in the
+    // editable surface is LIVE-ONLY and keeps taking effect immediately;
+    // lib/schemas/pageBuilder.js owns that partition and the reasoning.
+    //
+    // NULL MEANS "nothing unpublished here". Existing pages are NOT
+    // backfilled — there is no migration — so a draft appears lazily on
+    // first edit and most documents will simply lack the key. Readers must
+    // treat absent and null identically (lib/pageBuilder/draftState.js does).
+    //
+    // WHY Mixed, not a typed sub-schema: same reason as SectionSchema above.
+    // Zod is the authoritative validator — draftContentSchema is PICKED from
+    // pageBuilderSchema, so retyping the nine fields here would duplicate that
+    // and let the two drift. The model's job is to persist the validated blob.
+    //
+    // NEVER in a public projection. The draft is unpublished by definition;
+    // a public read that carries it leaks unreleased content, which is the
+    // one failure this whole split exists to prevent. Reads that must not
+    // carry it go through stripDraft().
+    //
+    // NEVER inside a PageVersion snapshot. PageVersion is append-only
+    // history, capped at 20 per page with a prune that DELETES rows; a draft
+    // is a single mutable head that must never be pruned. Opposite
+    // invariants — snapshotting a draft would archive unpublished content and
+    // then quietly discard it.
+    draft: { type: mongoose.Schema.Types.Mixed, default: null },
+
     // Audit — same shape as CustomPage.
     createdBy: { id: { type: String }, name: { type: String } },
     updatedBy: { id: { type: String }, name: { type: String } },

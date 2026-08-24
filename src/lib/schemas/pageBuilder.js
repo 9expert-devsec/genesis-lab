@@ -193,3 +193,75 @@ export const pageBuilderSchema = z.object({
 
   slugHistory: z.array(z.string()).default([]),
 });
+
+// ── Draft / published split: the content partition ───────────────────
+
+/**
+ * DRAFT_CONTENT_KEYS — the CONTENT half of a page, and the single definition
+ * of it. A published page must not change when the author edits it, so
+ * autosave writes these keys into `draft` on the same document and pressing
+ * เผยแพร่ promotes them onto the live fields.
+ *
+ * ONE definition, exported, because two things need it and they must not be
+ * able to disagree: `draftContentSchema` below (what validates a draft) and
+ * lib/pageBuilder/draftState.js (what BUILDS and reads one). Same rule as
+ * PLACEHOLDER_SLUG and SECTION_STYLE_CAPS.
+ */
+export const DRAFT_CONTENT_KEYS = [
+  'title',
+  'sections',
+  'theme',
+  'showHeader',
+  'showFooter',
+  'showStickyCta',
+  'seo',
+  'jsonLd',
+  'promotionCover',
+];
+
+/**
+ * LIVE_ONLY_KEYS — everything else in the editable surface. DERIVED, not
+ * typed out: it is exactly `pageBuilderSchema`'s keys minus the draft keys,
+ * so the partition is structural. Add a field to pageBuilderSchema and it
+ * lands here automatically — and the exact-set test in test/pure/draftState
+ * goes red NAMING it, which is the point: a new field must be assigned a
+ * side by a human, in the same commit, not defaulted into one silently.
+ *
+ * These keep taking effect IMMEDIATELY, draft or no draft:
+ *   - slug is identity. It has a unique index, a slugHistory trail, a
+ *     cross-collection guard and two public routes; a "draft slug" is a slug
+ *     the unique index cannot protect. So renaming a published page's slug
+ *     still applies at once — a KNOWN, ACCEPTED limit of this work.
+ *   - pageType is routing. /promotions queries `pageType: 'promotion'`, and
+ *     it gates both the cross-collection slug guard and promotionMode. It
+ *     also gates promotionId/promotionOrder, which are live-only: a drafted
+ *     pageType would let a draft say "not a promotion" while the live
+ *     promotionId kept the page on the grid.
+ *   - status and the publish window decide visibility; drafting them would
+ *     mean a page could not be unpublished without publishing.
+ *
+ * NOT here, because they are not in the editable surface at all: `preview`,
+ * `createdBy`, `updatedBy`, timestamps. They are server-managed — see the
+ * previewSchema note above, which is the same precedent that keeps the
+ * draft's own `savedAt`/`savedBy` stamps out of draftContentSchema.
+ */
+export const LIVE_ONLY_KEYS = Object.keys(pageBuilderSchema.shape)
+  .filter((k) => !DRAFT_CONTENT_KEYS.includes(k));
+
+/**
+ * draftContentSchema — validates a draft's content. DERIVED from
+ * pageBuilderSchema by .pick(), never retyped, so a rule change on a field
+ * (a max length, an enum member, a regex) reaches the draft surface with no
+ * second edit. A hand-written twin with the same keys would pass a
+ * key-set test and drift on the rules — that is the failure this shape rules
+ * out, and test/pure/draftState proves it behaviourally.
+ *
+ * WHAT IS DELIBERATELY ABSENT: the server-managed stamps `savedAt` and
+ * `savedBy`. A stored draft carries them alongside the content, but they are
+ * set in the action layer (round 2) and must never be part of an editable,
+ * client-submitted surface — exactly the reasoning that keeps `preview` out
+ * of pageBuilderSchema. effectiveContent() drops them for the same reason.
+ */
+export const draftContentSchema = pageBuilderSchema.pick(
+  Object.fromEntries(DRAFT_CONTENT_KEYS.map((k) => [k, true]))
+);
