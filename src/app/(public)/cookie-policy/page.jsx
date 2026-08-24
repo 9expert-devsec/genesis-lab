@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SiYoutube, SiGoogleanalytics } from 'react-icons/si';
+import { SiYoutube, SiGoogleanalytics, SiGoogleads } from 'react-icons/si';
 import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
@@ -111,7 +111,7 @@ const COOKIE_TYPES = [
     name: 'การตลาด/โฆษณา',
     nameEn: 'Targeting-Advertising',
     purpose: 'นำเสนอโฆษณาที่ตรงกับความสนใจของท่าน',
-    provider: null,
+    provider: 'Google Ads',
   },
 ];
 
@@ -119,21 +119,28 @@ const COOKIE_TYPES = [
  * §3 — third-party services whose code runs on our pages.
  *
  * ── WHAT IS ACTUALLY LOADED, MEASURED FROM THIS CODEBASE ────────────────────
- * The brief offered five candidates. Only ONE survives a search of src/, and
- * the difference between "we link to them" and "their code runs on our page"
- * is exactly what decides whether a cookie gets set:
+ * Re-verified against src/ in round C-A: the difference between "we link to
+ * them" and "their code runs on our page" is exactly what decides whether a
+ * cookie gets set.
  *
  *   YouTube            IN USE. youtube.com/iframe_api is injected as a script
  *                      and youtube.com/embed/ iframes are rendered on the
  *                      masterclass and course pages. Note the embeds use
  *                      youtube.com, NOT youtube-nocookie.com, so they do set
  *                      cookies.
- *   Google Analytics   NOT FOUND. No gtag(, no googletagmanager, no G- or GTM-
- *                      id, no next/script analytics loader anywhere in src/.
- *                      BOTH source documents name it, and §2's Analytics card
- *                      lists it as the provider, so it is shown as pending
- *                      rather than dropped — but nothing in this repo loads it.
- *   Google Tag Manager NOT FOUND. Not rendered at all.
+ *   Google Analytics   IN USE. Analytics.jsx loads gtag.js and configures
+ *                      G-6043WVS74D; it is rendered site-wide from
+ *                      src/app/layout.jsx. Confirmed, not pending — an
+ *                      earlier pass here missed this loader entirely.
+ *   Google Ads         IN USE. The same Analytics.jsx call also configures
+ *                      AW-1060453366 for conversion tracking — a distinct
+ *                      product from Analytics, sharing the same gtag.js load.
+ *                      Named generically here: this AW- id doesn't match the
+ *                      one Ads account formally linked to the GA4 property, so
+ *                      its exact ownership is unconfirmed. No account or
+ *                      conversion ID is stated on the page for that reason.
+ *   Google Tag Manager NOT FOUND. Not rendered at all — a different product
+ *                      from the gtag.js loader above; confirmed absent.
  *   Meta / Facebook    NO PIXEL. There is no fbq( and no connect.facebook.
  *                      siteConfig has a link to the Facebook page; an outbound
  *                      link is not a pixel and sets no cookie here.
@@ -161,7 +168,13 @@ const THIRD_PARTY = [
     Icon: SiGoogleanalytics,
     name: 'Google Analytics',
     purpose: 'วิเคราะห์ภาพรวมการใช้งานเว็บไซต์',
-    confirmed: false,
+    confirmed: true,
+  },
+  {
+    Icon: SiGoogleads,
+    name: 'Google Ads',
+    purpose: 'ติดตามผลลัพธ์จากโฆษณาและวัดผล conversion',
+    confirmed: true,
   },
 ];
 
@@ -213,12 +226,15 @@ export default function CookiePolicyPage() {
         counsel has not reviewed the text — which is all PolicyStatusNotice
         claims.
 
-        The detail line says the cookie list has NOT been verified, rather than
-        that verification is under way. Nobody has started it. Same rule as the
-        heading: state what is not done, never a status that does not exist.
+        ROUND C-B: the detail line used to cover the whole §02/§03 provider
+        list as unverified. That's no longer true — YouTube, Google Analytics
+        and Google Ads are confirmed running (see THIRD_PARTY's header
+        comment), so restating that blanket caveat here would be stale in the
+        opposite direction. Narrowed to the one row this investigation did not
+        resolve: §02's Functional-cookie provider.
       */
       notice={
-        <PolicyStatusNotice detail="รายชื่อคุกกี้และผู้ให้บริการภายนอกในหัวข้อ 02 และ 03 ยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ จึงอาจไม่ตรงกับคุกกี้ที่เว็บไซต์ใช้งานจริงทั้งหมด" />
+        <PolicyStatusNotice detail="ผู้ให้บริการของคุกกี้ประเภท &quot;ฟังก์ชันการใช้งาน&quot; ในหัวข้อ 02 ยังไม่ได้ระบุ และยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ" />
       }
       help={{
         icon: 'settings',
@@ -305,17 +321,21 @@ export default function CookiePolicyPage() {
             ))}
           </ul>
           {/*
-            The source document is headed "ต้องยืนยันรายชื่อ Cookie/Pixel ที่ใช้
-            จริงกับทีม IDev ก่อนเผยแพร่". That confirmation has not happened, so
-            the list says so on the page rather than only in this comment.
+            ROUND C-A/C-B: the source document's "ต้องยืนยันรายชื่อ Cookie/Pixel
+            ที่ใช้จริงกับทีม IDev ก่อนเผยแพร่" caveat is now resolved for
+            everything ABOVE — YouTube, Google Analytics and Google Ads are all
+            confirmed running via a code search, not IDev sign-off, but
+            confirmed either way. Leaving the old blanket "ยังไม่ได้ตรวจสอบ"
+            wording here would be stale in the other direction: it would claim
+            these three are still unverified when they are not.
 
-            Phrased as "ยังไม่ได้ตรวจสอบ" — has not been verified — and not
-            "อยู่ระหว่างการตรวจสอบ", which would assert a review in progress
-            that nobody has begun.
+            The one thing this investigation did NOT resolve is §02's
+            "ฟังก์ชันการใช้งาน" (Functional) row, whose provider is still
+            unspecified — so the footnote narrows to that alone.
           */}
           <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-            * รายชื่อผู้ให้บริการข้างต้นยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ
-            และอาจมีการปรับปรุงก่อนประกาศใช้จริง
+            * ผู้ให้บริการของคุกกี้ประเภท &quot;ฟังก์ชันการใช้งาน&quot; ในหัวข้อ 02
+            ยังไม่ได้ระบุ และยังไม่ได้ตรวจสอบกับทีมพัฒนาระบบ
           </p>
         </Section>
 
