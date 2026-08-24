@@ -14,18 +14,34 @@ import { CountdownTimer } from './CountdownTimer';
  * match the new design; no static Figma numbers (its mock 12,900 บาท, "ว่าง
  * 4 ที่นั่ง", 18-day countdown, etc.) were ported — those were placeholder
  * values in the design file, not data.
+ *
+ * ROUND M-C: the top visual band now uses each course's own
+ * `cover_image_url` instead of the shared 13/14 orange/blue art — design
+ * review flagged the shared background as wrong once real photos exist per
+ * course. Both live courses were confirmed (via a direct DB read) to have a
+ * real cover_image_url, so FALLBACK_IMAGE below only matters for a future
+ * course published without one — it is not in use today. This is the third
+ * role this pair of files has had across two rounds (full-card screenshot →
+ * background-only art → now an unused fallback); left in place rather than
+ * deleted since the role keeps changing — see the M-C report.
  */
 const LEVEL_MAP = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
 
 /** Card 1 (Claude AI) is themed orange, everything else blue — matches the Figma. */
-const VISUAL_THEME = {
-  'mas-claude-ai-for-data-analyst': { bg: 'bg-[#f97316]', image: '/masterclass-element/13_course_claude_ai_card.png' },
+const PILL_COLOR = { 'mas-claude-ai-for-data-analyst': 'bg-[#f97316]' };
+const DEFAULT_PILL_COLOR = 'bg-[#1d64f2]';
+
+/** Only used if a course has no cover_image_url — see the header comment. */
+const FALLBACK_IMAGE = {
+  'mas-claude-ai-for-data-analyst': '/masterclass-element/13_course_claude_ai_card.png',
 };
-const DEFAULT_THEME = { bg: 'bg-[#1d64f2]', image: '/masterclass-element/14_course_ai_digital_card.png' };
+const DEFAULT_FALLBACK_IMAGE = '/masterclass-element/14_course_ai_digital_card.png';
 
 export function MasterclassCard({ course }) {
   const firstBatch = course.batches?.[0];
-  const theme = VISUAL_THEME[course.slug] ?? DEFAULT_THEME;
+  const pillColor = PILL_COLOR[course.slug] ?? DEFAULT_PILL_COLOR;
+  const cardImage =
+    course.cover_image_url || FALLBACK_IMAGE[course.slug] || DEFAULT_FALLBACK_IMAGE;
   const scheduleNote = `*เรียนเฉพาะวัน${(course.schedule_days ?? []).join('/')} ${course.time_start ?? ''} - ${course.time_end ?? ''} น.`;
 
   return (
@@ -36,11 +52,11 @@ export function MasterclassCard({ course }) {
       {/* Top visual band */}
       <div className="relative flex h-[200px] w-full flex-col justify-between p-6">
         <div aria-hidden className="absolute inset-0">
-          <Image src={theme.image} alt="" fill className="object-cover" sizes="(max-width:768px) 100vw, 50vw" />
+          <Image src={cardImage} alt="" fill className="object-cover" sizes="(max-width:768px) 100vw, 50vw" />
           <div className="absolute inset-0 bg-[rgba(3,10,22,0.8)]" />
         </div>
         <div className="relative flex w-full items-center justify-between">
-          <span className={`inline-flex items-start rounded-full ${theme.bg} px-3 py-1`}>
+          <span className={`inline-flex items-start rounded-full ${pillColor} px-3 py-1`}>
             <span className="text-xs font-semibold text-white">Masterclass</span>
           </span>
           <span className="text-sm font-bold text-white">9Expert</span>

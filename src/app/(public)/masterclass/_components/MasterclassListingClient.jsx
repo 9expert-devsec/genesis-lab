@@ -40,19 +40,30 @@ function Hero() {
     <section className="flex min-h-[420px] items-center justify-between overflow-hidden bg-9e-navy px-4 py-16 lg:px-20">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center justify-between gap-10 lg:flex-row">
         <div className="flex w-full max-w-[640px] flex-col items-start gap-6">
+          {/* ROUND M-C: border/bg stay blue — they echo the rest of the
+              page's blue chip system (comparison-table header pill,
+              feature-pill borders). Only the text moves to 9e-lime, which
+              reads clearly against the translucent blue-on-navy fill and
+              matches how "จริง" below also carries the accent color. */}
           <span className="inline-flex items-start rounded-full border border-[#1d64f2] bg-[rgba(29,100,242,0.13)] px-3 py-1.5">
-            <span className="text-[13px] font-bold uppercase text-[#1d64f2]">MASTERCLASS</span>
+            <span className="text-[13px] font-bold uppercase text-9e-lime">MASTERCLASS</span>
           </span>
           <div className="flex w-full flex-col gap-3">
-            <h1 className="text-4xl font-extrabold leading-[1.2] text-white lg:text-5xl">
+            <h1 className="text-4xl font-bold leading-[1.2] text-white lg:text-5xl">
               <span className="block">ยกระดับทักษะ</span>
               <span className="block">
-                สู่การใช้งาน<span className="text-[#10b981]">จริง</span>
+                สู่การใช้งาน<span className="text-9e-lime">จริง</span>
               </span>
             </h1>
             <p className="text-xl font-semibold text-[#1d64f2]">Workshop เข้มข้น เฉพาะเสาร์-อาทิตย์</p>
             <p className="text-base text-white/80">กลุ่มเล็ก ลงมือปฏิบัติจริง กับผู้เชี่ยวชาญตัวจริง</p>
           </div>
+          {/* ROUND M-C: fixed w-[180px] AND h-14 on every pill, regardless of
+              how its own text wraps — before this, "Saturdays and Sundays"
+              could wrap to a 3rd line while the other two stayed at 2, so
+              the pills came out visibly different heights. The fixed height
+              plus items-center keeps icon+text vertically centered the same
+              way in all three, independent of line count. */}
           <div className="flex flex-wrap items-start gap-4">
             {[
               { icon: Calendar, lines: ['Classes only on', 'Saturdays and Sundays'] },
@@ -61,7 +72,7 @@ function Hero() {
             ].map(({ icon: Icon, lines }) => (
               <span
                 key={lines[0]}
-                className="flex w-[180px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5"
+                className="flex h-14 w-[180px] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5"
               >
                 <Icon size={17} className="shrink-0 text-white" />
                 <span className="flex-1 text-xs font-medium leading-[1.3] text-white">
@@ -72,13 +83,18 @@ function Hero() {
             ))}
           </div>
         </div>
-        <div className="flex h-[360px] w-full max-w-[480px] shrink-0 items-center justify-center overflow-hidden max-lg:hidden">
+        {/* ROUND M-C: the asset's natural size is 630×420 (3:2). The old
+            480×360 (4:3) box forced object-cover to crop ~30px off each
+            side to fill the taller-relative-to-width box. 480×320 matches
+            the asset's own aspect ratio exactly (480 × 420/630 = 320), so
+            object-cover now scales without cropping anything out. */}
+        <div className="flex h-[320px] w-full max-w-[480px] shrink-0 items-center justify-center overflow-hidden max-lg:hidden">
           <Image
             src="/masterclass-element/01_hero_learning_illustration.png"
             alt=""
             width={480}
-            height={360}
-            className="h-[360px] w-[480px] rounded-2xl object-cover"
+            height={320}
+            className="h-[320px] w-[480px] rounded-2xl object-cover"
           />
         </div>
       </div>
@@ -105,13 +121,18 @@ function IntroSection() {
             </p>
           ))}
         </div>
+        {/* ROUND M-C: rounded-2xl now also lives on the <Image> itself, not
+            just the wrapper. overflow-hidden + rounded-2xl on the wrapper
+            alone should clip the img to that radius, but it wasn't catching
+            evenly on all four corners — matching the radius on the inner
+            element directly is the defensive fix. */}
         <div className="h-[340px] w-full max-w-[540px] shrink-0 overflow-hidden rounded-2xl">
           <Image
             src="/masterclass-element/02_classroom_photo.png"
             alt=""
             width={540}
             height={340}
-            className="h-full w-full object-cover"
+            className="h-full w-full rounded-2xl object-cover"
           />
         </div>
       </div>
@@ -130,26 +151,46 @@ const WHY_STUDY = [
   { Icon: FileText, title: 'ได้รับ e-Certificate', desc: 'พร้อม Workshop Files ประกอบการเรียน' },
 ];
 
+/**
+ * ROUND M-C addendum: card is w-[282px] instead of a flexible grid cell, so
+ * both rows share one width. At the 1200px container: row 1 is 4 × 282px +
+ * 3 × 24px gap = 1128 + 72 = 1200px exactly, no cramming. Row 2 is 3 × 282px
+ * + 2 × 24px gap = 894px, centered in the 1200px row rather than stretched
+ * or left-aligned.
+ */
+function WhyStudyCard({ Icon, title, desc }) {
+  return (
+    <div className="flex w-[282px] shrink-0 flex-col items-start gap-4 rounded-2xl border border-[#e2e8f0] bg-white p-6">
+      <span className="flex size-12 items-center justify-center rounded-full bg-[rgba(29,100,242,0.07)]">
+        <Icon size={20} className="text-[#1d64f2]" />
+      </span>
+      <div className="flex flex-col gap-2">
+        <p className="text-base font-bold text-[#0f172a]">{title}</p>
+        <p className="text-sm leading-[1.4] text-[#475569]">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
 function WhyStudySection() {
+  const row1 = WHY_STUDY.slice(0, 4);
+  const row2 = WHY_STUDY.slice(4);
+
   return (
     <section className="bg-[#f8fafc] px-4 py-16 lg:px-20">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center gap-12">
         <h2 className="text-center text-3xl font-bold text-[#0f172a]">ทำไมต้องเรียน Masterclass</h2>
-        <div className="grid w-full grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {WHY_STUDY.map(({ Icon, title, desc }) => (
-            <div
-              key={title}
-              className="flex flex-col items-start gap-4 rounded-2xl border border-[#e2e8f0] bg-white p-6"
-            >
-              <span className="flex size-12 items-center justify-center rounded-full bg-[rgba(29,100,242,0.07)]">
-                <Icon size={20} className="text-[#1d64f2]" />
-              </span>
-              <div className="flex flex-col gap-2">
-                <p className="text-base font-bold text-[#0f172a]">{title}</p>
-                <p className="text-sm leading-[1.4] text-[#475569]">{desc}</p>
-              </div>
-            </div>
-          ))}
+        <div className="flex w-full flex-col items-center gap-6">
+          <div className="flex w-full flex-wrap justify-center gap-6">
+            {row1.map((item) => (
+              <WhyStudyCard key={item.title} {...item} />
+            ))}
+          </div>
+          <div className="flex w-full flex-wrap justify-center gap-6">
+            {row2.map((item) => (
+              <WhyStudyCard key={item.title} {...item} />
+            ))}
+          </div>
         </div>
       </div>
     </section>
