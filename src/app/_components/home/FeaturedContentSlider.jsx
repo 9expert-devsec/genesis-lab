@@ -205,7 +205,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
       ([entry]) => setOnScreen(entry.isIntersecting),
       // Any sliver counts. A stricter threshold would stall the carousel while
       // it is half-visible, which reads as broken rather than considerate.
-      { threshold: 0 }
+      { threshold: 0 },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -418,12 +418,13 @@ export function FeaturedContentSlider({ copy, items = [] }) {
           // would be a second thing to keep in step for one boolean.
           reducedMotion={reducedMotion}
           controls={
-            <div data-fc-controls="" className="flex shrink-0 items-center gap-[7px] lg:gap-[9px]">
+            <div
+              data-fc-controls=""
+              className="flex shrink-0 items-center gap-[7px] lg:gap-[9px]"
+            >
               <SliderButton
                 label={
-                  autoPlaying
-                    ? "หยุดเลื่อนอัตโนมัติ"
-                    : "เริ่มเลื่อนอัตโนมัติ"
+                  autoPlaying ? "หยุดเลื่อนอัตโนมัติ" : "เริ่มเลื่อนอัตโนมัติ"
                 }
                 onClick={() => setUserStopped((s) => !s)}
               >
@@ -683,7 +684,8 @@ function ImageOnlyCard({ item, active }) {
   // an image card is artwork and nothing else there, exactly as before.
   const shell =
     "block w-full overflow-hidden border border-[var(--9e-fc-panel-border)] " +
-    CARD_RADIUS + " " +
+    CARD_RADIUS +
+    " " +
     "bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] " +
     "max-lg:flex max-lg:h-full max-lg:flex-col max-lg:justify-start " +
     FEATURED_FRAME;
@@ -707,9 +709,7 @@ function ImageOnlyCard({ item, active }) {
       href={item.href}
       data-fc-card="image"
       aria-label={item.title}
-      {...(external
-        ? { target: "_blank", rel: "noopener noreferrer" }
-        : null)}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : null)}
       className={`${shell} transition-opacity duration-9e-micro ease-9e hover:opacity-95`}
     >
       {body}
@@ -763,30 +763,29 @@ function SlideCopy({ item }) {
 
         {/* h3, not h2 — the section already spent its h2 on the heading above,
             and this is one item inside that section. */}
-            <div className="h-[98px]">
-<h3
-          data-fc-title=""
-          className="text-[20px] font-extrabold leading-[1.25] text-white lg:text-[26px] line-clamp-3"
-        >
-          <span className="block">{item.title}</span>
-          {item.titleAccent || item.titleHighlight ? (
-            <span className="block">
-              {item.titleAccent ? (
-                <span className="text-[var(--9e-fc-accent)]">
-                  {item.titleAccent}
-                </span>
-              ) : null}
-              {item.titleAccent && item.titleHighlight ? " " : null}
-              {item.titleHighlight ? (
-                <span className="text-[var(--9e-fc-gold)]">
-                  {item.titleHighlight}
-                </span>
-              ) : null}
-            </span>
-          ) : null}
-        </h3>
-            </div>
-        
+        <div className="h-[75px] md:h-[98px]">
+          <h3
+            data-fc-title=""
+            className="text-[20px] font-extrabold leading-[1.25] text-white lg:text-[26px] line-clamp-3"
+          >
+            <span className="block">{item.title}</span>
+            {item.titleAccent || item.titleHighlight ? (
+              <span className="block">
+                {item.titleAccent ? (
+                  <span className="text-[var(--9e-fc-accent)]">
+                    {item.titleAccent}
+                  </span>
+                ) : null}
+                {item.titleAccent && item.titleHighlight ? " " : null}
+                {item.titleHighlight ? (
+                  <span className="text-[var(--9e-fc-gold)]">
+                    {item.titleHighlight}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
+          </h3>
+        </div>
 
         {item.subtitle ? (
           <p className="text-sm font-medium text-[var(--9e-fc-text-body)]">
@@ -900,12 +899,12 @@ function SplitCard({ item, active, isPlaying, onPlay }) {
       data-fc-card="split"
       aria-roledescription="carousel"
       aria-label="คอนเทนต์เด่น"
-      className={`flex w-full flex-col-reverse gap-5 overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] bg-[var(--9e-fc-panel)] p-4 shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] sm:p-5 lg:flex-row lg:gap-7 lg:p-7 ${FEATURED_FRAME}`}
+      className={`flex w-full flex-col-reverse gap-5 overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] lg:flex-row lg:gap-7 ${FEATURED_FRAME}`}
     >
       {/* Details. `lg:min-w-0` is load-bearing on a flex child holding long
           unbroken Thai — without it the panel refuses to shrink below its
           content's intrinsic width and shoves the media off the card. */}
-      <div className="flex flex-col justify-between gap-4 lg:h-full lg:min-w-0 lg:flex-1 lg:gap-5">
+      <div className="flex flex-col justify-between gap-4 lg:h-full lg:min-w-0 lg:flex-1 lg:gap-5 p-7">
         <SlideCopy item={item} />
 
         <div className="flex flex-col gap-4">
@@ -929,7 +928,7 @@ function SplitCard({ item, active, isPlaying, onPlay }) {
       {/* Media. 16:9 at every width — the video source is YouTube and YouTube
           is natively 16:9, so any other ratio would letterbox or crop every
           video forever. */}
-      <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-2xl bg-black lg:w-[58%] lg:self-center xl:w-[640px]">
+      <div className="relative aspect-[16/9] w-full shrink-0 overflow-hidden rounded-[24px] bg-black lg:w-[58%] lg:self-center lg:h-full">
         {isPlaying && item.videoId ? (
           <VideoEmbed videoId={item.videoId} title={item.title} />
         ) : (
@@ -1028,7 +1027,6 @@ function VideoFacade({ item, active, onPlay }) {
           <YouTubePlayMark className="block h-auto w-full" />
         </span>
       ) : null}
-
     </>
   );
 
