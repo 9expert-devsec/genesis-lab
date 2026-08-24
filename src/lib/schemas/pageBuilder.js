@@ -249,6 +249,32 @@ export const LIVE_ONLY_KEYS = Object.keys(pageBuilderSchema.shape)
   .filter((k) => !DRAFT_CONTENT_KEYS.includes(k));
 
 /**
+ * The live-only half splits again, and the split is load-bearing because a
+ * DIFFERENT action owns each part:
+ *
+ *   IDENTITY_KEYS -> updatePageIdentity (round 3)
+ *   STATUS_KEYS   -> publishPageStatus  (round 2)
+ *   slugHistory   -> nobody. It is SERVER-COMPUTED on a rename and is never
+ *                    part of any client patch; listing it here would invite a
+ *                    caller to send one.
+ *
+ * Written out rather than derived from each other because each is a
+ * deliberate assignment, not a remainder — and the exact-set tests below the
+ * line in test/pure/draftState pin all four groups against the schema, so a
+ * new field cannot land in none of them. 9 + 4 + 3 + 1 = 17, asserted.
+ *
+ * The editor's reducer classifies a page patch by these sets to decide which
+ * dirty flag to raise, so they must stay importable from a client component —
+ * this module imports only zod, which is what makes that safe.
+ */
+export const IDENTITY_KEYS = ['slug', 'pageType', 'promotionId', 'promotionOrder'];
+
+export const STATUS_KEYS = ['status', 'publishStartDate', 'publishEndDate'];
+
+/** Server-computed; in no client-facing patch. Named so the partition closes. */
+export const SERVER_COMPUTED_KEYS = ['slugHistory'];
+
+/**
  * draftContentSchema — validates a draft's content. DERIVED from
  * pageBuilderSchema by .pick(), never retyped, so a rule change on a field
  * (a max length, an enum member, a regex) reaches the draft surface with no

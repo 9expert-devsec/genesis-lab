@@ -180,6 +180,13 @@ const PageBuilderSchema = new mongoose.Schema(
     // pageBuilderSchema, so retyping the nine fields here would duplicate that
     // and let the two drift. The model's job is to persist the validated blob.
     //
+    // ONE EXCEPTION ON CREATE, and it is this schema's doing: `title` is
+    // `required`, so a brand-new page cannot hold its title only inside the
+    // draft — create() would reject the document. createPageBuilderPage
+    // therefore seeds the live title from the authored one (nothing is
+    // published yet, so there is nothing for it to contradict) and every
+    // later edit of it goes to the draft like the other eight keys.
+    //
     // NEVER in a public projection. The draft is unpublished by definition;
     // a public read that carries it leaks unreleased content, which is the
     // one failure this whole split exists to prevent. Reads that must not

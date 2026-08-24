@@ -15,6 +15,7 @@ import {
   duplicatePageBuilderPage,
   updatePageIdentity,
   updatePageStatus,
+  createPageBuilderPage,
 } from '@/lib/actions/pageBuilder';
 import { getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
@@ -735,5 +736,122 @@ test('the draft/publish action layer', async (t) => {
     assert.equal(res.ok, true, 'it stopped working');
     assert.deepEqual(Object.keys(res).sort(), ['ok', 'status'], 'its return shape changed');
     assert.equal(row().status, 'published');
+  });
+
+  // ══ ROUND 4: creating a page puts its content in the DRAFT ══════════════
+  //
+  // HARNESS LIMIT, stated because it shapes what these can claim: the fake does
+  // not apply Mongoose defaults, so a content field the create simply does not
+  // write is ABSENT here where production would show the schema default. That
+  // is the claim anyway — "not written live" — so the assertions below check
+  // absence rather than a defaulted value.
+
+  await scenario('creating a page stores the authored content in .draft, not live', async () => {
+    const authored = {
+      slug: 'fresh-slug',
+      title: 'Authored Title',
+      pageType: 'general',
+      promotionId: '',
+      promotionOrder: 0,
+      ...draftContent({ title: 'Authored Title' }),
+    };
+    const res = await createPageBuilderPage(authored);
+    assert.equal(res.ok, true, res.error);
+
+    const doc = all('PageBuilder').find((p) => p.slug === 'fresh-slug');
+    assert.ok(doc, 'no document was created');
+
+    // The eight content keys other than `title` are not written live at all.
+    for (const key of DRAFT_CONTENT_KEYS) {
+      if (key === 'title') continue;
+      assert.equal(key in doc, false, `${key} was written to the LIVE document on create`);
+    }
+    // `title` is the documented exception — the model requires it.
+    assert.equal(doc.title, 'Authored Title');
+
+    // …and the whole authored content half is in the draft.
+    assert.deepEqual(
+      Object.keys(doc.draft).sort(),
+      [...DRAFT_CONTENT_KEYS, 'savedAt', 'savedBy'].sort()
+    );
+    assert.equal(doc.draft.theme, 'ai_purple');
+    assert.equal(doc.draft.title, 'Authored Title');
+    assert.deepEqual(doc.draft.sections.map((s) => s.type), ['rich_text']);
+  });
+
+  await scenario('creating a page NEVER publishes it, whatever the input says', async () => {
+    const res = await createPageBuilderPage({
+      slug: 'fresh-slug', title: 'T', pageType: 'general', promotionId: '', promotionOrder: 0,
+      status: 'published', // the editor's local state can say anything
+      ...draftContent({ title: 'T' }),
+    });
+    assert.equal(res.ok, true, res.error);
+    const doc = all('PageBuilder').find((p) => p.slug === 'fresh-slug');
+    assert.equal(doc.status, 'draft', 'a create published the page directly');
+    assert.equal(count('PageVersion'), 0, 'a create wrote a snapshot; only a publish may');
+  });
+
+  await scenario('CONTROL: the same input DOES publish through publishPageStatus', async () => {
+    // Proves the case above is create refusing to publish, not the fixture being
+    // unpublishable. Same page, one extra call, and now it is live.
+    const created = await createPageBuilderPage({
+      slug: 'fresh-slug', title: 'T', pageType: 'general', promotionId: '', promotionOrder: 0,
+      ...draftContent({ title: 'T' }),
+    });
+    assert.equal(created.ok, true, created.error);
+    const res = await publishPageStatus(created.id, { status: 'published' }, created.updatedAt);
+    assert.equal(res.ok, true, res.error);
+    const doc = all('PageBuilder').find((p) => String(p._id) === String(created.id));
+    assert.equal(doc.status, 'published');
+    assert.equal(doc.title, 'T', 'the draft was not promoted onto the live fields');
+    assert.equal(doc.draft, null);
+    assert.equal(count('PageVersion'), 1, 'the first publish did not snapshot');
+  });
+
+  await scenario('a created draft goes through the SAME tier gate every later save does', async () => {
+    // Otherwise this would be the one authored payload in the system that never
+    // met sanitizePageForTier — and it would be the first one.
+    setSessionUser({ id: 'u2', name: 'Editor', tier: 'editor' });
+    const res = await createPageBuilderPage({
+      slug: 'fresh-slug', title: 'T', pageType: 'general', promotionId: '', promotionOrder: 0,
+      ...draftContent({
+        title: 'T',
+        sections: [section('keep', 'rich_text'), section('adv', 'custom_html')],
+      }),
+    });
+    assert.equal(res.ok, true, res.error);
+    const doc = all('PageBuilder').find((p) => p.slug === 'fresh-slug');
+    assert.deepEqual(
+      doc.draft.sections.map((s) => s.type), ['rich_text'],
+      'an editor smuggled an advanced section into a brand-new page draft'
+    );
+    assert.deepEqual(doc.draft.sections.map((s) => s.sortOrder), [0], 'sortOrder was not renumbered');
+  });
+
+  await scenario('CONTROL: a developer creating the same page KEEPS the advanced section', async () => {
+    setSessionUser({ id: 'u1', name: 'Dev', tier: 'developer' });
+    const res = await createPageBuilderPage({
+      slug: 'fresh-slug', title: 'T', pageType: 'general', promotionId: '', promotionOrder: 0,
+      ...draftContent({
+        title: 'T',
+        sections: [section('keep', 'rich_text'), section('adv', 'custom_html')],
+      }),
+    });
+    assert.equal(res.ok, true, res.error);
+    const doc = all('PageBuilder').find((p) => p.slug === 'fresh-slug');
+    assert.deepEqual(doc.draft.sections.map((s) => s.type), ['rich_text', 'custom_html']);
+  });
+
+  await scenario('a create returns the token the editor needs for its next save', async () => {
+    const res = await createPageBuilderPage({
+      slug: 'fresh-slug', title: 'T', pageType: 'general', promotionId: '', promotionOrder: 0,
+      ...draftContent({ title: 'T' }),
+    });
+    assert.equal(res.ok, true, res.error);
+    assert.ok(res.id, 'no id came back to adopt');
+    assert.ok(res.updatedAt, 'no token came back; the first autosave would be rejected');
+    // And that token actually works against the very next save.
+    const next = await saveDraftContent(res.id, draftContent({ title: 'Second' }), res.updatedAt);
+    assert.equal(next.ok, true, `the create token was rejected: ${next.error}`);
   });
 });

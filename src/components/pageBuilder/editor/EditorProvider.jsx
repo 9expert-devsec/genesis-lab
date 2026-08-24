@@ -68,6 +68,13 @@ export function EditorProvider({ children, page, pageId = null, updatedAt = null
   const value = useMemo(
     () => ({
       ...state,
+      // DERIVED, never stored: the reducer keeps the two real flags
+      // (contentDirty / identityDirty) and this is their OR. Consumers that
+      // only care whether anything is unsaved — the leave guard, the top
+      // bar's "ยังไม่ได้บันทึก" — keep reading one boolean and did not change.
+      // Computing it here rather than keeping a third field in the reducer
+      // means it cannot drift out of step with the two it summarises.
+      dirty: state.contentDirty || state.identityDirty,
       dispatch,
       tier, // { canUseAdvanced, canPublish, canManagePreview } — server-resolved
       resolvedData, // id-keyed data map for data-backed sections (2C.2a)

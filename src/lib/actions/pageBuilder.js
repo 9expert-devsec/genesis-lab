@@ -32,6 +32,7 @@ import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
 import { recordAudit, snapshotVersion } from '@/lib/pages/pageAudit';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { draftContentSchema } from '@/lib/schemas/pageBuilder';
+import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS, STATUS_KEYS } from '@/lib/schemas/pageBuilder';
 import { stripDraft, effectiveContent, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
 
 const ADMIN_PATH = '/admin/pages';
@@ -44,22 +45,21 @@ const MAX_VERSION_ROWS = 20;
 const AUDIT_TYPE = 'builder'; // pageType stamped on every PageBuilder audit row
 const PUBLISH_STATES = ['published', 'scheduled'];
 
+// zod's .pick() wants a { key: true } mask; the key lists are arrays. One
+// converter, so no pick in this file ever restates a list that already exists.
+const maskOf = (keys) => Object.fromEntries(keys.map((k) => [k, true]));
 // The live-only status/date window publishPageStatus accepts. PICKED from the
 // page schema, never re-declared, so the nullable-date coercion ('' -> null)
 // and the status vocabulary have exactly one definition — the same rule as
 // draftContentSchema on the other half of the partition.
-const statusSchema = pageBuilderSchema.pick({
-  status: true, publishStartDate: true, publishEndDate: true,
-});
+const statusSchema = pageBuilderSchema.pick(maskOf(STATUS_KEYS));
 
 // The live-only IDENTITY fields updatePageIdentity accepts. PICKED from the
 // page schema for the same reason draftContentSchema and statusSchema are:
 // the slug regex, the pageType vocabulary and the promotionOrder integer rule
 // have exactly one definition, and a rule change reaches this surface with no
 // second edit. Together the three picks cover all seventeen editable keys.
-const identitySchema = pageBuilderSchema.pick({
-  slug: true, pageType: true, promotionId: true, promotionOrder: true,
-});
+const identitySchema = pageBuilderSchema.pick(maskOf(IDENTITY_KEYS));
 
 /**
  * Shown when a save is rejected because the stored doc moved since the client
@@ -257,6 +257,31 @@ export async function getPageBuilderPagesByPromotionIds(ids) {
 
 // ── page mutations ───────────────────────────────────────────────────
 
+/**
+ * Create a page. Its authored CONTENT lands in `.draft`, never live.
+ *
+ * ── CREATING A PAGE NEVER PUBLISHES IT ─────────────────────────────────────
+ * `status` is hardcoded to 'draft' and is NOT read from the input. Under the
+ * draft/published split, publish is always a separate, later promotion through
+ * publishPageStatus — including a page's very first one. That removes a whole
+ * class of question ("was this created published, or promoted?") and means the
+ * snapshot history has exactly one writer.
+ *
+ * The old "created straight into published → snapshot it" branch is GONE rather
+ * than kept behind a comment. It is not the picker's 'soon' branch, which stays
+ * because a schema type outside the registry is genuinely reachable and a test
+ * MEASURES that gap. Here `status` is a literal in this function: no input can
+ * reach the branch, so a test "proving" it is never invoked would be asserting
+ * a tautology about a constant rather than anything about a caller.
+ *
+ * ── WHY `title` IS THE ONE CONTENT FIELD ALSO WRITTEN LIVE ─────────────────
+ * Not a hedge — the model requires it (`title: { required: true }`), so a
+ * document whose title exists only inside `.draft` fails validation on
+ * create(). Since nothing is published yet there is nothing for it to
+ * contradict: the live title seeds the admin list with the name the author
+ * typed, and every LATER edit of it goes to the draft like the other eight
+ * keys. See the note in models/PageBuilder.js.
+ */
 export async function createPageBuilderPage(input) {
   const session = await requireAdmin('pages');
   await dbConnect();
@@ -276,24 +301,40 @@ export async function createPageBuilderPage(input) {
   }
 
   const user = session.user;
-  const data = sanitizePageForTier(parsed.data, null, canUseAdvanced(user));
-  data.status = coercePublishStatus(data.status, user);
-  data.sections = renumberSections(data.sections);
-
   const stamp = await currentUserStamp(session);
 
+  // The content half, through the SAME pipeline every later saveDraftContent
+  // applies. A freshly created page must not get a draft that skipped the tier
+  // gate — that would be one authored payload in the whole system that never
+  // met sanitizePageForTier, and it would be the first one.
+  const content = {};
+  for (const key of DRAFT_CONTENT_KEYS) content[key] = parsed.data[key];
+  const sanitized = sanitizePageForTier(content, null, canUseAdvanced(user));
+  sanitized.sections = renumberSections(sanitized.sections);
+
   try {
-    const doc = await PageBuilder.create({ ...data, createdBy: stamp, updatedBy: stamp });
+    const doc = await PageBuilder.create({
+      // Identity, live and immediate — exactly what updatePageIdentity owns.
+      slug: parsed.data.slug,
+      pageType: parsed.data.pageType,
+      promotionId: parsed.data.promotionId,
+      promotionOrder: parsed.data.promotionOrder,
+      status: 'draft',
+      title: sanitized.title, // required by the model — see the note above
+      draft: { ...sanitized, savedAt: new Date(), savedBy: stamp },
+      createdBy: stamp,
+      updatedBy: stamp,
+    });
     bustCaches(doc);
     await recordAudit({
       pageId: String(doc._id), pageType: AUDIT_TYPE, action: 'create',
       after: { slug: doc.slug, title: doc.title, status: doc.status, pageType: doc.pageType },
       actor: stamp,
     });
-    // A page created straight into `published` is a publish — snapshot it.
-    if (doc.status === 'published') {
-      await snapshotVersion({ pageId: String(doc._id), snapshot: doc.toObject(), label: 'publish', actor: stamp });
-    }
+    // NO snapshot here. A snapshot records what was once actually PUBLIC, and a
+    // page created into 'draft' never was. The first snapshot is written by the
+    // first publishPageStatus call.
+    //
     // `updatedAt` is the optimistic-concurrency token for the caller's NEXT
     // save. The editor adopts the created id in place (history.replaceState,
     // no navigation) rather than redirecting, so there is no reload to re-read
