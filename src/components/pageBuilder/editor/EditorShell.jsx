@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useEditor } from './EditorProvider';
 import { useEditorSave } from './useEditorSave';
+import { useLeaveGuard } from './useLeaveGuard';
+import { LeaveConfirmDialog } from './LeaveConfirmDialog';
 import { EditorTopBar } from './EditorTopBar';
 import { StructurePanel } from './StructurePanel';
 import { CanvasPanel } from './CanvasPanel';
@@ -54,18 +56,34 @@ function Panel({ title, children, className }) {
 }
 
 export function EditorShell() {
-  const { dirty, conflict, error } = useEditor();
+  const { dirty, saving, conflict, error } = useEditor();
   const { saveNow, publish } = useEditorSave();
   const [dialog, setDialog] = useState(null); // 'settings' | 'preview' | 'publish' | null
 
-  // Unsaved-changes guard. A conflict also counts as unsaved: those changes
-  // exist only in this tab.
-  useEffect(() => {
-    if (!dirty && !conflict) return undefined;
-    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [dirty, conflict]);
+  /**
+   * ── Unsaved-changes guard: THREE exits, ONE decision ──────────────────────
+   * This was `beforeunload` alone, gated on `!dirty && !conflict` written out
+   * right here. That covers tab close and reload and NOTHING else, so the
+   * BROWSER BACK BUTTON left the editor silently — confirmed, not theorised.
+   * App Router soft navigation fires no beforeunload, so the sidebar was open
+   * the same way.
+   *
+   * What that cost: autosave is a 5s idle debounce, and it NEVER runs for an
+   * unsaved /builder/new page (deliberately — an abandoned new page must leave
+   * nothing behind), so on a new page Back destroyed the whole draft with no
+   * backstop. A conflicted session is worse still: autosave has stopped for
+   * good, so that tree exists only here.
+   *
+   * The condition now lives in lib/pageBuilder/leaveGuard.js and the three
+   * listeners live in useLeaveGuard.js — one rule, three exits, so the next
+   * state that should block leaving cannot be added to only one of them. The
+   * old inline `!dirty && !conflict` is gone rather than left beside the new
+   * one; two guards on one rule is what this change exists to remove.
+   *
+   * `saving` joins the inputs here (see the module for why it changes no
+   * outcome today and is kept anyway).
+   */
+  const { reason, pending, confirmLeave, cancelLeave } = useLeaveGuard({ dirty, saving, conflict });
 
   // ── WHERE THE HEIGHT COMES FROM ──────────────────────────────────────────
   // The chain, read off the files rather than guessed:
@@ -95,6 +113,15 @@ export function EditorShell() {
       <PageSettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
       <PreviewDialog open={dialog === 'preview'} onClose={() => setDialog(null)} />
       <PublishDialog open={dialog === 'publish'} onClose={() => setDialog(null)} onPublish={publish} />
+      {/* Not part of `dialog`: that state is opened by the top bar's buttons,
+          this one by an exit the author attempted. They can never be open at
+          once — a leave attempt starts outside this component. */}
+      <LeaveConfirmDialog
+        open={Boolean(pending)}
+        reason={reason}
+        onCancel={cancelLeave}
+        onConfirm={confirmLeave}
+      />
       {conflict && <ConflictBanner message={conflict.message} />}
       {error && !conflict && (
         <p className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-700" role="alert">

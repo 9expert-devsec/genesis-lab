@@ -25,10 +25,29 @@ import { createPageBuilderPage, updatePageBuilderPage } from '@/lib/actions/page
  * exactly this — it syncs usePathname/useSearchParams without re-rendering the
  * route.) The trade: the URL and the rendered route diverge until a reload,
  * which then lands on the correct route and reads the saved doc. Invisible and
- * self-healing. Back is unaffected — replaceState does not push an entry, so
- * Back leaves the editor to wherever the user came from.
+ * self-healing.
  *
  * DO NOT "fix" this into router.replace. It reopens a silent-loss window.
+ *
+ * ── THIS USED TO SAY "Back is unaffected". IT NO LONGER IS ────────────────
+ * The sentence here was: "replaceState does not push an entry, so Back leaves
+ * the editor to wherever the user came from." The first half is still true of
+ * THIS call. The conclusion is not, and it stopped being true on purpose:
+ * leaving the editor on Back with unsaved work was a silent-loss bug, and
+ * useLeaveGuard.js now keeps one sentinel entry above the editor's so a Back
+ * press can be caught and confirmed. Back therefore does NOT leave immediately
+ * while there is unsaved work; it asks, and a confirmed leave then goes back
+ * two entries so the author still lands where they were aiming.
+ *
+ * ── AND THIS CALL HAS A SECOND EFFECT NOW. `null` IS NOT INERT ────────────
+ * `replaceState(null, …)` rewrites THE CURRENT ENTRY — which, once the guard is
+ * armed, is the sentinel — and the `null` WIPES the marker useLeaveGuard stamps
+ * on it. Left alone, the Back guard would die at exactly this moment: the first
+ * save of a new page, i.e. the page where loss is total because autosave never
+ * runs for an unsaved page. useLeaveGuard repairs it by re-stamping the entry
+ * on the pathname change this call produces. Do not pass a state object here to
+ * "help" — the repair is one-sided on purpose, so this file keeps knowing
+ * nothing about the guard.
  *
  * ── Autosave ─────────────────────────────────────────────────────────────
  * 5s idle debounce (typing resets it, so it never fires mid-typing), only when
