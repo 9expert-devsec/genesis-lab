@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "node test/run.mjs",
+    "test:browser": "node test/browser/run.mjs",
     "test:smoke": "node --env-file=.env.local test/smoke.mjs",
     "derive:postcodes": "node scripts/derive-postcode-index.mjs",
     "check:postcodes": "node scripts/derive-postcode-index.mjs --check",
