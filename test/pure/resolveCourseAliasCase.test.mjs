@@ -54,6 +54,12 @@ function harness({ extensions = [STALE_EXTENSION] } = {}) {
       calls.extension.push(id);
       return extensions.find((e) => e.courseId === id) ?? null;
     },
+    // Nothing here is mid-rename, so this finds nothing — as the real lookup
+    // would. Supplied so it cannot fall through to the real
+    // getCourseExtensionByFormerCode, which reads Mongo; see
+    // test/fs/injectedDepCoverage.test.mjs for why an unsupplied db-backed dep
+    // is a defect while the branch that reaches it is still unexercised.
+    fetchExtensionByFormerCode: async () => null,
   };
   return { calls, deps };
 }
@@ -115,6 +121,7 @@ test('CONTROL: with an EXACT-match lookup, the reported 404 comes straight back'
       [STALE_EXTENSION].find((e) => e.urlAlias === alias) ?? null,
     fetchCourse: async (id) => UPSTREAM.find((c) => c.course_id === id) ?? null, // verbatim
     fetchExtension: async () => null,
+    fetchExtensionByFormerCode: async () => null,
   };
 
   assert.equal(

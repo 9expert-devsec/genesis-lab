@@ -65,9 +65,51 @@ export async function PageBuilderView({ page }) {
 
   const { pageClass } = themeSurface(page.theme);
 
+  /**
+   * ── ROUND 61: ONE INHERITED DECLARATION, AND WHY IT IS `anywhere` ────────
+   * A long unbroken run — a synthetic `ทททท…`, or any Thai string the ICU
+   * breaker finds no opportunity in — pushed the section past the page and out
+   * of the card. Measured across all 17 self-contained section types
+   * (scripts/_probe-round61-overflow.mjs): 12 of them overflowed, at up to
+   * 2862px inside a 600px box.
+   *
+   * `overflow-wrap` is INHERITED, so this reaches every section without any
+   * section's own class attribute moving — the whole stored corpus renders
+   * byte-identically, which is what makes a page-level fix the small one.
+   *
+   * ── `anywhere` RATHER THAN `break-word`, AND globals.css ALREADY SAYS WHY ──
+   * The article-table note in globals.css records the governing fact:
+   * `overflow-wrap: break-word` does NOT reduce a box's min-content width (CSS
+   * Text 3 §5.5 — its soft wrap opportunities are not counted when computing
+   * min-content intrinsic sizes); only `anywhere` counts. Measured here, the
+   * consequence is exact:
+   *
+   *   break-word  fixed the plain blocks and left EVERY flex/grid case at a
+   *               min-content floor — cta, notice, two_column, card_grid,
+   *               accordion, full_width all still overflowed, and four of
+   *               two_column's five ratios sat at 1248 in a 1200 box.
+   *   anywhere    fixed all 17 types and all 5 ratios, with nothing else added.
+   *
+   * `min-w-0` on the wrappers was tried first and is NOT the answer: it lets a
+   * track shrink but does not give the text anywhere to break, so several cases
+   * got WORSE (70-30 went 1463 -> 2258).
+   *
+   * ── IT DOES NOT TOUCH THAI PROSE, WHICH IS THE POINT ────────────────────
+   * `anywhere` only introduces a break where the line would otherwise overflow,
+   * so Chrome's ICU dictionary breaking still decides ordinary Thai. Measured on
+   * 314 characters of real Thai at 1200 / 380 / 260px: identical line counts
+   * (3 / 9 / 15) before and after, and ZERO breaks landing on a combining mark.
+   * `word-break: break-all` also wraps the run, and is rejected: it broke Latin
+   * words mid-word (2 mid-word breaks in one 63-character English sentence),
+   * which these bilingual pages carry throughout.
+   *
+   * An arbitrary PROPERTY, so it can compile to nothing while the markup looks
+   * perfect — registered in test/fs/tailwindArbitraryValueRules.test.mjs,
+   * compiled from this file.
+   */
   return (
     <div
-      className={cn(pageClass)}
+      className={cn(pageClass, '[overflow-wrap:anywhere]')}
       style={themeStyle(page.theme)}
       data-pb-theme={page.theme || 'default'}
     >

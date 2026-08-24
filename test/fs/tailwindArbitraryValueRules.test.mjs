@@ -1,10 +1,10 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { createElement } from 'react';
-import { readSource } from '../sourceScan.mjs';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { readSource } from "../sourceScan.mjs";
 
 /**
  * CLASSES WHOSE PAINT DEPENDS ON A RUNTIME VARIABLE MUST COMPILE TO A REAL RULE.
@@ -44,7 +44,7 @@ import { readSource } from '../sourceScan.mjs';
  * devDependencies and are driven directly.
  */
 
-const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+const ROOT = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 /**
  * Every class the schedule surfaces rely on whose PAINTED RESULT depends on a CSS
@@ -89,38 +89,38 @@ const CASES = [
    * scripts/_probe-tab-contrast.mjs — with nothing on screen to say so.
    */
   {
-    what: 'the selected tab card',
-    file: 'src/app/admin/registrations/_components/detailShell.jsx',
-    className: 'bg-[var(--surface-raised)]',
-    property: 'background-color',
-    referencesVar: '--surface-raised',
+    what: "the selected tab card",
+    file: "src/app/admin/registrations/_components/detailShell.jsx",
+    className: "bg-[var(--surface-raised)]",
+    property: "background-color",
+    referencesVar: "--surface-raised",
   },
   {
-    what: 'the selected tab label (dark half)',
-    file: 'src/app/admin/registrations/_components/detailShell.jsx',
-    className: 'dark:text-9e-air',
-    property: 'color',
+    what: "the selected tab label (dark half)",
+    file: "src/app/admin/registrations/_components/detailShell.jsx",
+    className: "dark:text-9e-air",
+    property: "color",
   },
   {
-    what: 'the selected tab count badge',
-    file: 'src/app/admin/registrations/_components/detailShell.jsx',
-    className: 'bg-9e-action/10',
-    property: 'background-color',
+    what: "the selected tab count badge",
+    file: "src/app/admin/registrations/_components/detailShell.jsx",
+    className: "bg-9e-action/10",
+    property: "background-color",
   },
   {
     // The dark half of the same badge, and the step DIFFERS from the light one
     // (15 vs 10) because the blue sits on a dark card. Registered separately
     // rather than assumed to follow: each step is independently droppable.
-    what: 'the selected tab count badge (dark half)',
-    file: 'src/app/admin/registrations/_components/detailShell.jsx',
-    className: 'dark:bg-9e-air/15',
-    property: 'background-color',
+    what: "the selected tab count badge (dark half)",
+    file: "src/app/admin/registrations/_components/detailShell.jsx",
+    className: "dark:bg-9e-air/15",
+    property: "background-color",
   },
   {
-    what: 'the /schedule round hover',
-    file: 'src/app/(public)/schedule/_components/ScheduleClient.jsx',
-    className: 'hover:bg-[var(--round-hover-bg)]',
-    property: 'background-color',
+    what: "the /schedule round hover",
+    file: "src/app/(public)/schedule/_components/ScheduleClient.jsx",
+    className: "hover:bg-[var(--round-hover-bg)]",
+    property: "background-color",
   },
   /**
    * ── ROUND 28: THE PAGE BUILDER'S DARK SURFACES BECOME A VARIABLE ─────────
@@ -143,27 +143,113 @@ const CASES = [
    */
   {
     what: "the page builder panels' hover surface",
-    file: 'src/components/pageBuilder/editor/StructurePanel.jsx',
-    className: 'hover:bg-[var(--surface-hover)]',
-    property: 'background-color',
-    referencesVar: '--surface-hover',
+    file: "src/components/pageBuilder/editor/StructurePanel.jsx",
+    className: "hover:bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
   },
   {
     what: "the page settings dialog's menu surface",
-    file: 'src/components/pageBuilder/editor/PageSettingsDialog.jsx',
-    className: 'bg-[var(--surface-hover)]',
-    property: 'background-color',
-    referencesVar: '--surface-hover',
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
   },
   {
     // The footer band. A DIFFERENT variable from the two above, deliberately —
     // the band sits one step off the dialog surface rather than at its hover
     // tint — so it is registered separately rather than assumed to follow.
     what: "the page settings dialog's footer band",
-    file: 'src/components/pageBuilder/editor/PageSettingsDialog.jsx',
-    className: 'bg-[var(--surface-muted)]',
-    property: 'background-color',
-    referencesVar: '--surface-muted',
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-muted)]",
+    property: "background-color",
+    referencesVar: "--surface-muted",
+  },
+  /**
+   * ── ROUND 28: THE PAGE BUILDER'S DARK SURFACES BECOME A VARIABLE ─────────
+   *
+   * Five editor files carried `dark:bg-[#0D1B2A]` — a hex spelling of `9e-navy`
+   * that could not participate in the theme system at all. They now read
+   * `var(--surface-hover)`, which globals.css defines twice (#F8FAFD on :root,
+   * #20344C in .dark) so one class covers both themes.
+   *
+   * That trade is only a gain if the class COMPILES. It is exactly the shape
+   * this file was written for — an arbitrary value wrapping a runtime variable,
+   * which renders perfect markup while emitting no rule — and the surfaces it
+   * paints are the ones nobody looks at twice: a panel hover and a menu
+   * background. A dead rule there is invisible in review and invisible in a
+   * screenshot taken in light mode.
+   *
+   * BOTH FORMS are registered, because they are separately droppable: the
+   * static form is the settings dialog's nav and the breadcrumb card, and the
+   * hover form is every row and icon button in the two panels.
+   */
+  {
+    what: "the page builder panels' hover surface",
+    file: "src/components/pageBuilder/editor/StructurePanel.jsx",
+    className: "hover:bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
+  },
+  {
+    what: "the page settings dialog's menu surface",
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
+  },
+  {
+    // The footer band. A DIFFERENT variable from the two above, deliberately —
+    // the band sits one step off the dialog surface rather than at its hover
+    // tint — so it is registered separately rather than assumed to follow.
+    what: "the page settings dialog's footer band",
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-muted)]",
+    property: "background-color",
+    referencesVar: "--surface-muted",
+  },
+  /**
+   * ── ROUND 28: THE PAGE BUILDER'S DARK SURFACES BECOME A VARIABLE ─────────
+   *
+   * Five editor files carried `dark:bg-[#0D1B2A]` — a hex spelling of `9e-navy`
+   * that could not participate in the theme system at all. They now read
+   * `var(--surface-hover)`, which globals.css defines twice (#F8FAFD on :root,
+   * #20344C in .dark) so one class covers both themes.
+   *
+   * That trade is only a gain if the class COMPILES. It is exactly the shape
+   * this file was written for — an arbitrary value wrapping a runtime variable,
+   * which renders perfect markup while emitting no rule — and the surfaces it
+   * paints are the ones nobody looks at twice: a panel hover and a menu
+   * background. A dead rule there is invisible in review and invisible in a
+   * screenshot taken in light mode.
+   *
+   * BOTH FORMS are registered, because they are separately droppable: the
+   * static form is the settings dialog's nav and the breadcrumb card, and the
+   * hover form is every row and icon button in the two panels.
+   */
+  {
+    what: "the page builder panels' hover surface",
+    file: "src/components/pageBuilder/editor/StructurePanel.jsx",
+    className: "hover:bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
+  },
+  {
+    what: "the page settings dialog's menu surface",
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-hover)]",
+    property: "background-color",
+    referencesVar: "--surface-hover",
+  },
+  {
+    // The footer band. A DIFFERENT variable from the two above, deliberately —
+    // the band sits one step off the dialog surface rather than at its hover
+    // tint — so it is registered separately rather than assumed to follow.
+    what: "the page settings dialog's footer band",
+    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    className: "bg-[var(--surface-muted)]",
+    property: "background-color",
+    referencesVar: "--surface-muted",
   },
   {
     /**
@@ -180,11 +266,11 @@ const CASES = [
      * other components use — which is exactly why the CASE compiles ONE file's
      * code rather than reading the whole stylesheet.
      */
-    what: 'the /schedule round hover ring (width)',
-    file: 'src/app/(public)/schedule/_components/ScheduleClient.jsx',
-    className: 'hover:ring-2',
-    property: 'box-shadow',
-    referencesVar: '--tw-ring-color',
+    what: "the /schedule round hover ring (width)",
+    file: "src/app/(public)/schedule/_components/ScheduleClient.jsx",
+    className: "hover:ring-2",
+    property: "box-shadow",
+    referencesVar: "--tw-ring-color",
   },
   {
     /**
@@ -202,11 +288,11 @@ const CASES = [
      * `--tw-ring-color` rather than a paint property precisely because this
      * class is not supposed to paint.
      */
-    what: 'the /schedule round hover ring (colour)',
-    file: 'src/app/(public)/schedule/_components/ScheduleClient.jsx',
-    className: 'hover:ring-[color:var(--round-ring)]',
-    property: '--tw-ring-color',
-    referencesVar: '--round-ring',
+    what: "the /schedule round hover ring (colour)",
+    file: "src/app/(public)/schedule/_components/ScheduleClient.jsx",
+    className: "hover:ring-[color:var(--round-ring)]",
+    property: "--tw-ring-color",
+    referencesVar: "--round-ring",
   },
   /**
    * ── THE PAGE-BUILDER ACCENT (round 24) ──────────────────────────────────
@@ -223,25 +309,25 @@ const CASES = [
    * one file and is dropped from another cannot hide behind a shared name.
    */
   {
-    what: 'the open accordion item\'s title',
-    file: 'src/components/pageBuilder/sections/accordion.jsx',
-    className: 'text-[var(--pb-accent-text)]',
-    property: 'color',
-    referencesVar: '--pb-accent-text',
+    what: "the open accordion item's title",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-text)]",
+    property: "color",
+    referencesVar: "--pb-accent-text",
   },
   {
-    what: 'the open accordion item\'s chevron',
-    file: 'src/components/pageBuilder/sections/accordion.jsx',
-    className: 'text-[var(--pb-accent-fill)]',
-    property: 'color',
-    referencesVar: '--pb-accent-fill',
+    what: "the open accordion item's chevron",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
   },
   {
-    what: 'the instructor card\'s specialty chip label',
-    file: 'src/components/pageBuilder/sections/instructor_card.jsx',
-    className: 'text-[var(--pb-accent-fill)]',
-    property: 'color',
-    referencesVar: '--pb-accent-fill',
+    what: "the instructor card's specialty chip label",
+    file: "src/components/pageBuilder/sections/instructor_card.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
   },
   {
     /**
@@ -283,16 +369,16 @@ const CASES = [
      * `9e-action` token removed, or this file dropped from the content globs),
      * which would redden both.
      */
-    what: 'the course-card skill capsule hover (text)',
-    file: 'src/app/(public)/training-course/_components/CourseCard.jsx',
-    className: 'hover:text-9e-action',
-    property: 'color',
+    what: "the course-card skill capsule hover (text)",
+    file: "src/app/(public)/training-course/_components/CourseCard.jsx",
+    className: "hover:text-9e-action",
+    property: "color",
   },
   {
-    what: 'the course-card skill capsule hover (border)',
-    file: 'src/app/(public)/training-course/_components/CourseCard.jsx',
-    className: 'hover:border-9e-action',
-    property: 'border-color',
+    what: "the course-card skill capsule hover (border)",
+    file: "src/app/(public)/training-course/_components/CourseCard.jsx",
+    className: "hover:border-9e-action",
+    property: "border-color",
   },
   {
     /**
@@ -306,10 +392,304 @@ const CASES = [
      * what actually fails when the capsule's class stops compiling. The full
      * reasoning is on the CourseCard text case above.
      */
-    what: 'the online-card skill capsule hover (border)',
-    file: 'src/app/_components/home/OnlineCourseCard.jsx',
-    className: 'hover:border-9e-action',
-    property: 'border-color',
+    what: "the online-card skill capsule hover (border)",
+    file: "src/app/_components/home/OnlineCourseCard.jsx",
+    className: "hover:border-9e-action",
+    property: "border-color",
+  },
+  /**
+   * ── THE PAGE-BUILDER ACCENT (round 24) ──────────────────────────────────
+   *
+   * Registered because round 24 found this file's exact defect shape sitting
+   * unregistered in a shipped component: icon_card's chip asks for a tinted
+   * accent background and Tailwind emits nothing for it (the tripwire below).
+   * These three are the classes round 24 added, and the whole reason they are
+   * here is that "it renders the right class" was already true of the broken
+   * one.
+   *
+   * All three are `text-[var(…)]`-shaped — the case this file was built for —
+   * and each is compiled from ITS OWN component, so a class that survives in
+   * one file and is dropped from another cannot hide behind a shared name.
+   */
+  {
+    what: "the open accordion item's title",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-text)]",
+    property: "color",
+    referencesVar: "--pb-accent-text",
+  },
+  {
+    what: "the open accordion item's chevron",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
+  },
+  {
+    what: "the instructor card's specialty chip label",
+    file: "src/components/pageBuilder/sections/instructor_card.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
+  },
+  /**
+   * ── ROUND 60: THE RICH-TEXT SPACING, WHICH IS ARBITRARY *VARIANTS* ───────
+   *
+   * A different shape from everything above — no arbitrary VALUE and no runtime
+   * variable. The value is stock (`my-0`, `mt-0`, `mb-0`); the arbitrary part is
+   * the SELECTOR (`[&_li>p]`, `[&>*:first-child]`). Same failure mode though,
+   * which is why they belong in this file: an arbitrary variant that Tailwind
+   * declines to parse emits NOTHING, the markup still reads perfectly, and every
+   * string-matching test stays green while the spacing silently reverts.
+   *
+   * That is not hypothetical here. While measuring this fix a liveness probe
+   * reported all three as dead twice — first because the probe element had no
+   * descendants for them to act on, then because Tailwind's preflight had
+   * already zeroed the margins they remove. Both were flaws in the probe, and
+   * both looked exactly like "the class does not compile". Only compiling the
+   * real file distinguishes the two, and that is what this test does.
+   *
+   * `[&_li>p]:my-0` is registered for BOTH files. The renderer and the editor
+   * input carry the same spacing set on purpose (so the author composes against
+   * the published rhythm), and they are separately droppable — deleting it from
+   * one would leave the other green.
+   */
+  {
+    what: "rich_text's list-item paragraph reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&_li>p]:my-0",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's leading outer-margin reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&>*:first-child]:mt-0",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's trailing outer-margin reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&>*:last-child]:mb-0",
+    property: "margin-bottom",
+  },
+  {
+    what: "the rich-text editor input's list-item paragraph reset",
+    file: "src/components/pageBuilder/editor/richText/RichTextEditor.jsx",
+    className: "[&_li>p]:my-0",
+    property: "margin-top",
+  },
+  /**
+   * ── ROUND 65: THE THREE RESPONSIVE SPACING CLASSES ──────────────────────
+   *
+   * The body scale became `prose-sm md:prose-base`, so the paragraph/list gap
+   * had to become responsive too — `my-3` below 768px, `my-4` above. These are
+   * NOT arbitrary values, but they are a stacked variant (`md:` on top of the
+   * plugin's `prose-p:` modifier), which is the same failure shape this file
+   * exists for: if the stack ever stops being emitted, the markup stays
+   * perfect and the gap silently reverts to whatever the unprefixed class set.
+   *
+   * The unprefixed `prose-p:my-3` is deliberately NOT registered separately:
+   * it is the same modifier this file already covers through `[&_li>p]:my-0`'s
+   * neighbours, and its failure is visible in the same measurement. What is
+   * new, and therefore registered, is the `md:` stack.
+   */
+  {
+    what: "rich_text's desktop paragraph gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-p:my-4",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's desktop bullet-list gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-ul:my-4",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's desktop numbered-list gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-ol:my-4",
+    property: "margin-top",
+  },
+  /**
+   * ── ROUND 61: THE PAGE-WIDE WRAP, AN ARBITRARY *PROPERTY* ────────────────
+   *
+   * A third shape for this file: not an arbitrary value, not an arbitrary
+   * variant, but a whole declaration Tailwind has no utility for.
+   * `overflow-wrap: anywhere` is the only value that reduces a box's
+   * min-content width (CSS Text 3 §5.5 — the fact globals.css already records
+   * in its article-table note), which is why `break-words` fixed the plain
+   * blocks and left every flex/grid section at a min-content floor.
+   *
+   * It is registered because it carries this file's failure mode exactly: one
+   * class, on one element, whose entire job is inherited by everything below
+   * it. If it compiled to nothing the markup would still be perfect, every
+   * render test would still pass, and twelve section types would quietly go
+   * back to pushing themselves out of the page. Nothing else in the tree would
+   * say so.
+   *
+   * Registered for BOTH files: the published page and the editor canvas carry
+   * it separately and are separately droppable, and the point of the pair is
+   * that the canvas agrees with the page.
+   */
+  {
+    what: "the published page's wrap-anywhere",
+    file: "src/components/pageBuilder/PageBuilderView.jsx",
+    className: "[overflow-wrap:anywhere]",
+    property: "overflow-wrap",
+  },
+  {
+    what: "the editor canvas's wrap-anywhere",
+    file: "src/components/pageBuilder/editor/CanvasPanel.jsx",
+    className: "[overflow-wrap:anywhere]",
+    property: "overflow-wrap",
+  },
+  /**
+   * ── THE PAGE-BUILDER ACCENT (round 24) ──────────────────────────────────
+   *
+   * Registered because round 24 found this file's exact defect shape sitting
+   * unregistered in a shipped component: icon_card's chip asks for a tinted
+   * accent background and Tailwind emits nothing for it (the tripwire below).
+   * These three are the classes round 24 added, and the whole reason they are
+   * here is that "it renders the right class" was already true of the broken
+   * one.
+   *
+   * All three are `text-[var(…)]`-shaped — the case this file was built for —
+   * and each is compiled from ITS OWN component, so a class that survives in
+   * one file and is dropped from another cannot hide behind a shared name.
+   */
+  {
+    what: "the open accordion item's title",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-text)]",
+    property: "color",
+    referencesVar: "--pb-accent-text",
+  },
+  {
+    what: "the open accordion item's chevron",
+    file: "src/components/pageBuilder/sections/accordion.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
+  },
+  {
+    what: "the instructor card's specialty chip label",
+    file: "src/components/pageBuilder/sections/instructor_card.jsx",
+    className: "text-[var(--pb-accent-fill)]",
+    property: "color",
+    referencesVar: "--pb-accent-fill",
+  },
+  /**
+   * ── ROUND 60: THE RICH-TEXT SPACING, WHICH IS ARBITRARY *VARIANTS* ───────
+   *
+   * A different shape from everything above — no arbitrary VALUE and no runtime
+   * variable. The value is stock (`my-0`, `mt-0`, `mb-0`); the arbitrary part is
+   * the SELECTOR (`[&_li>p]`, `[&>*:first-child]`). Same failure mode though,
+   * which is why they belong in this file: an arbitrary variant that Tailwind
+   * declines to parse emits NOTHING, the markup still reads perfectly, and every
+   * string-matching test stays green while the spacing silently reverts.
+   *
+   * That is not hypothetical here. While measuring this fix a liveness probe
+   * reported all three as dead twice — first because the probe element had no
+   * descendants for them to act on, then because Tailwind's preflight had
+   * already zeroed the margins they remove. Both were flaws in the probe, and
+   * both looked exactly like "the class does not compile". Only compiling the
+   * real file distinguishes the two, and that is what this test does.
+   *
+   * `[&_li>p]:my-0` is registered for BOTH files. The renderer and the editor
+   * input carry the same spacing set on purpose (so the author composes against
+   * the published rhythm), and they are separately droppable — deleting it from
+   * one would leave the other green.
+   */
+  {
+    what: "rich_text's list-item paragraph reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&_li>p]:my-0",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's leading outer-margin reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&>*:first-child]:mt-0",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's trailing outer-margin reset",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "[&>*:last-child]:mb-0",
+    property: "margin-bottom",
+  },
+  {
+    what: "the rich-text editor input's list-item paragraph reset",
+    file: "src/components/pageBuilder/editor/richText/RichTextEditor.jsx",
+    className: "[&_li>p]:my-0",
+    property: "margin-top",
+  },
+  /**
+   * ── ROUND 65: THE THREE RESPONSIVE SPACING CLASSES ──────────────────────
+   *
+   * The body scale became `prose-sm md:prose-base`, so the paragraph/list gap
+   * had to become responsive too — `my-3` below 768px, `my-4` above. These are
+   * NOT arbitrary values, but they are a stacked variant (`md:` on top of the
+   * plugin's `prose-p:` modifier), which is the same failure shape this file
+   * exists for: if the stack ever stops being emitted, the markup stays
+   * perfect and the gap silently reverts to whatever the unprefixed class set.
+   *
+   * The unprefixed `prose-p:my-3` is deliberately NOT registered separately:
+   * it is the same modifier this file already covers through `[&_li>p]:my-0`'s
+   * neighbours, and its failure is visible in the same measurement. What is
+   * new, and therefore registered, is the `md:` stack.
+   */
+  {
+    what: "rich_text's desktop paragraph gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-p:my-4",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's desktop bullet-list gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-ul:my-4",
+    property: "margin-top",
+  },
+  {
+    what: "rich_text's desktop numbered-list gap",
+    file: "src/components/pageBuilder/sections/rich_text.jsx",
+    className: "md:prose-ol:my-4",
+    property: "margin-top",
+  },
+  /**
+   * ── ROUND 61: THE PAGE-WIDE WRAP, AN ARBITRARY *PROPERTY* ────────────────
+   *
+   * A third shape for this file: not an arbitrary value, not an arbitrary
+   * variant, but a whole declaration Tailwind has no utility for.
+   * `overflow-wrap: anywhere` is the only value that reduces a box's
+   * min-content width (CSS Text 3 §5.5 — the fact globals.css already records
+   * in its article-table note), which is why `break-words` fixed the plain
+   * blocks and left every flex/grid section at a min-content floor.
+   *
+   * It is registered because it carries this file's failure mode exactly: one
+   * class, on one element, whose entire job is inherited by everything below
+   * it. If it compiled to nothing the markup would still be perfect, every
+   * render test would still pass, and twelve section types would quietly go
+   * back to pushing themselves out of the page. Nothing else in the tree would
+   * say so.
+   *
+   * Registered for BOTH files: the published page and the editor canvas carry
+   * it separately and are separately droppable, and the point of the pair is
+   * that the canvas agrees with the page.
+   */
+  {
+    what: "the published page's wrap-anywhere",
+    file: "src/components/pageBuilder/PageBuilderView.jsx",
+    className: "[overflow-wrap:anywhere]",
+    property: "overflow-wrap",
+  },
+  {
+    what: "the editor canvas's wrap-anywhere",
+    file: "src/components/pageBuilder/editor/CanvasPanel.jsx",
+    className: "[overflow-wrap:anywhere]",
+    property: "overflow-wrap",
   },
 ];
 
@@ -323,7 +703,7 @@ const CASES = [
  * This file keeps everything that is ABOUT the classes — CASES, the file list, the
  * harvest — and imports only the machinery.
  */
-import { compile, declarationsFor, require_ } from '../twCompile.mjs';
+import { compile, declarationsFor, require_ } from "../twCompile.mjs";
 
 for (const { what, file, className, property, referencesVar } of CASES) {
   test(`${what}: "${className}" compiles to a ${property} rule`, async () => {
@@ -353,21 +733,21 @@ for (const { what, file, className, property, referencesVar } of CASES) {
      * comment happened to rescue it.
      */
     const { code } = readSource(file);
-    const css = await compile([{ raw: code, extension: 'js' }]);
+    const css = await compile([{ raw: code, extension: "js" }]);
     const decls = declarationsFor(css, className);
 
     assert.ok(
       decls.length > 0,
-      `Tailwind emitted NO rule for "${className}" while scanning ${file}. `
-      + 'The class is probably assembled from a template literal or a '
-      + 'concatenation — Tailwind matches raw text, so the complete class must '
-      + 'appear literally in the CODE (comments are stripped here on purpose).',
+      `Tailwind emitted NO rule for "${className}" while scanning ${file}. ` +
+        "The class is probably assembled from a template literal or a " +
+        "concatenation — Tailwind matches raw text, so the complete class must " +
+        "appear literally in the CODE (comments are stripped here on purpose).",
     );
     assert.ok(
       decls.some((d) => d.startsWith(`${property}:`)),
-      `"${className}" compiled, but sets [${decls.join(', ')}] instead of ${property}. `
-      + 'A bare var() Tailwind cannot type becomes background-IMAGE, which is '
-      + 'invalid for a colour and therefore inert.',
+      `"${className}" compiled, but sets [${decls.join(", ")}] instead of ${property}. ` +
+        "A bare var() Tailwind cannot type becomes background-IMAGE, which is " +
+        "invalid for a colour and therefore inert.",
     );
 
     if (referencesVar) {
@@ -387,10 +767,10 @@ for (const { what, file, className, property, referencesVar } of CASES) {
        */
       assert.ok(
         decls.some((d) => d.includes(`var(${referencesVar})`)),
-        `"${className}" compiled, but no declaration reads var(${referencesVar}). `
-        + `Got [${decls.join(', ')}]. The component sets ${referencesVar} inline, so if `
-        + 'Tailwind has renamed its internal the inline value no longer reaches the '
-        + 'utility and the ring silently falls back to the preflight default.',
+        `"${className}" compiled, but no declaration reads var(${referencesVar}). ` +
+          `Got [${decls.join(", ")}]. The component sets ${referencesVar} inline, so if ` +
+          "Tailwind has renamed its internal the inline value no longer reaches the " +
+          "utility and the ring silently falls back to the preflight default.",
       );
     }
   });
@@ -398,7 +778,7 @@ for (const { what, file, className, property, referencesVar } of CASES) {
 
 // ── Controls ────────────────────────────────────────────────────────────────
 
-test('CONTROL: the compiler DOES return nothing for a template-literal class', async () => {
+test("CONTROL: the compiler DOES return nothing for a template-literal class", async () => {
   /**
    * The exact defect, reproduced. Tailwind is handed source text in which the
    * class is interpolated rather than written out; the class the component would
@@ -407,22 +787,28 @@ test('CONTROL: the compiler DOES return nothing for a template-literal class', a
    * This is what makes the assertions above meaningful: without it, "a rule
    * exists" could be true of any input at all.
    */
-  const broken = 'const HOVER = `hover:bg-[var(${SOME_CONSTANT})]`;';
-  const css = await compile([{ raw: broken, extension: 'js' }]);
+  const broken = "const HOVER = `hover:bg-[var(${SOME_CONSTANT})]`;";
+  const css = await compile([{ raw: broken, extension: "js" }]);
   assert.equal(
-    declarationsFor(css, 'hover:bg-[var(--round-hover-bg)]').length,
+    declarationsFor(css, "hover:bg-[var(--round-hover-bg)]").length,
     0,
-    'the interpolated form must not produce the rendered class — that is the bug',
+    "the interpolated form must not produce the rendered class — that is the bug",
   );
 
   // …and the literal form, through the same compiler, DOES.
   const fixed = 'const HOVER = "hover:bg-[var(--round-hover-bg)]";';
-  const decls = declarationsFor(await compile([{ raw: fixed, extension: 'js' }]), 'hover:bg-[var(--round-hover-bg)]');
-  assert.ok(decls.length > 0, 'the literal form must compile — otherwise this test proves nothing');
-  assert.ok(decls.some((d) => d.startsWith('background-color:')));
+  const decls = declarationsFor(
+    await compile([{ raw: fixed, extension: "js" }]),
+    "hover:bg-[var(--round-hover-bg)]",
+  );
+  assert.ok(
+    decls.length > 0,
+    "the literal form must compile — otherwise this test proves nothing",
+  );
+  assert.ok(decls.some((d) => d.startsWith("background-color:")));
 });
 
-test('CONTROL: it tests the DECLARATION, not the value — an unknown variable still compiles', async () => {
+test("CONTROL: it tests the DECLARATION, not the value — an unknown variable still compiles", async () => {
   /**
    * Required by the brief, and it is a real distinction. Tailwind does not know
    * or care whether `--never-defined-anywhere` exists; it emits
@@ -434,32 +820,47 @@ test('CONTROL: it tests the DECLARATION, not the value — an unknown variable s
    * claim, pinned by the render tests that read the inline style attribute.
    */
   const raw = 'const x = "hover:bg-[var(--never-defined-anywhere)]";';
-  const decls = declarationsFor(await compile([{ raw, extension: 'js' }]), 'hover:bg-[var(--never-defined-anywhere)]');
-  assert.ok(decls.length > 0, 'a nonexistent variable must still produce a rule');
+  const decls = declarationsFor(
+    await compile([{ raw, extension: "js" }]),
+    "hover:bg-[var(--never-defined-anywhere)]",
+  );
   assert.ok(
-    decls.some((d) => d === 'background-color: var(--never-defined-anywhere)'),
-    `expected the declaration verbatim, got [${decls.join(', ')}]`,
+    decls.length > 0,
+    "a nonexistent variable must still produce a rule",
+  );
+  assert.ok(
+    decls.some((d) => d === "background-color: var(--never-defined-anywhere)"),
+    `expected the declaration verbatim, got [${decls.join(", ")}]`,
   );
 });
 
-test('CONTROL: the selector matcher is exact, not a substring', async () => {
+test("CONTROL: the selector matcher is exact, not a substring", async () => {
   /**
    * `declarationsFor` escapes the class the way Tailwind does. If it matched
    * loosely it could find a longer selector that merely CONTAINS this class and
    * report someone else's declarations as proof.
    */
-  const raw = 'const x = ["bg-[var(--round-hover-bg)]", "hover:bg-[var(--round-hover-bg)]"];';
-  const css = await compile([{ raw, extension: 'js' }]);
+  const raw =
+    'const x = ["bg-[var(--round-hover-bg)]", "hover:bg-[var(--round-hover-bg)]"];';
+  const css = await compile([{ raw, extension: "js" }]);
 
-  const hover = declarationsFor(css, 'hover:bg-[var(--round-hover-bg)]');
-  const plain = declarationsFor(css, 'bg-[var(--round-hover-bg)]');
-  assert.ok(hover.length > 0 && plain.length > 0, 'both variants must compile');
+  const hover = declarationsFor(css, "hover:bg-[var(--round-hover-bg)]");
+  const plain = declarationsFor(css, "bg-[var(--round-hover-bg)]");
+  assert.ok(hover.length > 0 && plain.length > 0, "both variants must compile");
 
   // The plain class is a SUBSTRING of the hover one. A loose matcher would
   // return the hover rule when asked for the plain one and vice versa; an exact
   // one returns each rule once.
-  assert.equal(plain.length, 1, `the plain class matched ${plain.length} rules — the matcher is loose`);
-  assert.equal(hover.length, 1, `the hover class matched ${hover.length} rules — the matcher is loose`);
+  assert.equal(
+    plain.length,
+    1,
+    `the plain class matched ${plain.length} rules — the matcher is loose`,
+  );
+  assert.equal(
+    hover.length,
+    1,
+    `the hover class matched ${hover.length} rules — the matcher is loose`,
+  );
 });
 
 /**
@@ -472,7 +873,7 @@ test('CONTROL: the selector matcher is exact, not a substring', async () => {
  * handed their source as a `raw` string regardless.
  */
 
-test('CONTROL: the ring COLOUR class paints nothing on its own — the WIDTH class does', async () => {
+test("CONTROL: the ring COLOUR class paints nothing on its own — the WIDTH class does", async () => {
   /**
    * Why the ring needs both classes, stated as a fact about the compiler rather
    * than as a convention.
@@ -487,35 +888,43 @@ test('CONTROL: the ring COLOUR class paints nothing on its own — the WIDTH cla
    * what proves the distinction is real rather than a naming choice.
    */
   const colour = declarationsFor(
-    await compile([{ raw: 'const X = "hover:ring-[color:var(--round-ring)]";', extension: 'js' }]),
-    'hover:ring-[color:var(--round-ring)]',
+    await compile([
+      {
+        raw: 'const X = "hover:ring-[color:var(--round-ring)]";',
+        extension: "js",
+      },
+    ]),
+    "hover:ring-[color:var(--round-ring)]",
   );
-  assert.ok(colour.length > 0, 'the colour class must compile to something');
+  assert.ok(colour.length > 0, "the colour class must compile to something");
   assert.ok(
-    colour.some((d) => d.startsWith('--tw-ring-color:')),
-    `expected it to set the ring colour, got [${colour.join(', ')}]`,
+    colour.some((d) => d.startsWith("--tw-ring-color:")),
+    `expected it to set the ring colour, got [${colour.join(", ")}]`,
   );
   assert.equal(
-    colour.some((d) => d.startsWith('box-shadow:')),
+    colour.some((d) => d.startsWith("box-shadow:")),
     false,
-    'a colour-only ring utility must NOT paint — if this ever emits a box-shadow '
-    + 'the width/colour split above has stopped being meaningful',
+    "a colour-only ring utility must NOT paint — if this ever emits a box-shadow " +
+      "the width/colour split above has stopped being meaningful",
   );
 
   const width = declarationsFor(
-    await compile([{ raw: 'const X = "hover:ring-2";', extension: 'js' }]),
-    'hover:ring-2',
+    await compile([{ raw: 'const X = "hover:ring-2";', extension: "js" }]),
+    "hover:ring-2",
   );
-  assert.ok(width.some((d) => d.startsWith('box-shadow:')), 'the width class must paint');
+  assert.ok(
+    width.some((d) => d.startsWith("box-shadow:")),
+    "the width class must paint",
+  );
   assert.equal(
-    width.some((d) => d.startsWith('--tw-ring-color:')),
+    width.some((d) => d.startsWith("--tw-ring-color:")),
     false,
-    'and must NOT set the colour — that is the other class’s job, which is why '
-    + 'deleting it would leave the ring on the preflight default blue',
+    "and must NOT set the colour — that is the other class’s job, which is why " +
+      "deleting it would leave the ring on the preflight default blue",
   );
 });
 
-test('CONTROL: the UNHINTED ring-[var(--…)] form is ambiguous, and the hint settles it', async () => {
+test("CONTROL: the UNHINTED ring-[var(--…)] form is ambiguous, and the hint settles it", async () => {
   /**
    * The reason the shipped class carries `color:` while the hover BACKGROUND
    * legitimately does not.
@@ -534,21 +943,26 @@ test('CONTROL: the UNHINTED ring-[var(--…)] form is ambiguous, and the hint se
    * moment to be glad it is there rather than to relax it.
    */
   const unhinted = declarationsFor(
-    await compile([{ raw: 'const X = "hover:ring-[var(--round-ring)]";', extension: 'js' }]),
-    'hover:ring-[var(--round-ring)]',
+    await compile([
+      { raw: 'const X = "hover:ring-[var(--round-ring)]";', extension: "js" },
+    ]),
+    "hover:ring-[var(--round-ring)]",
   );
-  assert.ok(unhinted.length > 0, 'the unhinted form still compiles to a rule');
+  assert.ok(unhinted.length > 0, "the unhinted form still compiles to a rule");
   assert.deepEqual(
     unhinted,
-    ['--tw-ring-color: var(--round-ring)'],
-    'the unhinted form resolved to something other than a plain ring colour — the '
-    + 'ambiguity the `color:` hint removes has become load-bearing; do not drop the hint',
+    ["--tw-ring-color: var(--round-ring)"],
+    "the unhinted form resolved to something other than a plain ring colour — the " +
+      "ambiguity the `color:` hint removes has become load-bearing; do not drop the hint",
   );
   // Neither form paints, which is the point of the control above.
-  assert.equal(unhinted.some((d) => d.startsWith('box-shadow:')), false);
+  assert.equal(
+    unhinted.some((d) => d.startsWith("box-shadow:")),
+    false,
+  );
 });
 
-test('CONTROL: a DRIFTING variable name reddens — in both couplings', async () => {
+test("CONTROL: a DRIFTING variable name reddens — in both couplings", async () => {
   /**
    * The failure `referencesVar` exists for. There are two couplings, and they
    * break for different reasons:
@@ -566,26 +980,36 @@ test('CONTROL: a DRIFTING variable name reddens — in both couplings', async ()
    * covers the compiled side of both.
    */
   const width = declarationsFor(
-    await compile([{ raw: 'const X = "hover:ring-2";', extension: 'js' }]),
-    'hover:ring-2',
+    await compile([{ raw: 'const X = "hover:ring-2";', extension: "js" }]),
+    "hover:ring-2",
   );
   const colour = declarationsFor(
-    await compile([{ raw: 'const X = "hover:ring-[color:var(--round-ring)]";', extension: 'js' }]),
-    'hover:ring-[color:var(--round-ring)]',
+    await compile([
+      {
+        raw: 'const X = "hover:ring-[color:var(--round-ring)]";',
+        extension: "js",
+      },
+    ]),
+    "hover:ring-[color:var(--round-ring)]",
   );
 
   assert.ok(
-    width.some((d) => d.includes('var(--tw-ring-color)')),
-    `the width rule no longer reads var(--tw-ring-color): [${width.join(', ')}]`,
+    width.some((d) => d.includes("var(--tw-ring-color)")),
+    `the width rule no longer reads var(--tw-ring-color): [${width.join(", ")}]`,
   );
   assert.ok(
-    colour.some((d) => d.includes('var(--round-ring)')),
-    `the colour rule no longer reads var(--round-ring): [${colour.join(', ')}]`,
+    colour.some((d) => d.includes("var(--round-ring)")),
+    `the colour rule no longer reads var(--round-ring): [${colour.join(", ")}]`,
   );
 
   // Drifted spellings must NOT match, or `includes` is loose enough to accept
   // anything and both assertions above are decorative.
-  for (const wrong of ['--tw-ring-colour', '--round-rings', '--round_ring', '--tw-ringcolor']) {
+  for (const wrong of [
+    "--tw-ring-colour",
+    "--round-rings",
+    "--round_ring",
+    "--tw-ringcolor",
+  ]) {
     assert.equal(
       [...width, ...colour].some((d) => d.includes(`var(${wrong})`)),
       false,
@@ -594,7 +1018,7 @@ test('CONTROL: a DRIFTING variable name reddens — in both couplings', async ()
   }
 });
 
-test('CONTROL: the ring cases would redden if the component stopped rendering them', async () => {
+test("CONTROL: the ring cases would redden if the component stopped rendering them", async () => {
   /**
    * `hover:ring-2` carries no brackets, so it cannot fail the way the hover
    * background did. It can still be DELETED — and because it is a stock utility
@@ -604,25 +1028,154 @@ test('CONTROL: the ring cases would redden if the component stopped rendering th
    * That is why the CASES compile ONE file's code in isolation. This is the
    * proof: the same classes, against a source that no longer mentions them.
    */
-  const without = 'const CELL = "group cursor-pointer rounded-9e-md border px-1 py-1.5";';
-  const css = await compile([{ raw: without, extension: 'js' }]);
-  assert.equal(declarationsFor(css, 'hover:ring-2').length, 0, 'no width rule');
+  const without =
+    'const CELL = "group cursor-pointer rounded-9e-md border px-1 py-1.5";';
+  const css = await compile([{ raw: without, extension: "js" }]);
+  assert.equal(declarationsFor(css, "hover:ring-2").length, 0, "no width rule");
   assert.equal(
-    declarationsFor(css, 'hover:ring-[color:var(--round-ring)]').length, 0, 'no colour rule',
+    declarationsFor(css, "hover:ring-[color:var(--round-ring)]").length,
+    0,
+    "no colour rule",
   );
-  assert.ok(css.includes('.rounded-9e-md'), 'but the classes that ARE there compiled');
+  assert.ok(
+    css.includes(".rounded-9e-md"),
+    "but the classes that ARE there compiled",
+  );
 });
 
-test('CONTROL: a class NOT present in the scanned source produces nothing', async () => {
+test("CONTROL: a class NOT present in the scanned source produces nothing", async () => {
   // Otherwise "a rule exists" might be Tailwind emitting the world rather than
   // reading the content it was given.
   const raw = 'const x = "text-sm";';
-  const css = await compile([{ raw, extension: 'js' }]);
-  assert.equal(declarationsFor(css, 'hover:bg-[var(--round-hover-bg)]').length, 0);
-  assert.ok(css.includes('.text-sm'), 'but the class that IS there compiled');
+  const css = await compile([{ raw, extension: "js" }]);
+  assert.equal(
+    declarationsFor(css, "hover:bg-[var(--round-hover-bg)]").length,
+    0,
+  );
+  assert.ok(css.includes(".text-sm"), "but the class that IS there compiled");
 });
 
-test('the config under test is the real one, with its content globs intact', () => {
+test("CONTROL (round 60): the WIDENED escape table still reports a dead class dead", async () => {
+  /**
+   * escapeClass stopped enumerating characters and now escapes everything
+   * outside `[A-Za-z0-9_-]`, because the old list had no `&`, `>` or `*` and so
+   * reported three live arbitrary-variant classes as producing NO RULE.
+   *
+   * Widening a matcher is exactly how a guard stops guarding — if it now found
+   * something for every input, all four registrations above would be vacuous.
+   * So: an arbitrary VARIANT that is genuinely absent must still come back
+   * empty, in the same compile where a present one comes back full.
+   */
+  const raw = 'const x = "[&_li>p]:my-0";';
+  const css = await compile([{ raw, extension: "js" }]);
+  assert.ok(
+    declarationsFor(css, "[&_li>p]:my-0").length > 0,
+    "the class that IS there did not compile — the escaping is wrong in the other direction",
+  );
+  for (const absent of [
+    "[&_li>p]:my-4",
+    "[&>*:first-child]:mt-0",
+    "[&_td>span]:my-0",
+  ]) {
+    assert.equal(
+      declarationsFor(css, absent).length,
+      0,
+      `"${absent}" is not in the source but the matcher found declarations for it`,
+    );
+  }
+});
+
+test("CONTROL (round 60): the WIDENED escape table still reports a dead class dead", async () => {
+  /**
+   * escapeClass stopped enumerating characters and now escapes everything
+   * outside `[A-Za-z0-9_-]`, because the old list had no `&`, `>` or `*` and so
+   * reported three live arbitrary-variant classes as producing NO RULE.
+   *
+   * Widening a matcher is exactly how a guard stops guarding — if it now found
+   * something for every input, all four registrations above would be vacuous.
+   * So: an arbitrary VARIANT that is genuinely absent must still come back
+   * empty, in the same compile where a present one comes back full.
+   */
+  const raw = 'const x = "[&_li>p]:my-0";';
+  const css = await compile([{ raw, extension: "js" }]);
+  assert.ok(
+    declarationsFor(css, "[&_li>p]:my-0").length > 0,
+    "the class that IS there did not compile — the escaping is wrong in the other direction",
+  );
+  for (const absent of [
+    "[&_li>p]:my-4",
+    "[&>*:first-child]:mt-0",
+    "[&_td>span]:my-0",
+  ]) {
+    assert.equal(
+      declarationsFor(css, absent).length,
+      0,
+      `"${absent}" is not in the source but the matcher found declarations for it`,
+    );
+  }
+});
+
+test("CONTROL (round 60): the WIDENED escape table still reports a dead class dead", async () => {
+  /**
+   * escapeClass stopped enumerating characters and now escapes everything
+   * outside `[A-Za-z0-9_-]`, because the old list had no `&`, `>` or `*` and so
+   * reported three live arbitrary-variant classes as producing NO RULE.
+   *
+   * Widening a matcher is exactly how a guard stops guarding — if it now found
+   * something for every input, all four registrations above would be vacuous.
+   * So: an arbitrary VARIANT that is genuinely absent must still come back
+   * empty, in the same compile where a present one comes back full.
+   */
+  const raw = 'const x = "[&_li>p]:my-0";';
+  const css = await compile([{ raw, extension: "js" }]);
+  assert.ok(
+    declarationsFor(css, "[&_li>p]:my-0").length > 0,
+    "the class that IS there did not compile — the escaping is wrong in the other direction",
+  );
+  for (const absent of [
+    "[&_li>p]:my-4",
+    "[&>*:first-child]:mt-0",
+    "[&_td>span]:my-0",
+  ]) {
+    assert.equal(
+      declarationsFor(css, absent).length,
+      0,
+      `"${absent}" is not in the source but the matcher found declarations for it`,
+    );
+  }
+});
+
+test("CONTROL (round 60): the WIDENED escape table still reports a dead class dead", async () => {
+  /**
+   * escapeClass stopped enumerating characters and now escapes everything
+   * outside `[A-Za-z0-9_-]`, because the old list had no `&`, `>` or `*` and so
+   * reported three live arbitrary-variant classes as producing NO RULE.
+   *
+   * Widening a matcher is exactly how a guard stops guarding — if it now found
+   * something for every input, all four registrations above would be vacuous.
+   * So: an arbitrary VARIANT that is genuinely absent must still come back
+   * empty, in the same compile where a present one comes back full.
+   */
+  const raw = 'const x = "[&_li>p]:my-0";';
+  const css = await compile([{ raw, extension: "js" }]);
+  assert.ok(
+    declarationsFor(css, "[&_li>p]:my-0").length > 0,
+    "the class that IS there did not compile — the escaping is wrong in the other direction",
+  );
+  for (const absent of [
+    "[&_li>p]:my-4",
+    "[&>*:first-child]:mt-0",
+    "[&_td>span]:my-0",
+  ]) {
+    assert.equal(
+      declarationsFor(css, absent).length,
+      0,
+      `"${absent}" is not in the source but the matcher found declarations for it`,
+    );
+  }
+});
+
+test("the config under test is the real one, with its content globs intact", () => {
   /**
    * The compile above REPLACES `content` so it can scan one file at a time. That
    * makes it blind to a glob mistake, which is the OTHER way a class goes
@@ -630,16 +1183,24 @@ test('the config under test is the real one, with its content globs intact', () 
    * unguarded. (test/pure/tailwindContentCoverage owns the deeper version of
    * this claim; here it is just enough to know the preset is real.)
    */
-  const config = require_(path.join(ROOT, 'tailwind.config.js'));
-  assert.ok(Array.isArray(config.content), 'the real config must declare content');
-  for (const glob of ['./src/app/**/*.{js,jsx}', './src/components/**/*.{js,jsx}']) {
+  const config = require_(path.join(ROOT, "tailwind.config.js"));
+  assert.ok(
+    Array.isArray(config.content),
+    "the real config must declare content",
+  );
+  for (const glob of [
+    "./src/app/**/*.{js,jsx}",
+    "./src/components/**/*.{js,jsx}",
+  ]) {
     assert.ok(config.content.includes(glob), `the real config lost ${glob}`);
   }
   // And every CASE file sits under one of those roots, or scanning it here
   // would prove nothing about the real build.
   for (const { file } of CASES) {
     assert.ok(
-      file.startsWith('src/app/') || file.startsWith('src/components/') || file.startsWith('src/lib/'),
+      file.startsWith("src/app/") ||
+        file.startsWith("src/components/") ||
+        file.startsWith("src/lib/"),
       `${file} is outside the scanned roots`,
     );
   }
@@ -675,53 +1236,65 @@ test('the config under test is the real one, with its content globs intact', () 
  * "a status added without a colour" is the exact defect the fold removed.
  */
 
-const STATUS_MODULE = 'src/lib/registrations/statuses.js';
+const STATUS_MODULE = "src/lib/registrations/statuses.js";
 
-test('every declared status accent and badge compiles to a real rule', async () => {
+test("every declared status accent and badge compiles to a real rule", async () => {
   const { PUBLIC_STATUSES, INHOUSE_STATUSES } =
-    await import('@/lib/registrations/statuses');
+    await import("@/lib/registrations/statuses");
 
   // ONE compile of the module's scrubbed CODE — comments stripped, for the
   // reason the header above gives: the real build scans comments, so a class
   // mentioned only in prose would compile while the code stayed broken.
   const { code } = readSource(STATUS_MODULE);
-  const css = await compile([{ raw: code, extension: 'js' }]);
+  const css = await compile([{ raw: code, extension: "js" }]);
 
   const declared = [...PUBLIC_STATUSES, ...INHOUSE_STATUSES];
-  assert.ok(declared.length >= 7, `only ${declared.length} statuses — the walk is wrong`);
+  assert.ok(
+    declared.length >= 7,
+    `only ${declared.length} statuses — the walk is wrong`,
+  );
 
   for (const s of declared) {
-    for (const [prop, className] of [['accent', s.accent], ['badge', s.badge]]) {
+    for (const [prop, className] of [
+      ["accent", s.accent],
+      ["badge", s.badge],
+    ]) {
       // `badge` is two classes in one string; each must compile on its own.
       for (const single of String(className).trim().split(/\s+/)) {
         const decls = declarationsFor(css, single);
         assert.ok(
           decls.length > 0,
-          `Tailwind emitted NO rule for "${single}" (${s.value}.${prop}) while scanning `
-          + `${STATUS_MODULE}. The class is probably assembled from a template literal — `
-          + 'Tailwind matches raw text, so the complete class must appear literally in the CODE.',
+          `Tailwind emitted NO rule for "${single}" (${s.value}.${prop}) while scanning ` +
+            `${STATUS_MODULE}. The class is probably assembled from a template literal — ` +
+            "Tailwind matches raw text, so the complete class must appear literally in the CODE.",
         );
       }
     }
   }
 });
 
-test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
+test("CONTROL: an interpolated badge compiles to NOTHING", async () => {
   // The break that reddened nothing in the pure tier, run through this
   // instrument instead. Without this, the test above could be passing because
   // `declarationsFor` finds a rule for anything.
-  const broken = "export const S = [{ value: 'x', badge: `bg-${'emerald'}-100 text-emerald-700` }];";
-  const css = await compile([{ raw: broken, extension: 'js' }]);
+  const broken =
+    "export const S = [{ value: 'x', badge: `bg-${'emerald'}-100 text-emerald-700` }];";
+  const css = await compile([{ raw: broken, extension: "js" }]);
   assert.deepEqual(
-    declarationsFor(css, 'bg-emerald-100'), [],
-    'the control is inert — an interpolated class still compiled, so this guard proves nothing',
+    declarationsFor(css, "bg-emerald-100"),
+    [],
+    "the control is inert — an interpolated class still compiled, so this guard proves nothing",
   );
   // And the same class written literally DOES compile, so the difference is the
   // interpolation and not the class being unknown to Tailwind.
-  const fixed = "export const S = [{ value: 'x', badge: 'bg-emerald-100 text-emerald-700' }];";
+  const fixed =
+    "export const S = [{ value: 'x', badge: 'bg-emerald-100 text-emerald-700' }];";
   assert.ok(
-    declarationsFor(await compile([{ raw: fixed, extension: 'js' }]), 'bg-emerald-100').length > 0,
-    'the literal form does not compile either — the fixture is wrong, not the guard',
+    declarationsFor(
+      await compile([{ raw: fixed, extension: "js" }]),
+      "bg-emerald-100",
+    ).length > 0,
+    "the literal form does not compile either — the fixture is wrong, not the guard",
   );
 });
 
@@ -774,19 +1347,19 @@ test('CONTROL: an interpolated badge compiles to NOTHING', async () => {
  * round for a list a human maintains.
  */
 const REGISTRATION_LAYOUT_FILES = [
-  'src/app/admin/registrations/_components/RegistrationsClient.jsx',
-  'src/app/admin/registrations/_components/ListPanel.jsx',
+  "src/app/admin/registrations/_components/RegistrationsClient.jsx",
+  "src/app/admin/registrations/_components/ListPanel.jsx",
   // The ตัวกรอง disclosure — round 8. It went in because this list caught its
   // absence exactly as the note above says it would: the panel's classes RENDER,
   // the compile input did not include the file, and every one of them was
   // reported dead. Loud and in the right direction.
-  'src/app/admin/registrations/_components/FilterPanel.jsx',
-  'src/app/admin/registrations/_components/PublicTable.jsx',
-  'src/app/admin/registrations/_components/InhouseTable.jsx',
+  "src/app/admin/registrations/_components/FilterPanel.jsx",
+  "src/app/admin/registrations/_components/PublicTable.jsx",
+  "src/app/admin/registrations/_components/InhouseTable.jsx",
   // The shared cell atoms — the status chip, the date cell, the chevron.
-  'src/app/admin/registrations/_components/tableParts.jsx',
+  "src/app/admin/registrations/_components/tableParts.jsx",
   // The summary cards' accent classes are declared here, not in the screens.
-  'src/lib/registrations/statuses.js',
+  "src/lib/registrations/statuses.js",
 ];
 
 /**
@@ -802,54 +1375,84 @@ function arbitraryClassesIn(markup) {
   const found = new Set();
   for (const m of markup.matchAll(/\sclass="([^"]*)"/g)) {
     for (const token of m[1].split(/\s+/)) {
-      if (token.includes('-[') && token.endsWith(']')) found.add(token);
+      if (token.includes("-[") && token.endsWith("]")) found.add(token);
     }
   }
   return [...found].sort();
 }
 
-test('every arbitrary-value class the registrations screens RENDER compiles to a rule', async () => {
-  const { RegistrationsClient } = await import('@/app/admin/registrations/_components/RegistrationsClient');
+test("every arbitrary-value class the registrations screens RENDER compiles to a rule", async () => {
+  const { RegistrationsClient } =
+    await import("@/app/admin/registrations/_components/RegistrationsClient");
 
   const EMPTY = { items: [], page: 1, pageCount: 1, total: 0, pageSize: 20 };
-  const render = (props) => renderToStaticMarkup(createElement(RegistrationsClient, {
-    initialData: EMPTY, status: 'all', q: '', range: 'all', lastEdited: {}, ...props,
-  }));
+  const render = (props) =>
+    renderToStaticMarkup(
+      createElement(RegistrationsClient, {
+        initialData: EMPTY,
+        status: "all",
+        q: "",
+        range: "all",
+        lastEdited: {},
+        ...props,
+      }),
+    );
 
   const markup = [
-    render({ source: 'public',  counts: { total: 39 }, sourceTotals: { public: 39, inhouse: 9 } }),
-    render({ source: 'inhouse', counts: { total: 9 },  sourceTotals: { inhouse: 9, public: 39 }, courseNames: {} }),
+    render({
+      source: "public",
+      counts: { total: 39 },
+      sourceTotals: { public: 39, inhouse: 9 },
+    }),
+    render({
+      source: "inhouse",
+      counts: { total: 9 },
+      sourceTotals: { inhouse: 9, public: 39 },
+      courseNames: {},
+    }),
     // A paged, populated render, so the footer and the pager are on screen too —
     // their classes exist on no other branch.
     render({
-      source: 'public',
+      source: "public",
       counts: { total: 74 },
       sourceTotals: { public: 74, inhouse: 9 },
-      initialData: { items: [], page: 2, pageCount: 4, total: 74, pageSize: 20 },
+      initialData: {
+        items: [],
+        page: 2,
+        pageCount: 4,
+        total: 74,
+        pageSize: 20,
+      },
     }),
-  ].join('\n');
+  ].join("\n");
 
   const classes = arbitraryClassesIn(markup);
-  assert.ok(classes.length >= 30,
-    `only ${classes.length} arbitrary-value classes harvested — the extractor is not reading the render`);
+  assert.ok(
+    classes.length >= 30,
+    `only ${classes.length} arbitrary-value classes harvested — the extractor is not reading the render`,
+  );
 
   const css = await compile(
-    REGISTRATION_LAYOUT_FILES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })),
+    REGISTRATION_LAYOUT_FILES.map((rel) => ({
+      raw: readSource(rel).code,
+      extension: "js",
+    })),
   );
 
   const dead = classes.filter((c) => declarationsFor(css, c).length === 0);
   assert.deepEqual(
-    dead, [],
-    'these classes are RENDERED but Tailwind emits no rule for them while scanning '
-    + `${REGISTRATION_LAYOUT_FILES.length} source files:\n    ${dead.join('\n    ')}\n\n`
-    + 'Each is almost certainly assembled from a template literal or a concatenation. '
-    + 'Tailwind matches raw text, so the complete class must appear LITERALLY in the '
-    + 'code — an interpolated one produces correct markup and no CSS at all, which no '
-    + 'markup assertion anywhere in this suite can see.',
+    dead,
+    [],
+    "these classes are RENDERED but Tailwind emits no rule for them while scanning " +
+      `${REGISTRATION_LAYOUT_FILES.length} source files:\n    ${dead.join("\n    ")}\n\n` +
+      "Each is almost certainly assembled from a template literal or a concatenation. " +
+      "Tailwind matches raw text, so the complete class must appear LITERALLY in the " +
+      "code — an interpolated one produces correct markup and no CSS at all, which no " +
+      "markup assertion anywhere in this suite can see.",
   );
 });
 
-test('CONTROL: the harvest reddens when a rendered class is not literal in the source', async () => {
+test("CONTROL: the harvest reddens when a rendered class is not literal in the source", async () => {
   /**
    * The instrument measured against the exact defect, in both directions.
    *
@@ -860,24 +1463,30 @@ test('CONTROL: the harvest reddens when a rendered class is not literal in the s
    */
   const rendered = '<div class="h-[82px] w-[269px]"></div>';
   const harvested = arbitraryClassesIn(rendered);
-  assert.deepEqual(harvested, ['h-[82px]', 'w-[269px]'], 'the extractor did not read the class attribute');
-
-  const broken = 'const ROW = `h-[${ROW_H}px] w-[${W}px]`;';
-  const brokenCss = await compile([{ raw: broken, extension: 'js' }]);
   assert.deepEqual(
-    harvested.filter((c) => declarationsFor(brokenCss, c).length > 0), [],
-    'an interpolated source still produced the rendered classes — the control is inert',
+    harvested,
+    ["h-[82px]", "w-[269px]"],
+    "the extractor did not read the class attribute",
+  );
+
+  const broken = "const ROW = `h-[${ROW_H}px] w-[${W}px]`;";
+  const brokenCss = await compile([{ raw: broken, extension: "js" }]);
+  assert.deepEqual(
+    harvested.filter((c) => declarationsFor(brokenCss, c).length > 0),
+    [],
+    "an interpolated source still produced the rendered classes — the control is inert",
   );
 
   const fixed = 'const ROW = "h-[82px] w-[269px]";';
-  const fixedCss = await compile([{ raw: fixed, extension: 'js' }]);
+  const fixedCss = await compile([{ raw: fixed, extension: "js" }]);
   assert.deepEqual(
-    harvested.filter((c) => declarationsFor(fixedCss, c).length === 0), [],
-    'the literal form does not compile either — the fixture is wrong, not the guard',
+    harvested.filter((c) => declarationsFor(fixedCss, c).length === 0),
+    [],
+    "the literal form does not compile either — the fixture is wrong, not the guard",
   );
 });
 
-test('CONTROL: a combinator tail is found, and a longer class is still not', async () => {
+test("CONTROL: a combinator tail is found, and a longer class is still not", async () => {
   /**
    * The two halves of the matcher change above, measured.
    *
@@ -889,39 +1498,61 @@ test('CONTROL: a combinator tail is found, and a longer class is still not', asy
    * the longer one's declarations, which is the property the old enumeration was
    * really there to provide and which now comes from the character check.
    */
-  const css = await compile([{ raw: 'const X = "space-y-[22px] w-0 w-0.5";', extension: 'js' }]);
+  const css = await compile([
+    { raw: 'const X = "space-y-[22px] w-0 w-0.5";', extension: "js" },
+  ]);
 
-  const spaced = declarationsFor(css, 'space-y-[22px]');
-  assert.ok(spaced.length > 0, 'a child-combinator rule is still invisible to the matcher');
-  assert.ok(spaced.some((d) => d.startsWith('margin-top:')), `expected a margin, got [${spaced.join(', ')}]`);
+  const spaced = declarationsFor(css, "space-y-[22px]");
+  assert.ok(
+    spaced.length > 0,
+    "a child-combinator rule is still invisible to the matcher",
+  );
+  assert.ok(
+    spaced.some((d) => d.startsWith("margin-top:")),
+    `expected a margin, got [${spaced.join(", ")}]`,
+  );
 
-  const w0 = declarationsFor(css, 'w-0');
-  assert.equal(w0.length, 1, `w-0 matched ${w0.length} rules — it is borrowing w-0.5's`);
-  assert.deepEqual(w0, ['width: 0px']);
-  assert.deepEqual(declarationsFor(css, 'w-0.5'), ['width: 0.125rem']);
+  const w0 = declarationsFor(css, "w-0");
+  assert.equal(
+    w0.length,
+    1,
+    `w-0 matched ${w0.length} rules — it is borrowing w-0.5's`,
+  );
+  assert.deepEqual(w0, ["width: 0px"]);
+  assert.deepEqual(declarationsFor(css, "w-0.5"), ["width: 0.125rem"]);
 });
 
-test('CONTROL: the extractor reads class attributes, not page text', async () => {
+test("CONTROL: the extractor reads class attributes, not page text", async () => {
   // The screens render Thai copy, `title` attributes and inline `style` values.
   // If the harvest scanned the whole markup it could pick up a "class" that is
   // really content, and then fail on a perfectly correct page.
-  const noise = '<p title="w-[999px]" style="width:12px">ค่าปรับ-[หมายเหตุ]</p><div class="h-[82px]"></div>';
-  assert.deepEqual(arbitraryClassesIn(noise), ['h-[82px]']);
+  const noise =
+    '<p title="w-[999px]" style="width:12px">ค่าปรับ-[หมายเหตุ]</p><div class="h-[82px]"></div>';
+  assert.deepEqual(arbitraryClassesIn(noise), ["h-[82px]"]);
 });
 
-test('CONTROL: the compiled file list is the one the render can draw from', async () => {
+test("CONTROL: the compiled file list is the one the render can draw from", async () => {
   // Each file must be inside the real content globs, or compiling it here proves
   // nothing about the real build. (The compile above replaces `content`, so it
   // is blind to a glob mistake by construction.)
-  const config = require_(path.join(ROOT, 'tailwind.config.js'));
+  const config = require_(path.join(ROOT, "tailwind.config.js"));
   for (const rel of REGISTRATION_LAYOUT_FILES) {
     assert.ok(
-      rel.startsWith('src/app/') || rel.startsWith('src/components/') || rel.startsWith('src/lib/'),
+      rel.startsWith("src/app/") ||
+        rel.startsWith("src/components/") ||
+        rel.startsWith("src/lib/"),
       `${rel} is outside the scanned roots`,
     );
-    assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing — the compile input is empty`);
+    assert.ok(
+      readSource(rel).code.length > 200,
+      `${rel} scrubbed to nothing — the compile input is empty`,
+    );
   }
-  assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
+  assert.ok(
+    config.content.some(
+      (g) => typeof g === "string" && g.startsWith("./src/app/"),
+    ),
+  );
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -962,16 +1593,21 @@ test('CONTROL: the compiled file list is the one the render can draw from', asyn
  */
 
 const LAYOUT_SOURCES = [
-  'src/app/admin/registrations/_components/RegistrationsClient.jsx',
-  'src/app/admin/registrations/_components/PublicTable.jsx',
-  'src/app/admin/registrations/_components/InhouseTable.jsx',
-  'src/app/admin/registrations/_components/tableParts.jsx',
-  'src/lib/registrations/statuses.js',
+  "src/app/admin/registrations/_components/RegistrationsClient.jsx",
+  "src/app/admin/registrations/_components/PublicTable.jsx",
+  "src/app/admin/registrations/_components/InhouseTable.jsx",
+  "src/app/admin/registrations/_components/tableParts.jsx",
+  "src/lib/registrations/statuses.js",
 ];
 
 /** Compile every file the two screens are built from, once. */
 async function layoutCss() {
-  return compile(LAYOUT_SOURCES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })));
+  return compile(
+    LAYOUT_SOURCES.map((rel) => ({
+      raw: readSource(rel).code,
+      extension: "js",
+    })),
+  );
 }
 
 /**
@@ -995,7 +1631,7 @@ function declarationsForAll(css, classes) {
 
 // ── DEFECT 1: the status chip stretched to fill its cell ────────────────────
 
-test('the status chip’s compiled CSS constrains its width to its content', async () => {
+test("the status chip’s compiled CSS constrains its width to its content", async () => {
   /**
    * THE DEFECT: the chip rendered as a full-width block across the whole สถานะ
    * column, on both tables.
@@ -1010,22 +1646,36 @@ test('the status chip’s compiled CSS constrains its width to its content', asy
    * means nothing here. It is: does the stylesheet give this element an explicit
    * CONTENT-BASED WIDTH, which is the one thing that defeats the stretch.
    */
-  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
-  const markup = renderToStaticMarkup(createElement(PublicTable, {
-    items: [{ _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z', coordinator: {} }],
-    lastEdited: {},
-    detailHref: (id) => `/admin/registrations/${id}`,
-  }));
+  const { PublicTable } =
+    await import("@/app/admin/registrations/_components/PublicTable");
+  const markup = renderToStaticMarkup(
+    createElement(PublicTable, {
+      items: [
+        {
+          _id: "aaaaaaaaaaaaaaaaaaaa0001",
+          courseName: "x",
+          status: "confirmed",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          coordinator: {},
+        },
+      ],
+      lastEdited: {},
+      detailHref: (id) => `/admin/registrations/${id}`,
+    }),
+  );
 
-  const classes = classesOfElementWith(markup, 'h-[26px]');
-  assert.ok(classes, 'no status chip found in the render — the marker class has changed');
+  const classes = classesOfElementWith(markup, "h-[26px]");
+  assert.ok(
+    classes,
+    "no status chip found in the render — the marker class has changed",
+  );
 
   const decls = declarationsForAll(await layoutCss(), classes);
   assert.ok(
-    decls.some((d) => d === 'width: fit-content'),
-    'the status chip has no compiled width constraint, so the flex-column parent will '
-    + `stretch it across the whole column. Got [${decls.join(', ')}]. `
-    + '`inline-flex` alone does NOT do this — a flex item is blockified.',
+    decls.some((d) => d === "width: fit-content"),
+    "the status chip has no compiled width constraint, so the flex-column parent will " +
+      `stretch it across the whole column. Got [${decls.join(", ")}]. ` +
+      "`inline-flex` alone does NOT do this — a flex item is blockified.",
   );
 });
 
@@ -1048,20 +1698,36 @@ test('the status chip’s compiled CSS constrains its width to its content', asy
  * `rounded-full` is the marker because it is what makes a chip a chip here, and
  * it is not used by anything else in these two components.
  */
-test('every chip in both tables has a compiled width constraint', async () => {
-  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
-  const { InhouseTable } = await import('@/app/admin/registrations/_components/InhouseTable');
+test("every chip in both tables has a compiled width constraint", async () => {
+  const { PublicTable } =
+    await import("@/app/admin/registrations/_components/PublicTable");
+  const { InhouseTable } =
+    await import("@/app/admin/registrations/_components/InhouseTable");
 
   const publicRow = {
-    _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', classDate: '1 ส.ค. 2569',
-    scheduleType: 'hybrid', attendanceMode: 'teams', coordinator: { email: 'a@b.c' },
-    attendeesCount: 3, status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z',
+    _id: "aaaaaaaaaaaaaaaaaaaa0001",
+    courseName: "x",
+    classDate: "1 ส.ค. 2569",
+    scheduleType: "hybrid",
+    attendanceMode: "teams",
+    coordinator: { email: "a@b.c" },
+    attendeesCount: 3,
+    status: "confirmed",
+    createdAt: "2026-08-01T00:00:00.000Z",
   };
   const inhouseRow = {
-    _id: 'bbbbbbbbbbbbbbbbbbbb0002', companyName: 'c', coursesInterested: ['X-1'],
-    contactFirstName: 'a', contactLastName: 'b', contactEmail: 'a@b.c', contactPhone: '08',
-    participantsCount: 15, trainingFormat: 'onsite', preferredMonth: '2026-11',
-    status: 'quoted', createdAt: '2026-08-01T00:00:00.000Z',
+    _id: "bbbbbbbbbbbbbbbbbbbb0002",
+    companyName: "c",
+    coursesInterested: ["X-1"],
+    contactFirstName: "a",
+    contactLastName: "b",
+    contactEmail: "a@b.c",
+    contactPhone: "08",
+    participantsCount: 15,
+    trainingFormat: "onsite",
+    preferredMonth: "2026-11",
+    status: "quoted",
+    createdAt: "2026-08-01T00:00:00.000Z",
   };
 
   /**
@@ -1074,38 +1740,53 @@ test('every chip in both tables has a compiled width constraint', async () => {
    *
    * A sweep is only as wide as the markup it is handed. Two rows.
    */
-  const classroomRow = { ...publicRow, _id: 'cccccccccccccccccccc0003', scheduleType: '', attendanceMode: '' };
+  const classroomRow = {
+    ...publicRow,
+    _id: "cccccccccccccccccccc0003",
+    scheduleType: "",
+    attendanceMode: "",
+  };
 
   const markup = [
-    renderToStaticMarkup(createElement(PublicTable, {
-      items: [publicRow, classroomRow], lastEdited: {}, detailHref: (id) => `/admin/registrations/${id}`,
-    })),
-    renderToStaticMarkup(createElement(InhouseTable, {
-      items: [inhouseRow], lastEdited: {}, courseNames: {},
-    })),
-  ].join('\n');
+    renderToStaticMarkup(
+      createElement(PublicTable, {
+        items: [publicRow, classroomRow],
+        lastEdited: {},
+        detailHref: (id) => `/admin/registrations/${id}`,
+      }),
+    ),
+    renderToStaticMarkup(
+      createElement(InhouseTable, {
+        items: [inhouseRow],
+        lastEdited: {},
+        courseNames: {},
+      }),
+    ),
+  ].join("\n");
 
   const chips = [...markup.matchAll(/\sclass="([^"]*)"/g)]
     .map((m) => m[1].split(/\s+/).filter(Boolean))
-    .filter((classes) => classes.includes('rounded-full'));
+    .filter((classes) => classes.includes("rounded-full"));
 
-  assert.ok(chips.length >= 4,
-    `only ${chips.length} chips harvested — expected at least both schedule branches, the mode chip `
-    + 'and the status chips');
+  assert.ok(
+    chips.length >= 4,
+    `only ${chips.length} chips harvested — expected at least both schedule branches, the mode chip ` +
+      "and the status chips",
+  );
 
   const css = await layoutCss();
   for (const classes of chips) {
     const decls = declarationsForAll(css, classes);
     assert.ok(
-      decls.some((d) => d.startsWith('width:')),
-      `a chip has no compiled width constraint and its parent may stretch it: [${classes.join(' ')}]. `
-      + 'A chip that is a direct child of CellLink (flex flex-col) is blockified and stretched by '
-      + '`align-items: stretch`; `inline-flex` does not prevent that.',
+      decls.some((d) => d.startsWith("width:")),
+      `a chip has no compiled width constraint and its parent may stretch it: [${classes.join(" ")}]. ` +
+        "A chip that is a direct child of CellLink (flex flex-col) is blockified and stretched by " +
+        "`align-items: stretch`; `inline-flex` does not prevent that.",
     );
   }
 });
 
-test('CellLink stretches its children by default — which is why the chip must constrain itself', async () => {
+test("CellLink stretches its children by default — which is why the chip must constrain itself", async () => {
   /**
    * The other half of the interaction, asserted so the fix cannot be removed as
    * "redundant". If CellLink ever gains `items-start`, the chip's `w-fit` really
@@ -1125,56 +1806,97 @@ test('CellLink stretches its children by default — which is why the chip must 
    * cell's link deliberately adds `items-center` of its own and is not the
    * subject of this claim.
    */
-  const { PublicTable } = await import('@/app/admin/registrations/_components/PublicTable');
-  const markup = renderToStaticMarkup(createElement(PublicTable, {
-    items: [{ _id: 'aaaaaaaaaaaaaaaaaaaa0001', courseName: 'x', status: 'confirmed', createdAt: '2026-08-01T00:00:00.000Z', coordinator: {} }],
-    lastEdited: {},
-    detailHref: (id) => `/admin/registrations/${id}`,
-  }));
+  const { PublicTable } =
+    await import("@/app/admin/registrations/_components/PublicTable");
+  const markup = renderToStaticMarkup(
+    createElement(PublicTable, {
+      items: [
+        {
+          _id: "aaaaaaaaaaaaaaaaaaaa0001",
+          courseName: "x",
+          status: "confirmed",
+          createdAt: "2026-08-01T00:00:00.000Z",
+          coordinator: {},
+        },
+      ],
+      lastEdited: {},
+      detailHref: (id) => `/admin/registrations/${id}`,
+    }),
+  );
 
-  const classes = classesOfElementWith(markup, 'flex-col');
-  assert.ok(classes, 'no CellLink found in the render — the marker class has changed');
+  const classes = classesOfElementWith(markup, "flex-col");
+  assert.ok(
+    classes,
+    "no CellLink found in the render — the marker class has changed",
+  );
 
   const decls = declarationsForAll(await layoutCss(), classes);
-  assert.ok(decls.includes('display: flex'), `CellLink is not a flex container: [${decls.join(', ')}]`);
-  assert.ok(decls.includes('flex-direction: column'), 'CellLink is not a column — the stretch axis has changed');
+  assert.ok(
+    decls.includes("display: flex"),
+    `CellLink is not a flex container: [${decls.join(", ")}]`,
+  );
+  assert.ok(
+    decls.includes("flex-direction: column"),
+    "CellLink is not a column — the stretch axis has changed",
+  );
   assert.equal(
-    decls.some((d) => d.startsWith('align-items:')), false,
-    `CellLink now sets align-items: [${decls.join(', ')}]. If it is flex-start, the chip no longer `
-    + 'needs w-fit AND the truncating paragraphs may have stopped being given a width to '
-    + 'ellipsis against — re-read both before relaxing anything.',
+    decls.some((d) => d.startsWith("align-items:")),
+    false,
+    `CellLink now sets align-items: [${decls.join(", ")}]. If it is flex-start, the chip no longer ` +
+      "needs w-fit AND the truncating paragraphs may have stopped being given a width to " +
+      "ellipsis against — re-read both before relaxing anything.",
   );
 });
 
 test('the in-house format chip uses the SAME mechanism, so "match the others" stays true', async () => {
   // The claim the fix was chosen by. If ModeCell's chip ever stops using `w-fit`
   // the status chip is no longer matching anything and the comment goes stale.
-  const parts = readSource('src/app/admin/registrations/_components/InhouseTable.jsx').code;
-  assert.match(parts, /'inline-flex h-\[23px\] w-fit shrink-0 items-center/,
-    'the in-house mode chip no longer sizes itself with w-fit');
+  const parts = readSource(
+    "src/app/admin/registrations/_components/InhouseTable.jsx",
+  ).code;
+  assert.match(
+    parts,
+    /'inline-flex h-\[23px\] w-fit shrink-0 items-center/,
+    "the in-house mode chip no longer sizes itself with w-fit",
+  );
 });
 
-test('CONTROL: `w-fit` is what emits the constraint, and removing it emits nothing', async () => {
+test("CONTROL: `w-fit` is what emits the constraint, and removing it emits nothing", async () => {
   // Without this, the assertion above could be satisfied by some other class in
   // the chip's list, or by `w-fit` compiling to something else entirely.
-  const withFit = declarationsFor(await compile([{ raw: 'const X = "w-fit";', extension: 'js' }]), 'w-fit');
-  assert.deepEqual(withFit, ['width: fit-content'], `w-fit compiles to [${withFit.join(', ')}]`);
+  const withFit = declarationsFor(
+    await compile([{ raw: 'const X = "w-fit";', extension: "js" }]),
+    "w-fit",
+  );
+  assert.deepEqual(
+    withFit,
+    ["width: fit-content"],
+    `w-fit compiles to [${withFit.join(", ")}]`,
+  );
 
-  const without = 'const X = "inline-flex h-[26px] items-center rounded-full px-[9px] text-[12px] font-semibold";';
-  const css = await compile([{ raw: without, extension: 'js' }]);
-  const decls = declarationsForAll(css, without.match(/"([^"]*)"/)[1].split(' '));
+  const without =
+    'const X = "inline-flex h-[26px] items-center rounded-full px-[9px] text-[12px] font-semibold";';
+  const css = await compile([{ raw: without, extension: "js" }]);
+  const decls = declarationsForAll(
+    css,
+    without.match(/"([^"]*)"/)[1].split(" "),
+  );
   assert.equal(
-    decls.some((d) => d.startsWith('width:')), false,
-    'the pre-fix class list already emitted a width — then the defect was something else',
+    decls.some((d) => d.startsWith("width:")),
+    false,
+    "the pre-fix class list already emitted a width — then the defect was something else",
   );
   // …and it DOES emit the display the class list advertises, which is exactly why
   // reading the class list was misleading: the CSS was never wrong, the cascade was.
-  assert.ok(decls.includes('display: inline-flex'), 'inline-flex did not compile — the fixture is wrong');
+  assert.ok(
+    decls.includes("display: inline-flex"),
+    "inline-flex did not compile — the fixture is wrong",
+  );
 });
 
 // ── DEFECT 2: the accent bar escaped the card's rounded corner ──────────────
 
-test('the summary card clips its accent bar to its own radius', async () => {
+test("the summary card clips its accent bar to its own radius", async () => {
   /**
    * THE DEFECT: the 4px bar drew outside the card's rounded corners.
    *
@@ -1188,18 +1910,29 @@ test('the summary card clips its accent bar to its own radius', async () => {
    * defect itself.
    */
   const css = await layoutCss();
-  const card = ['relative', 'h-[82px]', 'w-full', 'overflow-hidden', 'rounded-9e-lg', 'border'];
+  const card = [
+    "relative",
+    "h-[82px]",
+    "w-full",
+    "overflow-hidden",
+    "rounded-9e-lg",
+    "border",
+  ];
   const decls = declarationsForAll(css, card);
 
-  assert.ok(decls.includes('overflow: hidden'),
-    `the card does not clip its children, so the accent bar escapes the corner: [${decls.join(', ')}]`);
+  assert.ok(
+    decls.includes("overflow: hidden"),
+    `the card does not clip its children, so the accent bar escapes the corner: [${decls.join(", ")}]`,
+  );
   // Any radius property, per-corner or shorthand — see the note on the bar below
   // for why matching only the shorthand is how a matcher goes blind.
-  assert.ok(decls.some((d) => /^border-[a-z-]*radius\s*:\s*16px/.test(d)),
-    `the card has no 16px radius to clip TO — overflow alone would clip to a square: [${decls.join(', ')}]`);
+  assert.ok(
+    decls.some((d) => /^border-[a-z-]*radius\s*:\s*16px/.test(d)),
+    `the card has no 16px radius to clip TO — overflow alone would clip to a square: [${decls.join(", ")}]`,
+  );
 });
 
-test('the accent bar sets no radius of its own', async () => {
+test("the accent bar sets no radius of its own", async () => {
   /**
    * The bar used to carry `rounded-l-9e-lg`, and it could never work: on a
    * 4px-wide box CSS reduces both horizontal radii to fit, scaling 16px down to
@@ -1210,14 +1943,25 @@ test('the accent bar sets no radius of its own', async () => {
    * re-picked every time the card's changes; clipping means the bar's corners ARE
    * the card's corners, by construction.
    */
-  const { RegistrationsClient } = await import('@/app/admin/registrations/_components/RegistrationsClient');
-  const markup = renderToStaticMarkup(createElement(RegistrationsClient, {
-    initialData: { items: [], page: 1, pageCount: 1, total: 0, pageSize: 20 },
-    status: 'all', q: '', range: 'all', source: 'public', counts: { total: 1 }, lastEdited: {},
-  }));
+  const { RegistrationsClient } =
+    await import("@/app/admin/registrations/_components/RegistrationsClient");
+  const markup = renderToStaticMarkup(
+    createElement(RegistrationsClient, {
+      initialData: { items: [], page: 1, pageCount: 1, total: 0, pageSize: 20 },
+      status: "all",
+      q: "",
+      range: "all",
+      source: "public",
+      counts: { total: 1 },
+      lastEdited: {},
+    }),
+  );
 
-  const bar = classesOfElementWith(markup, 'w-0');
-  assert.ok(bar, 'no accent bar found in the render — the marker class has changed');
+  const bar = classesOfElementWith(markup, "w-0");
+  assert.ok(
+    bar,
+    "no accent bar found in the render — the marker class has changed",
+  );
 
   const decls = declarationsForAll(await layoutCss(), bar);
   /**
@@ -1230,15 +1974,19 @@ test('the accent bar sets no radius of its own', async () => {
    * narrowest possible way for a guard to be wrong.
    */
   assert.equal(
-    decls.some((d) => /^border-[a-z-]*radius\s*:/.test(d)), false,
-    `the accent bar sets its own radius: [${decls.join(', ')}]. On a 4px-wide box CSS scales `
-    + 'a 16px radius down to ~2px, which cannot follow the card. The card clips it instead.',
+    decls.some((d) => /^border-[a-z-]*radius\s*:/.test(d)),
+    false,
+    `the accent bar sets its own radius: [${decls.join(", ")}]. On a 4px-wide box CSS scales ` +
+      "a 16px radius down to ~2px, which cannot follow the card. The card clips it instead.",
   );
   // It IS still the 4px coloured bar, so this is not passing because the bar went away.
-  assert.ok(decls.includes('border-left-width: 4px'), 'the accent bar is no longer 4px wide');
+  assert.ok(
+    decls.includes("border-left-width: 4px"),
+    "the accent bar is no longer 4px wide",
+  );
 });
 
-test('the selected card’s ring survives the clip — it is a shadow, not a child', async () => {
+test("the selected card’s ring survives the clip — it is a shadow, not a child", async () => {
   /**
    * The risk `overflow-hidden` introduces, checked rather than assumed. `overflow`
    * clips an element's DESCENDANTS and content; it does not clip the element's own
@@ -1249,52 +1997,75 @@ test('the selected card’s ring survives the clip — it is a shadow, not a chi
    * `overflow-hidden` would silently eat.
    */
   const css = await layoutCss();
-  const ring = declarationsForAll(css, ['ring-2', 'ring-offset-1']);
-  assert.ok(ring.length > 0, 'the ring classes compile to nothing — the selected card has no outline at all');
+  const ring = declarationsForAll(css, ["ring-2", "ring-offset-1"]);
   assert.ok(
-    ring.some((d) => d.startsWith('box-shadow:')),
-    `the ring is not drawn with a box-shadow: [${ring.join(', ')}]. If it is drawn with a child `
-    + 'or a pseudo-element, `overflow-hidden` on the card now clips it away.',
+    ring.length > 0,
+    "the ring classes compile to nothing — the selected card has no outline at all",
+  );
+  assert.ok(
+    ring.some((d) => d.startsWith("box-shadow:")),
+    `the ring is not drawn with a box-shadow: [${ring.join(", ")}]. If it is drawn with a child ` +
+      "or a pseudo-element, `overflow-hidden` on the card now clips it away.",
   );
 });
 
-test('CONTROL: a card WITHOUT overflow-hidden emits no clip', async () => {
+test("CONTROL: a card WITHOUT overflow-hidden emits no clip", async () => {
   // The negative form of the first assertion, so "the card clips" cannot be
   // passing because `declarationsForAll` finds `overflow: hidden` in something
   // else on the page.
   const before = 'const X = "relative h-[82px] w-full rounded-9e-lg border";';
-  const css = await compile([{ raw: before, extension: 'js' }]);
-  const decls = declarationsForAll(css, before.match(/"([^"]*)"/)[1].split(' '));
-  assert.equal(decls.some((d) => d === 'overflow: hidden'), false,
-    'the pre-fix class list already clipped — then the defect was something else');
+  const css = await compile([{ raw: before, extension: "js" }]);
+  const decls = declarationsForAll(
+    css,
+    before.match(/"([^"]*)"/)[1].split(" "),
+  );
+  assert.equal(
+    decls.some((d) => d === "overflow: hidden"),
+    false,
+    "the pre-fix class list already clipped — then the defect was something else",
+  );
   // …but it DID already have the radius, which is what the bar was escaping.
-  assert.ok(decls.includes('border-radius: 16px'), 'the fixture lost the radius — it proves nothing');
+  assert.ok(
+    decls.includes("border-radius: 16px"),
+    "the fixture lost the radius — it proves nothing",
+  );
 });
 
-test('CONTROL: the element extractor finds the right elements, and reports a miss', async () => {
+test("CONTROL: the element extractor finds the right elements, and reports a miss", async () => {
   /**
    * Both defect tests locate their subject by a marker class. A extractor that
    * silently returned the WRONG element would assert the wrong thing green; one
    * that returned null is caught by the `assert.ok` at each call site, and this
    * pins that it really does return null rather than something empty.
    */
-  assert.deepEqual(classesOfElementWith('<span class="a b c"></span>', 'b'), ['a', 'b', 'c']);
-  assert.equal(classesOfElementWith('<span class="a b c"></span>', 'zzz'), null);
+  assert.deepEqual(classesOfElementWith('<span class="a b c"></span>', "b"), [
+    "a",
+    "b",
+    "c",
+  ]);
+  assert.equal(
+    classesOfElementWith('<span class="a b c"></span>', "zzz"),
+    null,
+  );
   // Whole-token matching, not substring: `w-0` must not match `w-0.5`.
-  assert.equal(classesOfElementWith('<span class="w-0.5"></span>', 'w-0'), null);
-});
-
-test('CONTROL: the status module is inside the real content globs', async () => {
-  // The compile above replaces `content`, so it cannot see a glob mistake. If
-  // src/lib stopped being scanned, every class in that module would be purged
-  // in the real build while this file stayed green.
-  const config = require_(path.join(ROOT, 'tailwind.config.js'));
-  assert.ok(
-    config.content.some((g) => typeof g === 'string' && g.startsWith('./src/lib/')),
-    'src/lib is not in the real content globs — the status colours would be purged',
+  assert.equal(
+    classesOfElementWith('<span class="w-0.5"></span>', "w-0"),
+    null,
   );
 });
 
+test("CONTROL: the status module is inside the real content globs", async () => {
+  // The compile above replaces `content`, so it cannot see a glob mistake. If
+  // src/lib stopped being scanned, every class in that module would be purged
+  // in the real build while this file stayed green.
+  const config = require_(path.join(ROOT, "tailwind.config.js"));
+  assert.ok(
+    config.content.some(
+      (g) => typeof g === "string" && g.startsWith("./src/lib/"),
+    ),
+    "src/lib is not in the real content globs — the status colours would be purged",
+  );
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // THE REGISTRATION DETAIL SCREENS — HARVESTED FROM THE RENDER, COMPILED FROM
@@ -1319,30 +2090,36 @@ test('CONTROL: the status module is inside the real content globs', async () => 
  * compare the broken text with itself and pass.
  */
 const DETAIL_LAYOUT_FILES = [
-  'src/app/admin/registrations/_components/detailShell.jsx',
-  'src/app/admin/registrations/_components/RegistrationDetailClient.jsx',
-  'src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx',
+  "src/app/admin/registrations/_components/detailShell.jsx",
+  "src/app/admin/registrations/_components/RegistrationDetailClient.jsx",
+  "src/app/admin/registrations/inhouse/_components/InhouseDetailClient.jsx",
   // The ประวัติการดำเนินการ tab's card and its 82px entries. It is mounted from
   // page.jsx as a SLOT, so nothing the detail clients render can produce its
   // classes — a harvest that stopped at the clients would report the whole feed
   // as uncovered while looking complete.
-  'src/components/audit/HistoryFeed.jsx',
+  "src/components/audit/HistoryFeed.jsx",
   // The status dot and the chip take their colour from the vocabulary, so the
   // module's own classes are part of what these screens render.
-  'src/lib/registrations/statuses.js',
+  "src/lib/registrations/statuses.js",
 ];
 
 /** The two documents, full enough that every optional branch is on screen. */
 const DETAIL_PUBLIC_DOC = {
-  _id: 'aaaaaaaaaaaaaaaaaaaa0001',
-  status: 'pending',
-  courseName: 'Power BI Advanced',
-  courseCode: 'PBI-301',
-  classId: 'class-9',
-  classDate: '12 - 13 ส.ค. 2569',
-  scheduleType: 'hybrid',
-  attendanceMode: 'teams',
-  coordinator: { firstName: 'สมชาย', lastName: 'ใจดี', email: 'a@b.c', phone: '08', isAttending: true },
+  _id: "aaaaaaaaaaaaaaaaaaaa0001",
+  status: "pending",
+  courseName: "Power BI Advanced",
+  courseCode: "PBI-301",
+  classId: "class-9",
+  classDate: "12 - 13 ส.ค. 2569",
+  scheduleType: "hybrid",
+  attendanceMode: "teams",
+  coordinator: {
+    firstName: "สมชาย",
+    lastName: "ใจดี",
+    email: "a@b.c",
+    phone: "08",
+    isAttending: true,
+  },
   attendeesListProvided: true,
   attendeesCount: 2,
   /**
@@ -1357,45 +2134,76 @@ const DETAIL_PUBLIC_DOC = {
    * one-item and two-item shapes here.
    */
   attendees: [
-    { firstName: 'ส', lastName: 'ช', email: 'a@b.c', phone: '08' },
-    { firstName: 'ส', lastName: 'ญ', email: 'c@d.e', phone: '' },
-    { firstName: '',  lastName: '',  email: '',      phone: '' },
+    { firstName: "ส", lastName: "ช", email: "a@b.c", phone: "08" },
+    { firstName: "ส", lastName: "ญ", email: "c@d.e", phone: "" },
+    { firstName: "", lastName: "", email: "", phone: "" },
   ],
   requestInvoice: true,
-  invoice: { type: 'corporate', country: 'TH', companyName: 'บ.', branchType: 'head_office', taxId: '0105551234567', thaiAddress: { addressLine: 'x', subDistrict: 'y', district: 'z', province: 'w', postalCode: '10110' } },
-  notes: 'โทรยืนยันแล้ว',
-  pricing: { pricePerSeat: 10000, seats: 2, subtotal: 20000, vatAmount: 1400, total: 21400 },
-  payment: { method: 'promptpay', omiseStatus: 'successful', omiseChargeId: 'chrg_1', paidAt: '2026-08-02T03:00:00.000Z' },
-  consent: { dataChecked: true, noRefund: true, changePolicy: true, termsAccepted: true, acceptedAt: '2026-08-01T03:00:00.000Z', ipAddress: '1.2.3.4' },
-  createdAt: '2026-08-01T03:00:00.000Z',
-  updatedAt: '2026-08-02T03:00:00.000Z',
+  invoice: {
+    type: "corporate",
+    country: "TH",
+    companyName: "บ.",
+    branchType: "head_office",
+    taxId: "0105551234567",
+    thaiAddress: {
+      addressLine: "x",
+      subDistrict: "y",
+      district: "z",
+      province: "w",
+      postalCode: "10110",
+    },
+  },
+  notes: "โทรยืนยันแล้ว",
+  pricing: {
+    pricePerSeat: 10000,
+    seats: 2,
+    subtotal: 20000,
+    vatAmount: 1400,
+    total: 21400,
+  },
+  payment: {
+    method: "promptpay",
+    omiseStatus: "successful",
+    omiseChargeId: "chrg_1",
+    paidAt: "2026-08-02T03:00:00.000Z",
+  },
+  consent: {
+    dataChecked: true,
+    noRefund: true,
+    changePolicy: true,
+    termsAccepted: true,
+    acceptedAt: "2026-08-01T03:00:00.000Z",
+    ipAddress: "1.2.3.4",
+  },
+  createdAt: "2026-08-01T03:00:00.000Z",
+  updatedAt: "2026-08-02T03:00:00.000Z",
 };
 
 const DETAIL_INHOUSE_DOC = {
-  _id: 'cccccccccccccccccccc0003',
-  status: 'pending',
-  companyName: 'บริษัท ทดสอบ จำกัด',
-  quotationCompany: 'บริษัท ทดสอบ จำกัด',
-  contactFirstName: 'สมชาย',
-  contactLastName: 'ใจดี',
-  contactEmail: 'a@b.c',
-  contactPhone: '08',
-  coursesInterested: ['EXC-201'],
+  _id: "cccccccccccccccccccc0003",
+  status: "pending",
+  companyName: "บริษัท ทดสอบ จำกัด",
+  quotationCompany: "บริษัท ทดสอบ จำกัด",
+  contactFirstName: "สมชาย",
+  contactLastName: "ใจดี",
+  contactEmail: "a@b.c",
+  contactPhone: "08",
+  coursesInterested: ["EXC-201"],
   participantsCount: 15,
-  contentMode: 'standard',
-  contentDetails: 'เน้น Power Query',
-  trainingFormat: 'onsite',
-  onsiteVenue: { addressLine: 'x', province: 'y' },
-  preferredMonth: '2026-09',
-  scheduleNote: 'ช่วงบ่าย',
-  quotationCountry: 'TH',
-  branchType: 'head_office',
-  taxId: '0105551234567',
-  adminNotes: 'คุยแล้ว',
-  message: 'อยากได้ workshop',
-  source: 'inhouse',
-  createdAt: '2026-08-01T03:00:00.000Z',
-  updatedAt: '2026-08-02T03:00:00.000Z',
+  contentMode: "standard",
+  contentDetails: "เน้น Power Query",
+  trainingFormat: "onsite",
+  onsiteVenue: { addressLine: "x", province: "y" },
+  preferredMonth: "2026-09",
+  scheduleNote: "ช่วงบ่าย",
+  quotationCountry: "TH",
+  branchType: "head_office",
+  taxId: "0105551234567",
+  adminNotes: "คุยแล้ว",
+  message: "อยากได้ workshop",
+  source: "inhouse",
+  createdAt: "2026-08-01T03:00:00.000Z",
+  updatedAt: "2026-08-02T03:00:00.000Z",
 };
 
 /**
@@ -1413,28 +2221,51 @@ const DETAIL_INHOUSE_DOC = {
  * act-only row, and the synthesised document entry.
  */
 async function historySlot() {
-  const { createElement: h } = await import('react');
-  const { HistoryFeed } = await import('@/components/audit/HistoryFeed');
-  const { HISTORY_STATE } = await import('@/lib/audit/auditQuery');
-  const { PUBLIC_ACTION_TITLES } = await import('@/lib/audit/registrationHistory');
+  const { createElement: h } = await import("react");
+  const { HistoryFeed } = await import("@/components/audit/HistoryFeed");
+  const { HISTORY_STATE } = await import("@/lib/audit/auditQuery");
+  const { PUBLIC_ACTION_TITLES } =
+    await import("@/lib/audit/registrationHistory");
   return h(HistoryFeed, {
     state: HISTORY_STATE.OK,
     rows: [
-      { _id: 'h1', action: 'status', before: { status: 'pending' }, after: { status: 'confirmed' }, meta: null, createdAt: '2026-08-12T04:00:00.000Z', actor: { name: 'ก' } },
-      { _id: 'h2', action: 'update', before: null, after: null, meta: null, createdAt: '2026-08-11T04:00:00.000Z', actor: { name: 'ข' } },
+      {
+        _id: "h1",
+        action: "status",
+        before: { status: "pending" },
+        after: { status: "confirmed" },
+        meta: null,
+        createdAt: "2026-08-12T04:00:00.000Z",
+        actor: { name: "ก" },
+      },
+      {
+        _id: "h2",
+        action: "update",
+        before: null,
+        after: null,
+        meta: null,
+        createdAt: "2026-08-11T04:00:00.000Z",
+        actor: { name: "ข" },
+      },
     ],
     total: 2,
     titles: PUBLIC_ACTION_TITLES,
-    origin: { createdAt: '2026-08-01T03:00:00.000Z', source: 'web', label: 'ได้รับใบสมัคร' },
-    title: 'ประวัติการดำเนินการ',
-    description: 'บันทึกการดำเนินการของผู้ดูแลระบบ',
+    origin: {
+      createdAt: "2026-08-01T03:00:00.000Z",
+      source: "web",
+      label: "ได้รับใบสมัคร",
+    },
+    title: "ประวัติการดำเนินการ",
+    description: "บันทึกการดำเนินการของผู้ดูแลระบบ",
   });
 }
 
-test('every arbitrary-value class the DETAIL screens RENDER compiles to a rule', async () => {
-  const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
-  const { InhouseDetailClient } = await import('@/app/admin/registrations/inhouse/_components/InhouseDetailClient');
-  const { createElement: h } = await import('react');
+test("every arbitrary-value class the DETAIL screens RENDER compiles to a rule", async () => {
+  const { RegistrationDetailClient } =
+    await import("@/app/admin/registrations/_components/RegistrationDetailClient");
+  const { InhouseDetailClient } =
+    await import("@/app/admin/registrations/inhouse/_components/InhouseDetailClient");
+  const { createElement: h } = await import("react");
   const slot = await historySlot();
 
   /**
@@ -1446,37 +2277,52 @@ test('every arbitrary-value class the DETAIL screens RENDER compiles to a rule',
    * branches and the other's `w-fit` could be deleted with nothing going red.
    */
   const markup = [
-    ...['pending', 'confirmed', 'paid', 'cancelled'].map((status) =>
-      renderToStaticMarkup(h(RegistrationDetailClient, { doc: { ...DETAIL_PUBLIC_DOC, status }, history: slot }))),
-    ...['pending', 'quoted', 'cancelled'].map((status) =>
-      renderToStaticMarkup(h(InhouseDetailClient, {
-        doc: { ...DETAIL_INHOUSE_DOC, status },
-        courses: [{ code: 'EXC-201', name: 'Excel Advanced' }],
-        history: slot,
-      }))),
-  ].join('\n');
+    ...["pending", "confirmed", "paid", "cancelled"].map((status) =>
+      renderToStaticMarkup(
+        h(RegistrationDetailClient, {
+          doc: { ...DETAIL_PUBLIC_DOC, status },
+          history: slot,
+        }),
+      ),
+    ),
+    ...["pending", "quoted", "cancelled"].map((status) =>
+      renderToStaticMarkup(
+        h(InhouseDetailClient, {
+          doc: { ...DETAIL_INHOUSE_DOC, status },
+          courses: [{ code: "EXC-201", name: "Excel Advanced" }],
+          history: slot,
+        }),
+      ),
+    ),
+  ].join("\n");
 
   const classes = arbitraryClassesIn(markup);
-  assert.ok(classes.length >= 40,
-    `only ${classes.length} arbitrary-value classes harvested from the detail screens — the extractor is not reading the render`);
+  assert.ok(
+    classes.length >= 40,
+    `only ${classes.length} arbitrary-value classes harvested from the detail screens — the extractor is not reading the render`,
+  );
 
   const css = await compile(
-    DETAIL_LAYOUT_FILES.map((rel) => ({ raw: readSource(rel).code, extension: 'js' })),
+    DETAIL_LAYOUT_FILES.map((rel) => ({
+      raw: readSource(rel).code,
+      extension: "js",
+    })),
   );
 
   const dead = classes.filter((c) => declarationsFor(css, c).length === 0);
   assert.deepEqual(
-    dead, [],
-    'these classes are RENDERED by the detail screens but Tailwind emits no rule for them while '
-    + `scanning ${DETAIL_LAYOUT_FILES.length} source files:\n    ${dead.join('\n    ')}\n\n`
-    + 'Each is almost certainly assembled from a template literal or a concatenation. Tailwind '
-    + 'matches raw text, so the complete class must appear LITERALLY in the code — an interpolated '
-    + 'one produces correct markup and no CSS at all, which no markup assertion anywhere in this '
-    + 'suite can see.',
+    dead,
+    [],
+    "these classes are RENDERED by the detail screens but Tailwind emits no rule for them while " +
+      `scanning ${DETAIL_LAYOUT_FILES.length} source files:\n    ${dead.join("\n    ")}\n\n` +
+      "Each is almost certainly assembled from a template literal or a concatenation. Tailwind " +
+      "matches raw text, so the complete class must appear LITERALLY in the code — an interpolated " +
+      "one produces correct markup and no CSS at all, which no markup assertion anywhere in this " +
+      "suite can see.",
   );
 });
 
-test('the measured geometry really is in the harvest, not merely a large count', async () => {
+test("the measured geometry really is in the harvest, not merely a large count", async () => {
   /**
    * The count floor above says the extractor read SOMETHING. This says it read
    * the numbers the geometry actually specifies — so a screen that quietly
@@ -1487,29 +2333,34 @@ test('the measured geometry really is in the harvest, not merely a large count',
    * dark strip, the tab list, the tabs, the primary button, the overflow button,
    * the count badge, the section-card header row and the DL column gap.
    */
-  const { RegistrationDetailClient } = await import('@/app/admin/registrations/_components/RegistrationDetailClient');
-  const { createElement: h } = await import('react');
+  const { RegistrationDetailClient } =
+    await import("@/app/admin/registrations/_components/RegistrationDetailClient");
+  const { createElement: h } = await import("react");
   // The REAL feed as the slot, not a `<p>` stand-in — see the note at the other
   // render. A stub renders the tab panel perfectly and harvests none of the
   // feed's geometry, which is exactly the blind spot this assertion is for.
   const markup = renderToStaticMarkup(
-    h(RegistrationDetailClient, { doc: DETAIL_PUBLIC_DOC, history: await historySlot() }));
+    h(RegistrationDetailClient, {
+      doc: DETAIL_PUBLIC_DOC,
+      history: await historySlot(),
+    }),
+  );
   const classes = new Set(arbitraryClassesIn(markup));
 
   for (const measured of [
-    'h-[87px]',   // the status bar
+    "h-[87px]", // the status bar
     // `h-[93px]` — THE DARK STRIP — is deliberately absent. The strip was
     // deleted from both screens in round 6, so a screen that still emitted this
     // class would be one that had brought it back. Left named here rather than
     // silently dropped, because this list's whole job is to be the measurements
     // the geometry specifies, and a reader comparing it to the design file will
     // otherwise wonder which of the two is out of date.
-    'h-[49px]',   // the tab list
-    'h-[39px]',   // one tab
-    'w-[100px]',  // the primary action
-    'w-[39px]',   // the overflow button
-    'w-[21px]',   // the count badge
-    'h-[43px]',   // the section-card header row
+    "h-[49px]", // the tab list
+    "h-[39px]", // one tab
+    "w-[100px]", // the primary action
+    "w-[39px]", // the overflow button
+    "w-[21px]", // the count badge
+    "h-[43px]", // the section-card header row
     // ── the field row's column split ──────────────────────────────────────
     // `gap-x-[36px]` — THE TWO 500px DL COLUMNS — is deliberately absent. Round
     // 7 replaced the two-column definition list with one field per row, so a
@@ -1523,9 +2374,9 @@ test('the measured geometry really is in the harvest, not merely a large count',
     // complete literal that every shape check in this file passes. It reached
     // the harvest and the harvest is what said so. See
     // scripts/_probe-field-row-columns.mjs.
-    'lg:grid-cols-[22%_1fr]', // the label column at 22%, the value column filling
-    'lg:gap-x-[1%]',          // ...so the value column's left edge lands at 23%
-    'py-[11px]',              // the row's own rhythm, between the hairlines
+    "lg:grid-cols-[22%_1fr]", // the label column at 22%, the value column filling
+    "lg:gap-x-[1%]", // ...so the value column's left edge lands at 23%
+    "py-[11px]", // the row's own rhythm, between the hairlines
     // ── ROUND 11'S TYPE SCALE ─────────────────────────────────────────────
     // The value at 16px, the label at 13px and the card heading at 14px, each
     // with the line box Thai needs at that size. THESE BELONG IN THE HARVEST
@@ -1561,18 +2412,18 @@ test('the measured geometry really is in the harvest, not merely a large count',
     // HEIGHT that was the defect. Two 48px lines in a 48px box with
     // `items-center` put 24px of heading above the block and 24px below, which
     // is how the H1 came to overlap the chip row and the subtitle at once.
-    'text-[40px]',            // the page H1
-    'leading-[64px]',         // ...and the line box 40px Thai needs (1.584em floor)
-    'min-h-[25px]',           // the chip row and the subtitle, which may now grow
-    'text-[16px]',            // every value on both screens
-    'leading-[28px]',         // ...and the line box 16px Thai needs
-    'text-[13px]',            // the label, taking the size the value vacated
-    'lg:leading-[28px]',      // ...sharing the value's line box once the split is on
-    'text-[14px]',            // the shared card heading
-    'leading-[23px]',         // ...unchanged, and it still clears the font's floor
+    "text-[40px]", // the page H1
+    "leading-[64px]", // ...and the line box 40px Thai needs (1.584em floor)
+    "min-h-[25px]", // the chip row and the subtitle, which may now grow
+    "text-[16px]", // every value on both screens
+    "leading-[28px]", // ...and the line box 16px Thai needs
+    "text-[13px]", // the label, taking the size the value vacated
+    "lg:leading-[28px]", // ...sharing the value's line box once the split is on
+    "text-[14px]", // the shared card heading
+    "leading-[23px]", // ...unchanged, and it still clears the font's floor
     // ── the ผู้เข้าอบรม tab ────────────────────────────────────────────────
-    'h-[75.85px]', // the three-cell summary row
-    'h-[48.3px]',  // one attendee row
+    "h-[75.85px]", // the three-cell summary row
+    "h-[48.3px]", // one attendee row
     // `h-[21.5px]` — THE สถานะข้อมูล CHIP — is deliberately absent. Round 8
     // deleted the column, the chip and `attendeeInfoState` with it: the chip's
     // definition of "complete" was all four attendee fields, and email and phone
@@ -1580,21 +2431,24 @@ test('the measured geometry really is in the harvest, not merely a large count',
     // deficient. Named rather than silently dropped, for the same reason
     // `h-[93px]` and `gap-x-[36px]` are named above — a reader comparing this
     // list to the design file needs to know which of the two is out of date.
-    'w-[92.6px]',  // the + เพิ่มผู้เข้าอบรม button
-    'h-[32.6px]',  // ...and its height
-    'h-[28px]',    // the compact per-row "•••" trigger
+    "w-[92.6px]", // the + เพิ่มผู้เข้าอบรม button
+    "h-[32.6px]", // ...and its height
+    "h-[28px]", // the compact per-row "•••" trigger
     // ── the ประวัติการดำเนินการ tab ────────────────────────────────────────
-    'h-[53.8px]',  // the feed card's header row
-    'h-[82px]',    // one history entry
-    'pl-[48px]',   // its text block
-    'w-[150px]',   // its timestamp block
-    'top-[13px]',  // the icon box's measured offset
+    "h-[53.8px]", // the feed card's header row
+    "h-[82px]", // one history entry
+    "pl-[48px]", // its text block
+    "w-[150px]", // its timestamp block
+    "top-[13px]", // the icon box's measured offset
   ]) {
-    assert.ok(classes.has(measured), `the render carries no ${measured} — a measured element is missing`);
+    assert.ok(
+      classes.has(measured),
+      `the render carries no ${measured} — a measured element is missing`,
+    );
   }
 });
 
-test('the field-row divider is SIBLING-based, so it cannot trail the last row', async () => {
+test("the field-row divider is SIBLING-based, so it cannot trail the last row", async () => {
   /**
    * ── THE HALF A MARKUP ASSERTION CANNOT MAKE ───────────────────────────────
    *
@@ -1612,56 +2466,89 @@ test('the field-row divider is SIBLING-based, so it cannot trail the last row', 
    * This is also what makes "a card with one row emits no divider" a mechanism
    * rather than a coincidence: one child is never the second of a sibling pair.
    */
-  const css = await compile([{ raw: 'divide-y divide-[var(--surface-border)]', extension: 'html' }]);
+  const css = await compile([
+    { raw: "divide-y divide-[var(--surface-border)]", extension: "html" },
+  ]);
 
   const rule = /(\.divide-y\b[^{]*)\{/.exec(css);
-  assert.ok(rule, 'Tailwind emitted no rule for divide-y at all');
+  assert.ok(rule, "Tailwind emitted no rule for divide-y at all");
   const selector = rule[1];
 
-  assert.match(selector, /[~+]/,
-    `divide-y is not sibling-based — it cannot guarantee "between rows": ${selector}`);
-  assert.equal(/last-child/.test(selector), false,
-    `divide-y is a :last-child construction, which needs an escape hatch: ${selector}`);
-  assert.match(selector, /^\.divide-y\s*>/,
-    `divide-y does not target direct children, so a nested element could take a rule: ${selector}`);
+  assert.match(
+    selector,
+    /[~+]/,
+    `divide-y is not sibling-based — it cannot guarantee "between rows": ${selector}`,
+  );
+  assert.equal(
+    /last-child/.test(selector),
+    false,
+    `divide-y is a :last-child construction, which needs an escape hatch: ${selector}`,
+  );
+  assert.match(
+    selector,
+    /^\.divide-y\s*>/,
+    `divide-y does not target direct children, so a nested element could take a rule: ${selector}`,
+  );
 
   // The colour follows the same selector, or the rule is 1px of nothing.
-  const colour = /(\.divide-\\\[var\\\(--surface-border\\\)\\\][^{]*)\{/.exec(css);
-  assert.ok(colour, 'the divider colour compiled to nothing');
-  assert.match(colour[1], /[~+]/, 'the divider colour is not scoped to the same sibling pairs');
+  const colour = /(\.divide-\\\[var\\\(--surface-border\\\)\\\][^{]*)\{/.exec(
+    css,
+  );
+  assert.ok(colour, "the divider colour compiled to nothing");
+  assert.match(
+    colour[1],
+    /[~+]/,
+    "the divider colour is not scoped to the same sibling pairs",
+  );
 });
 
-test('CONTROL: the selector probe DOES reject a trailing-divider mechanism', async () => {
+test("CONTROL: the selector probe DOES reject a trailing-divider mechanism", async () => {
   // Without this the assertion above passes on any selector containing a tilde,
   // and would go on passing if the patterns were misspelled. Two hand-written
   // selectors with known answers: the shape that trails, and the shape that does
   // not.
-  const trailing = '.divide-y > :not([hidden]):last-child';
-  const between  = '.divide-y > :not([hidden]) ~ :not([hidden])';
-  assert.ok(/last-child/.test(trailing), 'the probe cannot see a :last-child construction');
-  assert.equal(/[~+]/.test(trailing), false, 'the probe thinks a :last-child rule is sibling-based');
-  assert.ok(/[~+]/.test(between), 'the probe cannot see a sibling combinator');
+  const trailing = ".divide-y > :not([hidden]):last-child";
+  const between = ".divide-y > :not([hidden]) ~ :not([hidden])";
+  assert.ok(
+    /last-child/.test(trailing),
+    "the probe cannot see a :last-child construction",
+  );
+  assert.equal(
+    /[~+]/.test(trailing),
+    false,
+    "the probe thinks a :last-child rule is sibling-based",
+  );
+  assert.ok(/[~+]/.test(between), "the probe cannot see a sibling combinator");
   assert.equal(/last-child/.test(between), false);
 });
 
-test('CONTROL: the detail file list is the one the render can draw from', async () => {
+test("CONTROL: the detail file list is the one the render can draw from", async () => {
   // Each file must be inside the real content globs, or compiling it here proves
   // nothing about the real build. (The compile replaces `content`, so it is
   // blind to a glob mistake by construction.)
-  const config = require_(path.join(ROOT, 'tailwind.config.js'));
+  const config = require_(path.join(ROOT, "tailwind.config.js"));
   for (const rel of DETAIL_LAYOUT_FILES) {
     assert.ok(
-      rel.startsWith('src/app/') || rel.startsWith('src/components/') || rel.startsWith('src/lib/'),
+      rel.startsWith("src/app/") ||
+        rel.startsWith("src/components/") ||
+        rel.startsWith("src/lib/"),
       `${rel} is outside the scanned roots`,
     );
-    assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing — the compile input is empty`);
+    assert.ok(
+      readSource(rel).code.length > 200,
+      `${rel} scrubbed to nothing — the compile input is empty`,
+    );
   }
-  assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
+  assert.ok(
+    config.content.some(
+      (g) => typeof g === "string" && g.startsWith("./src/app/"),
+    ),
+  );
 });
 
 // ── ROUND 24 — a shipped class that compiles to nothing, pinned ─────────────
 
-test('AUDIT TRIPWIRE (round 24): icon_card\'s tinted chip background compiles to NO rule', async () => {
+test("AUDIT TRIPWIRE (round 24): icon_card's tinted chip background compiles to NO rule", async () => {
   /**
    * ── THIS FILE'S OWN DEFECT, FOUND IN A SHIPPED COMPONENT ─────────────────
    * icon_card renders its icon inside what its docstring calls "a tinted chip",
@@ -1687,34 +2574,138 @@ test('AUDIT TRIPWIRE (round 24): icon_card\'s tinted chip background compiles to
    * CASES above, and let instructor_card adopt the tint (see
    * test/render/itemAccents, which pins the same decision from the other side).
    */
-  const { code } = readSource('src/components/pageBuilder/sections/icon_card.jsx');
-  assert.match(code, /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
-    'icon_card no longer carries the tinted chip class at all — if the chip was reworked, this '
-    + 'tripwire and its note in test/render/itemAccents both need deleting');
+  const { code } = readSource(
+    "src/components/pageBuilder/sections/icon_card.jsx",
+  );
+  assert.match(
+    code,
+    /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
+    "icon_card no longer carries the tinted chip class at all — if the chip was reworked, this " +
+      "tripwire and its note in test/render/itemAccents both need deleting",
+  );
 
-  const css = await compile([{ raw: code, extension: 'js' }]);
-  assert.deepEqual(declarationsFor(css, 'bg-[color:var(--pb-accent-fill)]/10'), [],
-    'THE TINTED CHIP NOW COMPILES. That is the fix — delete this test, add the class to CASES '
-    + 'above, and give instructor_card the tint it was denied in round 24.');
+  const css = await compile([{ raw: code, extension: "js" }]);
+  assert.deepEqual(
+    declarationsFor(css, "bg-[color:var(--pb-accent-fill)]/10"),
+    [],
+    "THE TINTED CHIP NOW COMPILES. That is the fix — delete this test, add the class to CASES " +
+      "above, and give instructor_card the tint it was denied in round 24.",
+  );
 
   // …while the SAME variable in a class Tailwind can type does compile, which
   // is what makes the emptiness above a property of the modifier and not of the
   // variable, the file, or the compile harness.
-  const working = declarationsFor(css, 'text-[var(--pb-accent-fill)]');
-  assert.ok(working.some((d) => d.startsWith('color:')),
-    'the unmodified accent class stopped compiling too — then this is not about the opacity '
-    + 'modifier and the diagnosis above is wrong');
+  const working = declarationsFor(css, "text-[var(--pb-accent-fill)]");
+  assert.ok(
+    working.some((d) => d.startsWith("color:")),
+    "the unmodified accent class stopped compiling too — then this is not about the opacity " +
+      "modifier and the diagnosis above is wrong",
+  );
 });
 
-test('CONTROL: the opacity modifier works on a NON-arbitrary colour in the same compile', async () => {
+test("CONTROL: the opacity modifier works on a NON-arbitrary colour in the same compile", async () => {
   /**
    * Discrimination. Without it, "the /10 class emits nothing" could mean the
    * harness cannot see modified classes at all. A theme-scale colour with the
    * same modifier is compiled from the same input and must produce a rule.
    */
-  const css = await compile([{ raw: 'bg-9e-action/10 bg-[color:var(--pb-accent-fill)]/10', extension: 'js' }]);
-  assert.ok(declarationsFor(css, 'bg-9e-action/10').some((d) => d.startsWith('background-color:')),
-    'the harness cannot see an opacity-modified class at all, so the tripwire above proves nothing');
-  assert.deepEqual(declarationsFor(css, 'bg-[color:var(--pb-accent-fill)]/10'), [],
-    'forced into the scan as a raw literal it still emits nothing — this is the modifier, not the scan');
+  const css = await compile([
+    {
+      raw: "bg-9e-action/10 bg-[color:var(--pb-accent-fill)]/10",
+      extension: "js",
+    },
+  ]);
+  assert.ok(
+    declarationsFor(css, "bg-9e-action/10").some((d) =>
+      d.startsWith("background-color:"),
+    ),
+    "the harness cannot see an opacity-modified class at all, so the tripwire above proves nothing",
+  );
+  assert.deepEqual(
+    declarationsFor(css, "bg-[color:var(--pb-accent-fill)]/10"),
+    [],
+    "forced into the scan as a raw literal it still emits nothing — this is the modifier, not the scan",
+  );
+});
+
+// ── ROUND 24 — a shipped class that compiles to nothing, pinned ─────────────
+
+test("AUDIT TRIPWIRE (round 24): icon_card's tinted chip background compiles to NO rule", async () => {
+  /**
+   * ── THIS FILE'S OWN DEFECT, FOUND IN A SHIPPED COMPONENT ─────────────────
+   * icon_card renders its icon inside what its docstring calls "a tinted chip",
+   * asking for a tenth-strength accent background. Tailwind cannot apply an
+   * opacity modifier to an arbitrary colour that is a bare custom property — it
+   * has no channels to multiply — so it emits NOTHING, and that chip has been
+   * fully transparent since it shipped.
+   *
+   * It is the exact shape this file exists for: perfect markup, no rule, no
+   * error, and nothing on screen to say so. It went unnoticed because CASES is
+   * a named list and this component was never added to it.
+   *
+   * ── HOW IT SURFACED, WHICH IS THE PART WORTH KEEPING ─────────────────────
+   * Round 24 was told to copy this chip verbatim onto instructor_card. Copying
+   * it would have REPLACED a real background with nothing — a visible
+   * regression produced by faithfully following a precedent that does nothing.
+   * The measurement is what caught it; the instruction would not have.
+   *
+   * SELF-RETIRING, in the manner of docs/section-control-audit.md §9: this goes
+   * red on the day icon_card's chip is given a background that works — most
+   * likely a color-mix arbitrary value, which Tailwind passes through
+   * untouched. When it does, DELETE THIS TEST, register the working class in
+   * CASES above, and let instructor_card adopt the tint (see
+   * test/render/itemAccents, which pins the same decision from the other side).
+   */
+  const { code } = readSource(
+    "src/components/pageBuilder/sections/icon_card.jsx",
+  );
+  assert.match(
+    code,
+    /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
+    "icon_card no longer carries the tinted chip class at all — if the chip was reworked, this " +
+      "tripwire and its note in test/render/itemAccents both need deleting",
+  );
+
+  const css = await compile([{ raw: code, extension: "js" }]);
+  assert.deepEqual(
+    declarationsFor(css, "bg-[color:var(--pb-accent-fill)]/10"),
+    [],
+    "THE TINTED CHIP NOW COMPILES. That is the fix — delete this test, add the class to CASES " +
+      "above, and give instructor_card the tint it was denied in round 24.",
+  );
+
+  // …while the SAME variable in a class Tailwind can type does compile, which
+  // is what makes the emptiness above a property of the modifier and not of the
+  // variable, the file, or the compile harness.
+  const working = declarationsFor(css, "text-[var(--pb-accent-fill)]");
+  assert.ok(
+    working.some((d) => d.startsWith("color:")),
+    "the unmodified accent class stopped compiling too — then this is not about the opacity " +
+      "modifier and the diagnosis above is wrong",
+  );
+});
+
+test("CONTROL: the opacity modifier works on a NON-arbitrary colour in the same compile", async () => {
+  /**
+   * Discrimination. Without it, "the /10 class emits nothing" could mean the
+   * harness cannot see modified classes at all. A theme-scale colour with the
+   * same modifier is compiled from the same input and must produce a rule.
+   */
+  const css = await compile([
+    {
+      raw: "bg-9e-action/10 bg-[color:var(--pb-accent-fill)]/10",
+      extension: "js",
+    },
+  ]);
+  assert.ok(
+    declarationsFor(css, "bg-9e-action/10").some((d) =>
+      d.startsWith("background-color:"),
+    ),
+    "the harness cannot see an opacity-modified class at all, so the tripwire above proves nothing",
+  );
+  assert.deepEqual(
+    declarationsFor(css, "bg-[color:var(--pb-accent-fill)]/10"),
+    [],
+    "forced into the scan as a raw literal it still emits nothing — this is the modifier, not the scan",
+  );
 });

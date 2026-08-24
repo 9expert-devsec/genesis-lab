@@ -1,18 +1,23 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { X, Lock, Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { X, Lock, Search } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
-  LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
-} from '@/lib/schemas/pageBuilder';
-import { isContainer } from '@/lib/pageBuilder/containerSlots';
-import { isAdvancedType } from '@/lib/pages/tierSanitize';
-import { labelOf } from '@/lib/pageBuilder/sectionLabels';
-import { iconOf } from '@/lib/pageBuilder/sectionIcons';
-import { RENDERABLE_SECTION_TYPES } from '../SectionRenderer';
-import { useEditor } from './EditorProvider';
+  LAYOUT_TYPES,
+  CONTENT_TYPES,
+  CARD_TYPES,
+  DYNAMIC_TYPES,
+  ADVANCED_TYPES,
+  RETIRED_SECTION_TYPES,
+} from "@/lib/schemas/pageBuilder";
+import { isContainer } from "@/lib/pageBuilder/containerSlots";
+import { isAdvancedType } from "@/lib/pages/tierSanitize";
+import { labelOf } from "@/lib/pageBuilder/sectionLabels";
+import { iconOf } from "@/lib/pageBuilder/sectionIcons";
+import { RENDERABLE_SECTION_TYPES } from "../SectionRenderer";
+import { useEditor } from "./EditorProvider";
 
 /**
  * The add-section picker.
@@ -62,7 +67,37 @@ import { useEditor } from './EditorProvider';
 // and a clickable type with no component throws in newSection() or publishes an
 // empty section. The branch is unreachable because the codebase is currently in
 // a good state, not because the state it guards cannot happen.
-function typeState(type, canUseAdvanced) {
+/**
+ * EXPORTED FOR ITS CONTROL, and for nothing else.
+ *
+ * Round 80 added the 'retired' branch, which `visibleGroups` makes unreachable
+ * from the picker — the same position the 'soon' branch has been in since 2C.2b.
+ * An unreachable fail-closed branch that no test can call is a branch nobody
+ * knows still works, so this is exported and driven directly rather than left
+ * to be inferred from the rendered grid. It has ONE call site in this file and
+ * must keep only that one: the gate deciding what is clickable has to stay in
+ * the picker, not spread to callers who could disagree with it.
+ */
+export function typeState(type, canUseAdvanced) {
+  /**
+   * ── ROUND 80: 'retired' — FIRST, AND FAIL-CLOSED ─────────────────────
+   * A retired type is filtered out of `visibleGroups` below, so this branch is
+   * UNREACHABLE from the picker today — exactly the position the 'soon' branch
+   * above is in, and it is kept for the same stated reason: currently
+   * unreachable is not unreachable. Two things could reach it, and both are
+   * ordinary edits rather than exotic ones — a later round rendering a group's
+   * `types` without going through `visibleGroups`, or a caller passing a type
+   * straight to `typeState`.
+   *
+   * It is checked BEFORE `renderable`, because a retired type IS renderable —
+   * that is the whole point of a retirement — so the renderable check would
+   * return 'add' and make it clickable.
+   *
+   * A control proves it fires: test/render/sectionPickerRetired asserts
+   * `typeState('highlight_grid', true) === 'retired'` and that no other layout
+   * type answers 'retired'.
+   */
+  if (RETIRED_SECTION_TYPES.includes(type)) return "retired";
   const renderable = RENDERABLE_SECTION_TYPES.includes(type);
   if (isAdvancedType(type)) {
     // ── The developer-tier gate ──────────────────────────────────────────
@@ -96,10 +131,10 @@ function typeState(type, canUseAdvanced) {
     //     group. NO extra expand click. Putting the four types behind a
     //     disclosure for the ONE tier that can actually use them would be the
     //     collapse pointed exactly the wrong way.
-    if (!canUseAdvanced) return 'locked';
-    return renderable ? 'add' : 'soon';
+    if (!canUseAdvanced) return "locked";
+    return renderable ? "add" : "soon";
   }
-  return renderable ? 'add' : 'soon';
+  return renderable ? "add" : "soon";
 }
 
 /**
@@ -124,15 +159,15 @@ function typeState(type, canUseAdvanced) {
  * pills, matching CARD_TYPES as it is exported.
  */
 export const GROUPS = [
-  { key: 'content',  title: 'เนื้อหา',             types: CONTENT_TYPES },
-  { key: 'layout',   title: 'เลย์เอาต์',            types: LAYOUT_TYPES },
-  { key: 'card',     title: 'การ์ด',               types: CARD_TYPES },
-  { key: 'dynamic',  title: 'ไดนามิก',             types: DYNAMIC_TYPES },
-  { key: 'advanced', title: 'ขั้นสูง (developer)',  types: ADVANCED_TYPES },
+  { key: "content", title: "เนื้อหา", types: CONTENT_TYPES },
+  { key: "layout", title: "เลย์เอาต์", types: LAYOUT_TYPES },
+  { key: "card", title: "การ์ด", types: CARD_TYPES },
+  { key: "dynamic", title: "ไดนามิก", types: DYNAMIC_TYPES },
+  { key: "advanced", title: "ขั้นสูง (developer)", types: ADVANCED_TYPES },
 ];
 
 /** The pill for "no group filter". Not a group — it is the absence of one. */
-const ALL_GROUP = 'all';
+const ALL_GROUP = "all";
 
 /**
  * The pill row, DERIVED from `GROUPS` — one pill per group, in the group order,
@@ -149,7 +184,7 @@ const ALL_GROUP = 'all';
  * a coincidence of counting.
  */
 export function pillsOf(groups = GROUPS) {
-  return [{ key: ALL_GROUP, title: 'ทั้งหมด' }, ...groups];
+  return [{ key: ALL_GROUP, title: "ทั้งหมด" }, ...groups];
 }
 
 /**
@@ -167,7 +202,9 @@ export function pillsOf(groups = GROUPS) {
  * name, so what an author types is what an author can see.
  */
 function matchesQuery(type, query) {
-  const q = String(query ?? '').trim().toLowerCase();
+  const q = String(query ?? "")
+    .trim()
+    .toLowerCase();
   if (!q) return true;
   return labelOf(type).toLowerCase().includes(q);
 }
@@ -183,14 +220,38 @@ function matchesQuery(type, query) {
  * with no grid under it reads as a rendering fault rather than as "no match".
  */
 export function visibleGroups(query, activeGroup) {
-  return GROUPS
-    .filter((g) => activeGroup === ALL_GROUP || activeGroup === g.key)
-    .map((g) => ({ ...g, types: g.types.filter((t) => matchesQuery(t, query)) }))
-    .filter((g) => g.types.length > 0);
+  return (
+    GROUPS.filter((g) => activeGroup === ALL_GROUP || activeGroup === g.key)
+      /**
+       * ── ROUND 80: RETIRED TYPES ARE SUBTRACTED HERE ────────────────────
+       * ONE place, and it is the exported derivation the tests already drive, so
+       * a retirement cannot be visible through one code path and hidden through
+       * another.
+       *
+       * SUBTRACTED RATHER THAN SHOWN-AND-DISABLED, which is the opposite of what
+       * this picker does for 'soon' and 'locked' — and the difference is the
+       * point. Those two say "this exists and you cannot have it YET", which is
+       * information an author can act on. A retirement says "this existed and you
+       * cannot have it AGAIN", which is not: drawing a permanently dead button
+       * advertises a capability with no path to it. The type keeps its label and
+       * icon for the sections that already exist; it just stops being on offer.
+       *
+       * `GROUPS` itself is untouched and still holds the imported constants BY
+       * REFERENCE — round 9's derivation, and the test that pins it, both still
+       * hold. The subtraction is a view over that list, not an edit to it.
+       */
+      .map((g) => ({
+        ...g,
+        types: g.types.filter(
+          (t) => !RETIRED_SECTION_TYPES.includes(t) && matchesQuery(t, query),
+        ),
+      }))
+      .filter((g) => g.types.length > 0)
+  );
 }
 
 function TypeButton({ type, state, onPick }) {
-  const disabled = state !== 'add';
+  const disabled = state !== "add";
   const Icon = iconOf(type);
   return (
     <button
@@ -200,12 +261,18 @@ function TypeButton({ type, state, onPick }) {
       data-state={state}
       disabled={disabled}
       onClick={disabled ? undefined : () => onPick(type)}
-      title={state === 'locked' ? 'ต้องมีสิทธิ์ developer' : state === 'soon' ? 'กำลังจะมาในเร็ว ๆ นี้' : undefined}
+      title={
+        state === "locked"
+          ? "ต้องมีสิทธิ์ developer"
+          : state === "soon"
+            ? "กำลังจะมาในเร็ว ๆ นี้"
+            : undefined
+      }
       className={cn(
-        'flex items-start justify-between gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-2.5 text-left text-[13px]',
+        "flex items-start justify-between gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-2.5 text-left text-[13px]",
         disabled
-          ? 'cursor-not-allowed opacity-50'
-          : 'text-9e-navy hover:border-9e-action/40 hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy'
+          ? "cursor-not-allowed opacity-50"
+          : "text-9e-navy hover:border-9e-action/40 hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy",
       )}
     >
       {/* Leading icon in a tinted rounded tile. The tint is the SAME pair this
@@ -219,10 +286,10 @@ function TypeButton({ type, state, onPick }) {
       <span className="flex min-w-0 items-start gap-2">
         <span
           className={cn(
-            'flex h-7 w-7 shrink-0 items-center justify-center rounded-9e-md',
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-9e-md",
             disabled
-              ? 'bg-9e-ice text-9e-slate-dp-50 dark:bg-9e-navy'
-              : 'bg-9e-action/10 text-9e-action'
+              ? "bg-9e-ice text-9e-slate-dp-50 dark:bg-9e-navy"
+              : "bg-9e-action/10 text-9e-action",
           )}
           aria-hidden
         >
@@ -235,8 +302,10 @@ function TypeButton({ type, state, onPick }) {
               hold other sections — an author who does not know that never
               nests, and the container types then look like empty boxes. Kept,
               restyled to sit under the label in the narrower card. */}
-          {state === 'add' && isContainer(type) && (
-            <span className="mt-0.5 block text-[10px] leading-tight text-9e-slate-dp-50">ใส่ section ซ้อนข้างในได้</span>
+          {state === "add" && isContainer(type) && (
+            <span className="mt-0.5 block text-[10px] leading-tight text-9e-slate-dp-50">
+              ใส่ section ซ้อนข้างในได้
+            </span>
           )}
         </span>
       </span>
@@ -246,12 +315,17 @@ function TypeButton({ type, state, onPick }) {
           the day a declared type ships without a component this is what the
           author sees instead of a clickable button, and a JSX path deleted for
           being cold is a path that is not there when the state comes back. */}
-      {state === 'soon' && (
+      {state === "soon" && (
         <span className="shrink-0 rounded-full bg-9e-ice px-1.5 py-px text-[9px] text-9e-slate-dp-50 dark:bg-9e-navy">
           เร็ว ๆ นี้
         </span>
       )}
-      {state === 'locked' && <Lock className="mt-0.5 h-3 w-3 shrink-0 text-9e-slate-dp-50" aria-hidden />}
+      {state === "locked" && (
+        <Lock
+          className="mt-0.5 h-3 w-3 shrink-0 text-9e-slate-dp-50"
+          aria-hidden
+        />
+      )}
     </button>
   );
 }
@@ -273,7 +347,9 @@ function AdvancedLockedSummary({ types }) {
       <Lock className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>
         ต้องมีสิทธิ์ developer จึงจะเพิ่ม section ขั้นสูงได้
-        <span className="mt-0.5 block text-[10px]">{types.map(labelOf).join(' · ')}</span>
+        <span className="mt-0.5 block text-[10px]">
+          {types.map(labelOf).join(" · ")}
+        </span>
       </span>
     </p>
   );
@@ -293,7 +369,12 @@ function AdvancedLockedSummary({ types }) {
  * pure function of its props.
  */
 export function SectionPickerBody({
-  query, activeGroup, canUseAdvanced, onQueryChange, onGroupChange, onPick,
+  query,
+  activeGroup,
+  canUseAdvanced,
+  onQueryChange,
+  onGroupChange,
+  onPick,
 }) {
   const groups = visibleGroups(query, activeGroup);
 
@@ -316,7 +397,10 @@ export function SectionPickerBody({
           prepended because it is not a group. */}
       <div data-testid="picker-header" className="mb-3 shrink-0 space-y-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50" aria-hidden />
+          <Search
+            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+            aria-hidden
+          />
           <input
             type="search"
             data-testid="picker-search"
@@ -336,18 +420,18 @@ export function SectionPickerBody({
                 type="button"
                 data-testid="picker-pill"
                 data-group-key={pill.key}
-                data-active={active ? 'true' : 'false'}
+                data-active={active ? "true" : "false"}
                 aria-pressed={active}
                 onClick={() => onGroupChange(pill.key)}
                 className={cn(
-                  'rounded-full border px-2.5 py-1 text-[11px]',
+                  "rounded-full border px-2.5 py-1 text-[11px]",
                   // The selected treatment is PublishDialog's, verbatim
                   // (`border-9e-action/40 bg-9e-action/10` on its chosen status
                   // row) plus this editor's accent text — one active-state
                   // convention across the builder, not a second one.
                   active
-                    ? 'border-9e-action/40 bg-9e-action/10 font-medium text-9e-action'
-                    : 'border-[var(--surface-border)] text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy'
+                    ? "border-9e-action/40 bg-9e-action/10 font-medium text-9e-action"
+                    : "border-[var(--surface-border)] text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy",
                 )}
               >
                 {pill.title}
@@ -375,29 +459,44 @@ export function SectionPickerBody({
         data-testid="picker-scroll"
         className="flex-1 overflow-y-auto [scrollbar-gutter:stable]"
       >
-      {groups.map((group) => (
-        <div key={group.key} data-testid="picker-group" data-group-key={group.key} className="mb-3 last:mb-0">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">{group.title}</p>
-          {group.key === 'advanced' && !canUseAdvanced ? (
-            <AdvancedLockedSummary types={group.types} />
-          ) : (
-            // 2 columns below md is exactly what this grid did at 32rem, so the
-            // narrow end is unchanged; the extra columns only appear once the
-            // dialog has actually widened. See the width note on Dialog.Content.
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
-              {group.types.map((type) => (
-                <TypeButton key={type} type={type} state={typeState(type, canUseAdvanced)} onPick={onPick} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+        {groups.map((group) => (
+          <div
+            key={group.key}
+            data-testid="picker-group"
+            data-group-key={group.key}
+            className="mb-3 last:mb-0"
+          >
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">
+              {group.title}
+            </p>
+            {group.key === "advanced" && !canUseAdvanced ? (
+              <AdvancedLockedSummary types={group.types} />
+            ) : (
+              // 2 columns below md is exactly what this grid did at 32rem, so the
+              // narrow end is unchanged; the extra columns only appear once the
+              // dialog has actually widened. See the width note on Dialog.Content.
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+                {group.types.map((type) => (
+                  <TypeButton
+                    key={type}
+                    type={type}
+                    state={typeState(type, canUseAdvanced)}
+                    onPick={onPick}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
 
-      {groups.length === 0 && (
-        <p data-testid="picker-empty" className="rounded-9e-md border border-[var(--surface-border)] px-3 py-6 text-center text-[12px] text-9e-slate-dp-50">
-          ไม่พบชนิด section ที่ตรงกับคำค้นหา
-        </p>
-      )}
+        {groups.length === 0 && (
+          <p
+            data-testid="picker-empty"
+            className="rounded-9e-md border border-[var(--surface-border)] px-3 py-6 text-center text-[12px] text-9e-slate-dp-50"
+          >
+            ไม่พบชนิด section ที่ตรงกับคำค้นหา
+          </p>
+        )}
       </div>
     </>
   );
@@ -407,17 +506,28 @@ export function SectionPicker({ open, onClose, onPick }) {
   const { tier } = useEditor();
   const canUseAdvanced = Boolean(tier?.canUseAdvanced);
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState(ALL_GROUP);
 
   // Reopening the picker starts from everything visible. The dialog's contents
   // unmount on close but this component does not, so without the reset the next
   // open would come back mid-search — with the type the author now wants
   // filtered out and no obvious reason why.
-  const reset = () => { setQuery(''); setActiveGroup(ALL_GROUP); };
+  const reset = () => {
+    setQuery("");
+    setActiveGroup(ALL_GROUP);
+  };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          reset();
+          onClose();
+        }
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
@@ -439,9 +549,9 @@ export function SectionPicker({ open, onClose, onPick }) {
             // same one every dialog here uses — so on a phone this is still a
             // full-bleed sheet with a 1rem margin, and the grid is back to the
             // 2 columns it has always had below md.
-            'fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
+            "fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]",
+            "-translate-x-1/2 -translate-y-1/2 rounded-9e-md border",
+            "border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl",
             // ── WHY scrollbar-gutter, AND WHAT IT IS NOT FIXING ─────────────
             // Round 10's reported defect: the picker "shrinks" when a filter
             // narrows the list. MEASURED in headless Chrome at 1400x600, both
@@ -534,18 +644,28 @@ export function SectionPicker({ open, onClose, onPick }) {
             // not a reason never to split, only a reason the scroller must move
             // inward rather than be deleted. The rewritten pin is in
             // test/render/sectionPickerWidthStability.test.mjs.
-            'flex flex-col h-[min(47rem,calc(100dvh-4rem))]'
+            "flex flex-col h-[min(47rem,calc(100dvh-4rem))]",
           )}
         >
           {/* The title row is the other fixed part of the column — it holds its
               natural height and never scrolls away from the close button. */}
-          <div data-testid="picker-titlebar" className="mb-3 flex shrink-0 items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เพิ่ม section</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy">
+          <div
+            data-testid="picker-titlebar"
+            className="mb-3 flex shrink-0 items-center justify-between"
+          >
+            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">
+              เพิ่ม section
+            </Dialog.Title>
+            <Dialog.Close
+              aria-label="ปิด"
+              className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy"
+            >
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
-          <Dialog.Description className="sr-only">เลือกชนิดของ section ที่ต้องการเพิ่ม</Dialog.Description>
+          <Dialog.Description className="sr-only">
+            เลือกชนิดของ section ที่ต้องการเพิ่ม
+          </Dialog.Description>
 
           <SectionPickerBody
             query={query}

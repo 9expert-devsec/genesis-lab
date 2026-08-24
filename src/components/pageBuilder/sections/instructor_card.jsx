@@ -40,7 +40,7 @@ export function InstructorCardSection({ data }) {
   const specialties = Array.isArray(data.specialties) ? data.specialties.filter(Boolean) : [];
 
   return (
-    <div className="mx-auto flex max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center">
+    <div className="mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center">
       {image && (
         <Image
           src={image}

@@ -59,7 +59,7 @@ export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 /** True for a value this system will put in a style attribute. */
 export function isHexColor(value) {
-  return typeof value === 'string' && HEX_COLOR_RE.test(value);
+  return typeof value === "string" && HEX_COLOR_RE.test(value);
 }
 
 /**
@@ -76,7 +76,7 @@ export function hexOrNull(value) {
 }
 
 /** The two modes a colour control offers. `preset` is the absence of a choice. */
-export const COLOR_MODES = ['preset', 'custom'];
+export const COLOR_MODES = ["preset", "custom"];
 
 /**
  * Gradient directions, and the CSS each becomes.
@@ -87,19 +87,24 @@ export const COLOR_MODES = ['preset', 'custom'];
  * vocabulary an author has to think about.
  */
 export const GRADIENT_DIRECTIONS = [
-  'to_bottom', 'to_top', 'to_right', 'to_left', 'to_bottom_right', 'to_bottom_left',
+  "to_bottom",
+  "to_top",
+  "to_right",
+  "to_left",
+  "to_bottom_right",
+  "to_bottom_left",
 ];
 
 const DIRECTION_CSS = {
-  to_bottom:       'to bottom',
-  to_top:          'to top',
-  to_right:        'to right',
-  to_left:         'to left',
-  to_bottom_right: 'to bottom right',
-  to_bottom_left:  'to bottom left',
+  to_bottom: "to bottom",
+  to_top: "to top",
+  to_right: "to right",
+  to_left: "to left",
+  to_bottom_right: "to bottom right",
+  to_bottom_left: "to bottom left",
 };
 
-export const DEFAULT_GRADIENT_DIRECTION = 'to_bottom';
+export const DEFAULT_GRADIENT_DIRECTION = "to_bottom";
 
 /**
  * A custom background as an inline style object — or `null` for "no custom
@@ -127,13 +132,87 @@ export function customBackgroundStyle(custom) {
   if (!from) return null;
   const to = hexOrNull(custom?.to);
   if (!to) return { backgroundColor: from };
-  const dir = DIRECTION_CSS[custom?.direction] ?? DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
+  const dir =
+    DIRECTION_CSS[custom?.direction] ??
+    DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
   return { backgroundImage: `linear-gradient(${dir}, ${from}, ${to})` };
+}
+
+/**
+ * ── ROUND 79: THE SAME COLOURS, AS VARIABLES A STYLESHEET CAN DERIVE FROM ─
+ *
+ * `customBackgroundStyle` above emits FINISHED CSS — a `background-color` or a
+ * `linear-gradient(...)`. That is a dead end for dark mode: an inline style has
+ * no `.dark` selector, so a finished declaration can never have a second form.
+ *
+ * This emits the same author values as CUSTOM PROPERTIES instead, and a rule in
+ * globals.css turns them into the finished declaration — twice, once per theme.
+ * The light rule reproduces exactly what the function above produced, so an
+ * author's colour in light mode is still the bytes they typed.
+ *
+ * ── WHY NOT COMPUTE THE DARK VALUE HERE ─────────────────────────────────
+ * docs/custom-colour-dark-mode.md §D: a stored or JS-computed pair goes stale
+ * the day the formula changes, with no signal, and needs a migration across
+ * every version snapshot. Deriving in CSS means the formula lives in ONE
+ * declaration, applies to values nobody has typed yet, and costs no JS at all.
+ *
+ * `null` when there is no honourable custom background, so callers can spread
+ * it without emitting an empty attribute — same contract as the function above.
+ */
+export function customBackgroundVars(custom) {
+  const from = hexOrNull(custom?.from);
+  if (!from) return null;
+  const to = hexOrNull(custom?.to);
+  const dir =
+    DIRECTION_CSS[custom?.direction] ??
+    DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
+  // The FLAT case deliberately sets no `--pb-cbg-to`: one stop and two stops
+  // are different statements (see above), and the CSS selects on the kind
+  // rather than on whether a variable happens to be empty.
+  return to
+    ? { "--pb-cbg-from": from, "--pb-cbg-to": to, "--pb-cbg-dir": dir }
+    : { "--pb-cbg-from": from };
+}
+
+/**
+ * `flat` | `gradient` — the value of the `data-pb-custom-bg` attribute, which
+ * is what the stylesheet keys on. `null` when the section has no custom
+ * background, so no attribute is emitted.
+ */
+export function customBackgroundKind(custom) {
+  const from = hexOrNull(custom?.from);
+  if (!from) return null;
+  return hexOrNull(custom?.to) ? "gradient" : "flat";
 }
 
 /** Does this settings block ask for a custom background, and can it be honoured? */
 export function hasCustomBackground(settings) {
-  return settings?.backgroundMode === 'custom' && customBackgroundStyle(settings?.backgroundCustom) !== null;
+  return (
+    settings?.backgroundMode === "custom" &&
+    customBackgroundStyle(settings?.backgroundCustom) !== null
+  );
+}
+
+/**
+ * ── ROUND 79: THE THIRD MODE ────────────────────────────────────────────
+ *
+ * `backgroundPin: true` means "use my colour verbatim in BOTH themes" — round
+ * 39's original promise, kept as an opt-in for the author who has a brand
+ * colour that must not shift.
+ *
+ * ABSENT MEANS DERIVE, and that is a deliberate break with the rule that an
+ * absent value renders what it rendered before. Round 56 §H's default rule
+ * exists so a feature cannot change stored pages silently; here the whole
+ * point of the round is to change them, the author asked for it by name, and
+ * the alternative — absent means pinned — ships a feature that does nothing
+ * until every existing section is found and re-edited by hand.
+ *
+ * It is stated rather than hidden: the control's own hint says a custom colour
+ * is now adjusted in dark mode unless pinned, so an author reading the panel
+ * learns the new behaviour at the point of choosing.
+ */
+export function isBackgroundPinned(settings) {
+  return settings?.backgroundPin === true;
 }
 
 // ── contrast ───────────────────────────────────────────────────────────────
@@ -153,7 +232,7 @@ export function hasCustomBackground(settings) {
  */
 export const THEME_TEXT_RGB = Object.freeze({
   navy: Object.freeze([13, 27, 42]),
-  ice:  Object.freeze([248, 250, 253]),
+  ice: Object.freeze([248, 250, 253]),
 });
 
 /** `#rrggbb` → [r, g, b]. Callers pass values isHexColor has already accepted. */
@@ -163,7 +242,7 @@ function channels(hex) {
 
 /** [r, g, b] → `#rrggbb`. The inverse, for the one caller below. */
 function toHex(rgb) {
-  return `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  return `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /**
@@ -232,10 +311,12 @@ export function backgroundContrastOk(custom) {
   const from = hexOrNull(custom?.from);
   if (!from) return true;
   const rgb = channels(from);
-  return Math.max(
-    contrastRatio(rgb, THEME_TEXT_RGB.navy),
-    contrastRatio(rgb, THEME_TEXT_RGB.ice),
-  ) >= CONTRAST_MIN;
+  return (
+    Math.max(
+      contrastRatio(rgb, THEME_TEXT_RGB.navy),
+      contrastRatio(rgb, THEME_TEXT_RGB.ice),
+    ) >= CONTRAST_MIN
+  );
 }
 
 /**

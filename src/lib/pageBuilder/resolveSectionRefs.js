@@ -124,7 +124,28 @@ export function assembleResolved(nodes, courseMap, instructorById, derived = {})
       // Schedules for the authored course code (already resolved code→_id→rows in
       // the fetch). `[]` marker for an unset/unresolved code; limit caps the rows.
       const rows = c.courseId ? (scheduleMap.get(String(c.courseId)) ?? []) : [];
-      out[s.id] = Number(c.limit) > 0 ? rows.slice(0, Number(c.limit)) : rows;
+      /**
+       * ── ROUND 64: `limit` IS AN 'upcoming'-ONLY CAP ────────────────────────
+       *
+       * Under `source='manual'` the author has NAMED the rows, so a cap left
+       * over from the other mode must not shorten their list. It would not
+       * merely trim: `chosenRounds` matches the stored ids against these rows,
+       * so a stored `limit: 1` on a three-round selection would make rounds two
+       * and three look MISSING — a slice presenting as an upstream deletion.
+       * Two of the three sections stored when this shipped carry `limit: 1`,
+       * which is exactly the shape that would hit it the day step 4 lets an
+       * author switch one over.
+       *
+       * The SELECTION itself is not applied here — that stays in the renderer,
+       * so the editor's picker can still see the rounds the author has not
+       * chosen (round 63 §G, argued at lib/pageBuilder/chosenRounds.js). This
+       * only declines to apply the OTHER mode's control.
+       *
+       * `=== 'manual'`, never `!== 'upcoming'`: absent is the stored state of
+       * every existing section and must take the unchanged branch.
+       */
+      const capped = c.source !== 'manual' && Number(c.limit) > 0;
+      out[s.id] = capped ? rows.slice(0, Number(c.limit)) : rows;
     } else if (s.type === 'course_list') {
       out[s.id] = resolveCourseList(c, courseMap, coursesBySkill, coursesByProgram);
     } else {

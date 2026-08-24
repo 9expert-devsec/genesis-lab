@@ -1,6 +1,7 @@
 'use client';
 
 import { useEditor as useTiptap, EditorContent } from '@tiptap/react';
+import { toPlainJson } from '@/lib/plainValue';
 import { useCallback, useEffect, useMemo } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
@@ -27,6 +28,24 @@ import { richTextExtensions } from './tiptapExtensions';
  * never has to wonder which editor is meant.
  */
 
+/**
+ * ── onMouseDown preventDefault IS NOT OPTIONAL ON A TIPTAP TOOLBAR ────────
+ * Round 55, and a SEPARATE finding from the bug that round fixed — the label
+ * capture in SectionContentEditor was the cause of the reported symptoms; this
+ * is a second defect found while tracing it, and it is stated separately rather
+ * than folded in.
+ *
+ * Pressing a toolbar button moves focus out of the contenteditable, and the
+ * browser collapses the selection when it does. `onClick` then runs against an
+ * editor that no longer has the range the author had selected, so
+ * `chain().focus().toggleBold()` re-focuses and applies the mark to a collapsed
+ * cursor instead of to the words that were highlighted.
+ *
+ * Cancelling the default action of MOUSEDOWN is what keeps the selection: the
+ * button never takes focus, so nothing is stolen, and the click still fires.
+ * This is the standard requirement for a ProseMirror/Tiptap toolbar and it was
+ * missing here.
+ */
 function ToolButton({ onClick, active, disabled, label, children }) {
   return (
     <button
@@ -35,6 +54,7 @@ function ToolButton({ onClick, active, disabled, label, children }) {
       aria-label={label}
       aria-pressed={active || undefined}
       disabled={disabled}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn(
         'rounded p-1 text-9e-slate-dp-50 transition-colors',
@@ -61,10 +81,84 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none dark:prose-invert min-h-[8rem]',
+        /**
+         * ── ROUND 60: THE SAME SPACING SET AS THE RENDERER ────────────────
+         * The input keeps `prose-sm` — a compact editing box is deliberate and
+         * this round is spacing, not size — but it must not disagree with the
+         * published page about how far apart paragraphs and bullets sit, or the
+         * author is composing against the wrong rhythm.
+         *
+         * Measured before the change, the input had the same list defect for the
+         * same reason as the renderer: Tiptap wraps each item's text in a `<p>`
+         * that is both :first-child and :last-child, so typography's
+         * `> ul > li > p:first-child` and `:last-child` rules both fired and
+         * every bullet sat a full paragraph apart (16px at prose-sm, matching
+         * the paragraph gap exactly). See sections/rich_text.jsx for the full
+         * cascade and scripts/_probe-round60-prose-spacing.mjs for the numbers.
+         *
+         * The utilities are identical to the renderer's, so the two surfaces are
+         * changed by one decision rather than two that have to be kept in step.
+         */
+        /**
+         * ── ROUND 65: THE INPUT KEEPS prose-sm, AND NOW IT MEANS SOMETHING ─
+         * The renderer moved to `prose-sm md:prose-base` — 14px below 768px,
+         * 16px above. This input does NOT follow it up, and the reason is a
+         * measurement rather than a preference:
+         *
+         *   EditorShell  lg:grid-cols-[276px_1fr_330px]
+         *
+         * The settings panel is a FIXED 330px column. Its width does not track
+         * the viewport, so a `md:` query — which reads the BROWSER's width —
+         * would put 16px body text in a 330px box on every desktop, and would
+         * drop it back to 14px if the author narrowed the window even though
+         * the panel had not moved at all. It would be responsive to the wrong
+         * thing. The canvas can carry the query honestly because it is an
+         * iframe whose own width IS the previewed viewport; a side panel is not
+         * a viewport.
+         *
+         * What this round DOES fix is the thing round 60 could only note: the
+         * input was 14px against an 18px canvas, and now it is 14px against a
+         * canvas whose narrow half is also 14px. The compact box is no longer a
+         * compromise — it is exactly the mobile rendering.
+         *
+         * So the spacing follows the MOBILE half of the renderer's set: `my-3`,
+         * with no `md:` overrides, because this surface has no wide mode to
+         * override into. The two lists are checked against each other in
+         * test/render/richTextSpacing.
+         */
+        class: 'prose prose-sm max-w-none focus:outline-none dark:prose-invert min-h-[8rem] '
+          + 'prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1 [&_li>p]:my-0 '
+          + '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
       },
     },
-    onUpdate: ({ editor: ed }) => onChange(ed.getJSON()),
+    /**
+     * ── ROUND 68: getJSON() IS NOT PLAIN JSON, DESPITE THE NAME ──────────
+     *
+     * ProseMirror builds every node's attributes with `Object.create(null)`,
+     * and `Node.toJSON()` hands that same object straight out — so a document
+     * from `getJSON()` carries NULL-PROTOTYPE `attrs` objects. React's client
+     * encoder refuses one: measured, a null-prototype object encodes as `"$T"`
+     * (a temporary reference) where a plain `{}` encodes normally. The server
+     * then decodes `"$T"` into a Proxy that throws on almost any property, and
+     * the first thing to read it is Mongoose's `isBsonType` — which is why
+     * three rounds chased the word `_bsontype` for a problem that has nothing
+     * to do with MongoDB.
+     *
+     * Only three nodes in this schema declare attributes — heading, image and
+     * orderedList — and a node with none omits the key entirely. That is why
+     * documents of paragraphs and bullet lists saved for months and the first
+     * heading broke it. Measured: 10 stored rich_text documents, ZERO nodes
+     * carrying an `attrs` key.
+     *
+     * `toPlainJson` rewrites the prototype and NOTHING else — no key added or
+     * removed, no value changed, `undefined` preserved (which a JSON round trip
+     * would drop). It is deliberately not in the extension declarations: the
+     * whole generated schema has ZERO non-plain attribute defaults, so no
+     * declaration is wrong — the prototype comes from ProseMirror core, below
+     * every extension. And it is not a content sanitiser; richTextContract.js
+     * owns what a document may contain, and this changes none of it.
+     */
+    onUpdate: ({ editor: ed }) => onChange(toPlainJson(ed.getJSON())),
   });
 
   // The section tree is the source of truth: selecting a different rich_text

@@ -1,17 +1,40 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Upload, Loader2, ChevronUp, ChevronDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { safeUrl } from '@/lib/pageBuilder/safeUrl';
-import { isContainer } from '@/lib/pageBuilder/containerSlots';
-import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
-import { isKnownIconName } from '@/lib/pageBuilder/lucideIcon';
-import { embedSrc } from '@/lib/pageBuilder/embedSrc';
-import { moveInArray } from './pagePath';
-import { IconPicker } from './IconPicker';
-import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
-import { RichTextEditor } from './richText/RichTextEditor';
+import { useEffect, useRef, useState } from "react";
+import {
+  Plus,
+  Trash2,
+  Upload,
+  Loader2,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { safeUrl } from "@/lib/pageBuilder/safeUrl";
+import { isContainer } from "@/lib/pageBuilder/containerSlots";
+import { isValidSectionId } from "@/lib/pageBuilder/scopeCss";
+import { isKnownIconName } from "@/lib/pageBuilder/lucideIcon";
+import { embedSrc } from "@/lib/pageBuilder/embedSrc";
+import { moveInArray } from "./pagePath";
+// Round 47, ADDED beside the line above rather than folded into it. Editor-side
+// and plain JS on purpose — see duplicateCodes.js for why it is not in
+// lib/pageBuilder/sectionLabels.js with the other content predicate.
+import { duplicateCourseCodes } from "./duplicateCodes";
+// Round 48, ADDED beside the line above. The picker that replaces this file's
+// course textarea; see CoursePicker.jsx for the rule it must not break.
+import { CourseIdsPicker, CourseSelectPicker } from "./CoursePicker";
+import { IconPicker } from "./IconPicker";
+import {
+  Field,
+  FieldBlock,
+  Select,
+  TextInput,
+  TextArea,
+  Warn,
+  INPUT_CLASS,
+  Toggle,
+} from "./fields";
+import { RichTextEditor } from "./richText/RichTextEditor";
 
 /**
  * Per-type content editors (5b).
@@ -31,67 +54,137 @@ import { RichTextEditor } from './richText/RichTextEditor';
  * author is looking at the field.
  */
 
-const HEADING_LEVELS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
-const LEVEL_LABELS = { h1: 'H1', h2: 'H2', h3: 'H3', h4: 'H4', h5: 'H5', h6: 'H6' };
-const ALIGNS = ['left', 'center', 'right'];
-const ALIGN_LABELS = { left: 'ซ้าย', center: 'กลาง', right: 'ขวา' };
-const NOTICE_VARIANTS = ['info', 'success', 'warning', 'error'];
-const NOTICE_LABELS = { info: 'ข้อมูล', success: 'สำเร็จ', warning: 'คำเตือน', error: 'ข้อผิดพลาด' };
-const EMBED_PROVIDERS = ['youtube', 'vimeo', 'iframe'];
-const EMBED_PROVIDER_LABELS = { youtube: 'YouTube', vimeo: 'Vimeo', iframe: 'iframe (โค้ดฝัง)' };
-const ICON_HINT = 'ค้นหาด้วยชื่อภาษาอังกฤษ เช่น rocket, users';
+const HEADING_LEVELS = ["h1", "h2", "h3", "h4", "h5", "h6"];
+const LEVEL_LABELS = {
+  h1: "H1",
+  h2: "H2",
+  h3: "H3",
+  h4: "H4",
+  h5: "H5",
+  h6: "H6",
+};
+const ALIGNS = ["left", "center", "right"];
+const ALIGN_LABELS = { left: "ซ้าย", center: "กลาง", right: "ขวา" };
+const NOTICE_VARIANTS = ["info", "success", "warning", "error"];
+const NOTICE_LABELS = {
+  info: "ข้อมูล",
+  success: "สำเร็จ",
+  warning: "คำเตือน",
+  error: "ข้อผิดพลาด",
+};
+const EMBED_PROVIDERS = ["youtube", "vimeo", "iframe"];
+const EMBED_PROVIDER_LABELS = {
+  youtube: "YouTube",
+  vimeo: "Vimeo",
+  iframe: "iframe (โค้ดฝัง)",
+};
+const ICON_HINT = "ค้นหาด้วยชื่อภาษาอังกฤษ เช่น rocket, users";
 
 // ── heading ──────────────────────────────────────────────────────────
 function HeadingEditor({ content, patch }) {
-  const empty = !String(content?.text ?? '').trim();
+  const empty = !String(content?.text ?? "").trim();
   return (
     <>
+      {/**
+       * Round 57 — the eyebrow sits ABOVE the heading on screen, so its control
+       * sits above the heading's here. Blank by default and blank renders
+       * nothing, so a heading that ignores it is the heading it always was.
+       */}
+      <Field
+        label="ข้อความนำ (eyebrow)"
+        hint={'บรรทัดเล็กเหนือหัวข้อ เช่น "PROMOTION DETAILS" — ไม่บังคับ'}
+      >
+        <TextInput
+          value={content?.eyebrow}
+          onChange={(v) => patch({ eyebrow: v })}
+        />
+      </Field>
       <Field label="ข้อความ">
-        <TextInput value={content?.text} onChange={(v) => patch({ text: v })} invalid={empty} />
+        <TextInput
+          value={content?.text}
+          onChange={(v) => patch({ text: v })}
+          invalid={empty}
+        />
       </Field>
       {empty && <Warn>หัวข้อว่างจะไม่แสดงผลบนหน้าเว็บ</Warn>}
       <Field label="ระดับหัวข้อ" hint="H1 ควรมีเพียงหัวข้อเดียวต่อหนึ่งหน้า">
-        <Select value={content?.level} options={HEADING_LEVELS} labels={LEVEL_LABELS}
-          onChange={(v) => patch({ level: v })} />
+        <Select
+          value={content?.level}
+          options={HEADING_LEVELS}
+          labels={LEVEL_LABELS}
+          onChange={(v) => patch({ level: v })}
+        />
       </Field>
       <Field label="จัดวาง">
-        <Select value={content?.align} options={ALIGNS} labels={ALIGN_LABELS}
-          onChange={(v) => patch({ align: v })} />
+        <Select
+          value={content?.align}
+          options={ALIGNS}
+          labels={ALIGN_LABELS}
+          onChange={(v) => patch({ align: v })}
+        />
       </Field>
     </>
   );
 }
 
 // ── rich_text ────────────────────────────────────────────────────────
+/**
+ * ── FieldBlock, NOT Field, AND THAT IS THE WHOLE BUG FIX (round 55) ───────
+ * `Field` renders a `<label>`. A `<label>` with no `for` forwards a click on
+ * any non-interactive part of itself to its FIRST LABELABLE DESCENDANT, and
+ * `<button>` is labelable — so wrapping this editor in one made the toolbar's
+ * first button, ตัวหนา (bold), the control for the entire field.
+ *
+ * Measured on the mounted component: the label contains 14 toolbar buttons and
+ * the contenteditable surface, and `label.control` resolves to the bold button.
+ * A click on the field's own caption reaches that button.
+ *
+ * That is the reported defect in both its halves. Clicking the text toggles
+ * bold because the click is forwarded to the bold button; and typed text comes
+ * out bold because clicking into the editor to start typing IS such a click, so
+ * the author is already in bold before the first keystroke. One cause, two
+ * symptoms — the mark is REAL, not a CSS weight, because what runs is Tiptap's
+ * own toggleBold command.
+ *
+ * Round 49 wrote `FieldBlock` for exactly this and said so in its header: a
+ * `<label>` is right for ONE input and wrong for a composite control containing
+ * buttons. It reached the course picker's rows and not this file, which had the
+ * same shape and 14 more buttons. Nothing else changes — FieldBlock emits the
+ * same caption and hint markup, so the field looks identical.
+ */
 function RichTextSectionEditor({ content, patch }) {
   return (
-    <Field label="เนื้อหา">
+    <FieldBlock label="เนื้อหา">
       <RichTextEditor doc={content?.doc} onChange={(doc) => patch({ doc })} />
-    </Field>
+    </FieldBlock>
   );
 }
 
 // ── image ────────────────────────────────────────────────────────────
 function ImageEditor({ content, patch }) {
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const src = String(content?.src ?? '').trim();
-  const altEmpty = !String(content?.alt ?? '').trim();
+  const [err, setErr] = useState("");
+  const src = String(content?.src ?? "").trim();
+  const altEmpty = !String(content?.alt ?? "").trim();
 
   // Reuses the existing admin endpoint — no second upload path to secure.
   const upload = async (file) => {
     if (!file) return;
-    setBusy(true); setErr('');
+    setBusy(true);
+    setErr("");
     try {
       const fd = new FormData();
-      fd.append('file', file);
-      fd.append('folder', 'page-builder');
-      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      fd.append("file", file);
+      fd.append("folder", "page-builder");
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: fd,
+      });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? 'อัปโหลดไม่สำเร็จ');
+      if (!res.ok) throw new Error(json?.error ?? "อัปโหลดไม่สำเร็จ");
       patch({ src: json.url, publicId: json.publicId });
     } catch (e) {
-      setErr(e?.message ?? 'อัปโหลดไม่สำเร็จ');
+      setErr(e?.message ?? "อัปโหลดไม่สำเร็จ");
     } finally {
       setBusy(false);
     }
@@ -102,19 +195,35 @@ function ImageEditor({ content, patch }) {
       <Field label="รูปภาพ">
         {src && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={src} alt="" className="mb-1.5 h-24 w-full rounded-9e-md object-cover" />
+          <img
+            src={src}
+            alt=""
+            className="mb-1.5 h-24 w-full rounded-9e-md object-cover"
+          />
         )}
-        <label className={cn(
-          'flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed',
-          'border-[var(--surface-border)] px-2 py-2 text-[11px] text-9e-slate-dp-50',
-          'hover:border-9e-action/40 hover:text-9e-action',
-          busy && 'pointer-events-none opacity-50'
-        )}>
-          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-          {busy ? 'กำลังอัปโหลด…' : src ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}
+        <label
+          className={cn(
+            "flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed",
+            "border-[var(--surface-border)] px-2 py-2 text-[11px] text-9e-slate-dp-50",
+            "hover:border-9e-action/40 hover:text-9e-action",
+            busy && "pointer-events-none opacity-50",
+          )}
+        >
+          {busy ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Upload className="h-3 w-3" />
+          )}
+          {busy ? "กำลังอัปโหลด…" : src ? "เปลี่ยนรูป" : "อัปโหลดรูป"}
           <input
-            type="file" accept="image/*" className="sr-only" disabled={busy}
-            onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              upload(e.target.files?.[0]);
+              e.target.value = "";
+            }}
           />
         </label>
       </Field>
@@ -126,13 +235,16 @@ function ImageEditor({ content, patch }) {
       </Field>
       {src && altEmpty && (
         <Warn>
-          ไม่มี alt — รูปนี้จะถูกถือว่าเป็นรูปประดับ (decorative) และ screen reader จะข้ามไป
-          ถ้ารูปสื่อความหมาย ควรใส่คำอธิบาย
+          ไม่มี alt — รูปนี้จะถูกถือว่าเป็นรูปประดับ (decorative) และ screen
+          reader จะข้ามไป ถ้ารูปสื่อความหมาย ควรใส่คำอธิบาย
         </Warn>
       )}
 
       <Field label="คำบรรยายใต้รูป">
-        <TextInput value={content?.caption} onChange={(v) => patch({ caption: v })} />
+        <TextInput
+          value={content?.caption}
+          onChange={(v) => patch({ caption: v })}
+        />
       </Field>
     </>
   );
@@ -140,36 +252,100 @@ function ImageEditor({ content, patch }) {
 
 // ── cta ──────────────────────────────────────────────────────────────
 function CtaEditor({ content, patch }) {
-  const href = String(content?.buttonHref ?? '').trim();
-  const label = String(content?.buttonLabel ?? '').trim();
-  const hrefUnsafe = href !== '' && !safeUrl(href);
+  const href = String(content?.buttonHref ?? "").trim();
+  const label = String(content?.buttonLabel ?? "").trim();
+  const hrefUnsafe = href !== "" && !safeUrl(href);
   // The component renders the button only with BOTH a label and a safe href —
   // otherwise it silently renders no button at all.
-  const noButton = (label === '') !== (href === '');
+  const noButton = (label === "") !== (href === "");
+  // Round 57 — the second button, read the same way for the same reason.
+  const href2 = String(content?.secondaryButtonHref ?? "").trim();
+  const label2 = String(content?.secondaryButtonLabel ?? "").trim();
+  const href2Unsafe = href2 !== "" && !safeUrl(href2);
+  const noSecondButton = (label2 === "") !== (href2 === "");
 
   return (
     <>
       <Field label="หัวข้อ">
-        <TextInput value={content?.heading} onChange={(v) => patch({ heading: v })} />
+        <TextInput
+          value={content?.heading}
+          onChange={(v) => patch({ heading: v })}
+        />
       </Field>
       <Field label="คำอธิบาย">
-        <TextArea value={content?.description} onChange={(v) => patch({ description: v })} />
+        <TextArea
+          value={content?.description}
+          onChange={(v) => patch({ description: v })}
+        />
       </Field>
       <Field label="ข้อความบนปุ่ม">
-        <TextInput value={content?.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} />
+        <TextInput
+          value={content?.buttonLabel}
+          onChange={(v) => patch({ buttonLabel: v })}
+        />
       </Field>
-      <Field label="ลิงก์ปุ่ม" hint="http, https, mailto, tel, /path หรือ #anchor">
-        <TextInput value={content?.buttonHref} onChange={(v) => patch({ buttonHref: v })} invalid={hrefUnsafe} />
+      <Field
+        label="ลิงก์ปุ่ม"
+        hint="http, https, mailto, tel, /path หรือ #anchor"
+      >
+        <TextInput
+          value={content?.buttonHref}
+          onChange={(v) => patch({ buttonHref: v })}
+          invalid={hrefUnsafe}
+        />
       </Field>
       {hrefUnsafe && (
         <Warn tone="red">
-          ลิงก์นี้ใช้ไม่ได้ — ปุ่มจะไม่แสดงผลเลย (รองรับ http, https, mailto, tel, /path และ #anchor)
+          ลิงก์นี้ใช้ไม่ได้ — ปุ่มจะไม่แสดงผลเลย (รองรับ http, https, mailto,
+          tel, /path และ #anchor)
         </Warn>
       )}
       {!hrefUnsafe && noButton && (
         <Warn>
           ปุ่มจะแสดงก็ต่อเมื่อมีทั้งข้อความบนปุ่มและลิงก์ — ตอนนี้ยังขาด
-          {label === '' ? ' ข้อความบนปุ่ม' : ' ลิงก์'}
+          {label === "" ? " ข้อความบนปุ่ม" : " ลิงก์"}
+        </Warn>
+      )}
+      {/**
+       * ── ROUND 57: THE SECOND BUTTON ─────────────────────────────────────
+       * Placed directly after the first pair, because it is the same control
+       * twice and an author reads them as a group. Blank by default, and blank
+       * renders nothing — a cta that ignores this pair is the cta it has
+       * always been.
+       *
+       * It gets the SAME pair warning as the first, for the same reason: the
+       * renderer draws a button only with both halves, so a half-filled pair
+       * is silently invisible and the author would have no way to learn why.
+       */}
+      <Field
+        label="ข้อความบนปุ่มที่สอง"
+        hint="ไม่บังคับ — เว้นว่างถ้าต้องการปุ่มเดียว"
+      >
+        <TextInput
+          value={content?.secondaryButtonLabel}
+          onChange={(v) => patch({ secondaryButtonLabel: v })}
+        />
+      </Field>
+      <Field
+        label="ลิงก์ปุ่มที่สอง"
+        hint="http, https, mailto, tel, /path หรือ #anchor"
+      >
+        <TextInput
+          value={content?.secondaryButtonHref}
+          onChange={(v) => patch({ secondaryButtonHref: v })}
+          invalid={href2Unsafe}
+        />
+      </Field>
+      {href2Unsafe && (
+        <Warn tone="red">
+          ลิงก์ปุ่มที่สองใช้ไม่ได้ — ปุ่มที่สองจะไม่แสดงผลเลย (รองรับ http,
+          https, mailto, tel, /path และ #anchor)
+        </Warn>
+      )}
+      {!href2Unsafe && noSecondButton && (
+        <Warn>
+          ปุ่มที่สองจะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์ — ตอนนี้ยังขาด
+          {label2 === "" ? " ข้อความบนปุ่มที่สอง" : " ลิงก์ปุ่มที่สอง"}
         </Warn>
       )}
     </>
@@ -181,8 +357,12 @@ function NoticeEditor({ content, patch }) {
   return (
     <>
       <Field label="ชนิด">
-        <Select value={content?.variant} options={NOTICE_VARIANTS} labels={NOTICE_LABELS}
-          onChange={(v) => patch({ variant: v })} />
+        <Select
+          value={content?.variant}
+          options={NOTICE_VARIANTS}
+          labels={NOTICE_LABELS}
+          onChange={(v) => patch({ variant: v })}
+        />
       </Field>
       <Field label="ข้อความ">
         <TextArea value={content?.text} onChange={(v) => patch({ text: v })} />
@@ -193,49 +373,134 @@ function NoticeEditor({ content, patch }) {
 
 // ── price_card ─────────────────────────────────────────────────────────
 function PriceCardEditor({ content, patch }) {
-  const title = String(content?.title ?? '').trim();
-  const price = String(content?.price ?? '').trim();
+  const title = String(content?.title ?? "").trim();
+  const price = String(content?.price ?? "").trim();
   const features = Array.isArray(content?.features) ? content.features : [];
-  const hasFeature = features.some((f) => String(f ?? '').trim());
+  const hasFeature = features.some((f) => String(f ?? "").trim());
   // Mirrors PriceCardSection's fail-closed guard exactly.
   const empty = !title && !price && !hasFeature;
 
-  const href = String(content?.buttonHref ?? '').trim();
-  const label = String(content?.buttonLabel ?? '').trim();
-  const hrefUnsafe = href !== '' && !safeUrl(href);
-  const noButton = (label === '') !== (href === '');
+  const href = String(content?.buttonHref ?? "").trim();
+  const label = String(content?.buttonLabel ?? "").trim();
+  const hrefUnsafe = href !== "" && !safeUrl(href);
+  const noButton = (label === "") !== (href === "");
 
   return (
     <>
       <Field label="หัวข้อ">
-        <TextInput value={content?.title} onChange={(v) => patch({ title: v })} />
+        <TextInput
+          value={content?.title}
+          onChange={(v) => patch({ title: v })}
+        />
       </Field>
       <Field label="ราคา" hint={'ข้อความอิสระได้ เช่น "฿12,900" หรือ "สอบถาม"'}>
-        <TextInput value={content?.price} onChange={(v) => patch({ price: v })} />
+        <TextInput
+          value={content?.price}
+          onChange={(v) => patch({ price: v })}
+        />
       </Field>
       <Field label="ต่อรอบ" hint={'เช่น "/ คน" หรือ "/ เดือน"'}>
-        <TextInput value={content?.period} onChange={(v) => patch({ period: v })} />
+        <TextInput
+          value={content?.period}
+          onChange={(v) => patch({ period: v })}
+        />
+      </Field>
+      {/**
+       * ── ROUND 57: THE PROMOTION FIELDS ────────────────────────────────
+       * Placed straight after ราคา because that is what they qualify — the
+       * before-price and the saving read as one group with it, and the
+       * footnote is the small print under it.
+       *
+       * Each is ONE control in its own `Field`, which is a `<label>` — correct
+       * here and only here: round 55's defect was a `<label>` wrapping a
+       * composite with fourteen buttons, so a click anywhere activated the
+       * first. One input per label is exactly what a label is for.
+       *
+       * Every one is blank by default and renders nothing when blank (§H), so
+       * an author who ignores this group sees the card they have always seen.
+       */}
+      <Field
+        label="ราคาก่อนลด"
+        hint={'ขีดฆ่าไว้เหนือราคา เช่น "40,800 บาท" — เว้นว่างถ้าไม่มี'}
+      >
+        <TextInput
+          value={content?.originalPrice}
+          onChange={(v) => patch({ originalPrice: v })}
+        />
+      </Field>
+      <Field label="ป้ายส่วนลด" hint={'ป้ายเล็กข้างราคาก่อนลด เช่น "ลด 20%"'}>
+        <TextInput
+          value={content?.discountBadge}
+          onChange={(v) => patch({ discountBadge: v })}
+        />
+      </Field>
+      <Field
+        label="หมายเหตุใต้ราคา"
+        hint={
+          'ตัวเล็กใต้ราคา เช่น "* ราคานี้ยังไม่รวม VAT 7%" — คนละส่วนกับรายการด้านล่าง'
+        }
+      >
+        <TextInput
+          value={content?.footnote}
+          onChange={(v) => patch({ footnote: v })}
+        />
+      </Field>
+      <Field
+        label="ป้ายมุมการ์ด"
+        hint={'ข้อความแถบเฉียงมุมบนขวา เช่น "Early Bird ลด 20%"'}
+      >
+        <TextInput
+          value={content?.ribbon}
+          onChange={(v) => patch({ ribbon: v })}
+        />
       </Field>
       <Field label="รายการ (บรรทัดละ 1 รายการ)">
-        <TextArea value={features.join('\n')} onChange={(v) => patch({ features: v.split('\n') })} rows={4} />
+        <TextArea
+          value={features.join("\n")}
+          onChange={(v) => patch({ features: v.split("\n") })}
+          rows={4}
+        />
       </Field>
-      {empty && <Warn>ยังไม่มีหัวข้อ ราคา หรือรายการ — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      {empty && (
+        <Warn>
+          ยังไม่มีหัวข้อ ราคา หรือรายการ — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ
+        </Warn>
+      )}
       <label className="mb-2.5 flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
-        <input type="checkbox" checked={content?.highlighted === true}
-          onChange={(e) => patch({ highlighted: e.target.checked })} />
+        <input
+          type="checkbox"
+          checked={content?.highlighted === true}
+          onChange={(e) => patch({ highlighted: e.target.checked })}
+        />
         เน้นการ์ดนี้ (ขอบสีเน้น)
       </label>
       <Field label="ข้อความบนปุ่ม">
-        <TextInput value={content?.buttonLabel} onChange={(v) => patch({ buttonLabel: v })} />
+        <TextInput
+          value={content?.buttonLabel}
+          onChange={(v) => patch({ buttonLabel: v })}
+        />
       </Field>
-      <Field label="ลิงก์ปุ่ม" hint="http, https, mailto, tel, /path หรือ #anchor">
-        <TextInput value={content?.buttonHref} onChange={(v) => patch({ buttonHref: v })} invalid={hrefUnsafe} />
+      <Field
+        label="ลิงก์ปุ่ม"
+        hint="http, https, mailto, tel, /path หรือ #anchor"
+      >
+        <TextInput
+          value={content?.buttonHref}
+          onChange={(v) => patch({ buttonHref: v })}
+          invalid={hrefUnsafe}
+        />
       </Field>
       {hrefUnsafe && (
-        <Warn tone="red">ลิงก์นี้ใช้ไม่ได้ — ปุ่มจะไม่แสดงผลเลย (รองรับ http, https, mailto, tel, /path และ #anchor)</Warn>
+        <Warn tone="red">
+          ลิงก์นี้ใช้ไม่ได้ — ปุ่มจะไม่แสดงผลเลย (รองรับ http, https, mailto,
+          tel, /path และ #anchor)
+        </Warn>
       )}
       {!hrefUnsafe && noButton && (
-        <Warn>ปุ่มจะแสดงเมื่อมีทั้งข้อความบนปุ่มและลิงก์ — ตอนนี้ยังขาด{label === '' ? ' ข้อความบนปุ่ม' : ' ลิงก์'}</Warn>
+        <Warn>
+          ปุ่มจะแสดงเมื่อมีทั้งข้อความบนปุ่มและลิงก์ — ตอนนี้ยังขาด
+          {label === "" ? " ข้อความบนปุ่ม" : " ลิงก์"}
+        </Warn>
       )}
     </>
   );
@@ -243,22 +508,38 @@ function PriceCardEditor({ content, patch }) {
 
 // ── stat_card ──────────────────────────────────────────────────────────
 function StatCardEditor({ content, patch }) {
-  const value = String(content?.value ?? '').trim();
-  const label = String(content?.label ?? '').trim();
-  const icon = String(content?.icon ?? '').trim();
+  const value = String(content?.value ?? "").trim();
+  const label = String(content?.label ?? "").trim();
+  const icon = String(content?.icon ?? "").trim();
   const empty = !value && !label; // mirrors StatCardSection's guard (icon alone is not a stat)
-  const iconBad = icon !== '' && !isKnownIconName(icon);
+  const iconBad = icon !== "" && !isKnownIconName(icon);
   return (
     <>
       <Field label="ตัวเลข/ค่า" hint={'เช่น "1,200+" หรือ "98%"'}>
-        <TextInput value={content?.value} onChange={(v) => patch({ value: v })} invalid={empty} />
+        <TextInput
+          value={content?.value}
+          onChange={(v) => patch({ value: v })}
+          invalid={empty}
+        />
       </Field>
       <Field label="คำอธิบาย">
-        <TextInput value={content?.label} onChange={(v) => patch({ label: v })} />
+        <TextInput
+          value={content?.label}
+          onChange={(v) => patch({ label: v })}
+        />
       </Field>
-      {empty && <Warn>ต้องมีตัวเลขหรือคำอธิบายอย่างน้อยหนึ่งอย่าง — ไม่งั้นการ์ดนี้จะไม่แสดงผล</Warn>}
+      {empty && (
+        <Warn>
+          ต้องมีตัวเลขหรือคำอธิบายอย่างน้อยหนึ่งอย่าง —
+          ไม่งั้นการ์ดนี้จะไม่แสดงผล
+        </Warn>
+      )}
       <Field label="ไอคอน (ไม่บังคับ)" hint={ICON_HINT}>
-        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker
+          value={content?.icon}
+          onChange={(v) => patch({ icon: v })}
+          invalid={iconBad}
+        />
       </Field>
       {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
     </>
@@ -266,36 +547,170 @@ function StatCardEditor({ content, patch }) {
 }
 
 // ── icon_card ──────────────────────────────────────────────────────────
+/**
+ * Round 69 — the illustration uploader.
+ *
+ * ── REUSES THE UPLOAD MECHANISM, DOES NOT INVENT A SECOND ────────────────
+ * Two image surfaces already exist in this editor and both POST a
+ * multipart body to `/api/admin/upload`: `ImageEditor` above (folder
+ * `page-builder`, stores `{src, publicId}`) and `PromoCoverField` in
+ * PageSettingsDialog (folder `promotion-covers`, stores the URL ONLY).
+ *
+ * This follows PROMOCOVERFIELD, because it stores the URL only: `icon_card`
+ * gains ONE key, so there is no `publicId` beside it, and the note on
+ * `promotion-covers` in the upload route says what that implies — a URL with
+ * no ownership token must not live inside `<base>/page-builder/`, which is the
+ * scope the item-5 Cloudinary GC will sweep, or the GC will read it as an
+ * orphan. Hence `page-builder-icons`, a sibling, allowlisted next to it.
+ *
+ * ── THE PICKER IS UNTOUCHED AND STAYS REACHABLE ──────────────────────────
+ * The icon field below is exactly the control round 14 built, still enumerating
+ * from `isKnownIconName` through `ICON_NAMES`. It is not hidden, disabled or
+ * conditioned on the image: an author can set both and clear the image to get
+ * the icon back. Only the RENDERER prefers the image, which is why the hint
+ * says so rather than the control pretending the icon is gone.
+ */
 function IconCardEditor({ content, patch }) {
-  const title = String(content?.title ?? '').trim();
-  const description = String(content?.description ?? '').trim();
-  const icon = String(content?.icon ?? '').trim();
-  const empty = !title && !description && !icon; // mirrors IconCardSection's raw-content guard
-  const iconBad = icon !== '' && !isKnownIconName(icon);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const title = String(content?.title ?? "").trim();
+  const description = String(content?.description ?? "").trim();
+  const icon = String(content?.icon ?? "").trim();
+  const imageSrc = String(content?.imageSrc ?? "").trim();
+  // Mirrors IconCardSection's raw-content guard, which round 69 widened by the
+  // image: a card carrying only a picture still renders.
+  const empty = !title && !description && !icon && !imageSrc;
+  const iconBad = icon !== "" && !isKnownIconName(icon);
+
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "page-builder-icons");
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "อัปโหลดไม่สำเร็จ");
+      // URL ONLY — json.publicId is intentionally ignored, see the note above.
+      patch({ imageSrc: json.url });
+    } catch (e) {
+      setErr(e?.message ?? "อัปโหลดไม่สำเร็จ");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
+      {/* FieldBlock, not Field: this is a COMPOSITE control (an upload label and
+          a remove button), and Field is a <label> that forwards a stray click on
+          its own padding to the first labelable control inside it — the round
+          47/48 defect FieldBlock exists for. */}
+      <FieldBlock
+        label="รูปภาพแทนไอคอน (ไม่บังคับ)"
+        hint="ถ้าใส่รูป จะแสดงรูปนี้แทนไอคอน — ขนาดที่แสดงคือ 44×44 px เท่ากับกรอบไอคอน รูปจะย่อให้พอดีกรอบโดยไม่บิดสัดส่วน"
+      >
+        {imageSrc && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt=""
+            className="mb-1.5 h-11 w-11 rounded-9e-md object-contain"
+          />
+        )}
+        <label
+          className={cn(
+            "flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed",
+            "border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50",
+            "hover:border-9e-action/40 hover:text-9e-action",
+            busy && "pointer-events-none opacity-50",
+          )}
+        >
+          {busy ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Upload className="h-3 w-3" />
+          )}
+          {busy ? "กำลังอัปโหลด…" : imageSrc ? "เปลี่ยนรูป" : "อัปโหลดรูป"}
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              upload(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {imageSrc && (
+          <button
+            type="button"
+            className="mt-1.5 text-xs text-9e-slate-dp-50 underline hover:text-9e-action"
+            onClick={() => patch({ imageSrc: "" })}
+          >
+            เอารูปออก (กลับไปใช้ไอคอน)
+          </button>
+        )}
+      </FieldBlock>
+      {err && <Warn tone="red">{err}</Warn>}
+
       <Field label="ไอคอน" hint={ICON_HINT}>
-        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker
+          value={content?.icon}
+          onChange={(v) => patch({ icon: v })}
+          invalid={iconBad}
+        />
       </Field>
-      {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
+      {iconBad && !imageSrc && (
+        <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>
+      )}
+      {imageSrc && icon !== "" && (
+        <Warn>
+          การ์ดนี้มีทั้งรูปและไอคอน — จะแสดงรูป เอารูปออกเพื่อกลับไปใช้ไอคอน
+        </Warn>
+      )}
       <Field label="หัวข้อ">
-        <TextInput value={content?.title} onChange={(v) => patch({ title: v })} />
+        <TextInput
+          value={content?.title}
+          onChange={(v) => patch({ title: v })}
+        />
       </Field>
       <Field label="คำอธิบาย">
-        <TextArea value={content?.description} onChange={(v) => patch({ description: v })} />
+        <TextArea
+          value={content?.description}
+          onChange={(v) => patch({ description: v })}
+        />
       </Field>
-      {empty && <Warn>ยังไม่มีไอคอน หัวข้อ หรือคำอธิบาย — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      {empty && (
+        <Warn>
+          ยังไม่มีรูป ไอคอน หัวข้อ หรือคำอธิบาย — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ
+        </Warn>
+      )}
     </>
   );
 }
 
 // ── custom_html (developer-tier) ───────────────────────────────────────
 function CustomHtmlEditor({ content, patch }) {
-  const empty = !String(content?.html ?? '').trim();
+  const empty = !String(content?.html ?? "").trim();
   return (
     <>
-      <Field label="HTML" hint="ถูก sanitize ทุกครั้งที่แสดงผล — script และ event handler จะถูกตัดออก">
-        <TextArea value={content?.html} onChange={(v) => patch({ html: v })} rows={6} mono />
+      <Field
+        label="HTML"
+        hint="ถูก sanitize ทุกครั้งที่แสดงผล — script และ event handler จะถูกตัดออก"
+      >
+        <TextArea
+          value={content?.html}
+          onChange={(v) => patch({ html: v })}
+          rows={6}
+          mono
+        />
       </Field>
       {empty && <Warn>ยังไม่มีเนื้อหา — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
     </>
@@ -304,16 +719,27 @@ function CustomHtmlEditor({ content, patch }) {
 
 // ── custom_css (developer-tier) — scoped to this section's Section ID ────
 function CustomCssEditor({ content, patch, advanced }) {
-  const css = String(content?.css ?? '').trim();
-  const sectionId = String(advanced?.sectionId ?? '');
-  const idValid = sectionId !== '' && isValidSectionId(sectionId);
+  const css = String(content?.css ?? "").trim();
+  const sectionId = String(advanced?.sectionId ?? "");
+  const idValid = sectionId !== "" && isValidSectionId(sectionId);
   return (
     <>
-      <Field label="CSS" hint="ถูก scope ด้วย Section ID ของ section นี้ — มีผลเฉพาะภายใน section นี้เท่านั้น">
-        <TextArea value={content?.css} onChange={(v) => patch({ css: v })} rows={6} mono />
+      <Field
+        label="CSS"
+        hint="ถูก scope ด้วย Section ID ของ section นี้ — มีผลเฉพาะภายใน section นี้เท่านั้น"
+      >
+        <TextArea
+          value={content?.css}
+          onChange={(v) => patch({ css: v })}
+          rows={6}
+          mono
+        />
       </Field>
-      {css !== '' && !idValid && (
-        <Warn>ต้องตั้ง Section ID ที่กลุ่ม “ขั้นสูง (developer)” ด้านล่างก่อน CSS ถึงจะทำงาน — ตอนนี้จะไม่ถูกใช้เลย</Warn>
+      {css !== "" && !idValid && (
+        <Warn>
+          ต้องตั้ง Section ID ที่กลุ่ม “ขั้นสูง (developer)” ด้านล่างก่อน CSS
+          ถึงจะทำงาน — ตอนนี้จะไม่ถูกใช้เลย
+        </Warn>
       )}
     </>
   );
@@ -321,57 +747,97 @@ function CustomCssEditor({ content, patch, advanced }) {
 
 // ── debug_json (developer-tier) — canvas-only inspection block ──────────
 function DebugJsonEditor({ content, patch }) {
-  const raw = String(content?.json ?? '');
+  const raw = String(content?.json ?? "");
   let jsonBad = false;
   if (raw.trim()) {
-    try { JSON.parse(raw); } catch { jsonBad = true; }
+    try {
+      JSON.parse(raw);
+    } catch {
+      jsonBad = true;
+    }
   }
   return (
     <>
-      <Field label="JSON" hint="แสดงเฉพาะในหน้าแก้ไข (canvas) เท่านั้น — จะไม่แสดงบนหน้าที่เผยแพร่หรือพรีวิว">
-        <TextArea value={content?.json} onChange={(v) => patch({ json: v })} rows={6} mono />
+      <Field
+        label="JSON"
+        hint="แสดงเฉพาะในหน้าแก้ไข (canvas) เท่านั้น — จะไม่แสดงบนหน้าที่เผยแพร่หรือพรีวิว"
+      >
+        <TextArea
+          value={content?.json}
+          onChange={(v) => patch({ json: v })}
+          rows={6}
+          mono
+        />
       </Field>
-      {jsonBad && <Warn>JSON ไม่ถูกต้อง — จะแสดงเป็นข้อความดิบตามที่พิมพ์</Warn>}
+      {jsonBad && (
+        <Warn>JSON ไม่ถูกต้อง — จะแสดงเป็นข้อความดิบตามที่พิมพ์</Warn>
+      )}
     </>
   );
 }
 
 // ── embed (developer-tier) ─────────────────────────────────────────────
 function EmbedEditor({ content, patch }) {
-  const provider = content?.provider ?? 'youtube';
+  const provider = content?.provider ?? "youtube";
   const providerField = (
     <Field label="ผู้ให้บริการ">
-      <Select value={provider} options={EMBED_PROVIDERS} labels={EMBED_PROVIDER_LABELS}
-        onChange={(v) => patch({ provider: v })} />
+      <Select
+        value={provider}
+        options={EMBED_PROVIDERS}
+        labels={EMBED_PROVIDER_LABELS}
+        onChange={(v) => patch({ provider: v })}
+      />
     </Field>
   );
 
-  if (provider === 'iframe') {
-    const empty = !String(content?.html ?? '').trim();
+  if (provider === "iframe") {
+    const empty = !String(content?.html ?? "").trim();
     return (
       <>
         {providerField}
-        <Field label="โค้ด iframe" hint="อนุญาตเฉพาะโฮสต์ที่ปลอดภัย (YouTube, Vimeo, Google, Facebook) — อื่น ๆ จะถูกตัดทิ้ง">
-          <TextArea value={content?.html} onChange={(v) => patch({ html: v })} rows={5} mono />
+        <Field
+          label="โค้ด iframe"
+          hint="อนุญาตเฉพาะโฮสต์ที่ปลอดภัย (YouTube, Vimeo, Google, Facebook) — อื่น ๆ จะถูกตัดทิ้ง"
+        >
+          <TextArea
+            value={content?.html}
+            onChange={(v) => patch({ html: v })}
+            rows={5}
+            mono
+          />
         </Field>
         {empty && <Warn>ยังไม่มีโค้ด — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
       </>
     );
   }
 
-  const url = String(content?.url ?? '').trim();
+  const url = String(content?.url ?? "").trim();
   const src = embedSrc(provider, url);
   return (
     <>
       {providerField}
       <Field
         label="ลิงก์วิดีโอ"
-        hint={provider === 'youtube' ? 'เช่น https://youtu.be/… หรือ https://www.youtube.com/watch?v=…' : 'เช่น https://vimeo.com/…'}
+        hint={
+          provider === "youtube"
+            ? "เช่น https://youtu.be/… หรือ https://www.youtube.com/watch?v=…"
+            : "เช่น https://vimeo.com/…"
+        }
       >
-        <TextInput value={content?.url} onChange={(v) => patch({ url: v })} invalid={url !== '' && !src} />
+        <TextInput
+          value={content?.url}
+          onChange={(v) => patch({ url: v })}
+          invalid={url !== "" && !src}
+        />
       </Field>
-      {url === '' && <Warn>ยังไม่มีลิงก์ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
-      {url !== '' && !src && <Warn tone="red">อ่านรหัสวิดีโอจากลิงก์นี้ไม่ได้ — section นี้จะไม่แสดงผล</Warn>}
+      {url === "" && (
+        <Warn>ยังไม่มีลิงก์ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+      )}
+      {url !== "" && !src && (
+        <Warn tone="red">
+          อ่านรหัสวิดีโอจากลิงก์นี้ไม่ได้ — section นี้จะไม่แสดงผล
+        </Warn>
+      )}
     </>
   );
 }
@@ -388,71 +854,231 @@ function EmbedEditor({ content, patch }) {
 // this one (the whole point of the fail-closed warnings is that authors trust
 // them). The `undefined` guard below is what keeps that trust intact.
 
-// A newline-per-id textarea for authored course-id lists.
-function CourseIdsField({ value, onChange, hint }) {
-  const ids = Array.isArray(value) ? value : [];
+/**
+ * The authored course list — a picker since round 48, a newline-per-id textarea
+ * before it. ONE component serving course_selector, bundle_courses and
+ * course_list[manual], which is why replacing it reaches three of the five
+ * course-referencing section types at once.
+ *
+ * `courses` is the catalogue round 47 threaded down from the route: a
+ * projection, {course_id, course_name}, and authoritative for NOTHING. It
+ * supplies rows to choose from and names to show. It defaults to empty, and an
+ * empty catalogue is still a working control — every stored code keeps its row,
+ * and a code can still be typed.
+ */
+function CourseIdsField({ value, onChange, hint, courses }) {
   return (
-    <Field label="รหัสคอร์ส (บรรทัดละ 1 รหัส)" hint={hint ?? 'เช่น MSE-AI — ใช้รหัสจากระบบคอร์ส'}>
-      <TextArea value={ids.join('\n')} onChange={(v) => onChange(v.split('\n').map((s) => s.trim()))} rows={4} />
-    </Field>
+    <CourseIdsPicker
+      value={value}
+      onChange={onChange}
+      courses={courses}
+      hint={hint}
+    />
   );
 }
 
+/**
+ * TWO WARNINGS, AND ONLY ONE OF THEM WAITS FOR THE FETCH.
+ *
+ * ── WHY THE `resolved === undefined` GUARD MOVED ───────────────────────────
+ * It used to be an early `return null` covering the whole component. That was
+ * right when there was one warning and it was about resolution. It is wrong the
+ * moment a second warning is about the LOCAL ARRAY: a duplicate is knowable
+ * synchronously, with no fetch, so gating it on `resolved` would blank it for
+ * the 350ms debounce after every keystroke — the flashing this block's own
+ * header calls out, arrived at from the other direction. The guard now narrows
+ * `missing` instead of short-circuiting the render.
+ *
+ * ── THE TWO COUNTS ARE INDEPENDENT, WHICH IS WHY BOTH CAN SHOW ─────────────
+ * `missing` is `wanted.length - resolved.length`, and the fetch DE-DUPES
+ * (`collectRefs` builds a Set) — so it would be reasonable to fear that a
+ * duplicate inflates the missing count and the two warnings contradict each
+ * other. It does not: `assembleResolved` maps POSITIONALLY
+ * (`ids.map((id) => courseMap.get(id)).filter(Boolean)`), so four authored
+ * resolvable codes give four resolved entries even when two of them are the
+ * same code. Measured live, driven through the real resolver:
+ * docs/course-picker-proposal.md §D.4.
+ *
+ * So a list can be simultaneously "has a repeat" and "has a code that resolves
+ * to nothing", and both lines are true at once and say different things.
+ *
+ * ── WARN, NEVER EDIT ───────────────────────────────────────────────────────
+ * Nothing here de-duplicates, reorders or rejects, and nothing downstream does
+ * either — `publishBlockers` checks title, slug and section count and nothing
+ * else. Duplicates RENDER, deliberately: the same course twice in a list is a
+ * layout an author can want. Silently rewriting a stored array to mean
+ * something the author did not write is a larger defect than the one being
+ * reported (§F.4).
+ */
 function CourseIdsWarnings({ ids, resolved }) {
   const wanted = (Array.isArray(ids) ? ids : []).filter(Boolean);
-  if (!wanted.length) return <Warn>ยังไม่ได้เลือกคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>;
-  // `undefined` = not resolved yet (loading); only warn about missing once fetched.
-  if (resolved === undefined) return null;
-  const missing = wanted.length - (Array.isArray(resolved) ? resolved.length : 0);
-  return missing > 0 ? (
-    <Warn tone="red">มี {missing} รหัสที่ไม่พบคอร์ส — จะไม่แสดงในรายการ</Warn>
-  ) : null;
-}
+  if (!wanted.length)
+    return <Warn>ยังไม่ได้เลือกคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>;
 
-function CourseCardEditor({ content, patch, resolved }) {
-  const courseId = String(content?.courseId ?? '').trim();
-  const notFound = courseId !== '' && resolved === null;
+  // Synchronous — no fetch, so no tri-state. Amber, not red: a repeat renders
+  // exactly what it says it will, so this reports a SURPRISE, not a breakage.
+  const repeated = duplicateCourseCodes(ids);
+
+  // `undefined` = not resolved yet (loading); only warn about missing once
+  // fetched. Zero rather than an early return, so the line above still shows.
+  const missing =
+    resolved === undefined
+      ? 0
+      : wanted.length - (Array.isArray(resolved) ? resolved.length : 0);
+
   return (
     <>
-      <Field label="รหัสคอร์ส (course_id)" hint="เช่น MSE-AI — ใช้รหัสจากระบบคอร์ส">
-        <TextInput value={content?.courseId} onChange={(v) => patch({ courseId: v })} invalid={notFound} />
+      {repeated.length > 0 && (
+        <Warn>
+          รหัสซ้ำ: {repeated.join(", ")} — คอร์สเดิมจะแสดงซ้ำตามจำนวนที่ใส่ไว้
+        </Warn>
+      )}
+      {missing > 0 && (
+        <Warn tone="red">
+          มี {missing} รหัสที่ไม่พบคอร์ส — จะไม่แสดงในรายการ
+        </Warn>
+      )}
+    </>
+  );
+}
+
+/**
+ * Round 50 added the price switch BESIDE the course code, in this tab, because
+ * the price is a fact about what this card SAYS — not about how it looks — and
+ * the author reaching for it has a page problem, not a styling one.
+ *
+ * `content?.showPrice !== false` here is the SAME expression the renderer uses,
+ * and it has to be: the field is absent on every card stored before this
+ * commit, and a `=== true` check would show the box unticked while the page
+ * showed the price. The panel would be lying about the page.
+ *
+ * The hint says WHAT IT IS FOR, not what it does — the box's own text already
+ * says what it does. An author arrives here because their page shows ฿12,900 in
+ * a การ์ดคอร์ส next to “ราคาพิเศษ 4,900 บาท” in a การ์ดราคา and nothing says
+ * which applies; the hint is what tells them this is the control for that.
+ */
+function CourseCardEditor({ content, patch, resolved, courses }) {
+  const courseId = String(content?.courseId ?? "").trim();
+  const notFound = courseId !== "" && resolved === null;
+  return (
+    <>
+      <CourseSelectPicker
+        value={content?.courseId}
+        onChange={(courseId) => patch({ courseId })}
+        courses={courses}
+        label="คอร์ส (course_id)"
+        hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ"
+        invalid={notFound}
+      />
+      {/* Round 50's price switch, unmoved and unchanged: it stays BELOW the
+          course reference, because the code is what the card is and the price
+          is a fact about what that card says. Its own tests still drive it. */}
+      {/**
+       * Round 52 changed this control's SHAPE and nothing else. The expression
+       * below is round 50's, byte for byte, and it has to be: the key is
+       * ABSENT on every card stored before round 50 — `.lean()` applies no
+       * Mongoose defaults and serialisation drops undefined keys — so a
+       * truthiness check here would show an off switch over a page that shows
+       * the price. The panel would be lying about the page, for every card.
+       *
+       * The COPY moved with the shape. A checkbox's box text says what ticking
+       * it means (“แสดงราคาคอร์สบนการ์ดนี้”); a switch's label says what the
+       * setting IS, so that sentence became the label and the old label
+       * “ราคาบนการ์ด” — a topic, not a setting — is gone.
+       *
+       * ── ROUND 53 MADE IT LEGIBLE, AND CHANGED NOTHING ELSE ─────────────
+       * A screenshot of the shipped control: a grey circle, no colour
+       * difference between its two states, and a three-line hint. Reading it
+       * required knowing that knob-left means off. Three fixes, all
+       * presentation:
+       *
+       *   · A STATE WORD — แสดง / ไม่แสดง — so the control says what it is
+       *     doing rather than only showing it. Round 52 left this out because
+       *     ไม่แสดง CONTAINS แสดง and that breaks substring matchers; the
+       *     answer is to match element text in the tests, not to withhold a
+       *     word from the author.
+       *   · COLOUR on the track when on, so the two states differ at a glance.
+       *   · A SHORTER HINT. It ran to three lines. Its JOB is unchanged — it
+       *     says WHEN to reach for this, never what the control mechanically
+       *     does — and the switch plus its state word now say the rest.
+       *
+       * The expression below is still round 50's, byte for byte, and what the
+       * toggle dispatches is still round 52's.
+       */}
+      <Field label="แสดงราคาบนการ์ด" hint="ปิดเมื่อหน้านี้มีการ์ดราคาอยู่แล้ว">
+        <Toggle
+          checked={content?.showPrice !== false}
+          onChange={(next) => patch({ showPrice: next })}
+          onLabel="แสดง"
+          offLabel="ไม่แสดง"
+        />
       </Field>
-      {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
-      {notFound && <Warn tone="red">ไม่พบคอร์สรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      {courseId === "" && (
+        <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+      )}
+      {notFound && (
+        <Warn tone="red">
+          ไม่พบคอร์สรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ
+        </Warn>
+      )}
     </>
   );
 }
 
 function InstructorCardEditor({ content, patch, resolved }) {
-  const instructorId = String(content?.instructorId ?? '').trim();
-  const notFound = instructorId !== '' && resolved === null;
+  const instructorId = String(content?.instructorId ?? "").trim();
+  const notFound = instructorId !== "" && resolved === null;
   return (
     <>
-      <Field label="รหัสผู้สอน (instructor_id)" hint="ใช้รหัสผู้สอนจากระบบผู้สอน">
-        <TextInput value={content?.instructorId} onChange={(v) => patch({ instructorId: v })} invalid={notFound} />
+      <Field
+        label="รหัสผู้สอน (instructor_id)"
+        hint="ใช้รหัสผู้สอนจากระบบผู้สอน"
+      >
+        <TextInput
+          value={content?.instructorId}
+          onChange={(v) => patch({ instructorId: v })}
+          invalid={notFound}
+        />
       </Field>
-      {instructorId === '' && <Warn>ยังไม่ได้ระบุผู้สอน — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
-      {notFound && <Warn tone="red">ไม่พบผู้สอนรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      {instructorId === "" && (
+        <Warn>ยังไม่ได้ระบุผู้สอน — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+      )}
+      {notFound && (
+        <Warn tone="red">
+          ไม่พบผู้สอนรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ
+        </Warn>
+      )}
     </>
   );
 }
 
-function CourseSelectorEditor({ content, patch, resolved }) {
+function CourseSelectorEditor({ content, patch, resolved, courses }) {
   return (
     <>
       <Field label="หัวข้อ (ไม่บังคับ)">
-        <TextInput value={content?.heading} onChange={(v) => patch({ heading: v })} />
+        <TextInput
+          value={content?.heading}
+          onChange={(v) => patch({ heading: v })}
+        />
       </Field>
-      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+      <CourseIdsField
+        value={content?.courseIds}
+        onChange={(courseIds) => patch({ courseIds })}
+        courses={courses}
+      />
       <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
     </>
   );
 }
 
-function BundleCoursesEditor({ content, patch, resolved }) {
+function BundleCoursesEditor({ content, patch, resolved, courses }) {
   return (
     <>
-      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+      <CourseIdsField
+        value={content?.courseIds}
+        onChange={(courseIds) => patch({ courseIds })}
+        courses={courses}
+      />
       <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
     </>
   );
@@ -468,57 +1094,119 @@ function BundleCoursesEditor({ content, patch, resolved }) {
 // not found". Both CAN show at once: a filter can resolve to a sample now (info)
 // whose contents will still vary at publish (also info), or resolve to nothing
 // (red) — the two say different things.
+/**
+ * ── THIS LABEL USED TO PROMISE MORE THAN THE SITE DELIVERS ──────────────────
+ *
+ * It said the published page fetches fresh data "ตามเวลาที่ผู้เข้าชมเปิดหน้า" —
+ * at the moment a visitor opens it. It does not, and never did. Measured, round
+ * 63 §A.2:
+ *
+ *   /[...slug]            export const revalidate = 3600   (ISR, 1 hour)
+ *   /promotions/[slug]    export const revalidate = 3600
+ *   listSchedules()       revalidate: 1800, tags: ['schedules']
+ *
+ * `revalidateTag('schedules')` (actions/schedules.js, webhooks/handlers.js) can
+ * cut the 30-minute FETCH window, but nothing revalidates the two page routes on
+ * a schedule change — so a published page's rows can be a full hour behind, and
+ * two visitors seconds apart are served the SAME cached render.
+ *
+ * That is round 18's dead-control class wearing a hint's clothes: a promise
+ * nothing honours, which the author has no way to detect because the number they
+ * see in the canvas is plausible either way. It was wrong before the
+ * chosen-rounds work and is corrected here on its own account, not as a
+ * side-effect of it.
+ *
+ * The opening clause is unchanged deliberately — `test/render/courseSelectPicker`
+ * pins 'ตัวอย่าง ณ เวลาแก้ไข' as the marker that this label rendered at all, and
+ * the sample-vs-broken tone distinction (info, never amber/red) is what
+ * docs/page-builder-status.md §2C.2b argued for.
+ *
+ * SHARED WITH course_list's derived sources, on purpose while both types make
+ * the same promise. Round 63 §D#1 flagged the sharing as the trap it is: the two
+ * diverge the moment `course_schedule` grows a mode whose row SET is authored
+ * rather than derived, and at that point this becomes two labels or takes a
+ * prop. It is not that yet — `source='manual'` is unreachable from the editor
+ * (steps 4-5) — so splitting now would ship two identical strings and an
+ * argument nobody can read.
+ */
 function SampleLabel() {
   return (
     <Warn tone="info">
-      ตัวอย่าง ณ เวลาแก้ไข — หน้าที่เผยแพร่จริงจะดึงข้อมูลใหม่ตามเวลาที่ผู้เข้าชมเปิดหน้า จำนวนและรายการที่แสดงจริงอาจต่างจากนี้
+      ตัวอย่าง ณ เวลาแก้ไข — หน้าที่เผยแพร่จริงจะดึงข้อมูลใหม่เป็นระยะ
+      (อย่างช้าชั่วโมงละครั้ง) ไม่ใช่ทุกครั้งที่มีผู้เข้าชม
+      จำนวนและรายการที่แสดงจริงอาจต่างจากนี้
     </Warn>
   );
 }
 
-const COURSE_LIST_SOURCES = ['manual', 'skill', 'program'];
+const COURSE_LIST_SOURCES = ["manual", "skill", "program"];
 const COURSE_LIST_SOURCE_LABELS = {
-  manual:  'เลือกเอง (ระบุรหัสคอร์ส)',
-  skill:   'ตามสกิล (Skill)',
-  program: 'ตามโปรแกรม (Program)',
+  manual: "เลือกเอง (ระบุรหัสคอร์ส)",
+  skill: "ตามสกิล (Skill)",
+  program: "ตามโปรแกรม (Program)",
 };
 
-function CourseListEditor({ content, patch, resolved }) {
-  const source = content?.source ?? 'manual';
-  const isDerived = source === 'skill' || source === 'program';
-  const filter = String(content?.filter ?? '').trim();
+function CourseListEditor({ content, patch, resolved, courses }) {
+  const source = content?.source ?? "manual";
+  const isDerived = source === "skill" || source === "program";
+  const filter = String(content?.filter ?? "").trim();
   // For a derived source, `resolved` is the fetched SAMPLE list. Same tri-state
   // discipline as the authored warnings (see the block comment above): undefined
   // = fetch in flight (never warn), [] = fetched and empty (a bad/empty filter),
   // array = found. Only warn "not found" once fetched — never while undefined.
-  const emptySample = isDerived && filter !== '' && Array.isArray(resolved) && resolved.length === 0;
+  const emptySample =
+    isDerived &&
+    filter !== "" &&
+    Array.isArray(resolved) &&
+    resolved.length === 0;
 
   return (
     <>
       <Field label="แหล่งข้อมูล">
-        <Select value={source} options={COURSE_LIST_SOURCES} labels={COURSE_LIST_SOURCE_LABELS}
-          onChange={(v) => patch({ source: v })} />
+        <Select
+          value={source}
+          options={COURSE_LIST_SOURCES}
+          labels={COURSE_LIST_SOURCE_LABELS}
+          onChange={(v) => patch({ source: v })}
+        />
       </Field>
 
       {isDerived ? (
         <>
           <Field
-            label={source === 'skill' ? 'รหัสสกิล (skill id)' : 'รหัสโปรแกรม (program id)'}
+            label={
+              source === "skill"
+                ? "รหัสสกิล (skill id)"
+                : "รหัสโปรแกรม (program id)"
+            }
             hint="ใช้ id จากระบบคอร์ส — จะดึงคอร์สทั้งหมดในกลุ่มนี้โดยอัตโนมัติ"
           >
-            <TextInput value={content?.filter} onChange={(v) => patch({ filter: v })} invalid={emptySample} />
+            <TextInput
+              value={content?.filter}
+              onChange={(v) => patch({ filter: v })}
+              invalid={emptySample}
+            />
           </Field>
-          {filter === '' && (
-            <Warn>ยังไม่ได้ระบุ{source === 'skill' ? 'สกิล' : 'โปรแกรม'} — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+          {filter === "" && (
+            <Warn>
+              ยังไม่ได้ระบุ{source === "skill" ? "สกิล" : "โปรแกรม"} — section
+              นี้จะไม่แสดงผลบนหน้าเว็บ
+            </Warn>
           )}
           {emptySample && (
-            <Warn tone="red">ไม่พบคอร์สในกลุ่มนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+            <Warn tone="red">
+              ไม่พบคอร์สในกลุ่มนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ
+            </Warn>
           )}
           <SampleLabel />
         </>
       ) : (
         <>
-          <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+          <CourseIdsField
+            value={content?.courseIds}
+            onChange={(courseIds) => patch({ courseIds })}
+            courses={courses}
+          />
           <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
         </>
       )}
@@ -533,21 +1221,32 @@ function CourseListEditor({ content, patch, resolved }) {
   );
 }
 
-function CourseScheduleEditor({ content, patch, resolved }) {
-  const courseId = String(content?.courseId ?? '').trim();
+function CourseScheduleEditor({ content, patch, resolved, courses }) {
+  const courseId = String(content?.courseId ?? "").trim();
   // `resolved` is the schedules SAMPLE (tri-state): undefined = fetching, [] =
   // fetched with no upcoming rounds (bad code, or a real course with none open),
   // array = found. The empty case is genuinely ambiguous and both render nothing,
   // so the warning states the observable ("no open rounds") rather than guessing.
-  const emptySample = courseId !== '' && Array.isArray(resolved) && resolved.length === 0;
+  const emptySample =
+    courseId !== "" && Array.isArray(resolved) && resolved.length === 0;
   return (
     <>
-      <Field label="รหัสคอร์ส (course_id)" hint="เช่น MSE-AI — จะดึงรอบที่เปิดรับสมัครของคอร์สนี้">
-        <TextInput value={content?.courseId} onChange={(v) => patch({ courseId: v })} invalid={emptySample} />
-      </Field>
-      {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      <CourseSelectPicker
+        value={content?.courseId}
+        onChange={(courseId) => patch({ courseId })}
+        courses={courses}
+        label="คอร์ส (course_id)"
+        hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ — จะดึงรอบที่เปิดรับสมัครของคอร์สนี้"
+        invalid={emptySample}
+      />
+      {courseId === "" && (
+        <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+      )}
       {emptySample && (
-        <Warn tone="red">ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
+        <Warn tone="red">
+          ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — section
+          นี้จะไม่แสดงผลบนหน้าเว็บ
+        </Warn>
       )}
       <Field label="จำกัดจำนวนรอบ (0 = ไม่จำกัด)">
         <TextInput
@@ -555,7 +1254,7 @@ function CourseScheduleEditor({ content, patch, resolved }) {
           onChange={(v) => patch({ limit: Number.parseInt(v, 10) || 0 })}
         />
       </Field>
-      {courseId !== '' && <SampleLabel />}
+      {courseId !== "" && <SampleLabel />}
     </>
   );
 }
@@ -567,9 +1266,16 @@ function CourseScheduleEditor({ content, patch, resolved }) {
  */
 function ItemList({ items, set, fields, addLabel, emptyWarn }) {
   const list = Array.isArray(items) ? items : [];
-  const update = (i, patch) => set(list.map((it, j) => (j === i ? { ...it, ...patch } : it)));
+  const update = (i, patch) =>
+    set(list.map((it, j) => (j === i ? { ...it, ...patch } : it)));
   const remove = (i) => set(list.filter((_, j) => j !== i));
-  const add = () => set([...list, Object.fromEntries(fields.map((f) => [f.key, f.type === 'check' ? true : '']))]);
+  const add = () =>
+    set([
+      ...list,
+      Object.fromEntries(
+        fields.map((f) => [f.key, f.type === "check" ? true : ""]),
+      ),
+    ]);
 
   /**
    * ── KEEPING THE KEYBOARD ON THE ITEM, NOT ON THE ROW ────────────────────
@@ -591,15 +1297,18 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
     const want = pendingFocus.current;
     pendingFocus.current = null;
     if (!want || !containerRef.current) return;
-    const at = (dir) => containerRef.current.querySelector(`[data-move="${dir}"][data-row="${want.index}"]`);
+    const at = (dir) =>
+      containerRef.current.querySelector(
+        `[data-move="${dir}"][data-row="${want.index}"]`,
+      );
     const target = at(want.dir);
-    const fallback = at(want.dir === 'up' ? 'down' : 'up');
+    const fallback = at(want.dir === "up" ? "down" : "up");
     const el = target && !target.disabled ? target : fallback;
     if (el && !el.disabled) el.focus();
   });
 
   const move = (i, dir) => {
-    const to = dir === 'up' ? i - 1 : i + 1;
+    const to = dir === "up" ? i - 1 : i + 1;
     // The ends are refused HERE, not in moveInArray. That helper clamps a
     // destination rather than rejecting it, so asking it to move item 0 to -1
     // hands back a NEW array in the SAME order — which would pass an identity
@@ -635,9 +1344,14 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
           being safe and the rows need a stable identity instead. The items
           carry no id to key on today, so that would mean adding one. */}
       {list.map((item, i) => (
-        <div key={i} className="mb-2 rounded-9e-md border border-[var(--surface-border)] p-2">
+        <div
+          key={i}
+          className="mb-2 rounded-9e-md border border-[var(--surface-border)] p-2"
+        >
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-9e-slate-dp-50">#{i + 1}</span>
+            <span className="text-[10px] font-bold text-9e-slate-dp-50">
+              #{i + 1}
+            </span>
             <span className="flex items-center gap-0.5">
               {/* Buttons rather than drag-and-drop, and the keyboard is the
                   reason. Native HTML5 dragging has no keyboard path at all, so
@@ -646,53 +1360,77 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
                   ends are disabled rather than wrapping: an author walking an
                   item up stops at the top instead of finding it at the bottom. */}
               <button
-                type="button" data-move="up" data-row={i} disabled={i === 0}
-                aria-label={`ย้ายรายการที่ ${i + 1} ขึ้น`} onClick={() => move(i, 'up')}
+                type="button"
+                data-move="up"
+                data-row={i}
+                disabled={i === 0}
+                aria-label={`ย้ายรายการที่ ${i + 1} ขึ้น`}
+                onClick={() => move(i, "up")}
                 className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
               >
                 <ChevronUp className="h-3 w-3" />
               </button>
               <button
-                type="button" data-move="down" data-row={i} disabled={i === list.length - 1}
-                aria-label={`ย้ายรายการที่ ${i + 1} ลง`} onClick={() => move(i, 'down')}
+                type="button"
+                data-move="down"
+                data-row={i}
+                disabled={i === list.length - 1}
+                aria-label={`ย้ายรายการที่ ${i + 1} ลง`}
+                onClick={() => move(i, "down")}
                 className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
               >
                 <ChevronDown className="h-3 w-3" />
               </button>
               <button
-                type="button" aria-label={`ลบรายการที่ ${i + 1}`} onClick={() => remove(i)}
+                type="button"
+                aria-label={`ลบรายการที่ ${i + 1}`}
+                onClick={() => remove(i)}
                 className="rounded p-0.5 text-9e-slate-dp-50 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
               >
                 <Trash2 className="h-3 w-3" />
               </button>
             </span>
           </div>
-          {fields.map((f) => (
-            f.type === 'check' ? (
-              <label key={f.key} className="mb-1 flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
-                <input type="checkbox" checked={item?.[f.key] !== false}
-                  onChange={(e) => update(i, { [f.key]: e.target.checked })} />
+          {fields.map((f) =>
+            f.type === "check" ? (
+              <label
+                key={f.key}
+                className="mb-1 flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90"
+              >
+                <input
+                  type="checkbox"
+                  checked={item?.[f.key] !== false}
+                  onChange={(e) => update(i, { [f.key]: e.target.checked })}
+                />
                 {f.label}
               </label>
-            ) : f.type === 'area' ? (
+            ) : f.type === "area" ? (
               <Field key={f.key} label={f.label}>
-                <TextArea value={item?.[f.key]} onChange={(v) => update(i, { [f.key]: v })} rows={2} />
+                <TextArea
+                  value={item?.[f.key]}
+                  onChange={(v) => update(i, { [f.key]: v })}
+                  rows={2}
+                />
               </Field>
             ) : (
               <Field key={f.key} label={f.label}>
-                <TextInput value={item?.[f.key]} onChange={(v) => update(i, { [f.key]: v })} />
+                <TextInput
+                  value={item?.[f.key]}
+                  onChange={(v) => update(i, { [f.key]: v })}
+                />
               </Field>
-            )
-          ))}
+            ),
+          )}
         </div>
       ))}
       {!list.length && emptyWarn && <Warn>{emptyWarn}</Warn>}
       <button
-        type="button" onClick={add}
+        type="button"
+        onClick={add}
         className={cn(
-          'flex w-full items-center justify-center gap-1 rounded-9e-md border border-dashed',
-          'border-[var(--surface-border)] px-2 py-1 text-[11px] text-9e-slate-dp-50',
-          'hover:border-9e-action/40 hover:text-9e-action'
+          "flex w-full items-center justify-center gap-1 rounded-9e-md border border-dashed",
+          "border-[var(--surface-border)] px-2 py-1 text-[11px] text-9e-slate-dp-50",
+          "hover:border-9e-action/40 hover:text-9e-action",
         )}
       >
         <Plus className="h-3 w-3" /> {addLabel}
@@ -701,8 +1439,14 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
   );
 }
 
-const CHECKLIST_FIELDS = [{ key: 'text', label: 'ข้อความ' }, { key: 'checked', label: 'ติ๊กถูก', type: 'check' }];
-const ITEM_FIELDS = [{ key: 'title', label: 'หัวข้อ' }, { key: 'body', label: 'เนื้อหา', type: 'area' }];
+const CHECKLIST_FIELDS = [
+  { key: "text", label: "ข้อความ" },
+  { key: "checked", label: "ติ๊กถูก", type: "check" },
+];
+const ITEM_FIELDS = [
+  { key: "title", label: "หัวข้อ" },
+  { key: "body", label: "เนื้อหา", type: "area" },
+];
 
 const CONTENT_EDITORS = {
   heading: HeadingEditor,
@@ -724,32 +1468,73 @@ const CONTENT_EDITORS = {
   course_list: CourseListEditor,
   course_schedule: CourseScheduleEditor,
   checklist: ({ content, patch }) => (
-    <ItemList
-      items={content?.items} set={(items) => patch({ items })} fields={CHECKLIST_FIELDS}
-      addLabel="เพิ่มรายการ" emptyWarn="ยังไม่มีรายการ — section นี้จะว่างเปล่า"
-    />
+    <>
+      {/**
+       * Round 57 — a title for the list (เงื่อนไขโปรโมชัน / หมายเหตุ). The box
+       * TINT is the section background preset's job, not this field's.
+       */}
+      <Field
+        label="หัวข้อรายการ"
+        hint={'ชื่อกล่อง เช่น "เงื่อนไขโปรโมชัน" — ไม่บังคับ'}
+      >
+        <TextInput
+          value={content?.heading}
+          onChange={(v) => patch({ heading: v })}
+        />
+      </Field>
+      <ItemList
+        items={content?.items}
+        set={(items) => patch({ items })}
+        fields={CHECKLIST_FIELDS}
+        addLabel="เพิ่มรายการ"
+        emptyWarn="ยังไม่มีรายการ — section นี้จะว่างเปล่า"
+      />
+    </>
   ),
   timeline: ({ content, patch }) => (
-    <ItemList items={content?.items} set={(items) => patch({ items })} fields={ITEM_FIELDS}
-      addLabel="เพิ่มขั้นตอน" emptyWarn="ยังไม่มีขั้นตอน — section นี้จะว่างเปล่า" />
+    <ItemList
+      items={content?.items}
+      set={(items) => patch({ items })}
+      fields={ITEM_FIELDS}
+      addLabel="เพิ่มขั้นตอน"
+      emptyWarn="ยังไม่มีขั้นตอน — section นี้จะว่างเปล่า"
+    />
   ),
   accordion: ({ content, patch }) => (
-    <ItemList items={content?.items} set={(items) => patch({ items })} fields={ITEM_FIELDS}
-      addLabel="เพิ่มหัวข้อ" emptyWarn="ยังไม่มีหัวข้อ — section นี้จะว่างเปล่า" />
+    <ItemList
+      items={content?.items}
+      set={(items) => patch({ items })}
+      fields={ITEM_FIELDS}
+      addLabel="เพิ่มหัวข้อ"
+      emptyWarn="ยังไม่มีหัวข้อ — section นี้จะว่างเปล่า"
+    />
   ),
   tabs: ({ content, patch }) => (
-    <ItemList items={content?.tabs} set={(tabs) => patch({ tabs })} fields={ITEM_FIELDS}
-      addLabel="เพิ่มแท็บ" emptyWarn="ยังไม่มีแท็บ — section นี้จะว่างเปล่า" />
+    <ItemList
+      items={content?.tabs}
+      set={(tabs) => patch({ tabs })}
+      fields={ITEM_FIELDS}
+      addLabel="เพิ่มแท็บ"
+      emptyWarn="ยังไม่มีแท็บ — section นี้จะว่างเปล่า"
+    />
   ),
 };
 
-export function SectionContentEditor({ type, content, patch, advanced, resolved }) {
+export function SectionContentEditor({
+  type,
+  content,
+  patch,
+  advanced,
+  resolved,
+  courses = [],
+}) {
   const Editor = CONTENT_EDITORS[type];
   if (!Editor) {
     // Containers hold child sections, not content — the tree edits those.
     return isContainer(type) ? (
       <p className="text-[11px] text-9e-slate-dp-50">
-        section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”
+        section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง
+        “โครงสร้างหน้า”
       </p>
     ) : null;
   }
@@ -757,5 +1542,13 @@ export function SectionContentEditor({ type, content, patch, advanced, resolved 
   // course/instructor, or list) only by the 2C.2a data-backed editors — it is
   // what turns the edit-time fetch into a fail-closed warning instead of a
   // placeholder. The rest ignore both.
-  return <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />;
+  return (
+    <Editor
+      content={content ?? {}}
+      patch={patch}
+      advanced={advanced}
+      resolved={resolved}
+      courses={courses}
+    />
+  );
 }

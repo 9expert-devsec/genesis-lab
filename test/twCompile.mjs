@@ -15,21 +15,21 @@
 // reported every working space-y-* utility as dead. Those are the reasons the code is
 // shaped as it is, and they belong with it.
 
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import postcss from 'postcss';
-import tailwindcss from 'tailwindcss';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
 
-const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 /** Compile Tailwind's utilities over `content` and return the CSS. */
 export async function compile(content) {
   const config = {
-    presets: [require_(path.join(ROOT, 'tailwind.config.js'))],
+    presets: [require_(path.join(ROOT, "tailwind.config.js"))],
     content,
   };
   const result = await postcss([tailwindcss(config)]).process(
-    '@tailwind utilities;',
+    "@tailwind utilities;",
     { from: undefined },
   );
   return result.css;
@@ -51,7 +51,7 @@ export function require_(p) {
 }
 
 // node:test runs ESM; tailwind.config.js is CJS. One createRequire, reused.
-const { createRequire } = await import('node:module');
+const { createRequire } = await import("node:module");
 globalThis.__twRequire = createRequire(import.meta.url);
 
 /**
@@ -97,12 +97,44 @@ globalThis.__twRequire = createRequire(import.meta.url);
  * should have been red — the defect was latent, and it was an INVESTIGATION
  * that it broke, not an assertion.
  */
+/**
+ * ── ROUND 60: THE TABLE STOPPED BEING ENUMERATED, FOR THE EIGHTH TIME ──────
+ *
+ * It listed `: [ ] ( ) . / % #`. That is not the set Tailwind escapes, it is the
+ * set the classes registered SO FAR happened to contain — the same mistake the
+ * tail check made before it was bounded rather than enumerated, and with the
+ * same symptom: a working utility reported as producing NO RULE.
+ *
+ * Measured, not reasoned. Round 60 registered `[&_li>p]:my-0` and
+ * `[&>*:first-child]:mt-0`, which Tailwind emits as
+ *
+ *     .\[\&_li\>p\]\:my-0 li > p            { margin-top: 0px; … }
+ *     .\[\&\>\*\:first-child\]\:mt-0 > :first-child { margin-top: 0px }
+ *
+ * — `&`, `>` and `*` all backslash-escaped. The old table escaped none of the
+ * three, so `indexOf` looked for a selector that is not in the file and reported
+ * three live classes as dead. Chrome's CSS.getMatchedStylesForNode had already
+ * shown those exact rules winning the cascade on the served page, which is the
+ * only reason the disagreement was caught rather than believed.
+ *
+ * So the rule is now GENERAL: a CSS identifier may carry `[A-Za-z0-9_-]`
+ * unescaped, and Tailwind backslash-escapes everything else. Enumerating which
+ * characters "matter" is what has to stop — the next arbitrary variant will use
+ * `+` or `~` or `!` and nobody will remember this comment.
+ *
+ * The comma keeps its own pass because it is genuinely different: Tailwind
+ * writes it as the unicode escape `\2c ` — with a significant trailing space —
+ * not as `\,`. See the note above for the wrong diagnosis that cost.
+ */
 export function escapeClass(className) {
-  return className
-    .replace(/[:[\]()./%#]/g, (c) => `\\${c}`)
-    // Must run AFTER the backslash pass above, or that pass would escape the
-    // backslash this one introduces.
-    .replace(/,/g, '\\2c ');
+  return (
+    className
+      .replace(/[^A-Za-z0-9_,-]/g, (c) => `\\${c}`)
+      // Must run AFTER the backslash pass above, or that pass would escape the
+      // backslash this one introduces. The comma is excluded from that pass so it
+      // arrives here bare.
+      .replace(/,/g, "\\2c ")
+  );
 }
 
 export function declarationsFor(css, className) {
@@ -123,7 +155,7 @@ export function declarationsFor(css, className) {
      * explicit tail pattern that enumerated the shapes a selector may end with
      * — see the note below for why enumerating was wrong.
      */
-    if (/[A-Za-z0-9_\\-]/.test(css[from] ?? '')) continue;
+    if (/[A-Za-z0-9_\\-]/.test(css[from] ?? "")) continue;
 
     /**
      * ── WHY THIS NO LONGER ENUMERATES THE ALLOWED TAILS ────────────────────
@@ -150,14 +182,14 @@ export function declarationsFor(css, className) {
      * body. The exactness that mattered is preserved by the character check
      * above, which is where it always belonged.
      */
-    const open = css.indexOf('{', from);
+    const open = css.indexOf("{", from);
     if (open === -1) continue;
-    if (css.slice(from, open).includes('}')) continue;
+    if (css.slice(from, open).includes("}")) continue;
 
-    const close = css.indexOf('}', open);
+    const close = css.indexOf("}", open);
     if (close === -1) continue;
 
-    for (const decl of css.slice(open + 1, close).split(';')) {
+    for (const decl of css.slice(open + 1, close).split(";")) {
       const t = decl.trim();
       if (t) out.push(t);
     }

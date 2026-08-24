@@ -51,6 +51,26 @@ import {
  * guard is for the day one of them does not.
  */
 /**
+ * Round 51, ADDED beside the statement above rather than folded into it — the
+ * standing rule in this repo.
+ *
+ * `limit` BECAME A PROP, and its default is the number that was hardcoded here,
+ * so THIS form's behaviour is unchanged in every respect. It is the only thing
+ * the page builder's single-value picker could not reuse as it stood.
+ *
+ * The cap was written as a constant 50 for a list of 78. That is fine for a
+ * form whose admin knows the code they want and types three characters — but
+ * the page builder measured the other end of the same distribution: the worst
+ * single-character query matches 78 of 79 rows, so a cap of 50 SILENTLY drops
+ * 28 courses with nothing on screen saying it did. §G step 3 rejected exactly
+ * that for the list control and left `limit` off; the single-value control
+ * needs the same, and passes null.
+ *
+ * `filterCourseOptions` already reads `typeof limit === 'number'`, so null and
+ * undefined both mean "no cap" there — no change was needed on that side, and
+ * this file is the only one that had to move.
+ */
+/**
  * Tell the enclosing <form> that a value changed, the only way it listens.
  *
  * Exported so it can be tested against a real DOM node without mounting a React
@@ -79,6 +99,7 @@ export function CourseSearchSelect({
   emptyLabel = '— ไม่มี —',
   placeholder = 'พิมพ์เพื่อค้นหา course_id หรือชื่อ',
   inputClassName = '',
+  limit = 50,
 }) {
   const listId = useId();
   const [query, setQuery] = useState('');
@@ -95,8 +116,8 @@ export function CourseSearchSelect({
   );
 
   const matches = useMemo(
-    () => filterCourseOptions(options, open ? query : '', { excludeCode, limit: 50 }),
-    [options, query, open, excludeCode]
+    () => filterCourseOptions(options, open ? query : '', { excludeCode, limit }),
+    [options, query, open, excludeCode, limit]
   );
 
   /**

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { EditorProvider } from './EditorProvider';
-import { EditorShell } from './EditorShell';
+import { EditorProvider } from "./EditorProvider";
+import { EditorShell } from "./EditorShell";
 
 /**
  * Client entry point for the editor. The route (a server component) loads the
@@ -14,12 +14,21 @@ import { EditorShell } from './EditorShell';
  * useEditorSave.js.
  */
 export function PageBuilderEditor({
-  page, pageId = null, updatedAt = null, tier, currentUserName = '',
+  page,
+  pageId = null,
+  updatedAt = null,
+  tier,
+  currentUserName = "",
+  courses = [],
 }) {
   return (
     <EditorProvider
-      page={page} pageId={pageId} updatedAt={updatedAt} tier={tier}
+      page={page}
+      pageId={pageId}
+      updatedAt={updatedAt}
+      tier={tier}
       currentUserName={currentUserName}
+      courses={courses}
     >
       <EditorShell />
     </EditorProvider>

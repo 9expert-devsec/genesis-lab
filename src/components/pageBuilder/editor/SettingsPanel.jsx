@@ -1,33 +1,63 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import * as Tabs from '@radix-ui/react-tabs';
-import { Lock } from 'lucide-react';
-import { CONTAINER_WIDTHS, SPACING, VISIBILITY, ACCENTS } from '@/lib/schemas/pageBuilder';
-import { OFFERED_BACKGROUNDS } from '@/lib/pageBuilder/presets';
-import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
-import { labelOf } from '@/lib/pageBuilder/sectionLabels';
-import { iconOf } from '@/lib/pageBuilder/sectionIcons';
-import { cn } from '@/lib/utils';
+import { useState } from "react";
+import * as Tabs from "@radix-ui/react-tabs";
+import { Lock } from "lucide-react";
 import {
-  CONTAINER_WIDTH_LABELS, SPACING_LABELS, BACKGROUND_LABELS,
-  VISIBILITY_LABELS, ACCENT_LABELS, labelFor,
-} from '@/lib/pageBuilder/presetLabels';
-import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+  CONTAINER_WIDTHS,
+  SPACING,
+  VISIBILITY,
+  ACCENTS,
+} from "@/lib/schemas/pageBuilder";
+import { OFFERED_BACKGROUNDS } from "@/lib/pageBuilder/presets";
+import { isValidSectionId } from "@/lib/pageBuilder/scopeCss";
+import { labelOf } from "@/lib/pageBuilder/sectionLabels";
+import { iconOf } from "@/lib/pageBuilder/sectionIcons";
+import { cn } from "@/lib/utils";
+import {
+  CONTAINER_WIDTH_LABELS,
+  SPACING_LABELS,
+  BACKGROUND_LABELS,
+  VISIBILITY_LABELS,
+  ACCENT_LABELS,
+  labelFor,
+} from "@/lib/pageBuilder/presetLabels";
+// Round 71, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory. The ONE source for which types honour
+// settings.spacingBetween, so a control cannot be offered where nothing reads it.
+import { SPACING_BETWEEN_TYPES } from "@/lib/pageBuilder/presets";
+import {
+  Field,
+  Group,
+  Select,
+  TextInput,
+  TextArea,
+  Warn,
+  INPUT_CLASS,
+} from "./fields";
 // Round 39, ADDED beside the statements above rather than folded into any —
 // the standing rule in this directory.
-import { ColorInput } from './fields';
+import { ColorInput } from "./fields";
+// Round 79, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory. The pin control is a switch, and this is
+// the switch every other panel in the builder already uses.
+import { Toggle } from "./fields";
 import {
-  CUSTOM_COLOR_OPTION, CUSTOM_COLOR_LABEL, GRADIENT_DIRECTION_LABELS,
-} from '@/lib/pageBuilder/presetLabels';
+  CUSTOM_COLOR_OPTION,
+  CUSTOM_COLOR_LABEL,
+  GRADIENT_DIRECTION_LABELS,
+} from "@/lib/pageBuilder/presetLabels";
 import {
-  isHexColor, GRADIENT_DIRECTIONS, DEFAULT_GRADIENT_DIRECTION,
-  backgroundContrastOk, accentContrastOk,
-} from '@/lib/pageBuilder/customColor';
-import { SectionContentEditor } from './SectionContentEditor';
-import { SectionTypeFields } from './SectionTypeFields';
-import { getAt, parentSectionPath } from './pagePath';
-import { useEditor } from './EditorProvider';
+  isHexColor,
+  GRADIENT_DIRECTIONS,
+  DEFAULT_GRADIENT_DIRECTION,
+  backgroundContrastOk,
+  accentContrastOk,
+} from "@/lib/pageBuilder/customColor";
+import { SectionContentEditor } from "./SectionContentEditor";
+import { SectionTypeFields } from "./SectionTypeFields";
+import { getAt, parentSectionPath } from "./pagePath";
+import { useEditor } from "./EditorProvider";
 
 /**
  * Settings panel (5a) — the UNIVERSAL envelope for the selected section.
@@ -42,6 +72,15 @@ import { useEditor } from './EditorProvider';
  *   settings.containerWidth / spacingTop / spacingBottom / background /
  *   visibility, style.accentColor (cascades to descendants via CSS vars),
  *   and the advanced.* block.
+ *
+ * ── ROUND 71 ADDED THE FIRST FIELD THAT IS NOT UNIVERSAL ─────────────────
+ * `settings.spacingBetween` is read by TWO types (presets.SPACING_BETWEEN_TYPES
+ * — `container` and `full_width`), so the sentence above is no longer true as
+ * written. The RULE it comes from is intact and is what makes the field
+ * conditional: a control for a value the render path ignores is a lie the
+ * author cannot detect, so it is offered exactly where it is honoured and
+ * nowhere else. Universality was one way to satisfy that rule; it was never
+ * the rule. See the note at the field itself for the cost of the split.
  *
  * ── THAT CLAIM WAS MEASURED, AND IT IS EXACT FOR THREE OF THE FIVE ─────────
  * docs/section-control-audit.md rendered all 27 types against every value of
@@ -114,7 +153,7 @@ import { useEditor } from './EditorProvider';
  * person editing it. The notice also says the save is safe, because "there is
  * code here I can't see" otherwise reads as "my save might destroy it".
  */
-const ADVANCED_KEYS = ['sectionId', 'customClass', 'customCss', 'customHtml'];
+const ADVANCED_KEYS = ["sectionId", "customClass", "customCss", "customHtml"];
 
 /** Which advanced keys actually carry a value. Names them, for the notice. */
 function advancedKeysSet(advanced) {
@@ -142,7 +181,8 @@ export function hasAdvancedTab(advanced, canUseAdvanced) {
 }
 
 export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
-  const patch = (p) => dispatch({ type: 'PATCH_SECTION_KEY', path, key: 'advanced', patch: p });
+  const patch = (p) =>
+    dispatch({ type: "PATCH_SECTION_KEY", path, key: "advanced", patch: p });
 
   // The one decision — see hasAdvancedTab. The tab strip asks the same thing.
   if (!hasAdvancedTab(advanced, canUseAdvanced)) return null;
@@ -154,8 +194,8 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
         <p className="flex items-start gap-1.5 rounded-9e-sm bg-[var(--surface-hover)] px-2.5 py-2 text-xs text-9e-slate-dp-50">
           <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           <span>
-            section นี้มีการปรับแต่งโดย developer ({set.join(', ')}) — คุณแก้ไขไม่ได้
-            แต่การบันทึกของคุณจะไม่ลบทิ้ง
+            section นี้มีการปรับแต่งโดย developer ({set.join(", ")}) —
+            คุณแก้ไขไม่ได้ แต่การบันทึกของคุณจะไม่ลบทิ้ง
           </span>
         </p>
       </Group>
@@ -166,13 +206,20 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
   // it warns loudly, but only in dev, and only in a console nobody has open at
   // authoring time. Saying it here is the point: an author must learn it now,
   // not from a dead anchor link in production.
-  const idValue = advanced?.sectionId ?? '';
-  const idInvalid = idValue !== '' && !isValidSectionId(idValue);
+  const idValue = advanced?.sectionId ?? "";
+  const idInvalid = idValue !== "" && !isValidSectionId(idValue);
 
   return (
     <Group title="ขั้นสูง (developer)">
-      <Field label="Section ID (anchor)" hint="ใช้เป็น #anchor และเป็นขอบเขตของ CSS ด้านล่าง">
-        <TextInput value={idValue} onChange={(v) => patch({ sectionId: v })} invalid={idInvalid} />
+      <Field
+        label="Section ID (anchor)"
+        hint="ใช้เป็น #anchor และเป็นขอบเขตของ CSS ด้านล่าง"
+      >
+        <TextInput
+          value={idValue}
+          onChange={(v) => patch({ sectionId: v })}
+          invalid={idInvalid}
+        />
       </Field>
       {idInvalid && (
         <Warn tone="red">
@@ -181,16 +228,34 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
         </Warn>
       )}
       <Field label="Custom class">
-        <TextInput value={advanced?.customClass} onChange={(v) => patch({ customClass: v })} />
+        <TextInput
+          value={advanced?.customClass}
+          onChange={(v) => patch({ customClass: v })}
+        />
       </Field>
-      <Field label="Custom CSS" hint="ถูก scope ด้วย Section ID ด้านบนโดยอัตโนมัติ">
-        <TextArea value={advanced?.customCss} onChange={(v) => patch({ customCss: v })} rows={4} mono />
+      <Field
+        label="Custom CSS"
+        hint="ถูก scope ด้วย Section ID ด้านบนโดยอัตโนมัติ"
+      >
+        <TextArea
+          value={advanced?.customCss}
+          onChange={(v) => patch({ customCss: v })}
+          rows={4}
+          mono
+        />
       </Field>
       {advanced?.customCss && !idValue && (
-        <Warn>ต้องมี Section ID ก่อน CSS ถึงจะทำงาน — ตอนนี้ CSS นี้จะไม่ถูกใช้เลย</Warn>
+        <Warn>
+          ต้องมี Section ID ก่อน CSS ถึงจะทำงาน — ตอนนี้ CSS นี้จะไม่ถูกใช้เลย
+        </Warn>
       )}
       <Field label="Custom HTML" hint="ถูก sanitize ทุกครั้งที่แสดงผล">
-        <TextArea value={advanced?.customHtml} onChange={(v) => patch({ customHtml: v })} rows={4} mono />
+        <TextArea
+          value={advanced?.customHtml}
+          onChange={(v) => patch({ customHtml: v })}
+          rows={4}
+          mono
+        />
       </Field>
     </Group>
   );
@@ -201,7 +266,19 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
  * wrapping it buys the tests a component that renders exactly what the tab
  * renders rather than something assembled a second way.
  */
-export function ContentTab({ type, content, advanced, resolved, patch }) {
+/**
+ * `courses` is the catalogue, DEFAULTED so this body still renders without
+ * one. That default is not a convenience: it is what lets the render tier
+ * drive this tab with no provider, which round 47's warning tests do.
+ */
+export function ContentTab({
+  type,
+  content,
+  advanced,
+  resolved,
+  patch,
+  courses = [],
+}) {
   return (
     <SectionContentEditor
       type={type}
@@ -209,6 +286,7 @@ export function ContentTab({ type, content, advanced, resolved, patch }) {
       advanced={advanced}
       resolved={resolved}
       patch={patch}
+      courses={courses}
     />
   );
 }
@@ -261,9 +339,10 @@ export function ContentTab({ type, content, advanced, resolved, patch }) {
  * custom accent changes the VALUE those variables carry and not which
  * components read them, so the set is exactly the set it was.
  */
-const ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ '
-  + 'ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — '
-  + 'section บางชนิดไม่มีส่วนที่ใช้สีองค์ประกอบ จึงจะไม่เห็นความเปลี่ยนแปลง';
+const ACCENT_HINT =
+  "ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ " +
+  "ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — " +
+  "section บางชนิดไม่มีส่วนที่ใช้สีองค์ประกอบ จึงจะไม่เห็นความเปลี่ยนแปลง";
 
 /**
  * ── THE CUSTOM-MODE CAVEAT, AND WHAT IT DELIBERATELY DOES NOT CLAIM ────────
@@ -287,11 +366,35 @@ const ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น 
  * the sentence that was measured to vary: a section with no accent inherits the
  * page theme's accent (#005CFF on default, #9124FF on ai_purple).
  */
-const CUSTOM_COLOR_CAVEAT = 'สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — '
-  + 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด';
+/**
+ * ── ROUND 79 REPLACED THE SECOND HALF OF THIS PROMISE ────────────────────
+ * It used to end 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด' — the system adjusts this
+ * colour for neither the theme nor dark mode. The first clause is still true
+ * and still says the thing round 22 measured: a custom colour does not follow
+ * the PAGE THEME, which is what custom mode gives up.
+ *
+ * The dark-mode clause is now FALSE, and round 18's rule cuts both ways: a
+ * promise of stability the system no longer keeps is as much a lie as a claimed
+ * effect that never happens. So it says what the system now does, and names the
+ * escape hatch in the same breath, because an author reading this at the moment
+ * of choosing is the only one who can act on it.
+ *
+ * It STILL makes no comparison with preset mode. Round 39 measured that nothing
+ * followed dark mode then, so a contrast would have been unverifiable; rounds
+ * 78 and 79 changed both halves and a comparison would now be merely
+ * uninteresting. Either way the caveat's job is to describe custom mode.
+ */
+const CUSTOM_COLOR_CAVEAT =
+  "สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — " +
+  'และจะถูกปรับให้เข้ากับโหมดมืดโดยอัตโนมัติ เว้นแต่จะเลือก "ตรึงสีไว้"';
+
+/** The pin control's own label and hint. */
+const PIN_LABEL = "ตรึงสีไว้ (ไม่ปรับตามโหมดมืด)";
+const PIN_HINT =
+  "ใช้สีนี้ตามที่ระบุทั้งในโหมดสว่างและโหมดมืด — สำหรับสีแบรนด์ที่ต้องคงเดิม";
 
 /** The hex box's placeholder. Not a colour — six letters standing for digits. */
-const HEX_PLACEHOLDER = '#RRGGBB';
+const HEX_PLACEHOLDER = "#RRGGBB";
 
 /**
  * ── THE CONTRAST WARNINGS: THEY WARN, THEY DO NOT ENFORCE ──────────────────
@@ -311,10 +414,10 @@ const HEX_PLACEHOLDER = '#RRGGBB';
  * one, so it is a perfectly readable BACKGROUND and an unreadable ACCENT TEXT.
  */
 const BACKGROUND_CONTRAST_WARNING =
-  'สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG';
+  "สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
 
 const ACCENT_CONTRAST_WARNING =
-  'สีนี้อาจอ่านยากเมื่อใช้เป็นตัวอักษรบนพื้นหลังสว่าง — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG';
+  "สีนี้อาจอ่านยากเมื่อใช้เป็นตัวอักษรบนพื้นหลังสว่าง — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG";
 
 /**
  * The two types whose card width is fixed, so ความกว้าง cannot change what the
@@ -342,9 +445,10 @@ const ACCENT_CONTRAST_WARNING =
  * asserts this list and that scan name the same two types. A third type gaining
  * the clamp, or these two losing it, reddens a test that names the fix.
  */
-const FIXED_CARD_WIDTH_TYPES = ['course_card', 'instructor_card'];
+const FIXED_CARD_WIDTH_TYPES = ["course_card", "instructor_card"];
 
-const FIXED_CARD_WIDTH_HINT = 'การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น';
+const FIXED_CARD_WIDTH_HINT =
+  "การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น";
 
 /**
  * The รูปแบบ tab: the per-type layout/style fields, then the universal envelope
@@ -371,24 +475,26 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
    * preset the author had, not reset it. So `background`/`accentColor` are left
    * untouched when custom is chosen, and the mode alone moves.
    */
-  const backgroundIsCustom = settings.backgroundMode === 'custom';
-  const accentIsCustom = style.accentMode === 'custom';
+  const backgroundIsCustom = settings.backgroundMode === "custom";
+  const accentIsCustom = style.accentMode === "custom";
   const bgCustom = settings.backgroundCustom ?? {};
 
   /** Choosing in the background select: a preset value, or the custom sentinel. */
-  const pickBackgroundMode = (v) => (v === CUSTOM_COLOR_OPTION
-    ? { backgroundMode: 'custom' }
-    // `undefined` rather than 'preset' — absence IS preset, and writing the
-    // word would put a key into every section that ever opened this control.
-    : { backgroundMode: undefined, background: v });
+  const pickBackgroundMode = (v) =>
+    v === CUSTOM_COLOR_OPTION
+      ? { backgroundMode: "custom" }
+      : // `undefined` rather than 'preset' — absence IS preset, and writing the
+        // word would put a key into every section that ever opened this control.
+        { backgroundMode: undefined, background: v };
 
-  const pickAccentMode = (v) => (v === CUSTOM_COLOR_OPTION
-    ? { accentMode: 'custom' }
-    : { accentMode: undefined, accentColor: v || undefined });
+  const pickAccentMode = (v) =>
+    v === CUSTOM_COLOR_OPTION
+      ? { accentMode: "custom" }
+      : { accentMode: undefined, accentColor: v || undefined };
 
   /** Merge one field of the custom background, keeping the other two. */
   const patchCustomBackground = (patch) =>
-    patchKey('settings', { backgroundCustom: { ...bgCustom, ...patch } });
+    patchKey("settings", { backgroundCustom: { ...bgCustom, ...patch } });
 
   return (
     <>
@@ -396,29 +502,78 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
         type={type}
         layout={layout}
         style={style}
-        patchLayout={(patch) => patchKey('layout', patch)}
-        patchStyle={(patch) => patchKey('style', patch)}
+        patchLayout={(patch) => patchKey("layout", patch)}
+        patchStyle={(patch) => patchKey("style", patch)}
       />
 
       <Group title="การจัดวาง">
-        <Field label="ความกว้าง" hint={FIXED_CARD_WIDTH_TYPES.includes(type) ? FIXED_CARD_WIDTH_HINT : undefined}>
+        <Field
+          label="ความกว้าง"
+          hint={
+            FIXED_CARD_WIDTH_TYPES.includes(type)
+              ? FIXED_CARD_WIDTH_HINT
+              : undefined
+          }
+        >
           <Select
-            value={settings.containerWidth} options={CONTAINER_WIDTHS} labels={CONTAINER_WIDTH_LABELS}
-            onChange={(v) => patchKey('settings', { containerWidth: v })}
+            value={settings.containerWidth}
+            options={CONTAINER_WIDTHS}
+            labels={CONTAINER_WIDTH_LABELS}
+            onChange={(v) => patchKey("settings", { containerWidth: v })}
           />
         </Field>
         <Field label="ระยะห่างด้านบน">
           <Select
-            value={settings.spacingTop} options={SPACING} labels={SPACING_LABELS}
-            onChange={(v) => patchKey('settings', { spacingTop: v })}
+            value={settings.spacingTop}
+            options={SPACING}
+            labels={SPACING_LABELS}
+            onChange={(v) => patchKey("settings", { spacingTop: v })}
           />
         </Field>
         <Field label="ระยะห่างด้านล่าง">
           <Select
-            value={settings.spacingBottom} options={SPACING} labels={SPACING_LABELS}
-            onChange={(v) => patchKey('settings', { spacingBottom: v })}
+            value={settings.spacingBottom}
+            options={SPACING}
+            labels={SPACING_LABELS}
+            onChange={(v) => patchKey("settings", { spacingBottom: v })}
           />
         </Field>
+        {/*
+          ── ROUND 71: THE FIRST PER-TYPE FIELD IN THIS GROUP ──────────────
+          The header above says this panel ships only fields whose effect is
+          UNIVERSAL. This one is not, and the rule it comes from is the reason
+          it is conditional rather than the reason it is excluded: a control
+          for a value the render path ignores is a lie the author cannot
+          detect. Only `container` and `full_width` read spacingBetween, so
+          only they are offered it.
+
+          THE COST, NAMED: an author who selects a container sees a fourth
+          control here and, selecting a card_grid or a two_column, does not.
+          That inconsistency is real. It is preferred to the alternative,
+          which is the same word meaning a different distance on each type —
+          a grid GUTTER on the grids, and on two_column one of its TWO gaps
+          with no way to say which. The group already varies by type in a
+          smaller way (ความกว้าง carries a different hint for the fixed-width
+          cards), so this is that pattern going one step further, not a new
+          one.
+
+          DERIVED, NOT RESTATED: the list is presets.SPACING_BETWEEN_TYPES,
+          the same constant the components are checked against, so offering
+          the control and honouring it cannot drift.
+        */}
+        {SPACING_BETWEEN_TYPES.includes(type) && (
+          <Field
+            label="ระยะห่างระหว่างเนื้อหาข้างใน"
+            hint="ระยะห่างระหว่างแต่ละ section ที่อยู่ข้างในกล่องนี้ — ไม่ใช่ระยะห่างด้านบน/ล่างของตัวกล่องเอง (ค่าเริ่มต้น: ปานกลาง)"
+          >
+            <Select
+              value={settings.spacingBetween ?? "medium"}
+              options={SPACING}
+              labels={SPACING_LABELS}
+              onChange={(v) => patchKey("settings", { spacingBetween: v })}
+            />
+          </Field>
+        )}
       </Group>
 
       {/*
@@ -447,11 +602,19 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
         <Field label="พื้นหลัง">
           <select
             className={INPUT_CLASS}
-            value={backgroundIsCustom ? CUSTOM_COLOR_OPTION : (settings.background ?? 'default')}
-            onChange={(e) => patchKey('settings', pickBackgroundMode(e.target.value))}
+            value={
+              backgroundIsCustom
+                ? CUSTOM_COLOR_OPTION
+                : (settings.background ?? "default")
+            }
+            onChange={(e) =>
+              patchKey("settings", pickBackgroundMode(e.target.value))
+            }
           >
             {OFFERED_BACKGROUNDS.map((b) => (
-              <option key={b} value={b}>{labelFor(BACKGROUND_LABELS, b)}</option>
+              <option key={b} value={b}>
+                {labelFor(BACKGROUND_LABELS, b)}
+              </option>
             ))}
             <option value={CUSTOM_COLOR_OPTION}>{CUSTOM_COLOR_LABEL}</option>
           </select>
@@ -461,16 +624,23 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
           <>
             <Field label="สีเริ่มต้น" hint={CUSTOM_COLOR_CAVEAT}>
               <ColorInput
-                value={bgCustom.from} placeholder={HEX_PLACEHOLDER}
+                value={bgCustom.from}
+                placeholder={HEX_PLACEHOLDER}
                 invalid={Boolean(bgCustom.from) && !isHexColor(bgCustom.from)}
                 onChange={(v) => patchCustomBackground({ from: v })}
               />
             </Field>
-            {!backgroundContrastOk(bgCustom) && <Warn>{BACKGROUND_CONTRAST_WARNING}</Warn>}
+            {!backgroundContrastOk(bgCustom) && (
+              <Warn>{BACKGROUND_CONTRAST_WARNING}</Warn>
+            )}
 
-            <Field label="สีที่สอง" hint="เว้นว่างไว้ถ้าต้องการสีพื้นเรียบสีเดียว">
+            <Field
+              label="สีที่สอง"
+              hint="เว้นว่างไว้ถ้าต้องการสีพื้นเรียบสีเดียว"
+            >
               <ColorInput
-                value={bgCustom.to} placeholder={HEX_PLACEHOLDER}
+                value={bgCustom.to}
+                placeholder={HEX_PLACEHOLDER}
                 invalid={Boolean(bgCustom.to) && !isHexColor(bgCustom.to)}
                 onChange={(v) => patchCustomBackground({ to: v })}
               />
@@ -483,23 +653,46 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
               <Field label="ทิศทางไล่สี">
                 <Select
                   value={bgCustom.direction ?? DEFAULT_GRADIENT_DIRECTION}
-                  options={GRADIENT_DIRECTIONS} labels={GRADIENT_DIRECTION_LABELS}
+                  options={GRADIENT_DIRECTIONS}
+                  labels={GRADIENT_DIRECTION_LABELS}
                   onChange={(v) => patchCustomBackground({ direction: v })}
                 />
               </Field>
             )}
+
+            {/* ROUND 79 — the opt-out. Offered only in custom mode, because a
+                preset colour already follows the theme and pinning one would be
+                a control that cannot change anything. Absent stores nothing:
+                `patchKey` is called with `undefined` when switched back off, so a
+                section an author never pinned keeps the byte-shape it had. */}
+            <Field label={PIN_LABEL} hint={PIN_HINT}>
+              <Toggle
+                checked={settings.backgroundPin === true}
+                onChange={(next) =>
+                  patchKey("settings", {
+                    backgroundPin: next ? true : undefined,
+                  })
+                }
+                onLabel="ตรึง"
+                offLabel="ปรับอัตโนมัติ"
+              />
+            </Field>
           </>
         )}
 
         <Field label="สีองค์ประกอบ" hint={ACCENT_HINT}>
           <select
             className={INPUT_CLASS}
-            value={accentIsCustom ? CUSTOM_COLOR_OPTION : (style.accentColor ?? '')}
-            onChange={(e) => patchKey('style', pickAccentMode(e.target.value))}
+            value={
+              accentIsCustom ? CUSTOM_COLOR_OPTION : (style.accentColor ?? "")
+            }
+            onChange={(e) => patchKey("style", pickAccentMode(e.target.value))}
           >
             <option value="">ตามธีมของหน้า</option>
             {ACCENTS.map((a) => (
-              <option key={a} value={a}>{labelFor(ACCENT_LABELS, a)}</option>
+              <option key={a} value={a}>
+                {labelFor(ACCENT_LABELS, a)}
+              </option>
             ))}
             <option value={CUSTOM_COLOR_OPTION}>{CUSTOM_COLOR_LABEL}</option>
           </select>
@@ -509,21 +702,35 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
           <>
             <Field label="สีที่กำหนดเอง" hint={CUSTOM_COLOR_CAVEAT}>
               <ColorInput
-                value={style.accentCustom} placeholder={HEX_PLACEHOLDER}
-                invalid={Boolean(style.accentCustom) && !isHexColor(style.accentCustom)}
-                onChange={(v) => patchKey('style', { accentCustom: v })}
+                value={style.accentCustom}
+                placeholder={HEX_PLACEHOLDER}
+                invalid={
+                  Boolean(style.accentCustom) && !isHexColor(style.accentCustom)
+                }
+                onChange={(v) => patchKey("style", { accentCustom: v })}
               />
             </Field>
-            {!accentContrastOk(style.accentCustom) && <Warn>{ACCENT_CONTRAST_WARNING}</Warn>}
+            {!accentContrastOk(style.accentCustom) && (
+              <Warn>{ACCENT_CONTRAST_WARNING}</Warn>
+            )}
           </>
         )}
       </Group>
 
       <Group title="การแสดงผล">
-        <Field label="แสดงบน" hint={settings.visibility === 'hidden' ? 'section นี้จะไม่แสดงที่ใดเลย' : undefined}>
+        <Field
+          label="แสดงบน"
+          hint={
+            settings.visibility === "hidden"
+              ? "section นี้จะไม่แสดงที่ใดเลย"
+              : undefined
+          }
+        >
           <Select
-            value={settings.visibility} options={VISIBILITY} labels={VISIBILITY_LABELS}
-            onChange={(v) => patchKey('settings', { visibility: v })}
+            value={settings.visibility}
+            options={VISIBILITY}
+            labels={VISIBILITY_LABELS}
+            onChange={(v) => patchKey("settings", { visibility: v })}
           />
         </Field>
       </Group>
@@ -588,18 +795,24 @@ export function SelectionHeader({ type, parentType }) {
   const ParentIcon = parentType ? iconOf(parentType) : null;
   return (
     <div className="mb-4" data-testid="settings-header">
-      <p data-testid="settings-header-type" className="text-xl font-bold leading-7 text-9e-navy dark:text-white">
+      <p
+        data-testid="settings-header-type"
+        className="text-xl font-bold leading-7 text-9e-navy dark:text-white"
+      >
         {labelOf(type)}
       </p>
       {parentType && (
         <p
           data-testid="settings-header-parent"
           className={cn(
-            'mt-2 flex h-[50px] items-center gap-2.5 rounded-9e-sm border',
-            'border-[var(--surface-border)] bg-[var(--surface-hover)] px-2.5 text-xs text-9e-slate-dp-50'
+            "mt-2 flex h-[50px] items-center gap-2.5 rounded-9e-sm border",
+            "border-[var(--surface-border)] bg-[var(--surface-hover)] px-2.5 text-xs text-9e-slate-dp-50",
           )}
         >
-          <ParentIcon className="h-[26px] w-[26px] shrink-0 text-9e-action" aria-hidden />
+          <ParentIcon
+            className="h-[26px] w-[26px] shrink-0 text-9e-action"
+            aria-hidden
+          />
           อยู่ใน {labelOf(parentType)}
         </p>
       )}
@@ -648,8 +861,8 @@ export function SectionNameField({ name, onChange }) {
  * hasAdvancedTab.
  */
 const BASE_TABS = [
-  { key: 'content', label: 'เนื้อหา' },
-  { key: 'style', label: 'รูปแบบ' },
+  { key: "content", label: "เนื้อหา" },
+  { key: "style", label: "รูปแบบ" },
 ];
 
 /**
@@ -667,13 +880,14 @@ const BASE_TABS = [
  * width would leave a ragged gap on the two-tab case.
  */
 const TAB_TRIGGER_CLASS = [
-  'flex-1 border-b-2 border-transparent px-2 text-xs font-medium text-9e-slate-dp-50',
-  'data-[state=active]:border-9e-action data-[state=active]:font-bold data-[state=active]:text-9e-action',
-  'hover:text-9e-action',
-].join(' ');
+  "flex-1 border-b-2 border-transparent px-2 text-xs font-medium text-9e-slate-dp-50",
+  "data-[state=active]:border-9e-action data-[state=active]:font-bold data-[state=active]:text-9e-action",
+  "hover:text-9e-action",
+].join(" ");
 
 export function SettingsPanel() {
-  const { page, selected, selection, dispatch, tier, resolvedData } = useEditor();
+  const { page, selected, selection, dispatch, tier, resolvedData, courses } =
+    useEditor();
 
   /**
    * ── WHICH TAB IS OPEN IS VIEW STATE, NOT DOCUMENT STATE ──────────────────
@@ -686,16 +900,21 @@ export function SettingsPanel() {
    * Declared before the early return below, because hooks cannot be called
    * conditionally.
    */
-  const [tab, setTab] = useState('content');
+  const [tab, setTab] = useState("content");
 
   if (!selected || !selection) {
     // No selection, no tab strip — there is nothing for it to be about.
-    return <p className="text-xs text-9e-slate-dp-50">เลือก section เพื่อแก้ไขการตั้งค่า</p>;
+    return (
+      <p className="text-xs text-9e-slate-dp-50">
+        เลือก section เพื่อแก้ไขการตั้งค่า
+      </p>
+    );
   }
 
   const settings = selected.settings ?? {};
   const style = selected.style ?? {};
-  const patchKey = (key, patch) => dispatch({ type: 'PATCH_SECTION_KEY', path: selection, key, patch });
+  const patchKey = (key, patch) =>
+    dispatch({ type: "PATCH_SECTION_KEY", path: selection, key, patch });
   const canUseAdvanced = Boolean(tier?.canUseAdvanced);
 
   // Null for a top-level selection — see the header note below.
@@ -703,7 +922,7 @@ export function SettingsPanel() {
   const parentSection = parentPath ? getAt(page, parentPath) : null;
 
   const tabs = hasAdvancedTab(selected.advanced, canUseAdvanced)
-    ? [...BASE_TABS, { key: 'advanced', label: 'ขั้นสูง' }]
+    ? [...BASE_TABS, { key: "advanced", label: "ขั้นสูง" }]
     : BASE_TABS;
 
   /**
@@ -726,7 +945,7 @@ export function SettingsPanel() {
    * which is the behaviour being asked for; it is not a section showing a tab
    * the author never picked.
    */
-  const active = tabs.some((t) => t.key === tab) ? tab : 'content';
+  const active = tabs.some((t) => t.key === tab) ? tab : "content";
 
   return (
     <div>
@@ -744,7 +963,10 @@ export function SettingsPanel() {
           named. It would add precision for exactly one type, and the slot copy
           lives in the structure panel — naming it here would put a second copy
           of that vocabulary in a second file to serve one case. */}
-      <SelectionHeader type={selected.type} parentType={parentSection?.type ?? null} />
+      <SelectionHeader
+        type={selected.type}
+        parentType={parentSection?.type ?? null}
+      />
 
       {/* ── THE ONE FIELD THAT IS NOT A TAB, AND THE ONE THAT IS NOT A KEY ───
           The name is a TOP-LEVEL key on the section, beside its type and its
@@ -756,8 +978,14 @@ export function SettingsPanel() {
           the tree dirty like every other section edit, so the name rides the
           ordinary autosave rather than a write of its own. */}
       <SectionNameField
-        name={selected.name ?? ''}
-        onChange={(v) => dispatch({ type: 'PATCH_SECTION', path: selection, patch: { name: v } })}
+        name={selected.name ?? ""}
+        onChange={(v) =>
+          dispatch({
+            type: "PATCH_SECTION",
+            path: selection,
+            patch: { name: v },
+          })
+        }
       />
 
       <Tabs.Root value={active} onValueChange={setTab}>
@@ -767,7 +995,12 @@ export function SettingsPanel() {
           className="mb-4 flex h-[46px] items-stretch border-b border-[var(--surface-border)]"
         >
           {tabs.map((t) => (
-            <Tabs.Trigger key={t.key} value={t.key} data-tab={t.key} className={TAB_TRIGGER_CLASS}>
+            <Tabs.Trigger
+              key={t.key}
+              value={t.key}
+              data-tab={t.key}
+              className={TAB_TRIGGER_CLASS}
+            >
               {t.label}
             </Tabs.Trigger>
           ))}
@@ -781,7 +1014,8 @@ export function SettingsPanel() {
             content={selected.content}
             advanced={selected.advanced}
             resolved={resolvedData?.[selected.id]}
-            patch={(patch) => patchKey('content', patch)}
+            courses={courses}
+            patch={(patch) => patchKey("content", patch)}
           />
         </Tabs.Content>
 

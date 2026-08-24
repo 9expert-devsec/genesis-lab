@@ -9,7 +9,13 @@ import { defineSection } from './base';
 
 export const CONTENT_TYPES = ['heading', 'rich_text', 'image', 'cta', 'checklist', 'notice'];
 
+/**
+ * Round 57 — `eyebrow` is the small line above the heading (page B's
+ * "PROMOTION DETAILS", §B #25). Defaults to '' and absent renders nothing (§H):
+ * it ADDS something no page has shown, unlike round 50's `showPrice`.
+ */
 const headingContent = z.object({
+  eyebrow: z.string().default(''),
   text:  z.string().default(''),
   level: z.enum(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']).default('h2'),
   align: z.enum(['left', 'center', 'right']).default('left'),
@@ -34,14 +40,33 @@ const imageContent = z.object({
   caption:  z.string().default(''),
 }).passthrough();
 
+/**
+ * ── ROUND 57: A SECOND BUTTON (docs/promotion-page-coverage.md §G step 2) ──
+ * Both live promotion pages close with two actions and page B's hero opens with
+ * two; this type offered one pair, so §B counted the gap twice.
+ *
+ * Both new fields default to '' and ABSENT RENDERS NOTHING (§H) — they ADD
+ * something no page has shown. That is the opposite of round 50's `showPrice`,
+ * which defaults ON and reads `!== false` because it REMOVES something every
+ * stored card shows. The renderer applies the SAME pair-guard the first button
+ * has always used: a label without a safe href draws nothing, and vice versa.
+ */
 const ctaContent = z.object({
-  heading:     z.string().default(''),
-  description: z.string().default(''),
-  buttonLabel: z.string().default(''),
-  buttonHref:  z.string().default(''),
+  heading:              z.string().default(''),
+  description:          z.string().default(''),
+  buttonLabel:          z.string().default(''),
+  buttonHref:           z.string().default(''),
+  secondaryButtonLabel: z.string().default(''),
+  secondaryButtonHref:  z.string().default(''),
 }).passthrough();
 
+/**
+ * Round 57 — `heading` titles the list (เงื่อนไขโปรโมชัน / หมายเหตุ, §B #17).
+ * The box TINT is the section background preset's job, not this field's.
+ * Defaults to '' and absent renders nothing (§H).
+ */
 const checklistContent = z.object({
+  heading: z.string().default(''),
   items: z.array(z.object({
     text:    z.string().default(''),
     checked: z.boolean().default(true),

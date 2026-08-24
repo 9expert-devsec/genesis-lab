@@ -67,6 +67,46 @@
   --surface-divider: #F3F4F6;
   --shadow-color:    13 27 42;
 
+  /* ── Page Builder section surfaces (settings.background) ──────────────
+   * ROUND 78. BACKGROUND_CLASS in src/lib/pageBuilder/presets.js used to
+   * resolve to literal Tailwind colours — bg-white, bg-9e-ice,
+   * bg-9e-slate-lt-800, bg-9e-navy. Every one of those is a raw brand hex that
+   * globals.css declares ONCE, so a section carrying one rendered the same
+   * colour in both themes, and a published page came out as an opaque light
+   * slab on a dark canvas. Measured on /promotions/early-bird-claude-code
+   * before this change: the page shell computed #ffffff in dark mode and a
+   * heading on it scored 1.00:1.
+   *
+   * THE LIGHT VALUES BELOW ARE THE OLD LITERALS, BYTE FOR BYTE. That is the
+   * whole safety property: this is not a re-palette, it is the existing light
+   * colours gaining a dark counterpart. A test compiles both tables and
+   * asserts each key's light declaration still equals what it was.
+   *
+   * ── THE DARK VALUES ARE EXISTING HOUSE COLOURS, NOT NEW ONES ────────────
+   * Nothing here mints a colour. Each dark value is a hex this file already
+   * declares elsewhere, re-bound under a name that says what it is for:
+   *   --pb-bg-white     #0D1B2A = --page-bg (dark), the ground itself
+   *   --pb-bg-light     #132638 = --surface (dark), one step off the ground
+   *   --pb-bg-soft-gray #1A2D42 = --surface-muted (dark), two steps off
+   *   --pb-bg-dark      #080E16 = the dark-tint anchor named in the scale note
+   *                     below; DEEPER than the ground, so a deliberately dark
+   *                     band still reads as a band instead of vanishing.
+   *
+   * The ordering is preserved rather than the lightness. In light the four
+   * step progressively AWAY from a white page (255 -> 248 -> 241, then the
+   * inverted band at 13); in dark they step progressively away from a navy
+   * ground in the only direction available, which globals.css already states
+   * as the rule — "dark elevation is conveyed by a LIGHTER surface".
+   *
+   * `brand_gradient` is deliberately NOT here. It paints --9e-action ->
+   * --9e-air, two of the thirteen raw brand hexes this file declares once on
+   * purpose; a brand gradient is not a theme surface and has no dark
+   * counterpart to give it. Reported rather than invented. */
+  --pb-bg-white:     #FFFFFF;
+  --pb-bg-light:     #F8FAFD;
+  --pb-bg-soft-gray: #F1F3F6;
+  --pb-bg-dark:      #0D1B2A;
+
   /* === 11-step scales (light mode) === */
 
   /* Signature Blue scale */
@@ -247,6 +287,14 @@
   --surface-divider: #17293C;
   --shadow-color:    0 0 0;
 
+  /* ── Page Builder section surfaces — DARK (see the :root note) ──────────
+   * Every value here is a hex already declared above under `.dark`, re-bound
+   * under a Page Builder name. No new colour is introduced. */
+  --pb-bg-white:     #0D1B2A;   /* = --page-bg      : the ground */
+  --pb-bg-light:     #132638;   /* = --surface      : one step off it */
+  --pb-bg-soft-gray: #1A2D42;   /* = --surface-muted: two steps off it */
+  --pb-bg-dark:      #080E16;   /* the dark-tint anchor: deeper than the ground */
+
   /* === 11-step scales (dark mode) === */
 
   /* Signature Blue scale */
@@ -380,6 +428,71 @@
   --9e-green-800: #0D322B;
   --9e-green-900: #0A2020;
   --9e-green-950: #09171B;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   AUTHOR-CHOSEN SECTION BACKGROUNDS, AND THEIR DARK COUNTERPART
+   Round 79. docs/custom-colour-dark-mode.md is the spec.
+
+   An author's colour arrives at render time as a custom property, never as a
+   literal in source — round 30's ban is on a colour DECIDED in code, and a
+   value read from the database is not one. The renderer emits
+   `--pb-cbg-from` (+ `--pb-cbg-to` / `--pb-cbg-dir` for a gradient) and a
+   `data-pb-custom-bg` attribute saying which kind it is.
+
+   ── THE LIGHT RULES REPRODUCE THE OLD INLINE STYLE EXACTLY ───────────────
+   `customBackgroundStyle` used to emit `background-color: <from>` or
+   `linear-gradient(<dir>, <from>, <to>)` inline. These two rules are that,
+   moved into the stylesheet so a `.dark` counterpart can exist at all — an
+   inline declaration has no selector and can never have a second form.
+
+   ── THE DARK RULE, AND WHY IT IS SHAPED LIKE THIS ────────────────────────
+   `L' = 1 − L × 0.782314` is the `oklch-anchored` formula the doc measured,
+   with the constant folded: 0.782314 = 1 − L(#0D1B2A), the OKLab lightness of
+   the dark page ground. It keeps the colour's DISTANCE FROM THE PAGE rather
+   than its absolute lightness, so a barely-off-white panel becomes a
+   barely-off-dark one instead of collapsing to black. Chroma and hue are
+   passed through untouched, so the author's hue survives — measured drift
+   1.2–1.4° on the real stored colours.
+
+   Verified in Chrome (scripts/_probe-round79-oklch-support.mjs): the browser
+   agrees with the OKLab arithmetic to a delta of 0 on all four stored
+   colours, and the doc's measured table therefore describes what ships.
+
+   ── @supports IS LOad-BEARING, NOT DECORATION ────────────────────────────
+   `background-color: oklch(from var(--x) …)` is parsed lazily because of the
+   `var()`. Where relative colour syntax is unsupported, substitution yields
+   something unparseable and the declaration is INVALID AT COMPUTED-VALUE
+   TIME — which sets the property to `unset`, i.e. TRANSPARENT. It does not
+   fall back to the earlier declaration. Measured: the unguarded form computes
+   `rgba(0, 0, 0, 0)`.
+
+   `@supports` is evaluated at parse time against a literal with no `var()` in
+   it, so an unsupporting browser skips this block entirely and the light rules
+   above survive untouched — the author's own colour, in both themes, which is
+   exactly the pre-round-79 behaviour rather than something worse.
+
+   ── PINNED SECTIONS OPT OUT ──────────────────────────────────────────────
+   `data-pb-bg-pin` is emitted when the author asked for their colour verbatim
+   in both themes. The dark rules exclude it, so a pinned section keeps round
+   39's original promise.
+   ────────────────────────────────────────────────────────────── */
+[data-pb-custom-bg="flat"]     { background-color: var(--pb-cbg-from); }
+[data-pb-custom-bg="gradient"] {
+  background-image: linear-gradient(var(--pb-cbg-dir), var(--pb-cbg-from), var(--pb-cbg-to));
+}
+
+@supports (background-color: oklch(from white calc(l) c h)) {
+  .dark [data-pb-custom-bg="flat"]:not([data-pb-bg-pin]) {
+    background-color: oklch(from var(--pb-cbg-from) calc(1 - l * 0.782314) c h);
+  }
+  .dark [data-pb-custom-bg="gradient"]:not([data-pb-bg-pin]) {
+    background-image: linear-gradient(
+      var(--pb-cbg-dir),
+      oklch(from var(--pb-cbg-from) calc(1 - l * 0.782314) c h),
+      oklch(from var(--pb-cbg-to)   calc(1 - l * 0.782314) c h)
+    );
+  }
 }
 
 /* Native form controls and scrollbars follow the active theme */

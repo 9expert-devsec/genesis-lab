@@ -1,12 +1,15 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { readdirSync, readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { backgroundClass, OFFERED_BACKGROUNDS } from '@/lib/pageBuilder/presets';
-import { BACKGROUNDS, ALL_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
-import { readSource } from '../sourceScan.mjs';
+import {
+  backgroundClass,
+  OFFERED_BACKGROUNDS,
+} from "@/lib/pageBuilder/presets";
+import { BACKGROUNDS, ALL_SECTION_TYPES } from "@/lib/schemas/pageBuilder";
+import { readSource } from "../sourceScan.mjs";
 
 /**
  * Round 18 — THREE TRIPWIRES OVER MEASURED GAPS, NOT THREE RULES.
@@ -40,8 +43,8 @@ import { readSource } from '../sourceScan.mjs';
  */
 
 const SECTIONS_DIR = path.resolve(
-  fileURLToPath(new URL('../..', import.meta.url)),
-  'src/components/pageBuilder/sections',
+  fileURLToPath(new URL("../..", import.meta.url)),
+  "src/components/pageBuilder/sections",
 );
 
 // ── FINDING 8 — the guard presets.js says exists ───────────────────────────
@@ -60,26 +63,42 @@ test('AUDIT TRIPWIRE (finding 8): background "image" still renders as nothing', 
    * the exclusion had no way to retire itself. This is that check, arriving
    * late.
    */
-  assert.equal(backgroundClass('image'), '',
-    'FINDING 8 IS FIXED: background "image" now renders something. DELETE this test AND '
-    + 'remove the `image` filter from OFFERED_BACKGROUNDS in presets.js — the panel is '
-    + 'currently hiding a background that works.');
+  assert.equal(
+    backgroundClass("image"),
+    "",
+    'FINDING 8 IS FIXED: background "image" now renders something. DELETE this test AND ' +
+      "remove the `image` filter from OFFERED_BACKGROUNDS in presets.js — the panel is " +
+      "currently hiding a background that works.",
+  );
 
   // It is still in the vocabulary and still withheld from the author. Both
   // halves, because the finding is the gap BETWEEN them.
-  assert.equal(BACKGROUNDS.includes('image'), true, 'the schema no longer declares it');
-  assert.equal(OFFERED_BACKGROUNDS.includes('image'), false, 'the panel now offers it');
-  assert.deepEqual([...OFFERED_BACKGROUNDS],
-    ['default', 'white', 'light', 'soft_gray', 'dark', 'brand_gradient']);
+  assert.equal(
+    BACKGROUNDS.includes("image"),
+    true,
+    "the schema no longer declares it",
+  );
+  assert.equal(
+    OFFERED_BACKGROUNDS.includes("image"),
+    false,
+    "the panel now offers it",
+  );
+  assert.deepEqual(
+    [...OFFERED_BACKGROUNDS],
+    ["default", "white", "light", "soft_gray", "dark", "brand_gradient"],
+  );
 });
 
-test('CONTROL: the emptiness check discriminates — a real background is not empty', () => {
+test("CONTROL: the emptiness check discriminates — a real background is not empty", () => {
   // Without this, `equal(x, '')` passing would say nothing about whether
   // backgroundClass can ever return anything at all.
-  assert.notEqual(backgroundClass('dark'), '');
-  assert.equal(backgroundClass('default'), '',
-    'default is ALSO empty, legitimately — it inherits the theme surface. That is exactly '
-    + 'why OFFERED_BACKGROUNDS is an explicit list and not "every value with a class".');
+  assert.notEqual(backgroundClass("dark"), "");
+  assert.equal(
+    backgroundClass("default"),
+    "",
+    "default is ALSO empty, legitimately — it inherits the theme surface. That is exactly " +
+      'why OFFERED_BACKGROUNDS is an explicit list and not "every value with a class".',
+  );
 });
 
 // ── FINDING 2 — who actually consumes the accent variable ──────────────────
@@ -102,21 +121,29 @@ test('CONTROL: the emptiness check discriminates — a real background is not em
  */
 function directAccentConsumers() {
   return readdirSync(SECTIONS_DIR)
-    .filter((f) => f.endsWith('.jsx'))
-    .filter((f) => /--pb-accent-/.test(readSource(`src/components/pageBuilder/sections/${f}`).code))
-    .map((f) => f.replace(/\.jsx$/, ''))
+    .filter((f) => f.endsWith(".jsx"))
+    .filter((f) =>
+      /--pb-accent-/.test(
+        readSource(`src/components/pageBuilder/sections/${f}`).code,
+      ),
+    )
+    .map((f) => f.replace(/\.jsx$/, ""))
     .sort();
 }
 
 function buttonHelperConsumers() {
   return readdirSync(SECTIONS_DIR)
-    .filter((f) => f.endsWith('.jsx'))
-    .filter((f) => /accentButtonClass/.test(readSource(`src/components/pageBuilder/sections/${f}`).code))
-    .map((f) => f.replace(/\.jsx$/, ''))
+    .filter((f) => f.endsWith(".jsx"))
+    .filter((f) =>
+      /accentButtonClass/.test(
+        readSource(`src/components/pageBuilder/sections/${f}`).code,
+      ),
+    )
+    .map((f) => f.replace(/\.jsx$/, ""))
     .sort();
 }
 
-test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with the accent', () => {
+test("AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with the accent", () => {
   /**
    * Eleven name the variable themselves; `cta` reaches it through the shared
    * button helper (price_card does both). Twelve types in total, plus the four
@@ -153,41 +180,73 @@ test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with t
    * consumer is now a claim that a type has an accent surface after all, which
    * is exactly the argument that should not be settled silently.
    */
-  assert.deepEqual(directAccentConsumers(), [
-    'accordion', 'checklist', 'course_schedule', 'highlight_grid', 'icon_card',
-    'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
-  ],
-  'FINDING 2\'S SET MOVED. It is no longer a gap closing — it closed in round 24. An ADDITION '
-  + 'now asserts a type has an accent surface the audit says it does not: make that argument in '
-  + 'docs/section-control-audit.md before extending this list. A REMOVAL means a type stopped '
-  + 'following the author\'s accent, which is the original defect coming back.');
+  assert.deepEqual(
+    directAccentConsumers(),
+    [
+      "accordion",
+      "checklist",
+      "course_schedule",
+      "icon_card",
+      "instructor_card",
+      "price_card",
+      "rich_text",
+      "stat_card",
+      "tabs",
+      "timeline",
+    ],
+    "FINDING 2'S SET MOVED. It is no longer a gap closing — it closed in round 24. An ADDITION " +
+      "now asserts a type has an accent surface the audit says it does not: make that argument in " +
+      "docs/section-control-audit.md before extending this list. A REMOVAL means a type stopped " +
+      "following the author's accent, which is the original defect coming back.",
+  );
 
-  assert.deepEqual(buttonHelperConsumers(), ['cta', 'price_card'],
-    'the indirect route changed — accentButtonClass is how cta gets its accent without naming '
-    + 'the variable, and it is gated by SECTION_STYLE_CAPS');
+  assert.deepEqual(
+    buttonHelperConsumers(),
+    ["cta", "price_card"],
+    "the indirect route changed — accentButtonClass is how cta gets its accent without naming " +
+      "the variable, and it is gated by SECTION_STYLE_CAPS",
+  );
 
   // The union is the twelve the audit reports. Written as a union rather than
   // as a thirteenth literal list, so the two routes above stay the only source.
-  const painting = [...new Set([...directAccentConsumers(), ...buttonHelperConsumers()])].sort();
-  assert.equal(painting.length, 12);
+  const painting = [
+    ...new Set([...directAccentConsumers(), ...buttonHelperConsumers()]),
+  ].sort();
+  assert.equal(painting.length, 11);
 
   /**
    * The eleven with no accent surface, named. This is the half that was only
    * ever prose before, and it is the half that now carries the meaning: the
    * complement of the set above is a DECISION per type, not a remainder.
    */
-  assert.deepEqual(ALL_SECTION_TYPES.filter((t) => !painting.includes(t)).sort(), [
-    'bundle_courses', 'card_grid', 'container', 'course_card', 'course_list',
-    'course_selector', 'custom_css', 'custom_html', 'debug_json', 'embed',
-    'full_width', 'heading', 'image', 'notice', 'two_column',
-  ].sort(),
-  'the set of types that do NOT paint with the accent changed. Four of these are containers '
-  + 'that FORWARD it (card_grid, container, full_width, two_column) and eleven have no accent '
-  + 'surface — see docs/section-control-audit.md §12. A type leaving this list needs the '
-  + 'argument written down first.');
+  assert.deepEqual(
+    ALL_SECTION_TYPES.filter((t) => !painting.includes(t)).sort(),
+    [
+      "bundle_courses",
+      "card_grid",
+      "container",
+      "course_card",
+      "course_list",
+      "course_selector",
+      "custom_css",
+      "custom_html",
+      "debug_json",
+      "embed",
+      "full_width",
+      "heading",
+      "highlight_grid",
+      "image",
+      "notice",
+      "two_column",
+    ].sort(),
+    "the set of types that do NOT paint with the accent changed. Four of these are containers " +
+      "that FORWARD it (card_grid, container, full_width, two_column) and eleven have no accent " +
+      "surface — see docs/section-control-audit.md §12. A type leaving this list needs the " +
+      "argument written down first.",
+  );
 });
 
-test('CONTROL: the consumer scan reads code, not prose', () => {
+test("CONTROL: the consumer scan reads code, not prose", () => {
   /**
    * THIS CONTROL ALREADY EARNED ITS KEEP. It is what showed that the first
    * version of the test above counted `cta` for the wrong reason — its
@@ -199,21 +258,32 @@ test('CONTROL: the consumer scan reads code, not prose', () => {
    * bytes, because readSource strips comments from `code` and `withImports`
    * alike — only the file on disk still has the prose to be fooled by.
    */
-  const raw = (f) => readFileSync(path.join(SECTIONS_DIR, f), 'utf8');
+  const raw = (f) => readFileSync(path.join(SECTIONS_DIR, f), "utf8");
 
-  assert.match(raw('heading.jsx'), /accent/i, 'heading.jsx no longer mentions the accent at all');
-  assert.match(raw('cta.jsx'), /--pb-accent-/, 'cta.jsx no longer names the variable in prose');
+  assert.match(
+    raw("heading.jsx"),
+    /accent/i,
+    "heading.jsx no longer mentions the accent at all",
+  );
+  assert.match(
+    raw("cta.jsx"),
+    /--pb-accent-/,
+    "cta.jsx no longer names the variable in prose",
+  );
 
   // …and neither survives the comment strip, which is what makes the set exact.
-  assert.equal(directAccentConsumers().includes('heading'), false);
-  assert.equal(directAccentConsumers().includes('cta'), false,
-    'cta counted as a direct consumer — the scan is reading its docstring, exactly as it did '
-    + 'before this control caught it');
+  assert.equal(directAccentConsumers().includes("heading"), false);
+  assert.equal(
+    directAccentConsumers().includes("cta"),
+    false,
+    "cta counted as a direct consumer — the scan is reading its docstring, exactly as it did " +
+      "before this control caught it",
+  );
 });
 
 // ── FINDING 1 — the two self-clamps that make ความกว้าง inert ──────────────
 
-test('AUDIT TRIPWIRE (finding 1): course_card and instructor_card still clamp themselves', () => {
+test("AUDIT TRIPWIRE (finding 1): course_card and instructor_card still clamp themselves", () => {
   /**
    * Measured in Chrome at 1440px (scripts/_probe-container-width.mjs): the
    * painted content width of both is 384px at ALL FOUR containerWidth settings,
@@ -225,17 +295,22 @@ test('AUDIT TRIPWIRE (finding 1): course_card and instructor_card still clamp th
    * layout engine, and re-running the browser probe from the test tier is a
    * dependency the suite does not have.
    */
-  for (const file of ['course_card', 'instructor_card']) {
-    const { code } = readSource(`src/components/pageBuilder/sections/${file}.jsx`);
-    assert.match(code, /max-w-sm/,
-      `FINDING 1 IS FIXED for ${file}: the self-clamp is gone, so settings.containerWidth `
-      + 'can reach it. Re-run scripts/_probe-container-width.mjs, confirm the four settings now '
-      + 'give four widths, then delete this type from the test and from finding 1 in '
-      + 'docs/section-control-audit.md.');
+  for (const file of ["course_card", "instructor_card"]) {
+    const { code } = readSource(
+      `src/components/pageBuilder/sections/${file}.jsx`,
+    );
+    assert.match(
+      code,
+      /max-w-sm/,
+      `FINDING 1 IS FIXED for ${file}: the self-clamp is gone, so settings.containerWidth ` +
+        "can reach it. Re-run scripts/_probe-container-width.mjs, confirm the four settings now " +
+        "give four widths, then delete this type from the test and from finding 1 in " +
+        "docs/section-control-audit.md.",
+    );
   }
 });
 
-test('CONTROL: the clamp scan discriminates — a section without one is not matched', () => {
+test("CONTROL: the clamp scan discriminates — a section without one is not matched", () => {
   /**
    * heading fills its wrapper; it is the type whose four containerWidth values
    * measured 640 / 864 / 1168 / 1408. If the scan matched it too, the assertion
@@ -253,18 +328,38 @@ test('CONTROL: the clamp scan discriminates — a section without one is not mat
    * matching it while `max-w-sm` does not is what proves the finding-1 scan is
    * specific rather than matching any width utility anywhere.
    */
-  assert.equal(/max-w-sm/.test(readSource('src/components/pageBuilder/sections/heading.jsx').code), false);
-  assert.equal(/max-w-sm/.test(readSource('src/components/pageBuilder/sections/container.jsx').code), false,
-    'container carries the narrow-card clamp now — finding 1 and the retired finding 3 are being '
-    + 'confused by a scan that cannot tell them apart');
+  assert.equal(
+    /max-w-sm/.test(
+      readSource("src/components/pageBuilder/sections/heading.jsx").code,
+    ),
+    false,
+  );
+  assert.equal(
+    /max-w-sm/.test(
+      readSource("src/components/pageBuilder/sections/container.jsx").code,
+    ),
+    false,
+    "container carries the narrow-card clamp now — finding 1 and the retired finding 3 are being " +
+      "confused by a scan that cannot tell them apart",
+  );
 
   // The generic pattern still finds SOMETHING, so "no match" above is a fact
   // about container and not about a scan that stopped working.
-  const anyWidth = (f) => /max-w-/.test(readSource(`src/components/pageBuilder/sections/${f}.jsx`).code);
-  assert.equal(anyWidth('course_card'), true, 'the generic width pattern matches nothing at all');
-  assert.equal(anyWidth('container'), false,
-    'container has a width clamp again — round 25 removed it so settings.containerWidth could '
-    + 'reach the box; see docs/section-control-audit.md §13');
+  const anyWidth = (f) =>
+    /max-w-/.test(
+      readSource(`src/components/pageBuilder/sections/${f}.jsx`).code,
+    );
+  assert.equal(
+    anyWidth("course_card"),
+    true,
+    "the generic width pattern matches nothing at all",
+  );
+  assert.equal(
+    anyWidth("container"),
+    false,
+    "container has a width clamp again — round 25 removed it so settings.containerWidth could " +
+      "reach the box; see docs/section-control-audit.md §13",
+  );
 });
 
 /*

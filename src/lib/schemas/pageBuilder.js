@@ -57,6 +57,13 @@ export const JSONLD_TYPES = [
 export {
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
 };
+/**
+ * ROUND 80 — types that still VALIDATE and RENDER but are no longer offered in
+ * the picker. Re-exported here so callers keep one import site, and NOT
+ * subtracted from ALL_SECTION_TYPES below: a retired type must keep parsing, or
+ * every stored section of that type fails validation on the next save.
+ */
+export { RETIRED_SECTION_TYPES } from './sections/layout';
 
 /** Every declared MVP section type, flat. */
 export const ALL_SECTION_TYPES = [

@@ -123,7 +123,11 @@ card does not. That is why 2C.2b's label is a first.
   which erodes *every* editor warning, not just this one. Reasoning kept at the
   code (`SectionContentEditor` / `EditorProvider`) per item 1's mitigation.
 - **2C.2b (derived / time-varying)** — `course_list:source='skill'|'program'`,
-  `course_schedule`. The set/rows are a function of request time, so the canvas
+  `course_schedule`. The set/rows are a function of **render** time — not of the
+  visitor's clock: both public surfaces are `revalidate = 3600`, so a published
+  set can be an hour old and is identical for every visitor inside that window
+  (measured, round 63 §A.2, which also corrected the editor label that claimed
+  otherwise). So the canvas
   can only show an edit-time **sample** — the first time this codebase would ship
   a canvas that knowingly shows content the published page won't match. Browser
   pass #2 rejected a canvas placeholder on this exact principle; 2C.2b asks for a

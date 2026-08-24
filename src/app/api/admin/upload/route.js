@@ -46,6 +46,10 @@ const ALLOWED_FOLDERS = new Set([
   // reference, so a cover inside that scope would look like an orphan. Keeping it
   // out of scope makes "not GC-tracked yet" (option B) also mean "not at risk".
   'promotion-covers',
+  // Round 69 — icon_card illustrations. A SIBLING of page-builder for the same
+  // reason promotion-covers is: icon_card.imageSrc stores the secure URL and no
+  // publicId, so a file inside the item-5 GC scope would look like an orphan.
+  'page-builder-icons',
   'notifications',
   'about',
   'career-paths',

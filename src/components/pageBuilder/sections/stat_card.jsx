@@ -20,7 +20,7 @@ export function StatCardSection({ content, style }) {
   const Icon = lucideIcon(content?.icon);
 
   return (
-    <div className={cn('rounded-9e-lg p-6 text-center', cardSurfaceClass('stat_card', style))}>
+    <div className={cn('h-full rounded-9e-lg p-6 text-center', cardSurfaceClass('stat_card', style))}>
       {Icon && (
         <Icon className="mx-auto mb-2 h-8 w-8 text-[var(--pb-accent-fill)]" strokeWidth={2} aria-hidden />
       )}

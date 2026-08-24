@@ -141,7 +141,7 @@ export function sectionSummary(section) {
  *   container  every child slot empty (renders a bare grid) → the layout components
  *   price_card no title, price, or feature                  → sections/price_card.jsx
  *   stat_card  no value and no label                        → sections/stat_card.jsx
- *   icon_card  no icon-name, title, or description          → sections/icon_card.jsx
+ *   icon_card  no icon-name, IMAGE, title, or description   → sections/icon_card.jsx
  *   custom_html no html                                     → sections/custom_html.jsx
  *   custom_css  no css OR no valid Section ID to scope to    → sections/custom_css.jsx
  *   embed      iframe: no html · youtube/vimeo: url→no id   → sections/embed.jsx
@@ -188,6 +188,7 @@ export function sectionRendersEmpty(section) {
     case 'icon_card':
       return (
         !String(c.icon ?? '').trim() &&
+        !String(c.imageSrc ?? '').trim() &&
         !String(c.title ?? '').trim() &&
         !String(c.description ?? '').trim()
       );
