@@ -35,6 +35,21 @@ import { useEditor } from './EditorProvider';
 
 // 'add' → clickable. 'soon' → exists, component is a later phase. 'locked' →
 // exists, needs a higher tier. Only 'add' reaches onPick.
+//
+// ── 'soon' IS UNREACHABLE TODAY, BY MEASUREMENT — AND STAYS ─────────────────
+// After 2C.2b every type declared in lib/schemas/sections/* has a component in
+// SectionRenderer's REGISTRY, so `renderable` is true for every type the picker
+// draws and no button can currently reach 'soon'. That is MEASURED, not
+// assumed: test/render/sectionTypeCoverage.test.mjs subtracts
+// RENDERABLE_SECTION_TYPES from ALL_SECTION_TYPES and asserts the remainder is
+// empty. It is self-retiring — the day a declared type ships without a
+// component it goes red and names the type.
+//
+// DO NOT DELETE THE BRANCH ON THAT BASIS. It is the fail-closed path: it is the
+// only thing that keeps a schema-only type DISABLED here instead of clickable,
+// and a clickable type with no component throws in newSection() or publishes an
+// empty section. The branch is unreachable because the codebase is currently in
+// a good state, not because the state it guards cannot happen.
 function typeState(type, canUseAdvanced) {
   const renderable = RENDERABLE_SECTION_TYPES.includes(type);
   if (isAdvancedType(type)) {
