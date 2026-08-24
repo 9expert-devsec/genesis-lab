@@ -67,6 +67,7 @@ import {
   findPageBuilderPageByHistoricalSlug,
 } from '@/lib/actions/pageBuilder';
 import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
+import { stripDraft } from '@/lib/pageBuilder/draftState';
 
 /**
  * Catch-all route for legacy-style pattern URLs:
@@ -141,7 +142,11 @@ async function resolveCustomPageForRequest(segment, searchParams) {
 async function resolveBuilderPageForRequest(segment) {
   const page = await getPageBuilderPageBySlugAny(segment);
   if (!page) return null;
-  return isPubliclyVisible(page) ? page : null;
+  // stripDraft HERE rather than inside getPageBuilderPageBySlugAny, because
+  // that reader is shared with /preview/[slug] and previewAccess, which are
+  // allowed to see a draft (and in round 3 will render it). This is a PUBLIC
+  // request path: an unpublished edit must never reach it.
+  return isPubliclyVisible(page) ? stripDraft(page) : null;
 }
 
 // ── Program / skill pretty-URL pages ────────────────────────────────

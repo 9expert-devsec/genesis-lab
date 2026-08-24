@@ -7,9 +7,10 @@ import mongoose from 'mongoose';
  * diff) keeps rollback a straight overwrite and survives schema drift.
  *
  * A snapshot is taken on every PUBLISH and before every rollback. History is
- * capped at the 20 most recent per page — the caller prunes the oldest on
- * insert (see lib/pages/pageAudit.js). Like the audit log, writing a version
- * MUST NEVER block a save.
+ * UNBOUNDED: the caller used to prune to the newest 20 on insert and no longer
+ * does, because a deleted snapshot strands the Cloudinary assets its ownership
+ * tokens were the last record of (see lib/pages/pageAudit.js). Like the audit
+ * log, writing a version MUST NEVER block a save.
  *
  * The rollback UI is Phase 3; this phase only writes snapshots.
  */

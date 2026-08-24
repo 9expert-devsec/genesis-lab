@@ -683,7 +683,19 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 //
 // MEASURED against this tree, not derived: the pins were left at their round-8
 // values, the walk was run, and 171 / 165 are the numbers it reported.
-const MUTATING_EXPORT_COUNT = 171;
+//
+// DRAFT/PUBLISHED SPLIT ROUND 2: 171 -> 174 and 165 -> 168, +3 on BOTH pins —
+// saveDraftContent, publishPageStatus and discardDraftContent added to
+// pageBuilder.js. Each writes Mongo directly in its own body
+// (PageBuilder.findByIdAndUpdate), so the file-local classifier at depth 0
+// sees all three and the two pins move together; REACHED_THROUGH_IMPORT is
+// unchanged and the delta stays 6. They ship ALONGSIDE the actions the editor
+// still calls — createPageBuilderPage, updatePageBuilderPage and
+// updatePageStatus are untouched — so this is an addition, not a replacement,
+// and the count rising by exactly three is the whole of it. All three record
+// an audit row ('draft.save' | 'publish' | 'status' | 'draft.discard'), which
+// is why only the COUNT pins moved and no coverage case did.
+const MUTATING_EXPORT_COUNT = 174;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -864,7 +876,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 165,
+    zero, 168,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -889,7 +901,11 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'REVERSED: 166 → 165, -1 — that action was removed, so a paid registration\'s ' +
     'seat count can no longer be changed by any path. The MUTATION is gone, not ' +
     'its audit: the gate in updateRegistration stays and refuses the field ' +
-    'outright. Both pins move together and the delta stays 6.'
+    'outright. Both pins move together and the delta stays 6. ' +
+    'DRAFT/PUBLISHED SPLIT ROUND 2: 165 -> 168, +3 — saveDraftContent, ' +
+    'publishPageStatus and discardDraftContent added to pageBuilder.js, each ' +
+    'calling PageBuilder.findByIdAndUpdate in its own body, so depth 0 sees all ' +
+    'three and the delta stays 6.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

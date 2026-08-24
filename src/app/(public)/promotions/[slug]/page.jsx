@@ -5,6 +5,7 @@ import { resolvePromotion } from "@/lib/resolvePromotion";
 import { getPageBuilderPageBySlugAny } from "@/lib/actions/pageBuilder";
 import { shouldRenderBuilderPromotion } from "@/lib/pageBuilder/promotionMode";
 import { PageBuilderView } from "@/components/pageBuilder/PageBuilderView";
+import { stripDraft } from '@/lib/pageBuilder/draftState';
 
 export const revalidate = 3600;
 
@@ -47,7 +48,9 @@ export async function generateMetadata({ params }) {
   // shape, but canonical is FORCED to /promotions/<slug> (auto-derived — the
   // author never types it, and seo.canonicalUrl is deliberately ignored here so a
   // promotion's one home is always /promotions/<slug>).
-  const builderPage = await getPageBuilderPageBySlugAny(segment);
+  // stripDraft on a PUBLIC read — getPageBuilderPageBySlugAny is shared with
+  // the preview route, which may see a draft, so the guard belongs here.
+  const builderPage = stripDraft(await getPageBuilderPageBySlugAny(segment));
   if (shouldRenderBuilderPromotion(builderPage)) {
     const seo = builderPage.seo ?? {};
     const base = process.env.NEXT_PUBLIC_SITE_URL;
@@ -113,7 +116,9 @@ export default async function PromotionDetailPage({ params }) {
   //    builder slug won't resolve there) — it 404s, matching what its bare-slug
   //    render would have done, which the Phase-3 grid relies on. See
   //    promotionDetailTarget in lib/pageBuilder/promotionMode.js. ──
-  const builderPage = await getPageBuilderPageBySlugAny(segment);
+  // stripDraft on a PUBLIC read — getPageBuilderPageBySlugAny is shared with
+  // the preview route, which may see a draft, so the guard belongs here.
+  const builderPage = stripDraft(await getPageBuilderPageBySlugAny(segment));
   if (shouldRenderBuilderPromotion(builderPage)) {
     // FULL-BLEED (Phase 3): only the back link sits in a contained strip; the
     // PageBuilderView below runs edge-to-edge so authored heroes / full_width

@@ -46,7 +46,20 @@ export async function getActiveBuilderPromotions() {
   const docs = await PageBuilder.find({
     pageType: 'promotion',
     status: { $in: ['published', 'scheduled'] },
-  }).lean();
+  })
+    // A PROJECTION, where there was none. This read had no .select() at all,
+    // so it shipped whole page documents — every section body included — to
+    // build a card of six fields, and it would have shipped the unpublished
+    // `draft` by default the moment that field existed. Same precedent as
+    // getPageBuilderPagesByPromotionIds.
+    //
+    // The list is exactly what the pipeline below reads, and nothing else:
+    //   pageType                                    -> isPromotionPage
+    //   status, publishStartDate, publishEndDate    -> isPubliclyVisible
+    //   promotionOrder, createdAt                   -> the sort
+    //   _id, slug, title, promotionCover            -> builderPromotionToCard
+    .select('slug title pageType status promotionOrder promotionCover publishStartDate publishEndDate createdAt')
+    .lean();
   return serialize(selectVisiblePromotionPages(docs));
 }
 
