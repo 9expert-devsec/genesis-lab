@@ -151,6 +151,7 @@ import { register } from 'node:module';
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reportSuite } from './reportSuite.mjs';
 
 register(new URL('./loader.mjs', import.meta.url));
 const { run } = await import('node:test');
@@ -190,70 +191,27 @@ const undiscovered = onDisk.filter((f) => !enumerated.has(f));
 // the runner is not reporting failures. Manual by design — see the case file.
 if (process.env.CANARY) files.push(path.join(TEST_DIR, 'canary.case.mjs'));
 
-let pass = 0, fail = 0;
-// Per-file counts, so "this file ran" can be distinguished from "this file was
-// listed". A file that imports cleanly but defines no test contributes nothing
-// and, under a total-only check, is indistinguishable from one that was never
-// written — which is exactly the shape of a silently-deleted suite.
-const perFile = new Map(files.map((f) => [f, 0]));
-const bump = (e) => {
-  const f = e?.file;
-  if (f && perFile.has(f)) perFile.set(f, perFile.get(f) + 1);
-};
 const stream = run({ files, isolation: 'none', concurrency: true });
-stream.on('test:pass', (e) => { pass += 1; bump(e); });
-stream.on('test:fail', (e) => { fail += 1; bump(e); });
-stream.compose(spec).pipe(process.stdout);
 
-stream.on('close', () => {
-  const total = pass + fail;
-  const problems = [];
-
-  // A FLOOR, not an exact count — and the comment says so now, because it used
-  // to argue the opposite while the code did this, which is worse than either
-  // choice on its own.
-  //
-  // WHAT THE FLOOR STILL CATCHES: wholesale disappearance. A tier that stops
-  // being enumerated, a file that throws on import, a manifest that silently
-  // walks nothing — all of those drop the total and are caught here, which is the
-  // failure that actually shipped a green suite before this check existed.
-  //
-  // WHAT IT GIVES UP, stated plainly because it was measured: an exact count also
-  // catches tests added and then LOST inside the same window, because the number
-  // that would catch them is the one a human has to write down. That is not
-  // hypothetical — 26 tests once landed against a floor of 565 and the suite sat
-  // green, so all 26 could have vanished the next day in silence. A floor cannot
-  // see that. The two sibling meta-controls below are what remain against it:
-  // FILE DISCOVERY (a *.test.mjs on disk the manifest never ran) and PER-FILE
-  // COUNTS (an enumerated file contributing zero), and between them they catch
-  // the disappearance of a whole file even when the total still clears the floor.
-  //
-  // Raising the floor is optional under these semantics. Lowering it, or watching
-  // it drift far below the real total, gives the check less and less to do.
-  if (total < FLOOR) {
-    problems.push(
-      `expected AT LEAST ${FLOOR} tests, ran ${total}. `
-      + 'Tests VANISHED — that is what this check is for.'
-    );
-  }
-  if (undiscovered.length) {
-    problems.push(
-      'these *.test.mjs files exist on disk but the manifest never ran them:\n' +
-      undiscovered.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
-    );
-  }
-  const empty = [...perFile].filter(([, n]) => n === 0).map(([f]) => f);
-  if (empty.length) {
-    problems.push(
-      'these files were enumerated but contributed ZERO tests:\n' +
-      empty.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
-    );
-  }
-
-  console.log(
-    `\n[suite] ${pass} passed, ${fail} failed, ${total} total across ${files.length} files `
-    + `(floor ${FLOOR})`
-  );
-  for (const p of problems) console.log(`[meta-control] FAIL: ${p}`);
-  process.exit(fail > 0 || problems.length ? 1 : 0);
+// The tail — drain the reporter, summarise, decide the exit code — lives in
+// test/reportSuite.mjs, so a control can drive it over a ONE-CASE manifest
+// (test/fs/runnerFlush.test.mjs) instead of only as the tail of this suite.
+// Read that file for why it had to move: this used to be a stream.on('close')
+// handler ending in a process.exit() call, 'close' fires before the composed
+// reporter has finished writing, and the exit tore stdout down mid-flush — so
+// a RED run printed the bare "✖ <name>" line and NOT ONE BYTE of the
+// assertion detail. Measured: zero token hits in 442 KB of captured output.
+//
+// process.exitCode, not process.exit(): the process ends when the event loop
+// drains, by which point every queued byte of stdout has gone out. This is
+// the only place the exit code is decided, and there is deliberately no exit
+// call left anywhere in the runner.
+process.exitCode = await reportSuite({
+  stream,
+  reporter: spec,
+  out: process.stdout,
+  files,
+  floor: FLOOR,
+  undiscovered,
+  testDir: TEST_DIR,
 });
