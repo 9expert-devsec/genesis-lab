@@ -52,6 +52,15 @@ const statusSchema = pageBuilderSchema.pick({
   status: true, publishStartDate: true, publishEndDate: true,
 });
 
+// The live-only IDENTITY fields updatePageIdentity accepts. PICKED from the
+// page schema for the same reason draftContentSchema and statusSchema are:
+// the slug regex, the pageType vocabulary and the promotionOrder integer rule
+// have exactly one definition, and a rule change reaches this surface with no
+// second edit. Together the three picks cover all seventeen editable keys.
+const identitySchema = pageBuilderSchema.pick({
+  slug: true, pageType: true, promotionId: true, promotionOrder: true,
+});
+
 /**
  * Shown when a save is rejected because the stored doc moved since the client
  * loaded it. It deliberately does NOT offer "recover from version history":
@@ -477,6 +486,34 @@ export async function duplicatePageBuilderPage(id) {
   }
 }
 
+/**
+ * Set a page's status and nothing else.
+ *
+ * ── NO LIVE CALLER, as of the draft/published split round 3 ───────────────
+ * Kept as a narrow primitive; unmodified in behaviour. Its last caller was
+ * the admin list's publish/unpublish toggle, now pointed at
+ * publishPageStatus. Nothing in the app reaches this any more, and that is
+ * deliberate rather than an oversight — read the two traps below before
+ * wiring anything to it, because the name sounds like exactly what you want
+ * and it has already misled twice.
+ *
+ *   1. NO CONFLICT CHECK. It writes a bare $set: { status } against whatever
+ *      is stored, with no expectedUpdatedAt. Every other mutation in this
+ *      file takes one. A caller that read the page, thought about it, and
+ *      then called this will happily stamp a status onto a document someone
+ *      else has since rewritten.
+ *   2. IT WOULD SNAPSHOT A PENDING DRAFT. On status === 'published' it
+ *      snapshots doc.toObject(), which since round 1 includes `draft`. A
+ *      PageVersion row records what was once actually PUBLIC; one carrying
+ *      an unpublished edit is a lie in the history, and the rollback that
+ *      reads it would restore content that was never live. It also does not
+ *      PROMOTE that draft, so it publishes the stale content while archiving
+ *      the new — wrong in both directions at once. This is the precise trap
+ *      publishPageStatus was built to avoid, and why the list moved.
+ *
+ * Prefer publishPageStatus from anything that changes status, and
+ * updatePageBuilderPage from anything holding a working tree.
+ */
 export async function updatePageStatus(id, status) {
   const session = await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
@@ -765,6 +802,96 @@ export async function discardDraftContent(id, expectedUpdatedAt) {
     return { ok: true, updatedAt: updated.updatedAt?.toISOString() };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ยกเลิกฉบับร่างไม่สำเร็จ' };
+  }
+}
+
+
+/**
+ * Change the page's IDENTITY: slug, pageType, promotionId, promotionOrder.
+ *
+ * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
+ * Round 2 split the editor's single full-document save into two narrower
+ * writes: saveDraftContent (the nine DRAFT_CONTENT_KEYS) and publishPageStatus
+ * (status + the date window). Between them they cover thirteen of the
+ * seventeen editable keys. These four are the remainder — live-only fields
+ * that are not status fields — and nothing else can write them. Without this,
+ * rewiring the editor would make a slug or pageType rename impossible.
+ *
+ * These take effect IMMEDIATELY, draft or no draft, which is the whole reason
+ * they are live-only: slug is identity (a unique index, a slugHistory trail, a
+ * cross-collection guard and two public routes), and pageType is routing
+ * (/promotions queries it, and it gates both the cross-collection slug guard
+ * and promotionMode). See lib/schemas/pageBuilder.js for the partition.
+ *
+ * DOES NOT touch `.draft` — a pending edit survives a rename untouched — and
+ * DOES NOT snapshot: a snapshot records what was once actually PUBLIC, and
+ * renaming a slug is not a publish. Both are asserted, not assumed.
+ */
+export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  const parsed = identitySchema.safeParse(patch);
+  if (!parsed.success) return { ok: false, error: firstZodMessage(parsed.error) };
+
+  // BOTH slug guards, exactly as the whole-page save runs them today. The
+  // second is scoped to promotion pages because only they claim
+  // /promotions/<slug>, a namespace the general guard does not cover — and it
+  // is keyed off the RESULTING pageType, so a page becoming a promotion in the
+  // same call is checked as one.
+  const slugCheck = await checkSlugAvailable(parsed.data.slug, { excludeBuilderId: id });
+  if (!slugCheck.ok) return slugCheck;
+  if (parsed.data.pageType === 'promotion') {
+    const promoSlugCheck = await checkPromotionSlugAvailable(parsed.data.slug);
+    if (!promoSlugCheck.ok) return promoSlugCheck;
+  }
+
+  const set = {
+    slug: parsed.data.slug,
+    pageType: parsed.data.pageType,
+    promotionId: parsed.data.promotionId,
+    promotionOrder: parsed.data.promotionOrder,
+  };
+
+  // Retire the old slug into history on a rename (deduped; the NEW slug never
+  // lingers in its own history, or the 301 lookup would resolve to itself).
+  // Byte-identical to the whole-page save's rule — one behaviour, two callers.
+  if (set.slug !== existing.slug) {
+    const history = new Set(existing.slugHistory ?? []);
+    history.add(existing.slug);
+    history.delete(set.slug);
+    set.slugHistory = [...history];
+  }
+
+  const actor = await currentUserStamp(session);
+
+  try {
+    const updated = await PageBuilder.findByIdAndUpdate(
+      id, { $set: set }, { new: true, runValidators: true }
+    );
+    if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+    // The OLD slug too: on a rename the previous public URL must be
+    // revalidated or it keeps serving the page from cache under a slug that no
+    // longer resolves. Same call shape the whole-page save uses.
+    bustCaches(updated, existing.slug);
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'update',
+      before: { slug: existing.slug, status: existing.status },
+      after:  { slug: updated.slug, status: updated.status },
+      actor,
+    });
+    return { ok: true, slug: updated.slug, updatedAt: updated.updatedAt?.toISOString() };
+  } catch (err) {
+    if (err?.code === 11000) return { ok: false, error: 'Slug นี้ถูกใช้แล้ว' };
+    return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
   }
 }
 

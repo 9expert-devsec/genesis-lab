@@ -13,6 +13,8 @@ import {
   getPageBuilderPageBySlug,
   getPageBuilderPageBySlugAny,
   duplicatePageBuilderPage,
+  updatePageIdentity,
+  updatePageStatus,
 } from '@/lib/actions/pageBuilder';
 import { getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
@@ -494,5 +496,244 @@ test('the draft/publish action layer', async (t) => {
     assert.ok(!JSON.stringify(dupe).includes(MARKER), 'the draft body reached the copy');
     // The source keeps its own draft — the strip is on the copy, not a move.
     assert.equal(row().draft.title, MARKER, 'duplicating stole the source page draft');
+  });
+
+  // ══ ROUND 3: identity writes, and retiring the list's old publish path ══
+  //
+  // These live inside the SAME parent test as everything above, and that is
+  // load-bearing rather than tidy: a second file with its own root test would
+  // run CONCURRENTLY with this one (run() uses concurrency:true) while sharing
+  // the one module-level fake database, and the two would reset each other's
+  // fixtures mid-flight. One parent, one sequence, one owner of the fake db.
+
+  await scenario('updatePageIdentity changes exactly the four keys, and nothing else', async () => {
+    const before = copy(seedPage({ draft: draftContent() }));
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'promotion', promotionId: 'PROMO-9', promotionOrder: 4,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+
+    const after = row();
+    assert.equal(after.slug, 'renamed-slug');
+    assert.equal(after.pageType, 'promotion');
+    assert.equal(after.promotionId, 'PROMO-9');
+    assert.equal(after.promotionOrder, 4);
+
+    // EXACT set of what moved — never a sample. slugHistory is here because
+    // this call renamed; the case below pins that it stays put when it does not.
+    const moved = Object.keys(after).filter(
+      (k) => JSON.stringify(after[k]) !== JSON.stringify(before[k])
+    ).sort();
+    assert.deepEqual(
+      moved,
+      ['pageType', 'promotionId', 'promotionOrder', 'slug', 'slugHistory', 'updatedAt'],
+      'an identity update moved fields outside its four keys'
+    );
+  });
+
+  await scenario('updatePageIdentity leaves slugHistory alone when the slug does not change', async () => {
+    const before = copy(seedPage({ slugHistory: ['older-slug'] }));
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: before.slug, pageType: 'general', promotionId: '', promotionOrder: 7,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.deepEqual(row().slugHistory, ['older-slug'], 'a non-rename rewrote slugHistory');
+    assert.equal(row().promotionOrder, 7);
+  });
+
+  await scenario('a rename retires the old slug and never leaves the new one in history', async () => {
+    const before = copy(seedPage({ slug: 'first-slug', slugHistory: ['renamed-slug', 'older'] }));
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+    // Deduped, old slug added, NEW slug removed — a 301 that resolved to itself
+    // would loop. Exact set, order-independent.
+    assert.deepEqual(
+      [...row().slugHistory].sort(), ['first-slug', 'older'],
+      'slugHistory is wrong after the rename'
+    );
+  });
+
+  await scenario('a draft survives an identity rename byte-identical', async () => {
+    const pending = draftContent({ title: MARKER });
+    const before = copy(seedPage({ status: 'published', draft: pending }));
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.deepEqual(row().draft, copy(pending), 'the pending draft was disturbed by a rename');
+    assert.equal(count('PageVersion'), 0, 'an identity update snapshotted');
+  });
+
+  await scenario('a rename revalidates BOTH the old and the new public URL', async () => {
+    // No existing test covered this call shape — the whole-page save has the
+    // same `bustCaches(updated, existing.slug)` line and nothing asserted it.
+    // Missing the OLD slug leaves the previous URL serving from cache.
+    const before = copy(seedPage({ slug: 'first-slug' }));
+    await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    const paths = revalidations.filter((c) => c.kind === 'path').map((c) => c.path).sort();
+    assert.deepEqual(paths, ['/admin/pages', '/first-slug', '/renamed-slug']);
+    assert.deepEqual(revalidations.filter((c) => c.kind === 'tag').map((c) => c.tag), ['page-builder']);
+  });
+
+  await scenario('a promotion rename also revalidates /promotions', async () => {
+    const before = copy(seedPage({ slug: 'first-slug', pageType: 'promotion' }));
+    await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'promotion', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    const paths = revalidations.filter((c) => c.kind === 'path').map((c) => c.path).sort();
+    assert.deepEqual(paths, ['/admin/pages', '/first-slug', '/promotions', '/renamed-slug']);
+  });
+
+  await scenario('updatePageIdentity rejects a slug already taken by another builder page', async () => {
+    const before = copy(seedPage());
+    seed('PageBuilder', { _id: 'other', slug: 'taken-slug', title: 'Other', status: 'draft', slugHistory: [] });
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'taken-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, false, 'a colliding slug was accepted');
+    assert.equal(res.error, 'Slug นี้ถูกใช้แล้ว');
+    assert.equal(row().slug, 'real-slug', 'the page was renamed despite the collision');
+  });
+
+  await scenario('CONTROL: the same slug on the page ITSELF is not a collision', async () => {
+    // excludeBuilderId is what makes this true; without it every save of an
+    // unchanged slug would report a collision with itself.
+    const before = copy(seedPage());
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: before.slug, pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, true, `a page collided with its own slug: ${res.error}`);
+  });
+
+  await scenario('updatePageIdentity rejects a slug already taken by a CustomPage', async () => {
+    const before = copy(seedPage());
+    seed('CustomPage', { _id: 'cp1', slug: 'taken-slug', slugHistory: [] });
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'taken-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, false, 'the cross-collection guard did not run');
+    assert.equal(res.error, 'Slug นี้ถูกใช้แล้ว');
+  });
+
+  await scenario('a PROMOTION page also gets the /promotions namespace guard', async () => {
+    const before = copy(seedPage());
+    seed('PromotionConfig', { _id: 'pc1', url_slug: 'promo-taken' });
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'promo-taken', pageType: 'promotion', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, false, 'a promotion page took a slug an MSDB promotion already claims');
+    assert.equal(row().slug, 'real-slug');
+  });
+
+  await scenario('CONTROL: the promotion guard is SCOPED — a general page may use that slug', async () => {
+    // Proves the case above is the scoped guard firing and not the general one.
+    // Same fixture, same slug, only pageType differs.
+    const before = copy(seedPage());
+    seed('PromotionConfig', { _id: 'pc1', url_slug: 'promo-taken' });
+    const res = await updatePageIdentity(PAGE_ID, {
+      slug: 'promo-taken', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(res.ok, true, `the promotion guard leaked onto a general page: ${res.error}`);
+    assert.equal(row().slug, 'promo-taken');
+  });
+
+  await scenario('updatePageIdentity rejects a malformed slug and a stale token', async () => {
+    const before = copy(seedPage());
+    const bad = await updatePageIdentity(PAGE_ID, {
+      slug: 'NOT A SLUG!!', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, token(before));
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /^slug:/);
+
+    const stale = new Date(new Date(before.updatedAt).getTime() - 5000).toISOString();
+    const conflicted = await updatePageIdentity(PAGE_ID, {
+      slug: 'renamed-slug', pageType: 'general', promotionId: '', promotionOrder: 0,
+    }, stale);
+    assert.equal(conflicted.conflict, true);
+    assert.equal(row().slug, 'real-slug');
+  });
+
+  // ── the regression the admin-list repoint fixes ───────────────────────────
+
+  await scenario('THE TRAP: updatePageStatus snapshots the pending draft (unchanged)', async () => {
+    // This is the OLD list path, pinned rather than fixed. It is why the toggle
+    // moved, and pinning it stops anyone wiring it back up thinking it is safe.
+    // updatePageStatus itself is untouched by this round — this documents its
+    // behaviour, it does not change it.
+    seedPage({ status: 'draft', draft: draftContent({ title: MARKER }) });
+    const res = await updatePageStatus(PAGE_ID, 'published');
+    assert.equal(res.ok, true, res.error);
+
+    const [version] = all('PageVersion');
+    assert.equal('draft' in version.snapshot, true, 'the trap is gone — update the comment that describes it');
+    assert.equal(version.snapshot.draft.title, MARKER, 'the unpublished edit is in the archive');
+    // And it did NOT promote: the live page went public with the stale content
+    // while the archive recorded the new. Wrong in both directions at once.
+    assert.equal(row().title, 'Live Title', 'updatePageStatus started promoting drafts');
+    assert.equal(row().draft.title, MARKER, 'updatePageStatus started clearing drafts');
+  });
+
+  await scenario('THE FIX: publishPageStatus on the SAME fixture snapshots no draft', async () => {
+    // Byte-for-byte the same starting page as the case above; only the action
+    // differs. That is the whole of what the admin-list repoint buys.
+    const before = copy(seedPage({ status: 'draft', draft: draftContent({ title: MARKER }) }));
+    const res = await publishPageStatus(PAGE_ID, {
+      status: 'published',
+      publishStartDate: before.publishStartDate,
+      publishEndDate: before.publishEndDate,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+
+    const [version] = all('PageVersion');
+    assert.equal('draft' in version.snapshot, false, 'the snapshot carries a draft key');
+    assert.equal(version.snapshot.title, MARKER, 'the promoted content is what was archived');
+    assert.equal(row().title, MARKER, 'the draft was not promoted');
+    assert.equal(row().draft, null, 'the draft was not cleared');
+  });
+
+  await scenario('the list toggle passes the window through, so a schedule is not wiped', async () => {
+    // publishPageStatus validates the WHOLE window and both dates default to
+    // null when absent — so a toggle that omitted them would silently clear a
+    // scheduled page's dates. The list reads whole documents and passes both.
+    const start = '2026-09-01T00:00:00.000Z';
+    const end = '2026-09-30T00:00:00.000Z';
+    const before = copy(seedPage({ status: 'scheduled', publishStartDate: start, publishEndDate: end }));
+    const res = await publishPageStatus(PAGE_ID, {
+      status: 'published',
+      publishStartDate: before.publishStartDate,
+      publishEndDate: before.publishEndDate,
+    }, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.equal(new Date(row().publishStartDate).toISOString(), start, 'the schedule start was wiped');
+    assert.equal(new Date(row().publishEndDate).toISOString(), end, 'the schedule end was wiped');
+  });
+
+  await scenario('CONTROL: omitting the window IS what would wipe it', async () => {
+    // Proves the case above is the pass-through doing the work, not the action
+    // happening to preserve dates on its own.
+    const before = copy(seedPage({
+      status: 'scheduled',
+      publishStartDate: '2026-09-01T00:00:00.000Z',
+      publishEndDate: '2026-09-30T00:00:00.000Z',
+    }));
+    const res = await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.equal(row().publishStartDate, null, 'omitting the window no longer clears it');
+    assert.equal(row().publishEndDate, null);
+  });
+
+  await scenario('updatePageStatus still has NO conflict check — unchanged, and why it is unused', async () => {
+    // Pinned because the function now has no caller, and an uncalled function
+    // is exactly the one that rots unnoticed. It takes no token at all.
+    seedPage({ status: 'draft' });
+    assert.equal(updatePageStatus.length, 2, 'updatePageStatus grew or lost a parameter');
+    const res = await updatePageStatus(PAGE_ID, 'published');
+    assert.equal(res.ok, true, 'it stopped working');
+    assert.deepEqual(Object.keys(res).sort(), ['ok', 'status'], 'its return shape changed');
+    assert.equal(row().status, 'published');
   });
 });

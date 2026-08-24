@@ -695,7 +695,21 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // and the count rising by exactly three is the whole of it. All three record
 // an audit row ('draft.save' | 'publish' | 'status' | 'draft.discard'), which
 // is why only the COUNT pins moved and no coverage case did.
-const MUTATING_EXPORT_COUNT = 174;
+//
+// ROUND 3: 174 -> 175 and 168 -> 169, +1 on BOTH pins — updatePageIdentity
+// added to pageBuilder.js. It writes Mongo directly in its own body
+// (PageBuilder.findByIdAndUpdate), so depth 0 sees it and the two pins move
+// together; REACHED_THROUGH_IMPORT is unchanged and the delta stays 6. It
+// records an audit row under the existing 'update' label — the same label and
+// shape the whole-page save already uses for exactly this class of change —
+// so only the COUNT pins moved and no coverage case did.
+//
+// Round 3 also RETIRED a caller without removing a function: the admin list's
+// toggle moved from updatePageStatus to publishPageStatus. updatePageStatus
+// is still exported and still counted here, which is correct — this pin
+// counts mutating EXPORTS, not reachable ones. An export nothing calls is
+// still a POST endpoint.
+const MUTATING_EXPORT_COUNT = 175;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -876,7 +890,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 168,
+    zero, 169,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -905,7 +919,9 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'DRAFT/PUBLISHED SPLIT ROUND 2: 165 -> 168, +3 — saveDraftContent, ' +
     'publishPageStatus and discardDraftContent added to pageBuilder.js, each ' +
     'calling PageBuilder.findByIdAndUpdate in its own body, so depth 0 sees all ' +
-    'three and the delta stays 6.'
+    'three and the delta stays 6. ' +
+    'ROUND 3: 168 -> 169, +1 — updatePageIdentity added to pageBuilder.js, ' +
+    'writing through PageBuilder.findByIdAndUpdate in its own body.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
