@@ -1,4 +1,7 @@
+'use client';
+
 import Image from 'next/image';
+import { motion, useReducedMotion } from 'framer-motion';
 
 /**
  * Founder/instructor quote band. Static content — name, title, and
@@ -8,9 +11,28 @@ import Image from 'next/image';
  * and the right column anchors the image with `items-end`. On mobile
  * the photo is hidden so the quote keeps its own breathing room.
  */
+
+/**
+ * ROUND HS-C: fade-in ONLY — no translateY, no scale. This is the page's
+ * closing statement, deliberately kept still; every other content section
+ * moves on entrance, this one just settles into place.
+ */
+const FADE_ONLY_VARIANTS = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.7, ease: 'easeOut' } },
+};
+
 export function InstructorQuote() {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
-    <section className="relative overflow-hidden">
+    <motion.section
+      className="relative overflow-hidden"
+      variants={FADE_ONLY_VARIANTS}
+      initial={shouldReduceMotion ? false : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.3 }}
+    >
       {/* Circuit board background — gradient + traces + nodes. All
           gradient/filter IDs are prefixed `instructor-` so they don't
           collide with other SVGs on the page. */}
@@ -177,6 +199,6 @@ export function InstructorQuote() {
           </div>
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }

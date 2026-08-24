@@ -1,10 +1,28 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
+
+/**
+ * ROUND HS-C: stagger fade-up, once per mount. `CARD_VARIANTS` carries the
+ * per-card motion; `CONTAINER_VARIANTS` only carries staggerChildren/
+ * delayChildren — cards have no whileInView of their own, they inherit
+ * "visible" from the scroller div via framer-motion's variant propagation,
+ * which is what actually produces the stagger (each child's OWN transition
+ * still fires independently once the parent's state changes).
+ */
+const CARD_VARIANTS = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
+const CONTAINER_VARIANTS = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
+};
 
 /**
  * Horizontal snap-scroll carousel of course cards with prev/next
@@ -20,6 +38,7 @@ export function CourseCarousel({
   const scrollerRef = useRef(null);
   const [canPrev, setCanPrev] = useState(false);
   const [canNext, setCanNext] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   const update = useCallback(() => {
     const el = scrollerRef.current;
@@ -63,20 +82,25 @@ export function CourseCarousel({
 
   return (
     <div className="relative">
-      <div
+      <motion.div
         ref={scrollerRef}
         className="scrollbar-hide flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 pt-2"
         style={{ touchAction: 'pan-y', cursor: 'grab' }}
+        variants={CONTAINER_VARIANTS}
+        initial={shouldReduceMotion ? false : 'hidden'}
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
       >
         {courses.map((c) => (
-          <div
+          <motion.div
             key={c._id ?? c.course_id ?? c.o_course_id}
             className="w-[280px] shrink-0 snap-start sm:w-[310px] md:w-[330px]"
+            variants={CARD_VARIANTS}
           >
             <CardComponent course={c} currentYear={currentYear} skillSlugs={skillSlugs} />
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       <button
         type="button"
