@@ -493,7 +493,7 @@ export function FeaturedContentSlider({ copy, items = [] }) {
  * quietly grow past the image card at narrow widths — reintroducing exactly
  * the mismatch this exists to prevent.
  */
-const FEATURED_FRAME = "lg:aspect-[12/5] lg:max-h-[500px] lg:min-h-0";
+const FEATURED_FRAME = "lg:aspect-[16/5] lg:max-h-[500px] lg:min-h-0";
 
 /**
  * The featured card's corner radius.
@@ -591,7 +591,7 @@ function ImageOnlyCard({ item, active }) {
           fill child: a radius on the wrapper alone would not clip it. */}
       <div
         data-fc-art=""
-        className={`relative aspect-[16/9] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
+        className={`relative aspect-[16/5] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
       >
         <SlideImage
           item={item}
@@ -739,7 +739,7 @@ function ImageOnlyCard({ item, active }) {
 function SlideCopy({ item }) {
   return (
     <div className="flex flex-col gap-3">
-      {item.badge ? (
+      {/* {item.badge ? (
         <div
           data-fc-badge=""
           className="flex w-fit items-center gap-1.5 rounded-lg bg-[var(--9e-fc-badge-bg)] px-3 py-1"
@@ -752,7 +752,7 @@ function SlideCopy({ item }) {
             {item.badge}
           </p>
         </div>
-      ) : null}
+      ) : null} */}
 
       <div className="flex flex-col gap-1.5">
         {item.kicker ? (
@@ -763,9 +763,10 @@ function SlideCopy({ item }) {
 
         {/* h3, not h2 — the section already spent its h2 on the heading above,
             and this is one item inside that section. */}
-        <h3
+            <div className="h-[98px]">
+<h3
           data-fc-title=""
-          className="text-[26px] font-extrabold leading-[1.15] text-white lg:text-[34px]"
+          className="text-[20px] font-extrabold leading-[1.25] text-white lg:text-[26px] line-clamp-3"
         >
           <span className="block">{item.title}</span>
           {item.titleAccent || item.titleHighlight ? (
@@ -784,6 +785,8 @@ function SlideCopy({ item }) {
             </span>
           ) : null}
         </h3>
+            </div>
+        
 
         {item.subtitle ? (
           <p className="text-sm font-medium text-[var(--9e-fc-text-body)]">
@@ -800,7 +803,7 @@ function SlideCopy({ item }) {
       {item.description ? (
         <p
           data-fc-desc=""
-          className="line-clamp-3 text-[13px] leading-relaxed text-[var(--9e-fc-text-muted)]"
+          className="line-clamp-3 text-base leading-relaxed text-[var(--9e-fc-text-muted)]"
         >
           {item.description}
         </p>
@@ -902,7 +905,7 @@ function SplitCard({ item, active, isPlaying, onPlay }) {
       {/* Details. `lg:min-w-0` is load-bearing on a flex child holding long
           unbroken Thai — without it the panel refuses to shrink below its
           content's intrinsic width and shoves the media off the card. */}
-      <div className="flex flex-col justify-center gap-4 lg:h-full lg:min-w-0 lg:flex-1 lg:gap-5">
+      <div className="flex flex-col justify-between gap-4 lg:h-full lg:min-w-0 lg:flex-1 lg:gap-5">
         <SlideCopy item={item} />
 
         <div className="flex flex-col gap-4">
