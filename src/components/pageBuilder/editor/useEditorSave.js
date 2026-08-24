@@ -260,7 +260,12 @@ export function useEditorSave() {
       // classifies as neither content nor identity, so it raises no dirty flag.
       dispatch({ type: 'PATCH_PAGE', patch: { ...statusPatch, status: res.status ?? statusPatch.status } });
       dispatch({
-        type: 'SAVE_OK', domains: [], updatedAt: res.updatedAt, at: Date.now(),
+        type: 'SAVE_OK',
+        // 'publish' clears neither flag — the flush above already did — but
+        // it is what tells the status line this write went live at once.
+        domains: ['publish'],
+        updatedAt: res.updatedAt,
+        at: Date.now(),
       });
       // Publishing promoted and cleared the draft, so nothing is pending now.
       dispatch({ type: 'DRAFT_DISCARDED' });

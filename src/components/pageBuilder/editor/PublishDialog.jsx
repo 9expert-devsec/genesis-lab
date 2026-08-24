@@ -8,6 +8,7 @@ import { isPubliclyVisible, invisibleReason } from '@/lib/pageBuilder/visibility
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 import { Field, Group, Warn, INPUT_CLASS } from './fields';
 import { useEditor } from './EditorProvider';
+import { hasPendingDraft } from '@/lib/pageBuilder/editorStatus';
 
 /**
  * Publish / schedule / retire (item 7).
@@ -49,7 +50,8 @@ const toInput = (v) => (v ? String(v).slice(0, 10) : '');
 const fromInput = (v) => (v ? new Date(`${v}T00:00:00`).toISOString() : null);
 
 export function PublishDialog({ open, onClose, onPublish }) {
-  const { page, tier } = useEditor();
+  const editor = useEditor();
+  const { page, tier } = editor;
   const [status, setStatus] = useState(page?.status ?? 'draft');
   const [start, setStart] = useState(toInput(page?.publishStartDate));
   const [end, setEnd] = useState(toInput(page?.publishEndDate));
@@ -106,6 +108,14 @@ export function PublishDialog({ open, onClose, onPublish }) {
               publish" would send the author hunting. */}
           {messages.map((m) => <Warn key={m} tone="red">{m}</Warn>)}
 
+          {/* What เผยแพร่ will actually put live. The author is looking at
+              the draft in the canvas, so "publish" reads as "publish what I
+              see" — which is true, and worth saying out loud precisely
+              because the currently-public page says something else. Uses the
+              file's existing Warn/info tone; no new component for one line. */}
+          {hasPendingDraft(editor) && (
+            <Warn tone="info">การเผยแพร่จะใช้เนื้อหาฉบับร่างล่าสุด ไม่ใช่เนื้อหาที่เผยแพร่อยู่ในขณะนี้</Warn>
+          )}
           <Group title="สถานะ">
             <div className="space-y-1">
               {OPTIONS.map(({ status: s, label, desc, Icon, publishy }) => {

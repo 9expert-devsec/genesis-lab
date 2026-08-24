@@ -1,8 +1,8 @@
 import {
   setAt, updateAt, removeAt, insertAt, moveWithin, getAt, reidSubtree,
 } from './pagePath';
-import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS, LIVE_ONLY_KEYS } from '@/lib/schemas/pageBuilder';
-import { effectiveContent, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
+import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS } from '@/lib/schemas/pageBuilder';
+import { hasUnpublishedDraft, composeWorkingView } from '@/lib/pageBuilder/draftState';
 
 /**
  * The editor's single state tree and its closed transition set.
@@ -53,23 +53,10 @@ import { effectiveContent, hasUnpublishedDraft } from '@/lib/pageBuilder/draftSt
 const CONTENT_SET = new Set(DRAFT_CONTENT_KEYS);
 const IDENTITY_SET = new Set(IDENTITY_KEYS);
 
-/**
- * Unwrap a stored document into the tree the editor edits.
- *
- * Handles all three shapes a real document arrives in: a pending draft, an
- * explicit `draft: null`, and — the common case in production — no `draft` key
- * at all, because these pages predate the field and Mongoose defaults do not
- * apply to documents read through .lean() plus a JSON round-trip. All three are
- * effectiveContent's job (round 1); this only adds the live-only half.
- */
-export function composeWorkingView(raw) {
-  const view = {};
-  for (const key of LIVE_ONLY_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(raw ?? {}, key)) view[key] = raw[key];
-  }
-  return { ...view, ...effectiveContent(raw) };
-}
-
+// composeWorkingView lives in lib/pageBuilder/draftState.js: /preview/[slug]
+// needs the identical composition, and a second copy here would be the thing
+// that drifts. Re-exported so existing importers of this module still resolve.
+export { composeWorkingView };
 export const initialEditorState = ({ page, pageId = null, updatedAt = null }) => ({
   page: composeWorkingView(page),
   pageId,                    // null for an unsaved /builder/new page
@@ -86,6 +73,7 @@ export const initialEditorState = ({ page, pageId = null, updatedAt = null }) =>
   identityDirty: false,
   saving: false,
   lastSavedAt: null,
+  lastSavedDomains: [],
   conflict: null,        // { message } — terminal, WHOLE-DOCUMENT: autosave stops
   error: null,
 });
@@ -185,6 +173,12 @@ export function editorReducer(state, action) {
         // definition — round 5's indicator reads this.
         hadDraft: domains.includes('content') ? true : state.hadDraft,
         lastSavedAt: action.at ?? Date.now(),
+        // RETAINED, not invented: SAVE_OK already had to name its domains
+        // (round 4) so it could clear the right flags. The top bar needs the
+        // same fact one step later — whether the last write was one the
+        // public sees at once — so the payload is kept instead of a second
+        // source being added beside it.
+        lastSavedDomains: domains,
         error: null,
       };
     }

@@ -854,4 +854,41 @@ test('the draft/publish action layer', async (t) => {
     const next = await saveDraftContent(res.id, draftContent({ title: 'Second' }), res.updatedAt);
     assert.equal(next.ok, true, `the create token was rejected: ${next.error}`);
   });
+
+  // ══ ROUND 5: discard, reached from the top bar's confirm ════════════════
+
+  await scenario('discardDraftContent takes the CURRENT token and returns a fresh one', async () => {
+    // The top bar's confirm calls round 4's discard(), which passes tokenRef —
+    // the same one-per-document token every other action uses. A stale token
+    // must be refused here exactly as it is on a save.
+    const before = copy(seedPage({ status: 'published', draft: draftContent({ title: MARKER }) }));
+    const stale = new Date(new Date(before.updatedAt).getTime() - 5000).toISOString();
+    const refused = await discardDraftContent(PAGE_ID, stale);
+    assert.equal(refused.conflict, true, 'a stale token was accepted');
+    assert.equal(row().draft.title, MARKER, 'a refused discard still threw the draft away');
+
+    const res = await discardDraftContent(PAGE_ID, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.equal(row().draft, null);
+    assert.ok(res.updatedAt, 'no fresh token came back');
+    assert.notEqual(res.updatedAt, token(before), 'the token did not advance');
+  });
+
+  await scenario('a discard returns NO content payload — the reload is what restores the view', async () => {
+    // Round 4 J: the response deliberately carries no live content, which is why
+    // discard() reloads the route instead of rebuilding the tree client-side.
+    // If this ever grows a payload, that decision should be revisited on purpose.
+    const before = copy(seedPage({ status: 'published', draft: draftContent() }));
+    const res = await discardDraftContent(PAGE_ID, token(before));
+    assert.deepEqual(Object.keys(res).sort(), ['ok', 'updatedAt']);
+  });
+
+  await scenario('after a discard the live content is what remains', async () => {
+    const before = copy(seedPage({ status: 'published', draft: draftContent({ title: MARKER }) }));
+    await discardDraftContent(PAGE_ID, token(before));
+    const after = row();
+    assert.equal(after.title, 'Live Title', 'the discard disturbed the live content');
+    assert.equal(after.draft, null);
+    assert.equal(count('PageVersion'), 0, 'a discard wrote a snapshot');
+  });
 });

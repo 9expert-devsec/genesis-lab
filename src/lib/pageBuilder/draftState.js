@@ -17,7 +17,7 @@
  * thing that reads one would drift, and the drift is silent — a key missing
  * from one side just quietly stops being drafted.
  */
-import { DRAFT_CONTENT_KEYS } from '@/lib/schemas/pageBuilder';
+import { DRAFT_CONTENT_KEYS, LIVE_ONLY_KEYS } from '@/lib/schemas/pageBuilder';
 
 /**
  * Pick exactly DRAFT_CONTENT_KEYS off a source object.
@@ -101,4 +101,25 @@ export function stripDraft(page) {
   if (page == null || typeof page !== 'object') return page;
   const { draft: _draft, ...rest } = page;
   return rest;
+}
+
+/**
+ * The stored document unwrapped into the ONE tree that an editor edits and a
+ * preview renders: effectiveContent() for the nine content keys, the stored
+ * document's own values for every live-only key.
+ *
+ * `.draft` is NOT carried through — it has been unwrapped INTO the result, and
+ * keeping both would give the caller two answers to "what is the title".
+ *
+ * Lives here rather than in the editor's reducer because two very different
+ * callers need exactly this composition and must not drift: the editor
+ * (initialEditorState) and /preview/[slug], whose whole purpose is to show what
+ * the editor is working on rather than what is currently public.
+ */
+export function composeWorkingView(raw) {
+  const view = {};
+  for (const key of LIVE_ONLY_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(raw ?? {}, key)) view[key] = raw[key];
+  }
+  return { ...view, ...effectiveContent(raw) };
 }

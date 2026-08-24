@@ -60,6 +60,18 @@ function exportedNamesFromSource(src) {
   const names = new Set();
   for (const m of src.matchAll(/^export\s+(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
   for (const m of src.matchAll(/^export\s+(?:const|let|var)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+  // `export const { a, b as c } = expr` — NextAuth's config is exported exactly
+  // this way, and without this the parser found ZERO names in that file. It was
+  // caught by the "parsed ZERO exports" guard below rather than passing
+  // vacuously, which is what that guard is for.
+  for (const block of src.matchAll(/^export\s+(?:const|let|var)\s*\{([^}]*)\}\s*=/gm)) {
+    for (const part of block[1].split(',')) {
+      const piece = part.trim();
+      if (!piece) continue;
+      const as = /\bas\s+([A-Za-z_$][\w$]*)$/.exec(piece);
+      names.add(as ? as[1] : piece.replace(/:.*$/, '').trim());
+    }
+  }
   // `export { a, b as c }` — the EXPORTED name is what a caller binds, so `c`.
   for (const block of src.matchAll(/^export\s*\{([^}]*)\}/gm)) {
     for (const part of block[1].split(',')) {
@@ -81,12 +93,13 @@ test('CONTROL: the source parser finds each export form, and no others', () => {
     'export const gamma = 1;',
     'export { delta, epsilon as zeta };',
     'export default thing;',
+    'export const { eta, theta as iota } = make();',
     'function notExported() {}',
     '// export function commentedOut() {}',
   ].join('\n'));
   assert.deepEqual(
     [...found].sort(),
-    ['alpha', 'beta', 'default', 'delta', 'gamma', 'zeta'].sort()
+    ['alpha', 'beta', 'default', 'delta', 'eta', 'gamma', 'iota', 'zeta'].sort()
   );
   assert.ok(!found.has('notExported'), 'a non-exported function was collected');
 });

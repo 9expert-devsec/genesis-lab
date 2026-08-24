@@ -111,6 +111,9 @@ export const STUBS = {
   '@/lib/db/connect':       path.join(ROOT, 'test', 'stub-db-connect.mjs'),
   // requireAdmin reaches next-auth (and the mongodb adapter) at import time.
   '@/lib/actions/auth':     path.join(ROOT, 'test', 'stub-actions-auth.mjs'),
+  // The NextAuth config CALLS NextAuth() at import time. Reached transitively
+  // from any admin client that imports a page action module.
+  '@/lib/auth/options':     path.join(ROOT, 'test', 'stub-auth-options.mjs'),
   // The Cloudinary SDK configures itself from env at import time.
   '@/lib/cloudinary':       path.join(ROOT, 'test', 'stub-cloudinary.mjs'),
 };

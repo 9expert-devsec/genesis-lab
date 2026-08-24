@@ -285,6 +285,24 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
                     <span className={'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ' + badge.cls}>
                       {badge.label}
                     </span>
+                    {/* A pending unpublished draft, marked next to the status
+                        rather than as a column: the row already says what the
+                        PUBLIC sees, and this says the server is holding
+                        something it does not. Builder rows only — CustomPage
+                        has no draft field, and `isBuilder` gates it rather
+                        than a truthiness check on `p.draft`, so a field-name
+                        collision on an advanced_html row could never light
+                        this up. No query change: the list reads whole
+                        documents (getPageBuilderPages has no .select()). */}
+                    {isBuilder && p.draft != null && (
+                      <span
+                        data-testid="pending-draft-dot"
+                        title="มีฉบับร่างที่ยังไม่เผยแพร่"
+                        className="ml-1.5 inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700"
+                      >
+                        ฉบับร่างรอเผยแพร่
+                      </span>
+                    )}
                   </td>
                   <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
                     {formatDate(p.updatedAt)}

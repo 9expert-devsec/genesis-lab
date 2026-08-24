@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getPageBuilderPageBySlugAny } from '@/lib/actions/pageBuilder';
 import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 import { previewCookieName, verifyPreviewCookie } from '@/lib/pageBuilder/previewSession';
+import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
 import { PreviewGate } from './_components/PreviewGate';
 
 /**
@@ -44,10 +45,12 @@ export const metadata = {
 // target it (every scoped selector is prefixed with #<sectionId>, and this
 // banner is not a descendant of any section), and customHtml cannot inject a
 // <style> to hide it (the shared sanitizer drops <style> entirely).
-function PreviewBanner() {
+function PreviewBanner({ pending }) {
   return (
     <div className="sticky top-0 z-[9999] border-b border-9e-lime bg-9e-lime px-4 py-2 text-center text-sm font-bold text-9e-navy">
-      ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — ห้ามแชร์ลิงก์นี้ต่อ
+      {pending
+        ? 'ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — ห้ามแชร์ลิงก์นี้ต่อ'
+        : 'หน้านี้ไม่มีฉบับร่างที่รอเผยแพร่ — ตัวอย่างนี้ตรงกับหน้าที่เผยแพร่อยู่ในขณะนี้'}
     </div>
   );
 }
@@ -73,10 +76,22 @@ export default async function PreviewPage({ params }) {
     return <PreviewGate slug={slug} state="locked" />;
   }
 
+  // AFTER the three gates above, never before: the composed view is built
+  // only once the cookie has been verified, so an unauthenticated response
+  // still contains nothing but the gate.
+  //
+  // composeWorkingView is the SAME function the editor seeds its state from
+  // (lib/pageBuilder/draftState.js), which is the whole point of this route:
+  // it must show what an author is working on, not what is currently public.
+  // Rendering the raw document made this page a duplicate of the live URL the
+  // moment the draft/published split landed — it would have shown the
+  // published content while the editor showed something else, under a banner
+  // claiming it was the draft.
+  const pending = hasUnpublishedDraft(page);
   return (
     <>
-      <PreviewBanner />
-      <PageBuilderView page={page} />
+      <PreviewBanner pending={pending} />
+      <PageBuilderView page={composeWorkingView(page)} />
     </>
   );
 }

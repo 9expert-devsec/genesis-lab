@@ -57,7 +57,7 @@ function Panel({ title, children, className }) {
 
 export function EditorShell() {
   const { dirty, saving, conflict, error } = useEditor();
-  const { saveNow, publish } = useEditorSave();
+  const { saveNow, publish, discard } = useEditorSave();
   const [dialog, setDialog] = useState(null); // 'settings' | 'preview' | 'publish' | null
 
   /**
@@ -109,6 +109,7 @@ export function EditorShell() {
         onOpenSettings={() => setDialog('settings')}
         onOpenPreview={() => setDialog('preview')}
         onPublish={() => setDialog('publish')}
+        onDiscard={discard}
       />
       <PageSettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
       <PreviewDialog open={dialog === 'preview'} onClose={() => setDialog(null)} />
