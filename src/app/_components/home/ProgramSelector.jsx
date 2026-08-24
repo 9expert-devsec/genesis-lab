@@ -102,7 +102,7 @@ export function ProgramSelector({
   );
 
   return (
-    <section className="bg-[#f8fafd] dark:bg-9e-border px-4 py-14 lg:px-6">
+    <section className="bg-9e-ice dark:bg-9e-card px-4 py-14 lg:px-6">
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-8 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ค้นหาสิ่งที่คุณสนใจ

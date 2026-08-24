@@ -209,8 +209,6 @@ export default async function HomePage() {
             hands the payload across. */}
         <FeatureContentSection banners={banners} />
 
-        <ServicesSection />
-
         <ProgramSelector
           programs={programs}
           skills={skills}
@@ -236,13 +234,17 @@ export default async function HomePage() {
           skillSlugs={skillSlugs}
         />
 
+        {/* ROUND HS-B: moved here from right after FeatureContentSection —
+            was rendering 3rd, ahead of ProgramSelector and the course
+            sections, which didn't match the intended order. Position only;
+            its background (the blue brand-gradient band) is unchanged. */}
+        <ServicesSection />
+
         {/* <InhouseCTA /> */}
 
         <ClientLogosSection logos={clientLogos} />
 
         <TestimonialStats reviews={reviews} />
-
-        
 
         <BlogSection
         articles={featuredArticles}

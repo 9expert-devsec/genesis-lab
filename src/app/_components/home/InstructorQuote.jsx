@@ -22,11 +22,13 @@ export function InstructorQuote() {
         aria-hidden="true"
       >
         <defs>
-          <radialGradient id="instructor-bg" cx="40%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#EEF6FF" />
-            <stop offset="60%" stopColor="#DBEEFF" />
-            <stop offset="100%" stopColor="#EEF6FF" />
-          </radialGradient>
+          {/* ROUND HS-B: the light-mode-lightening "instructor-bg" radial
+              gradient (#EEF6FF/#DBEEFF) that used to sit here was never
+              actually applied to anything — no fill="url(#instructor-bg)"
+              existed anywhere in this file. The section's real background
+              was already only the flat #0D1B2A rect below; this def was
+              dead markup, removed rather than "neutralized" since there was
+              nothing live to neutralize. */}
           <radialGradient id="instructor-ng1" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#005CFF" stopOpacity="0.3" />
             <stop offset="100%" stopColor="#005CFF" stopOpacity="0" />

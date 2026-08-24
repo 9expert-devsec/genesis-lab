@@ -37,8 +37,12 @@ export function BlogSection({ articles = [], programNames = {}, skillNames = {} 
     slug:      `/articles/${a.slug}`,
   }));
 
+  // ROUND HS-B: bg-[var(--page-bg)], no dark: override — --page-bg is
+  // 0D1B2A in dark mode, the same value dark:bg-9e-navy used to name
+  // explicitly, so the override was redundant once the base class reads
+  // the var directly.
   return (
-    <section className="bg-9e-ice px-4 py-12 dark:bg-9e-navy lg:px-6">
+    <section className="bg-[var(--page-bg)] px-4 py-12 lg:px-6">
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">

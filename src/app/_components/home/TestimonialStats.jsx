@@ -25,7 +25,7 @@ const STATS = [
  */
 export function TestimonialStats({ reviews = [] }) {
   return (
-    <section className="bg-white px-4 py-14 dark:bg-9e-border lg:px-6">
+    <section className="bg-9e-ice px-4 py-14 dark:bg-9e-card lg:px-6">
       <div className="mx-auto max-w-[1200px]">
         <h2 className="mb-2 text-center text-2xl font-bold text-9e-navy dark:text-white">
           ส่วนหนึ่งของความภาคภูมิใจ
