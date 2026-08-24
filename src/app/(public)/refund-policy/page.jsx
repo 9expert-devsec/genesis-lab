@@ -1,5 +1,4 @@
-import Link from 'next/link';
-import { PolicyLayout, PolicyDraftNotice } from '@/components/policies/PolicyLayout';
+import { PolicyLayout, PolicyStatusNotice } from '@/components/policies/PolicyLayout';
 import { PolicyAccordion } from '@/components/policies/PolicyAccordion';
 import { PolicyIcon } from '@/components/policies/PolicyIcon';
 import { POLICY_HUB, POLICY_ENTITY, findPolicy } from '@/config/policies';
@@ -15,65 +14,65 @@ export const metadata = {
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  ⚠ PLACEHOLDER COPY — NOT LEGAL TEXT, NOT APPROVED BY ANYONE
+ *  ROUND R-B — APPROVED COPY, PORTED FROM นโยบายการยกเลิกและคืนเงิน.docx
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Every sentence below was written to fill the Figma's structure so the layout
- * could be built and reviewed. NOBODY IN LEGAL HAS SEEN IT.
+ * Every section body below is the approved Cancellation & Refund Policy text.
+ * This is the real thing PolicyStatusNotice describes: reviewed and signed off
+ * by the person who owns it, not yet reviewed by counsel, and not yet in force
+ * because the site is not in production. The previous copy — invented refund
+ * percentages and notice-period tiers behind PolicyDraftNotice — is dropped
+ * wholesale, not edited; the source policy is a flat no-refund rule per course
+ * type, not a percentage schedule.
  *
- * This is the most dangerous of the three placeholder pages. THE NUMBERS ARE
- * INVENTED — the notice periods and the refund percentages in HIGHLIGHTS below
- * are not a policy anyone set. A visitor deciding whether to cancel a course
- * would act on them, and a customer who reads "คืนเงิน 100%" and then does not
- * get it has been told something false by the company. PolicyDraftNotice
- * renders a banner saying so at the top of the page.
+ * §1 (intro) and §2 (highlight cards) are not accordions, matching how §1/§2
+ * render on every other detail page. §3–§8 are the six accordions, one per
+ * course type plus the two exception sections — six real topics fill the six
+ * slots exactly. The source docx numbered ข้อยกเว้น and ช่องทางติดต่อ both "5";
+ * ช่องทางติดต่อ is dropped as a dedicated section (see below) and ข้อยกเว้น is
+ * renumbered §8 rather than porting the collision.
  *
- * Do not remove the banner, and do not quietly firm up the numbers — they need
- * to come from whoever actually owns the refund terms.
- *
- * ── THE COMPANY NAME ────────────────────────────────────────────────────────
- * The Figma's hero for this page read "บริษัท เจเนซิสแล็บ จำกัด (9EXPERT)".
- * That is a WRONG LEGAL ENTITY on a page about people's money, not merely
- * off-brand naming. It is read from POLICY_ENTITY here like every other page.
+ * No dedicated "contact" accordion: the sidebar help card every policy page
+ * already renders ("ต้องการความช่วยเหลือ?" → /contact-us) covers this, so the
+ * docx's contact details are not duplicated inline here.
  */
 
-/** THE PERCENTAGES AND NOTICE PERIODS ARE INVENTED. See the file header. */
 const HIGHLIGHTS = [
   {
+    icon: 'listChecks',
+    course: 'Public Training',
+    outcome: 'ไม่คืนเงินทุกกรณี',
+    detail: 'ไม่ว่าจะเข้าร่วมอบรมหรือไม่',
+  },
+  {
+    icon: 'settings',
+    course: 'In-House Training',
+    outcome: 'ไม่คืนเงินทุกกรณี',
+    detail: 'เมื่อยืนยันการจอง/ชำระเงินตามใบเสนอราคาหรือสัญญาแล้ว',
+  },
+  {
     icon: 'check',
-    window: 'ก่อนอบรม 15 วันขึ้นไป',
-    outcome: 'คืนเงินเต็มจำนวน',
-    detail: 'แจ้งล่วงหน้าอย่างน้อย 15 วันทำการก่อนวันเริ่มอบรม',
+    course: 'Masterclass',
+    outcome: 'ไม่คืนเงินทุกกรณี',
+    detail: 'เช่นเดียวกับ Public Training',
   },
   {
-    icon: 'calendar',
-    window: 'ก่อนอบรม 7-14 วัน',
-    outcome: 'คืนเงิน 50%',
-    detail: 'หรือเลื่อนไปรอบถัดไปได้โดยไม่มีค่าใช้จ่ายเพิ่มเติม',
-  },
-  {
-    icon: 'clock',
-    window: 'ก่อนอบรมน้อยกว่า 7 วัน',
-    outcome: 'สงวนสิทธิ์การคืนเงิน',
-    detail: 'สามารถเปลี่ยนผู้เข้าอบรมเป็นบุคคลอื่นแทนได้',
-  },
-  {
-    icon: 'refund',
-    window: 'กรณีบริษัทยกเลิกรอบอบรม',
-    outcome: 'คืนเงินเต็มจำนวน',
-    detail: 'หรือเลือกเลื่อนไปรอบถัดไปตามความสะดวกของท่าน',
+    icon: 'shield',
+    course: 'E-Learning',
+    outcome: 'ไม่คืนเงินทุกกรณี',
+    detail: 'เมื่อได้รับสิทธิ์เข้าถึงเนื้อหาแล้ว ไม่ว่าจะเข้าเรียนหรือไม่',
   },
 ];
 
 const TOC = [
-  { id: 'intro', title: 'บทนำ' },
-  { id: 'criteria', title: 'หลักเกณฑ์การยกเลิกและคืนเงิน' },
-  { id: 'how-to', title: 'ขั้นตอนการขอยกเลิก' },
-  { id: 'timeline', title: 'ระยะเวลาดำเนินการคืนเงิน' },
-  { id: 'postpone', title: 'การเลื่อนวันอบรม' },
-  { id: 'no-show', title: 'กรณีไม่มาเข้าอบรม' },
-  { id: 'company-cancel', title: 'กรณีบริษัทยกเลิกการอบรม' },
-  { id: 'contact', title: 'ติดต่อเรา' },
+  { id: 'intro', title: 'หลักการทั่วไป' },
+  { id: 'highlights', title: 'สรุปตามประเภทหลักสูตร' },
+  { id: 'public-training', title: 'Public Training' },
+  { id: 'inhouse-training', title: 'In-House Training' },
+  { id: 'masterclass', title: 'Masterclass' },
+  { id: 'elearning', title: 'E-Learning' },
+  { id: 'company-cancellation', title: 'กรณีบริษัทเป็นผู้ยกเลิกหรือเลื่อนหลักสูตร' },
+  { id: 'exceptions', title: 'ข้อยกเว้น' },
 ];
 
 export default function RefundPolicyPage() {
@@ -91,16 +90,8 @@ export default function RefundPolicyPage() {
       updated={policy.updated}
       toc={TOC}
       currentSlug={policy.slug}
-      /*
-        The strongest wording of the three. This page states refund PERCENTAGES
-        and NOTICE PERIODS — numbers a customer would act on and could later
-        hold the company to. If this page ships before real terms exist, this
-        banner is the only thing between us and having quoted refund figures we
-        invented, so it names the fabricated numbers explicitly rather than
-        warning about "content" in general.
-      */
       notice={
-        <PolicyDraftNotice detail="ตัวเลขทั้งหมดในหัวข้อ 02 — ระยะเวลาแจ้งล่วงหน้าและเปอร์เซ็นต์การคืนเงิน — เป็นตัวอย่างที่สมมติขึ้นทั้งหมด ไม่ใช่เงื่อนไขของบริษัท และไม่สามารถใช้อ้างอิงในการขอคืนเงินได้" />
+        <PolicyStatusNotice detail="เนื้อหาในหน้านี้จะมีผลบังคับใช้เมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ หากมีข้อสงสัยติดต่อ training@9expert.co.th" />
       }
       help={{
         icon: 'help',
@@ -116,39 +107,38 @@ export default function RefundPolicyPage() {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-9e-action/10 text-[12px] text-9e-action dark:bg-[#48B0FF]/10 dark:text-[#48B0FF]">
               01
             </span>
-            บทนำ
+            หลักการทั่วไป
           </h2>
           <p className="mt-3 text-[14px] leading-[1.8] text-[var(--text-secondary)]">
-            นโยบายนี้อธิบายหลักเกณฑ์การยกเลิกการสมัครอบรม การเลื่อนวันอบรม
-            กรณีไม่มาเข้าอบรม และขั้นตอนการขอคืนเงิน
-            โดยมีผลกับการสมัครอบรมทุกช่องทางของ 9EXPERT
+            เมื่อผู้ใช้บริการชำระเงินค่าบริการหลักสูตรฝึกอบรมกับ{POLICY_ENTITY}{' '}
+            (&quot;บริษัท&quot;) เรียบร้อยแล้ว บริษัทจะไม่คืนเงินไม่ว่ากรณีใด ๆ
+            ทั้งสิ้น ไม่ว่าจะเป็นหลักสูตรประเภท Public Training, In-House Training,
+            Masterclass หรือ E-Learning Training (หลักสูตรเรียนออนไลน์)
+            และไม่ว่าผู้ใช้บริการจะเป็นฝ่ายยกเลิก
+            หรือบริษัทเป็นฝ่ายยกเลิก/เลื่อนการอบรมเองก็ตาม
+            ขอให้ผู้ใช้บริการพิจารณาและตรวจสอบรายละเอียดหลักสูตร วันเวลาอบรม
+            และความพร้อมของตนเองอย่างรอบคอบก่อนทำการชำระเงินทุกครั้ง
           </p>
         </section>
 
-        <section id="criteria" className="scroll-mt-24">
+        <section id="highlights" className="scroll-mt-24">
           <h2 className="flex items-center gap-3 text-[18px] font-bold text-[var(--text-primary)]">
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-9e-action/10 text-[12px] text-9e-action dark:bg-[#48B0FF]/10 dark:text-[#48B0FF]">
               02
             </span>
-            หลักเกณฑ์การยกเลิกและคืนเงิน
+            สรุปตามประเภทหลักสูตร
           </h2>
-
-          {/*
-            THESE FIGURES ARE INVENTED — see the file header. The on-page note
-            below repeats it, because a visitor comparing these four cards is
-            making a decision about money and must not take them as terms.
-          */}
           <ul className="mt-4 grid grid-cols-2 gap-4 max-md:grid-cols-1">
             {HIGHLIGHTS.map((item) => (
               <li
-                key={item.window}
+                key={item.course}
                 className="rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-5"
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-9e-action/10 text-9e-action dark:bg-[#48B0FF]/10 dark:text-[#48B0FF]">
                   <PolicyIcon name={item.icon} className="h-5 w-5" />
                 </span>
                 <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-                  {item.window}
+                  {item.course}
                 </p>
                 <p className="text-[16px] font-bold text-[var(--text-primary)]">
                   {item.outcome}
@@ -159,100 +149,91 @@ export default function RefundPolicyPage() {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-[13px] font-semibold text-[var(--text-muted)]">
-            * ตัวเลขและระยะเวลาข้างต้นเป็นตัวอย่างประกอบการออกแบบเท่านั้น
-            ยังไม่ใช่เงื่อนไขที่บริษัทกำหนด กรุณาติดต่อทีมงานเพื่อยืนยันเงื่อนไขที่เป็นทางการ
-          </p>
         </section>
 
         <PolicyAccordion
           items={[
             {
-              id: 'how-to',
+              id: 'public-training',
+              number: '3',
               icon: 'listChecks',
-              title: 'ขั้นตอนการขอยกเลิก',
+              title: 'Public Training',
               defaultOpen: true,
               body: (
-                <ol className="space-y-2">
-                  {[
-                    'แจ้งความประสงค์ผ่านช่องทางติดต่อของบริษัท พร้อมระบุชื่อหลักสูตรและรอบอบรม',
-                    'ทีมงานตรวจสอบเงื่อนไขและยืนยันสิทธิ์การคืนเงินกลับไปยังท่าน',
-                    'จัดส่งเอกสารประกอบการคืนเงินตามที่ทีมงานแจ้ง',
-                    'บริษัทดำเนินการคืนเงินตามช่องทางที่ท่านชำระมา',
-                  ].map((step, i) => (
-                    <li key={step} className="flex gap-3">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-9e-action text-[11px] font-bold text-white dark:bg-[#48B0FF] dark:text-[#0D1B2A]">
-                        {i + 1}
-                      </span>
-                      <span>{step}</span>
-                    </li>
-                  ))}
-                </ol>
-              ),
-            },
-            {
-              id: 'timeline',
-              icon: 'clock',
-              title: 'ระยะเวลาดำเนินการคืนเงิน',
-              body: (
                 <p>
-                  โดยทั่วไปบริษัทจะดำเนินการคืนเงินภายใน 30 วันทำการ
-                  นับจากวันที่ได้รับเอกสารครบถ้วน
-                  ทั้งนี้ระยะเวลาที่เงินเข้าบัญชีขึ้นอยู่กับรอบการทำงานของธนาคารหรือผู้ให้บริการชำระเงิน
+                  เมื่อชำระเงินและลงทะเบียนแล้ว บริษัทจะไม่คืนเงินในทุกกรณี
+                  ไม่ว่าผู้ใช้บริการจะเข้าร่วมการอบรมหรือไม่ก็ตาม
                 </p>
               ),
             },
             {
-              id: 'postpone',
-              icon: 'calendar',
-              title: 'การเลื่อนวันอบรม',
+              id: 'inhouse-training',
+              number: '4',
+              icon: 'settings',
+              title: 'In-House Training',
               body: (
                 <p>
-                  ท่านสามารถขอเลื่อนไปรอบอบรมถัดไปได้ตามเงื่อนไขและที่นั่งว่าง
-                  โดยแจ้งล่วงหน้าตามระยะเวลาที่กำหนด
-                  การเลื่อนถือเป็นทางเลือกแทนการขอคืนเงิน
+                  หลักสูตร In-House Training เป็นการอบรมเฉพาะสำหรับองค์กรผู้ว่าจ้าง
+                  เมื่อองค์กรยืนยันการจองและ/หรือชำระเงินตามใบเสนอราคา (Quotation)
+                  หรือสัญญาที่ตกลงกันแล้ว บริษัทจะไม่คืนเงินไม่ว่ากรณีใด
+                  เงื่อนไขการชำระเงินและกำหนดการอบรมเป็นไปตามที่ระบุไว้ในใบเสนอราคาหรือสัญญาฉบับนั้น
                 </p>
               ),
             },
             {
-              id: 'no-show',
-              icon: 'help',
-              title: 'กรณีไม่มาเข้าอบรม',
+              id: 'masterclass',
+              number: '5',
+              icon: 'check',
+              title: 'Masterclass',
               body: (
                 <p>
-                  หากท่านไม่มาเข้าอบรมโดยไม่ได้แจ้งล่วงหน้า
-                  บริษัทขอสงวนสิทธิ์ในการคืนเงินและการเลื่อนรอบอบรม
-                  เนื่องจากที่นั่งได้ถูกจัดสรรไว้ให้ท่านแล้ว
+                  เมื่อชำระเงินและลงทะเบียนหลักสูตร Masterclass แล้ว
+                  บริษัทจะไม่คืนเงินในทุกกรณี
+                  ไม่ว่าผู้ใช้บริการจะเข้าร่วมการอบรมหรือไม่ก็ตาม เช่นเดียวกับหลักสูตร
+                  Public Training
                 </p>
               ),
             },
             {
-              id: 'company-cancel',
+              id: 'elearning',
+              number: '6',
               icon: 'shield',
-              title: 'กรณีบริษัทยกเลิกการอบรม',
+              title: 'E-Learning',
               body: (
                 <p>
-                  หากบริษัทจำเป็นต้องยกเลิกหรือเลื่อนรอบอบรม
-                  ท่านสามารถเลือกรับเงินคืนเต็มจำนวน
-                  หรือเลื่อนไปรอบถัดไปตามความสะดวกของท่าน
-                  โดยบริษัทจะแจ้งให้ทราบล่วงหน้าโดยเร็วที่สุด
+                  เมื่อชำระเงินแล้ว ถือว่าผู้ใช้บริการได้รับสิทธิ์เข้าถึงเนื้อหาทันที
+                  บริษัทจะไม่คืนเงินในทุกกรณี
+                  ไม่ว่าผู้ใช้บริการจะเข้าเรียนหรือเปิดดูเนื้อหาแล้วหรือไม่ก็ตาม
                 </p>
               ),
             },
             {
-              id: 'contact',
-              icon: 'mail',
-              title: 'ติดต่อเรา',
+              id: 'company-cancellation',
+              number: '7',
+              icon: 'refund',
+              title: 'กรณีบริษัทเป็นผู้ยกเลิกหรือเลื่อนหลักสูตร',
               body: (
                 <p>
-                  หากมีข้อสงสัยเกี่ยวกับการยกเลิกหรือการคืนเงิน สามารถ{' '}
-                  <Link
-                    href="/contact-us"
-                    className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
-                  >
-                    ติดต่อทีมงาน 9EXPERT
-                  </Link>{' '}
-                  เพื่อขอข้อมูลที่เป็นทางการ
+                  ในกรณีที่บริษัทจำเป็นต้องยกเลิกหรือเลื่อนการอบรม เช่น
+                  จำนวนผู้เข้าอบรมไม่ครบตามเกณฑ์ หรือเหตุสุดวิสัย
+                  บริษัทจะไม่คืนเงินเช่นกัน
+                  ทั้งนี้บริษัทอาจพิจารณาเสนอที่นั่งในรอบอบรมถัดไปให้แก่ผู้ใช้บริการตามความเหมาะสม
+                  ซึ่งเป็นดุลยพินิจของบริษัทเป็นกรณีไป
+                  มิใช่สิทธิที่ผู้ใช้บริการเรียกร้องได้
+                </p>
+              ),
+            },
+            {
+              id: 'exceptions',
+              number: '8',
+              icon: 'help',
+              title: 'ข้อยกเว้น',
+              body: (
+                <p>
+                  บริษัทขอสงวนสิทธิ์ในการพิจารณาเป็นกรณีพิเศษ
+                  เฉพาะกรณีที่เนื้อหาหรือระบบของหลักสูตรออนไลน์มีความบกพร่องทางเทคนิคจนไม่สามารถเข้าถึงบริการได้ทั้งหมด
+                  โดยผู้ใช้บริการต้องแจ้งบริษัททราบภายในระยะเวลาที่บริษัทกำหนด
+                  และการพิจารณาเป็นไปตามดุลยพินิจของบริษัท
                 </p>
               ),
             },
