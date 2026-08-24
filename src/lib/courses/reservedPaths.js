@@ -107,6 +107,9 @@ export const RESERVED_PATHS = Object.freeze([
   // that is very hard to see. The `-img` suffix is deliberate.
   { segment: 'policies-img', source: 'static' },
   { segment: 'port', source: 'static' },
+  // The /masterclass landing page's artwork. Same shadowing concern as
+  // policies-img above — not `masterclass`, which is the route itself.
+  { segment: 'masterclass-element', source: 'static' },
 
   // ── HAND-MAINTAINED. NOTHING VERIFIES THESE. ─────────────────────────────
   // From src/middleware.js's pass-through prefixes and framework internals.
