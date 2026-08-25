@@ -95,6 +95,69 @@ test('the three optional labels are the Figma three, in order', () => {
   assert.deepEqual(labels, ['คุกกี้วิเคราะห์', 'คุกกี้ด้านฟังก์ชัน', 'คุกกี้การตลาด']);
 });
 
+test('CB-A3 layout: the four toggles live in the BOTTOM row, not a row of their own', () => {
+  const d = doc();
+  const card = d.querySelector('section');
+  const rows = [...card.children];
+  const bottom = rows[rows.length - 1];
+
+  // The pill band above the divider is gone; everything interactive that is
+  // not the heading now shares one row. Asserted structurally rather than by
+  // counting rows, so re-ordering the header does not falsely redden it.
+  assert.equal(
+    bottom.querySelectorAll('input[type="checkbox"]').length,
+    4,
+    'all four category toggles are inside the last row',
+  );
+  assert.equal(
+    card.querySelectorAll('input[type="checkbox"]').length,
+    4,
+    'and there are no toggles anywhere else in the card',
+  );
+  assert.equal(
+    bottom.querySelectorAll('button').length,
+    3,
+    'the three buttons are in that same row',
+  );
+  assert.ok(
+    bottom.querySelector('a[href="/cookie-policy"]'),
+    'as is the policy link',
+  );
+});
+
+test('CB-A3 layout: the bottom row reads link → toggles → buttons', () => {
+  const d = doc();
+  const card = d.querySelector('section');
+  const rows = [...card.children];
+  const groups = [...rows[rows.length - 1].children];
+
+  // DOM order IS the wrap order and the screen-reader order, so it is the
+  // thing worth pinning — the visual arrangement follows from it.
+  assert.equal(groups.length, 3, 'three groups, so the toggles wrap as a unit');
+  assert.equal(groups[0].tagName, 'A', 'the policy link comes first');
+  assert.equal(
+    groups[1].querySelectorAll('input[type="checkbox"]').length,
+    4,
+    'the toggles come second',
+  );
+  assert.equal(groups[2].querySelectorAll('button').length, 3, 'the buttons last');
+  assert.match(
+    groups[2].getAttribute('class') ?? '',
+    /ml-auto/,
+    'and the buttons carry ml-auto, which is what right-aligns them on '
+      + 'whichever line they wrap onto',
+  );
+});
+
+test('the divider sits ABOVE the bottom row, not between toggles and buttons', () => {
+  const d = doc();
+  const card = d.querySelector('section');
+  const kids = [...card.children];
+  const hrIndex = kids.findIndex((k) => k.tagName === 'HR');
+  assert.ok(hrIndex > 0, 'there is still a divider');
+  assert.equal(hrIndex, kids.length - 2, 'and it is immediately before the last row');
+});
+
 test('the policy link points at the real shipped page', () => {
   const d = doc();
   const link = [...d.querySelectorAll('a')].find((a) =>

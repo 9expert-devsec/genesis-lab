@@ -6,22 +6,43 @@ import { TriangleAlert } from 'lucide-react';
 import { matchesRoutePattern } from '@/lib/floatingDock';
 import { setOccupiedBox, clearOccupiedBox } from '@/lib/viewportBottomInset';
 import { stickyBarOccupancyHeight } from '@/lib/stickyBarOccupancy';
-import { CookieBanner } from './CookieBanner';
+import { CookieBanner, OPTIONAL_CATEGORIES } from './CookieBanner';
+import {
+  parseConsent,
+  readConsentCookie,
+  writeConsentCookie,
+} from '@/lib/cookieConsentStore';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  *  CookieBannerPreview — TEMPORARY. DELETE THIS WHOLE FILE IN THE WIRING ROUND.
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Round CB-A2. Puts CookieBanner on screen so the team can review it in real
- * page context. Consent is STILL NOT WIRED: nothing here writes a cookie,
- * touches localStorage, or calls gtag. Analytics.jsx and the Consent Mode
- * defaults (`granted`) are untouched.
+ * Round CB-A2 put CookieBanner on screen so the team can review it in real
+ * page context. Round CB-A3 made the choice stick.
+ *
+ * CONSENT IS STILL NOT WIRED. The distinction that matters, because it is
+ * easy to misread now that a cookie is involved:
+ *
+ *   IT DOES     write the visitor's per-category choice to a first-party
+ *               cookie, and read it back to stay hidden on later visits.
+ *   IT DOES NOT call gtag('consent','update',…), change any Consent Mode
+ *               default, or touch Analytics.jsx. The defaults are still
+ *               `granted` and the cookie's value changes NOTHING about what
+ *               is tracked.
+ *
+ * Recording a preference and honouring it are separate commits on purpose:
+ * this one can be reviewed for whether the RECORD is right without also
+ * having to be right about the tag. The preview notice says exactly this in
+ * Thai, and it was reworded in CB-A3 precisely because "we do not save your
+ * setting" stopped being true.
  *
  * This file is the entire preview apparatus — the warning strip, the
- * session-only dismissal, the positioning. The wiring round deletes it and
- * mounts CookieBanner through a real consent provider instead, which is why
- * none of the temporary parts live inside CookieBanner itself.
+ * positioning, and the glue to the consent store. The wiring round deletes it
+ * and mounts CookieBanner through a real consent provider instead, which is
+ * why none of the temporary parts live inside CookieBanner itself.
+ * src/lib/cookieConsentStore.js is NOT temporary: the storage format is meant
+ * to survive this round and be read by the server next round.
  *
  * ── WHY IT IS SAFE TO SHOW A NON-FUNCTIONAL CONSENT BANNER ──────────────────
  * genesis-lab is not in production. Real users are still on the old site, so
@@ -44,8 +65,9 @@ import { CookieBanner } from './CookieBanner';
  *      transit."
  *
  * Mounting once in the root layout gives one tree for the whole app, so a
- * dismissal survives every soft navigation — and a full reload still brings
- * the banner back, which is the behaviour this round wants.
+ * dismissal survives every soft navigation without needing to be re-read from
+ * storage on each one. Since CB-A3 a full reload no longer brings the banner
+ * back either — that is now the cookie's job rather than the tree's.
  */
 
 /**
@@ -93,11 +115,20 @@ function PreviewNotice() {
         className="mt-px h-4 w-4 shrink-0 text-[#B45309] dark:text-[#FBBF24]"
         aria-hidden="true"
       />
+      {/*
+        WORDING CHANGED IN CB-A3, and the change is the point. The previous
+        version ended "และระบบจะไม่บันทึกการตั้งค่าของคุณไว้" — the system does
+        not save your setting. That is now FALSE: the choice is written to a
+        first-party cookie. Leaving it would have made the one element on the
+        card whose job is to be accurate the only inaccurate thing on it.
+        The notice now separates the two facts a reviewer needs to hold apart:
+        the choice IS recorded, and it still does NOT affect tracking.
+      */}
       <p className="text-xs leading-[1.5] text-[#78350F] dark:text-[#FDE68A]">
         <strong className="font-semibold">ตัวอย่างหน้าตาเท่านั้น (UI Preview)</strong>{' '}
-        — แบนเนอร์นี้ยังไม่เชื่อมต่อระบบจัดการคุกกี้ การกดปุ่มหรือเปิด/ปิดตัวเลือกใด ๆ
-        ยังไม่มีผลกับการเก็บคุกกี้หรือการติดตามข้อมูลจริง
-        และระบบจะไม่บันทึกการตั้งค่าของคุณไว้
+        — แบนเนอร์นี้ยังไม่เชื่อมต่อระบบจัดการคุกกี้
+        ระบบจะจดจำตัวเลือกของคุณไว้ (และจะไม่แสดงแบนเนอร์นี้อีก)
+        แต่ตัวเลือกดังกล่าวยังไม่มีผลกับการเก็บคุกกี้หรือการติดตามข้อมูลจริงแต่อย่างใด
       </p>
     </div>
   );
@@ -106,12 +137,23 @@ function PreviewNotice() {
 export function CookieBannerPreview() {
   const pathname = usePathname();
 
-  // Session-only, in-memory, and that is the whole specification. NOT a
-  // cookie, NOT localStorage, NOT sessionStorage. A fake persistence now would
-  // be harder to unpick later than real persistence is to add, and it would
-  // also be the one thing a reviewer could mistake for the feature working.
-  // Consequence, intended: a full page reload brings the banner back.
-  const [dismissed, setDismissed] = useState(false);
+  /**
+   * ── DISMISSAL IS NOW PERSISTED (CB-A3) ────────────────────────────────────
+   * CB-A2 kept this in memory only, on the grounds that fake persistence would
+   * be harder to unpick than real persistence is to add. This round adds the
+   * real thing: a first-party cookie, written on decision and read on mount.
+   * See src/lib/cookieConsentStore.js for why a cookie and not localStorage —
+   * the short version is that the wiring round has to read this value in a
+   * SERVER component, before the Google tag loads.
+   *
+   * `null` is the third state and it is load-bearing: "not decided yet" is not
+   * the same as "decided, everything off", and only the first should show the
+   * banner. Starting at null and reading the cookie in the mount effect also
+   * means the server and the first client render agree (both show nothing),
+   * which is the same hydration-safety the `mounted` gate below provides.
+   */
+  const [decision, setDecision] = useState(null);
+  const dismissed = decision !== null;
 
   const cardRef = useRef(null);
   const [box, setBox] = useState({ height: 0, left: 0, right: 0 });
@@ -133,7 +175,35 @@ export function CookieBannerPreview() {
    * be re-judged against the CLS it buys.
    */
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // Read the stored decision in the SAME effect that reveals the banner, so
+    // a returning visitor never gets a frame of banner before it is hidden
+    // again. parseConsent returns null for anything it cannot trust — absent,
+    // malformed, wrong schema version, or a key set that no longer matches
+    // OPTIONAL_CATEGORIES — and null means "ask again", which is the only safe
+    // response to a consent record we cannot read.
+    setDecision(
+      parseConsent(
+        readConsentCookie(),
+        OPTIONAL_CATEGORIES.map((c) => c.key),
+      ),
+    );
+    setMounted(true);
+  }, []);
+
+  /**
+   * The decision handler. Writes the cookie, then hides the banner.
+   *
+   * It records the categories the user actually ended up with — including any
+   * they toggled by hand before pressing a button — rather than a bare
+   * "dismissed" flag, because the wiring round needs to know WHICH categories
+   * were granted in order to map them onto Consent Mode signals. A boolean
+   * would force that round to either re-ask everyone or invent an answer.
+   */
+  const handleDecision = useCallback((categories) => {
+    writeConsentCookie(categories, new Date().toISOString());
+    setDecision(categories);
+  }, []);
 
   const visible = mounted && shouldRenderCookieBannerPreview(pathname) && !dismissed;
 
@@ -238,10 +308,29 @@ export function CookieBannerPreview() {
       data-cookie-banner-preview=""
       className="pointer-events-none fixed inset-x-0 bottom-0 z-70 p-3 sm:p-4"
     >
-      <div className="pointer-events-auto mx-auto max-w-[1200px]" ref={cardRef}>
+      {/*
+        ── WHY 960px AND NOT THE SITE'S max-w-[1200px] ─────────────────────
+        1200 is the SITE CONTENT container (103 uses in src/). This is a
+        floating card, not page content, and at 1200 the copy ran to a single
+        very long measure that read as a banner-shaped strip rather than a
+        card.
+
+        960 was chosen against the measured content, not by multiplying:
+        the bottom row's three groups measure 128 (link) + 531 (toggles) +
+        416 (buttons) = 1075, plus 40 of column gap and 48 of card padding =
+        1163px to hold all three on ONE line. Every real narrowing therefore
+        wraps that row, so the question is not "does it wrap" but "where".
+        At 960 the usable width is 912, and link + gap + toggles = 679 sits
+        comfortably on the first line with the buttons wrapping beneath,
+        right-aligned by `ml-auto` — which is the reading order the row was
+        built for. 1080 (an existing repo value) wraps identically but leaves
+        353px of slack stranded on the first line; 900 (also existing) works
+        but crowds the toggles toward the link.
+      */}
+      <div className="pointer-events-auto mx-auto max-w-[960px]" ref={cardRef}>
         <CookieBanner
           notice={<PreviewNotice />}
-          onDecision={() => setDismissed(true)}
+          onDecision={handleDecision}
         />
       </div>
     </div>

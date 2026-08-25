@@ -221,104 +221,37 @@ export function CookieBanner({ className, notice = null, onDecision }) {
         </div>
       </div>
 
-      {/* ── Row 2 — category pills ────────────────────────────────────── */}
-      <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
-        {/*
-          NECESSARY — always on, genuinely not toggleable.
-          A native `disabled checked` input is what carries that to assistive
-          tech: it announces as "switch, on, unavailable", and unlike an
-          onClick-that-returns-early it cannot be defeated by a handler that
-          fails to attach. The trade-off is that `disabled` also removes it from
-          the tab order — correct here, since there is nothing to operate, and
-          the sr-only sentence plus the visible Lock icon carry the "why".
-        */}
-        <label className={cn(PILL_CLASS, 'cursor-not-allowed')}>
-          <input
-            type="checkbox"
-            role="switch"
-            checked
-            disabled
-            readOnly
-            className="peer sr-only"
-          />
-          {/* Figma shows this one as a 28×16 filled toggle switch — keep that
-              visual so it reads as a switch that is on, not as a checkbox. */}
-          <span
-            aria-hidden="true"
-            className={cn(
-              'relative h-4 w-7 shrink-0 rounded-full',
-              'bg-9e-action dark:bg-9e-air',
-              'after:absolute after:right-0.5 after:top-0.5 after:h-3 after:w-3',
-              'after:rounded-full after:bg-white dark:after:bg-9e-navy',
-            )}
-          />
-          <span>คุกกี้ที่จำเป็น</span>
-          <Lock
-            className="h-3 w-3 shrink-0 text-[var(--text-muted)]"
-            aria-hidden="true"
-          />
-          <span className="sr-only">เปิดใช้งานเสมอ ไม่สามารถปิดได้</span>
-        </label>
-
-        {/* OPTIONAL — real checkboxes. The visible box is a sibling <span>
-            driven by peer-checked:, so the input itself stays a native control
-            (focusable, space-toggleable, correctly announced) rather than a div
-            wearing a switch costume. */}
-        {OPTIONAL_CATEGORIES.map(({ key, label }, index) => (
-          <label key={key} className={cn(PILL_CLASS, 'cursor-pointer')}>
-            <input
-              ref={index === 0 ? firstToggleRef : undefined}
-              type="checkbox"
-              checked={consent[key]}
-              onChange={() => toggle(key)}
-              className="peer sr-only"
-            />
-            <span
-              aria-hidden="true"
-              className={cn(
-                'flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border',
-                // OFF state — not in the Figma, which only supplies the ON
-                // state. Hollow box on the same border token as the pill.
-                'border-9e-slate-lt-300 bg-transparent dark:border-9e-border',
-                // ON state — Figma's filled green box with a check.
-                'peer-checked:border-9e-green-50 peer-checked:bg-9e-green-50',
-                // The tick is a DESCENDANT of this span, not a sibling of the
-                // input, so a bare `peer-checked:opacity-100` on the <Check>
-                // itself would compile to `.peer:checked ~ .opacity-100` and
-                // never match. Reveal it from here, where the peer relationship
-                // actually holds, and reach down with an arbitrary variant.
-                'peer-checked:[&>svg]:opacity-100',
-                // Focus ring rides the box, since the input is sr-only.
-                'peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand',
-                'peer-focus-visible:ring-offset-2',
-                'peer-focus-visible:ring-offset-[var(--surface-raised)]',
-              )}
-            >
-              {/*
-                The check glyph is NAVY, not the Figma's white. White on
-                #1FC17E measures 2.34:1 — it fails WCAG AA for a graphical
-                object (3:1) outright, and the mockup's #10b981 is no better.
-                Navy on the same green is 7.44:1. The tick is the only thing
-                distinguishing on from off, so it has to be legible.
-              */}
-              <Check
-                className="h-2.5 w-2.5 text-9e-navy opacity-0"
-                strokeWidth={3}
-                aria-hidden="true"
-              />
-            </span>
-            <span>{label}</span>
-          </label>
-        ))}
-      </div>
-
       {/* ── Divider ───────────────────────────────────────────────────── */}
       <hr className="w-full border-t border-9e-slate-lt-300 dark:border-9e-border" />
 
-      {/* ── Row 3 — links + buttons ───────────────────────────────────── */}
-      <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:gap-4">
+      {/*
+        ── THE BOTTOM ROW: policy link → four toggles → three buttons ──────
+        The toggles used to have a row of their own above the divider. Folding
+        them in here removes a whole band from the card.
+
+        WRAPPING. DOM order is the wrap order, and it is the reading order:
+        the link is first because it is the smallest and the least urgent, the
+        toggles are the subject, the buttons are the conclusion. Three flex
+        items, not nine — the toggles wrap among THEMSELVES inside their own
+        `flex-wrap` box, so a narrow viewport breaks them 2×2 instead of
+        stranding one pill on a line beside a button and reading as though that
+        pill belonged to it.
+
+        `ml-auto` on the buttons rather than `justify-between` on the row:
+        justify-between distributes ALL free space between the three groups, so
+        at intermediate widths the toggles drift away from the link and float
+        in the middle of nothing. ml-auto puts every pixel of slack in one
+        place — immediately before the buttons — which keeps the link and the
+        toggles reading as one left-hand group and still pins the buttons to
+        the right edge on whichever line they end up on.
+
+        gap-x-5/gap-y-3: the horizontal gap separates GROUPS and so is wider
+        than the gap between pills within a group (gap-2/3), which is what
+        makes the three groups legible as three groups rather than one queue.
+      */}
+      <div className="flex w-full flex-wrap items-center gap-x-5 gap-y-3">
         {/*
-          The Figma's left group has TWO links. The second — "ตั้งค่าคุกกี้"
+          The Figma's left group had TWO links. The second — "ตั้งค่าคุกกี้"
           with a settings icon — is GONE, and that is the deliberate resolution
           of the same question the "จัดการการตั้งค่า" button raised.
           With no settings modal and no preference page, that link's only
@@ -330,20 +263,109 @@ export function CookieBanner({ className, notice = null, onDecision }) {
           because a button is the honest element for an in-page action; the link
           slot keeps only the link that has a real destination.
         */}
-        <div className="flex items-center gap-6">
-          <Link
-            href="/cookie-policy"
-            className={cn(
-              'flex items-center gap-1.5 text-xs font-semibold',
-              'text-9e-action hover:underline dark:text-9e-air',
-            )}
-          >
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            อ่านนโยบายการใช้คุกกี้
-          </Link>
+        <Link
+          href="/cookie-policy"
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 text-xs font-semibold',
+            'text-9e-action hover:underline dark:text-9e-air',
+          )}
+        >
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          อ่านนโยบายการใช้คุกกี้
+        </Link>
+
+        {/* The four category toggles, wrapping as one unit. */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/*
+            NECESSARY — always on, genuinely not toggleable.
+            A native `disabled checked` input is what carries that to assistive
+            tech: it announces as "switch, on, unavailable", and unlike an
+            onClick-that-returns-early it cannot be defeated by a handler that
+            fails to attach. The trade-off is that `disabled` also removes it from
+            the tab order — correct here, since there is nothing to operate, and
+            the sr-only sentence plus the visible Lock icon carry the "why".
+          */}
+          <label className={cn(PILL_CLASS, 'cursor-not-allowed')}>
+            <input
+              type="checkbox"
+              role="switch"
+              checked
+              disabled
+              readOnly
+              className="peer sr-only"
+            />
+            {/* Figma shows this one as a 28×16 filled toggle switch — keep that
+                visual so it reads as a switch that is on, not as a checkbox. */}
+            <span
+              aria-hidden="true"
+              className={cn(
+                'relative h-4 w-7 shrink-0 rounded-full',
+                'bg-9e-action dark:bg-9e-air',
+                'after:absolute after:right-0.5 after:top-0.5 after:h-3 after:w-3',
+                'after:rounded-full after:bg-white dark:after:bg-9e-navy',
+              )}
+            />
+            <span>คุกกี้ที่จำเป็น</span>
+            <Lock
+              className="h-3 w-3 shrink-0 text-[var(--text-muted)]"
+              aria-hidden="true"
+            />
+            <span className="sr-only">เปิดใช้งานเสมอ ไม่สามารถปิดได้</span>
+          </label>
+
+          {/* OPTIONAL — real checkboxes. The visible box is a sibling <span>
+              driven by peer-checked:, so the input itself stays a native control
+              (focusable, space-toggleable, correctly announced) rather than a div
+              wearing a switch costume. */}
+          {OPTIONAL_CATEGORIES.map(({ key, label }, index) => (
+            <label key={key} className={cn(PILL_CLASS, 'cursor-pointer')}>
+              <input
+                ref={index === 0 ? firstToggleRef : undefined}
+                type="checkbox"
+                checked={consent[key]}
+                onChange={() => toggle(key)}
+                className="peer sr-only"
+              />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border',
+                  // OFF state — not in the Figma, which only supplies the ON
+                  // state. Hollow box on the same border token as the pill.
+                  'border-9e-slate-lt-300 bg-transparent dark:border-9e-border',
+                  // ON state — Figma's filled green box with a check.
+                  'peer-checked:border-9e-green-50 peer-checked:bg-9e-green-50',
+                  // The tick is a DESCENDANT of this span, not a sibling of the
+                  // input, so a bare `peer-checked:opacity-100` on the <Check>
+                  // itself would compile to `.peer:checked ~ .opacity-100` and
+                  // never match. Reveal it from here, where the peer relationship
+                  // actually holds, and reach down with an arbitrary variant.
+                  'peer-checked:[&>svg]:opacity-100',
+                  // Focus ring rides the box, since the input is sr-only.
+                  'peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand',
+                  'peer-focus-visible:ring-offset-2',
+                  'peer-focus-visible:ring-offset-[var(--surface-raised)]',
+                )}
+              >
+                {/*
+                  The check glyph is NAVY, not the Figma's white. White on
+                  #1FC17E measures 2.34:1 — it fails WCAG AA for a graphical
+                  object (3:1) outright, and the mockup's #10b981 is no better.
+                  Navy on the same green is 7.44:1. The tick is the only thing
+                  distinguishing on from off, so it has to be legible.
+                */}
+                <Check
+                  className="h-2.5 w-2.5 text-9e-navy opacity-0"
+                  strokeWidth={3}
+                  aria-hidden="true"
+                />
+              </span>
+              <span>{label}</span>
+            </label>
+          ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={focusToggles}
@@ -392,11 +414,15 @@ export function CookieBanner({ className, notice = null, onDecision }) {
         The Figma frame has no X, no "ภายหลัง", and no overlay click-out; the
         only exits it draws are the three buttons. So the banner as specified
         cannot be dismissed without making a choice.
-        Whether that is correct is a consent-design question, not a presentation
-        one: under PDPA a "close without choosing" affordance has to record the
-        same outcome as rejecting, which requires the persistence layer this
-        round explicitly does not build. Adding an X now would create a control
-        whose meaning is undefined. Left for the wiring round.
+
+        CB-A3 UPDATE: the persistence this used to be blocked on now exists
+        (src/lib/cookieConsentStore.js), so an X COULD be given a defined
+        meaning — it would have to record the same outcome as
+        "ปฏิเสธคุกกี้ที่ไม่จำเป็น", since silence is not consent. It is still
+        not added here, because "closing is secretly rejecting" is a consent-
+        design decision with a legal reading, not a presentation one, and it
+        should be taken deliberately rather than as a side effect of a layout
+        round. The blocker is now judgement, not capability.
       */}
     </section>
   );
