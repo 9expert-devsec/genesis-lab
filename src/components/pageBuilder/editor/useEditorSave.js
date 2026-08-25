@@ -250,6 +250,11 @@ export function useEditorSave() {
         statusPatch,
         flush: saveNow,
         publish: publishPageStatus,
+        // Held across flush AND promote. The inner flush clears `saving` when
+        // it lands, so without this the leave guard sees an idle editor for
+        // the whole promote-to-live call and lets the author walk away
+        // mid-publish with no warning.
+        onPhase: (phase) => dispatch({ type: phase === 'start' ? 'PUBLISH_START' : 'PUBLISH_END' }),
       });
       if (aborted) return;                 // the flush failed and already reported
       if (res?.conflict) { dispatch({ type: 'SAVE_CONFLICT', message: res.error }); return; }

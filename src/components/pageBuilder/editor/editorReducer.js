@@ -72,6 +72,10 @@ export const initialEditorState = ({ page, pageId = null, updatedAt = null }) =>
   contentDirty: false,
   identityDirty: false,
   saving: false,
+  // True for the WHOLE publish sequence — flush AND promote — where `saving`
+  // alone goes false in between (the flush ends its own save). Read together
+  // with `saving` by editorStatus.isSaving; see runPublish in savePlan.js.
+  publishing: false,
   lastSavedAt: null,
   lastSavedDomains: [],
   conflict: null,        // { message } — terminal, WHOLE-DOCUMENT: autosave stops
@@ -145,6 +149,14 @@ export function editorReducer(state, action) {
       const page = moveWithin(state.page, parentPath, from, action.to);
       return { ...edited(state, page), selection: [...parentPath, action.to] };
     }
+
+    // The publish bracket. Deliberately NOT folded into SAVE_START/SAVE_OK:
+    // those pair per CALL, and this one spans two of them.
+    case 'PUBLISH_START':
+      return { ...state, publishing: true, error: null };
+
+    case 'PUBLISH_END':
+      return { ...state, publishing: false };
 
     case 'SAVE_START':
       return { ...state, saving: true, error: null };

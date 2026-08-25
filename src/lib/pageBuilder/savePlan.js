@@ -127,9 +127,29 @@ function pick(source, keys) {
  *
  * @returns {Promise<{ok: boolean, aborted?: boolean, result?: object}>}
  */
-export async function runPublish({ statusPatch, flush, publish }) {
-  const flushed = await flush();
-  if (!flushed?.id) return { ok: false, aborted: true };
-  const result = await publish(flushed.id, statusPatch, flushed.updatedAt);
-  return { ok: Boolean(result?.ok), result };
+export async function runPublish({ statusPatch, flush, publish, onPhase }) {
+  // The bracket exists because the INNER flush ends its own save: save()
+  // dispatches SAVE_OK when it lands, clearing `saving` and both dirty flags
+  // — and publish() is only called AFTER that. Without a bracket around the
+  // whole sequence, the editor reports itself idle for the entire duration of
+  // the promote-to-live write, which is the one call where leaving matters
+  // most: nothing cancels a Server Action in flight, so an author who walks
+  // away mid-publish gets no warning and the publish lands regardless.
+  //
+  // In a `finally` on purpose. Three of the paths out of here return early —
+  // a failed flush, a rejected promote, a throw — and a bracket that only
+  // closed on the happy path would strand the editor as permanently "saving",
+  // which blocks every exit forever. A counter keyed off the existing
+  // SAVE_START/SAVE_OK pairs cannot do this: save() returns early WITHOUT
+  // dispatching when nothing is dirty, when one is already in flight, and
+  // after a conflict, so its brackets do not balance.
+  onPhase?.('start');
+  try {
+    const flushed = await flush();
+    if (!flushed?.id) return { ok: false, aborted: true };
+    const result = await publish(flushed.id, statusPatch, flushed.updatedAt);
+    return { ok: Boolean(result?.ok), result };
+  } finally {
+    onPhase?.('end');
+  }
 }

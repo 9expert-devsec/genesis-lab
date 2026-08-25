@@ -22,6 +22,22 @@ function minutesSince(ts, now) {
 }
 
 /**
+ * Is the editor mid-write?
+ *
+ * The OR is the point. `saving` brackets one call; a publish is TWO — a flush
+ * and then the promote-to-live — and the flush ends its own save on the way
+ * through, so `saving` alone goes false for the whole duration of the second
+ * one. `publishing` spans both (see runPublish in savePlan.js).
+ *
+ * Everything that asks "is the editor busy" must ask THIS, not `state.saving`:
+ * the top bar's "กำลังบันทึก…", the save button's disabled state, and — the
+ * one that made it matter — the leave guard, which was letting authors walk
+ * away in the middle of a publish with no warning at all.
+ */
+export function isSaving(state) {
+  return Boolean(state?.saving || state?.publishing);
+}
+/**
  * Does the SERVER hold unpublished content?
  *
  * Reads `hadDraft` — the round-4 boolean seeded from the stored document and
@@ -68,7 +84,8 @@ export function statusLine(state, now = Date.now()) {
   const { conflict, saving, contentDirty, identityDirty, lastSavedAt, lastSavedDomains } = state ?? {};
 
   if (conflict) return '';                       // the conflict banner owns this state
-  if (saving) return 'กำลังบันทึก…';
+  // isSaving, not `saving`: a publish's promote call runs with `saving` false.
+  if (isSaving(state)) return 'กำลังบันทึก…';
   if (contentDirty || identityDirty) return 'ยังไม่ได้บันทึก';
   if (!lastSavedAt) return '';
 

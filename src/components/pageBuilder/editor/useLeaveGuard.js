@@ -86,6 +86,59 @@ export function beginAttempt(exit, liveReason) {
 }
 
 /**
+ * ── THE FREEZE LETS ONE THING THROUGH: A WORSENING ────────────────────────
+ * Holding the reason still is right for DE-escalation — a save landing, the
+ * tree going clean — because the author is mid-sentence and the danger is
+ * only receding. It is wrong for the opposite direction: a session that hits
+ * a CONFLICT while the dialog is open has had its autosave stopped for good,
+ * and the frozen 'saving'/'dirty' copy would keep promising a save that is
+ * never coming.
+ *
+ * The ranks mirror leaveBlockReason's own precedence, so the ordering has one
+ * definition rather than two.
+ */
+export const REASON_RANK = { dirty: 1, saving: 2, conflict: 3 };
+
+export function rankOf(reason) {
+  return REASON_RANK[reason] ?? 0;
+}
+
+/**
+ * The floor a live reason must REACH before it is allowed to overwrite a
+ * frozen one — not merely outrank it.
+ *
+ * WHY IT IS AT 'conflict' AND NOT AT 1, which is the interesting part: rank
+ * alone would make dirty -> saving a promotion, and that transition is
+ * precisely the text-morph the freeze was built to stop. An autosave firing
+ * while the author reads is the COMMON case, and watching the copy rewrite
+ * itself mid-sentence is the defect, not a fix for one. 'saving' is also not
+ * more urgent than 'dirty' in any sense the author cares about — leaving while
+ * dirty loses the work outright, leaving mid-save merely might.
+ *
+ * 'conflict' is different in kind rather than degree: it is TERMINAL. Autosave
+ * has stopped permanently, its copy says so, and nothing will walk it back —
+ * so it can never flicker, and the milder text it replaces has become a
+ * promise the editor cannot keep.
+ *
+ * Written as a floor rather than an `=== 'conflict'` check so a later round
+ * that wants a fourth reason has one number to move, and has to think about
+ * this paragraph while moving it.
+ */
+const ESCALATION_FLOOR = REASON_RANK.conflict;
+
+/**
+ * Promote an open attempt when the live reason has become strictly worse and
+ * clears the floor. Returns the attempt UNCHANGED (same reference) otherwise,
+ * so the hook's setAttempt bails out without a re-render.
+ */
+export function escalate(attempt, liveReason) {
+  if (!attempt) return attempt;
+  const live = rankOf(liveReason);
+  if (live < ESCALATION_FLOOR) return attempt;
+  if (live <= rankOf(attempt.reason)) return attempt;
+  return { ...attempt, reason: liveReason };
+}
+/**
  * What the dialog should show. While an attempt is open the FROZEN reason
  * wins, whatever the live one has become since; with no attempt open the live
  * one passes through so the hook's other consumers are unaffected.
@@ -117,6 +170,13 @@ export function useLeaveGuard(state) {
   // of the Back press. This ref is what makes the capture current.
   const reasonRef = useRef(reason);
   useEffect(() => { reasonRef.current = reason; }, [reason]);
+
+  // A worsening reaches an OPEN dialog. Applied to the stored attempt rather
+  // than computed per render, so the promotion STICKS: recomputing
+  // max(frozen, live) every render would silently drop back to the frozen
+  // value the moment the live one receded. escalate() returns the same object
+  // when nothing is promoted, so this is a no-op re-render, not a loop.
+  useEffect(() => { setAttempt((cur) => escalate(cur, reason)); }, [reason]);
 
   // Latest values for listeners that are registered once and must not close
   // over a stale render.

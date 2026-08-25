@@ -9,6 +9,8 @@ import {
   editorReducer, initialEditorState, composeWorkingView,
 } from '@/components/pageBuilder/editor/editorReducer';
 import { runSave, runPublish, domainChanged } from '@/lib/pageBuilder/savePlan';
+import { isSaving } from '@/lib/pageBuilder/editorStatus';
+import { shouldBlockLeave } from '@/lib/pageBuilder/leaveGuard';
 
 /**
  * Round 4 — the editor's state layer under the draft/published split.
@@ -396,4 +398,127 @@ test('domainChanged sees a change in its own half and ignores the other', () => 
 
 test('CONTROL: the same object reference is never "changed"', () => {
   assert.equal(domainChanged(PAGE, PAGE, DRAFT_CONTENT_KEYS), false);
+});
+
+// ══ ROUND 7: the editor reports itself busy for the WHOLE publish ═══════════
+
+test('blocked stays true from the flush landing through the promote resolving', async () => {
+  // THE BLIND SPOT. publish() dispatches SAVE_START, then flushes; the flush
+  // ends its OWN save with SAVE_OK, clearing `saving` and both dirty flags —
+  // and publishPageStatus is only called after that. So the leave guard used to
+  // see a completely idle editor for the entire duration of the promote call,
+  // the one write where leaving matters most: nothing cancels a Server Action
+  // in flight, so the author walked away with no warning and it landed anyway.
+  //
+  // Sampled INSIDE the promote, not at its endpoints — the endpoints were never
+  // the problem.
+  let state = initialEditorState({ page: LIVE, pageId: 'p1', updatedAt: 'T0' });
+  const dispatch = (action) => { state = editorReducer(state, action); };
+  const guardAt = () => shouldBlockLeave({
+    dirty: state.contentDirty || state.identityDirty,
+    saving: isSaving(state),
+    conflict: state.conflict,
+  });
+
+  // The author has typed, so there IS something to flush — this is the case
+  // that produces the window; a clean page never opens it.
+  dispatch({ type: 'PATCH_PAGE', patch: { title: 'Typed' } });
+  assert.equal(guardAt(), true, 'precondition: a dirty page blocks leaving');
+
+  const samples = [];
+  await runPublish({
+    statusPatch: { status: 'published' },
+    onPhase: (phase) => dispatch({ type: phase === 'start' ? 'PUBLISH_START' : 'PUBLISH_END' }),
+    flush: async () => {
+      // Exactly what save() dispatches when it lands: the domain cleared, the
+      // token advanced — and `saving` false.
+      dispatch({ type: 'SAVE_OK', domains: ['content'], updatedAt: 'T1', at: 0 });
+      samples.push(['after-flush', guardAt()]);
+      return { id: 'p1', updatedAt: 'T1' };
+    },
+    publish: async () => {
+      // The promote is in flight RIGHT HERE. This is the window.
+      samples.push(['during-promote', guardAt()]);
+      return { ok: true, status: 'published', updatedAt: 'T2' };
+    },
+  });
+  samples.push(['after-promote', guardAt()]);
+
+  assert.deepEqual(
+    samples,
+    [['after-flush', true], ['during-promote', true], ['after-promote', false]],
+    'the editor reported itself idle while a publish was still in flight'
+  );
+});
+
+test('the bracket closes on EVERY exit, not just the happy one', async () => {
+  // A bracket that only closed on success would strand the editor as
+  // permanently "saving", which blocks every exit forever — a worse bug than
+  // the one being fixed. Three exits: a failed flush, a rejected promote, a
+  // throw.
+  const run = async (over) => {
+    let state = initialEditorState({ page: LIVE, pageId: 'p1', updatedAt: 'T0' });
+    const dispatch = (a) => { state = editorReducer(state, a); };
+    await runPublish({
+      statusPatch: { status: 'published' },
+      onPhase: (phase) => dispatch({ type: phase === 'start' ? 'PUBLISH_START' : 'PUBLISH_END' }),
+      flush: async () => ({ id: 'p1', updatedAt: 'T1' }),
+      publish: async () => ({ ok: true }),
+      ...over,
+    }).catch(() => {});
+    return state.publishing;
+  };
+
+  assert.equal(await run({}), false, 'the happy path left the bracket open');
+  assert.equal(await run({ flush: async () => null }), false, 'a failed flush left the bracket open');
+  assert.equal(
+    await run({ publish: async () => ({ ok: false, error: 'x' }) }), false,
+    'a rejected promote left the bracket open'
+  );
+  assert.equal(
+    await run({ publish: async () => { throw new Error('boom'); } }), false,
+    'a throw left the bracket open'
+  );
+});
+
+test('CONTROL: a plain save opens no publish bracket', () => {
+  // Proves the case above is the bracket doing the work and not `publishing`
+  // being stuck true. An ordinary autosave never touches it.
+  let state = initialEditorState({ page: LIVE, pageId: 'p1', updatedAt: 'T0' });
+  state = editorReducer(state, { type: 'PATCH_PAGE', patch: { title: 'Typed' } });
+  state = editorReducer(state, { type: 'SAVE_START' });
+  assert.equal(state.publishing, false, 'a normal save set the publish bracket');
+  assert.equal(isSaving(state), true, 'SAVE_START no longer reports saving');
+  state = editorReducer(state, { type: 'SAVE_OK', domains: ['content'], updatedAt: 'T1' });
+  assert.equal(isSaving(state), false, 'a landed save still reports saving');
+});
+
+test('isSaving is the OR, and each half alone is enough', () => {
+  assert.equal(isSaving({ saving: false, publishing: false }), false);
+  assert.equal(isSaving({ saving: true, publishing: false }), true);
+  assert.equal(
+    isSaving({ saving: false, publishing: true }), true,
+    'the publish bracket alone does not report busy'
+  );
+  assert.equal(isSaving({}), false);
+  assert.equal(isSaving(null), false);
+});
+
+test('per-domain SAVE_OK reporting is untouched by the bracket', () => {
+  // Round 4's flag-clearing and round 5's status-line text both key off
+  // `domains`. The bracket must not have disturbed either.
+  let state = initialEditorState({ page: LIVE, pageId: 'p1', updatedAt: 'T0' });
+  state = editorReducer(state, { type: 'PATCH_PAGE', patch: { title: 'Typed' } });
+  state = editorReducer(state, { type: 'PATCH_PAGE', patch: { slug: 'renamed' } });
+  state = editorReducer(state, { type: 'PUBLISH_START' });
+
+  state = editorReducer(state, { type: 'SAVE_OK', domains: ['content'], updatedAt: 'T1', at: 0 });
+  assert.equal(state.contentDirty, false, 'the content flag did not clear');
+  assert.equal(state.identityDirty, true, 'an identity flag was cleared by a content-only save');
+  assert.deepEqual(state.lastSavedDomains, ['content'], 'the domains the status line reads were lost');
+
+  state = editorReducer(state, { type: 'PUBLISH_END' });
+  assert.equal(state.contentDirty, false);
+  assert.equal(state.identityDirty, true, 'closing the bracket disturbed the dirty flags');
+  assert.deepEqual(state.lastSavedDomains, ['content'], 'closing the bracket disturbed the saved domains');
 });
