@@ -42,6 +42,33 @@ const REASON_COPY = {
   dirty: 'ยังมีการแก้ไขที่ยังไม่ได้บันทึก — งานที่ค้างอยู่มีอยู่แค่ในแท็บนี้เท่านั้น ออกไปแล้วจะไม่สามารถกู้คืนได้',
 };
 
+/**
+ * The confirm button's wording, where the default OVERCLAIMS.
+ *
+ * 'ออกโดยไม่บันทึก' — "leave WITHOUT saving" — is accurate for two of the three
+ * reasons and false for the third:
+ *
+ *   dirty    nothing has been sent to the server yet, so leaving really does
+ *            leave without saving. Accurate.
+ *   conflict autosave has STOPPED permanently for this session (see the copy
+ *            above), so nothing further will be written. Accurate.
+ *   saving   a write is ALREADY IN FLIGHT, and nothing cancels it. There is no
+ *            AbortController anywhere in the save path, and a Server Action
+ *            POST is not tied to component unmount — so the save will very
+ *            probably land, whatever this button says. Promising otherwise is
+ *            a claim the code cannot keep.
+ *
+ * Note the DESCRIPTION for 'saving' already hedges correctly — "การบันทึกอาจ
+ * ถูกยกเลิกกลางคัน", MAY be cancelled. The button was the half that stated it
+ * flatly. Only the button changes; the descriptions above are already right.
+ *
+ * Keyed off the FROZEN reason (useLeaveGuard captures it at open), so the
+ * label cannot flicker independently of the sentence sitting next to it.
+ */
+const CONFIRM_LABEL = {
+  saving: 'ออกตอนนี้',
+};
+const DEFAULT_CONFIRM_LABEL = 'ออกโดยไม่บันทึก';
 export function LeaveConfirmDialog({ open, reason, onCancel, onConfirm }) {
   const cancelRef = useRef(null);
 
@@ -89,7 +116,7 @@ export function LeaveConfirmDialog({ open, reason, onCancel, onConfirm }) {
               onClick={onConfirm}
               className="rounded-9e-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
             >
-              ออกโดยไม่บันทึก
+              {CONFIRM_LABEL[reason] ?? DEFAULT_CONFIRM_LABEL}
             </button>
           </div>
         </Dialog.Content>

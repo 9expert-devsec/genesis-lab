@@ -32,6 +32,71 @@ const SENTINEL = { __pbLeaveSentinel: true };
 
 const isSentinel = (s) => Boolean(s && s.__pbLeaveSentinel);
 
+/**
+ * ── ONE DEPARTURE ATTEMPT, ONE REASON, DECIDED AT OPEN ────────────────────
+ *
+ * `reason` used to be recomputed every render for as long as the dialog was
+ * up, and `open` tracked only `pending` — never `blocked`. So an autosave that
+ * was already counting down when Back was pressed could finish WHILE the
+ * author was reading, walking the copy 'dirty' -> 'saving' -> null on screen.
+ * At null, LeaveConfirmDialog's `REASON_COPY[reason] ?? REASON_COPY.dirty`
+ * fell back to the dirty wording — which by then was simply false: the edit it
+ * warns about losing had already been saved.
+ *
+ * The fix freezes what is SHOWN, never the underlying state: the guard keeps
+ * evaluating `blocked`/`reason` live for its own listeners, and only the copy
+ * the author is mid-sentence through is held still. Captured on the null ->
+ * non-null transition, released on close, so the NEXT attempt captures fresh.
+ *
+ * Split out as two pure functions rather than inlined, because the claim worth
+ * testing — "the reason does not move while the attempt is open" — is a
+ * sequence across renders, and this suite mounts no React roots.
+ */
+
+/**
+ * ── WHY THE DIALOG DOES NOT AUTO-COMPLETE WHEN THE BLOCK CLEARS ───────────
+ * The obvious companion to the freeze is: if `blocked` goes false while the
+ * dialog is open, just finish the departure — there is nothing left to lose,
+ * and completing the gesture is what an unguarded Back press would have done.
+ * It was specified, and it is NOT built, because AUTO-COMPLETING here can fire
+ * in the middle of a publish.
+ *
+ * The window is real and reachable. useEditorSave.publish() dispatches
+ * SAVE_START, then flushes through save(), which dispatches its OWN SAVE_OK
+ * when it lands — clearing `saving` and both dirty flags. publishPageStatus
+ * is only called AFTER that, so for the whole duration of the publish network
+ * call: saving false, dirty false, conflict null. blocked is FALSE while a
+ * write is still in flight.
+ *
+ * An author who pressed Back during a publish would therefore be navigated
+ * away mid-publish, and — since nothing in the save path is wired to an
+ * AbortController and a Server Action POST is not tied to unmount — the
+ * publish would carry on invisibly, with any conflict or error landing in a
+ * tab that is no longer there.
+ *
+ * That is a navigation hazard traded for a friction fix, which is the wrong
+ * way round. The prerequisite is in useEditorSave.js — publish must not clear
+ * `saving` between its flush and its promote — and that file is out of scope
+ * for this round. Once `saving` stays true for the whole publish, blocked no
+ * longer lies and the auto-complete becomes safe to add.
+ */
+/** Open an attempt, capturing the reason as it stands at this instant. */
+export function beginAttempt(exit, liveReason) {
+  return { exit, reason: liveReason };
+}
+
+/**
+ * What the dialog should show. While an attempt is open the FROZEN reason
+ * wins, whatever the live one has become since; with no attempt open the live
+ * one passes through so the hook's other consumers are unaffected.
+ */
+export function attemptView(attempt, liveReason) {
+  return {
+    pending: attempt ? attempt.exit : null,
+    reason: attempt ? attempt.reason : liveReason,
+  };
+}
+
 export function useLeaveGuard(state) {
   const router = useRouter();
   const pathname = usePathname();
@@ -41,7 +106,17 @@ export function useLeaveGuard(state) {
   const reason = leaveBlockReason(state);
   const blocked = shouldBlockLeave(state);
 
-  const [pending, setPending] = useState(null); // reason string | null
+  // ONE state for the whole attempt: which exit, and the reason frozen at the
+  // moment it opened. `pending` and the shown `reason` are both derived from
+  // it, so they can never disagree about whether an attempt is in progress.
+  const [attempt, setAttempt] = useState(null);
+  const { pending, reason: shownReason } = attemptView(attempt, reason);
+
+  // The listeners below are registered ONCE, so they cannot read `reason` from
+  // the render that created them — it would be the reason as of mount, not as
+  // of the Back press. This ref is what makes the capture current.
+  const reasonRef = useRef(reason);
+  useEffect(() => { reasonRef.current = reason; }, [reason]);
 
   // Latest values for listeners that are registered once and must not close
   // over a stale render.
@@ -153,7 +228,7 @@ export function useLeaveGuard(state) {
         leavingRef.current = true;
         window.history.go(-2);
       };
-      setPending('back');
+      setAttempt(beginAttempt('back', reasonRef.current));
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -206,7 +281,7 @@ export function useLeaveGuard(state) {
       e.stopPropagation();
       const to = `${url.pathname}${url.search}${url.hash}`;
       departRef.current = () => { leavingRef.current = true; router.push(to); };
-      setPending('link');
+      setAttempt(beginAttempt('link', reasonRef.current));
     };
 
     document.addEventListener('click', onClickCapture, true);
@@ -216,16 +291,20 @@ export function useLeaveGuard(state) {
   const confirmLeave = useCallback(() => {
     const depart = departRef.current;
     departRef.current = null;
-    setPending(null);
+    setAttempt(null);
     depart?.();
   }, []);
 
   const cancelLeave = useCallback(() => {
     departRef.current = null;
-    setPending(null);
+    setAttempt(null);
     // Nothing to undo for either exit: the Back case has already been pulled
     // back onto the sentinel, and the link case never navigated.
   }, []);
 
-  return { blocked, reason, pending, confirmLeave, cancelLeave };
+  // `reason` is the SHOWN one — frozen while an attempt is open. It arrives
+  // under the existing name because EditorShell binds it straight to the
+  // dialog and this round does not touch that file. `blocked` stays LIVE: the
+  // listeners must keep seeing the real state, and only the copy is held.
+  return { blocked, reason: shownReason, pending, confirmLeave, cancelLeave };
 }
