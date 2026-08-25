@@ -592,7 +592,7 @@ function ImageOnlyCard({ item, active }) {
           fill child: a radius on the wrapper alone would not clip it. */}
       <div
         data-fc-art=""
-        className={`relative aspect-[16/5] w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
+        className={`relative aspect-video w-full overflow-hidden lg:h-full lg:aspect-auto ${CARD_RADIUS_BELOW_LG}`}
       >
         <SlideImage
           item={item}
@@ -619,7 +619,7 @@ function ImageOnlyCard({ item, active }) {
           desktop still render artwork only?". */}
       <div
         data-fc-copy=""
-        className="flex flex-col gap-4 px-4 pb-4 pt-4 lg:hidden"
+        className="flex min-h-0 flex-1 flex-col justify-between lg:hidden p-7 "
       >
         <SlideCopy item={item} />
         {/* NEVER A DEAD BUTTON — the same guard, on the same key, that the
@@ -860,14 +860,14 @@ function SlideAction({ item, interactive = false }) {
   const className =
     "inline-flex items-center gap-1.5 rounded-[10px] bg-9e-action px-5 py-2.5 " +
     "text-sm font-bold text-white transition-colors duration-9e-micro ease-9e " +
-    "hover:bg-9e-action-scale-100";
+    "hover:bg-9e-action-scale-100 w-full justify-center";
 
-  const content = (
-    <>
-      <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
-      {label}
-    </>
-  );
+  // const content = (
+  //   <>
+  //     <Search className="h-3.5 w-3.5 shrink-0" strokeWidth={2.5} />
+  //     {label}
+  //   </>
+  // );
 
   return (
     <div data-fc-action="" className="flex flex-wrap gap-3">
@@ -879,10 +879,10 @@ function SlideAction({ item, interactive = false }) {
             : null)}
           className={className}
         >
-          {content}
+          {label}
         </Link>
       ) : (
-        <span className={className}>{content}</span>
+        <span className={className}>{label}</span>
       )}
     </div>
   );
@@ -899,7 +899,7 @@ function SplitCard({ item, active, isPlaying, onPlay }) {
       data-fc-card="split"
       aria-roledescription="carousel"
       aria-label="คอนเทนต์เด่น"
-      className={`flex w-full flex-col-reverse gap-5 overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] lg:flex-row lg:gap-7 ${FEATURED_FRAME}`}
+      className={`flex w-full flex-col-reverse overflow-hidden rounded-[24px] border border-[var(--9e-fc-panel-border)] bg-[var(--9e-fc-panel)] shadow-[0_16px_32px_0_rgba(0,0,0,0.5)] lg:flex-row ${FEATURED_FRAME}`}
     >
       {/* Details. `lg:min-w-0` is load-bearing on a flex child holding long
           unbroken Thai — without it the panel refuses to shrink below its
