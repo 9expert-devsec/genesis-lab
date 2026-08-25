@@ -7,6 +7,7 @@ import * as Tabs from '@radix-ui/react-tabs';
 
 import {
   ContentTab, StyleTab, AdvancedGroup, hasAdvancedTab, SelectionHeader,
+  SectionNameField,
 } from '@/components/pageBuilder/editor/SettingsPanel';
 import { VISIBILITY } from '@/lib/schemas/pageBuilder';
 import { VISIBILITY_LABELS } from '@/lib/pageBuilder/presetLabels';
@@ -143,6 +144,82 @@ test('the union across all three tabs equals the exact set the panel rendered be
       + 'before the split. A field in NO tab is invisible from inside every tab, which is why '
       + 'this is asserted as an exact set.');
   }
+});
+
+test('round 17 added a field to the panel and did NOT change the expected union', () => {
+  /**
+   * ── WHY THE SET ABOVE WAS LEFT ALONE, STATED AS A TEST ───────────────────
+   * The union is the set of fields reachable across the three TAB BODIES. The
+   * name input is not in one: it sits above the tab strip, beside
+   * SelectionHeader, because it configures nothing about how the section
+   * renders (see the note on SectionNameField).
+   *
+   * So EXPECTED was extended by nothing — and that is a claim, not an absence
+   * of work. If the field had been filed under เนื้อหา the union would have
+   * gained a member for every type, and extending EXPECTED by hand is the only
+   * honest way to record that; REGENERATING it from the tabs would have made
+   * it agree with whatever it found, which is the one thing this check must
+   * never do. This test pins the reason the hand-written set still stands.
+   */
+  const nameDoc = domOf(createElement(SectionNameField, { name: '', onChange: noop }));
+  assert.deepEqual(fieldsIn(nameDoc), ['ชื่อเรียกภายใน'], 'the name field changed its label');
+
+  // It is in NO tab, for any type — which is what leaves EXPECTED untouched.
+  for (const type of ['heading', 'two_column', 'card_grid', 'cta', 'price_card']) {
+    for (const [where, doc] of [['เนื้อหา', contentTab(type)], ['รูปแบบ', styleTab(type)]]) {
+      assert.equal(fieldsIn(doc).includes('ชื่อเรียกภายใน'), false,
+        `the name field appeared in the ${where} tab for ${type} — the union set above is now short by one`);
+    }
+  }
+  assert.equal(fieldsIn(advancedTab({}, true)).includes('ชื่อเรียกภายใน'), false);
+});
+
+test('CONTROL: the union WOULD have needed extending had the field gone in a tab', () => {
+  /**
+   * Discrimination for the test above. A field added to a tab body shows up in
+   * fieldsIn, so the exact-set comparison in the union test would fail — which
+   * is what makes "EXPECTED needed no change" a finding rather than an
+   * oversight.
+   */
+  const withField = domOf(createElement('div', null,
+    createElement(SectionNameField, { name: '', onChange: noop }),
+    createElement(StyleTab, { type: 'heading', layout: {}, style: {}, settings: {}, patchKey: noop })));
+  assert.deepEqual(fieldsIn(withField), ['ชื่อเรียกภายใน', ...ENVELOPE_FIELDS]);
+  assert.throws(() => assert.deepEqual(fieldsIn(withField), ENVELOPE_FIELDS),
+    'a tab that gained the field must break the exact-set comparison');
+});
+
+test('the name field says what the name is FOR, and where it does not appear', () => {
+  /**
+   * The hint is the whole reason an author will not expect this on the page.
+   * Exact text, because Thai qualifies by prefix and a substring check would
+   * pass on a hint that had lost its negation.
+   */
+  const doc = domOf(createElement(SectionNameField, { name: '', onChange: noop }));
+  const spans = [...doc.querySelectorAll('label > span')].map((s) => text(s));
+  assert.deepEqual(spans, [
+    'ชื่อเรียกภายใน',
+    'ใช้เรียก section นี้ในแผงโครงสร้างเท่านั้น — ไม่แสดงบนหน้าเว็บจริง',
+  ]);
+  assert.equal(
+    doc.querySelector('input')?.getAttribute('placeholder'),
+    'เว้นว่างไว้ก็ได้ — แผงโครงสร้างจะเรียกตามเนื้อหาหรือชนิดของ section',
+  );
+});
+
+test('the panel dispatches the TOP-LEVEL merge for the name, not the sub-object one', () => {
+  /**
+   * A source claim, because the panel needs a selection to render and only a
+   * dispatch can set one. The distinction is load-bearing and invisible in the
+   * markup: PATCH_SECTION_KEY pointed at a string key spreads the string (see
+   * test/pure/sectionName.test.mjs, which asserts that outcome directly).
+   */
+  const { code } = readSource(SRC);
+  const call = code.slice(code.indexOf('<SectionNameField'), code.indexOf('<Tabs.Root'));
+  assert.ok(call.length > 40, 'the SectionNameField call site was not located');
+  assert.match(call, /type: 'PATCH_SECTION'/, 'the name no longer goes through the top-level merge');
+  assert.equal(/PATCH_SECTION_KEY/.test(call), false,
+    'the name is a top-level key; the sub-object merge would leave an object where the string belongs');
 });
 
 test('CONTROL: the union check is sensitive to a single missing field, by name', () => {

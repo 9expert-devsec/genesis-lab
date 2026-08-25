@@ -278,6 +278,42 @@ export function SelectionHeader({ type, parentType }) {
 }
 
 /**
+ * The author's own name for the selected section — the one field in this panel
+ * that changes NOTHING about the rendered page.
+ *
+ * ── WHY IT SITS ABOVE THE TAB STRIP RATHER THAN IN A TAB ───────────────────
+ * All three tabs configure how this section renders: เนื้อหา is what the page
+ * says, รูปแบบ is how it is treated, ขั้นสูง is the developer's escape hatches.
+ * Every field in all three reaches the public page. This one does not — the
+ * envelope's name is read by the structure panel and by nothing else, and no
+ * renderer touches it. Filing it under เนื้อหา would put an editor-only label
+ * in the tab whose whole promise is "this is what visitors read", which is the
+ * same lie this panel's opening note refuses for controls nothing reads.
+ *
+ * So it belongs with the header, not with the configuration: SelectionHeader
+ * says what is selected and where it sits, and this lets the author overrule
+ * the first half of that in their own words. It also stays visible whichever
+ * tab is open, which is what renaming a run of sections actually needs.
+ *
+ * Takes plain props for the same reason the tab bodies do — the panel itself
+ * needs a selection, and only a dispatch can set one.
+ */
+export function SectionNameField({ name, onChange }) {
+  return (
+    <Field
+      label="ชื่อเรียกภายใน"
+      hint="ใช้เรียก section นี้ในแผงโครงสร้างเท่านั้น — ไม่แสดงบนหน้าเว็บจริง"
+    >
+      <TextInput
+        value={name}
+        onChange={onChange}
+        placeholder="เว้นว่างไว้ก็ได้ — แผงโครงสร้างจะเรียกตามเนื้อหาหรือชนิดของ section"
+      />
+    </Field>
+  );
+}
+
+/**
  * The tab strip's fixed part. ขั้นสูง is appended per section — see
  * hasAdvancedTab.
  */
@@ -365,6 +401,20 @@ export function SettingsPanel() {
           lives in the structure panel — naming it here would put a second copy
           of that vocabulary in a second file to serve one case. */}
       <SelectionHeader type={selected.type} parentType={parentSection?.type ?? null} />
+
+      {/* ── THE ONE FIELD THAT IS NOT A TAB, AND THE ONE THAT IS NOT A KEY ───
+          The name is a TOP-LEVEL key on the section, beside its type and its
+          enabled flag — not a member of content/settings/style/layout/advanced.
+          So it cannot go through patchKey: PATCH_SECTION_KEY merges into a
+          named SUB-OBJECT, and pointed at a string it would spread the string
+          and leave an object where the name should be. PATCH_SECTION is the
+          reducer's existing top-level merge and is exactly this shape; it marks
+          the tree dirty like every other section edit, so the name rides the
+          ordinary autosave rather than a write of its own. */}
+      <SectionNameField
+        name={selected.name ?? ''}
+        onChange={(v) => dispatch({ type: 'PATCH_SECTION', path: selection, patch: { name: v } })}
+      />
 
       <Tabs.Root value={active} onValueChange={setTab}>
         <Tabs.List

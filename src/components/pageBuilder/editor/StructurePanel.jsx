@@ -217,16 +217,26 @@ function SectionNode({ section, path, siblingCount }) {
   const willBeEmpty = !hidden && sectionRendersEmpty(section);
 
   const typeLabel = labelOf(section?.type);
-  const primary = summary || typeLabel;
+  // The author's own name wins when they gave one; the round-16 fallback —
+  // summary, else type label — stands in when they did not. Trimmed, because a
+  // name of nothing but spaces is a field the author cleared, not a name.
+  const name = typeof section?.name === 'string' ? section.name.trim() : '';
+  const primary = name || summary || typeLabel;
   // Line 2 is assembled from the parts line 1 did NOT already say. The type
-  // label appears here only when the summary took the lead; the child count
+  // label appears here only when line 1 is something else; the child count
   // only for containers, which is what sectionChildCounts returns null for
   // everything else to guarantee — a row with no slots must show no count
   // rather than "0", which would describe a heading as an empty container.
-  const secondary = [
+  //
+  // The final equality check closes the one case the part-by-part rule cannot
+  // reach: an author is free to type a name that reads exactly like the
+  // assembled second line, and dropping the duplicate is cheaper than
+  // forbidding the name.
+  const assembled = [
     primary === typeLabel ? null : typeLabel,
     childCountLabel(section),
   ].filter(Boolean).join(' · ');
+  const secondary = assembled === primary ? '' : assembled;
 
   const move = (to) => dispatch({ type: 'MOVE_SECTION', path, to });
 
@@ -256,20 +266,22 @@ function SectionNode({ section, path, siblingCount }) {
           className={cn('min-w-0 flex-1 text-left', hidden && 'line-through opacity-50')}
         >
           {/* ── LINE 1: WHAT THIS SECTION IS, AS SPECIFICALLY AS THE DATA ALLOWS
-              A designer mockup put an author-given name here. There is no such
-              value to show: the section envelope declares a `name` field, but
-              nothing in the app writes it and nothing reads it, so drawing it
-              would draw an empty string on every row.
+              The author's NAME leads when there is one. The envelope has always
+              declared that field; until the settings panel grew an input for it
+              the value was written by nothing, which is why this line used to
+              start at the summary and the note here said so.
 
-              So the most identifying thing available leads instead — the
-              summary when the type produces one (the heading's own text, the
-              CTA's label, the image's alt), and the type label otherwise. The
-              type label then moves to line 2, but ONLY when it is not already
-              what line 1 said, so no row ever prints its type twice.
+              When the name is blank the fallback is unchanged — the summary
+              when the type produces one (the heading's own text, the CTA's
+              label, the image's alt), and the type label otherwise. The type
+              label then moves to line 2, but ONLY when it is not already what
+              line 1 said, so no row ever prints its type twice.
 
-              What this cannot fix: five rich_text sections have no summary and
-              no distinguishing data at all, so they read identically. The
-              position number is what separates them, which is why it leads. */}
+              What this cannot fix on its own: five rich_text sections with no
+              name and no summary have no distinguishing data at all, so they
+              read identically. The position number is what separates them,
+              which is why it leads — and naming them is now the author's
+              remedy rather than something only a future round could give. */}
           <span className="flex items-baseline gap-1">
             <span data-testid="row-position" className="shrink-0 text-[10px] tabular-nums text-9e-slate-dp-50/70">
               {index + 1}.

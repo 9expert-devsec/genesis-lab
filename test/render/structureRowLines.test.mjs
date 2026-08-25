@@ -43,8 +43,8 @@ const PAGE = {
 };
 const TIER = { canUseAdvanced: true, canPublish: true, canManagePreview: true };
 
-const sec = (id, type, content = {}) => ({
-  id, type, content, settings: {}, style: {}, layout: {}, advanced: {}, enabled: true, sortOrder: 0,
+const sec = (id, type, content = {}, name = '') => ({
+  id, type, content, settings: {}, style: {}, layout: {}, advanced: {}, enabled: true, sortOrder: 0, name,
 });
 
 function panelDoc(sections) {
@@ -126,6 +126,120 @@ test('CONTROL: no row prints its type label on both lines, for any type', () => 
   // …and the spread really did produce both shapes, so the loop is not vacuous.
   assert.ok(secondaries(doc).length > 0, 'no row produced a second line at all');
   assert.ok(secondaries(doc).length < p.length, 'every row produced a second line — no fallback case ran');
+});
+
+// ── 1b. the AUTHOR'S NAME, when there is one (round 17) ───────────────────
+
+/**
+ * Line 1 is now name → summary → type label, and line 2 is still assembled from
+ * whatever line 1 did not already say. The three cases below are the three the
+ * brief names, and each asserts BOTH lines: "the name shows" is only half the
+ * claim, because the way this goes wrong is a row that prints the same string
+ * twice, which a line-1 assertion alone cannot see.
+ */
+
+test('a NAMED section leads with the name, and line 2 names its type', () => {
+  // rich_text produces no summary at all, so before the name existed this row
+  // had no second line. Naming it moves the type label down rather than losing
+  // it — the row still says what it is.
+  const doc = panelDoc([sec('a', 'rich_text', {}, 'บล็อกข้อความหลัก')]);
+  assert.deepEqual(primaries(doc), ['บล็อกข้อความหลัก']);
+  assert.deepEqual(secondaries(doc), ['ข้อความ']);
+});
+
+test('the name OUTRANKS the summary — the type label still takes line 2', () => {
+  /**
+   * The deliberate loss: a named heading no longer shows its own text on the
+   * row. That is the author overruling the derived label, which is the whole
+   * point of the field; the summary is one keystroke away on the canvas, and
+   * showing both would put three things on a row measured at 85px wide.
+   */
+  const doc = panelDoc([sec('a', 'heading', { text: 'ยินดีต้อนรับ' }, 'หัวเรื่องหลัก')]);
+  assert.deepEqual(primaries(doc), ['หัวเรื่องหลัก']);
+  assert.deepEqual(secondaries(doc), ['หัวข้อ']);
+});
+
+test('an UNNAMED section keeps the round-16 fallback exactly', () => {
+  // Both spellings of "no name": absent (older stored sections predate the
+  // field being written) and present-but-blank.
+  const doc = panelDoc([
+    sec('a', 'heading', { text: 'ยินดีต้อนรับ' }),
+    { ...sec('b', 'heading', { text: 'สอง' }), name: undefined },
+    sec('c', 'rich_text'),
+  ]);
+  assert.deepEqual(primaries(doc), ['ยินดีต้อนรับ', 'สอง', 'ข้อความ']);
+  assert.deepEqual(secondaries(doc), ['หัวข้อ', 'หัวข้อ']);
+});
+
+test('a name of nothing but whitespace is not a name', () => {
+  // Otherwise clearing the field back to spaces would leave a row labelled with
+  // an invisible string and no way to tell why it went blank.
+  const doc = panelDoc([sec('a', 'heading', { text: 'ยินดีต้อนรับ' }, '   ')]);
+  assert.deepEqual(primaries(doc), ['ยินดีต้อนรับ']);
+  assert.deepEqual(secondaries(doc), ['หัวข้อ']);
+});
+
+test('a named CONTAINER keeps its child count beside the type label', () => {
+  const doc = panelDoc([sec('a', 'container', { children: [sec('c1', 'heading'), sec('c2', 'cta')] }, 'ส่วนบนของหน้า')]);
+  assert.deepEqual(primaries(doc)[0], 'ส่วนบนของหน้า');
+  assert.equal(secondaries(doc)[0], 'คอนเทนเนอร์ · 2 section');
+});
+
+test('naming a section AFTER its own type label does not print the type twice', () => {
+  // The author is allowed to type the type label as the name. The rule that
+  // drops the type from line 2 when line 1 already said it covers this without
+  // a special case — the row simply has no second line.
+  const doc = panelDoc([sec('a', 'heading', { text: 'ยินดีต้อนรับ' }, 'หัวข้อ')]);
+  assert.deepEqual(primaries(doc), ['หัวข้อ']);
+  assert.deepEqual(secondaries(doc), []);
+});
+
+test('a name that reads exactly like the assembled second line drops that line', () => {
+  /**
+   * The one collision the part-by-part rule cannot reach: line 2 is a JOIN, so
+   * an author who types the joined string reproduces it whole. Nothing here is
+   * forbidden — the name stands and the duplicate second line goes.
+   */
+  const doc = panelDoc([sec('a', 'container', { children: [sec('c1', 'heading', { text: 'ลูก' })] }, 'คอนเทนเนอร์ · 1 section')]);
+  // Row-scoped: the container needs a child for the count to exist at all, and
+  // that child renders its own row with its own second line.
+  const row = doc.querySelector('[data-testid=\"row-primary\"]');
+  assert.equal(text(row), 'คอนเทนเนอร์ · 1 section');
+  assert.equal(row.closest('button').querySelector('[data-testid=\"row-secondary\"]'), null,
+    'the container row repeated its own name on line 2');
+  assert.deepEqual(secondaries(doc), ['หัวข้อ'], 'the CHILD row still has its own second line');
+});
+
+test('CONTROL: line 2 never repeats line 1, across all three cases at once', () => {
+  /**
+   * The spread covers named / summary-only / neither, plus the two adversarial
+   * names above, in ONE render — a per-case assertion could pass on each and
+   * still miss a rule that only misfires when the cases are mixed.
+   */
+  const doc = panelDoc([
+    sec('a', 'heading', { text: 'มีสรุป' }, 'ชื่อที่ตั้งเอง'),
+    sec('b', 'rich_text', {}, 'อีกชื่อหนึ่ง'),
+    sec('c', 'heading', { text: 'ไม่มีชื่อ' }),
+    sec('d', 'rich_text'),
+    sec('e', 'heading', { text: 'x' }, 'หัวข้อ'),
+    sec('f', 'container', { children: [sec('f1', 'cta')] }, 'คอนเทนเนอร์ · 1 section'),
+  ]);
+  const rows = [...doc.querySelectorAll('[data-testid="row-primary"]')];
+  assert.equal(rows.length, 7, 'the fixture did not render the rows this control needs');
+  rows.forEach((el, i) => {
+    const second = el.closest('button')?.querySelector('[data-testid="row-secondary"]');
+    if (second) assert.notEqual(text(second), text(el), `row ${i + 1} says the same thing twice`);
+  });
+  // …and the fixture really produced both shapes, so the loop is not vacuous.
+  const secs = secondaries(doc);
+  assert.ok(secs.length > 0, 'no row produced a second line at all');
+  assert.ok(secs.length < rows.length, 'every row produced a second line — no drop case ran');
+});
+
+test('CONTROL: the duplicate check discriminates — an identical pair of strings fails it', () => {
+  // Without this, notEqual across the loop above would read the same as a loop
+  // that never compares anything.
+  assert.throws(() => assert.notEqual('หัวข้อ', 'หัวข้อ'));
 });
 
 // ── 2. the child count: containers only, per slot ──────────────────────────
