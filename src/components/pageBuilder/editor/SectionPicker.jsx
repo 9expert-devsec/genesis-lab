@@ -429,7 +429,7 @@ export function SectionPicker({ open, onClose, onPick }) {
             // sit on identically-wide columns.
             //
             // What moved was the SCROLLBAR. 27 types overflow
-            // `max-h-[calc(100dvh-4rem)]`, so `overflow-y-auto` puts a classic
+            // the height cap, so `overflow-y-auto` puts a classic
             // scrollbar INSIDE the border box and 15px of content width
             // disappears; filter down to 5 and the scrollbar goes with it. The
             // card edges hold still while everything between them breathes —
@@ -441,28 +441,55 @@ export function SectionPicker({ open, onClose, onPick }) {
             // an arbitrary PROPERTY (Tailwind 3.4 ships no scrollbar-gutter
             // utility); it compiles, and pre-Chrome-94 / pre-Safari-18.2 simply
             // ignore it and get today's behaviour, never worse.
-            // ── min-h: AN ADDITION BEYOND THE WIDTH DEFECT, STATED AS ONE ───
-            // Not part of the reported bug. Width was the complaint; height is
-            // the other half of "the dialog changes size when I filter", and it
-            // moved far more — MEASURED 703px for 27 types, 243px for 5, 185px
-            // for a single search hit. At 832px wide, 185px tall is a 4.5:1
-            // strip: legible, because the search row and pills still span the
-            // full width, but it reads as a different component rather than the
-            // same one with less in it.
+            // ── HEIGHT IS A CONSTANT, EXACTLY AS WIDTH IS ───────────────────
+            // Round 12. Round 10 stopped the CONTENT WIDTH moving when a filter
+            // narrowed the list; height still moved, and by far more — MEASURED
+            // 739px for all 27 types, ~288px once a filter hit round 10's floor.
+            // So height is now declared the same way width is: one value, fixed
+            // by default, clamped only by the VIEWPORT and never by how many
+            // results the filter left.
             //
-            // 18rem (288px) is the floor at which the three short states — one
-            // hit, no hits, and a 5-type group — all come out the SAME height,
-            // so filtering between them no longer makes the card jump. It is a
-            // floor and not a fixed height on purpose: the full 27-type view
-            // still grows past it to its natural 703px.
+            // WHERE 47rem COMES FROM. Measured in headless Chrome against the
+            // dev server's own compiled stylesheet, ทั้งหมด with every group and
+            // every type, at 1400x1000/1200/1400, with scrollHeight ===
+            // clientHeight so the number is a natural height and not a clipped
+            // one. TWO numbers came back, and the difference is the whole reason
+            // this comment exists:
             //
-            // EDGE, named rather than left to be discovered: min-height beats
-            // max-height in CSS, so on a viewport shorter than ~352px this wins
-            // over `max-h` and the dialog slightly exceeds the intended inset.
-            // That is landscape-phone territory and the overflow is a few px;
-            // the alternative (a min that itself clamps to the viewport) buys
-            // nothing at a size where the dialog is unusable regardless.
-            'max-h-[calc(100dvh-4rem)] min-h-[18rem] overflow-y-auto [scrollbar-gutter:stable]'
+            //   developer      739px   27 types, Advanced as 4 buttons
+            //   NON-developer  746px   23 types, Advanced as the locked summary
+            //
+            // The non-developer view is SEVEN PIXELS TALLER while showing FOUR
+            // FEWER TYPES, because the collapsed Advanced row (a lock plus two
+            // lines of text) is taller than the single grid row of four buttons
+            // it stands in for. Sizing to the developer view alone — the obvious
+            // reading of "the height of ทั้งหมด" — would have left every
+            // non-developer with a permanently scrolling dialog, 2px of overflow
+            // they can never clear, on the majority tier.
+            //
+            // So the fit is to the TALLER of the two: 746 / 16 = 46.625rem,
+            // rounded up to 47rem = 752px, leaving 6px below the last row on top
+            // of the 16px `p-4` already provides.
+            //
+            // ── WHY ROUND 10'S 18rem MIN-HEIGHT IS GONE, NOT MISLAID ────────
+            // It was a FLOOR under a height that was still free to vary — it
+            // stopped the short states collapsing to a 4.5:1 strip while the
+            // 27-type view grew past it to its natural size. A fixed `h-` makes
+            // every state that one height, so a floor beneath it can never bind:
+            // it would be dead code that reads like a live constraint. The
+            // landscape-phone edge round 10 named with it (min-height beating
+            // max-height below a ~352px viewport) goes away with it too — `min()`
+            // clamps downward, so there is no longer a floor to lose that fight.
+            //
+            // The old viewport max-height is gone for the same reason and is not
+            // a dropped safeguard: the `min()` above IS that clamp, folded into
+            // the one declaration, so a short viewport still cannot be exceeded.
+            //
+            // The scroll stays on THIS element (see `overflow-y-auto` below):
+            // once the clamp bites, header, search, pills and groups scroll
+            // together — the pre-existing structure, deliberately not
+            // restructured this round.
+            'h-[min(47rem,calc(100dvh-4rem))] overflow-y-auto [scrollbar-gutter:stable]'
           )}
         >
           <div className="mb-3 flex items-center justify-between">

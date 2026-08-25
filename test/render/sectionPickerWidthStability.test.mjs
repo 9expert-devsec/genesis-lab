@@ -120,8 +120,8 @@ test('the shell’s width, height and scroll classes all compile from the real s
   const css = await compile([SRC]);
   const expected = {
     'w-[min(52rem,calc(100vw-2rem))]': 'width: min(52rem, calc(100vw - 2rem))',
-    'max-h-[calc(100dvh-4rem)]':       'max-height: calc(100dvh - 4rem)',
-    'min-h-[18rem]':                   'min-height: 18rem',
+    // Round 12 replaced the max-height/min-height PAIR with one fixed height.
+    'h-[min(47rem,calc(100dvh-4rem))]': 'height: min(47rem, calc(100dvh - 4rem))',
     'overflow-y-auto':                 'overflow-y: auto',
     '[scrollbar-gutter:stable]':       'scrollbar-gutter: stable',
   };
@@ -299,4 +299,161 @@ test('CONTROL: that probe DOES see sizing classes, and would catch an added one'
     .flatMap((el) => (el.getAttribute('class') ?? '').split(/\s+/))
     .filter((c) => c && SIZING.test(c));
   assert.ok(found.includes('w-full'), 'the search input lost w-full, or the probe stopped seeing it');
+});
+
+// ── ROUND 12: HEIGHT IS A CONSTANT TOO ─────────────────────────────────────
+//
+// NOTE ON THIS FILE'S NAME. It says "width" because round 10 created it for the
+// width defect. Round 12 locked HEIGHT the same way and the assertions belong
+// beside the width ones — same element, same class string, same mechanism, and
+// the compile test above already covers both axes in one map. Extended here
+// rather than split into a near-identical second file; the name is the only
+// thing that stayed narrow.
+//
+// WHAT WAS MEASURED (headless Chrome, dev server's own compiled stylesheet, the
+// server restarted first so no stale Tailwind state could be trusted):
+//
+//   natural, uncapped, viewport 1400x1400
+//     developer     ทั้งหมด   739px   27 types, Advanced as four buttons
+//     NON-developer ทั้งหมด   746px   23 types, Advanced as the locked summary
+//
+//   after the fix, nine filter states x three viewports
+//     1400x1000 and 1400x900 -> 752px in EVERY state, none scrolling
+//     1400x700               -> 636px in EVERY state (the min() clamp)
+//
+// The non-developer view being SEVEN PIXELS TALLER on FOUR FEWER TYPES is why
+// 47rem and not 46.5rem: fitting the developer view alone leaves every
+// non-developer permanently scrolling by 2px they can never clear. That number
+// is not re-derivable from anything in this repo's source, so it is written
+// down here and at the class itself.
+
+test('the height declaration is a static literal — it cannot vary with filter state', () => {
+  /**
+   * The exact parallel of the width test above, and it substitutes for the same
+   * thing for the same reason: Dialog.Content is inside a Radix Dialog.Portal,
+   * which emits nothing under renderToStaticMarkup, so "identical in the
+   * rendered className across states" would be a comparison of two empty
+   * strings. The claim is made where it is decidable — the className is a
+   * literal argument list with no interpolation and no reference to filter
+   * state, so there is no expression through which a filter COULD reach it.
+   */
+  const code = readSource(SRC).code;
+  const shell = code.slice(code.indexOf('<Dialog.Content'), code.indexOf('</Dialog.Content>'));
+  const start = shell.indexOf('cn(');
+  const className = shell.slice(start, shell.indexOf(')}', start));
+  assert.ok(className.includes('h-[min(') && className.includes('overflow-y-auto'),
+    'the className argument list was not located');
+
+  assert.ok(className.includes("'h-[min(47rem,calc(100dvh-4rem))] overflow-y-auto [scrollbar-gutter:stable]'"),
+    'the fixed-height literal is gone or has been reformulated. Height is the round-12 '
+    + 'invariant: one value for every filter state, clamped only by the viewport.');
+  assert.equal(className.includes('${'), false,
+    'the shell className now interpolates — the height is no longer a constant of the component');
+  for (const stateName of ['query', 'activeGroup', 'groups']) {
+    assert.equal(new RegExp(`\\b${stateName}\\b`).test(className), false,
+      `the shell className now reads ${stateName} — its height can vary with the filter`);
+  }
+});
+
+test('round 10’s min-height floor is GONE — a fixed height leaves nothing for it to do', () => {
+  /**
+   * `min-h-[18rem]` was a floor under a height that was still free to vary. A
+   * fixed `h-` makes every state that one height, so a floor beneath it can
+   * never bind — it would read as a live constraint while being dead. Asserted
+   * as ABSENT rather than trusted to have been deleted.
+   *
+   * Read from `code`, not `raw`: the comment at the class explains WHY the
+   * floor was removed, and on `raw` this assertion would fail on the
+   * explanation of its own subject.
+   *
+   * SCOPED TO THIS FILE, deliberately. The same utility is alive and correct in
+   * src/app/admin/career-paths/_components/CareerPathForm.jsx, so the compiled
+   * stylesheet still contains the rule and a CSS-level "absent" check would be
+   * asserting something false about an unrelated component.
+   */
+  const code = readSource(SRC).code;
+  assert.equal(code.includes('min-h-'), false,
+    'a min-height class is back in SectionPicker. With a fixed h- on the same element it '
+    + 'is either dead or it is fighting the fixed height; neither is wanted.');
+  assert.equal(code.includes('max-h-'), false,
+    'a max-height class is back in SectionPicker. The min() in the fixed height IS the '
+    + 'viewport clamp; a second one is a competing declaration of the same rule.');
+});
+
+test('CONTROL: that probe DOES catch a re-added floor, and is not just matching nothing', () => {
+  // Discrimination, not existence: the current shape and the pre-round-12 shape
+  // through the identical probe, coming out opposite. Verified end-to-end by a
+  // script-file break as well (see the commit).
+  const WITH_FLOOR = "'max-h-[calc(100dvh-4rem)] min-h-[18rem] overflow-y-auto [scrollbar-gutter:stable]'";
+  assert.equal(WITH_FLOOR.includes('min-h-'), true);
+  assert.equal(WITH_FLOOR.includes('max-h-'), true);
+  const FIXED = "'h-[min(47rem,calc(100dvh-4rem))] overflow-y-auto [scrollbar-gutter:stable]'";
+  assert.equal(FIXED.includes('min-h-'), false);
+  assert.equal(FIXED.includes('max-h-'), false);
+});
+
+test('the element that is height-clamped is the element that scrolls', () => {
+  /**
+   * WHAT INVESTIGATION D FOUND, PINNED. `overflow-y-auto` occurs exactly ONCE in
+   * the file and sits on Dialog.Content itself — there is no inner scroll
+   * region, so the header, the search box, the pills and every group scroll
+   * together.
+   *
+   * That structure is worth holding still now that height is FIXED rather than
+   * merely capped. Before, a short viewport shrank the box toward its content;
+   * now the box is 47rem by declaration and the min() clamps it on short
+   * viewports, so at 700px the content is genuinely taller than the box. If the
+   * height ever landed on one element and the overflow on another, the clamp
+   * would CLIP the last groups with no way to reach them — measured to work
+   * today: at 1400x700 the dialog clamps to 636px, scrollHeight 737, and
+   * scrolling to the bottom brings the final group (ขั้นสูง) and its last type
+   * (debug_json) fully into view.
+   *
+   * So the two are asserted as inseparable: one occurrence, same class string.
+   */
+  const code = readSource(SRC).code;
+  const occurrences = code.split('overflow-y-auto').length - 1;
+  assert.equal(occurrences, 1,
+    'overflow-y-auto now appears more than once — there is a second scroll region, and '
+    + 'which one owns the clamped height is no longer obvious');
+
+  const shell = code.slice(code.indexOf('<Dialog.Content'), code.indexOf('</Dialog.Content>'));
+  const line = shell.split('\n').find((l) => l.includes('overflow-y-auto'));
+  assert.ok(line, 'the overflow class is no longer inside the Dialog.Content block');
+  assert.match(line, /h-\[min\(47rem,calc\(100dvh-4rem\)\)\]/,
+    'the fixed height and the overflow that makes it scrollable have been split onto '
+    + 'different elements. On a short viewport the clamp then clips the last groups with '
+    + 'no way to scroll to them.');
+});
+
+test('the body renders no min-height or max-height in ANY filter state', () => {
+  /**
+   * The renderable half. The shell's height is a constant (asserted above);
+   * this is the other side — that nothing the body draws can push the box past
+   * it or hold it open beyond it, in any state. A `min-h-` on a group wrapper
+   * would reintroduce exactly the state-dependent height round 12 removed.
+   *
+   * This does NOT forbid `h-*` outright: the icon tiles are `h-7` and the lucide
+   * glyphs `h-[18px]`, which size themselves and not the dialog. Only the two
+   * properties that can fight a fixed height are excluded.
+   */
+  for (const { label, props } of STATES) {
+    const doc = bodyDoc(props);
+    const offenders = [...doc.querySelectorAll('*')]
+      .flatMap((el) => (el.getAttribute('class') ?? '').split(/\s+/))
+      .filter((c) => c && /(?:^|:)(?:min-h-|max-h-)/.test(c));
+    assert.deepEqual(offenders, [], `"${label}" renders a height constraint: ${offenders.join(', ')}`);
+  }
+});
+
+test('CONTROL: that probe DOES recognise the classes it is looking for', () => {
+  // Otherwise every deepEqual above compares two empty lists and means nothing.
+  const P = /(?:^|:)(?:min-h-|max-h-)/;
+  assert.ok(P.test('min-h-[18rem]'));
+  assert.ok(P.test('max-h-[calc(100dvh-4rem)]'));
+  assert.ok(P.test('sm:min-h-0'));
+  // …and does NOT fire on the height classes the body legitimately uses.
+  assert.equal(P.test('h-7'), false);
+  assert.equal(P.test('h-[18px]'), false);
+  assert.equal(P.test('h-3.5'), false);
 });
