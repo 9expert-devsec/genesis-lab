@@ -150,19 +150,27 @@ test('the scroll container reserves its scrollbar gutter unconditionally', () =>
    * Pinned as a pair — the gutter must sit on the SAME element that scrolls.
    * Reserving a gutter on a box that does not scroll does nothing, and the
    * defect would come back with both classes still present in the file.
+   *
+   * ── ROUND 13 RE-POINTED THIS AT A DIFFERENT ELEMENT ─────────────────────
+   * The CLAIM is unchanged and is still round 10's: gutter on whatever scrolls.
+   * Only the element changed. It used to read the Dialog.Content block and
+   * assert `overflow-y-auto` was there ("the shell no longer scrolls" was its
+   * failure message); the scroller moved to the inner body, so it reads the
+   * inner body now. Re-pointed rather than deleted, because the property it
+   * guards is exactly as live as it was — measured after the move, at
+   * 1400x700 with the gutter stripped off the scroller: body clientWidth 783px
+   * scrolling vs 798px not, grid columns 189.75 vs 193.5. The defect is one
+   * class away, on a new element.
    */
   const code = readSource(SRC).code;
-  const shell = code.slice(code.indexOf('<Dialog.Content'), code.indexOf('</Dialog.Content>'));
-  assert.ok(shell.length > 100, 'the Dialog.Content block was not located');
-  assert.match(shell, /overflow-y-auto/, 'the shell no longer scrolls');
-  assert.match(shell, /\[scrollbar-gutter:stable\]/,
+  const scroller = code.match(/data-testid="picker-scroll"\s+className="([^"]*)"/);
+  assert.ok(scroller, 'the inner scroll region was not located');
+  const cls = scroller[1];
+  assert.match(cls, /overflow-y-auto/, 'the inner body no longer scrolls');
+  assert.match(cls, /\[scrollbar-gutter:stable\]/,
     'the scrollbar gutter is no longer reserved. When the type list is long enough to '
-    + 'overflow max-h, the scrollbar takes 15px from the content box and every card and '
-    + 'the search field narrow with it — which is the round-10 defect, verbatim.');
-  // They are in the SAME class string, so one cannot drift onto another element.
-  const line = shell.split('\n').find((l) => l.includes('[scrollbar-gutter:stable]'));
-  assert.match(line, /overflow-y-auto/,
-    'the gutter and the overflow that needs it have been split onto different elements');
+    + 'overflow the body, the scrollbar takes 15px from the content box and every card '
+    + 'narrows with it — which is the round-10 defect, verbatim, one level in.');
 });
 
 test('the width declaration is a static literal — it cannot vary with filter state', () => {
@@ -192,7 +200,10 @@ test('the width declaration is a static literal — it cannot vary with filter s
   // would fail against the child element rather than the className.
   const start = shell.indexOf('cn(');
   const className = shell.slice(start, shell.indexOf(')}', start));
-  assert.ok(className.includes('w-[min(') && className.includes('overflow-y-auto'),
+  // Located by the two size literals. It used to be located partly by the
+  // overflow class; round 13 moved that onto the inner body, so a locator keyed
+  // on it would report the argument list as missing rather than test anything.
+  assert.ok(className.includes('w-[min(') && className.includes('h-[min('),
     'the className argument list was not located');
   assert.ok(className.includes("'fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]'"),
     'the width literal is gone or has been reformulated');
@@ -341,10 +352,20 @@ test('the height declaration is a static literal — it cannot vary with filter 
   const shell = code.slice(code.indexOf('<Dialog.Content'), code.indexOf('</Dialog.Content>'));
   const start = shell.indexOf('cn(');
   const className = shell.slice(start, shell.indexOf(')}', start));
-  assert.ok(className.includes('h-[min(') && className.includes('overflow-y-auto'),
+  // Located by the two size literals. It used to be located partly by the
+  // overflow class; round 13 moved that onto the inner body, so a locator keyed
+  // on it would report the argument list as missing rather than test anything.
+  assert.ok(className.includes('w-[min(') && className.includes('h-[min('),
     'the className argument list was not located');
 
-  assert.ok(className.includes("'h-[min(47rem,calc(100dvh-4rem))] overflow-y-auto [scrollbar-gutter:stable]'"),
+  // ROUND 13 CHANGED THIS EXPECTED STRING, and only this. Round 12 wrote the
+  // height, the overflow and the gutter as one literal because they were all on
+  // this element. The scroller moved inward, so the literal is now the flex
+  // column plus the height — the same 47rem, still one static value for every
+  // filter state. Nothing about round 12's height CLAIM changed; the string it
+  // matches did, and leaving the old one would have pinned a shape the round
+  // deliberately replaced.
+  assert.ok(className.includes("'flex flex-col h-[min(47rem,calc(100dvh-4rem))]'"),
     'the fixed-height literal is gone or has been reformulated. Height is the round-12 '
     + 'invariant: one value for every filter state, clamped only by the viewport.');
   assert.equal(className.includes('${'), false,
@@ -392,38 +413,136 @@ test('CONTROL: that probe DOES catch a re-added floor, and is not just matching 
   assert.equal(FIXED.includes('max-h-'), false);
 });
 
-test('the element that is height-clamped is the element that scrolls', () => {
+test('the clamped box and the scroller are SEPARATE, and the gutter follows the scroller', () => {
   /**
-   * WHAT INVESTIGATION D FOUND, PINNED. `overflow-y-auto` occurs exactly ONCE in
-   * the file and sits on Dialog.Content itself — there is no inner scroll
-   * region, so the header, the search box, the pills and every group scroll
-   * together.
+   * ── ROUND 13 REWROTE THIS PIN, AND WHY THE OLD ONE WAS WRONG ─────────────
    *
-   * That structure is worth holding still now that height is FIXED rather than
-   * merely capped. Before, a short viewport shrank the box toward its content;
-   * now the box is 47rem by declaration and the min() clamps it on short
-   * viewports, so at 700px the content is genuinely taller than the box. If the
-   * height ever landed on one element and the overflow on another, the clamp
-   * would CLIP the last groups with no way to reach them — measured to work
-   * today: at 1400x700 the dialog clamps to 636px, scrollHeight 737, and
-   * scrolling to the bottom brings the final group (ขั้นสูง) and its last type
-   * (debug_json) fully into view.
+   * It used to be titled "the element that is height-clamped is the element
+   * that scrolls" and it asserted, on Dialog.Content:
    *
-   * So the two are asserted as inseparable: one occurrence, same class string.
+   *     assert.equal(occurrences, 1)                     // one overflow in file
+   *     assert.match(line, /h-\[min\(47rem,…\)\]/)       // on the height line
+   *
+   * with the reasoning: "If the height ever landed on one element and the
+   * overflow on another, the clamp would CLIP the last groups with no way to
+   * reach them."
+   *
+   * That reasoning was sound for the shape it described — a fixed-height box
+   * with NOTHING scrollable inside it. Delete the overflow from such a box and
+   * the clamp does clip irrecoverably. What it does not license is the stronger
+   * claim it was written as: that the two may never be separated. The safe move
+   * is for the scroller to move INWARD, not to be deleted, and round 13 moved it
+   * inward so the title, search box and pills stay put while only the list
+   * scrolls.
+   *
+   * So the invariant is re-pointed rather than dropped, and it is now a
+   * THREE-WAY one:
+   *
+   *   1. Dialog.Content carries the fixed height and NO overflow.
+   *   2. The inner body carries the overflow.
+   *   3. The reserved scrollbar gutter is on the SAME element as the overflow.
+   *
+   * (3) is the half that would rot silently. The gutter exists to stop content
+   * reflowing sideways as a scrollbar appears and disappears between filter
+   * states; left on an ancestor that no longer scrolls it reserves space against
+   * a scrollbar that never arrives there, and round 10's defect returns INSIDE
+   * the body. Measured, at 1400x700, gutter removed from the scroller:
+   * body clientWidth 783px scrolling vs 798px not, grid columns 189.75 vs 193.5.
+   * With it: 783px and 189.75px in every state.
+   *
+   * The old worry is covered by measurement rather than by the old assertion:
+   * at 1400x700 the dialog clamps to 636px, the body scrolls (589 > 486), and
+   * scrolling it to the bottom brings ขั้นสูง and debug_json fully into view
+   * while the search box does not move (top 85px before and after).
    */
   const code = readSource(SRC).code;
+
+  // 1. exactly one scroller in the file, and it is NOT Dialog.Content
   const occurrences = code.split('overflow-y-auto').length - 1;
   assert.equal(occurrences, 1,
-    'overflow-y-auto now appears more than once — there is a second scroll region, and '
-    + 'which one owns the clamped height is no longer obvious');
+    'overflow-y-auto no longer appears exactly once — there is a second scroll region, '
+    + 'and which one owns the clamped height is no longer obvious');
 
   const shell = code.slice(code.indexOf('<Dialog.Content'), code.indexOf('</Dialog.Content>'));
-  const line = shell.split('\n').find((l) => l.includes('overflow-y-auto'));
-  assert.ok(line, 'the overflow class is no longer inside the Dialog.Content block');
-  assert.match(line, /h-\[min\(47rem,calc\(100dvh-4rem\)\)\]/,
-    'the fixed height and the overflow that makes it scrollable have been split onto '
-    + 'different elements. On a short viewport the clamp then clips the last groups with '
-    + 'no way to scroll to them.');
+  const start = shell.indexOf('cn(');
+  const shellClass = shell.slice(start, shell.indexOf(')}', start));
+  assert.equal(shellClass.includes('overflow-y-auto'), false,
+    'Dialog.Content is scrolling again. With the header inside it, the search box and '
+    + 'pills scroll away with the list — which is exactly what round 13 removed.');
+  assert.ok(shellClass.includes("'flex flex-col h-[min(47rem,calc(100dvh-4rem))]'"),
+    'Dialog.Content is no longer a fixed-height flex column. The height is what round 12 '
+    + 'measured; the column is what lets the list absorb it so the box stays that tall.');
+
+  // 2 + 3. the overflow and the gutter are on ONE element, the inner body
+  const scroller = code.match(/data-testid="picker-scroll"\s+className="([^"]*)"/);
+  assert.ok(scroller, 'the inner scroll region is gone — its data-testid no longer exists');
+  assert.equal(scroller[1], 'flex-1 overflow-y-auto [scrollbar-gutter:stable]',
+    'the inner body no longer carries exactly flex-1 + the overflow + the reserved gutter. '
+    + 'The gutter must sit on whichever element scrolls: on an ancestor that does not, it '
+    + 'reserves space against a scrollbar that never appears there and the grid columns '
+    + 'shift between filter states again.');
+});
+
+test('the header region holds the search box and the pills, OUTSIDE the scroller', () => {
+  /**
+   * The point of round 13, pinned structurally: the controls that CHANGE the
+   * list must not scroll away with it. Asserted on the rendered DOM rather than
+   * on source text, because "outside" is a containment question and containment
+   * is exactly what a text scan cannot see — a search input could sit on the
+   * right line of the file and still be nested in the wrong element.
+   */
+  for (const { label, props } of STATES) {
+    const doc = bodyDoc(props);
+    const header = doc.querySelector('[data-testid="picker-header"]');
+    const scroll = doc.querySelector('[data-testid="picker-scroll"]');
+    assert.ok(header, `"${label}": no fixed header region rendered`);
+    assert.ok(scroll, `"${label}": no scrolling body region rendered`);
+
+    // The two are siblings, not nested — a header inside the scroller scrolls.
+    assert.equal(header.contains(scroll), false, `"${label}": the scroller is INSIDE the header`);
+    assert.equal(scroll.contains(header), false,
+      `"${label}": the header is INSIDE the scroller, so the search box and pills scroll away `
+      + 'with the list — the exact behaviour round 13 removed');
+
+    // The controls live in the header…
+    const search = doc.querySelector('[data-testid="picker-search"]');
+    const pills = [...doc.querySelectorAll('[data-testid="picker-pill"]')];
+    assert.ok(header.contains(search), `"${label}": the search input is not in the fixed header`);
+    assert.ok(pills.length > 0, `"${label}": no pills rendered at all`);
+    for (const pill of pills) {
+      assert.ok(header.contains(pill), `"${label}": a filter pill is not in the fixed header`);
+    }
+    // …and NOT in the scroller.
+    assert.equal(scroll.contains(search), false, `"${label}": the search input is in the scroller`);
+
+    // The list lives in the scroller, and not in the header.
+    for (const group of doc.querySelectorAll('[data-testid="picker-group"]')) {
+      assert.ok(scroll.contains(group), `"${label}": a group is outside the scrolling region`);
+      assert.equal(header.contains(group), false, `"${label}": a group is in the fixed header`);
+    }
+  }
+});
+
+test('CONTROL: the containment probe DOES distinguish inside from outside', () => {
+  /**
+   * Otherwise every `contains` above could be passing on two elements that
+   * simply never overlap — including on a DOM where one of them is missing and
+   * `contains(null)` quietly returns false.
+   */
+  const doc = bodyDoc({});
+  const header = doc.querySelector('[data-testid="picker-header"]');
+  const scroll = doc.querySelector('[data-testid="picker-scroll"]');
+  const search = doc.querySelector('[data-testid="picker-search"]');
+
+  // Positive direction: the probe says TRUE for something genuinely inside.
+  assert.equal(header.contains(search), true);
+  // Negative direction: and FALSE for something genuinely outside.
+  assert.equal(scroll.contains(search), false);
+  // And `contains(null)` is false — so an assertion of the FALSE form could be
+  // satisfied by a missing element. That is why the tests above assert both
+  // elements exist first.
+  assert.equal(scroll.contains(null), false);
+  assert.equal(header.contains(header), true, 'contains() is not even reflexive — wrong DOM');
 });
 
 test('the body renders no min-height or max-height in ANY filter state', () => {

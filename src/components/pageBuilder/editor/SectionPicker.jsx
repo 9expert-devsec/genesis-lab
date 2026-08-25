@@ -299,11 +299,22 @@ export function SectionPickerBody({
 
   return (
     <>
-      {/* Search + pills. The pills are MAPPED FROM `GROUPS` — the same array
-          the grid below draws from — so a group added to that array gets a
-          pill for free and can never show a set that disagrees with its
-          header. "ทั้งหมด" is prepended because it is not a group. */}
-      <div className="mb-3 space-y-2">
+      {/* ── THE FIXED HEADER REGION ────────────────────────────────────────
+          Search + pills, and they do NOT scroll. The controls that CHANGE the
+          list must stay reachable while reading it — scrolling to the bottom
+          of 27 types and having to scroll back up to retype is the whole
+          reason this is split out of the list below.
+
+          It does not shrink either: as the flex column's fixed part it keeps
+          its natural height, and the list underneath absorbs every change in
+          the outer box, so the search field cannot be squeezed on a short
+          viewport.
+
+          The pills are MAPPED FROM `GROUPS` — the same array the grid below
+          draws from — so a group added to that array gets a pill for free and
+          can never show a set that disagrees with its header. "ทั้งหมด" is
+          prepended because it is not a group. */}
+      <div data-testid="picker-header" className="mb-3 shrink-0 space-y-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50" aria-hidden />
           <input
@@ -346,6 +357,24 @@ export function SectionPickerBody({
         </div>
       </div>
 
+      {/* ── THE SCROLLING REGION ────────────────────────────────────────────
+          Only the list scrolls. This is the element that carries the overflow
+          AND the reserved scrollbar gutter, and the two belong together on
+          whichever element scrolls: the gutter exists to stop the content
+          reflowing 15px sideways as the scrollbar comes and goes between
+          filter states, so it has to sit where the scrollbar actually appears.
+          Left behind on an ancestor that no longer scrolls it would reserve
+          space against a scrollbar that never arrives there, and the round-10
+          width defect would come back inside this box.
+
+          `flex-1` makes this the part that absorbs the outer box's fixed
+          height: whatever the header takes, the list gets the rest, so the
+          dialog's own height stays exactly what round 12 measured no matter
+          how tall the header grows. */}
+      <div
+        data-testid="picker-scroll"
+        className="flex-1 overflow-y-auto [scrollbar-gutter:stable]"
+      >
       {groups.map((group) => (
         <div key={group.key} data-testid="picker-group" data-group-key={group.key} className="mb-3 last:mb-0">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">{group.title}</p>
@@ -369,6 +398,7 @@ export function SectionPickerBody({
           ไม่พบชนิด section ที่ตรงกับคำค้นหา
         </p>
       )}
+      </div>
     </>
   );
 }
@@ -485,14 +515,31 @@ export function SectionPicker({ open, onClose, onPick }) {
             // a dropped safeguard: the `min()` above IS that clamp, folded into
             // the one declaration, so a short viewport still cannot be exceeded.
             //
-            // The scroll stays on THIS element (see `overflow-y-auto` below):
-            // once the clamp bites, header, search, pills and groups scroll
-            // together — the pre-existing structure, deliberately not
-            // restructured this round.
-            'h-[min(47rem,calc(100dvh-4rem))] overflow-y-auto [scrollbar-gutter:stable]'
+            // ── ROUND 13: THIS BOX NO LONGER SCROLLS ITSELF ─────────────────
+            // It is a flex COLUMN of three parts: the title row, the header
+            // region the body renders (search + pills), and the list, which
+            // takes the remaining height and does the scrolling. The overflow
+            // and the reserved gutter moved INWARD onto that list.
+            //
+            // Rounds 10 and 12 are untouched by that move. The height below is
+            // still the single declaration that decides this box's size, and
+            // because the list absorbs whatever the two fixed rows do not use,
+            // the outer box stays exactly this tall in every filter state —
+            // which is the property round 12 measured, now held by the flex
+            // distribution rather than by the box hugging its own scroll.
+            //
+            // Round 12 pinned overflow and height to the SAME element and
+            // reasoned a split would clip with no way to scroll. That was true
+            // of a fixed-height box with nothing scrollable inside it; it is
+            // not a reason never to split, only a reason the scroller must move
+            // inward rather than be deleted. The rewritten pin is in
+            // test/render/sectionPickerWidthStability.test.mjs.
+            'flex flex-col h-[min(47rem,calc(100dvh-4rem))]'
           )}
         >
-          <div className="mb-3 flex items-center justify-between">
+          {/* The title row is the other fixed part of the column — it holds its
+              natural height and never scrolls away from the close button. */}
+          <div data-testid="picker-titlebar" className="mb-3 flex shrink-0 items-center justify-between">
             <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เพิ่ม section</Dialog.Title>
             <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
               <X className="h-4 w-4" />
