@@ -57,6 +57,33 @@ export function labelOf(type) {
   return SECTION_LABELS[type] ?? String(type ?? 'ไม่ทราบชนิด');
 }
 
+/**
+ * How many child sections a container holds, PER SLOT.
+ *
+ * ── WHY PER SLOT AND NOT ONE TOTAL ─────────────────────────────────────────
+ * `two_column` has two slots. A single "6" over it would be true arithmetic and
+ * a false description: it reads as one list of six when it is two lists whose
+ * split is the whole point of choosing that type. The structure tree already
+ * draws the slots separately, labelled ซ้าย / ขวา, so a summed number on the
+ * row would also contradict what is directly underneath it.
+ *
+ * Returns null for a NON-container — not an empty array and not zero. A row
+ * that has no slots must be able to render no count at all, and `[]` invites a
+ * caller to print "0", which would say a heading is an empty container.
+ *
+ * An empty container DOES return its slots with zeros: it genuinely is a
+ * container holding nothing, and that is worth saying.
+ */
+export function sectionChildCounts(section) {
+  const slots = slotsOf(section?.type);
+  if (!slots) return null;
+  const content = section?.content ?? {};
+  return slots.map((slot) => ({
+    slot,
+    count: Array.isArray(content[slot]) ? content[slot].length : 0,
+  }));
+}
+
 const trim = (s, max = 40) => {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim();
   if (!t) return null;

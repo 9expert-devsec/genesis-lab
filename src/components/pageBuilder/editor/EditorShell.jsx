@@ -44,12 +44,23 @@ function ConflictBanner({ message }) {
   );
 }
 
-function Panel({ title, children, className }) {
+/**
+ * `hint` is an optional one-liner sitting with the heading.
+ *
+ * It belongs HERE rather than at the top of the panel's own body because this
+ * is where the heading is — StructurePanel renders no heading of its own, so a
+ * hint added inside it would be a second, competing header line under the real
+ * one. Passing it in keeps one header block per panel.
+ */
+function Panel({ title, hint, children, className }) {
   return (
     <section className={className}>
-      <h2 className="border-b border-[var(--surface-border)] px-3 py-2 text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
-        {title}
-      </h2>
+      <div className="border-b border-[var(--surface-border)] px-3 py-2">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
+          {title}
+        </h2>
+        {hint && <p className="mt-0.5 text-[10px] normal-case text-9e-slate-dp-50/70">{hint}</p>}
+      </div>
       <div className="p-3">{children}</div>
     </section>
   );
@@ -133,6 +144,7 @@ export function EditorShell() {
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_1fr_320px]">
         <Panel
           title="โครงสร้างหน้า"
+          hint="ลากเพื่อจัดลำดับ"
           className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] bg-[var(--surface)]"
         >
           <StructurePanel />

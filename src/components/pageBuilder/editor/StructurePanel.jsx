@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { slotsOf, MAX_SECTION_DEPTH } from '@/lib/pageBuilder/containerSlots';
-import { labelOf, sectionSummary, sectionRendersEmpty } from '@/lib/pageBuilder/sectionLabels';
+import { labelOf, sectionSummary, sectionRendersEmpty, sectionChildCounts } from '@/lib/pageBuilder/sectionLabels';
 import { countDescendants } from '@/lib/pageBuilder/sectionDescendants';
 import { newSection } from '@/lib/pageBuilder/newSection';
 import { useEditor } from './EditorProvider';
@@ -33,6 +33,27 @@ import { SectionPicker } from './SectionPicker';
  */
 
 const SLOT_LABELS = { children: null, left: 'ซ้าย', right: 'ขวา' };
+
+/**
+ * The child count for a container row, as text — or null for anything else.
+ *
+ * ── THE SLOT SPLIT IS THE HONEST PART ──────────────────────────────────────
+ * `sectionChildCounts` refuses to sum across slots, and this refuses to hide
+ * the split: a single-slot container reads "6 section", but a two_column reads
+ * "ซ้าย 4 · ขวา 2", because summing those into "6" would describe one list of
+ * six sitting where two lists actually are — contradicting the two labelled
+ * slot lists this panel draws directly underneath the row.
+ *
+ * Reuses SLOT_LABELS, which is already the one place a slot's name is written
+ * down. A slot whose label is null (`children`) has no name worth printing —
+ * it is the only slot — so the bare count stands for it.
+ */
+function childCountLabel(section) {
+  const counts = sectionChildCounts(section);
+  if (!counts) return null;
+  if (counts.length === 1) return `${counts[0].count} section`;
+  return counts.map(({ slot, count }) => `${SLOT_LABELS[slot] ?? slot} ${count}`).join(' · ');
+}
 
 const StructureContext = createContext(null);
 const useStructure = () => useContext(StructureContext);
@@ -195,6 +216,18 @@ function SectionNode({ section, path, siblingCount }) {
   // the strikethrough already explains that one, and both at once is noise.
   const willBeEmpty = !hidden && sectionRendersEmpty(section);
 
+  const typeLabel = labelOf(section?.type);
+  const primary = summary || typeLabel;
+  // Line 2 is assembled from the parts line 1 did NOT already say. The type
+  // label appears here only when the summary took the lead; the child count
+  // only for containers, which is what sectionChildCounts returns null for
+  // everything else to guarantee — a row with no slots must show no count
+  // rather than "0", which would describe a heading as an empty container.
+  const secondary = [
+    primary === typeLabel ? null : typeLabel,
+    childCountLabel(section),
+  ].filter(Boolean).join(' · ');
+
   const move = (to) => dispatch({ type: 'MOVE_SECTION', path, to });
 
   return (
@@ -220,12 +253,42 @@ function SectionNode({ section, path, siblingCount }) {
           type="button"
           aria-current={selected ? 'true' : undefined}
           onClick={() => dispatch({ type: 'SELECT', path })}
-          className={cn('min-w-0 flex-1 truncate text-left', hidden && 'line-through opacity-50')}
+          className={cn('min-w-0 flex-1 text-left', hidden && 'line-through opacity-50')}
         >
-          <span className={cn('font-medium', selected ? 'text-9e-navy dark:text-white' : 'text-9e-navy/80 dark:text-white/80')}>
-            {labelOf(section?.type)}
+          {/* ── LINE 1: WHAT THIS SECTION IS, AS SPECIFICALLY AS THE DATA ALLOWS
+              A designer mockup put an author-given name here. There is no such
+              value to show: the section envelope declares a `name` field, but
+              nothing in the app writes it and nothing reads it, so drawing it
+              would draw an empty string on every row.
+
+              So the most identifying thing available leads instead — the
+              summary when the type produces one (the heading's own text, the
+              CTA's label, the image's alt), and the type label otherwise. The
+              type label then moves to line 2, but ONLY when it is not already
+              what line 1 said, so no row ever prints its type twice.
+
+              What this cannot fix: five rich_text sections have no summary and
+              no distinguishing data at all, so they read identically. The
+              position number is what separates them, which is why it leads. */}
+          <span className="flex items-baseline gap-1">
+            <span data-testid="row-position" className="shrink-0 text-[10px] tabular-nums text-9e-slate-dp-50/70">
+              {index + 1}.
+            </span>
+            <span
+              data-testid="row-primary"
+              className={cn(
+                'min-w-0 flex-1 truncate font-medium',
+                selected ? 'text-9e-navy dark:text-white' : 'text-9e-navy/80 dark:text-white/80'
+              )}
+            >
+              {primary}
+            </span>
           </span>
-          {summary && <span className="ml-1.5 text-9e-slate-dp-50">{summary}</span>}
+          {secondary && (
+            <span data-testid="row-secondary" className="block truncate pl-[1.1rem] text-[10px] text-9e-slate-dp-50">
+              {secondary}
+            </span>
+          )}
           {hidden && <span className="sr-only"> (ซ่อนอยู่)</span>}
         </button>
 
