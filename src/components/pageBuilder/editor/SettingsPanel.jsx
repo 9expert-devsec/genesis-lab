@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+import * as Tabs from '@radix-ui/react-tabs';
 import { Lock } from 'lucide-react';
 import { CONTAINER_WIDTHS, SPACING, VISIBILITY, ACCENTS } from '@/lib/schemas/pageBuilder';
 import { OFFERED_BACKGROUNDS } from '@/lib/pageBuilder/presets';
@@ -61,12 +63,41 @@ import { useEditor } from './EditorProvider';
  * person editing it. The notice also says the save is safe, because "there is
  * code here I can't see" otherwise reads as "my save might destroy it".
  */
-function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
+const ADVANCED_KEYS = ['sectionId', 'customClass', 'customCss', 'customHtml'];
+
+/** Which advanced keys actually carry a value. Names them, for the notice. */
+function advancedKeysSet(advanced) {
+  return ADVANCED_KEYS.filter((k) => advanced?.[k]);
+}
+
+/**
+ * Is there an ขั้นสูง tab at all?
+ *
+ * ── ONE EXPRESSION, TWO READERS, ON PURPOSE ────────────────────────────────
+ * The tab strip needs to know whether to offer the tab, and `AdvancedGroup`
+ * needs to know whether to render anything. Those are the same question, and
+ * asking it twice is how they come to disagree — which fails in both
+ * directions and neither is loud:
+ *
+ *   a tab that opens onto nothing (the strip is more generous than the group),
+ *   or a hidden tab concealing a developer's CSS from the editor who is being
+ *   told, by the notice inside it, that their save will not destroy it.
+ *
+ * So `AdvancedGroup`'s early return IS this call. There is no second condition
+ * to keep in step; changing the rule here changes both readers at once.
+ */
+export function hasAdvancedTab(advanced, canUseAdvanced) {
+  return Boolean(canUseAdvanced) || advancedKeysSet(advanced).length > 0;
+}
+
+export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
   const patch = (p) => dispatch({ type: 'PATCH_SECTION_KEY', path, key: 'advanced', patch: p });
 
+  // The one decision — see hasAdvancedTab. The tab strip asks the same thing.
+  if (!hasAdvancedTab(advanced, canUseAdvanced)) return null;
+
   if (!canUseAdvanced) {
-    const set = ['sectionId', 'customClass', 'customCss', 'customHtml'].filter((k) => advanced?.[k]);
-    if (!set.length) return null;
+    const set = advancedKeysSet(advanced);
     return (
       <Group title="ขั้นสูง">
         <p className="flex items-start gap-1.5 rounded-9e-md bg-9e-ice px-2 py-1.5 text-[10px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
@@ -114,34 +145,39 @@ function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
   );
 }
 
-export function SettingsPanel() {
-  const { selected, selection, dispatch, tier, resolvedData } = useEditor();
-
-  if (!selected || !selection) {
-    return <p className="text-xs text-9e-slate-dp-50">เลือก section เพื่อแก้ไขการตั้งค่า</p>;
-  }
-
-  const settings = selected.settings ?? {};
-  const style = selected.style ?? {};
-  const patchKey = (key, patch) => dispatch({ type: 'PATCH_SECTION_KEY', path: selection, key, patch });
-
+/**
+ * The เนื้อหา tab. Thin by design — the per-type editor IS the content tab, and
+ * wrapping it buys the tests a component that renders exactly what the tab
+ * renders rather than something assembled a second way.
+ */
+export function ContentTab({ type, content, advanced, resolved, patch }) {
   return (
-    <div>
-      <p className="mb-3 text-xs font-bold text-9e-navy dark:text-white">{labelOf(selected.type)}</p>
+    <SectionContentEditor
+      type={type}
+      content={content}
+      advanced={advanced}
+      resolved={resolved}
+      patch={patch}
+    />
+  );
+}
 
-      {/* Content first: it is what the author came here to change. The envelope
-          below is a treatment applied to it. */}
-      <SectionContentEditor
-        type={selected.type}
-        content={selected.content}
-        advanced={selected.advanced}
-        resolved={resolvedData?.[selected.id]}
-        patch={(patch) => patchKey('content', patch)}
-      />
-
+/**
+ * The รูปแบบ tab: the per-type layout/style fields, then the three universal
+ * envelope groups.
+ *
+ * ── THE SPLIT FOLLOWS THE ORDER THAT WAS ALREADY HERE ──────────────────────
+ * Nothing is regrouped, reordered within a group, or moved between groups.
+ * This is the same JSX, in the same sequence, lifted out of the panel body so
+ * that a tab can hold it — and so that a test can render one tab's fields
+ * without the editor context a full panel needs.
+ */
+export function StyleTab({ type, layout, style, settings, patchKey }) {
+  return (
+    <>
       <SectionTypeFields
-        type={selected.type}
-        layout={selected.layout}
+        type={type}
+        layout={layout}
         style={style}
         patchLayout={(patch) => patchKey('layout', patch)}
         patchStyle={(patch) => patchKey('style', patch)}
@@ -197,13 +233,128 @@ export function SettingsPanel() {
           </select>
         </Field>
       </Group>
+    </>
+  );
+}
 
-      <AdvancedGroup
-        path={selection}
-        advanced={selected.advanced}
-        canUseAdvanced={Boolean(tier?.canUseAdvanced)}
-        dispatch={dispatch}
-      />
+/**
+ * The tab strip's fixed part. ขั้นสูง is appended per section — see
+ * hasAdvancedTab.
+ */
+const BASE_TABS = [
+  { key: 'content', label: 'เนื้อหา' },
+  { key: 'style', label: 'รูปแบบ' },
+];
+
+const TAB_TRIGGER_CLASS = [
+  'flex-1 rounded-9e-md px-2 py-1 text-[11px] font-medium text-9e-slate-dp-50',
+  'data-[state=active]:bg-9e-action/10 data-[state=active]:text-9e-action',
+  'hover:text-9e-action',
+].join(' ');
+
+export function SettingsPanel() {
+  const { selected, selection, dispatch, tier, resolvedData } = useEditor();
+
+  /**
+   * ── WHICH TAB IS OPEN IS VIEW STATE, NOT DOCUMENT STATE ──────────────────
+   * Local, deliberately not in editorReducer. The reducer's `page` is the saved
+   * document, and rounds 4-8 built `contentDirty` to mean exactly "content
+   * differs from what is stored". Putting a UI toggle in that tree would make
+   * opening a tab read as an unsaved change — the save bar would light up
+   * because someone looked at a different set of fields.
+   *
+   * Declared before the early return below, because hooks cannot be called
+   * conditionally.
+   */
+  const [tab, setTab] = useState('content');
+
+  if (!selected || !selection) {
+    // No selection, no tab strip — there is nothing for it to be about.
+    return <p className="text-xs text-9e-slate-dp-50">เลือก section เพื่อแก้ไขการตั้งค่า</p>;
+  }
+
+  const settings = selected.settings ?? {};
+  const style = selected.style ?? {};
+  const patchKey = (key, patch) => dispatch({ type: 'PATCH_SECTION_KEY', path: selection, key, patch });
+  const canUseAdvanced = Boolean(tier?.canUseAdvanced);
+
+  const tabs = hasAdvancedTab(selected.advanced, canUseAdvanced)
+    ? [...BASE_TABS, { key: 'advanced', label: 'ขั้นสูง' }]
+    : BASE_TABS;
+
+  /**
+   * ── THE OPEN TAB PERSISTS ACROSS SELECTIONS, CLAMPED AT RENDER ───────────
+   * Selecting another section keeps the tab you were on. An author walking down
+   * the page evening out spacing works entirely in รูปแบบ, and resetting to
+   * เนื้อหา on every selection would make them re-open it for each section.
+   *
+   * The strip's composition changes between sections — ขั้นสูง exists for one
+   * and not the next — so "persist" needs a fallback. It is computed HERE,
+   * as a derived value, rather than repaired by an effect that resets the
+   * state: a derived clamp cannot be stale, cannot flash the wrong tab for a
+   * frame, and makes a blank panel structurally impossible, because `active` is
+   * only ever a key that is in `tabs`. An effect syncing state to props is also
+   * the shape this directory keeps rejecting (see useEditorSave, useTreeDrag).
+   *
+   * The one consequence worth naming: the remembered tab is not forgotten while
+   * it is unavailable, so leaving a section that has no ขั้นสูง and landing on
+   * one that does reopens ขั้นสูง. That is "the panel remembers what you chose",
+   * which is the behaviour being asked for; it is not a section showing a tab
+   * the author never picked.
+   */
+  const active = tabs.some((t) => t.key === tab) ? tab : 'content';
+
+  return (
+    <div>
+      <p className="mb-3 text-xs font-bold text-9e-navy dark:text-white">{labelOf(selected.type)}</p>
+
+      <Tabs.Root value={active} onValueChange={setTab}>
+        <Tabs.List
+          data-testid="settings-tabs"
+          aria-label="ส่วนของการตั้งค่า"
+          className="mb-3 flex gap-1 rounded-9e-md bg-9e-ice p-0.5 dark:bg-[#0D1B2A]"
+        >
+          {tabs.map((t) => (
+            <Tabs.Trigger key={t.key} value={t.key} data-tab={t.key} className={TAB_TRIGGER_CLASS}>
+              {t.label}
+            </Tabs.Trigger>
+          ))}
+        </Tabs.List>
+
+        {/* Content first: it is what the author came here to change. The
+            envelope in รูปแบบ is a treatment applied to it. */}
+        <Tabs.Content value="content">
+          <ContentTab
+            type={selected.type}
+            content={selected.content}
+            advanced={selected.advanced}
+            resolved={resolvedData?.[selected.id]}
+            patch={(patch) => patchKey('content', patch)}
+          />
+        </Tabs.Content>
+
+        <Tabs.Content value="style">
+          <StyleTab
+            type={selected.type}
+            layout={selected.layout}
+            style={style}
+            settings={settings}
+            patchKey={patchKey}
+          />
+        </Tabs.Content>
+
+        {/* Rendered only when the tab exists, from the SAME call the strip made
+            — AdvancedGroup would return null here anyway, so this is belt and
+            braces rather than a second rule. */}
+        <Tabs.Content value="advanced">
+          <AdvancedGroup
+            path={selection}
+            advanced={selected.advanced}
+            canUseAdvanced={canUseAdvanced}
+            dispatch={dispatch}
+          />
+        </Tabs.Content>
+      </Tabs.Root>
     </div>
   );
 }
