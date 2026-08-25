@@ -64,14 +64,38 @@ export function insertAt(obj, parentPath, index, value) {
   return setAt(obj, parentPath, next);
 }
 
-/** Move an element within one array (sibling-scoped reorder). */
-export function moveWithin(obj, parentPath, from, to) {
-  const arr = getAt(obj, parentPath);
-  if (!Array.isArray(arr)) return obj;
-  if (from === to || from < 0 || from >= arr.length) return obj;
+/**
+ * Move one element of a BARE ARRAY, returning a new array.
+ *
+ * Extracted from `moveWithin` below, which is where this logic has always
+ * lived, when the section content editor needed to reorder the items inside a
+ * timeline / tabs / accordion / checklist. Those items are not sections and
+ * have no path — they are a plain array on `content` — so `moveWithin`'s
+ * signature does not fit them, but its ARITHMETIC is exactly what they need.
+ *
+ * Extracted rather than copied: two implementations of "move index from to
+ * index to" would have to agree forever, and the off-by-one they would
+ * eventually disagree about is the one below — `to` is clamped AFTER the
+ * removal, so a downward move lands where the caller means it to.
+ *
+ * Out-of-range or no-op moves return the ORIGINAL array, not a copy, so a
+ * caller can use identity to tell whether anything happened.
+ */
+export function moveInArray(arr, from, to) {
+  if (!Array.isArray(arr)) return arr;
+  if (from === to || from < 0 || from >= arr.length) return arr;
   const next = arr.slice();
   const [moved] = next.splice(from, 1);
   next.splice(Math.max(0, Math.min(to, next.length)), 0, moved);
+  return next;
+}
+
+/** Move an element within one array at a path (sibling-scoped section reorder). */
+export function moveWithin(obj, parentPath, from, to) {
+  const arr = getAt(obj, parentPath);
+  if (!Array.isArray(arr)) return obj;
+  const next = moveInArray(arr, from, to);
+  if (next === arr) return obj; // refused or no-op — same object, same answer as before
   return setAt(obj, parentPath, next);
 }
 
