@@ -8,24 +8,32 @@ import { CookieMascot } from './CookieMascot';
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- *  CookieBanner — PRESENTATION ONLY. NOT MOUNTED. NOT WIRED TO CONSENT.
+ *  CookieBanner — PRESENTATION ONLY. STILL NOT WIRED TO CONSENT.
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * Built from the Figma frame `cookie-banner` (file lWoAUx7CkpGmY79jAKAtWe,
- * node 7:2). Round CB-A.
+ * node 7:2). Round CB-A; mounted for team review in round CB-A2.
  *
- * ── READ THIS BEFORE YOU MOUNT IT ───────────────────────────────────────────
+ * ── WHAT IT STILL DOES NOT DO ───────────────────────────────────────────────
  * This component holds its four category states in `useState` and does NOTHING
  * ELSE with them. It does not write a cookie, does not touch localStorage, and
  * does not call gtag('consent', 'update', …). Consent Mode defaults elsewhere
  * in the app are untouched by this file and remain `granted`.
  *
- * That means mounting it TODAY would be actively harmful: a banner whose
- * "ปฏิเสธคุกกี้ที่ไม่จำเป็น" button visibly moves three toggles but changes no
- * actual tracking behaviour tells users they have a control they do not have.
- * That is a worse position than having no banner at all, because it manufactures
- * a false record of choice. It is deliberately absent from the public layout;
- * the follow-up round wires consent for real and mounts it in the same change.
+ * ── IT IS NOW ON SCREEN, AND THAT NEEDED A GUARD ────────────────────────────
+ * CB-A left this unmounted on the grounds that a banner whose
+ * "ปฏิเสธคุกกี้ที่ไม่จำเป็น" visibly moves three toggles but changes no tracking
+ * tells users they have a control they do not have. That reasoning has not
+ * changed — genesis-lab simply is not in production yet (real users are still
+ * on the old site), so the only people who can see it are the team.
+ *
+ * The mount therefore comes with a compensating control: CookieBannerPreview
+ * passes a Thai warning strip through the `notice` prop saying in plain words
+ * that the choices do not yet take effect. That strip is TEMPORARY and is
+ * deleted in the wiring round along with the preview wrapper.
+ *
+ * If this component ever renders WITHOUT that notice on a site real users can
+ * reach, the CB-A objection is live again and mounting is a defect.
  *
  * ── THE INITIAL STATE DIVERGES FROM THE MOCKUP ON PURPOSE ───────────────────
  * The Figma renders all three optional pills in their CHECKED state. They start
@@ -104,7 +112,21 @@ const BUTTON_CLASS = cn(
   'transition-colors duration-9e-micro ease-9e',
 );
 
-export function CookieBanner({ className }) {
+/**
+ * @param notice      Optional node rendered as the first thing inside the card.
+ *                    Generic on purpose — this component does not know the
+ *                    word "preview". Round CB-A2 passes the temporary
+ *                    preview-warning strip through here; the wiring round
+ *                    deletes that call site and this prop goes unused, with no
+ *                    edit needed inside this file.
+ * @param onDecision  Called with the resulting consent object when the user
+ *                    makes a DECISION (accept-all or reject-optional). Not
+ *                    called by the individual toggles, and not called by
+ *                    "จัดการการตั้งค่า" — see the note on that handler.
+ *                    This is the seam the wiring round will hang persistence
+ *                    and gtag('consent','update',…) on. It does neither today.
+ */
+export function CookieBanner({ className, notice = null, onDecision }) {
   // ── PDPA: all three optional categories start OFF. See the header comment
   //    before changing this to match the Figma's all-checked mockup state.
   const [consent, setConsent] = useState(INITIAL_CONSENT);
@@ -112,8 +134,23 @@ export function CookieBanner({ className }) {
   // Target for "จัดการการตั้งค่า" — see the note on that button below.
   const firstToggleRef = useRef(null);
 
-  const setAll = (value) => setConsent(applyAll(value));
   const toggle = (key) => setConsent((prev) => toggleCategory(prev, key));
+
+  /**
+   * A DECISION — the two buttons that answer the question the banner asks.
+   *
+   * The next state is computed once and both used and reported, rather than
+   * setting state and reading `consent` in the callback: that read would see
+   * the PREVIOUS render's value, so a listener would be handed the state the
+   * user just moved away from. It is a stale-closure bug that would be
+   * invisible in this round (nothing consumes the value yet) and would surface
+   * as inverted consent in the round that does.
+   */
+  const decide = (value) => {
+    const next = applyAll(value);
+    setConsent(next);
+    onDecision?.(next);
+  };
 
   /**
    * "จัดการการตั้งค่า" — this project ruled that there is NO settings modal and
@@ -139,15 +176,27 @@ export function CookieBanner({ className }) {
     <section
       aria-labelledby="cookie-banner-title"
       className={cn(
-        'flex w-full flex-col items-start gap-5 rounded-[16px] p-6',
+        // Figma's 24px padding / 20px gap are the sm+ values. Below that they
+        // are tightened: on a 375px phone the full-size card stood 536px tall
+        // — two thirds of the viewport — which is both bad on its own terms and
+        // the direct cause of how far FloatingActionDock has to lift over it.
+        'flex w-full flex-col items-start rounded-[16px]',
+        'gap-3 p-4 sm:gap-5 sm:p-6',
         'bg-[var(--surface-raised)]',
         'drop-shadow-[0px_12px_12px_rgba(15,23,42,0.15)]',
         className,
       )}
     >
+      {/* Caller-supplied slot, rendered before everything else so it is the
+          first thing read in the DOM as well as the first thing seen. Null in
+          the component's own right — see the prop docs. */}
+      {notice}
+
       {/* ── Row 1 — illustration + copy ───────────────────────────────── */}
-      <div className="flex w-full items-center gap-6">
-        <CookieMascot className="h-20 w-20 shrink-0" />
+      <div className="flex w-full items-center gap-4 sm:gap-6">
+        {/* Decorative. Hidden below sm: it costs 80px of height on a phone
+            and carries no information the heading does not already give. */}
+        <CookieMascot className="hidden h-20 w-20 shrink-0 sm:block" />
 
         {/* min-w-px is the Figma's own guard: without it the flex child refuses
             to shrink below its longest unbreakable Thai run and overflows. */}
@@ -173,7 +222,7 @@ export function CookieBanner({ className }) {
       </div>
 
       {/* ── Row 2 — category pills ────────────────────────────────────── */}
-      <div className="flex w-full flex-wrap items-start gap-3">
+      <div className="flex w-full flex-wrap items-start gap-2 sm:gap-3">
         {/*
           NECESSARY — always on, genuinely not toggleable.
           A native `disabled checked` input is what carries that to assistive
@@ -267,7 +316,7 @@ export function CookieBanner({ className }) {
       <hr className="w-full border-t border-9e-slate-lt-300 dark:border-9e-border" />
 
       {/* ── Row 3 — links + buttons ───────────────────────────────────── */}
-      <div className="flex w-full flex-wrap items-center justify-between gap-4">
+      <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:gap-4">
         {/*
           The Figma's left group has TWO links. The second — "ตั้งค่าคุกกี้"
           with a settings icon — is GONE, and that is the deliberate resolution
@@ -312,7 +361,7 @@ export function CookieBanner({ className }) {
 
           <button
             type="button"
-            onClick={() => setAll(false)}
+            onClick={() => decide(false)}
             className={cn(
               BUTTON_CLASS,
               'border border-9e-action bg-[var(--surface-raised)] text-9e-action',
@@ -326,7 +375,7 @@ export function CookieBanner({ className }) {
 
           <button
             type="button"
-            onClick={() => setAll(true)}
+            onClick={() => decide(true)}
             className={cn(
               BUTTON_CLASS,
               'px-5 bg-9e-action text-white hover:bg-9e-action-scale-100',

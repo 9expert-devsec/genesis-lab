@@ -240,7 +240,12 @@ module.exports = {
       //       — the dock is the ONE fixed box holding back-to-top and the chat
       //         launcher; neither child carries a z-index of its own.
       //   60  PublicHeader                 (above the hero cover slider)
-      //   70, 80  reserved for future chrome
+      //   70  CookieBannerPreview          (TEMPORARY — round CB-A2)
+      //       — bottom-edge consent chrome, above the dock and the header so
+      //         page chrome cannot cover it, below the whole overlay tier so
+      //         anything the user opened deliberately still wins. Frees this
+      //         rung again when the preview wrapper is deleted.
+      //   80  reserved for future chrome
       // Overlay tier — must cover all chrome; kept as arbitrary values so the
       // ladder above stays readable, low → high:
       //   9000  SitePopup                (promotional image overlay)
