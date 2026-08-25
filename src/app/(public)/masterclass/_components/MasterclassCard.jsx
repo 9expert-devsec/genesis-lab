@@ -1,7 +1,7 @@
-import Image from 'next/image';
-import Link from 'next/link';
-import { Clock, BarChart2 } from 'lucide-react';
-import { CountdownTimer } from './CountdownTimer';
+import Image from "next/image";
+import Link from "next/link";
+import { Clock, BarChart2 } from "lucide-react";
+import { CountdownTimer } from "./CountdownTimer";
 
 /**
  * ROUND M-B — restyled to match Figma node 27:5 (expert-masterclass-landing,
@@ -25,24 +25,32 @@ import { CountdownTimer } from './CountdownTimer';
  * background-only art → now an unused fallback); left in place rather than
  * deleted since the role keeps changing — see the M-C report.
  */
-const LEVEL_MAP = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
+const LEVEL_MAP = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  advanced: "Advanced",
+};
 
 /** Card 1 (Claude AI) is themed orange, everything else blue — matches the Figma. */
-const PILL_COLOR = { 'mas-claude-ai-for-data-analyst': 'bg-[#f97316]' };
-const DEFAULT_PILL_COLOR = 'bg-[#1d64f2]';
+const PILL_COLOR = { "mas-claude-ai-for-data-analyst": "bg-[#f97316]" };
+const DEFAULT_PILL_COLOR = "bg-[#1d64f2]";
 
 /** Only used if a course has no cover_image_url — see the header comment. */
 const FALLBACK_IMAGE = {
-  'mas-claude-ai-for-data-analyst': '/masterclass-element/13_course_claude_ai_card.png',
+  "mas-claude-ai-for-data-analyst":
+    "/masterclass-element/13_course_claude_ai_card.png",
 };
-const DEFAULT_FALLBACK_IMAGE = '/masterclass-element/14_course_ai_digital_card.png';
+const DEFAULT_FALLBACK_IMAGE =
+  "/masterclass-element/14_course_ai_digital_card.png";
 
 export function MasterclassCard({ course }) {
   const firstBatch = course.batches?.[0];
   const pillColor = PILL_COLOR[course.slug] ?? DEFAULT_PILL_COLOR;
   const cardImage =
-    course.cover_image_url || FALLBACK_IMAGE[course.slug] || DEFAULT_FALLBACK_IMAGE;
-  const scheduleNote = `*เรียนเฉพาะวัน${(course.schedule_days ?? []).join('/')} ${course.time_start ?? ''} - ${course.time_end ?? ''} น.`;
+    course.cover_image_url ||
+    FALLBACK_IMAGE[course.slug] ||
+    DEFAULT_FALLBACK_IMAGE;
+  const scheduleNote = `*เรียนเฉพาะวัน${(course.schedule_days ?? []).join("/")} ${course.time_start ?? ""} - ${course.time_end ?? ""} น.`;
 
   return (
     <Link
@@ -50,57 +58,92 @@ export function MasterclassCard({ course }) {
       className="group flex flex-1 flex-col overflow-hidden rounded-[20px] border border-[#e2e8f0] bg-white transition-shadow hover:shadow-lg"
     >
       {/* Top visual band */}
-      <div className="relative flex h-[200px] w-full flex-col justify-between p-6">
+      <div className="relative aspect-video">
         <div aria-hidden className="absolute inset-0">
-          <Image src={cardImage} alt="" fill className="object-cover" sizes="(max-width:768px) 100vw, 50vw" />
-          <div className="absolute inset-0 bg-[rgba(3,10,22,0.8)]" />
+          <Image
+            src={cardImage}
+            alt=""
+            fill
+            className="object-cover"
+            sizes="(max-width:768px) 100vw, 50vw"
+          />
+          {/* <div className="absolute inset-0 bg-[rgba(3,10,22,0.8)]" /> */}
         </div>
-        <div className="relative flex w-full items-center justify-between">
+        {/* <div className="relative flex w-full items-center justify-between">
           <span className={`inline-flex items-start rounded-full ${pillColor} px-3 py-1`}>
             <span className="text-xs font-semibold text-white">Masterclass</span>
           </span>
           <span className="text-sm font-bold text-white">9Expert</span>
-        </div>
-        <p className="relative w-full text-2xl font-bold text-white">{course.title_th}</p>
+        </div> */}
       </div>
 
       {/* Body */}
-      <div className="flex flex-col gap-5 p-6">
-        <div className="flex items-center gap-4">
-          <span className="flex items-center gap-1.5 text-[13px] text-[#475569]">
-            <Clock size={14} />
-            {course.duration_days} วัน
-          </span>
-          {course.level && (
+      <div className="flex flex-col justify-between h-full p-6 gap-2">
+        <div className="flex flex-col gap-2">
+          <p className="relative w-full text-2xl font-bold text-9e-navy">
+            {course.title_th}
+          </p>
+          <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5 text-[13px] text-[#475569]">
-              <BarChart2 size={14} />
-              {LEVEL_MAP[course.level] ?? course.level}
+              <Clock size={14} />
+              {course.duration_days} วัน
             </span>
-          )}
+            {course.level && (
+              <span className="flex items-center gap-1.5 text-[13px] text-[#475569]">
+                <BarChart2 size={14} />
+                {LEVEL_MAP[course.level] ?? course.level}
+              </span>
+            )}
+          </div>
+
+          <div className="h-[63px]">
+            {" "}
+            {course.subtitle_th && (
+              <p className="line-clamp-3 text-sm leading-[1.5] text-[#475569]">
+                {course.subtitle_th}
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <span className="text-[28px] font-bold text-[#1d64f2]">
+                {firstBatch.effective_price?.toLocaleString("th-TH")} บาท
+              </span>
+              {firstBatch.is_early_bird && (
+                <span className="text-base text-[#64748b] line-through">
+                  {firstBatch.original_price?.toLocaleString("th-TH")} บาท
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#64748b]">
+              {firstBatch.is_early_bird
+                ? "*ราคาพิเศษลงทะเบียนล่วงหน้า Early Bird"
+                : scheduleNote}
+            </p>
+          </div>
         </div>
 
-        {course.subtitle_th && (
-          <p className="line-clamp-3 text-sm leading-[1.5] text-[#475569]">{course.subtitle_th}</p>
-        )}
-
         {firstBatch ? (
-          <>
+          <div className="flex flex-col gap-2">
             {/* Price */}
-            <div className="flex flex-col gap-1">
+            {/* <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <span className="text-[28px] font-bold text-[#1d64f2]">
-                  {firstBatch.effective_price?.toLocaleString('th-TH')} บาท
+                  {firstBatch.effective_price?.toLocaleString("th-TH")} บาท
                 </span>
                 {firstBatch.is_early_bird && (
                   <span className="text-base text-[#64748b] line-through">
-                    {firstBatch.original_price?.toLocaleString('th-TH')} บาท
+                    {firstBatch.original_price?.toLocaleString("th-TH")} บาท
                   </span>
                 )}
               </div>
               <p className="text-xs text-[#64748b]">
-                {firstBatch.is_early_bird ? '*ราคาพิเศษลงทะเบียนล่วงหน้า Early Bird' : scheduleNote}
+                {firstBatch.is_early_bird
+                  ? "*ราคาพิเศษลงทะเบียนล่วงหน้า Early Bird"
+                  : scheduleNote}
               </p>
-            </div>
+            </div> */}
 
             {/* Countdown */}
             {firstBatch.is_early_bird && firstBatch.early_bird_deadline && (
@@ -108,30 +151,35 @@ export function MasterclassCard({ course }) {
                 <p className="w-full text-center text-xs font-semibold text-[#475569]">
                   ระยะเวลาส่วนลด Early Bird สิ้นสุดใน:
                 </p>
-                <CountdownTimer deadline={firstBatch.early_bird_deadline} className="justify-center" />
+                <CountdownTimer
+                  deadline={firstBatch.early_bird_deadline}
+                  className="justify-center"
+                />
               </div>
             )}
 
             {/* Capacity */}
             <div className="flex w-full flex-col gap-2">
               <div className="flex w-full items-start justify-between text-xs">
-                <span className="text-[#475569]">รับจำกัด {firstBatch.capacity} ที่นั่ง</span>
+                <span className="text-[#475569]">
+                  รับจำกัด {firstBatch.capacity} ที่นั่ง
+                </span>
                 <span
                   className={
-                    firstBatch.status === 'full'
-                      ? 'font-semibold text-red-500'
-                      : 'font-semibold text-[#10b981]'
+                    firstBatch.status === "full"
+                      ? "font-semibold text-red-500"
+                      : "font-semibold text-[#10b981]"
                   }
                 >
-                  {firstBatch.status === 'full'
-                    ? 'เต็มแล้ว'
+                  {firstBatch.status === "full"
+                    ? "เต็มแล้ว"
                     : `ว่าง ${Math.max(0, firstBatch.capacity - firstBatch.registered_count)} ที่นั่ง`}
                 </span>
               </div>
               <div className="h-1.5 w-full rounded-full bg-[#e2e8f0]">
                 <div
                   className={`h-1.5 rounded-full transition-all ${
-                    firstBatch.status === 'full' ? 'bg-red-500' : 'bg-[#10b981]'
+                    firstBatch.status === "full" ? "bg-red-500" : "bg-[#10b981]"
                   }`}
                   style={{
                     width: `${Math.min(100, (firstBatch.registered_count / firstBatch.capacity) * 100)}%`,
@@ -141,7 +189,7 @@ export function MasterclassCard({ course }) {
             </div>
 
             {/* CTA */}
-            {firstBatch.status === 'full' ? (
+            {firstBatch.status === "full" ? (
               <span className="flex w-full cursor-not-allowed items-center justify-center rounded-xl bg-gray-200 py-3 text-sm font-semibold text-gray-400">
                 เต็มแล้ว
               </span>
@@ -150,7 +198,7 @@ export function MasterclassCard({ course }) {
                 เปิดรับสมัคร
               </span>
             )}
-          </>
+          </div>
         ) : (
           <p className="text-sm text-gray-400">ยังไม่เปิดรับสมัคร</p>
         )}
