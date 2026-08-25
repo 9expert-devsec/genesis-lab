@@ -95,15 +95,39 @@ test('the three optional labels are the Figma three, in order', () => {
   assert.deepEqual(labels, ['คุกกี้วิเคราะห์', 'คุกกี้ด้านฟังก์ชัน', 'คุกกี้การตลาด']);
 });
 
+/**
+ * ── THE SHIPPED LAYOUT, AS OF 837e647 ───────────────────────────────────────
+ * The three guards below were written in CB-A3 against a bottom row of THREE
+ * groups (policy link → toggles → buttons) and a THREE-button set whose first
+ * member was "จัดการการตั้งค่า". The author then rearranged the banner by hand
+ * and both of those facts changed:
+ *
+ *   • the policy link moved OUT of the bottom row and UP into the header,
+ *     onto the title line, opposite "เราใช้คุกกี้";
+ *   • "จัดการการตั้งค่า" was removed, leaving two buttons.
+ *
+ * ── THIS REVERSES THE CB-A / CB-A2 FOCUS-MOVER DECISION, DELIBERATELY ───────
+ * Those rounds faced the question "what should จัดการการตั้งค่า do, given there
+ * is no settings modal?" and answered: keep the button, make it move focus to
+ * the first optional toggle. The two honest options were named at the time as
+ * "remove it, or have it focus the toggle row". The author has now taken the
+ * OTHER one. That is a legitimate call — with the toggles sitting inches away
+ * in the same row, a button whose whole effect is to focus one of them is
+ * close to decorative — and these guards now encode it.
+ *
+ * They are written to FAIL if the old layout comes back, not merely to tolerate
+ * both: the counts are exact, the link's position is asserted positively in the
+ * header AND negatively in the bottom row, and the removed button is asserted
+ * absent by label rather than by count alone.
+ */
+
 test('CB-A3 layout: the four toggles live in the BOTTOM row, not a row of their own', () => {
   const d = doc();
   const card = d.querySelector('section');
   const rows = [...card.children];
   const bottom = rows[rows.length - 1];
 
-  // The pill band above the divider is gone; everything interactive that is
-  // not the heading now shares one row. Asserted structurally rather than by
-  // counting rows, so re-ordering the header does not falsely redden it.
+  // The pill band above the divider is gone; the toggles moved down.
   assert.equal(
     bottom.querySelectorAll('input[type="checkbox"]').length,
     4,
@@ -116,16 +140,24 @@ test('CB-A3 layout: the four toggles live in the BOTTOM row, not a row of their 
   );
   assert.equal(
     bottom.querySelectorAll('button').length,
-    3,
-    'the three buttons are in that same row',
+    2,
+    'the two remaining buttons are in that same row',
+  );
+
+  // The policy link is no longer down here. Asserted in BOTH directions, so
+  // this cannot pass by the link having been deleted altogether.
+  assert.equal(
+    bottom.querySelector('a[href="/cookie-policy"]'),
+    null,
+    'the policy link is NOT in the bottom row any more',
   );
   assert.ok(
-    bottom.querySelector('a[href="/cookie-policy"]'),
-    'as is the policy link',
+    rows[0].querySelector('a[href="/cookie-policy"]'),
+    'it is in the header row instead',
   );
 });
 
-test('CB-A3 layout: the bottom row reads link → toggles → buttons', () => {
+test('CB-A3 layout: the bottom row reads toggles → buttons', () => {
   const d = doc();
   const card = d.querySelector('section');
   const rows = [...card.children];
@@ -133,19 +165,36 @@ test('CB-A3 layout: the bottom row reads link → toggles → buttons', () => {
 
   // DOM order IS the wrap order and the screen-reader order, so it is the
   // thing worth pinning — the visual arrangement follows from it.
-  assert.equal(groups.length, 3, 'three groups, so the toggles wrap as a unit');
-  assert.equal(groups[0].tagName, 'A', 'the policy link comes first');
+  assert.equal(groups.length, 2, 'two groups now: the link left this row');
   assert.equal(
-    groups[1].querySelectorAll('input[type="checkbox"]').length,
+    groups[0].querySelectorAll('input[type="checkbox"]').length,
     4,
-    'the toggles come second',
+    'the toggles come first, and wrap as one unit',
   );
-  assert.equal(groups[2].querySelectorAll('button').length, 3, 'the buttons last');
+  assert.equal(groups[0].querySelectorAll('button').length, 0, 'no button among them');
+  assert.equal(groups[1].querySelectorAll('button').length, 2, 'the buttons come last');
   assert.match(
-    groups[2].getAttribute('class') ?? '',
+    groups[1].getAttribute('class') ?? '',
     /ml-auto/,
     'and the buttons carry ml-auto, which is what right-aligns them on '
       + 'whichever line they wrap onto',
+  );
+});
+
+test('the policy link sits on the title line, opposite the heading', () => {
+  // Where it MOVED to, pinned positively — otherwise the only record of the
+  // move is a negative assertion in the test above, and a future edit that
+  // dropped the link entirely would satisfy that one.
+  const d = doc();
+  const card = d.querySelector('section');
+  const header = [...card.children][0];
+  const link = header.querySelector('a[href="/cookie-policy"]');
+  assert.ok(link, 'the link is in the header row');
+
+  const titleLine = d.getElementById('cookie-banner-title').parentElement.parentElement;
+  assert.ok(
+    titleLine.contains(link),
+    'and shares a flex row with the h2, rather than sitting under the body copy',
   );
 });
 
@@ -169,25 +218,49 @@ test('the policy link points at the real shipped page', () => {
 
 test('there is no second link — "ตั้งค่าคุกกี้" was removed deliberately', () => {
   const d = doc();
-  // With no settings modal and no preference page, that link had no
-  // destination; its only possible behaviour duplicated the จัดการการตั้งค่า
-  // button sitting beside it. If it comes back, it needs somewhere to go.
+  // The Figma drew two links. The second had no destination: with no settings
+  // modal and no preference page, its only possible behaviour was to focus the
+  // toggles, which the จัดการการตั้งค่า button did at the time. That button has
+  // since gone too (see the layout note above), so nothing in the card now
+  // claims to lead anywhere it does not. If either comes back, it needs a
+  // destination first.
   assert.equal(d.querySelectorAll('a').length, 1);
   assert.equal(d.body.textContent.includes('ตั้งค่าคุกกี้'), false);
 });
 
-test('all three buttons render, and every one is type=button', () => {
+test('both remaining buttons render, and every one is type=button', () => {
   const d = doc();
   const buttons = [...d.querySelectorAll('button')];
-  assert.equal(buttons.length, 3);
+  assert.equal(buttons.length, 2);
   for (const b of buttons) {
     // An untyped <button> inside a form submits it. This banner will eventually
     // be mounted globally, possibly inside one.
     assert.equal(b.getAttribute('type'), 'button');
   }
+  // Exact, and in order: the two that answer the question the banner asks.
   assert.deepEqual(
     buttons.map((b) => b.textContent.trim()),
-    ['จัดการการตั้งค่า', 'ปฏิเสธคุกกี้ที่ไม่จำเป็น', 'ยอมรับทั้งหมด'],
+    ['ปฏิเสธคุกกี้ที่ไม่จำเป็น', 'ยอมรับทั้งหมด'],
+  );
+});
+
+test('"จัดการการตั้งค่า" is GONE, not hidden', () => {
+  // Asserted by LABEL across the whole rendered card, not by button count.
+  // A count alone would still pass if the button were kept and merely styled
+  // `hidden`, or swapped for a third button with a different name — and a
+  // control that exists in the DOM but not on screen is exactly the kind of
+  // thing a screen reader would still announce.
+  const d = doc();
+  assert.equal(
+    d.body.textContent.includes('จัดการการตั้งค่า'),
+    false,
+    'the label appears nowhere in the rendered output',
+  );
+  assert.equal(
+    [...d.querySelectorAll('button')].some((b) =>
+      b.textContent.includes('จัดการ')),
+    false,
+    'and no button carries it under a slightly different spelling',
   );
 });
 
