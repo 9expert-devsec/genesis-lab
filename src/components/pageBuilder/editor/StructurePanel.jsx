@@ -3,12 +3,13 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  GripVertical, Eye, EyeOff, ChevronUp, ChevronDown, Copy, Trash2, Plus, Ban,
+  Eye, EyeOff, ChevronUp, ChevronDown, Copy, Trash2, Plus, Ban,
   AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { slotsOf, MAX_SECTION_DEPTH } from '@/lib/pageBuilder/containerSlots';
 import { labelOf, sectionSummary, sectionRendersEmpty, sectionChildCounts } from '@/lib/pageBuilder/sectionLabels';
+import { iconOf } from '@/lib/pageBuilder/sectionIcons';
 import { countDescendants } from '@/lib/pageBuilder/sectionDescendants';
 import { newSection } from '@/lib/pageBuilder/newSection';
 import { useEditor } from './EditorProvider';
@@ -67,7 +68,7 @@ function IconButton({ label, onClick, disabled, danger, children }) {
       disabled={disabled}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className={cn(
-        'rounded p-1 text-9e-slate-dp-50 transition-colors',
+        'rounded-9e-sm p-1 text-9e-slate-dp-50 transition-colors',
         'hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#0D1B2A] dark:hover:text-white',
         'disabled:pointer-events-none disabled:opacity-30',
         danger && 'hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40'
@@ -91,7 +92,7 @@ function EmptyBadge() {
   return (
     <span
       title="section นี้ยังว่าง จึงไม่แสดงผลบนหน้าเว็บ"
-      className="shrink-0 rounded-full border border-[var(--surface-border)] px-1.5 py-px text-[10px] text-9e-slate-dp-50"
+      className="shrink-0 rounded-full border border-[var(--surface-border)] px-1.5 py-0.5 text-[10px] text-9e-slate-dp-50"
     >
       ว่าง
     </span>
@@ -102,7 +103,7 @@ function CapBadge() {
   return (
     <span
       title={`ชั้นซ้อนลึกสุดแล้ว (${MAX_SECTION_DEPTH}) — เพิ่ม section ซ้อนข้างในไม่ได้`}
-      className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400"
+      className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-400"
     >
       ลึกสุด
     </span>
@@ -216,6 +217,7 @@ function SectionNode({ section, path, siblingCount }) {
   // the strikethrough already explains that one, and both at once is noise.
   const willBeEmpty = !hidden && sectionRendersEmpty(section);
 
+  const TypeIcon = iconOf(section?.type);
   const typeLabel = labelOf(section?.type);
   // The author's own name wins when they gave one; the round-16 fallback —
   // summary, else type label — stands in when they did not. Trimmed, because a
@@ -249,7 +251,7 @@ function SectionNode({ section, path, siblingCount }) {
       <div
         {...getRowProps(path)}
         className={cn(
-          'group flex items-center gap-1 rounded-9e-md border border-transparent px-1.5 py-1 text-xs',
+          'group flex items-center gap-1 rounded-9e-sm border border-transparent px-1.5 py-1.5 text-xs',
           'cursor-grab active:cursor-grabbing',
           selected ? 'border-9e-action/40 bg-9e-action/10' : 'hover:bg-9e-ice dark:hover:bg-[#0D1B2A]',
           isDragging(path) && 'opacity-40',
@@ -257,7 +259,20 @@ function SectionNode({ section, path, siblingCount }) {
           isDropTarget(path) && 'border-t-2 border-t-9e-action'
         )}
       >
-        <GripVertical className="h-3.5 w-3.5 shrink-0 text-9e-slate-dp-50/60" aria-hidden />
+        {/* ── THE TYPE ICON STANDS WHERE THE GRIP GLYPH DID ───────────────────
+            NOT beside it. The row was measured in a browser at 260px: after the
+            grip, the four hover actions and the visibility toggle, the label has
+            85px at top level and 33px on a nested row that also carries a badge.
+            An icon ADDED to the row costs another 18px of that, which the label
+            does not have — and the alternative, buying it back by shrinking a
+            control, is the one thing a 22px hit area must not pay.
+
+            Nothing about dragging changes: the handlers, the drop targets and
+            the grab cursor are all on the row div, which is why the glyph was
+            only ever decoration. iconOf is the SAME lookup the section picker
+            renders a type with (rounds 9-13), so an author meets one icon per
+            type and meets it twice. */}
+        <TypeIcon className="h-3.5 w-3.5 shrink-0 text-9e-slate-dp-50/60" aria-hidden />
 
         <button
           type="button"
@@ -297,7 +312,7 @@ function SectionNode({ section, path, siblingCount }) {
             </span>
           </span>
           {secondary && (
-            <span data-testid="row-secondary" className="block truncate pl-[1.1rem] text-[10px] text-9e-slate-dp-50">
+            <span data-testid="row-secondary" className="block truncate pl-4 text-[10px] text-9e-slate-dp-50">
               {secondary}
             </span>
           )}
@@ -341,7 +356,7 @@ function SectionNode({ section, path, siblingCount }) {
         return (
           <div key={slot} className="ml-3 border-l border-[var(--surface-border)] pl-1.5">
             {slotLabel && (
-              <p className="px-1.5 pt-1 text-[10px] uppercase tracking-wide text-9e-slate-dp-50/70">{slotLabel}</p>
+              <p className="px-1.5 pb-0.5 pt-2 text-xs uppercase tracking-wide text-9e-slate-dp-50/70">{slotLabel}</p>
             )}
             <SectionList sections={kids} basePath={[...path, 'content', slot]} />
           </div>
@@ -372,7 +387,7 @@ function AddRow({ basePath, count }) {
     return (
       <p
         title={`section ที่ซ้อนลึกเกิน ${MAX_SECTION_DEPTH} ชั้นจะไม่ถูกแสดงผลบนหน้าเว็บจริง`}
-        className="flex items-center gap-1 px-1.5 py-1 text-[10px] text-amber-700 dark:text-amber-400"
+        className="flex items-center gap-1 px-1.5 py-1.5 text-xs text-amber-700 dark:text-amber-400"
       >
         <Ban className="h-3 w-3 shrink-0" aria-hidden />
         ซ้อนได้ลึกสุด {MAX_SECTION_DEPTH} ชั้น — เพิ่มที่นี่ไม่ได้
@@ -385,8 +400,8 @@ function AddRow({ basePath, count }) {
       type="button"
       onClick={() => openPicker(basePath, count)}
       className={cn(
-        'mt-px flex w-full items-center gap-1 rounded-9e-md border border-dashed',
-        'border-[var(--surface-border)] px-1.5 py-1 text-[11px] text-9e-slate-dp-50',
+        'mt-1 flex w-full items-center gap-1 rounded-9e-sm border border-dashed',
+        'border-[var(--surface-border)] px-1.5 py-1.5 text-xs text-9e-slate-dp-50',
         'hover:border-9e-action/40 hover:bg-9e-ice hover:text-9e-action dark:hover:bg-[#0D1B2A]'
       )}
     >
@@ -400,7 +415,7 @@ function SectionList({ sections, basePath }) {
   return (
     <>
       {sections.length > 0 && (
-        <ul className="space-y-px">
+        <ul className="space-y-0.5">
           {sections.map((section, i) => (
             <SectionNode
               key={section?.id ?? `${basePath.join('.')}.${i}`}

@@ -7,26 +7,38 @@ import { labelFor } from '@/lib/pageBuilder/presetLabels';
 /**
  * Shared form primitives for the settings panel (5a envelope + 5b per-type
  * content). One set, so a field looks and behaves the same wherever it appears.
+ *
+ * ── SIZES AND SPACING COME OFF THE SHARED SCALES, NOT OUT OF THE AIR ───────
+ * These primitives used to carry three off-scale type sizes. There is no 9e-
+ * type token family — tailwind.config.js extends colour, radius, shadow and
+ * motion, and nothing else — so the shared scale here is Tailwind's own, whose
+ * smallest step is 12px. Everything below now sits on it, and hierarchy is
+ * carried by weight and colour instead, which these already did.
+ *
+ * Blast radius, stated rather than discovered: the three builder dialogs
+ * (settings / preview / publish) import these too, so they take the same
+ * treatment. That is the point of a shared primitive; none of their layout,
+ * copy or fields changes.
  */
 
 export const INPUT_CLASS =
-  'w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] ' +
-  'px-2 py-1 text-xs text-9e-navy dark:text-white';
+  'w-full rounded-9e-sm border border-[var(--surface-border)] bg-[var(--surface)] ' +
+  'px-2 py-1.5 text-xs text-9e-navy dark:text-white';
 
 export function Field({ label, hint, children }) {
   return (
-    <label className="mb-2.5 block">
-      <span className="mb-1 block text-[11px] font-medium text-9e-navy dark:text-white/90">{label}</span>
+    <label className="mb-3 block">
+      <span className="mb-1.5 block text-xs font-medium text-9e-navy dark:text-white/90">{label}</span>
       {children}
-      {hint && <span className="mt-0.5 block text-[10px] text-9e-slate-dp-50">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-9e-slate-dp-50">{hint}</span>}
     </label>
   );
 }
 
 export function Group({ title, children }) {
   return (
-    <fieldset className="mb-4 border-t border-[var(--surface-border)] pt-2.5">
-      <legend className="pr-2 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">
+    <fieldset className="mb-5 border-t border-[var(--surface-border)] pt-3">
+      <legend className="pr-2 text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
         {title}
       </legend>
       {children}
@@ -64,7 +76,7 @@ export function TextArea({ value, onChange, rows = 3, mono, ...rest }) {
       rows={rows}
       value={value ?? ''}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(INPUT_CLASS, mono && 'font-mono text-[10px]')}
+      className={cn(INPUT_CLASS, mono && 'font-mono')}
       {...rest}
     />
   );
@@ -93,13 +105,13 @@ export function Warn({ children, tone = 'amber' }) {
     <p
       role={isInfo ? 'note' : 'alert'}
       className={cn(
-        '-mt-1.5 mb-2.5 flex items-start gap-1 text-[10px]',
+        '-mt-1.5 mb-3 flex items-start gap-1 text-xs',
         tone === 'red' ? 'text-red-600'
           : isInfo ? 'text-9e-action dark:text-9e-air'
           : 'text-amber-700 dark:text-amber-400'
       )}
     >
-      <Icon className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>{children}</span>
     </p>
   );

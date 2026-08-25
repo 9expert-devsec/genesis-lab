@@ -101,7 +101,7 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
     const set = advancedKeysSet(advanced);
     return (
       <Group title="ขั้นสูง">
-        <p className="flex items-start gap-1.5 rounded-9e-md bg-9e-ice px-2 py-1.5 text-[10px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
+        <p className="flex items-start gap-1.5 rounded-9e-sm bg-9e-ice px-2 py-2 text-xs text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
           <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           <span>
             section นี้มีการปรับแต่งโดย developer ({set.join(', ')}) — คุณแก้ไขไม่ได้
@@ -264,12 +264,12 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
  */
 export function SelectionHeader({ type, parentType }) {
   return (
-    <div className="mb-3" data-testid="settings-header">
-      <p data-testid="settings-header-type" className="text-xs font-bold text-9e-navy dark:text-white">
+    <div className="mb-4" data-testid="settings-header">
+      <p data-testid="settings-header-type" className="text-sm font-bold text-9e-navy dark:text-white">
         {labelOf(type)}
       </p>
       {parentType && (
-        <p data-testid="settings-header-parent" className="mt-0.5 text-[10px] text-9e-slate-dp-50">
+        <p data-testid="settings-header-parent" className="mt-1 text-xs text-9e-slate-dp-50">
           อยู่ใน {labelOf(parentType)}
         </p>
       )}
@@ -323,7 +323,7 @@ const BASE_TABS = [
 ];
 
 const TAB_TRIGGER_CLASS = [
-  'flex-1 rounded-9e-md px-2 py-1 text-[11px] font-medium text-9e-slate-dp-50',
+  'flex-1 rounded-9e-sm px-2 py-1.5 text-xs font-medium text-9e-slate-dp-50',
   'data-[state=active]:bg-9e-action/10 data-[state=active]:text-9e-action',
   'hover:text-9e-action',
 ].join(' ');
@@ -420,7 +420,7 @@ export function SettingsPanel() {
         <Tabs.List
           data-testid="settings-tabs"
           aria-label="ส่วนของการตั้งค่า"
-          className="mb-3 flex gap-1 rounded-9e-md bg-9e-ice p-0.5 dark:bg-[#0D1B2A]"
+          className="mb-4 flex gap-1 rounded-9e-sm bg-9e-ice p-1 dark:bg-[#0D1B2A]"
         >
           {tabs.map((t) => (
             <Tabs.Trigger key={t.key} value={t.key} data-tab={t.key} className={TAB_TRIGGER_CLASS}>
