@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Lock } from 'lucide-react';
+import { X, Lock, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
@@ -31,6 +32,17 @@ import { useEditor } from './EditorProvider';
  *
  * Radix Dialog rather than a hand-rolled modal: focus trap / escape / aria are
  * exactly what a hand-rolled one gets subtly wrong.
+ *
+ * ── WHAT THIS ROUND CHANGED, AND WHAT IT DELIBERATELY DID NOT ───────────────
+ * 27 types in five groups is a wall to read top-to-bottom, so this round added
+ * PRESENTATION ONLY: a search box, a row of group filter pills, tinted icon
+ * tiles, a wider multi-column dialog, and — for a non-developer — the Advanced
+ * group folded into one locked summary row instead of four dead buttons.
+ *
+ * `typeState()` below is untouched. Search and pills decide what is DRAWN;
+ * `typeState` still decides, alone, what is CLICKABLE. Nothing here can make a
+ * 'soon' or 'locked' type reach onPick — filtering a list does not enable its
+ * members.
  */
 
 // 'add' → clickable. 'soon' → exists, component is a later phase. 'locked' →
@@ -67,19 +79,115 @@ function typeState(type, canUseAdvanced) {
     // real, offerable type. 2C shipped the four components, so as of this pass
     // the gate decides 'add' vs 'locked' for the first time since it was written
     // (docs/page-builder-status.md forward-dependency 3).
+    //
+    // ── THE OTHER HALF OF THIS SAME GATE, KEPT NEXT TO IT ON PURPOSE ──────
+    // The gate has a PRESENTATION half too, and it lives in the advanced branch
+    // of SectionPickerBody below. Both halves are written down here so a future
+    // reader finds the whole rule in one place instead of finding one side and
+    // assuming it is all of it:
+    //
+    //   !canUseAdvanced → this returns 'locked' for every advanced type, AND
+    //     the group collapses to ONE summary row carrying the lock and the
+    //     "ต้องมีสิทธิ์ developer" framing. Four identically-dead buttons told a
+    //     marketing author nothing four times; one row tells them once, and why.
+    //
+    //   canUseAdvanced → this returns 'add'/'soon' per type, AND the group
+    //     renders as ordinary clickable buttons in the same grid as every other
+    //     group. NO extra expand click. Putting the four types behind a
+    //     disclosure for the ONE tier that can actually use them would be the
+    //     collapse pointed exactly the wrong way.
     if (!canUseAdvanced) return 'locked';
     return renderable ? 'add' : 'soon';
   }
   return renderable ? 'add' : 'soon';
 }
 
-const GROUPS = [
-  { title: 'เนื้อหา', types: CONTENT_TYPES },
-  { title: 'เลย์เอาต์', types: LAYOUT_TYPES },
-  { title: 'การ์ด', types: CARD_TYPES },
-  { title: 'ไดนามิก', types: DYNAMIC_TYPES },
-  { title: 'ขั้นสูง (developer)', types: ADVANCED_TYPES },
+/**
+ * The five groups, and the ONE list the filter pills are built from.
+ *
+ * `types` is the imported constant BY REFERENCE, never a copy — a type added to
+ * (say) CARD_TYPES in lib/schemas/sections/cards.js appears in the การ์ด group
+ * and under the การ์ด pill with no edit here. test/render/sectionTypeCoverage
+ * pins that each of the five is still read from its export.
+ *
+ * `key` is a stable ASCII handle for the active-pill state and for the tests;
+ * `title` is what the author reads. They are separate so retitling a group in
+ * Thai cannot silently change which pill is selected.
+ *
+ * ── WHY การ์ด IS ITS OWN PILL AND NOT FOLDED INTO ไดนามิก ────────────────────
+ * The designer mockup shows four pills, with price_card sitting among the
+ * fetch-backed types under "Dynamic Data". That is a mislabel this codebase
+ * already has words for: docs/page-builder-status.md calls price_card /
+ * stat_card / icon_card the "self-contained" cards and keeps them distinct from
+ * the data-backed ones. A pill reading "ไดนามิก" over a static card would
+ * contradict the type semantics the rest of the builder is written to. Five
+ * pills, matching CARD_TYPES as it is exported.
+ */
+export const GROUPS = [
+  { key: 'content',  title: 'เนื้อหา',             types: CONTENT_TYPES },
+  { key: 'layout',   title: 'เลย์เอาต์',            types: LAYOUT_TYPES },
+  { key: 'card',     title: 'การ์ด',               types: CARD_TYPES },
+  { key: 'dynamic',  title: 'ไดนามิก',             types: DYNAMIC_TYPES },
+  { key: 'advanced', title: 'ขั้นสูง (developer)',  types: ADVANCED_TYPES },
 ];
+
+/** The pill for "no group filter". Not a group — it is the absence of one. */
+const ALL_GROUP = 'all';
+
+/**
+ * The pill row, DERIVED from `GROUPS` — one pill per group, in the group order,
+ * plus "ทั้งหมด" at the front because "no filter" is not a group.
+ *
+ * Hoisted into its own function ONLY so the derivation is testable as
+ * behaviour. Five pills typed out as five strings would render identically
+ * today and would then quietly disagree with the grid the first time a sixth
+ * category is exported from lib/schemas/sections/* — the failure mode being a
+ * pill row that no longer covers everything the picker draws, with nothing to
+ * say so. `groups` is a parameter with a default rather than a closed-over
+ * constant so a test can hand it a SIXTH group and watch a sixth pill come out;
+ * a test that could only ever see the real five could not tell derivation from
+ * a coincidence of counting.
+ */
+export function pillsOf(groups = GROUPS) {
+  return [{ key: ALL_GROUP, title: 'ทั้งหมด' }, ...groups];
+}
+
+/**
+ * Does this type's visible name contain what was typed?
+ *
+ * ── ON `.toLowerCase()` AND THAI ────────────────────────────────────────────
+ * Thai script is CASELESS, so folding does nothing to 'กริดไฮไลต์' — on the Thai
+ * labels this is a plain substring match, which is exactly what is wanted.
+ * It is kept anyway because it is NOT a no-op across all 27: four labels embed
+ * ASCII — 'HTML กำหนดเอง', 'CSS กำหนดเอง', 'Debug JSON', 'ฝังเนื้อหา (embed)' —
+ * and folding is the only reason typing `html` finds the first of them. So:
+ * caseless where the script is caseless, case-insensitive where it is not.
+ *
+ * Matching is against labelOf() — the name on the button — and not the raw type
+ * name, so what an author types is what an author can see.
+ */
+function matchesQuery(type, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return true;
+  return labelOf(type).toLowerCase().includes(q);
+}
+
+/**
+ * The groups to draw, already narrowed by both filters.
+ *
+ * The two conditions are an AND, not an OR: a pill restricts to one group and a
+ * query then restricts WITHIN it. A type outside the active group is not shown
+ * however well it matches the text.
+ *
+ * A group whose list narrows to nothing is DROPPED, not drawn empty — a header
+ * with no grid under it reads as a rendering fault rather than as "no match".
+ */
+export function visibleGroups(query, activeGroup) {
+  return GROUPS
+    .filter((g) => activeGroup === ALL_GROUP || activeGroup === g.key)
+    .map((g) => ({ ...g, types: g.types.filter((t) => matchesQuery(t, query)) }))
+    .filter((g) => g.types.length > 0);
+}
 
 function TypeButton({ type, state, onPick }) {
   const disabled = state !== 'add';
@@ -87,6 +195,9 @@ function TypeButton({ type, state, onPick }) {
   return (
     <button
       type="button"
+      data-testid="picker-type"
+      data-type={type}
+      data-state={state}
       disabled={disabled}
       onClick={disabled ? undefined : () => onPick(type)}
       title={state === 'locked' ? 'ต้องมีสิทธิ์ developer' : state === 'soon' ? 'กำลังจะมาในเร็ว ๆ นี้' : undefined}
@@ -97,18 +208,44 @@ function TypeButton({ type, state, onPick }) {
           : 'text-9e-navy hover:border-9e-action/40 hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]'
       )}
     >
-      {/* Leading icon — a quiet muted recognition aid (never a colourful accent),
-          top-aligned so it sits with the label when a container subtitle wraps
-          below. Decorative: the label is the accessible name, so aria-hidden. */}
+      {/* Leading icon in a tinted rounded tile. The tint is the SAME pair this
+          editor already uses for an active affordance — `bg-9e-action/10` +
+          `text-9e-action`, from RichTextEditor's active toolbar button and
+          PublishDialog's selected status row — not a new colour invented for
+          this dialog. An offerable type is drawn in the accent; anything
+          disabled keeps the old muted treatment on the neutral ice tint, so the
+          colour itself carries "you can add this". Decorative either way: the
+          label is the accessible name, so aria-hidden. */}
       <span className="flex min-w-0 items-start gap-2">
-        <Icon className="mt-px h-[18px] w-[18px] shrink-0 text-9e-slate-dp-50" aria-hidden />
+        <span
+          className={cn(
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-9e-md',
+            disabled
+              ? 'bg-9e-ice text-9e-slate-dp-50 dark:bg-[#0D1B2A]'
+              : 'bg-9e-action/10 text-9e-action'
+          )}
+          aria-hidden
+        >
+          <Icon className="h-[18px] w-[18px]" />
+        </span>
         <span className="min-w-0">
           <span className="font-medium">{labelOf(type)}</span>
+          {/* A DELIBERATE KEEP, not an oversight. The denser card tempted a
+              trim, but this line is the only place the picker says a type can
+              hold other sections — an author who does not know that never
+              nests, and the container types then look like empty boxes. Kept,
+              restyled to sit under the label in the narrower card. */}
           {state === 'add' && isContainer(type) && (
-            <span className="mt-0.5 block text-[10px] text-9e-slate-dp-50">ใส่ section ซ้อนข้างในได้</span>
+            <span className="mt-0.5 block text-[10px] leading-tight text-9e-slate-dp-50">ใส่ section ซ้อนข้างในได้</span>
           )}
         </span>
       </span>
+      {/* The 'soon' badge. Unreachable today — see typeState's note and
+          test/render/sectionTypeCoverage.test.mjs, which MEASURES that. This
+          round restyled the card around it and left the badge itself alone:
+          the day a declared type ships without a component this is what the
+          author sees instead of a clickable button, and a JSX path deleted for
+          being cold is a path that is not there when the state comes back. */}
       {state === 'soon' && (
         <span className="shrink-0 rounded-full bg-9e-ice px-1.5 py-px text-[9px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
           เร็ว ๆ นี้
@@ -119,17 +256,160 @@ function TypeButton({ type, state, onPick }) {
   );
 }
 
+/**
+ * The Advanced group's non-developer face: one row, locked, saying why.
+ *
+ * Renders INSTEAD OF the four buttons, never alongside them — see the
+ * presentation half of the developer-tier note at typeState. It is a <p>, not a
+ * disabled <button>: there is nothing here to press, and a button that exists
+ * only to refuse the press is exactly what this row replaces.
+ */
+function AdvancedLockedSummary({ types }) {
+  return (
+    <p
+      data-testid="picker-advanced-locked"
+      className="flex items-start gap-2 rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2.5 text-[12px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]"
+    >
+      <Lock className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span>
+        ต้องมีสิทธิ์ developer จึงจะเพิ่ม section ขั้นสูงได้
+        <span className="mt-0.5 block text-[10px]">{types.map(labelOf).join(' · ')}</span>
+      </span>
+    </p>
+  );
+}
+
+/**
+ * The picker's contents, WITHOUT the Radix portal around them.
+ *
+ * Split out and exported because a Dialog.Portal renders nothing under
+ * renderToStaticMarkup (established in rounds 5/6 — see the note at the bottom
+ * of test/render/draftVisibility.test.mjs), so everything drawn inside one is
+ * invisible to the render tier and can only be guarded by source scans. This
+ * body has no portal, takes `query` / `activeGroup` as PROPS rather than owning
+ * them, and is therefore assertable as real DOM at any filter value.
+ *
+ * The state itself lives one level up in SectionPicker; this component is a
+ * pure function of its props.
+ */
+export function SectionPickerBody({
+  query, activeGroup, canUseAdvanced, onQueryChange, onGroupChange, onPick,
+}) {
+  const groups = visibleGroups(query, activeGroup);
+
+  return (
+    <>
+      {/* Search + pills. The pills are MAPPED FROM `GROUPS` — the same array
+          the grid below draws from — so a group added to that array gets a
+          pill for free and can never show a set that disagrees with its
+          header. "ทั้งหมด" is prepended because it is not a group. */}
+      <div className="mb-3 space-y-2">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50" aria-hidden />
+          <input
+            type="search"
+            data-testid="picker-search"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="ค้นหาชนิด section"
+            aria-label="ค้นหาชนิด section"
+            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface)] py-1.5 pl-8 pr-2 text-[13px] text-9e-navy placeholder:text-9e-slate-dp-50 focus:border-9e-action/40 focus:outline-none dark:text-white"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {pillsOf().map((pill) => {
+            const active = activeGroup === pill.key;
+            return (
+              <button
+                key={pill.key}
+                type="button"
+                data-testid="picker-pill"
+                data-group-key={pill.key}
+                data-active={active ? 'true' : 'false'}
+                aria-pressed={active}
+                onClick={() => onGroupChange(pill.key)}
+                className={cn(
+                  'rounded-full border px-2.5 py-1 text-[11px]',
+                  // The selected treatment is PublishDialog's, verbatim
+                  // (`border-9e-action/40 bg-9e-action/10` on its chosen status
+                  // row) plus this editor's accent text — one active-state
+                  // convention across the builder, not a second one.
+                  active
+                    ? 'border-9e-action/40 bg-9e-action/10 font-medium text-9e-action'
+                    : 'border-[var(--surface-border)] text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]'
+                )}
+              >
+                {pill.title}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {groups.map((group) => (
+        <div key={group.key} data-testid="picker-group" data-group-key={group.key} className="mb-3 last:mb-0">
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">{group.title}</p>
+          {group.key === 'advanced' && !canUseAdvanced ? (
+            <AdvancedLockedSummary types={group.types} />
+          ) : (
+            // 2 columns below md is exactly what this grid did at 32rem, so the
+            // narrow end is unchanged; the extra columns only appear once the
+            // dialog has actually widened. See the width note on Dialog.Content.
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
+              {group.types.map((type) => (
+                <TypeButton key={type} type={type} state={typeState(type, canUseAdvanced)} onPick={onPick} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {groups.length === 0 && (
+        <p data-testid="picker-empty" className="rounded-9e-md border border-[var(--surface-border)] px-3 py-6 text-center text-[12px] text-9e-slate-dp-50">
+          ไม่พบชนิด section ที่ตรงกับคำค้นหา
+        </p>
+      )}
+    </>
+  );
+}
+
 export function SectionPicker({ open, onClose, onPick }) {
   const { tier } = useEditor();
   const canUseAdvanced = Boolean(tier?.canUseAdvanced);
 
+  const [query, setQuery] = useState('');
+  const [activeGroup, setActiveGroup] = useState(ALL_GROUP);
+
+  // Reopening the picker starts from everything visible. The dialog's contents
+  // unmount on close but this component does not, so without the reset the next
+  // open would come back mid-search — with the type the author now wants
+  // filtered out and no obvious reason why.
+  const reset = () => { setQuery(''); setActiveGroup(ALL_GROUP); };
+
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(32rem,calc(100vw-2rem))]',
+            // ── 52rem, and this is a NEW SHAPE for this directory's dialogs ──
+            // Every other dialog here is 30-34rem, a single-column popover: a
+            // confirm, a form, a status list. This one is a 27-item catalogue
+            // with a search box and a pill row above it, and a 3-4 column grid
+            // is the whole point of the redesign — at 32rem four columns are
+            // ~110px each and the Thai labels wrap to three lines.
+            //
+            // 52rem = 832px; less the p-4 gutters and the gap-2 tracks, four
+            // cards land at ~194px and three at ~256px, both comfortably wider
+            // than the longest label ('ฝังเนื้อหา (embed)'). It is deliberately
+            // not MORE: past ~56rem a row of four starts reading as a lot of
+            // empty card rather than as a denser catalogue.
+            //
+            // The `calc(100vw-2rem)` floor is the directory's, unchanged — the
+            // same one every dialog here uses — so on a phone this is still a
+            // full-bleed sheet with a 1rem margin, and the grid is back to the
+            // 2 columns it has always had below md.
+            'fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]',
             '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
             'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
             'max-h-[calc(100dvh-4rem)] overflow-y-auto'
@@ -143,16 +423,14 @@ export function SectionPicker({ open, onClose, onPick }) {
           </div>
           <Dialog.Description className="sr-only">เลือกชนิดของ section ที่ต้องการเพิ่ม</Dialog.Description>
 
-          {GROUPS.map((group) => (
-            <div key={group.title} className="mb-3 last:mb-0">
-              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-9e-slate-dp-50">{group.title}</p>
-              <div className="grid grid-cols-2 gap-2">
-                {group.types.map((type) => (
-                  <TypeButton key={type} type={type} state={typeState(type, canUseAdvanced)} onPick={onPick} />
-                ))}
-              </div>
-            </div>
-          ))}
+          <SectionPickerBody
+            query={query}
+            activeGroup={activeGroup}
+            canUseAdvanced={canUseAdvanced}
+            onQueryChange={setQuery}
+            onGroupChange={setActiveGroup}
+            onPick={onPick}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

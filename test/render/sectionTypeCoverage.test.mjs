@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { JSDOM } from 'jsdom';
 import { RENDERABLE_SECTION_TYPES } from '@/components/pageBuilder/SectionRenderer';
 import {
   ALL_SECTION_TYPES,
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
 } from '@/lib/schemas/pageBuilder';
+import { isAdvancedType } from '@/lib/pages/tierSanitize';
+import { SectionPickerBody } from '@/components/pageBuilder/editor/SectionPicker';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -156,4 +161,138 @@ test('the comment at typeState names THIS file, and CONTROL: that comment is inv
     'PRECONDITION BROKEN: the sentinel survives into the code view, so comments are no '
     + 'longer being stripped. Every source guard in this file that reads `.code` is now '
     + 'matchable by prose.');
+});
+
+// ── ONLY 'add' REACHES onPick — now as BEHAVIOUR, not only as shape ─────────
+//
+// EXTENDED HERE rather than started as a parallel file, because this is the
+// same invariant the rest of this file is about: `typeState` decides, and only
+// its 'add' verdict may be clickable. Everything above states that claim
+// against the SOURCE, which was the only tier available while the picker's
+// contents lived inside a Radix `Dialog.Portal` (portals render nothing under
+// renderToStaticMarkup — rounds 5/6).
+//
+// The round-9 redesign split those contents out as `SectionPickerBody`, which
+// is portal-free, so the claim can now be made against a computed DOM. That
+// matters specifically BECAUSE of that redesign: search, group pills and the
+// Advanced collapse all decide what is DRAWN, and the failure this guards is a
+// presentation layer that lets something through while re-arranging the list.
+// A source scan cannot see that; face three of defect 7 (sourceScan.mjs) is
+// exactly the shape it would take — `disabled` still appearing in the file
+// while the button it guards has moved.
+
+const pickerDoc = (canUseAdvanced) => new JSDOM(`<!doctype html><body>${
+  renderToStaticMarkup(createElement(SectionPickerBody, {
+    query: '', activeGroup: 'all', canUseAdvanced,
+    onQueryChange: () => {}, onGroupChange: () => {}, onPick: () => {},
+  }))
+}</body>`).window.document;
+
+/** The types the picker left CLICKABLE, as an exact sorted set. */
+const clickable = (doc) =>
+  [...doc.querySelectorAll('[data-testid="picker-type"]')]
+    .filter((b) => !b.hasAttribute('disabled'))
+    .map((b) => b.getAttribute('data-type'))
+    .sort();
+
+/**
+ * What `typeState` decides, restated from its two inputs — the renderer
+ * registry and the tier — WITHOUT importing it (it is module-private, and
+ * exporting it to be tested would be a change to the thing under test).
+ *
+ * This is a second reader of one rule and says so. It is not a copy of the
+ * implementation's SHAPE, though: it is the rule in its plainest form, and the
+ * assertions below compare it to the rendered DOM. If the two ever disagree,
+ * one of them is wrong and that is the finding.
+ */
+const shouldBeClickable = (type, canUseAdvanced) =>
+  RENDERABLE_SECTION_TYPES.includes(type) && (!isAdvancedType(type) || canUseAdvanced);
+
+test('a developer’s picker leaves clickable EXACTLY the types typeState computes as "add"', () => {
+  const doc = pickerDoc(true);
+  assert.deepEqual(
+    clickable(doc),
+    ALL_SECTION_TYPES.filter((t) => shouldBeClickable(t, true)).sort(),
+    'the picker’s clickable set has drifted from the renderable-and-permitted set',
+  );
+});
+
+test('a non-developer’s picker leaves NO advanced type clickable, and the rest unchanged', () => {
+  const doc = pickerDoc(false);
+  assert.deepEqual(
+    clickable(doc),
+    ALL_SECTION_TYPES.filter((t) => shouldBeClickable(t, false)).sort(),
+  );
+  // Stated separately in the terms of the gate itself, because the deepEqual
+  // above would also pass if BOTH sides had lost the tier rule together.
+  for (const type of ADVANCED_TYPES) {
+    assert.equal(clickable(doc).includes(type), false,
+      `${type} is clickable for a non-developer — the picker half of the developer gate is open`);
+  }
+});
+
+test('CONTROL: the two tiers really do differ, so neither assertion above is vacuous', () => {
+  // If the picker had stopped drawing buttons entirely, or stopped reading
+  // canUseAdvanced, both tests above would compare two identical lists and pass.
+  const dev = clickable(pickerDoc(true));
+  const nonDev = clickable(pickerDoc(false));
+  assert.ok(dev.length > 0 && nonDev.length > 0, 'a tier drew nothing clickable at all');
+  assert.notDeepEqual(dev, nonDev);
+  assert.deepEqual(dev.filter((t) => !nonDev.includes(t)).sort(), [...ADVANCED_TYPES].sort(),
+    'the difference between the tiers is something other than exactly the advanced types');
+});
+
+test('no button reaches onPick without the guard: disabled is bound to state !== "add"', () => {
+  const code = readSource('src/components/pageBuilder/editor/SectionPicker.jsx').code;
+  assert.match(code, /const disabled = state !== 'add';/,
+    'TypeButton no longer derives `disabled` from the computed state. Whatever it derives '
+    + 'it from now, it is not typeState’s verdict.');
+  assert.match(code, /onClick=\{disabled \? undefined : \(\) => onPick\(type\)\}/,
+    'the click handler is no longer withheld from a disabled button. `disabled` on a '
+    + '<button> is the browser’s guard; this is the second one, and both are wanted — a '
+    + 'restyle that turns the card into a <div> loses the first without warning.');
+});
+
+test('CONTROL: those two probes REJECT an unguarded button', () => {
+  // Discrimination, not existence: the guarded and unguarded shapes go through
+  // the identical probes and must come out opposite.
+  const UNGUARDED = "const disabled = false;\n  onClick={() => onPick(type)}";
+  assert.doesNotMatch(UNGUARDED, /const disabled = state !== 'add';/);
+  assert.doesNotMatch(UNGUARDED, /onClick=\{disabled \? undefined : \(\) => onPick\(type\)\}/);
+});
+
+test('the round-9 presentation layer cannot enable anything: filtering never widens the set', () => {
+  /**
+   * The redesign's own risk, named. Search and the group pills SUBTRACT from
+   * what is drawn; the Advanced collapse REMOVES four buttons for a
+   * non-developer. None of the three may add a clickable type that the
+   * unfiltered view did not already have.
+   *
+   * Asserted as a subset relation at several filter values, against the
+   * unfiltered set — the one comparison that stays true whatever the filters
+   * are later changed to do.
+   */
+  const unfiltered = new Set(clickable(pickerDoc(true)));
+  const at = (props) => new JSDOM(`<!doctype html><body>${
+    renderToStaticMarkup(createElement(SectionPickerBody, {
+      query: '', activeGroup: 'all', canUseAdvanced: true,
+      onQueryChange: () => {}, onGroupChange: () => {}, onPick: () => {}, ...props,
+    }))
+  }</body>`).window.document;
+
+  const cases = [
+    { query: 'การ์ด' }, { query: 'html' }, { query: 'zzzz' },
+    { activeGroup: 'advanced' }, { activeGroup: 'card' },
+    { activeGroup: 'advanced', canUseAdvanced: false },
+    { query: 'การ์ด', activeGroup: 'dynamic' },
+  ];
+  for (const props of cases) {
+    for (const type of clickable(at(props))) {
+      assert.ok(unfiltered.has(type),
+        `${type} became clickable under ${JSON.stringify(props)} but is not clickable unfiltered`);
+    }
+  }
+  // CONTROL: at least one of those cases drew something, so the loop is not
+  // passing by iterating over nothing.
+  assert.ok(clickable(at({ activeGroup: 'card' })).length > 0);
 });
