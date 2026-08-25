@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useRef, useState } from 'react';
-import Link from 'next/link';
-import { ExternalLink, Settings, Check, Lock } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { CookieMascot } from './CookieMascot';
+import { useRef, useState } from "react";
+import Link from "next/link";
+import { ExternalLink, Settings, Check, Lock } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { CookieMascot } from "./CookieMascot";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -62,9 +62,9 @@ import { CookieMascot } from './CookieMascot';
  * halfway.
  */
 export const OPTIONAL_CATEGORIES = [
-  { key: 'analytics',  label: 'คุกกี้วิเคราะห์' },
-  { key: 'functional', label: 'คุกกี้ด้านฟังก์ชัน' },
-  { key: 'marketing',  label: 'คุกกี้การตลาด' },
+  { key: "analytics", label: "คุกกี้วิเคราะห์" },
+  { key: "functional", label: "คุกกี้ด้านฟังก์ชัน" },
+  { key: "marketing", label: "คุกกี้การตลาด" },
 ];
 
 /**
@@ -101,15 +101,15 @@ export function toggleCategory(state, key) {
 
 /** Shared pill chrome — Figma: white / 1px #cbd5e1 / r20 / 12×8 / gap 8. */
 const PILL_CLASS = cn(
-  'flex items-center gap-2 rounded-[20px] border px-3 py-2',
-  'border-9e-slate-lt-300 bg-[var(--surface-raised)] dark:border-9e-border',
-  'text-xs font-medium text-[var(--text-secondary)] whitespace-nowrap',
+  "flex items-center gap-2 rounded-[20px] border px-3 py-2",
+  "border-9e-slate-lt-300 bg-[var(--surface-raised)] dark:border-9e-border",
+  "text-xs font-medium text-[var(--text-secondary)] whitespace-nowrap",
 );
 
 /** Shared button chrome — Figma: r8 / 16×10 (20×10 on the filled one) / 13px. */
 const BUTTON_CLASS = cn(
-  'rounded-lg px-4 py-2.5 text-[13px] font-semibold',
-  'transition-colors duration-9e-micro ease-9e',
+  "rounded-lg px-4 py-2.5 text-[13px] font-semibold",
+  "transition-colors duration-9e-micro ease-9e",
 );
 
 /**
@@ -169,7 +169,7 @@ export function CookieBanner({ className, notice = null, onDecision }) {
    */
   const focusToggles = () => {
     firstToggleRef.current?.focus();
-    firstToggleRef.current?.scrollIntoView({ block: 'nearest' });
+    firstToggleRef.current?.scrollIntoView({ block: "nearest" });
   };
 
   return (
@@ -180,10 +180,10 @@ export function CookieBanner({ className, notice = null, onDecision }) {
         // are tightened: on a 375px phone the full-size card stood 536px tall
         // — two thirds of the viewport — which is both bad on its own terms and
         // the direct cause of how far FloatingActionDock has to lift over it.
-        'flex w-full flex-col items-start rounded-[16px]',
-        'gap-3 p-4 sm:gap-5 sm:p-6',
-        'bg-[var(--surface-raised)]',
-        'drop-shadow-[0px_12px_12px_rgba(15,23,42,0.15)]',
+        "flex w-full flex-col items-start rounded-[16px]",
+        "gap-3 p-4 sm:gap-5 sm:p-6",
+        "bg-[var(--surface-raised)]",
+        "drop-shadow-[0px_12px_12px_rgba(15,23,42,0.15)]",
         className,
       )}
     >
@@ -200,17 +200,33 @@ export function CookieBanner({ className, notice = null, onDecision }) {
 
         {/* min-w-px is the Figma's own guard: without it the flex child refuses
             to shrink below its longest unbreakable Thai run and overflows. */}
+
         <div className="flex min-w-px flex-1 flex-col gap-2">
-          <div className="flex items-baseline gap-2 whitespace-nowrap">
-            <h2
-              id="cookie-banner-title"
-              className="text-[18px] font-bold text-[var(--text-primary)]"
+          <div className="flex flex-row justify-between">
+            <div className="flex items-baseline gap-2 whitespace-nowrap">
+              <h2
+                id="cookie-banner-title"
+                className="text-[18px] font-bold text-[var(--text-primary)]"
+              >
+                เราใช้คุกกี้
+              </h2>
+              <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                Cookie Settings
+              </span>
+            </div>
+            <Link
+              href="/cookie-policy"
+              className={cn(
+                "flex shrink-0 items-center gap-1.5 text-xs font-semibold",
+                "text-9e-action hover:underline dark:text-9e-air",
+              )}
             >
-              เราใช้คุกกี้
-            </h2>
-            <span className="text-xs font-semibold text-[var(--text-secondary)]">
-              Cookie Settings
-            </span>
+              <ExternalLink
+                className="h-3.5 w-3.5 shrink-0"
+                aria-hidden="true"
+              />
+              อ่านนโยบายการใช้คุกกี้
+            </Link>
           </div>
 
           <p className="text-xs leading-[1.5] text-[var(--text-secondary)]">
@@ -263,7 +279,7 @@ export function CookieBanner({ className, notice = null, onDecision }) {
           because a button is the honest element for an in-page action; the link
           slot keeps only the link that has a real destination.
         */}
-        <Link
+        {/* <Link
           href="/cookie-policy"
           className={cn(
             'flex shrink-0 items-center gap-1.5 text-xs font-semibold',
@@ -272,7 +288,7 @@ export function CookieBanner({ className, notice = null, onDecision }) {
         >
           <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           อ่านนโยบายการใช้คุกกี้
-        </Link>
+        </Link> */}
 
         {/* The four category toggles, wrapping as one unit. */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -285,7 +301,7 @@ export function CookieBanner({ className, notice = null, onDecision }) {
             the tab order — correct here, since there is nothing to operate, and
             the sr-only sentence plus the visible Lock icon carry the "why".
           */}
-          <label className={cn(PILL_CLASS, 'cursor-not-allowed')}>
+          <label className={cn(PILL_CLASS, "cursor-not-allowed")}>
             <input
               type="checkbox"
               role="switch"
@@ -299,10 +315,10 @@ export function CookieBanner({ className, notice = null, onDecision }) {
             <span
               aria-hidden="true"
               className={cn(
-                'relative h-4 w-7 shrink-0 rounded-full',
-                'bg-9e-action dark:bg-9e-air',
-                'after:absolute after:right-0.5 after:top-0.5 after:h-3 after:w-3',
-                'after:rounded-full after:bg-white dark:after:bg-9e-navy',
+                "relative h-4 w-7 shrink-0 rounded-full",
+                "bg-9e-action dark:bg-9e-air",
+                "after:absolute after:right-0.5 after:top-0.5 after:h-3 after:w-3",
+                "after:rounded-full after:bg-white dark:after:bg-9e-navy",
               )}
             />
             <span>คุกกี้ที่จำเป็น</span>
@@ -318,7 +334,7 @@ export function CookieBanner({ className, notice = null, onDecision }) {
               (focusable, space-toggleable, correctly announced) rather than a div
               wearing a switch costume. */}
           {OPTIONAL_CATEGORIES.map(({ key, label }, index) => (
-            <label key={key} className={cn(PILL_CLASS, 'cursor-pointer')}>
+            <label key={key} className={cn(PILL_CLASS, "cursor-pointer")}>
               <input
                 ref={index === 0 ? firstToggleRef : undefined}
                 type="checkbox"
@@ -329,22 +345,22 @@ export function CookieBanner({ className, notice = null, onDecision }) {
               <span
                 aria-hidden="true"
                 className={cn(
-                  'flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border',
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-lg border",
                   // OFF state — not in the Figma, which only supplies the ON
                   // state. Hollow box on the same border token as the pill.
-                  'border-9e-slate-lt-300 bg-transparent dark:border-9e-border',
+                  "border-9e-slate-lt-300 bg-transparent dark:border-9e-border",
                   // ON state — Figma's filled green box with a check.
-                  'peer-checked:border-9e-green-50 peer-checked:bg-9e-green-50',
+                  "peer-checked:border-9e-green-50 peer-checked:bg-9e-green-50",
                   // The tick is a DESCENDANT of this span, not a sibling of the
                   // input, so a bare `peer-checked:opacity-100` on the <Check>
                   // itself would compile to `.peer:checked ~ .opacity-100` and
                   // never match. Reveal it from here, where the peer relationship
                   // actually holds, and reach down with an arbitrary variant.
-                  'peer-checked:[&>svg]:opacity-100',
+                  "peer-checked:[&>svg]:opacity-100",
                   // Focus ring rides the box, since the input is sr-only.
-                  'peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand',
-                  'peer-focus-visible:ring-offset-2',
-                  'peer-focus-visible:ring-offset-[var(--surface-raised)]',
+                  "peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand",
+                  "peer-focus-visible:ring-offset-2",
+                  "peer-focus-visible:ring-offset-[var(--surface-raised)]",
                 )}
               >
                 {/*
@@ -366,30 +382,30 @@ export function CookieBanner({ className, notice = null, onDecision }) {
         </div>
 
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-          <button
+          {/* <button
             type="button"
             onClick={focusToggles}
             className={cn(
               BUTTON_CLASS,
-              'flex items-center gap-1.5 border',
-              'border-9e-slate-lt-300 bg-[var(--surface-raised)]',
-              'text-[var(--text-secondary)] dark:border-9e-border',
-              'hover:bg-[var(--surface-hover)]',
+              "flex items-center gap-1.5 border",
+              "border-9e-slate-lt-300 bg-[var(--surface-raised)]",
+              "text-[var(--text-secondary)] dark:border-9e-border",
+              "hover:bg-[var(--surface-hover)]",
             )}
           >
             <Settings className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             จัดการการตั้งค่า
-          </button>
+          </button> */}
 
           <button
             type="button"
             onClick={() => decide(false)}
             className={cn(
               BUTTON_CLASS,
-              'border border-9e-action bg-[var(--surface-raised)] text-9e-action',
-              'hover:bg-9e-action hover:text-white',
-              'dark:border-9e-air dark:text-9e-air',
-              'dark:hover:bg-9e-air dark:hover:text-9e-navy',
+              "border border-9e-action bg-[var(--surface-raised)] text-9e-action",
+              "hover:bg-9e-action hover:text-white",
+              "dark:border-9e-air dark:text-9e-air",
+              "dark:hover:bg-9e-air dark:hover:text-9e-navy",
             )}
           >
             ปฏิเสธคุกกี้ที่ไม่จำเป็น
@@ -400,8 +416,8 @@ export function CookieBanner({ className, notice = null, onDecision }) {
             onClick={() => decide(true)}
             className={cn(
               BUTTON_CLASS,
-              'px-5 bg-9e-action text-white hover:bg-9e-action-scale-100',
-              'dark:bg-9e-air dark:text-9e-navy dark:hover:bg-9e-air-scale-100',
+              "px-5 bg-9e-action text-white hover:bg-9e-action-scale-100",
+              "dark:bg-9e-air dark:text-9e-navy dark:hover:bg-9e-air-scale-100",
             )}
           >
             ยอมรับทั้งหมด
