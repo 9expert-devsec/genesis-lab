@@ -68,8 +68,41 @@ globalThis.__twRequire = createRequire(import.meta.url);
  * strictly more precise. The escape table is Tailwind's own for the characters
  * these classes actually contain.
  */
+/**
+ * ── THE COMMA IS NOT BACKSLASH-ESCAPED, AND THAT COST A WRONG DIAGNOSIS ─────
+ *
+ * Every other character here Tailwind escapes as `\<char>`. The comma it does
+ * NOT: it emits a CSS unicode escape, `\2c ` — backslash, hex, and a SIGNIFICANT
+ * TRAILING SPACE that terminates the hex run. So
+ *
+ *     w-[min(52rem,calc(100vw-2rem))]
+ *
+ * is written by Tailwind as
+ *
+ *     .w-\[min\(52rem\2c calc\(100vw-2rem\)\)\]
+ *
+ * and a lookup that escaped the comma as `\,` — or left it bare, as this
+ * function did — finds nothing and reports the class as producing NO RULE.
+ *
+ * THAT IS THE FAILURE MODE THIS FILE'S HEADER IS ABOUT, in a seventh costume:
+ * a working utility reported as dead. It is worse than the `space-y-*` case
+ * that shaped the tail check, because the answer it returns — an empty
+ * declaration list — is the same answer a genuinely dead class returns, and
+ * "this class compiles to nothing" is a conclusion a reader acts on.
+ *
+ * Found in round 10: the picker's width class was diagnosed as the cause of a
+ * layout defect on the strength of this function returning nothing for it. The
+ * class compiles perfectly; the served stylesheet had the rule all along. No
+ * test in the suite passed a comma-bearing class, so nothing was green that
+ * should have been red — the defect was latent, and it was an INVESTIGATION
+ * that it broke, not an assertion.
+ */
 export function escapeClass(className) {
-  return className.replace(/[:[\]()./%#]/g, (c) => `\\${c}`);
+  return className
+    .replace(/[:[\]()./%#]/g, (c) => `\\${c}`)
+    // Must run AFTER the backslash pass above, or that pass would escape the
+    // backslash this one introduces.
+    .replace(/,/g, '\\2c ');
 }
 
 export function declarationsFor(css, className) {

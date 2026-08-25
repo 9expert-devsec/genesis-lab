@@ -412,7 +412,57 @@ export function SectionPicker({ open, onClose, onPick }) {
             'fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]',
             '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
             'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
+            // ── WHY scrollbar-gutter, AND WHAT IT IS NOT FIXING ─────────────
+            // Round 10's reported defect: the picker "shrinks" when a filter
+            // narrows the list. MEASURED in headless Chrome at 1400x600, both
+            // filter states:
+            //
+            //   outer width   832px   832px    ← the box NEVER moved
+            //   clientWidth   815px   830px    ← the content did, by 15px
+            //   grid columns  189.75  193.50
+            //
+            // So `w-[min(52rem,…)]` above was never the problem and is
+            // unchanged — it compiles (Tailwind escapes the comma as `\2c `)
+            // and it holds. `grid-cols-*` was not the problem either: those are
+            // literal `repeat(n, minmax(0,1fr))` templates, which reserve every
+            // track even with fewer items to place, so four cards and one card
+            // sit on identically-wide columns.
+            //
+            // What moved was the SCROLLBAR. 27 types overflow
+            // `max-h-[calc(100dvh-4rem)]`, so `overflow-y-auto` puts a classic
+            // scrollbar INSIDE the border box and 15px of content width
+            // disappears; filter down to 5 and the scrollbar goes with it. The
+            // card edges hold still while everything between them breathes —
+            // which in a screenshot comparison reads exactly as "the dialog got
+            // wider", because the part you look at did.
+            //
+            // `stable` reserves the gutter whether or not it is occupied, so
+            // the content column is the same width in every filter state. It is
+            // an arbitrary PROPERTY (Tailwind 3.4 ships no scrollbar-gutter
+            // utility); it compiles, and pre-Chrome-94 / pre-Safari-18.2 simply
+            // ignore it and get today's behaviour, never worse.
+            // ── min-h: AN ADDITION BEYOND THE WIDTH DEFECT, STATED AS ONE ───
+            // Not part of the reported bug. Width was the complaint; height is
+            // the other half of "the dialog changes size when I filter", and it
+            // moved far more — MEASURED 703px for 27 types, 243px for 5, 185px
+            // for a single search hit. At 832px wide, 185px tall is a 4.5:1
+            // strip: legible, because the search row and pills still span the
+            // full width, but it reads as a different component rather than the
+            // same one with less in it.
+            //
+            // 18rem (288px) is the floor at which the three short states — one
+            // hit, no hits, and a 5-type group — all come out the SAME height,
+            // so filtering between them no longer makes the card jump. It is a
+            // floor and not a fixed height on purpose: the full 27-type view
+            // still grows past it to its natural 703px.
+            //
+            // EDGE, named rather than left to be discovered: min-height beats
+            // max-height in CSS, so on a viewport shorter than ~352px this wins
+            // over `max-h` and the dialog slightly exceeds the intended inset.
+            // That is landscape-phone territory and the overflow is a few px;
+            // the alternative (a min that itself clamps to the viewport) buys
+            // nothing at a size where the dialog is unusable regardless.
+            'max-h-[calc(100dvh-4rem)] min-h-[18rem] overflow-y-auto [scrollbar-gutter:stable]'
           )}
         >
           <div className="mb-3 flex items-center justify-between">
