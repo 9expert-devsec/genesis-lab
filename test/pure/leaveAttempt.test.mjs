@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  beginAttempt, attemptView, escalate, rankOf, REASON_RANK,
+  beginAttempt, attemptView, escalate, rankOf, REASON_RANK, shouldAutoComplete,
 } from '@/components/pageBuilder/editor/useLeaveGuard';
 import { leaveBlockReason } from '@/lib/pageBuilder/leaveGuard';
+import { editorReducer, initialEditorState } from '@/components/pageBuilder/editor/editorReducer';
 
 /**
  * The leave dialog's copy is decided ONCE, when the attempt opens.
@@ -26,6 +27,13 @@ import { leaveBlockReason } from '@/lib/pageBuilder/leaveGuard';
  * header already states; test/fs/leaveConfirmFreeze pins the wiring.
  */
 
+/** A minimal stored page, for the cases that need a real reducer state. */
+const LIVE = {
+  slug: 'live-slug', title: 'Live', pageType: 'general', status: 'published',
+  theme: 'default', showHeader: true, showFooter: true, showStickyCta: false,
+  publishStartDate: null, publishEndDate: null, promotionId: '', promotionOrder: 0,
+  promotionCover: '', sections: [], seo: {}, jsonLd: {}, slugHistory: [],
+};
 // ── the freeze holds across a whole sequence of live-state changes ──────────
 
 test('the shown reason is frozen at open and does not move while the attempt lives', () => {
@@ -201,4 +209,167 @@ test('CONTROL: the floor is what stops dirty -> saving being followed', () => {
     escalate(beginAttempt('back', 'dirty'), 'saving').reason, 'dirty',
     'a strictly-higher rank was promoted despite not clearing the floor'
   );
+});
+
+// ══ ROUND 8: the departure finishes itself once nothing is left to lose ═════
+
+/**
+ * A stand-in for the hook's render loop.
+ *
+ * The effect under test is `if (shouldAutoComplete({pending, blocked})) confirmLeave()`
+ * with deps [pending, blocked, confirmLeave]. This runs that exact rule over a
+ * sequence of committed states and counts what it calls — the closest a suite
+ * that mounts no React roots can get to the real thing, and the same technique
+ * rounds 6 and 7 used for the freeze and the publish bracket.
+ *
+ * `confirmLeave` here does what the real one does, in the same order: read and
+ * null departRef, clear the attempt, then depart. That ordering is why no
+ * one-shot ref is needed, and this harness would expose it if it changed.
+ */
+function editorSession(openWith) {
+  const calls = { confirmLeave: 0, departed: 0 };
+  let attempt = openWith ? beginAttempt('back', openWith) : null;
+  let departRef = openWith ? () => { calls.departed += 1; } : null;
+
+  const confirmLeave = () => {
+    calls.confirmLeave += 1;
+    const depart = departRef;
+    departRef = null;
+    attempt = null;
+    depart?.();
+  };
+
+  // One committed render: escalate as round 7 does, then run the effect.
+  const commit = (liveReason, blocked) => {
+    attempt = escalate(attempt, liveReason);
+    const { pending } = attemptView(attempt, liveReason);
+    if (shouldAutoComplete({ pending, blocked })) confirmLeave();
+    return attemptView(attempt, liveReason).pending;
+  };
+
+  return { commit, calls, confirmLeave, peek: () => attempt };
+}
+
+test('the predicate fires only with an attempt open AND nothing blocking', () => {
+  assert.equal(shouldAutoComplete({ pending: 'back', blocked: false }), true);
+  assert.equal(shouldAutoComplete({ pending: 'link', blocked: false }), true);
+  assert.equal(shouldAutoComplete({ pending: 'back', blocked: true }), false, 'it fired while still blocked');
+  assert.equal(shouldAutoComplete({ pending: null, blocked: false }), false, 'it fired with no attempt open');
+  assert.equal(shouldAutoComplete({ pending: null, blocked: true }), false);
+  assert.equal(shouldAutoComplete({}), false);
+});
+
+test('an autosave landing under an open dialog completes the departure itself', () => {
+  // Back pressed while dirty; the in-flight autosave then lands and the tree
+  // goes clean. Nothing is left to lose, so the original Back gesture finishes
+  // without a second click on a warning that has stopped being true.
+  const s = editorSession('dirty');
+  assert.equal(s.commit('dirty', true), 'back', 'precondition: the dialog is open and blocking');
+  assert.equal(s.calls.departed, 0, 'it departed while still blocked');
+
+  const pendingAfter = s.commit(null, false);   // the save landed
+  assert.equal(s.calls.departed, 1, 'the departure did not complete on its own');
+  assert.equal(pendingAfter, null, 'pending did not reset after the auto-complete');
+});
+
+test('the publish sequence completes the departure only after the PROMOTE lands', () => {
+  // Round 7's fix is what makes this safe, so it is driven here as the real
+  // sequence rather than as a single clean transition: the flush lands (which
+  // by itself clears dirty and `saving`), the promote is still in flight —
+  // `blocked` stays true because `publishing` holds it — and only when the
+  // promote resolves does the departure complete.
+  const s = editorSession('saving');
+  const seen = [];
+  seen.push(['back-pressed', s.commit('saving', true), s.calls.departed]);
+  seen.push(['flush-landed', s.commit('saving', true), s.calls.departed]);   // publishing holds blocked
+  seen.push(['promote-landed', s.commit(null, false), s.calls.departed]);
+
+  assert.deepEqual(seen, [
+    ['back-pressed', 'back', 0],
+    ['flush-landed', 'back', 0],
+    ['promote-landed', null, 1],
+  ], 'the departure completed at the wrong point in the publish sequence');
+});
+
+test('CONTROL: without round 7 the departure would fire mid-publish', () => {
+  // The same sequence with `blocked` false at flush-landed — which is exactly
+  // what it read before round 7's publishing bracket. This is the hazard that
+  // deferred this feature, expressed as a measurement rather than a claim.
+  const s = editorSession('saving');
+  s.commit('saving', true);
+  s.commit(null, false);                        // pre-round-7: idle mid-publish
+  assert.equal(
+    s.calls.departed, 1,
+    'the harness cannot even express the pre-round-7 hazard, so the case above proves nothing'
+  );
+});
+
+test('a CONFLICTED session never auto-departs, however long it runs', () => {
+  // `blocked` cannot fall for a conflicted session — SAVE_CONFLICT sets it and
+  // nothing in the reducer clears it — so the effect never becomes true. Driven
+  // for many commits, including live reasons that would clear any other session.
+  const s = editorSession('dirty');
+  s.commit('dirty', true);
+  s.commit('conflict', true);                   // escalates; round 7's floor holds it
+  assert.equal(attemptView(s.peek(), 'conflict').reason, 'conflict', 'precondition: escalated to conflict');
+
+  for (let i = 0; i < 25; i += 1) s.commit('conflict', true);
+  assert.equal(s.calls.departed, 0, 'a conflicted session auto-departed');
+  assert.equal(s.calls.confirmLeave, 0, 'a conflicted session reached confirmLeave');
+  assert.equal(attemptView(s.peek(), 'conflict').pending, 'back', 'the dialog closed itself');
+});
+
+test('conflict is terminal in the reducer — the premise the case above rests on', () => {
+  // Asserted against the real reducer rather than taken on trust: nothing
+  // clears `conflict`, so `blocked` can never fall once it is set.
+  let state = initialEditorState({ page: LIVE, pageId: 'p1', updatedAt: 'T0' });
+  state = editorReducer(state, { type: 'SAVE_CONFLICT', message: 'moved' });
+  assert.deepEqual(state.conflict, { message: 'moved' });
+
+  const everythingElse = [
+    { type: 'SAVE_START' },
+    { type: 'SAVE_OK', domains: ['content', 'identity'], updatedAt: 'T9', at: 0 },
+    { type: 'SAVE_ERROR', error: 'x' },
+    { type: 'PUBLISH_START' },
+    { type: 'PUBLISH_END' },
+    { type: 'DRAFT_DISCARDED' },
+    { type: 'PATCH_PAGE', patch: { title: 'Typed' } },
+    { type: 'SELECT', path: null },
+  ];
+  for (const action of everythingElse) {
+    state = editorReducer(state, action);
+    assert.deepEqual(state.conflict, { message: 'moved' }, `${action.type} cleared the conflict`);
+  }
+});
+
+test('the auto path and the manual button are the SAME function, called once', () => {
+  // Not two implementations that agree today. The harness counts confirmLeave
+  // itself, and the auto-complete raises it exactly once across the whole
+  // sequence — the same single function a click would have invoked.
+  const s = editorSession('dirty');
+  s.commit('dirty', true);
+  s.commit(null, false);
+  assert.equal(s.calls.confirmLeave, 1, 'the auto path did not go through confirmLeave, or went through it twice');
+  assert.equal(s.calls.departed, 1, 'confirmLeave was called without departing');
+});
+
+test('it fires at most once per attempt, with no one-shot ref', () => {
+  // confirmLeave nulls departRef and clears the attempt, so the next commit
+  // sees pending null and the predicate is false. Many further commits with
+  // nothing blocking must add nothing.
+  const s = editorSession('dirty');
+  s.commit('dirty', true);
+  s.commit(null, false);
+  for (let i = 0; i < 20; i += 1) s.commit(null, false);
+  assert.equal(s.calls.departed, 1, 'the departure fired more than once');
+  assert.equal(s.calls.confirmLeave, 1, 'confirmLeave was re-entered');
+});
+
+test('CONTROL: an attempt that never opened departs nothing', () => {
+  // Without this, "fires once" would pass for a harness whose departure never
+  // fires at all.
+  const s = editorSession(null);
+  for (let i = 0; i < 5; i += 1) s.commit(null, false);
+  assert.equal(s.calls.confirmLeave, 0);
+  assert.equal(s.calls.departed, 0);
 });

@@ -131,25 +131,83 @@ test('the DESCRIPTION strings are untouched — only the button overclaimed', ()
   assert.ok(code.includes('การแก้ไขนี้ชนกับการแก้ไขของคนอื่น ระบบจึงหยุดบันทึกอัตโนมัติไปแล้ว — งานที่ค้างอยู่มีอยู่แค่ในแท็บนี้เท่านั้น ออกไปแล้วจะหายทั้งหมด'));
 });
 
-// ── the auto-complete that is deliberately absent ──────────────────────────
+// ── departure: TWO entry points, ONE implementation ────────────────────────
 
-test('the hook does NOT auto-complete when the block clears, and says why', () => {
-  // Specified, and not built: publish() clears `saving` between its flush and
-  // its promote, so `blocked` is false while a write is still in flight. An
-  // auto-complete would navigate away mid-publish, and nothing in the save path
-  // is wired to an AbortController. Guarded so the reasoning is not lost.
-  const { code, raw } = readSource(GUARD);
-  // The precise claim: a departure is completed from EXACTLY ONE place, the
-  // explicit confirmLeave. An auto-complete would be a second invocation site.
-  // (An earlier probe here searched for an effect mentioning `!blocked`, which
-  // matched the two legitimate early-returns the exit listeners already have —
-  // a probe that reports a defect that is not there is its own bug.)
+test('a departure has exactly two entry points and exactly one implementation', () => {
+  // Round 6 asserted ONE entry point, because auto-complete did not exist yet.
+  // Round 8 adds the second — and note what did NOT change: `depart?.()` is
+  // still called from exactly one place, because the effect goes through
+  // confirmLeave rather than reimplementing it. The count that would have moved
+  // if departure had been duplicated is the count that stayed put.
+  const { code } = readSource(GUARD);
+
+  // THE IMPLEMENTATION — one, inside confirmLeave.
   const departures = code.match(/depart\?\.\(\)/g) ?? [];
-  assert.equal(departures.length, 1, 'a departure is completed from more than one place');
+  assert.equal(departures.length, 1, 'a departure is COMPLETED from more than one place');
   assert.match(
     code, /const confirmLeave = useCallback\(\(\) => \{[\s\S]{0,300}?depart\?\.\(\);/,
     'the one departure site is not confirmLeave'
   );
-  assert.match(raw, /WHY THE DIALOG DOES NOT AUTO-COMPLETE/, 'the rationale is undocumented');
-  assert.match(raw, /AbortController/, 'the missing-cancellation half of the reasoning is undocumented');
+
+  // THE ENTRY POINTS — exactly two, named:
+  //   1. manual — confirmLeave handed to EditorShell, which binds it to the
+  //      dialog's confirm button;
+  //   2. auto   — the block-clear effect in this file.
+  // Anything else invoking confirmLeave, here or by a second returned alias, is
+  // a third entry point and fails this.
+  const invocations = code.match(/(?<![.\w$])confirmLeave\(\)/g) ?? [];
+  assert.equal(invocations.length, 1, 'confirmLeave is invoked from somewhere other than the auto-complete effect');
+  assert.match(
+    code, /useEffect\(\(\) => \{\s*if \(shouldAutoComplete\(\{ pending, blocked \}\)\) confirmLeave\(\);\s*\}, \[pending, blocked, confirmLeave\]\);/,
+    'the auto entry point is missing, or is not gated on shouldAutoComplete'
+  );
+  const returned = code.match(/return \{ blocked, reason: shownReason, pending, confirmLeave, cancelLeave \};/g) ?? [];
+  assert.equal(returned.length, 1, 'the manual entry point is not handed out exactly once');
+});
+
+test('CONTROL: a THIRD entry point is caught', () => {
+  // The probe run over a file that grew one more caller. Both halves must
+  // reject it — an extra confirmLeave() call AND an extra depart?.() — because
+  // a third site could arrive as either shape.
+  const extraCaller = 'if (somethingElse) confirmLeave();\n    if (shouldAutoComplete({ pending, blocked })) confirmLeave();';
+  assert.equal(
+    (extraCaller.match(/(?<![.\w$])confirmLeave\(\)/g) ?? []).length, 2,
+    'the probe cannot see a second invocation at all'
+  );
+  const extraImpl = 'depart?.();\n  const other = departRef.current;\n  other?.();\n  depart?.();';
+  assert.notEqual(
+    (extraImpl.match(/depart\?\.\(\)/g) ?? []).length, 1,
+    'the probe cannot see a duplicated departure implementation'
+  );
+});
+
+test('CONTROL: the probe does not count the declaration as an invocation', () => {
+  // `const confirmLeave = useCallback(() => {` is not a call site. A probe that
+  // counted it would report two entry points on a correct file and one on a
+  // broken one — backwards, and green in the wrong direction.
+  const decl = 'const confirmLeave = useCallback(() => {';
+  assert.deepEqual(decl.match(/(?<![.\w$])confirmLeave\(\)/g), null);
+});
+
+test('the auto-complete gate reads the LIVE block, not the frozen reason', () => {
+  // The freeze governs what the dialog SAYS; this governs whether there is
+  // still anything to say it about. Gating on the frozen reason would leave the
+  // dialog up forever, since a frozen value never changes by definition.
+  const { code } = readSource(GUARD);
+  assert.match(code, /shouldAutoComplete\(\{ pending, blocked \}\)/, 'the gate is not reading the live blocked');
+  assert.equal(
+    /shouldAutoComplete\(\{ pending, (reason|shownReason) \}\)/.test(code), false,
+    'the gate is reading a frozen value, which never changes'
+  );
+});
+
+test('the rationale for auto-completing, and for why it was unsafe before, is recorded', () => {
+  // This block is the only place the round-6 -> round-7 -> round-8 ordering is
+  // written down: the deferral, its precondition, and why the precondition is
+  // now met. Losing it loses why the effect is allowed to exist.
+  const { raw } = readSource(GUARD);
+  assert.match(raw, /AUTO-COMPLETING A DEPARTURE ONCE THERE IS NOTHING LEFT TO LOSE/);
+  assert.match(raw, /WHY THIS WAS UNSAFE UNTIL ROUND 7/, 'the deferral and its precondition are undocumented');
+  assert.match(raw, /A CONFLICTED SESSION NEVER REACHES THIS/, 'the conflict argument is undocumented');
+  assert.match(raw, /publishing/, 'the round-7 mechanism this depends on is not named');
 });

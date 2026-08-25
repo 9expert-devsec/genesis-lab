@@ -54,32 +54,40 @@ const isSentinel = (s) => Boolean(s && s.__pbLeaveSentinel);
  */
 
 /**
- * ── WHY THE DIALOG DOES NOT AUTO-COMPLETE WHEN THE BLOCK CLEARS ───────────
- * The obvious companion to the freeze is: if `blocked` goes false while the
- * dialog is open, just finish the departure — there is nothing left to lose,
- * and completing the gesture is what an unguarded Back press would have done.
- * It was specified, and it is NOT built, because AUTO-COMPLETING here can fire
- * in the middle of a publish.
+ * ── AUTO-COMPLETING A DEPARTURE ONCE THERE IS NOTHING LEFT TO LOSE ────────
+ * If the block clears while the dialog is open — the autosave the author was
+ * warned about has landed, the tree is clean — the guard has nothing left to
+ * protect and is pure friction. Completing the original Back/link gesture is
+ * exactly what an unguarded press would already have done, so it finishes on
+ * its own rather than demanding a second click on a warning that has stopped
+ * being true.
  *
- * The window is real and reachable. useEditorSave.publish() dispatches
- * SAVE_START, then flushes through save(), which dispatches its OWN SAVE_OK
- * when it lands — clearing `saving` and both dirty flags. publishPageStatus
- * is only called AFTER that, so for the whole duration of the publish network
- * call: saving false, dirty false, conflict null. blocked is FALSE while a
- * write is still in flight.
+ * ── WHY THIS WAS UNSAFE UNTIL ROUND 7, AND IS NOT NOW ─────────────────────
+ * It was specified a round earlier and deliberately not built. publish()
+ * dispatched SAVE_START, flushed through save() — which ended its OWN save,
+ * clearing `saving` and both dirty flags — and only THEN called
+ * publishPageStatus. So `blocked` read false for the entire duration of the
+ * promote-to-live write, and auto-completing would have sent the author away
+ * mid-publish. Nothing cancels a Server Action in flight, so the write would
+ * have landed anyway, with any conflict or error arriving in a tab that no
+ * longer existed.
  *
- * An author who pressed Back during a publish would therefore be navigated
- * away mid-publish, and — since nothing in the save path is wired to an
- * AbortController and a Server Action POST is not tied to unmount — the
- * publish would carry on invisibly, with any conflict or error landing in a
- * tab that is no longer there.
+ * Round 7 closed that: runPublish brackets the WHOLE flush-then-promote
+ * sequence with a `publishing` flag, in a `finally` so every exit balances,
+ * and EditorProvider folds it into the `saving` this guard already reads.
+ * `blocked` can now only fall at a moment when nothing is still writing.
  *
- * That is a navigation hazard traded for a friction fix, which is the wrong
- * way round. The prerequisite is in useEditorSave.js — publish must not clear
- * `saving` between its flush and its promote — and that file is out of scope
- * for this round. Once `saving` stays true for the whole publish, blocked no
- * longer lies and the auto-complete becomes safe to add.
+ * ── A CONFLICTED SESSION NEVER REACHES THIS ──────────────────────────────
+ * Not by a check here, but by construction: `conflict` is set by SAVE_CONFLICT
+ * and cleared by NOTHING in the editor reducer (the only RESET dispatcher in
+ * the tree belongs to the chat store), so once it is set `blocked` can never
+ * fall at all. A conflicted session keeps its manual button, which is right —
+ * leaving one genuinely does lose the work.
  */
+export function shouldAutoComplete({ pending, blocked }) {
+  return Boolean(pending) && !blocked;
+}
+
 /** Open an attempt, capturing the reason as it stands at this instant. */
 export function beginAttempt(exit, liveReason) {
   return { exit, reason: liveReason };
@@ -362,6 +370,22 @@ export function useLeaveGuard(state) {
     // back onto the sentinel, and the link case never navigated.
   }, []);
 
+  // Fires at most once per attempt WITHOUT a one-shot ref, and that is a
+  // property of confirmLeave rather than luck: it clears departRef and sets
+  // the attempt to null, so the very next render has `pending` null and the
+  // predicate is false. Even a re-entry could not double-navigate — depart is
+  // read and nulled before it is called.
+  //
+  // Calls confirmLeave, never departRef directly. There is exactly ONE place
+  // that completes a departure and this is not a second one — the manual
+  // button and this effect are two ENTRY POINTS into the same function.
+  //
+  // `blocked` here is the LIVE value, deliberately, not the frozen reason:
+  // the freeze governs what the dialog SAYS, and this governs whether there
+  // is still anything to say it about.
+  useEffect(() => {
+    if (shouldAutoComplete({ pending, blocked })) confirmLeave();
+  }, [pending, blocked, confirmLeave]);
   // `reason` is the SHOWN one — frozen while an attempt is open. It arrives
   // under the existing name because EditorShell binds it straight to the
   // dialog and this round does not touch that file. `blocked` stays LIVE: the
