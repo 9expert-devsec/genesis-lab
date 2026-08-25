@@ -115,6 +115,26 @@ export function keyToPath(key) {
   return String(key).split('.').map((s) => (/^\d+$/.test(s) ? Number(s) : s));
 }
 
+/**
+ * The path of the SECTION CONTAINING the one at `path`, or null when it is
+ * top-level.
+ *
+ * A path is `['sections', i]` then repeats of `['content', slot, i]` — three
+ * keys per level of nesting, which is the same shape `depthOfPath` below
+ * divides by. So the parent section is three keys back, and a path of length 2
+ * has no parent at all.
+ *
+ * Returns NULL rather than an empty array for a top-level section: `[]` is a
+ * valid path (it addresses the page itself), so returning it would hand a
+ * caller something `getAt` resolves to the whole page — which would then be
+ * rendered as though it were the parent section. The null is what makes the
+ * no-parent case impossible to use by accident.
+ */
+export function parentSectionPath(path) {
+  if (!Array.isArray(path) || path.length <= 2) return null;
+  return path.slice(0, -3);
+}
+
 /** A section's depth: ['sections',0] → 0; each nested slot adds 1. */
 export function depthOfPath(path) {
   // path = ['sections', i] then repeats of ['content', slot, i]

@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 import * as Tabs from '@radix-ui/react-tabs';
 
 import {
-  ContentTab, StyleTab, AdvancedGroup, hasAdvancedTab,
+  ContentTab, StyleTab, AdvancedGroup, hasAdvancedTab, SelectionHeader,
 } from '@/components/pageBuilder/editor/SettingsPanel';
 import { VISIBILITY } from '@/lib/schemas/pageBuilder';
 import { VISIBILITY_LABELS } from '@/lib/pageBuilder/presetLabels';
@@ -47,6 +47,8 @@ const domOf = (el) => new JSDOM(`<!doctype html><body>${renderToStaticMarkup(el)
 /** Every field LABEL rendered, in order. Field renders `<label><span>…`. */
 const fieldsIn = (doc) => [...doc.querySelectorAll('label > span:first-child')].map((s) => s.textContent.trim());
 const groupsIn = (doc) => [...doc.querySelectorAll('legend')].map((l) => l.textContent.trim());
+/** One element's exact text, whitespace-collapsed. Added in round 16. */
+const text = (el) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? null;
 
 const noop = () => {};
 const contentTab = (type, content = {}) => domOf(createElement(ContentTab, {
@@ -360,4 +362,105 @@ test('Radix Tabs renders INLINE, not through a portal — verified, not assumed'
   // CONTROL: the inactive panel is genuinely absent, so the assertion above is
   // about the active one rather than about "some text survived".
   assert.equal(markup.includes('PANEL_B'), false, 'the inactive panel also rendered');
+});
+
+// ── ROUND 16: THE SELECTION HEADER ─────────────────────────────────────────
+//
+// Appended to this file rather than split off: it guards the same panel, and
+// the union check above is what proves round 16 did not disturb it.
+
+test('the header names the selected type, once', () => {
+  const doc = domOf(createElement(SelectionHeader, { type: 'heading', parentType: null }));
+  assert.equal(text(doc.querySelector('[data-testid="settings-header-type"]')), 'หัวข้อ');
+  // The type appears in exactly ONE element of the header — the old bare type
+  // line was absorbed, not left standing above the new one.
+  const all = [...doc.querySelectorAll('[data-testid="settings-header"] p')].map(text);
+  assert.deepEqual(all, ['หัวข้อ'], 'the header renders more than the type for a top-level section');
+});
+
+test('a NESTED selection names the section it sits in', () => {
+  const doc = domOf(createElement(SelectionHeader, { type: 'heading', parentType: 'two_column' }));
+  assert.equal(text(doc.querySelector('[data-testid="settings-header-type"]')), 'หัวข้อ');
+  assert.equal(text(doc.querySelector('[data-testid="settings-header-parent"]')), 'อยู่ใน สองคอลัมน์');
+});
+
+test('a TOP-LEVEL selection renders no parent line at all — never a dangling "อยู่ใน"', () => {
+  /**
+   * Item K. The line is absent rather than empty: an "อยู่ใน " with nothing
+   * after it would describe a containment that does not exist.
+   */
+  const doc = domOf(createElement(SelectionHeader, { type: 'heading', parentType: null }));
+  assert.equal(doc.querySelector('[data-testid="settings-header-parent"]'), null);
+  assert.equal(text(doc.querySelector('[data-testid="settings-header"]')), 'หัวข้อ');
+  assert.equal(/อยู่ใน/.test(text(doc.querySelector('[data-testid="settings-header"]'))), false,
+    'the containment wording rendered with no parent to name');
+});
+
+test('CONTROL: the parent line is reachable, so its absence above means something', () => {
+  // Same component, one prop apart, opposite answers.
+  const withParent = domOf(createElement(SelectionHeader, { type: 'heading', parentType: 'container' }));
+  const without = domOf(createElement(SelectionHeader, { type: 'heading', parentType: null }));
+  assert.ok(withParent.querySelector('[data-testid="settings-header-parent"]'));
+  assert.equal(without.querySelector('[data-testid="settings-header-parent"]'), null);
+  // An empty string is treated as no parent too — labelOf('') would print a
+  // fallback, which is exactly the dangling line this guards against.
+  const blank = domOf(createElement(SelectionHeader, { type: 'heading', parentType: '' }));
+  assert.equal(blank.querySelector('[data-testid="settings-header-parent"]'), null);
+});
+
+test('the type is not stated twice anywhere in the panel body', () => {
+  /**
+   * Item L, as source: the bare type line that used to sit above the tabs is
+   * gone, and labelOf(selected.type) is reached only through the header.
+   */
+  const code = readSource(SRC).code;
+  assert.equal(code.includes('<p className="mb-3 text-xs font-bold text-9e-navy dark:text-white">{labelOf(selected.type)}</p>'), false,
+    'the old bare type line is still there alongside the new header — the type is printed twice');
+  assert.equal(code.split('labelOf(selected.type)').length - 1, 0,
+    'the panel body still labels the selected type directly; that belongs to SelectionHeader now');
+  assert.match(code, /<SelectionHeader type=\{selected\.type\} parentType=\{parentSection\?\.type \?\? null\} \/>/,
+    'the header is no longer wired to the selection and its derived parent');
+});
+
+test('the parent is derived through the shared path helper, not an inline slice', () => {
+  // An inline `selection.slice(0, -3)` would be a second place that knows a
+  // path's stride — see the note in parentSectionPath.
+  const code = readSource(SRC).code;
+  assert.match(code, /const parentPath = parentSectionPath\(selection\);/,
+    'the panel no longer asks parentSectionPath for the parent');
+  assert.equal(/selection\.slice\(/.test(code), false,
+    'the panel slices the selection path itself — that is a second reader of the path stride');
+});
+
+test('the content tab no longer repeats the tab label as a legend', () => {
+  /**
+   * Item N. SectionContentEditor wrapped itself in a group legend เนื้อหา,
+   * which duplicated the tab above it once round 15 added tabs. Removed.
+   *
+   * SectionTypeFields' legends are deliberately KEPT: เลย์เอาต์ duplicates no
+   * tab, and รูปแบบ — which does match its tab's label — is what separates the
+   * per-type fields from the three envelope groups beneath them. Removing that
+   * one would merge them into an unlabelled block, which is grouping other
+   * fields depend on.
+   */
+  const doc = domOf(createElement(ContentTab, {
+    type: 'heading', content: { text: 'x' }, advanced: {}, resolved: null, patch: noop,
+  }));
+  assert.deepEqual(groupsIn(doc), [], 'the content tab still renders a legend');
+  // …and its fields survived the unwrapping.
+  assert.deepEqual(fieldsIn(doc), ['ข้อความ', 'ระดับหัวข้อ', 'จัดวาง']);
+
+  // The style tab KEEPS its legends — this is a targeted removal, not a sweep.
+  assert.deepEqual(groupsIn(styleTab('two_column')), ['เลย์เอาต์', ...ENVELOPE_GROUPS]);
+});
+
+test('CONTROL: the container fallback copy survived losing its legend', () => {
+  // The container branch was wrapped in the same legend; unwrapping it must not
+  // have taken the sentence with it.
+  const doc = domOf(createElement(ContentTab, {
+    type: 'container', content: {}, advanced: {}, resolved: null, patch: noop,
+  }));
+  assert.deepEqual(groupsIn(doc), []);
+  assert.equal(text(doc.querySelector('p')),
+    'section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”');
 });

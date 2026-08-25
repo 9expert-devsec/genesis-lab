@@ -14,6 +14,7 @@ import {
 import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { SectionContentEditor } from './SectionContentEditor';
 import { SectionTypeFields } from './SectionTypeFields';
+import { getAt, parentSectionPath } from './pagePath';
 import { useEditor } from './EditorProvider';
 
 /**
@@ -238,6 +239,45 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
 }
 
 /**
+ * The header: what is selected, and where it sits.
+ *
+ * ── IT ABSORBS THE OLD TYPE LINE RATHER THAN SITTING ABOVE IT ──────────────
+ * A bare `labelOf(selected.type)` used to stand here on its own. This replaces
+ * it, so the type is stated exactly once — adding a header above the old line
+ * would have printed the type twice, one line apart.
+ *
+ * ── THE SECOND LINE IS ABSENT, NOT EMPTY, AT TOP LEVEL ─────────────────────
+ * `parentType` is null for a section sitting directly on the page, and the line
+ * is then not rendered at all. That is why `parentSectionPath` returns null
+ * rather than an empty path: an empty path resolves to the whole page object,
+ * which is truthy and has no type, so a caller that did not distinguish them
+ * would render "อยู่ใน " with nothing after it.
+ *
+ * The containing SLOT (ซ้าย / ขวา on a two_column) is deliberately not named.
+ * It would add precision for exactly one type, and slot copy lives in the
+ * structure panel — naming it here would put a second copy of that vocabulary
+ * in a second file to serve one case.
+ *
+ * Takes plain strings rather than the section objects so the render tier can
+ * assert it directly: the panel itself needs a selection, and only a dispatch
+ * can set one (see round 15).
+ */
+export function SelectionHeader({ type, parentType }) {
+  return (
+    <div className="mb-3" data-testid="settings-header">
+      <p data-testid="settings-header-type" className="text-xs font-bold text-9e-navy dark:text-white">
+        {labelOf(type)}
+      </p>
+      {parentType && (
+        <p data-testid="settings-header-parent" className="mt-0.5 text-[10px] text-9e-slate-dp-50">
+          อยู่ใน {labelOf(parentType)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The tab strip's fixed part. ขั้นสูง is appended per section — see
  * hasAdvancedTab.
  */
@@ -253,7 +293,7 @@ const TAB_TRIGGER_CLASS = [
 ].join(' ');
 
 export function SettingsPanel() {
-  const { selected, selection, dispatch, tier, resolvedData } = useEditor();
+  const { page, selected, selection, dispatch, tier, resolvedData } = useEditor();
 
   /**
    * ── WHICH TAB IS OPEN IS VIEW STATE, NOT DOCUMENT STATE ──────────────────
@@ -277,6 +317,10 @@ export function SettingsPanel() {
   const style = selected.style ?? {};
   const patchKey = (key, patch) => dispatch({ type: 'PATCH_SECTION_KEY', path: selection, key, patch });
   const canUseAdvanced = Boolean(tier?.canUseAdvanced);
+
+  // Null for a top-level selection — see the header note below.
+  const parentPath = parentSectionPath(selection);
+  const parentSection = parentPath ? getAt(page, parentPath) : null;
 
   const tabs = hasAdvancedTab(selected.advanced, canUseAdvanced)
     ? [...BASE_TABS, { key: 'advanced', label: 'ขั้นสูง' }]
@@ -306,7 +350,21 @@ export function SettingsPanel() {
 
   return (
     <div>
-      <p className="mb-3 text-xs font-bold text-9e-navy dark:text-white">{labelOf(selected.type)}</p>
+      {/* ── THE HEADER: WHAT IS SELECTED, AND WHERE IT SITS ──────────────────
+          This ABSORBS the bare type line that used to stand here rather than
+          adding a second one — the type is stated once, on the first line.
+
+          The second line appears only for a NESTED selection. A top-level
+          section has no parent, and `parentSectionPath` returns null rather
+          than an empty path precisely so this cannot render "อยู่ใน " with
+          nothing after it; the line is simply absent, which is also the honest
+          description of a section that sits directly on the page.
+
+          The containing SLOT (ซ้าย / ขวา on a two_column) is deliberately not
+          named. It would add precision for exactly one type, and the slot copy
+          lives in the structure panel — naming it here would put a second copy
+          of that vocabulary in a second file to serve one case. */}
+      <SelectionHeader type={selected.type} parentType={parentSection?.type ?? null} />
 
       <Tabs.Root value={active} onValueChange={setTab}>
         <Tabs.List

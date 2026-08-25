@@ -10,7 +10,7 @@ import { isKnownIconName } from '@/lib/pageBuilder/lucideIcon';
 import { embedSrc } from '@/lib/pageBuilder/embedSrc';
 import { moveInArray } from './pagePath';
 import { IconPicker } from './IconPicker';
-import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
 
 /**
@@ -748,20 +748,14 @@ export function SectionContentEditor({ type, content, patch, advanced, resolved 
   if (!Editor) {
     // Containers hold child sections, not content — the tree edits those.
     return isContainer(type) ? (
-      <Group title="เนื้อหา">
-        <p className="text-[11px] text-9e-slate-dp-50">
-          section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”
-        </p>
-      </Group>
+      <p className="text-[11px] text-9e-slate-dp-50">
+        section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”
+      </p>
     ) : null;
   }
   // `advanced` is read only by CustomCssEditor; `resolved` (the fetched
   // course/instructor, or list) only by the 2C.2a data-backed editors — it is
   // what turns the edit-time fetch into a fail-closed warning instead of a
   // placeholder. The rest ignore both.
-  return (
-    <Group title="เนื้อหา">
-      <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />
-    </Group>
-  );
+  return <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />;
 }
