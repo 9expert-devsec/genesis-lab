@@ -9,6 +9,7 @@ import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
 import { isKnownIconName } from '@/lib/pageBuilder/lucideIcon';
 import { embedSrc } from '@/lib/pageBuilder/embedSrc';
 import { moveInArray } from './pagePath';
+import { IconPicker } from './IconPicker';
 import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
 
@@ -38,7 +39,7 @@ const NOTICE_VARIANTS = ['info', 'success', 'warning', 'error'];
 const NOTICE_LABELS = { info: 'ข้อมูล', success: 'สำเร็จ', warning: 'คำเตือน', error: 'ข้อผิดพลาด' };
 const EMBED_PROVIDERS = ['youtube', 'vimeo', 'iframe'];
 const EMBED_PROVIDER_LABELS = { youtube: 'YouTube', vimeo: 'Vimeo', iframe: 'iframe (โค้ดฝัง)' };
-const ICON_HINT = 'ชื่อไอคอน Lucide แบบ PascalCase เช่น Rocket, Users — ดูรายชื่อที่ lucide.dev/icons';
+const ICON_HINT = 'ค้นหาด้วยชื่อภาษาอังกฤษ เช่น rocket, users';
 
 // ── heading ──────────────────────────────────────────────────────────
 function HeadingEditor({ content, patch }) {
@@ -257,7 +258,7 @@ function StatCardEditor({ content, patch }) {
       </Field>
       {empty && <Warn>ต้องมีตัวเลขหรือคำอธิบายอย่างน้อยหนึ่งอย่าง — ไม่งั้นการ์ดนี้จะไม่แสดงผล</Warn>}
       <Field label="ไอคอน (ไม่บังคับ)" hint={ICON_HINT}>
-        <TextInput value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
       </Field>
       {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
     </>
@@ -274,7 +275,7 @@ function IconCardEditor({ content, patch }) {
   return (
     <>
       <Field label="ไอคอน" hint={ICON_HINT}>
-        <TextInput value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
+        <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
       </Field>
       {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
       <Field label="หัวข้อ">
