@@ -423,7 +423,20 @@ function AddRow({ basePath, count }) {
   );
 }
 
-function SectionList({ sections, basePath }) {
+/**
+ * `addRow` is FALSE for exactly one list — the top-level one, whose insertion
+ * point is pinned in the panel's footer instead (see StructurePanel below). It
+ * is not a style switch: a list that both rendered its AddRow here and had one
+ * pinned would offer the same insertion point twice.
+ *
+ * It defaults TRUE because every OTHER list must keep its own. A nested AddRow
+ * inserts into ITS container's slot — `basePath` is that slot's path — so it
+ * only means anything while sitting under the container it belongs to, and it
+ * has to travel with that container when the list scrolls. Pinning one of
+ * those would strand an insertion point for a slot that had scrolled out of
+ * sight, which is worse than not pinning it at all.
+ */
+function SectionList({ sections, basePath, addRow = true }) {
   return (
     <>
       {sections.length > 0 && (
@@ -438,7 +451,7 @@ function SectionList({ sections, basePath }) {
           ))}
         </ul>
       )}
-      <AddRow basePath={basePath} count={sections.length} />
+      {addRow && <AddRow basePath={basePath} count={sections.length} />}
     </>
   );
 }
@@ -494,7 +507,51 @@ export function StructurePanel() {
 
   return (
     <StructureContext.Provider value={ctx}>
-      <SectionList sections={sections} basePath={['sections']} />
+      {/* ── THE SCROLLING BAND — THE ONLY SCROLLER THIS PANEL ADDS ─────────
+          `flex-1` is what absorbs the height EditorShell's `split` hands over,
+          so the panel's outer height is whatever the grid row gives it no
+          matter how tall the heading above or the footer below grows. The
+          `p-3` is the padding the shared Panel body used to apply; it moves in
+          here with the scroll, so the list keeps the inset it had.
+
+          THE GUTTER SITS ON THIS ELEMENT BECAUSE THIS IS THE ELEMENT THAT
+          SCROLLS. Round 13 proved the converse by counter-example on the
+          section picker: left behind on an ancestor that no longer scrolls, a
+          reserved gutter reserves space against a scrollbar that never arrives
+          there, and the width instability simply reappears one level in — 783px
+          scrolling against 798px not. `stable` reserves it whether or not it is
+          occupied, so this box is the same width with a short page and a long
+          one. Browsers too old for the property ignore it and get today's
+          behaviour, never worse. */}
+      <div
+        data-testid="structure-scroll"
+        className="flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]"
+      >
+        <SectionList sections={sections} basePath={['sections']} addRow={false} />
+      </div>
+
+      {/* ── THE PINNED FOOTER — THE OUTERMOST INSERTION POINT, AND ONLY IT ──
+          "Add a section to the page" is the one action that is true of the
+          page rather than of whatever happens to be on screen, so it is the
+          one that can be pinned without lying: its `basePath` is the top-level
+          list, which does not move. Every NESTED AddRow stays in the scroller
+          above, with the container whose slot it inserts into.
+
+          The refusal row AddRow can render is unreachable from here and always
+          was: it fires when a child would land deeper than MAX_SECTION_DEPTH,
+          and a child of the top-level list is at depth 0. So this band is
+          always the button, and the cap's copy is untouched.
+
+          `border-t` is what stops the list appearing to run out from under the
+          button, now that content can pass behind it. The padding pairs with
+          AddRow's own `mt-1`: 8 above plus that 4 is the 12 below. */}
+      <div
+        data-testid="structure-add"
+        className="border-t border-[var(--surface-border)] px-3 pb-3 pt-2"
+      >
+        <AddRow basePath={['sections']} count={sections.length} />
+      </div>
+
       <SectionPicker open={Boolean(target)} onClose={() => setTarget(null)} onPick={onPick} />
       <ConfirmDeleteDialog
         pending={pendingDelete}

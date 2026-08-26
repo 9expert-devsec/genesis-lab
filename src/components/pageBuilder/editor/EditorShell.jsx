@@ -50,8 +50,28 @@ function ConflictBanner({ message }) {
  * is where the heading is — StructurePanel renders no heading of its own, so a
  * hint added inside it would be a second, competing header line under the real
  * one. Passing it in keeps one header block per panel.
+ *
+ * ── `split`: THE CHILD OWNS EVERYTHING BELOW THE HEADING (round 31) ────────
+ * WITHOUT it — the settings panel, unchanged — the body is one padded block
+ * and the SECTION is what scrolls, heading and all.
+ *
+ * WITH it the children are handed straight into the section's flex column, so
+ * a panel that wants a pinned footer can put the overflow on a band of its own
+ * and leave this heading standing outside it. The heading does not move,
+ * because nothing it sits in scrolls any more.
+ *
+ * WHY OPT-IN RATHER THAN THE SHAPE FOR BOTH. Both side panels render through
+ * here and only one of them is being split this round. Making the three-band
+ * shape unconditional would move the settings panel's scroller one level in as
+ * a side effect — and WHERE THE SCROLLER SITS is precisely what round 13 had
+ * to measure, and fix, and then pin with a test. That is not a thing to change
+ * in a panel nobody looked at.
+ *
+ * The caller supplies the column: `split` needs a `flex flex-col` section to
+ * be handed into, which is why the structure panel's className says so while
+ * the settings panel's still says `overflow-y-auto`.
  */
-function Panel({ title, hint, children, className }) {
+export function Panel({ title, hint, split, children, className }) {
   return (
     <section className={className}>
       {/* The design's EYEBROW: 10px, bold, uppercase, 1.3px of tracking.
@@ -65,7 +85,7 @@ function Panel({ title, hint, children, className }) {
         </h2>
         {hint && <p className="mt-0.5 text-[10px] normal-case text-9e-slate-dp-50/70">{hint}</p>}
       </div>
-      <div className="p-3">{children}</div>
+      {split ? children : <div className="p-3">{children}</div>}
     </section>
   );
 }
@@ -171,10 +191,24 @@ export function EditorShell() {
           no scale for a panel width: the grid template has always been written
           this way, and Tailwind's spacing scale tops out far below 276. */}
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[276px_1fr_330px]">
+        {/* ── THREE BANDS, AND THE PANEL IS THE ONLY ONE WITH A HEIGHT ─────
+            The section keeps the height the grid row gives it — nothing here
+            is taller or shorter than it was. What changes is which part of it
+            scrolls: `split` hands the space under the heading to
+            StructurePanel, which spends it on a scrolling list and a pinned
+            add-section footer. The heading and the footer are therefore
+            SIBLINGS of the scroller rather than passengers in it, so neither
+            can be scrolled away, and the body absorbing the remainder is what
+            keeps the outer height independent of how tall either grows.
+
+            `overflow-y-auto` is GONE from here on purpose: leaving it would
+            give the panel a second scrollbar outside the body's, which is the
+            one thing round 20 measured this editor as not having. */}
         <Panel
           title="โครงสร้างหน้า"
           hint="ลากเพื่อจัดลำดับ"
-          className="min-h-0 overflow-y-auto border-r border-[var(--surface-border)] bg-[var(--surface)]"
+          split
+          className="flex min-h-0 flex-col border-r border-[var(--surface-border)] bg-[var(--surface)]"
         >
           <StructurePanel />
         </Panel>
