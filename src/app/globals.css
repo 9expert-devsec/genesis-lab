@@ -1133,3 +1133,56 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
     width: 64px;
   }
 }
+
+/* ──────────────────────────────────────────────────────────────
+   Course outline — RICH section-7 bullets, rendered via
+   dangerouslySetInnerHTML from CourseExtension.trainingTopicsRich
+   (server-sanitised by lib/courses/sanitizeTopicHtml).
+
+   SCOPED TO `.topic-rich` AND NOTHING ELSE. The course detail page
+   also renders admin-authored HTML through CourseRoadmap and the FAQ
+   accordion's `prose` blocks; a bare `ul li::before` rule here would
+   repaint both. Every selector below is a descendant of `.topic-rich`.
+
+   THE MARKERS ARE CSS BECAUSE A REAL <ul> CANNOT CARRY THE PLAIN
+   PATH'S <span>. The plain renderer hand-rolls its bullet as
+   `<span class="text-9e-air">•</span>` inside a flex <li>; markup
+   coming from the stored field has no such span and never will.
+
+   Three depth levels, three glyphs — the cap is 3 (MAX_TOPIC_DEPTH)
+   and clampDepth LIFTS anything deeper rather than dropping it, so a
+   4th level cannot reach here. #48B0FF is 9e-air, matching the plain
+   path's marker exactly so the two look identical at level 1.
+   ────────────────────────────────────────────────────────────── */
+
+.topic-rich ul { list-style: none; margin: 0; padding: 0; }
+.topic-rich ul ul { margin-top: 0.375rem; padding-left: 1.125rem; }
+
+.topic-rich li {
+  position: relative;
+  /* Hanging indent: the marker is absolutely positioned in this pad, so
+     wrapped lines align to the text, not under the glyph. Thai wraps
+     mid-phrase without spaces, so a second line landing under the
+     marker is the common case, not the rare one. */
+  padding-left: 1.25rem;
+  line-height: 1.75;
+}
+.topic-rich li + li { margin-top: 0.375rem; }
+
+.topic-rich li::before {
+  content: '\2022';               /* • */
+  position: absolute;
+  left: 0;
+  color: #48B0FF;                 /* 9e-air — same glyph colour as the plain path */
+}
+.topic-rich ul ul li::before    { content: '\25E6'; }  /* ◦ hollow */
+.topic-rich ul ul ul li::before { content: '\25AA'; }  /* ▪ filled square */
+
+/* Inline marks the sanitiser allows. `code` needs a box; the rest inherit. */
+.topic-rich code {
+  padding: 0.05em 0.3em;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 0.9em;
+}
+.topic-rich a { text-decoration: underline; text-underline-offset: 2px; }

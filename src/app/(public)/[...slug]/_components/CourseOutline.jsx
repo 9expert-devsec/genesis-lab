@@ -58,7 +58,32 @@ import { ContentSection } from './ContentSection';
  * max-height transition and covers this one identically — a reduced-motion
  * reader saw an instant open before and sees an instant open now.
  */
-export function CourseOutline({ course }) {
+/**
+ * ══ TWO RENDER PATHS, AND THEY ARE DELIBERATELY NOT UNIFIED ════════════════
+ *
+ * `richHtml` is `string[]` (per-row sanitised HTML, index-aligned with
+ * `training_topics`) or NULL. It is prepared ON THE SERVER by
+ * lib/courses/courseOutlineView — this component must never import that module
+ * or its dependencies, which would ship parse5 and sanitize-html to the browser
+ * to re-sanitise stored content on every page view.
+ *
+ * NULL is every course today: nothing has a rich copy and there is no backfill.
+ *
+ * ── WHY THE PLAIN PATH IS NOT ROUTED THROUGH THE HTML PATH ─────────────────
+ * It would be tidier to escape the plain bullets into markup and render one
+ * code path. It would also be wrong, twice:
+ *
+ *   · UIPATH stores `List<mailmessage>` — a C# generic, the only angle bracket
+ *     in 4,443 measured values. React escaping renders it correctly today. Sent
+ *     through dangerouslySetInnerHTML it becomes an unknown element and THE
+ *     TEXT DISAPPEARS. Unifying would break a live row to simplify a branch.
+ *   · It would make the inertness proof unprovable. "Every one of the 79
+ *     courses renders byte-identical to before" is only checkable while the
+ *     plain path is the SAME CODE it was, not an equivalent rewrite.
+ *
+ * So: plain content keeps going through React escaping, always.
+ */
+export function CourseOutline({ course, richHtml = null }) {
   const topics = Array.isArray(course?.training_topics)
     ? course.training_topics.filter(Boolean)
     : [];
@@ -99,6 +124,13 @@ export function CourseOutline({ course }) {
             ? topic.bullets.filter(Boolean)
             : [];
           const title = topic?.title ?? '';
+          /**
+           * This row's rich HTML, or '' — index-aligned with `topics`, which is
+           * why courseOutlineView applies the SAME `.filter(Boolean)` to the
+           * same array before resolving. An empty entry falls through to the
+           * plain path, which for a bullet-less row renders nothing either way.
+           */
+          const rich = Array.isArray(richHtml) ? (richHtml[i] || '') : '';
           return (
             <div
               key={i}
@@ -141,18 +173,28 @@ export function CourseOutline({ course }) {
                     `overflow-hidden` is what clips DURING the transition; on its
                     own it is not enough, and neither is enough alone. */}
                 <div className="min-h-0 overflow-hidden">
-                  {bullets.length > 0 && (
-                    <ul className="space-y-1.5 border-t border-[var(--surface-divider)] bg-[color-mix(in_srgb,var(--surface-muted)_40%,transparent)] px-5 py-3">
-                      {bullets.map((bullet, j) => (
-                        <li
-                          key={j}
-                          className="flex items-start gap-2 text-base text-[var(--text-secondary)]"
-                        >
-                          <span className="mt-0.25 shrink-0 text-9e-air">•</span>
-                          <span>{bullet}</span>
-                        </li>
-                      ))}
-                    </ul>
+                  {rich ? (
+                    /* RICH — server-sanitised HTML for THIS row. The nested list
+                       markers are CSS on `.topic-rich`; a real <ul> from HTML
+                       cannot carry the hand-rolled <span> the plain path uses. */
+                    <div
+                      className="topic-rich space-y-1.5 border-t border-[var(--surface-divider)] bg-[color-mix(in_srgb,var(--surface-muted)_40%,transparent)] px-5 py-3 text-base text-[var(--text-secondary)]"
+                      dangerouslySetInnerHTML={{ __html: rich }}
+                    />
+                  ) : (
+                    bullets.length > 0 && (
+                      <ul className="space-y-1.5 border-t border-[var(--surface-divider)] bg-[color-mix(in_srgb,var(--surface-muted)_40%,transparent)] px-5 py-3">
+                        {bullets.map((bullet, j) => (
+                          <li
+                            key={j}
+                            className="flex items-start gap-2 text-base text-[var(--text-secondary)]"
+                          >
+                            <span className="mt-0.25 shrink-0 text-9e-air">•</span>
+                            <span>{bullet}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
                   )}
                 </div>
               </div>
