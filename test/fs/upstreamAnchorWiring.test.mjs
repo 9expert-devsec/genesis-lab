@@ -84,15 +84,37 @@ test('upstreamId is NOT in the blanket `update` object', () => {
    * and has never seen one. With `upstreamId` in that object literal, saving
    * the payment toggle would erase the anchor of every course it touched.
    */
+  /**
+   * ── RE-ANCHORED: THE LITERAL BECAME A BUILDER, THE RULE GOT STRONGER ──────
+   * This used to slice the action's `const update = { … }` literal and assert
+   * `upstreamId` was not inside it. That literal is gone: the action now calls
+   * `buildExtensionUpdate` and the field list lives in
+   * lib/courses/extensionUpdate as `EXTENSION_FIELDS`. The old `indexOf` found
+   * nothing, which is sourceScan defect 7, face one.
+   *
+   * The rule holds and is now checkable against a NAMED LIST rather than a
+   * regex over a slice of source — `upstreamId` is absent from the writable
+   * fields, so the builder cannot name it whatever a caller sends.
+   *
+   * Note the premise beneath it has ALSO changed, in the safe direction:
+   * omitting a key no longer blanks it. `upstreamId` was the one field already
+   * exempt from the blanket write; now every field is, and the anchor logic
+   * below is what still makes `upstreamId` special — it is decided against what
+   * is STORED, not merely carried through.
+   */
   const { code } = readSource(ACTION);
-  const start = code.indexOf('const update = {');
-  assert.notEqual(start, -1, 'the update object is gone — has the action been rewritten?');
-  const literal = code.slice(start, code.indexOf('};', start));
-  assert.ok(!/upstreamId/.test(literal),
-    'upstreamId sits in the blanket write — a caller that omits it would blank every anchor');
-  // and the literal really is the whole-document write it is being checked for
-  assert.match(literal, /metaTitle:/);
-  assert.match(literal, /isPublished:/);
+  assert.match(code, /const update = buildExtensionUpdate\(/,
+    'the action no longer builds its update through the builder');
+
+  const fields = readSource('src/lib/courses/extensionUpdate.js').code;
+  const listStart = fields.indexOf('EXTENSION_FIELDS = Object.freeze([');
+  assert.notEqual(listStart, -1, 'the writable field list is gone');
+  const list = fields.slice(listStart, fields.indexOf('])', listStart));
+  assert.ok(!/upstreamId/.test(list),
+    'upstreamId is a writable field — a caller that omits it could blank every anchor');
+  // and the list really is the writable set it is being checked for
+  assert.match(list, /'metaTitle'/);
+  assert.match(list, /'isPublished'/);
 });
 
 test('the anchor is decided against what is STORED, and only added on SET', () => {

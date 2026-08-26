@@ -13,19 +13,20 @@ import { htmlToProjection, projectionEquals } from '@/lib/courses/topicHtml';
  *
  * ══ THE STORAGE SHAPE, AND HOW IT WAS DERIVED ══════════════════════════════
  *
- * `CourseExtension.trainingTopicsRich` is ONE String. The rich content is
- * PER ROW. Those two facts settle the encoding, and the evidence is in the pure
- * core rather than in anyone's intention:
+ * `CourseExtension.trainingTopicsRich` is a `[String]`, one entry PER ROW,
+ * index-aligned with MSDB's `training_topics`. That the unit is a ROW rather
+ * than the whole section is not a preference — it is what the pure core already
+ * commits to:
  *
  *   · `plainBulletsToHtml(bullets)` takes ONE ROW's bullets and returns ONE
  *     `<ul>` (topicHtml.js:194).
  *   · `htmlToProjection(html)` returns a `string[]` — ONE ROW's bullets
  *     (topicHtml.js:233).
  *
- * So the field holds a JSON array of per-row HTML strings, index-aligned with
- * MSDB's `training_topics`:
+ * So the field is a per-row array of HTML strings, index-aligned with MSDB's
+ * `training_topics` — stored as a real [String] on CourseExtension:
  *
- *     '["<ul><li>a</li></ul>", "", "<ul><li>b</li></ul>"]'
+ *     ['<ul><li>a</li></ul>', '', '<ul><li>b</li></ul>']
  *
  * An empty string at index i means "row i has no rich copy" and is perfectly
  * normal — 125 of the 829 live rows carry no bullets at all.
@@ -64,35 +65,38 @@ import { htmlToProjection, projectionEquals } from '@/lib/courses/topicHtml';
  *
  * ══ EVERY UNCERTAINTY RESOLVES TO PLAIN ════════════════════════════════════
  *
- * Malformed JSON, a non-array, a length mismatch, a value that is not a string,
- * a parse failure — all of it lands on `plain`. There is no path through this
- * module that renders a rich copy it is not sure about. "I cannot tell" and
- * "they match" must never be the same answer when the difference decides whose
- * formatting lands on whose sentence.
+ * A non-array, a length mismatch, a value that is not a string — all of it lands
+ * on `plain`. There is no path through this module that renders a rich copy it
+ * is not sure about. "I cannot tell" and "they match" must never be the same
+ * answer when the difference decides whose formatting lands on whose sentence.
  */
 
 /** What the caller should render. */
 export const TOPIC_SOURCE = Object.freeze({ PLAIN: 'plain', RICH: 'rich' });
 
 /**
- * Decode the stored field into per-row HTML strings.
+ * Read the stored field as per-row HTML strings.
  *
- * Returns `[]` for anything it cannot read — empty, malformed JSON, a non-array,
- * or an array holding something that is not a string. `[]` means "no usable rich
- * copy", which the resolver turns into `plain`. It never throws: a corrupt field
- * must degrade a course's formatting, never break its page.
+ * Returns `[]` for anything it cannot use — absent, a non-array, or an array
+ * holding something that is not a string. `[]` means "no usable rich copy",
+ * which the resolver turns into `plain`. It never throws: a corrupt field must
+ * degrade a course's formatting, never break its page.
+ *
+ * ── THE FIELD IS A REAL [String]. IT WAS BRIEFLY A JSON STRING. ────────────
+ * The first draft of this module decoded `JSON.parse(raw)`, on the reasoning
+ * that a single String column had to encode the array somehow. The schema was
+ * then ruled to be a real `[String]` instead, which removes the parse failure
+ * mode entirely — there is no longer a way for this field to be syntactically
+ * broken, only structurally wrong.
+ *
+ * A non-array is still handled rather than assumed away. Mongo hands back what
+ * is in the document, and a hand-edited row or a future migration can put
+ * anything there; `[]` is the safe reading of all of it.
  */
 export function parseTopicRich(raw) {
-  if (typeof raw !== 'string' || raw.trim() === '') return [];
-  let parsed;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
-  if (!parsed.every((v) => typeof v === 'string')) return [];
-  return parsed;
+  if (!Array.isArray(raw)) return [];
+  if (!raw.every((v) => typeof v === 'string')) return [];
+  return raw;
 }
 
 /**
@@ -155,7 +159,7 @@ function plainProjection(rows) {
  *
  * @param {object}   input
  * @param {Array}    input.rows  MSDB `training_topics` — [{ title, bullets[] }]
- * @param {string}   input.rich  the stored `trainingTopicsRich` JSON string
+ * @param {string[]} input.rich  the stored `trainingTopicsRich` array
  *
  * @returns {{ source: string, stale: boolean, richRows: string[], rows: Array }}
  *   source   TOPIC_SOURCE.RICH only when the rich copy provably still describes

@@ -32,7 +32,7 @@ const ROWS = () => [
 ];
 
 /** The rich field a save would have produced for exactly those rows. */
-const richFor = (rows) => JSON.stringify(rows.map((r) => plainBulletsToHtml(r.bullets)));
+const richFor = (rows) => rows.map((r) => plainBulletsToHtml(r.bullets));
 
 // ── 1. no rich copy — where all 79 live courses are ────────────────────────
 
@@ -42,7 +42,7 @@ test('an EMPTY rich field means plain, and is NOT stale', () => {
    * and conflating them would light a staleness warning on every course that
    * has never been touched — 79 of 79 today.
    */
-  for (const rich of ['', '   ', null, undefined, 0, false]) {
+  for (const rich of [[], null, undefined, 0, false, '']) {
     const out = resolveTopicRich({ rows: ROWS(), rich });
     assert.equal(out.source, TOPIC_SOURCE.PLAIN, `rich=${JSON.stringify(rich)}`);
     assert.equal(out.stale, false, `rich=${JSON.stringify(rich)} must not report stale`);
@@ -52,12 +52,12 @@ test('an EMPTY rich field means plain, and is NOT stale', () => {
 
 test('the MSDB rows are handed back untouched for the plain path', () => {
   const rows = ROWS();
-  assert.deepEqual(resolveTopicRich({ rows, rich: '' }).rows, rows);
+  assert.deepEqual(resolveTopicRich({ rows, rich: [] }).rows, rows);
 });
 
 test('missing rows do not throw — an empty course resolves to plain', () => {
   for (const rows of [undefined, null, [], 'nonsense', {}]) {
-    const out = resolveTopicRich({ rows, rich: '' });
+    const out = resolveTopicRich({ rows, rich: [] });
     assert.equal(out.source, TOPIC_SOURCE.PLAIN);
     assert.equal(out.stale, false);
   }
@@ -97,7 +97,7 @@ test('formatting inside a bullet does not make it stale — the TEXT is what mat
   // The whole point of the split store: markup lives in genesis, and the rich
   // copy is valid exactly while its flattened text still equals MSDB's.
   const rows = [{ title: 'T', bullets: ['bold one', 'plain two'] }];
-  const rich = JSON.stringify(['<ul><li><strong>bold</strong> one</li><li>plain two</li></ul>']);
+  const rich = ['<ul><li><strong>bold</strong> one</li><li>plain two</li></ul>'];
   const out = resolveTopicRich({ rows, rich });
   assert.equal(out.source, TOPIC_SOURCE.RICH);
   assert.equal(out.stale, false);
@@ -209,29 +209,41 @@ test('a bullet ADDED to one row makes it stale', () => {
 
 // ── every uncertainty resolves to plain ────────────────────────────────────
 
-test('a MALFORMED rich field degrades to plain and never throws', () => {
+test('a STRUCTURALLY WRONG rich field degrades to plain and never throws', () => {
+  /**
+   * The field is a real `[String]`, so there is no parse step and no
+   * syntactically-broken state — only structurally wrong ones. Mongo hands back
+   * whatever is in the document, and a hand-edited row or a future migration
+   * can put anything there.
+   *
+   * Every one of these reads as ABSENT rather than stale: the resolver cannot
+   * tell what was intended, so it must not claim a rich copy exists and is out
+   * of date. It falls back to exactly today's behaviour and says nothing.
+   */
   const rows = ROWS();
   for (const rich of [
-    '{not json',                       // unparseable
-    '"a string"',                      // parses, not an array
-    '{"0":"<ul></ul>"}',               // parses, an object
-    '[1,2]',                           // array of non-strings
-    '[null]',                          // array with a null
-    '["<ul></ul>", 7]',                // one bad entry poisons the field
+    '<ul></ul>',                       // a bare string, not an array
+    { 0: '<ul></ul>' },                // an object
+    [1, 2],                            // array of non-strings
+    [null],                            // array with a null
+    ['<ul></ul>', 7],                  // ONE bad entry poisons the whole field
+    [undefined],                       // array with a hole
+    [['<ul></ul>']],                   // nested array
   ]) {
     const out = resolveTopicRich({ rows, rich });
-    assert.equal(out.source, TOPIC_SOURCE.PLAIN, `rich=${rich}`);
-    assert.equal(out.stale, false, `${rich}: unreadable is ABSENT, not stale`);
-    assert.deepEqual(out.richRows, [], `rich=${rich}`);
+    const label = JSON.stringify(rich);
+    assert.equal(out.source, TOPIC_SOURCE.PLAIN, `rich=${label}`);
+    assert.equal(out.stale, false, `${label}: unreadable is ABSENT, not stale`);
+    assert.deepEqual(out.richRows, [], `rich=${label}`);
   }
 });
 
 test('a rich array of the WRONG LENGTH is stale, not a crash', () => {
   const rows = ROWS();
-  for (const rich of ['["<ul><li>a</li></ul>"]', '["","",""]']) {
+  for (const rich of [['<ul><li>a</li></ul>'], ['', '', '']]) {
     const out = resolveTopicRich({ rows, rich });
     assert.equal(out.source, TOPIC_SOURCE.PLAIN);
-    assert.equal(out.stale, true, `${rich}: a decodable but misaligned copy IS stale`);
+    assert.equal(out.stale, true, `${JSON.stringify(rich)}: a readable but misaligned copy IS stale`);
   }
 });
 
@@ -253,9 +265,9 @@ test('CONTROL: the resolver is not simply always-plain', () => {
 
 test('CONTROL: the resolver is not simply always-rich either', () => {
   const rows = ROWS();
-  assert.equal(resolveTopicRich({ rows, rich: '' }).source, TOPIC_SOURCE.PLAIN);
+  assert.equal(resolveTopicRich({ rows, rich: [] }).source, TOPIC_SOURCE.PLAIN);
   assert.equal(
-    resolveTopicRich({ rows, rich: '["<ul><li>different</li></ul>",""]' }).source,
+    resolveTopicRich({ rows, rich: ['<ul><li>different</li></ul>', ''] }).source,
     TOPIC_SOURCE.PLAIN,
   );
 });
@@ -264,8 +276,8 @@ test('the two stale-vs-absent states are distinguishable by the caller', () => {
   // B2 shows a warning for one and nothing for the other. If both reported the
   // same pair of values the caller could not tell them apart.
   const rows = ROWS();
-  const absent = resolveTopicRich({ rows, rich: '' });
-  const stale = resolveTopicRich({ rows, rich: '["<ul><li>x</li></ul>",""]' });
+  const absent = resolveTopicRich({ rows, rich: [] });
+  const stale = resolveTopicRich({ rows, rich: ['<ul><li>x</li></ul>', ''] });
   assert.deepEqual(
     [absent.source, absent.stale], [TOPIC_SOURCE.PLAIN, false],
   );
@@ -276,10 +288,16 @@ test('the two stale-vs-absent states are distinguishable by the caller', () => {
 
 // ── the encoding ───────────────────────────────────────────────────────────
 
-test('parseTopicRich decodes a per-row array and rejects everything else', () => {
-  assert.deepEqual(parseTopicRich('["<ul></ul>",""]'), ['<ul></ul>', '']);
-  assert.deepEqual(parseTopicRich('[]'), []);
-  for (const bad of ['', '  ', null, undefined, 5, {}, '[1]', '{"a":1}', 'x']) {
+test('parseTopicRich takes a per-row array and rejects everything else', () => {
+  // It reads the array Mongo returns. No JSON, no parse step — an earlier
+  // draft of this module decoded a JSON string and the schema was ruled to be
+  // a real [String] instead, which removes that failure mode entirely.
+  assert.deepEqual(parseTopicRich(['<ul></ul>', '']), ['<ul></ul>', '']);
+  assert.deepEqual(parseTopicRich([]), []);
+  for (const bad of [
+    '', '  ', null, undefined, 5, {}, [1], { a: 1 }, 'x',
+    '["<ul></ul>"]',   // the JSON-string form is NOT accepted — it is a string
+  ]) {
     assert.deepEqual(parseTopicRich(bad), [], `parseTopicRich(${JSON.stringify(bad)})`);
   }
 });

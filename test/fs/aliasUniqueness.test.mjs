@@ -42,7 +42,31 @@ test('courseId stays unique — the alias index is an addition, not a swap', () 
 // ── D4: the app-level check, and that it did NOT replace the index ─────────
 
 test('the save action checks for a clashing alias before writing', () => {
-  assert.match(ACTIONS.code, /urlAlias:\s*cleanAlias/, 'nothing looks the alias up');
+  /**
+   * ── RE-ANCHORED: THE EXPRESSION MOVED, THE RULE DID NOT ──────────────────
+   * This used to match `/urlAlias:\s*cleanAlias/` inside the action's update
+   * literal. That literal moved to lib/courses/extensionUpdate, where the same
+   * assignment now reads `urlAlias: () => cleanAlias` — so the old pattern can
+   * no longer see it. sourceScan defect 7, face one: the guard goes quiet while
+   * looking untouched.
+   *
+   * The rule is unchanged and is asserted in the two halves it actually has:
+   * the action normalises the alias and hands THAT value to the builder, and
+   * the builder writes it rather than re-deriving one.
+   */
+  assert.match(
+    ACTIONS.code, /const cleanAlias = normaliseAlias\(data\?\.urlAlias\)/,
+    'the action no longer normalises the alias it writes',
+  );
+  assert.match(
+    ACTIONS.code, /buildExtensionUpdate\(\{[^}]*cleanAlias[^}]*\}\)/,
+    'the normalised alias is not handed to the update builder',
+  );
+  assert.match(
+    readSource('src/lib/courses/extensionUpdate.js').code,
+    /urlAlias:\s*\(\)\s*=>\s*cleanAlias/,
+    'the builder writes something other than the normalised alias',
+  );
   assert.match(
     ACTIONS.code,
     /courseId:\s*\{\s*\$ne:\s*courseId\s*\}/,
