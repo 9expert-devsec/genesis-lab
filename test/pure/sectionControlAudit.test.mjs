@@ -199,3 +199,40 @@ test('CONTROL: the clamp scan discriminates — a section without one is not mat
     'container DOES clamp (max-w-3xl, finding 3) — the pattern must be specific enough to tell '
     + 'the two findings apart');
 });
+
+// ── FINDING 3 — the container's own clamp, which had no tripwire ───────────
+
+test('AUDIT TRIPWIRE (finding 3): container still clamps itself to the width that swallows three settings', () => {
+  /**
+   * Added in round 21. Findings 1, 2 and 8 got tripwires when the audit was
+   * written; finding 3 did not, and the control above mentions it only in
+   * passing — a message, not an assertion. So the one finding whose fix is the
+   * most invasive of the three was also the one nothing would notice changing.
+   *
+   * Measured, at a 1200px container: the four `settings.containerWidth` values
+   * paint 640 / 768 / 768 / 768. Only `small` (672 − 32 of padding = 640) is
+   * narrower than the component's own `max-w-3xl`; `medium`, `large` and `full`
+   * all lose to it. `presets.js` is not at fault — it emits exactly the
+   * max-widths it names. The second authority is here.
+   *
+   * The specific value is pinned, not just "some clamp": a change from
+   * `max-w-3xl` to any other fixed width would still swallow settings, just a
+   * different number of them, and the audit's row would be wrong in a new way.
+   */
+  const { code } = readSource('src/components/pageBuilder/sections/container.jsx');
+  assert.match(code, /max-w-3xl/,
+    'FINDING 3 HAS MOVED: container no longer clamps itself to max-w-3xl. If the clamp is GONE, '
+    + 're-run scripts/_probe-container-width.mjs and confirm the four settings now give four '
+    + 'distinct widths, then delete this test and finding 3 from docs/section-control-audit.md. '
+    + 'If it merely CHANGED, the audit\'s measured row (640/768/768/768) is now wrong and needs '
+    + 're-measuring — see docs/control-fix-proposal.md §3.');
+
+  // …and full_width, its sibling, still has no clamp at all. The two types are
+  // distinguished by exactly this line today, which is why §3 of the proposal
+  // cannot simply delete it.
+  assert.equal(
+    /max-w-/.test(readSource('src/components/pageBuilder/sections/full_width.jsx').code), false,
+    'full_width gained a width clamp — container and full_width are no longer distinguished by '
+    + 'the one line finding 3 is about',
+  );
+});
