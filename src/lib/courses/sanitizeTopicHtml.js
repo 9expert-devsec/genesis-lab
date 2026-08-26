@@ -12,10 +12,14 @@ import { clampDepth, MAX_TOPIC_DEPTH } from '@/lib/courses/topicHtml';
  *
  *   · `<div>` / `<h1>` / `<table>` inside a list item is invalid nesting the
  *     browser silently reflows, and the reflow escapes the list;
- *   · the outline accordion body is height-constrained — CourseOutline.jsx
- *     renders `max-h-[800px]` when open and `max-h-0` when closed, with
- *     `overflow-hidden` on the same element — so ONE oversized block in ONE
- *     bullet clips or breaks the animation for a whole course's section;
+ *   · the outline accordion body is a GRID TRACK animating 0fr -> 1fr, with the
+ *     content in a `min-h-0 overflow-hidden` grid item. A block box in one
+ *     bullet is measured into that track like anything else, so it does not
+ *     clip — it simply makes one panel arbitrarily tall, pushing every topic
+ *     below it off the screen. (The panel used to carry a `max-h-[800px]`
+ *     ceiling, which clipped instead; that was its own defect and is fixed —
+ *     see CourseOutline.jsx's header. The tag list is narrow for the layout
+ *     reason above either way.)
  *   · `<iframe>` in an outline bullet is not a feature anyone asked for, and
  *     the page sanitizer's 11-host allow-list is a surface this field has no
  *     reason to carry.

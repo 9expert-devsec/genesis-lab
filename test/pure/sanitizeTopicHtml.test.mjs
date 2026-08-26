@@ -10,13 +10,13 @@ import { readSource } from '../sourceScan.mjs';
  *
  * ── WHY IT IS NOT sanitizePageHtml ──────────────────────────────────────────
  * That module allows div, table, iframe and h1 — correct for a custom PAGE
- * body, wrong inside an <li>. The outline accordion body is height-constrained
- * (CourseOutline.jsx renders max-h-[800px] / max-h-0 with overflow-hidden on
- * one element), so a block box in a single bullet clips or breaks the reveal
- * animation for the whole course section. The two are asserted DIFFERENT below
- * by RUNNING BOTH on one fixture — not by comparing source text — so a future
- * "just reuse the page one" refactor goes red on behaviour rather than on
- * spelling.
+ * body, wrong inside an <li>. The outline accordion body is a grid track
+ * animating 0fr -> 1fr with the content in a `min-h-0 overflow-hidden` grid
+ * item, so a block box in one bullet is measured into that track and makes a
+ * single panel arbitrarily tall, pushing every topic below it off screen. The
+ * two sanitizers are asserted DIFFERENT below by RUNNING BOTH on one fixture —
+ * not by comparing source text — so a future "just reuse the page one" refactor
+ * goes red on behaviour rather than on spelling.
  *
  * ── SOURCE-SCANNING ASSERTIONS READ THROUGH test/sourceScan.mjs ─────────────
  * The single reader for that in this suite. It strips comments, and this file
