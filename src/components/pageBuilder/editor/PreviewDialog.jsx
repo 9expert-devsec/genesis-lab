@@ -30,8 +30,16 @@ import { useEditor } from './EditorProvider';
  * preview cookie's HMAC covers passwordHash + passwordUpdatedAt), which is the
  * property that makes revoke meaningful rather than cosmetic.
  */
-export function PreviewDialog({ open, onClose }) {
-  const { page, pageId, tier } = useEditor();
+/**
+ * The dialog BODY, taking plain props — same split, and the same reason, as
+ * PageSettingsBody. Radix renders a portal, which produces NOTHING under
+ * renderToStaticMarkup, so the wrapper is the half no render test can reach.
+ *
+ * All the state and every handler live here rather than in the wrapper: they
+ * are what the body renders from, and moving them would have been an edit
+ * rather than a move. No action call shape changed.
+ */
+export function PreviewBody({ page, pageId, tier, open }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   // Only a GENERATED password lands here — the admin never types it, so it is
@@ -116,24 +124,7 @@ export function PreviewDialog({ open, onClose }) {
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
-          )}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ลิงก์พรีวิว</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-              <X className="h-4 w-4" />
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">จัดการลิงก์พรีวิวที่ป้องกันด้วยรหัสผ่าน</Dialog.Description>
+    <>
 
           {!pageId && <Warn>ต้องบันทึกหน้านี้ก่อนจึงจะสร้างลิงก์พรีวิวได้</Warn>}
           {!slug && pageId && <Warn>ต้องตั้ง URL (slug) ก่อนจึงจะมีลิงก์พรีวิว</Warn>}
@@ -237,6 +228,34 @@ export function PreviewDialog({ open, onClose }) {
                 onChange={(e) => onExpiry(e.target.value)} />
             </Field>
           </Group>
+    </>
+  );
+}
+
+export function PreviewDialog({ open, onClose }) {
+  const { page, pageId, tier } = useEditor();
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Content
+          className={cn(
+            'fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]',
+            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
+            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
+            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
+          )}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ลิงก์พรีวิว</Dialog.Title>
+            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+          <Dialog.Description className="sr-only">จัดการลิงก์พรีวิวที่ป้องกันด้วยรหัสผ่าน</Dialog.Description>
+
+          <PreviewBody page={page} pageId={pageId} tier={tier} open={open} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

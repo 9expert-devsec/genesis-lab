@@ -106,8 +106,27 @@ function PromoCoverField({ value, onChange }) {
   );
 }
 
-export function PageSettingsDialog({ open, onClose }) {
-  const { page, pageId, dispatch } = useEditor();
+/**
+ * The dialog's BODY, taking plain props.
+ *
+ * ── WHY IT IS SEPARATE, AND WHY THAT IS A TEST CONCERN ─────────────────────
+ * Neither of these dialogs had any test coverage, and neither could have: the
+ * component reads `useEditor()`, which THROWS outside a provider, and even
+ * inside one a Radix `Dialog.Portal` renders NOTHING under
+ * renderToStaticMarkup — measured, 0 bytes. So the whole dialog was
+ * unreachable from the render tier in two independent ways.
+ *
+ * This is the same split, for the same reason, as `SettingsPanel`'s exported
+ * tab bodies (round 15) and `SectionPickerBody` (rounds 9/13): the wrapper
+ * keeps the context read and the portal; the body takes plain props and can be
+ * rendered directly.
+ *
+ * IT IS A MOVE, NOT AN EDIT. Every field, warning, hint and dispatch below is
+ * the JSX that was inline in the dialog, unchanged — which is what lets the
+ * union check in test/render/pageDialogs assert the field set is the same one
+ * that shipped before the split.
+ */
+export function PageSettingsBody({ page, pageId, dispatch, open }) {
   const patch = (p) => dispatch({ type: 'PATCH_PAGE', patch: p });
   const patchSeo = (p) => dispatch({ type: 'PATCH_PAGE', patch: { seo: { ...(page?.seo ?? {}), ...p } } });
 
@@ -118,25 +137,7 @@ export function PageSettingsDialog({ open, onClose }) {
   const seo = page?.seo ?? {};
 
   return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(34rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
-          )}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ตั้งค่าหน้า</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-              <X className="h-4 w-4" />
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">แก้ไขข้อมูลระดับหน้า เช่น ชื่อ, URL, ธีม และ SEO</Dialog.Description>
-
+    <>
           <Group title="ทั่วไป">
             <Field label="ชื่อหน้า" hint="ใช้ในระบบหลังบ้านและเป็นค่าตั้งต้นของ meta title">
               <TextInput value={page?.title} onChange={(v) => patch({ title: v })} invalid={titleEmpty} />
@@ -231,6 +232,34 @@ export function PageSettingsDialog({ open, onClose }) {
           <Group title="ประวัติการเผยแพร่">
             <VersionHistory pageId={pageId} open={open} />
           </Group>
+    </>
+  );
+}
+
+export function PageSettingsDialog({ open, onClose }) {
+  const { page, pageId, dispatch } = useEditor();
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Content
+          className={cn(
+            'fixed left-1/2 top-1/2 z-50 w-[min(34rem,calc(100vw-2rem))]',
+            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
+            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
+            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
+          )}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ตั้งค่าหน้า</Dialog.Title>
+            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+          <Dialog.Description className="sr-only">แก้ไขข้อมูลระดับหน้า เช่น ชื่อ, URL, ธีม และ SEO</Dialog.Description>
+
+          <PageSettingsBody page={page} pageId={pageId} dispatch={dispatch} open={open} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
