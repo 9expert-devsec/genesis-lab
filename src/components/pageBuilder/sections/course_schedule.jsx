@@ -72,8 +72,33 @@ export function CourseScheduleSection({ content, data }) {
 
           const row = (
             <div className="flex items-center gap-3 px-4 py-3">
-              <CalendarDays className="h-4 w-4 shrink-0 text-9e-action" strokeWidth={1.75} aria-hidden />
+              {/*
+                ORNAMENT — follows the section's accent, via --pb-accent-fill.
+                It used to name the DEFAULT accent's own colour token directly,
+                which is the subtlest form of the dead-control defect: the icon
+                looked accented, so nothing seemed wrong, and a section whose
+                author had chosen a different accent silently kept the default.
+                Same swap, same variable, same reason as checklist's tick and
+                stat_card's / icon_card's icons — ornament takes `fill`.
+
+                At the default accent this repaints nothing: the token and
+                --pb-accent-fill both resolve to the same colour, measured in
+                Chrome rather than argued from the class string (round 23).
+              */}
+              <CalendarDays className="h-4 w-4 shrink-0 text-[var(--pb-accent-fill)]" strokeWidth={1.75} aria-hidden />
               <span className="min-w-0 flex-1">
+                {/*
+                  The two negative rules the nine existing consumers hold to,
+                  and why nothing else in this row moved:
+
+                  BODY COPY IS NEVER ACCENTED. The date range is this row's
+                  primary text and the type is its secondary text; both keep
+                  their surface text tokens.
+
+                  SEMANTIC COLOUR IS NEVER OVERRIDDEN. resolveScheduleBadge
+                  encodes open / nearly-full. Repainting it with a chosen accent
+                  would make the badge lie about how full a round is.
+                */}
                 <span className="block text-sm font-bold text-[var(--text-primary)]">{range ?? 'ยังไม่ระบุวันที่'}</span>
                 {typeLabel && <span className="block text-xs text-[var(--text-secondary)]">{typeLabel}</span>}
               </span>
@@ -88,6 +113,17 @@ export function CourseScheduleSection({ content, data }) {
 
           return (
             <li key={s?._id ?? i}>
+              {/*
+                The hover tint is DELIBERATELY not accented, and it is the one
+                judgement call here. It is a pale tint off the signature scale,
+                not the default accent's token, so the defect above does not
+                describe it — the author never had a reason to expect it to
+                follow their choice. And none of the nine existing consumers
+                accents a hover surface: the closest precedent, icon_card's
+                chip, is a resting background, not a state. Accenting a hover
+                would be a fourth role invented here rather than a pattern
+                followed, so it stays for a round that argues for it on its own.
+              */}
               {href ? (
                 <a href={href} className="block transition-colors hover:bg-9e-signature-900">{row}</a>
               ) : row}

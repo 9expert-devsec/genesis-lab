@@ -749,9 +749,40 @@ test('C: the panel comment corrects the two fields this round made true, and sto
     'a Tailwind class literal is back in SettingsPanel.jsx, which Tailwind scans — describe the '
     + 'utility in prose and let the test tier name it');
 
-  // The open gap is still described as open — not as settled.
-  assert.match(head, /accordion, instructor_card and course_schedule/,
-    'the three types with an unclaimed accent surface are no longer named as an open gap');
+  /**
+   * The open gap is still described as open — not as settled.
+   *
+   * ── ROUND 23 SHRANK THIS LIST, AND THE PIN DID NOT NOTICE ────────────────
+   * It read `accordion, instructor_card and course_schedule` until round 23
+   * gave course_schedule's icon the accent. This assertion stayed GREEN through
+   * that commit, because a `match` asserts the sentence is PRESENT and cannot
+   * see its subject go false. The audit tripwire over the renderers is what
+   * went red, and the comment was corrected from there.
+   *
+   * So the list is now cross-checked against the measured consumer set below
+   * rather than only against itself — the same one-source discipline the
+   * ความกว้าง hint already answers to.
+   */
+  assert.match(head, /accordion and instructor_card/,
+    'the types with an unclaimed accent surface are no longer named as an open gap');
   assert.match(head, /open gap in the renderers/,
     'the comment stopped saying the remaining accent gap is unfixed');
+  assert.equal(/course_schedule — DO have a surface/.test(head), false,
+    'course_schedule is listed as an open accent gap again, but it takes the accent since '
+    + 'round 23 — check test/pure/sectionControlAudit finding 2 for the measured set');
+
+  // The named-open types must be exactly the ones that do NOT paint with the
+  // accent. Derived from the components, so the sentence cannot drift alone.
+  const painting = readdirSync(SECTIONS_DIR)
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /--pb-accent-/.test(readSource(`src/components/pageBuilder/sections/${f}`).code))
+    .map((f) => f.replace(/\.jsx$/, ''));
+  for (const t of ['accordion', 'instructor_card']) {
+    assert.equal(painting.includes(t), false,
+      `${t} is named as an open accent gap in SettingsPanel's comment but now paints with the `
+      + 'accent — the comment and the exact set in test/pure/sectionControlAudit both need it');
+  }
+  assert.equal(painting.includes('course_schedule'), true,
+    'course_schedule stopped painting with the accent — the comment above no longer lists it '
+    + 'as an open gap, so the gap would now be unrecorded anywhere');
 });

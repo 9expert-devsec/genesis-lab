@@ -612,3 +612,146 @@ Unlike §9's tripwires these are **not** self-retiring. They pin copy this round
 chose, so a later round that changes the copy updates them in the same commit —
 which is the ordinary relationship between a test and the thing it tests, and
 the reason they live here rather than beside the tripwires.
+
+---
+
+## 11. Round 23 — `course_schedule` takes the accent (finding 2, partial)
+
+**Appended, not merged**, same as §10. §8's finding 2 stays as round 18 measured
+it. Measured at `77221ea`.
+
+Step 2 of [docs/control-fix-proposal.md](./control-fix-proposal.md) §6, and the
+first change to a file the **published page renders** since round 5.
+
+### The change, and why this one went first
+
+`course_schedule`'s calendar icon named the default accent's own colour token
+directly. That is the quietest form of the defect this whole audit is about: the
+icon *looked* accented, so an author who picked a different accent had no
+symptom to notice — it simply stayed the colour it had always been.
+
+One class token, swapped for `--pb-accent-fill`. The role is **ornament**,
+following `checklist`'s tick, `timeline`'s dot and `icon_card`'s / `stat_card`'s
+icons; no fourth role was invented and `SECTION_STYLE_CAPS` was not touched.
+
+### Finding 2, updated
+
+| | round 18 | round 21 | round 23 |
+|---|---:|---:|---:|
+| direct consumers (name the variable) | 8 | 8 | **9** |
+| indirect (`accentButtonClass`) | 2 | 2 | 2 |
+| union that paints | 9 | 9 | **10** |
+| types with a surface and no accent | — | 3 | **2** |
+
+The remaining two are `accordion` and `instructor_card` — steps 3 and 4. The
+eleven types with no accent surface are unchanged and remain correct restraint,
+not defects (§10).
+
+### What did NOT change, and the rule each one is
+
+Both of round 21's negative rules held, and both are now asserted rather than
+described:
+
+- **Body copy is never accented.** The row's date range (primary text) and its
+  type label (secondary text) keep their surface tokens.
+- **Semantic colour is never overridden.** `resolveScheduleBadge` encodes
+  open / nearly-full. Accenting it would make the badge lie about how full a
+  round is.
+
+One deliberate non-change that is a judgement rather than a rule: the row's
+**hover tint** is a pale value off the signature scale, not the default accent's
+token, so the defect above does not describe it — and no existing consumer
+accents a hover *state* (`icon_card`'s tinted chip is a resting background). It
+stays, for a round that argues for it on its own merits.
+
+### The byte-zero prediction, stated precisely
+
+Round 21 predicted this step would be inert at the default accent. It is — but
+the claim needs its unit named, because two different things could be meant:
+
+| what | before → after, at the default accent |
+|---|---|
+| **painted colour** | `rgb(0, 92, 255)` → `rgb(0, 92, 255)` — **identical** |
+| rendered markup | differs in **exactly 2 whitespace-separated tokens** — the same class token, once per rendered row, and nothing else |
+
+The markup difference is not a surprise, it is the change: the class attribute
+is the thing being edited, so a markup diff can only ever report "not
+identical". The proposal's §7 framed the prediction as colour ("`text-9e-action`
+and the default accent resolve to the same colour"), and that is what held.
+
+**So the browser measurement was necessary here, not optional** — contrary to
+the expectation that a colour-only change would not need it. It is the only
+instrument that can evaluate the prediction at all: the utility resolves to a
+hex compiled into the stylesheet, the variable resolves through
+`--pb-accent-fill` → `ACCENT_VARS` → a `:root` custom property in `globals.css`,
+and JSDOM resolves none of that. What was *not* run is a **layout** measurement:
+nothing changed size or position, and the painted box was never in question.
+
+### Measured, in real Chrome
+
+`scripts/_probe-schedule-accent.mjs` — real `SectionRenderer`, real compiled
+Tailwind, the real `:root` block, the real theme wrapper, `getComputedStyle` on
+the real element. Seven cases: no author choice, plus all six accents.
+
+| | icon colours | primary text | badges |
+|---|---:|---:|---:|
+| before | **1 distinct** | 1 | 1 |
+| after | **6 distinct** | 1 | 1 |
+
+Before, the icon painted `rgb(0, 92, 255)` at every one of the seven — which is
+finding 2 for this type, measured rather than inferred. After, only `(default)`
+and `brand_blue` are unchanged, and those are the same accent named two ways.
+
+### Blast radius, re-measured rather than trusted
+
+`scripts/audit-control-fix-blast-radius.mjs` plus a targeted read-only walk:
+**0** — and `course_schedule` does not appear in the corpus at all. 0 live, 0
+draft, 0 in `page_versions`, out of 34 sections across 3 documents.
+
+**The caveat still applies, unchanged.** That is one database at one moment
+(`9exp_genesis`), small enough that it may be development or staging rather than
+production. Re-run before this reaches a production deploy; the script takes its
+URI from the environment.
+
+### Tripwires: one fired, and it was reconciled per its own instructions
+
+**Finding 2's tripwire went red, naming `course_schedule`** — a ninth direct
+consumer where it expected eight. That is the tripwire working. Its message
+directs, for an ADDED type: update finding 2 here, and delete the test *once the
+offered set and the reader set agree*. They do not yet — two types remain — so
+the expected set was extended by one and the test kept, with the reconciliation
+written into it. Findings 1, 3 and 8 were untouched and stayed green.
+
+**One pin did NOT fire, and that is the more useful result.** Round 22 asserted
+that `SettingsPanel.jsx`'s comment names `accordion, instructor_card and
+course_schedule` as an open accent gap. That sentence became false in this
+commit and the assertion stayed **green**, because a `match` checks the prose is
+PRESENT and cannot see its subject change underneath it. The renderer-side
+tripwire is what caught it. The comment was corrected to name two types, and the
+assertion now cross-checks the named list against the measured consumer set — so
+the sentence can no longer drift on its own.
+
+### An accidental safeguard, found by a control that failed to break anything
+
+The first attempt to accent the status badge — to prove the second negative rule
+was actually being tested — produced **no change in the markup at all**. `cn`
+is tailwind-merge: `status.soft` also sets a text colour, later in the argument
+list, so the injected accent was silently dropped. The break only bit once it
+was placed after `status.soft` and allowed to win the merge.
+
+Worth recording because it cuts both ways: the badge is incidentally hard to
+override by accident, and a control that "passes" after a break must be diffed
+before it is believed.
+
+### Tests added
+
+Four, in `test/render/derived.test.mjs`, beside the existing `course_schedule`
+coverage. They pin the **wiring** — which mechanism the element reads — because
+the accent travels by CSS variable and the class string is constant across all
+six values, so no render test can see the colour. The colour claim lives in the
+probe above.
+
+Verified red by three deliberate breaks, all reverted by file copy: the
+hardcoded token restored (caught in three files at once — the wiring test by
+name, finding 2's tripwire, and round 22's new cross-source assertion), the
+semantic badge accented, and the row's primary text accented.

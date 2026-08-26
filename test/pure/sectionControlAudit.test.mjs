@@ -116,15 +116,32 @@ function buttonHelperConsumers() {
     .sort();
 }
 
-test('AUDIT TRIPWIRE (finding 2): exactly nine section components paint with the accent', () => {
+test('AUDIT TRIPWIRE (finding 2): exactly ten section components paint with the accent', () => {
   /**
-   * Eight name the variable themselves; `cta` reaches it through the shared
-   * button helper (price_card does both). Nine types in total, plus the four
+   * Nine name the variable themselves; `cta` reaches it through the shared
+   * button helper (price_card does both). Ten types in total, plus the four
    * containers that forward the variable to children without drawing anything
-   * of their own — thirteen with an effect, fourteen without.
+   * of their own — fourteen with an effect, thirteen without.
+   *
+   * ── THIS TRIPWIRE FIRED IN ROUND 23, AND THIS IS THE RECONCILIATION ──────
+   * `course_schedule` was ADDED: its calendar icon named the default accent's
+   * own colour token directly, so it looked accented and never followed the
+   * author's choice. Round 23 swapped the token for the variable, the scan
+   * found a ninth direct consumer, and this assertion went red naming it —
+   * which is the tripwire doing its job, not a fault to route around.
+   *
+   * Reconciled exactly as the message below directs for an ADDED type: the
+   * expected set is extended by the one type, and finding 2 is updated in
+   * docs/section-control-audit.md (§10, round 23). The test is NOT deleted,
+   * because deletion is conditioned on the offered set and the reader set
+   * AGREEING, and they still do not — `accordion` and `instructor_card` have a
+   * surface the pattern reaches and take no accent. Two left, not three.
+   *
+   * Nothing else about this file's contract changes: it still records measured
+   * state, and the day those two land it goes red again and is deleted then.
    */
   assert.deepEqual(directAccentConsumers(), [
-    'checklist', 'highlight_grid', 'icon_card', 'price_card',
+    'checklist', 'course_schedule', 'highlight_grid', 'icon_card', 'price_card',
     'rich_text', 'stat_card', 'tabs', 'timeline',
   ],
   'FINDING 2 HAS MOVED: the set of components naming --pb-accent-* changed. If a type was '
@@ -136,10 +153,18 @@ test('AUDIT TRIPWIRE (finding 2): exactly nine section components paint with the
     'the indirect route changed — accentButtonClass is how cta gets its accent without naming '
     + 'the variable, and it is gated by SECTION_STYLE_CAPS');
 
-  // The union is the nine the audit reports. Written as a union rather than as
-  // a tenth literal list, so the two routes above stay the only source.
+  // The union is the ten the audit reports. Written as a union rather than as
+  // an eleventh literal list, so the two routes above stay the only source.
   const painting = [...new Set([...directAccentConsumers(), ...buttonHelperConsumers()])].sort();
-  assert.equal(painting.length, 9);
+  assert.equal(painting.length, 10);
+
+  // The two types the gap is still open on, named so the next step's target is
+  // stated here rather than only in a document. Both go false when it lands,
+  // which reddens the exact-set assertion above and retires this test.
+  assert.deepEqual(
+    ['accordion', 'instructor_card'].filter((t) => directAccentConsumers().includes(t)), [],
+    'a type the audit lists as an open accent gap now paints with the accent — the exact set '
+    + 'above must be extended in the same commit, and finding 2 updated with it');
 });
 
 test('CONTROL: the consumer scan reads code, not prose', () => {
