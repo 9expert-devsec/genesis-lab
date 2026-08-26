@@ -1,9 +1,9 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
-  Eye, EyeOff, ChevronUp, ChevronDown, Copy, Trash2, Plus, Ban,
+  Eye, EyeOff, ChevronUp, ChevronDown, ChevronRight, Copy, Trash2, Plus, Ban,
   AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -13,7 +13,7 @@ import { iconOf } from '@/lib/pageBuilder/sectionIcons';
 import { countDescendants } from '@/lib/pageBuilder/sectionDescendants';
 import { newSection } from '@/lib/pageBuilder/newSection';
 import { useEditor } from './EditorProvider';
-import { depthOfPath } from './pagePath';
+import { depthOfPath, getAt, parentSectionPath, pathToKey } from './pagePath';
 import { useTreeDrag } from './useTreeDrag';
 import { SectionPicker } from './SectionPicker';
 
@@ -215,10 +215,15 @@ function ConfirmDeleteDialog({ pending, onCancel, onConfirm }) {
 
 function SectionNode({ section, path, siblingCount }) {
   const { dispatch, selection } = useEditor();
-  const { getRowProps, isDragging, isDropTarget, requestDelete } = useStructure();
+  const { getRowProps, isDragging, isDropTarget, requestDelete, isExpanded, toggleExpanded } = useStructure();
 
   const index = path[path.length - 1];
   const slots = slotsOf(section?.type);
+  // A container is any type with slots — the same test the cap badge and the
+  // child count already use, so "has a disclosure control" and "has children
+  // to count" can never disagree.
+  const isContainer = Boolean(slots);
+  const open = isContainer && isExpanded(section, path);
   const hidden = section?.enabled === false;
   const selected = selection?.length === path.length && selection.every((k, i) => path[i] === k);
   const atCap = Boolean(slots) && depthOfPath(path) >= MAX_SECTION_DEPTH;
@@ -271,20 +276,51 @@ function SectionNode({ section, path, siblingCount }) {
           isDropTarget(path) && 'border-t-2 border-t-9e-action'
         )}
       >
-        {/* ── THE TYPE ICON STANDS WHERE THE GRIP GLYPH DID ───────────────────
-            NOT beside it. The row was measured in a browser at 260px: after the
-            grip, the four hover actions and the visibility toggle, the label has
-            85px at top level and 33px on a nested row that also carries a badge.
-            An icon ADDED to the row costs another 18px of that, which the label
-            does not have — and the alternative, buying it back by shrinking a
-            control, is the one thing a 22px hit area must not pay.
+        {/* ── ONE LEADING COLUMN, 24px WIDE, TWO THINGS IN IT ────────────────
+            A container gets the disclosure control; a leaf gets round 17's type
+            icon, centred in a box of the same size so the two line up down the
+            list. A tree whose disclosers and whose icons start at different
+            offsets reads as two lists interleaved.
 
-            Nothing about dragging changes: the handlers, the drop targets and
-            the grab cursor are all on the row div, which is why the glyph was
-            only ever decoration. iconOf is the SAME lookup the section picker
-            renders a type with (rounds 9-13), so an author meets one icon per
-            type and meets it twice. */}
-        <TypeIcon className="h-3.5 w-3.5 shrink-0 text-9e-slate-dp-50/60" aria-hidden />
+            WHY THE CONTAINER GIVES UP ITS TYPE ICON, AND WHY THAT COSTS NOTHING.
+            A container row ALWAYS states its type in text. When it has no name
+            and no summary, line 1 is the type label itself; when it has either,
+            childCountLabel forces a second line and the type label is the first
+            thing on it — that is what the assembly a few lines up guarantees.
+            So the glyph is the one place a container's type is said twice, and
+            the disclosure control is the one thing a container has that a leaf
+            does not. Swapping them where they are needed spends no width.
+
+            WHY THERE IS NO DRAG HANDLE HERE, MEASURED. Chrome at the shipped
+            276px: the label button is 76px on a top-level row and 24.4px on a
+            nested one, because the action cluster and the visibility toggle
+            take 120px and are in flow on every row at every depth whether or
+            not they are visible. A handle costs 18px with its gap; retiring the
+            position number repays 11.5. A nested row would be left under 8px of
+            label, which is not a label. Round 29 reached the same arithmetic
+            from the other side and concluded there is room for a handle AND the
+            cluster on a 54px CARD with a two-line text block — which is its
+            step 4, not this. The blocker to name for whoever takes that on is
+            the 120px of always-in-flow controls, not the handle.
+
+            Widening this column from 14px to 24px is what the position number
+            paid for: 11.5px retired against 10px spent, so every row's label is
+            1.5px wider than it was rather than narrower. */}
+        {isContainer ? (
+          <IconButton
+            label={open ? 'ยุบ section ที่ซ้อนอยู่' : 'ขยายเพื่อดู section ที่ซ้อนอยู่'}
+            onClick={() => toggleExpanded(section, path)}
+          >
+            <ChevronRight
+              className={cn('h-4 w-4 transition-transform', open && 'rotate-90')}
+              aria-hidden
+            />
+          </IconButton>
+        ) : (
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+            <TypeIcon className="h-3.5 w-3.5 text-9e-slate-dp-50/60" aria-hidden />
+          </span>
+        )}
 
         <button
           type="button"
@@ -304,27 +340,40 @@ function SectionNode({ section, path, siblingCount }) {
               label then moves to line 2, but ONLY when it is not already what
               line 1 said, so no row ever prints its type twice.
 
-              What this cannot fix on its own: five rich_text sections with no
-              name and no summary have no distinguishing data at all, so they
-              read identically. The position number is what separates them,
-              which is why it leads — and naming them is now the author's
-              remedy rather than something only a future round could give. */}
-          <span className="flex items-baseline gap-1">
-            <span data-testid="row-position" className="shrink-0 text-[10px] tabular-nums text-9e-slate-dp-50/70">
-              {index + 1}.
-            </span>
-            <span
-              data-testid="row-primary"
-              className={cn(
-                'min-w-0 flex-1 truncate font-medium',
-                selected ? 'text-9e-navy dark:text-white' : 'text-9e-navy/80 dark:text-white/80'
-              )}
-            >
-              {primary}
-            </span>
+              ── WHAT THE POSITION NUMBER USED TO CARRY, AND WHAT NOW DOES NOT
+              A leading number stood here from round 16 to round 32, for a
+              reason this note used to state: sections with no name and no
+              summary have no distinguishing data at all, and the number was
+              what separated them. Round 17 gave the author a name field, which
+              answers it for any section someone has named.
+
+              IT DOES NOT ANSWER IT FOR THE UNNAMED. Measured rather than
+              assumed: three adjacent unnamed rich_text sections render four
+              distinct rows with the number and TWO without — all three read the
+              bare word ข้อความ with no second line, and nothing on the row
+              tells them apart. That is a real cost of retiring the number and
+              it is not absorbed here: what should carry it instead is the
+              canvas, which already knows which section is selected and could
+              scroll to it, and a name the settings panel could offer to fill in
+              from the section's own content. Neither is this round's.
+
+              What line 1 still does is unchanged. The author's NAME leads when
+              there is one; the summary stands in when the type produces one
+              (the heading's own text, the CTA's label, the image's alt); the
+              type label otherwise, in which case it does not repeat on line 2. */}
+          <span
+            data-testid="row-primary"
+            className={cn(
+              'block truncate font-medium',
+              selected ? 'text-9e-navy dark:text-white' : 'text-9e-navy/80 dark:text-white/80'
+            )}
+          >
+            {primary}
           </span>
+          {/* The indent this line carried was the width of the number it used
+              to hang under. With the number gone it hangs under nothing. */}
           {secondary && (
-            <span data-testid="row-secondary" className="block truncate pl-4 text-[10px] text-9e-slate-dp-50">
+            <span data-testid="row-secondary" className="block truncate text-[10px] text-9e-slate-dp-50">
               {secondary}
             </span>
           )}
@@ -362,7 +411,13 @@ function SectionNode({ section, path, siblingCount }) {
         </IconButton>
       </div>
 
-      {slots?.map((slot) => {
+      {/* Only when open. A collapsed container renders no slot header, no
+          child rows and no nested AddRow — the whole subtree is absent from
+          the DOM rather than hidden with a class, so a collapsed page costs
+          what it looks like it costs. The child COUNT round 16 puts on line 2
+          is what keeps a closed container from being opaque: it says how many
+          are in there without opening it. */}
+      {open && slots?.map((slot) => {
         const kids = Array.isArray(section?.content?.[slot]) ? section.content[slot] : [];
         const slotLabel = SLOT_LABELS[slot];
         return (
@@ -456,9 +511,137 @@ function SectionList({ sections, basePath, addRow = true }) {
   );
 }
 
-export function StructurePanel() {
-  const { page, dispatch } = useEditor();
+/**
+ * The key a container's open/shut state is remembered under.
+ *
+ * ── IT IS THE SECTION'S ID, NOT ITS PATH, AND THAT IS NOT A PREFERENCE ────
+ * A path is a POSITION, and every action this panel offers moves positions.
+ * Keyed by path, an open container closes itself the moment a sibling is added
+ * above it, deleted above it, or moved past it — MOVE_SECTION rewrites the
+ * array, so `sections.1` stops meaning the node the author opened and starts
+ * meaning whatever took its place. Measured, not reasoned: the interaction
+ * probe caught exactly this — one click of ขึ้น on the row below an open
+ * container shut it and left the key pointing at a leaf.
+ *
+ * An id follows the node through all four. It is the one thing about a section
+ * that a reorder does not touch.
+ *
+ * ── WHY THE PANEL STILL ADDRESSES BY PATH EVERYWHERE ELSE ────────────────
+ * This does NOT reopen pagePath.js's rule. That rule is about ADDRESSING — a
+ * dispatch that edits the wrong node because two ids collide is a wrong edit,
+ * and paths are unambiguous by construction. This is view state: the worst a
+ * collision can do here is open two containers at once, which is cosmetic and
+ * self-evident. The editor's DUPLICATE_SECTION deep re-ids through
+ * reidSection, and so does the server's duplicateSection — the same module —
+ * so a collision needs a page that predates that shared walk.
+ *
+ * A section with no id at all falls back to its path, which is wrong under a
+ * reorder in exactly the way described above — but a section with no id cannot
+ * be addressed reliably by anything, and losing its open state is the mildest
+ * consequence available.
+ */
+function expandKey(section, path) {
+  return section?.id ? `id:${section.id}` : `path:${pathToKey(path)}`;
+}
+
+/**
+ * Every container between the page and `path`, as keys — the set that has to
+ * be open for `path` to be on screen at all.
+ *
+ * parentSectionPath returns NULL at the top level rather than an empty array
+ * (see pagePath.js for why), which is exactly what terminates this walk.
+ */
+function ancestorKeys(page, path) {
+  const out = [];
+  for (let p = parentSectionPath(path); p; p = parentSectionPath(p)) out.push(expandKey(getAt(page, p), p));
+  return out;
+}
+
+/**
+ * @param {string[]} [initialExpanded] section IDS open on first render.
+ *   PRODUCTION PASSES NOTHING and a test asserts EditorShell still doesn't —
+ *   every container starts closed there. It exists because collapse is state,
+ *   and the two things that need to observe the OPEN tree cannot dispatch into
+ *   it: the render tests build static markup (never a React root — the runner
+ *   is isolation:'none' and one leaked root breaks unrelated files), and the
+ *   fit probe measures a page at both extremes in one pass. Seeding is the
+ *   only way either reaches the expanded case, so it is a real parameter with
+ *   a documented default rather than a hook reached into from outside.
+ */
+export function StructurePanel({ initialExpanded = [] }) {
+  const { page, dispatch, selection } = useEditor();
   const sections = Array.isArray(page?.sections) ? page.sections : [];
+
+  /**
+   * ── COLLAPSE IS VIEW STATE AND IT STAYS OUT OF THE DOCUMENT ─────────────
+   * It lives here, in a hook, keyed by context path — NOT in the reducer's
+   * page tree. Round 15 ruled the same way for the settings panel's tabs and
+   * the reason is the same one: `page` is what autosave serialises, so a
+   * toggle written into it would mark the document dirty, race the 5s debounce
+   * and publish a view preference as content. Nothing below dispatches; the
+   * only writer is setExpanded, and PATCH_SECTION never sees a key.
+   *
+   * Keys, not paths: a path is a fresh array every render, so a Set of paths
+   * would never match itself. pathToKey is the same serialisation the drag
+   * hook uses for the same reason.
+   *
+   * WHY CLOSED BY DEFAULT. Round 29 measured its example page at 1297px in a
+   * panel that cannot collapse against 407px collapsed, and named collapse —
+   * not row height — as the variable that decides whether the panel is usable
+   * at all. Closed-by-default is also what makes a container's cost legible:
+   * an open container's children are indistinguishable from its siblings in a
+   * flat list, which is the confusion the indent rule was fighting. What keeps
+   * a closed container from being opaque is round 16's child count, which is
+   * on the row whether it is open or shut.
+   */
+  const [expanded, setExpanded] = useState(
+    () => new Set(initialExpanded.map((id) => `id:${id}`))
+  );
+
+  const isExpanded = useCallback(
+    (section, path) => expanded.has(expandKey(section, path)),
+    [expanded]
+  );
+  const toggleExpanded = useCallback((section, path) => {
+    const key = expandKey(section, path);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      // delete() reports whether it removed anything, so this is one lookup.
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
+
+  /**
+   * ── A COLLAPSED ANCESTOR MUST NEVER HIDE THE SELECTION ──────────────────
+   * The trap: SELECT is dispatched from the CANVAS too, and ADD_SECTION,
+   * DUPLICATE_SECTION and MOVE_SECTION all set the selection themselves — to a
+   * path that may sit inside a closed container. The settings panel would then
+   * be editing a section with no row on screen.
+   *
+   * So a selection change opens whatever it is inside. An EFFECT rather than a
+   * derivation on purpose: derived, the ancestors of the selection would be
+   * permanently open and their chevrons would be dead controls. Written into
+   * the set, the author can close them again afterwards, and the next
+   * selection into that subtree opens it again.
+   *
+   * The identity guard is what makes a repeated SELECT of the same row free:
+   * returning `prev` unchanged is a bail-out React does not re-render for.
+   */
+  useEffect(() => {
+    if (!selection) return;
+    const keys = ancestorKeys(page, selection);
+    if (keys.length === 0) return;
+    setExpanded((prev) => {
+      if (keys.every((k) => prev.has(k))) return prev;
+      const next = new Set(prev);
+      for (const k of keys) next.add(k);
+      return next;
+    });
+    // `page` is a dependency because the ancestors' IDS are read out of it.
+    // Every edit produces a new page object, so this runs often — the identity
+    // bail-out above is what makes those runs free.
+  }, [selection, page]);
 
   // { parentPath, index } while the picker is open, else null.
   const [target, setTarget] = useState(null);
@@ -503,7 +686,10 @@ export function StructurePanel() {
   // Stable identity or every row re-renders on any panel render — useTreeDrag
   // memoizes for that reason, and spreading it into a fresh object here would
   // throw that away.
-  const ctx = useMemo(() => ({ ...drag, openPicker, requestDelete }), [drag, openPicker, requestDelete]);
+  const ctx = useMemo(
+    () => ({ ...drag, openPicker, requestDelete, isExpanded, toggleExpanded }),
+    [drag, openPicker, requestDelete, isExpanded, toggleExpanded]
+  );
 
   return (
     <StructureContext.Provider value={ctx}>

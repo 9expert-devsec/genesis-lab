@@ -47,16 +47,22 @@ const sec = (id, type, content = {}, name = '') => ({
   id, type, content, settings: {}, style: {}, layout: {}, advanced: {}, enabled: true, sortOrder: 0, name,
 });
 
-function panelDoc(sections) {
+/**
+ * @param {string[]} [expanded] context keys of containers to render OPEN.
+ *   Round 32 made containers collapse, closed by default, so a fixture whose
+ *   claim is about a CHILD row has to say which container it is inside. Every
+ *   assertion here is about line 1 and line 2 — none of them is about collapse
+ *   — so the containers they need are opened rather than the claims weakened.
+ */
+function panelDoc(sections, expanded = []) {
   const markup = renderToStaticMarkup(
     createElement(EditorProvider, { page: { ...PAGE, sections }, pageId: 'p1', updatedAt: 'T0', tier: TIER },
-      createElement(StructurePanel, {})),
+      createElement(StructurePanel, { initialExpanded: expanded })),
   );
   return new JSDOM(`<!doctype html><body>${markup}</body>`).window.document;
 }
 
 const text = (el) => el?.textContent?.replace(/\s+/g, ' ').trim() ?? null;
-const positions = (doc) => [...doc.querySelectorAll('[data-testid="row-position"]')].map(text);
 const primaries = (doc) => [...doc.querySelectorAll('[data-testid="row-primary"]')].map(text);
 const secondaries = (doc) => [...doc.querySelectorAll('[data-testid="row-secondary"]')].map(text);
 
@@ -65,7 +71,8 @@ const secondaries = (doc) => [...doc.querySelectorAll('[data-testid="row-seconda
 test('CONTROL: the panel really renders one row per section', () => {
   const doc = panelDoc([sec('a', 'heading', { text: 'หนึ่ง' }), sec('b', 'rich_text')]);
   assert.equal(primaries(doc).length, 2);
-  assert.deepEqual(positions(doc), ['1.', '2.']);
+  assert.deepEqual(primaries(doc), ['หนึ่ง', 'ข้อความ'],
+    'the harness is not reading the rows this file is about');
 });
 
 // ── 1. line 1 and line 2, per the three cases the brief names ──────────────
@@ -200,7 +207,7 @@ test('a name that reads exactly like the assembled second line drops that line',
    * an author who types the joined string reproduces it whole. Nothing here is
    * forbidden — the name stands and the duplicate second line goes.
    */
-  const doc = panelDoc([sec('a', 'container', { children: [sec('c1', 'heading', { text: 'ลูก' })] }, 'คอนเทนเนอร์ · 1 section')]);
+  const doc = panelDoc([sec('a', 'container', { children: [sec('c1', 'heading', { text: 'ลูก' })] }, 'คอนเทนเนอร์ · 1 section')], ['a']);
   // Row-scoped: the container needs a child for the count to exist at all, and
   // that child renders its own row with its own second line.
   const row = doc.querySelector('[data-testid=\"row-primary\"]');
@@ -223,7 +230,7 @@ test('CONTROL: line 2 never repeats line 1, across all three cases at once', () 
     sec('d', 'rich_text'),
     sec('e', 'heading', { text: 'x' }, 'หัวข้อ'),
     sec('f', 'container', { children: [sec('f1', 'cta')] }, 'คอนเทนเนอร์ · 1 section'),
-  ]);
+  ], ['f']);
   const rows = [...doc.querySelectorAll('[data-testid="row-primary"]')];
   assert.equal(rows.length, 7, 'the fixture did not render the rows this control needs');
   rows.forEach((el, i) => {
@@ -274,47 +281,63 @@ test('an EMPTY container does show zero — it has slots, they are just empty', 
   assert.equal(secondaries(doc)[0], '0 section');
 });
 
-// ── 3. position numbers, and what they are after a move ────────────────────
+// ── 3. the order the rows render in ───────────────────────────────────────
+//
+// ── WHAT ROUND 32 RETIRED HERE, AND WHAT IT DELIBERATELY DID NOT ──────────
+// These two tests and the one after them were round 16's numbering tests, and
+// the leading position number they asserted no longer renders. NONE of the
+// three was purely about numbering, though — each was ALSO the only pin on
+// something that must survive — so all three are re-pointed rather than
+// deleted, and what each keeps is named at the assertion:
+//
+//   · this one also pinned that a reorder renders in the MOVED order, which is
+//     round 25's claim and the only render-tier statement of it
+//   · the next also pinned that a nested list renders under its container in
+//     its own order, with the container's own label above it
+//   · the third also pinned that the row does NOT read the stored sortOrder,
+//     which is a real trap: MOVE_SECTION rewrites the array without touching
+//     that field, so a row reading it would go stale on every move
+//
+// Only the number itself is gone. That it is gone is asserted in
+// structureRowCollapse.test.mjs; here, in the file that used to require it,
+// the point is that nothing ELSE went with it.
 
-test('positions number each list from 1, and follow the array after a reorder', () => {
+test('a reorder renders the rows in the moved order', () => {
   /**
-   * Asserted as the FULL numbering plus the full primary column, not just the
-   * moved row: a numbering that stayed attached to the item rather than the
-   * position would leave the moved row right and its neighbours wrong.
+   * Asserted as the FULL primary column, not just the moved row: an order that
+   * stayed attached to the item rather than the position would leave the moved
+   * row right and its neighbours wrong.
    */
   const before = [
     sec('a', 'heading', { text: 'หนึ่ง' }),
     sec('b', 'heading', { text: 'สอง' }),
     sec('c', 'heading', { text: 'สาม' }),
   ];
-  const first = panelDoc(before);
-  assert.deepEqual(positions(first), ['1.', '2.', '3.']);
-  assert.deepEqual(primaries(first), ['หนึ่ง', 'สอง', 'สาม']);
+  assert.deepEqual(primaries(panelDoc(before)), ['หนึ่ง', 'สอง', 'สาม']);
 
   // The move the ขึ้น/ลง buttons and the drag both perform.
   const after = panelDoc(moveInArray(before, 0, 2));
-  assert.deepEqual(positions(after), ['1.', '2.', '3.'], 'the numbering stopped counting from 1');
   assert.deepEqual(primaries(after), ['สอง', 'สาม', 'หนึ่ง'], 'the rows are not in the moved order');
 });
 
-test('a nested list restarts its own numbering at 1', () => {
+test('a nested list renders under its container, in its own order', () => {
   const doc = panelDoc([
     sec('a', 'container', { children: [sec('c1', 'heading', { text: 'ลูกหนึ่ง' }), sec('c2', 'heading', { text: 'ลูกสอง' })] }),
     sec('b', 'rich_text'),
-  ]);
-  // Two top-level rows and two children: 1,2 for the children inside the
-  // container, and 1,2 for the top level — the container is row 1.
-  assert.deepEqual(positions(doc), ['1.', '1.', '2.', '2.']);
+  ], ['a']);
+  // The container's own row, then its two children in order, then the sibling
+  // that follows the container at the top level.
   assert.deepEqual(primaries(doc), ['คอนเทนเนอร์', 'ลูกหนึ่ง', 'ลูกสอง', 'ข้อความ']);
 });
 
-test('the position is DERIVED from the index, never stored on the section', () => {
-  // sortOrder exists on the envelope and is not what the row prints — a row
+test('the row never reads the stored sortOrder', () => {
+  // sortOrder exists on the envelope and is not what the row reads — a row
   // reading it would go stale the moment a move rewrote the array without it.
+  // Round 32 retired the printed position number that used to be asserted
+  // beside this; the sortOrder half was never about printing.
   const code = readSource(SRC).code;
   const node = code.slice(code.indexOf('function SectionNode('), code.indexOf('function SectionList('));
   assert.ok(node.length > 500, 'the SectionNode body was not located');
-  assert.match(node, /\{index \+ 1\}\./, 'the row no longer numbers from its render index');
   assert.equal(/sortOrder/.test(node), false,
     'the row reads sortOrder. That is a stored field and MOVE_SECTION reorders the array '
     + 'without rewriting it, so the printed number would drift from the real order.');

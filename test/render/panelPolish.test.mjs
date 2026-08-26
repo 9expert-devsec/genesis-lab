@@ -8,6 +8,8 @@ import { EditorProvider } from '@/components/pageBuilder/editor/EditorProvider';
 import { StructurePanel } from '@/components/pageBuilder/editor/StructurePanel';
 import { ALL_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
 import { iconOf, SECTION_ICONS } from '@/lib/pageBuilder/sectionIcons';
+import { isContainer } from '@/lib/pageBuilder/containerSlots';
+import { ChevronRight } from 'lucide-react';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -68,10 +70,10 @@ const sec = (id, type) => ({
   enabled: true, sortOrder: 0, name: '',
 });
 
-function panelDoc(sections) {
+function panelDoc(sections, expanded = []) {
   const markup = renderToStaticMarkup(
     createElement(EditorProvider, { page: { ...PAGE, sections }, pageId: 'p1', updatedAt: 'T0', tier: TIER },
-      createElement(StructurePanel, {})),
+      createElement(StructurePanel, { initialExpanded: expanded })),
   );
   return new JSDOM(`<!doctype html><body>${markup}</body>`).window.document;
 }
@@ -86,25 +88,60 @@ const drawingOfComponent = (Comp) => {
   const doc = new JSDOM(`<!doctype html><body>${renderToStaticMarkup(createElement(Comp, {}))}</body>`).window.document;
   return drawingOf(doc.querySelector('svg'));
 };
-/** The row's LEADING icon — the first svg inside the row div. */
-const leadIconsIn = (doc) => [...doc.querySelectorAll('li > div')]
-  .map((row) => drawingOf(row.querySelector(':scope > svg')))
+/**
+ * The row's LEADING glyph — whatever is drawn in the first column.
+ *
+ * Round 32 put two different things there and the reader has to survive both:
+ * a leaf carries round 17's type icon inside a sizing span, a container
+ * carries the disclosure control, which is a button. `firstElementChild` is
+ * the column either way; the svg inside it is the drawing.
+ *
+ * `div[draggable]` rather than `div` because an <li> holds its row AND its
+ * slot wrappers as direct children, and only the row is the drag source.
+ */
+const rowsIn = (doc) => [...doc.querySelectorAll('li > div[draggable]')];
+const leadGlyphsIn = (doc) => rowsIn(doc)
+  .map((row) => drawingOf(row.firstElementChild?.querySelector('svg')))
   .filter((d) => d !== null);
 
 // ── 1. the icon on the row is iconOf()'s answer, for every type ────────────
 
-test('every section type renders the icon iconOf() returns for it', () => {
+test('every NON-container type renders the icon iconOf() returns for it', () => {
   /**
    * Exhaustive over the union, not a sample. A second mapping that agreed on
    * the six types someone thought to check is the exact failure this is for.
+   *
+   * ── ROUND 32 NARROWED THE SUBJECT, AND SAYS SO RATHER THAN SHRINKING ─────
+   * A CONTAINER's first column is its disclosure control now, not its type
+   * icon — the swap costs no information, because a container row always
+   * states its type in text (line 1 when it has no name, line 2 otherwise, via
+   * childCountLabel). The containers are not dropped from the check: the next
+   * test asserts what they draw INSTEAD, so the union is still covered
+   * exhaustively, just by two tests rather than one.
    */
-  const doc = panelDoc(ALL_SECTION_TYPES.map((t, i) => sec(`s${i}`, t)));
-  const got = leadIconsIn(doc);
-  const want = ALL_SECTION_TYPES.map((t) => drawingOfComponent(iconOf(t)));
+  const leaves = ALL_SECTION_TYPES.filter((t) => !isContainer(t));
+  const doc = panelDoc(leaves.map((t, i) => sec(`s${i}`, t)));
+  const got = leadGlyphsIn(doc);
+  const want = leaves.map((t) => drawingOfComponent(iconOf(t)));
 
-  assert.equal(got.length, ALL_SECTION_TYPES.length, 'one row per type did not render');
-  const wrong = ALL_SECTION_TYPES.filter((t, i) => got[i] !== want[i]);
+  assert.equal(got.length, leaves.length, 'one row per type did not render');
+  const wrong = leaves.filter((t, i) => got[i] !== want[i]);
   assert.deepEqual(wrong, [], 'these rows drew something other than iconOf()\'s icon');
+});
+
+test('every CONTAINER type renders the disclosure control there instead', () => {
+  const containers = ALL_SECTION_TYPES.filter((t) => isContainer(t));
+  assert.ok(containers.length >= 5, 'the container list is empty — this check would be vacuous');
+  const doc = panelDoc(containers.map((t, i) => sec(`c${i}`, t)));
+  const got = leadGlyphsIn(doc);
+  const chevron = drawingOfComponent(ChevronRight);
+
+  assert.equal(got.length, containers.length, 'one row per container type did not render');
+  assert.deepEqual([...new Set(got)], [chevron],
+    'a container row drew something other than the disclosure chevron in its first column');
+  // …and the two really are distinguishable, so the assertion above is not
+  // satisfied by every glyph in the file being the same drawing.
+  assert.notEqual(chevron, drawingOfComponent(iconOf('heading')));
 });
 
 test('CONTROL: the comparison discriminates — different types draw different icons', () => {
@@ -120,7 +157,7 @@ test('CONTROL: the comparison discriminates — different types draw different i
 test('CONTROL: a row paired with the WRONG type\'s icon fails the same check', () => {
   // The assertion above, run against a deliberately shifted pairing.
   const doc = panelDoc([sec('a', 'heading'), sec('b', 'cta')]);
-  const got = leadIconsIn(doc);
+  const got = leadGlyphsIn(doc);
   const shifted = [drawingOfComponent(iconOf('cta')), drawingOfComponent(iconOf('heading'))];
   assert.throws(() => assert.deepEqual(got, shifted),
     'a mismatched pairing must fail — otherwise the sweep above proves nothing');
@@ -256,7 +293,8 @@ test('the structure panel keeps exactly one off-scale size, and only where width
    */
   const { code } = readSource(SRC);
   assert.deepEqual(arbitraryFontSizes(code), ['text-[10px]']);
-  assert.equal((code.match(/text-\[10px\]/g) ?? []).length, 4);
+  // Four until round 32, which retired the position number — one of them.
+  assert.equal((code.match(/text-\[10px\]/g) ?? []).length, 3);
 });
 
 test('CONTROL: the size scanner sees an off-scale value that IS there', () => {
@@ -481,17 +519,28 @@ test('the row still holds one leading icon, the label, and the same six controls
    * control was added, removed, or made smaller to pay for it.
    */
   const doc = panelDoc([{ ...sec('a', 'heading'), content: { text: 'มีข้อความ' } }]);
-  const row = doc.querySelector('li > div');
+  const row = rowsIn(doc)[0];
   const kinds = [...row.children].map((el) => el.tagName.toLowerCase());
-  assert.deepEqual(kinds, ['svg', 'button', 'span', 'button'],
-    'the row gained or lost a child — its 85px label budget was measured against exactly this shape');
+  // Round 32: the leading svg is inside a 24px sizing span now, so the icons
+  // and the containers' disclosure buttons start at one offset. The COUNT is
+  // what this test is about and it is unchanged — nothing was added to the row.
+  assert.deepEqual(kinds, ['span', 'button', 'span', 'button'],
+    'the row gained or lost a child — its label budget was measured against exactly this shape');
+
+  // A CONTAINER spends the same column on its disclosure control, so its shape
+  // is the same length. If it were ever longer, the swap would have cost width
+  // rather than been free.
+  const container = rowsIn(panelDoc([sec('g', 'card_grid')]))[0];
+  assert.deepEqual([...container.children].map((el) => el.tagName.toLowerCase()),
+    ['button', 'button', 'span', 'span', 'button'],
+    'a container row is not the same shape as a leaf row plus its empty badge');
 
   // The BADGED shape, which is the one that matters: the browser measurement
   // put a nested row carrying a badge at 33px of label. A badge is one more
   // span, and it is the last thing this row can afford.
-  const badged = panelDoc([sec('b', 'heading')]).querySelector('li > div');
+  const badged = rowsIn(panelDoc([sec('b', 'heading')]))[0];
   assert.deepEqual([...badged.children].map((el) => el.tagName.toLowerCase()),
-    ['svg', 'button', 'span', 'span', 'button'],
+    ['span', 'button', 'span', 'span', 'button'],
     'an empty section no longer renders exactly one badge between the label and the actions');
 
   const actions = [...row.querySelectorAll('button[aria-label]')].map((b) => b.getAttribute('aria-label'));

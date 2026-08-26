@@ -78,15 +78,26 @@ function shellPanelProps() {
   return { title, hint, split, className };
 }
 
-/** The panel as EditorShell composes it, props and all. */
-function shellDoc(sections) {
+/**
+ * The panel as EditorShell composes it, props and all.
+ *
+ * `expanded` opens the named containers. Round 32 made containers collapse,
+ * closed by default, and the nested-AddRow claim below is about where a nested
+ * insertion point LIVES — not about whether it is on screen — so the fixtures
+ * that make that claim open their containers rather than assert a weaker one.
+ */
+function shellDoc(sections, expanded = []) {
   const markup = renderToStaticMarkup(
     createElement(EditorProvider,
       { page: { ...PAGE, sections }, pageId: 'p1', updatedAt: 'T0', tier: TIER },
-      createElement(Panel, shellPanelProps(), createElement(StructurePanel, {}))),
+      createElement(Panel, shellPanelProps(),
+        createElement(StructurePanel, { initialExpanded: expanded }))),
   );
   return new JSDOM(`<!doctype html><body>${markup}</body>`).window.document;
 }
+
+/** The two containers in CONTAINER_PAGE below, as context keys. */
+const CONTAINER_PAGE_OPEN = ['g', 't'];
 
 /** The three bands, located the way a reader would. */
 function bands(doc) {
@@ -316,7 +327,7 @@ const CONTAINER_PAGE = [
 ];
 
 test('every nested add-section row is inside the scrolling body, one per container slot', () => {
-  const doc = shellDoc(CONTAINER_PAGE);
+  const doc = shellDoc(CONTAINER_PAGE, CONTAINER_PAGE_OPEN);
   assert.deepEqual(bandFaults(doc), []);
 
   const { scroll, footer } = bands(doc);
@@ -337,7 +348,7 @@ test('CONTROL: pinning a NESTED add row into the footer is caught', () => {
    * The failure this round could plausibly ship: sweeping every AddRow into
    * the footer rather than only the outermost. The probe must see it.
    */
-  const doc = shellDoc(CONTAINER_PAGE);
+  const doc = shellDoc(CONTAINER_PAGE, CONTAINER_PAGE_OPEN);
   assert.deepEqual(bandFaults(doc), [], 'the unbroken DOM must start clean');
 
   const { scroll, footer } = bands(doc);
