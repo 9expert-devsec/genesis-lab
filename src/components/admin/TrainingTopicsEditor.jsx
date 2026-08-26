@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
-import { normaliseTopicRow, rowHasContent } from '@/lib/courses/trainingTopics';
+import { Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { TopicBulletsEditor } from '@/components/admin/TopicBulletsEditor';
+import { buildTopicSavePayload } from '@/lib/courses/topicEditorSave';
 
 /**
  * TrainingTopicsEditor — dynamic list of `{ title, bullets[] }`.
@@ -13,59 +14,76 @@ import { normaliseTopicRow, rowHasContent } from '@/lib/courses/trainingTopics';
  * save wrote those blanks back under keys the upstream schema discards — see
  * src/lib/courses/trainingTopics.js for the measurement and the damage.
  *
- * Two ways to feed seed data:
- *   - `initialTopics` (preferred): the MSDB-shaped array
- *     `[{ title: string, bullets: string[] }]`. Each bullets array is
- *     newline-joined for the textarea representation.
- *   - `defaultValue` (legacy alias): same shape, kept so older callers
- *     don't break. Treated as a fallback when `initialTopics` is omitted.
+ * ══ THE BULLETS ARE NOW RICH, THE TITLES ARE NOT ═══════════════════════════
  *
- * The whole list is serialised to a single hidden input (`name`, default
- * "training_topics") as JSON. `parseTrainingTopics()` on the server
- * (src/lib/courses/trainingTopics.js) decodes it back to the upstream shape.
+ * Each row's bullets are edited in a `TopicBulletsEditor` (Tiptap, bullet lists
+ * only, three levels) and carried as HTML. Row TITLES stay plain `<input>`s and
+ * stay MSDB-owned, by settled agreement: MSDB's own admin form edits them, and
+ * a title that became rich here would be a field two systems format differently.
  *
- * A ROW WITH A TITLE AND NO BULLETS IS KEPT. 121 real headings upstream have
- * no bullets; a filter that required them would delete those headings on the
- * next save. Only a row with neither is dropped.
+ * ── THE HIDDEN INPUT STILL CARRIES `[{ title, bullets[] }]` ────────────────
+ * Unchanged, deliberately. `parseTrainingTopicsValue` on the server, MSDB's
+ * schema, and every consortium consumer of GET /api/ai/public-course all read
+ * that shape. The rich HTML is a SECOND, genesis-side copy — it never replaces
+ * the plain projection, it accompanies it.
+ *
+ * ── ONE FUNCTION PRODUCES BOTH HALVES ─────────────────────────────────────
+ * `buildTopicSavePayload` returns the plain projection AND the per-row HTML
+ * from one pass over one list, so the two are index-aligned structurally
+ * rather than by two `.filter()`s agreeing. `onRowsChange` hands the rich half
+ * up to CourseForm, which sends it to the extension store; the hidden input
+ * carries the plain half to MSDB. Neither is derived from the other.
+ *
+ * ══ A TITLE-ONLY ROW IS CONTENT, AND GETS A REAL, EMPTY EDITOR ═════════════
+ *
+ * 125 rows across 27 courses carry a real title and no bullets — "Part 9.
+ * สรุปเนื้อหา และ Q&A" and the like. They are legitimate headings, and on the
+ * PAGE they render no panel element at all (measured). On the FORM they must
+ * still get a working, empty editor an admin can type the first bullet into:
+ * collapsing or hiding it would make those 125 rows the only ones in the
+ * catalogue that cannot gain a bullet.
+ *
+ * The two directions of the filter are both live and both tested:
+ *   · a title-only row must keep SURVIVING  (`title || bullets.length > 0`);
+ *   · a row left completely empty must keep being DROPPED — an empty editor
+ *     serialises to '' and not to `<ul></ul>`, so it does not start counting
+ *     as content.
  *
  * Init pattern
- *   We seed `useState` with a normalisation of the prop at mount, then
- *   run an effect that re-syncs IF the prop reference changes from
- *   empty → non-empty (e.g. the parent finished an async fetch after
- *   first paint). Once the editor has rows, we don't clobber them on
- *   subsequent prop changes — that would erase admin-typed input
- *   whenever the parent re-renders.
+ *   We seed `useState` with a normalisation of the prop at mount, then run an
+ *   effect that re-syncs IF the prop reference changes from empty → non-empty
+ *   (e.g. the parent finished an async fetch after first paint). Once the
+ *   editor has rows we do not clobber them on subsequent prop changes — that
+ *   would erase admin-typed input whenever the parent re-renders.
  */
 function normalise(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((row) => ({
       title: String(row?.title ?? ''),
-      bullets: Array.isArray(row?.bullets)
-        ? row.bullets.map((s) => String(s ?? '')).join('\n')
-        : String(row?.bullets ?? ''),
+      html: String(row?.html ?? ''),
     }))
-    .filter((r) => r.title || r.bullets.length > 0);
+    .filter((r) => r.title || r.html.length > 0);
 }
 
 export function TrainingTopicsEditor({
   name = 'training_topics',
   initialTopics,
   defaultValue,
+  onRowsChange,
+  staleWarning = '',
 }) {
   const seedSource = initialTopics ?? defaultValue ?? [];
   const seedNormalised = useMemo(() => normalise(seedSource), [seedSource]);
 
   const [rows, setRows] = useState(() =>
-    seedNormalised.length > 0
-      ? seedNormalised
-      : [{ title: '', bullets: '' }]
+    seedNormalised.length > 0 ? seedNormalised : [{ title: '', html: '' }]
   );
 
-  // If the parent passes a non-empty seed AFTER first paint (async data
-  // arrived late), populate the editor — but only when the user hasn't
-  // touched the placeholder row yet. The `hasUserEditedRef` flag
-  // protects against clobbering real input.
+  // If the parent passes a non-empty seed AFTER first paint (async data arrived
+  // late), populate the editor — but only when the user has not touched the
+  // placeholder row yet. `hasUserEditedRef` protects against clobbering real
+  // input.
   const hasUserEditedRef = useRef(false);
   useEffect(() => {
     if (hasUserEditedRef.current) return;
@@ -79,37 +97,63 @@ export function TrainingTopicsEditor({
 
   function updateRow(idx, field, value) {
     markEdited();
-    setRows((cur) =>
-      cur.map((r, i) => (i === idx ? { ...r, [field]: value } : r))
-    );
+    setRows((cur) => cur.map((r, i) => (i === idx ? { ...r, [field]: value } : r)));
   }
   function addRow() {
     markEdited();
-    setRows((cur) => [...cur, { title: '', bullets: '' }]);
+    setRows((cur) => [...cur, { title: '', html: '' }]);
   }
   function removeRow(idx) {
     markEdited();
     setRows((cur) => cur.filter((_, i) => i !== idx));
   }
 
-  // Serialise on every keystroke. Cheap — list is small.
-  //
-  // Built through the SAME helpers the server parse uses, so the two halves of
-  // the round trip cannot drift into different ideas of what a row is. The
-  // filter keeps a title-only row (`bullets: []`) on purpose.
-  const serialized = useMemo(
-    () => JSON.stringify(rows.map(normaliseTopicRow).filter(rowHasContent)),
-    [rows]
-  );
+  /**
+   * Both halves, from the one list, on every edit.
+   *
+   * Recomputed per keystroke — the sanitiser runs once per row per change. The
+   * list is small (the largest live course is 28 rows) and the strings are
+   * short, so this is cheaper than a cache that could hand back a stale
+   * projection for a row whose HTML changed.
+   */
+  const payload = useMemo(() => buildTopicSavePayload(rows), [rows]);
+  const serialized = useMemo(() => JSON.stringify(payload.plain), [payload]);
+
+  /**
+   * Hand the rich half up.
+   *
+   * In an effect rather than during render: calling the parent setter while
+   * rendering is a React error, and the parent stores this in state that feeds
+   * both the save and the unsaved-changes signature.
+   */
+  const onRowsChangeRef = useRef(onRowsChange);
+  onRowsChangeRef.current = onRowsChange;
+  useEffect(() => {
+    onRowsChangeRef.current?.(payload.rich);
+  }, [payload]);
 
   return (
     <div className="space-y-3">
       <input type="hidden" name={name} value={serialized} />
-      {rows.map((row, i) => (
+
+      {/* ── THE STALE WARNING ────────────────────────────────────────────
+          Rendered from a non-empty string, so an empty banner is not a
+          reachable state. Without this, an admin opens a course whose rich
+          copy was discarded, sees plain text, assumes nobody formatted it,
+          saves, and destroys the only copy of that work — MSDB never had it.
+          See lib/courses/topicEditorSeed. */}
+      {staleWarning ? (
         <div
-          key={i}
-          className="rounded-9e-md border border-[var(--surface-border)] p-3"
+          role="alert"
+          className="flex items-start gap-2 rounded-9e-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900"
         >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{staleWarning}</span>
+        </div>
+      ) : null}
+
+      {rows.map((row, i) => (
+        <div key={i} className="rounded-9e-md border border-[var(--surface-border)] p-3">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
               หัวข้อที่ {i + 1}
@@ -130,13 +174,15 @@ export function TrainingTopicsEditor({
             placeholder="ชื่อหัวข้อหลัก"
             className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
           />
-          <textarea
-            value={row.bullets}
-            onChange={(e) => updateRow(i, 'bullets', e.target.value)}
-            placeholder="หัวข้อย่อย (1 บรรทัด = 1 อย่าง)"
-            rows={3}
-            className="mt-2 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
-          />
+          {/* ALWAYS RENDERED, including for a row with no bullets. A title-only
+              row is 125-rows-worth of real content and must be able to gain a
+              first bullet. */}
+          <div className="mt-2">
+            <TopicBulletsEditor
+              value={row.html}
+              onChange={(html) => updateRow(i, 'html', html)}
+            />
+          </div>
         </div>
       ))}
 

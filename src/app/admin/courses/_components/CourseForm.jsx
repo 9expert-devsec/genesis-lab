@@ -15,7 +15,7 @@ import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
-import { seedTrainingTopics } from '@/lib/courses/trainingTopics';
+import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
@@ -270,6 +270,38 @@ export function CourseForm({
     '';
   const [previousCourse, setPreviousCourse] = useState(initialPreviousCode);
 
+  /**
+   * ── SECTION 7's SEED, FROM THE SAME FUNCTION THE PUBLIC PAGE ASKS ────────
+   * `seedTopicEditorRows` calls `resolveTopicRich`, which is the function
+   * `courseOutlineView` calls to decide what a VISITOR sees. One decision,
+   * two surfaces. If the seed made its own the admin would edit formatting
+   * nobody can see, or overwrite formatting the form never loaded.
+   *
+   * `warning` is non-empty ONLY in the stale case, where the rich copy has
+   * been discarded and seeding fell back to the plain MSDB text.
+   */
+  const topicSeed = useMemo(
+    () => seedTopicEditorRows({
+      course: initial,
+      extension,
+      onLegacyShape: warnLegacyTopicShape,
+    }),
+    [initial, extension]
+  );
+
+  /**
+   * The rich half of section 7, lifted out of the editor.
+   *
+   * `[]` until the child reports — which it does in a mount effect, so it is
+   * settled before the unsaved-changes baseline is taken a frame later. It is
+   * ordinary React state and is therefore NOT in FormData, so it is compared
+   * explicitly in `courseEditorSignature` the way the gallery is; without
+   * that, a formatting-only edit (bolding a word, nesting a bullet) changes
+   * nothing the plain projection can see and the guard would let the admin
+   * walk away from it.
+   */
+  const [trainingTopicsRich, setTrainingTopicsRich] = useState([]);
+
   // ── Unsaved-changes guard: snapshot, dirty, interception ──────────
 
   /** Everything the editor can change, as one comparable string. */
@@ -279,9 +311,11 @@ export function CourseForm({
         formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
+          trainingTopicsRich,
         },
       }),
-    [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery]
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
+      trainingTopicsRich]
   );
 
   /**
@@ -423,9 +457,20 @@ export function CourseForm({
         gallery: gallery.map((item, i) => ({ ...item, order: i })),
         isPublished,
         omisePaymentEnabled,
+        /**
+         * ── THE KEY IS ALWAYS NAMED, AND THAT IS THE POINT ───────────────
+         * `buildExtensionUpdate` selects on KEY PRESENCE: an absent key means
+         * leave-alone. Every OTHER caller of this action omits the field and
+         * must keep leaving it alone; this one owns it, so it names it on
+         * every save — including when the value is `[]`, which is how a
+         * course whose formatting the admin REMOVED gets its obsolete rich
+         * copy cleared rather than kept forever as a stale one.
+         */
+        trainingTopicsRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
-    [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished, omisePaymentEnabled]
+    [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
+      omisePaymentEnabled, trainingTopicsRich]
   );
 
   /**
@@ -1075,11 +1120,13 @@ export function CourseForm({
       ─────────────────────────────────────────────────────────── */}
       <Section
         title={`7. ${COURSE_SECTION_LABELS.outline}`}
-        hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — 1 บรรทัด = 1 หัวข้อย่อย"
+        hint="แต่ละหัวข้อหลักมีหัวข้อย่อยได้หลายอัน — จัดรูปแบบและซ้อนได้สูงสุด 3 ระดับ · ชื่อหัวข้อหลักเป็นข้อความธรรมดา (MSDB เป็นเจ้าของ)"
       >
         <TrainingTopicsEditor
           name="training_topics"
-          initialTopics={seedTrainingTopics(initial, { onLegacyShape: warnLegacyTopicShape })}
+          initialTopics={topicSeed.rows}
+          staleWarning={topicSeed.warning}
+          onRowsChange={setTrainingTopicsRich}
         />
       </Section>
 
