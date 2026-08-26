@@ -51,6 +51,40 @@ export const settingsSchema = z
   })
   .default({});
 
+/**
+ * The same envelope with a DIFFERENT starting width for one section type.
+ *
+ * ── WHY THIS EXISTS: A DEFAULT INSTEAD OF A CLAMP ──────────────────────────
+ * `container` used to keep its narrow readable column by hardcoding a max-width
+ * in its component. That is a second authority over a concept
+ * `settings.containerWidth` already owns, and it silently outranked the author:
+ * three of the four settings painted the same number of pixels.
+ *
+ * Moving the narrowness here changes it from a rule an author cannot reach into
+ * a STARTING POINT they can. The type keeps its character by DEFAULTING to a
+ * readable column; picking anything else now does what it says.
+ *
+ * ── IT REPLACES THE DEFAULT, IT DOES NOT LAYER OVER IT ─────────────────────
+ * That distinction is the whole point, because "two defaults for one field" is
+ * the shape being removed, not a smaller version of it to be tolerated.
+ * `.extend()` OVERWRITES a key rather than merging it, so the member this
+ * produces has exactly ONE default for `containerWidth` and the base's value is
+ * not present in it at all. There is no precedence rule to remember and nothing
+ * that could start winning differently after a zod upgrade.
+ *
+ * The unwrap/rewrap is required, not stylistic: `settingsSchema` is a
+ * ZodDefault, which has no `.extend()`. `.removeDefault()` returns the inner
+ * object, and the `.default({})` is put back so an absent `settings` still
+ * fills itself in — dropping it would make the whole block required and reject
+ * every section that omits it.
+ */
+export function settingsWithContainerWidth(width) {
+  return settingsSchema
+    .removeDefault()
+    .extend({ containerWidth: z.enum(CONTAINER_WIDTHS).default(width) })
+    .default({});
+}
+
 // layout.* only matters for multi-column / carousel sections, so its fields
 // are optional (validated when present) rather than forced onto every block.
 export const layoutSchema = z
@@ -106,11 +140,18 @@ export const baseSectionSchema = z.object({
  * literal + that type's `content` schema. `content` defaults to an empty
  * passthrough object so a Phase-1 section with no content still validates
  * (the components — and their exact content shapes — arrive in Phase 2).
+ *
+ * `settings` accepts a per-type override — see settingsWithContainerWidth, and
+ * `container` in layout.js, its only user today. It is a parameter HERE rather
+ * than an `.extend()` at the call site so that every union member is still
+ * produced by exactly one expression: a second way to build a member is how the
+ * envelope comes to differ between types for reasons nobody wrote down.
  */
-export function defineSection(type, contentSchema) {
+export function defineSection(type, contentSchema, { settings } = {}) {
   return baseSectionSchema.extend({
-    type:    z.literal(type),
-    content: (contentSchema ?? z.object({}).passthrough()).default({}),
+    type:     z.literal(type),
+    content:  (contentSchema ?? z.object({}).passthrough()).default({}),
+    ...(settings ? { settings } : {}),
   });
 }
 

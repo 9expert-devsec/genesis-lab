@@ -236,48 +236,65 @@ test('AUDIT TRIPWIRE (finding 1): course_card and instructor_card still clamp th
 });
 
 test('CONTROL: the clamp scan discriminates — a section without one is not matched', () => {
-  // heading fills its wrapper; it is the type whose four containerWidth values
-  // measured 640 / 864 / 1168 / 1408. If the scan matched it too, the assertion
-  // above would be true of everything.
-  assert.equal(/max-w-sm/.test(readSource('src/components/pageBuilder/sections/heading.jsx').code), false);
-  assert.equal(/max-w-/.test(readSource('src/components/pageBuilder/sections/container.jsx').code), true,
-    'container DOES clamp (max-w-3xl, finding 3) — the pattern must be specific enough to tell '
-    + 'the two findings apart');
-});
-
-// ── FINDING 3 — the container's own clamp, which had no tripwire ───────────
-
-test('AUDIT TRIPWIRE (finding 3): container still clamps itself to the width that swallows three settings', () => {
   /**
-   * Added in round 21. Findings 1, 2 and 8 got tripwires when the audit was
-   * written; finding 3 did not, and the control above mentions it only in
-   * passing — a message, not an assertion. So the one finding whose fix is the
-   * most invasive of the three was also the one nothing would notice changing.
+   * heading fills its wrapper; it is the type whose four containerWidth values
+   * measured 640 / 864 / 1168 / 1408. If the scan matched it too, the assertion
+   * above would be true of everything.
    *
-   * Measured, at a 1200px container: the four `settings.containerWidth` values
-   * paint 640 / 768 / 768 / 768. Only `small` (672 − 32 of padding = 640) is
-   * narrower than the component's own `max-w-3xl`; `medium`, `large` and `full`
-   * all lose to it. `presets.js` is not at fault — it emits exactly the
-   * max-widths it names. The second authority is here.
+   * ── THE SECOND HALF USED TO POINT AT container, AND ROUND 25 MOVED IT ────
+   * It asserted that container DID carry a width clamp, so that the pattern
+   * above could be shown specific enough to tell finding 1's clamp from finding
+   * 3's. Round 25 removed finding 3's clamp, so that half went red — correctly:
+   * it was pinned to a defect that no longer exists.
    *
-   * The specific value is pinned, not just "some clamp": a change from
-   * `max-w-3xl` to any other fixed width would still swallow settings, just a
-   * different number of them, and the audit's row would be wrong in a new way.
+   * The discrimination it provided still has to come from somewhere, so it now
+   * comes from a type that is genuinely clamped for a reason nobody is
+   * fixing: `embed` sizes its own aspect-ratio box. A width-shaped pattern
+   * matching it while `max-w-sm` does not is what proves the finding-1 scan is
+   * specific rather than matching any width utility anywhere.
    */
-  const { code } = readSource('src/components/pageBuilder/sections/container.jsx');
-  assert.match(code, /max-w-3xl/,
-    'FINDING 3 HAS MOVED: container no longer clamps itself to max-w-3xl. If the clamp is GONE, '
-    + 're-run scripts/_probe-container-width.mjs and confirm the four settings now give four '
-    + 'distinct widths, then delete this test and finding 3 from docs/section-control-audit.md. '
-    + 'If it merely CHANGED, the audit\'s measured row (640/768/768/768) is now wrong and needs '
-    + 're-measuring — see docs/control-fix-proposal.md §3.');
+  assert.equal(/max-w-sm/.test(readSource('src/components/pageBuilder/sections/heading.jsx').code), false);
+  assert.equal(/max-w-sm/.test(readSource('src/components/pageBuilder/sections/container.jsx').code), false,
+    'container carries the narrow-card clamp now — finding 1 and the retired finding 3 are being '
+    + 'confused by a scan that cannot tell them apart');
 
-  // …and full_width, its sibling, still has no clamp at all. The two types are
-  // distinguished by exactly this line today, which is why §3 of the proposal
-  // cannot simply delete it.
-  assert.equal(
-    /max-w-/.test(readSource('src/components/pageBuilder/sections/full_width.jsx').code), false,
-    'full_width gained a width clamp — container and full_width are no longer distinguished by '
-    + 'the one line finding 3 is about',
-  );
+  // The generic pattern still finds SOMETHING, so "no match" above is a fact
+  // about container and not about a scan that stopped working.
+  const anyWidth = (f) => /max-w-/.test(readSource(`src/components/pageBuilder/sections/${f}.jsx`).code);
+  assert.equal(anyWidth('course_card'), true, 'the generic width pattern matches nothing at all');
+  assert.equal(anyWidth('container'), false,
+    'container has a width clamp again — round 25 removed it so settings.containerWidth could '
+    + 'reach the box; see docs/section-control-audit.md §13');
 });
+
+/*
+ * ── FINDING 3'S TRIPWIRE WAS HERE, AND ROUND 25 RETIRED IT ─────────────────
+ *
+ * It pinned `container`'s hardcoded max-width — the second authority that made
+ * three of the four `settings.containerWidth` values paint the same 768px. It
+ * fired in round 25, exactly as designed, on the commit that removed the clamp.
+ *
+ * Its own message set the condition for deletion: "if the clamp is GONE, re-run
+ * scripts/_probe-container-width.mjs and confirm the four settings now give
+ * four distinct widths, then delete this test". Both halves were done. That
+ * probe reports `container` at 640 / 864 / 1168 / 1408 — four distinct, and the
+ * same four `heading` and `notice` give, which are the types that never had a
+ * clamp. So the test is gone rather than updated, which is what a self-retiring
+ * tripwire is for.
+ *
+ * WORTH CONTRASTING WITH FINDING 2, which round 24 could NOT retire: its
+ * condition ("once the offered set and the reader set agree") described a state
+ * the design will never reach. This one's condition was a fact about one line in
+ * one file, so it was reachable, and reached.
+ *
+ * What replaces it is not another source scan. The clamp is gone; what needs
+ * guarding now is that the four widths stay four and that `container` and
+ * `full_width` stay distinguishable — both properties of the SCHEMA, pinned in
+ * test/pure/containerWidthDefault.test.mjs, plus the browser measurement in
+ * scripts/_probe-container-reflow.mjs that no test tier can perform.
+ *
+ * Finding 3's row in docs/section-control-audit.md §8 is left standing on
+ * purpose. That section is the round-18 snapshot and rounds 22-24 established
+ * that closures are recorded in appended sections rather than by editing it —
+ * see §13.
+ */

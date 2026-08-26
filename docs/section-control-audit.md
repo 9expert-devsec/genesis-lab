@@ -933,3 +933,193 @@ Verified red by five deliberate breaks, all reverted by file copy: the chevron
 hardcode restored, the accordion reverted wholesale, the chip hardcode restored,
 the instructor bio accented, and the accordion body accented. The first three
 were each caught in two or three files at once, by name.
+
+---
+
+## 13. Round 25 — finding 3 closes, and the sequence ends
+
+**Appended, not merged.** §8's finding 3 row stays as round 18 measured it —
+the same convention rounds 22-24 used. Measured at `d365e92`.
+
+Step 4 of [docs/control-fix-proposal.md](./control-fix-proposal.md) §6, the last
+of the sequence, and the only one that changes **layout** rather than colour.
+
+### The change
+
+`container.jsx` hardcoded a max-width. That is a second authority over what
+`settings.containerWidth` already owns, and it won. The component could not
+defer to the setting either — `SectionRenderer` passes components `content`,
+`style`, `layout`, `domId`, `inEditor` and `data`, never `settings`.
+
+So the narrowness moved to the schema, where it is a **starting point an author
+can overrule** rather than a ceiling they cannot raise:
+
+- `src/lib/schemas/sections/base.js` — a `settingsWithContainerWidth(width)`
+  helper, and an optional `settings` override on `defineSection`.
+- `src/lib/schemas/sections/layout.js` — `container` declares `small`.
+- `src/components/pageBuilder/sections/container.jsx` — the clamp removed.
+
+**Three files, where the round expected two.** The schema half is split because
+`base.js` owns `settingsSchema` and `defineSection` while `layout.js` owns the
+container's definition; putting the helper in `layout.js` would have moved
+envelope assembly out of the file that owns it.
+
+**One default, not two.** `.extend()` overwrites a key rather than merging it,
+so the `container` union member carries exactly one default for
+`containerWidth` and the base's `large` is not present in it at all. There is no
+precedence rule to remember and nothing that could start resolving differently
+after a zod upgrade — which matters, because "two defaults for one field" is the
+same shape this round exists to remove.
+
+`presets.js` is untouched. Round 21 measured its width map correct and it is:
+the four values map to four distinct max-widths, and always did. The clamp is
+what collapsed them.
+
+### E — the control now works
+
+Measured in Chrome at a 1440px viewport, `scripts/_probe-container-reflow.mjs`:
+
+| `containerWidth` | before | after |
+|---|---:|---:|
+| `small` | 640 | **640** |
+| `medium` | 768 | **864** |
+| `large` | 768 | **1168** |
+| `full` | 768 | **1408** |
+
+Two distinct widths before, **four after** — and the same four that `heading`
+and `notice` give, which are types that never had a clamp. Confirmed
+independently by `scripts/_probe-container-width.mjs`, the probe finding 3's
+tripwire named.
+
+### B — the type distinction survived the move
+
+| at its DEFAULT | before | after |
+|---|---:|---:|
+| `container` | 768 | **640** |
+| `full_width` | 1168 | **1168** |
+
+Distinguishable in both, but by a different mechanism: before, by a ceiling the
+author could not raise; now, by a starting point they can. A **newly created
+container is 128px narrower** than one created before this round — the visible
+consequence of the move, and deliberate.
+
+Asserted as a measurement, not a class check, on purpose: with the clamp gone
+the two components differ only by a centring utility that has no visual effect
+of its own, so comparing class strings would report a difference that is not
+there.
+
+### F — the reflow measurement, which is why this step went last
+
+A container holds nested sections, so widening it reflows everything inside. All
+four widths, five tree shapes, 22 cases:
+
+| shape | small | medium | large | full |
+|---|---:|---:|---:|---:|
+| bare container | 640 | 864 | 1168 | 1408 |
+| container + heading + rich_text | 640 | 864 | 1168 | 1408 |
+| **container inside container** | 640 | 864 | 1168 | 1408 |
+| card_grid inside container | 640 | 864 | 1168 | 1408 |
+| two_column inside container | 640 | 864 | 1168 | 1408 |
+
+**Overflow: none.** Nothing paints wider than the box that contains it, at any
+width, in any shape — measured as `scrollWidth` against `clientWidth` rather
+than inferred.
+
+**The column-count hypothesis did not hold, and the data is the answer.** The
+brief expected a wider container might change how many columns fit, because
+`card_grid` and `two_column` resolve columns from breakpoints. Measured, the
+counts are **stable**: `card_grid` stays 3 and `two_column` stays 2 at every
+width. The breakpoints key off the **viewport**, which is constant here — so
+container width changes cell *size*, not cell *count*:
+
+| | small | medium | large | full |
+|---|---:|---:|---:|---:|
+| card_grid cells (3 across) | 187 | 261 | 363 | 373 |
+| two_column cells (2 across) | 288 | 400 | 552 | 568 |
+
+A 187px card cell at `small` is narrow, but that is pre-existing — `small` was
+the one width that already worked.
+
+### C — what happens to documents that already exist
+
+Answered from the stored shape, not from reasoning about zod defaults.
+
+**Every one of the 38 stored sections carries an explicit
+`settings.containerWidth`.** None is sparse: 34 `large`, 3 `medium`, 1 `small`.
+That is because `newSection` mints by parsing a bare `{type, id}` through the
+real union, so defaults are materialised at creation and persisted — and
+`StructurePanel` is the only caller, with nothing anywhere hardcoding a width.
+
+So:
+
+| a stored `container` with | before | after | changed? |
+|---|---:|---:|---|
+| `large` (what a new one used to get) | 768 | **1168** | **yes — widens** |
+| `medium` | 768 | **864** | **yes — widens** |
+| `small` | 640 | 640 | no |
+| no `containerWidth` key at all | 768 | 640 | would take the new default — but no such document exists |
+
+**The per-type default governs NEW containers only.** An existing one keeps what
+was persisted, and what changes for it is the clamp going away. That is the
+migration risk in one sentence, and it is why the count below matters.
+
+### H — blast radius
+
+**Zero.** Not one `container` section exists anywhere: 0 live, 0 draft, 0 in
+`page_versions`, out of 38 sections across 3 documents. `full_width` is also 0.
+
+Stated plainly, as the brief asked: **this change moves nothing today.** The
+entire risk is about what authors do next.
+
+**The caveat is unchanged.** One database (`9exp_genesis`) at one moment, small
+enough that it may be development or staging rather than production. Re-run
+before this reaches a production deploy.
+
+### Finding 3's tripwire fired, and its deletion condition WAS met
+
+It went red on the commit that removed the clamp — exactly as designed. Its own
+message set the condition: *"if the clamp is GONE, re-run
+scripts/_probe-container-width.mjs and confirm the four settings now give four
+distinct widths, then delete this test"*. Both halves were done, and the test is
+**deleted rather than updated**.
+
+**This is the contrast with finding 2.** Round 24 could not retire finding 2's
+tripwire because its condition — "once the offered set and the reader set agree"
+— described a state the design will never reach. Finding 3's condition was a
+fact about one line in one file: reachable, and reached. A self-retiring test is
+only self-retiring if its condition is something that can actually happen.
+
+**One collateral red, and it was correct.** The finding-1 control asserted that
+`container` *did* carry a width clamp, using it to show the `max-w-sm` scan was
+specific enough to tell the two findings apart. That assertion was pinned to a
+defect that no longer exists. It now takes its discrimination from a type that
+is genuinely clamped for a reason nobody is fixing.
+
+`presets.js`'s width map was not touched, and was not found wanting.
+
+### Tests
+
+Eight in `test/pure/containerWidthDefault.test.mjs`, each with a control:
+the per-type default and the base default for the other 26 types; that the
+override *replaces* rather than layers; that the two types stay distinguishable;
+that four settings map to four classes; and that a stored width survives the
+parse untouched.
+
+**What that file cannot see is named in it.** It is pure — schema parsing and
+one preset lookup — so it proves which *value* each type starts at, never a
+painted pixel. A class-string check would have passed on the broken version too,
+which is exactly why the painted widths live in the probe.
+
+Verified red by three deliberate breaks, all reverted by file copy: the
+container's default swapped to `large` (5 tests red), `defineSection` ignoring
+the override (5 red), and the clamp reinstated — which reddened the reconciled
+control *and*, measured, collapsed the widths straight back to
+640 / 768 / 768 / 768.
+
+### The sequence is finished
+
+All four steps of the round-21 proposal have shipped: the copy fixes (22),
+`course_schedule`'s icon (23), `accordion` and `instructor_card` (24), and the
+container's width (25). Of the round-18 findings, 1 remains open by design
+(the two card types clamp on purpose, and the panel now says so), 2 and 3 are
+closed, and 8 still stands with its tripwire.
