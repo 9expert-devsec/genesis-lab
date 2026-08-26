@@ -485,3 +485,130 @@ Each carries a control proving it discriminates. Nothing else was added: the
 rest of this audit is a measurement of a moving surface, and a test asserting
 that 14 types ignore the accent would have to be rewritten by every round that
 fixes one — which is a test that obstructs the fix rather than recording the gap.
+
+---
+
+## 10. Round 22 — the panel's promises, and what did NOT reclassify
+
+**Appended, not merged.** Everything above is round 18's measurement at `32f2aa7`
+and stays as written; this section records what changed after it and why.
+Measured at `51eb44d`.
+
+Round 22 is step 1 of the sequence in
+[docs/control-fix-proposal.md](./control-fix-proposal.md) §6: the copy fixes,
+editor-side only. It changed what two fields in `SettingsPanel.jsx` **claim**.
+It changed no renderer, no preset, and no schema.
+
+### The matrix is unchanged. That is the finding, not an omission
+
+| | cells | round 22 |
+|---|---:|---|
+| **READ** | 278 | unchanged |
+| **ABSENT** | 125 | unchanged |
+| **PARTIAL** | 35 | unchanged |
+| **IGNORED** | 16 | **unchanged** |
+
+`IGNORED` is defined in §1 as *offered, and no reader*. Both controls are still
+offered on every type they were offered on, and no component started reading
+either value. Copy does not move a cell — an honest label on an inert control is
+still an inert control, and recording it as anything else would make this
+document report a fix that has not happened.
+
+### The reclassification that was considered and rejected
+
+Finding 1's two cells — `settings.containerWidth` on `course_card` and
+`instructor_card` — were the candidates. Withdrawing the control for those two
+types would have turned two `IGNORED` cells into two defensible `ABSENT` ones,
+which is a real change to this document's findings. **It was not taken.** Three
+reasons, in the order they weighed:
+
+1. **It breaks the envelope's organizing idea.** `containerWidth` sits in the
+   universal half of the panel — the half whose comment says the effect applies
+   to every section. A per-type withdrawal makes "universal" mean "universal
+   except twice", and the exception lives in a hand-written list in a client
+   component with nothing able to check it.
+2. **It strands stored values.** A withdrawn control cannot show or reset a
+   value already on a section. Re-measured this round rather than trusted from
+   round 21: `scripts/audit-control-fix-blast-radius.mjs`, run read-only against
+   the configured database, reports **0** sections carrying a non-default
+   `containerWidth` on either type — 0 live, 0 on published/scheduled pages, 0
+   in drafts, 0 in `page_versions`. Neither type appears in the corpus at all.
+   That zero is a fact about one database at one moment (§5 of the proposal says
+   so), and a withdrawal would have to be right for every future page too.
+3. **It goes stale silently, in the worst direction.** Finding 1's own suggested
+   fix is to drop the self-clamp. The day that lands, a withdrawal would keep
+   hiding a control that had started working — no author-visible symptom, and
+   nothing that reddens. A stale *hint* only reads wrong.
+
+So the two cells stay `IGNORED`, and the field now says why to the author.
+
+### What DID change: the promise half of findings 1 and 2
+
+Both findings have a behaviour half and a promise half. Round 22 closes the
+promise half of both, and neither behaviour half.
+
+- **Finding 2.** The hint claimed a universal effect — true for the 13 types
+  that paint with the accent or forward it, false for the other 14. It now
+  names the three roles the accent actually has (ornament; one key figure or
+  link; the button surface) and says a type without such a surface shows
+  nothing. The proposal's §1 amendment stands: **eleven** of those fourteen are
+  correct restraint, and the open behaviour gap is **three** types — `accordion`,
+  `instructor_card`, `course_schedule` — not fourteen. Finding 2's row above
+  still reads "14 of 27" because that is what round 18 measured; the amendment
+  is here rather than in that row.
+- **Finding 1.** `ความกว้าง` now carries a per-type hint on the two card types
+  saying the card width is fixed. The control is untouched.
+
+### Why the accent hint is not per-type, which is itself a finding
+
+A per-type accent hint would be more accurate. **There is no single source it
+could be derived from**, and that is worth recording rather than working around:
+
+`SECTION_STYLE_CAPS` (presets.js) is this codebase's one capability registry —
+the declaration that makes "a component reads this prop" and "the panel offers a
+control for it" the same act. `accentColor` **is not in it**, and structurally
+cannot be without a change to `presets.js`: the accent is not a prop a component
+opts into, it is three CSS variables `SectionRenderer` sets on every section
+wrapper. Which components then paint with them is decided inside their class
+literals, and the only reader-set that exists is the **source-text scan** in
+`test/pure/sectionControlAudit.test.mjs` — which runs in the test tier and
+cannot run in a browser.
+
+A per-type hint therefore means a hand-written 27-entry map inside
+`SettingsPanel.jsx`, tracking class strings across 27 files, with nothing able
+to notice it going stale. That is exactly the drift round 18 found in that
+file's own comment, which is why the hint is one static string that is true in
+general. Making a single source exist is a `presets.js` change and belongs to a
+round that is allowed to make one.
+
+The `ความกว้าง` hint **is** per-type, and the asymmetry is deliberate: what it
+tracks — a `max-w-sm` self-clamp — is readable off the components, is already
+pinned by finding 1's tripwire, and `test/render/settingsPanelTabs.test.mjs`
+asserts the panel's two-type list and that scan name the same two types. A clamp
+added or dropped reddens both.
+
+### Tripwire status: none fired
+
+All four assertions in §9 (plus round 21's finding-3 addition) were re-run and
+are green, which is correct — each pins a renderer or preset fact, and round 22
+changed neither. Specifically: finding 8's `BACKGROUND_CLASS.image`, finding 2's
+nine-component consumer set, finding 1's two `max-w-sm` clamps and finding 3's
+`max-w-3xl` are all untouched. None of them asserts anything about panel copy,
+so none needed reconciling.
+
+Confirmed by deliberate break rather than by inspection: removing `max-w-sm`
+from `course_card.jsx` reddens finding 1's tripwire **and** the new cross-source
+check, together, and reverting by file copy returns both to green.
+
+### Tests added
+
+Eight, in `test/render/settingsPanelTabs.test.mjs` — the file that already owns
+round 15's union check, because these are assertions about the same rendered tab
+bodies. Round 15's `EXPECTED` union was **not** extended and needed no change:
+it is built from field LABELS (`label > span:first-child`), and a hint is a
+second span. That is asserted, not assumed.
+
+Unlike §9's tripwires these are **not** self-retiring. They pin copy this round
+chose, so a later round that changes the copy updates them in the same commit —
+which is the ordinary relationship between a test and the thing it tests, and
+the reason they live here rather than beside the tripwires.

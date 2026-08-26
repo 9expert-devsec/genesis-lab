@@ -31,6 +31,33 @@ import { useEditor } from './EditorProvider';
  *   visibility, style.accentColor (cascades to descendants via CSS vars),
  *   and the advanced.* block.
  *
+ * ── THAT CLAIM WAS MEASURED, AND IT IS EXACT FOR THREE OF THE FIVE ─────────
+ * docs/section-control-audit.md rendered all 27 types against every value of
+ * every field above. spacingTop, spacingBottom, background and visibility are
+ * universal as written. Two are not, and the paragraph above stood unqualified
+ * for four rounds while that was known:
+ *
+ *   containerWidth — the class lands on every section's container div, but
+ *     course_card and instructor_card each wrap themselves in a small fixed
+ *     max-width, so the painted card is 384px at all four settings. That clamp
+ *     is the design (a lone card renders at the width it has in a grid), so the
+ *     control is not going to start working there — see FIXED_CARD_WIDTH_TYPES
+ *     below, which is where the field now says so to the author.
+ *   accentColor — universal as a CASCADE (the wrapper always sets the three
+ *     variables, and custom_html's author CSS can read them), not as an
+ *     EFFECT: only the components that name --pb-accent-* paint with it. See
+ *     ACCENT_HINT below.
+ *
+ * ── WHAT THIS COMMENT STILL DOES NOT SAY, ON PURPOSE ───────────────────────
+ * Round 18 left the whole paragraph unedited because correcting a comment while
+ * the defect stood would make the code look consistent when it was not. That
+ * reason expires only for the parts a fix has reached, so the two clauses above
+ * describe the promise this panel now makes and stop there. Three types —
+ * accordion, instructor_card and course_schedule — DO have a surface the accent
+ * belongs on and do not take it; that is an open gap in the renderers, and it
+ * is deliberately not written up here as though it were settled. When those
+ * land, this note shrinks. docs/control-fix-proposal.md §1 has the sequence.
+ *
  * Deferred to 5b (SectionTypeFields), where the per-type knowledge already lives
  * — each of these is read by SOME components and ignored by the rest, so it
  * belongs next to that type's content editor, not in a panel that shows it for
@@ -164,6 +191,68 @@ export function ContentTab({ type, content, advanced, resolved, patch }) {
 }
 
 /**
+ * ACCENT_HINT — what สีเน้น actually does, replacing a claim that was universal
+ * and false.
+ *
+ * ── WHY ONE STATIC STRING AND NOT A PER-TYPE HINT ──────────────────────────
+ * A per-type hint would be more precise, and there is NO SINGLE SOURCE it could
+ * be derived from. `SECTION_STYLE_CAPS` is this codebase's one capability
+ * registry — the thing that makes "reads a prop" and "offers a control for it"
+ * the same act — and `accentColor` is deliberately not in it: the accent is not
+ * a prop a component opts into, it is three CSS variables SectionRenderer sets
+ * on EVERY section wrapper. Which components then paint with them is decided
+ * inside their class literals, and the only way to read that set is a
+ * source-text scan over sections/ (test/pure/sectionControlAudit does exactly
+ * that). A client component cannot run one.
+ *
+ * So a per-type hint means a hand-written 27-entry map here, tracking class
+ * strings in 27 files, with nothing able to notice it going stale — which is
+ * precisely the drift round 18 found in this file's own comment. Recorded as a
+ * finding in docs/section-control-audit.md rather than worked around: making
+ * one source exist means declaring the accent in SECTION_STYLE_CAPS, and that
+ * is a presets.js change, not a copy change.
+ *
+ * The two halves are what round 21 measured across the nine consumers: the
+ * three roles the accent has (ornament, one key figure or link, the button
+ * surface), and the fact that a type with no such surface shows nothing. The
+ * cascade clause is kept from the old hint because it was the true half — four
+ * container types forward the variables to their children.
+ */
+const ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ '
+  + 'ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — '
+  + 'section บางชนิดไม่มีส่วนที่ใช้สีเน้น จึงจะไม่เห็นความเปลี่ยนแปลง';
+
+/**
+ * The two types whose card width is fixed, so ความกว้าง cannot change what the
+ * author sees. Measured in Chrome: 384px at all four settings, because each
+ * wraps itself in a small fixed max-width that the envelope sits outside of.
+ *
+ * (This file is inside Tailwind's content globs, so the utility is described
+ * rather than spelled — a class literal in a comment here is a class the JIT
+ * emits. It is named exactly, once, in the test tier, which is not scanned.)
+ *
+ * ── THE CONTROL STAYS; ONLY THE PROMISE CHANGES ────────────────────────────
+ * Withdrawing it for these two was the alternative, and it is worse in three
+ * ways. It would make the universal envelope not universal — the organizing
+ * idea of this panel. It would strand any stored value: a section that ever
+ * carries a non-default width here would show no control to see or reset it
+ * (zero such sections exist today, re-measured this round, which is a fact
+ * about one database at one moment and not a property of the design). And a
+ * withdrawal goes stale SILENTLY — the day the self-clamp is dropped the panel
+ * would keep hiding a control that had started working, with nothing to say so.
+ *
+ * ── WHAT KEEPS THIS TWO-ENTRY LIST FROM DRIFTING ───────────────────────────
+ * The reason this list is defensible where ACCENT_HINT's would not be: the
+ * self-clamp it describes is ALREADY pinned by an exact-set tripwire
+ * (test/pure/sectionControlAudit, finding 1), and test/render/settingsPanelTabs
+ * asserts this list and that scan name the same two types. A third type gaining
+ * the clamp, or these two losing it, reddens a test that names the fix.
+ */
+const FIXED_CARD_WIDTH_TYPES = ['course_card', 'instructor_card'];
+
+const FIXED_CARD_WIDTH_HINT = 'การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น';
+
+/**
  * The รูปแบบ tab: the per-type layout/style fields, then the three universal
  * envelope groups.
  *
@@ -185,7 +274,7 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
       />
 
       <Group title="การจัดวาง">
-        <Field label="ความกว้าง">
+        <Field label="ความกว้าง" hint={FIXED_CARD_WIDTH_TYPES.includes(type) ? FIXED_CARD_WIDTH_HINT : undefined}>
           <Select
             value={settings.containerWidth} options={CONTAINER_WIDTHS} labels={CONTAINER_WIDTH_LABELS}
             onChange={(v) => patchKey('settings', { containerWidth: v })}
@@ -221,7 +310,7 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
       </Group>
 
       <Group title="สไตล์">
-        <Field label="สีเน้น" hint="มีผลกับ section นี้และ section ที่ซ้อนอยู่ข้างใน">
+        <Field label="สีเน้น" hint={ACCENT_HINT}>
           <select
             className={INPUT_CLASS}
             value={style.accentColor ?? ''}

@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
@@ -9,8 +12,9 @@ import {
   ContentTab, StyleTab, AdvancedGroup, hasAdvancedTab, SelectionHeader,
   SectionNameField,
 } from '@/components/pageBuilder/editor/SettingsPanel';
-import { VISIBILITY } from '@/lib/schemas/pageBuilder';
+import { VISIBILITY, ALL_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
 import { VISIBILITY_LABELS } from '@/lib/pageBuilder/presetLabels';
+import { Field } from '@/components/pageBuilder/editor/fields';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -540,4 +544,214 @@ test('CONTROL: the container fallback copy survived losing its legend', () => {
   assert.deepEqual(groupsIn(doc), []);
   assert.equal(text(doc.querySelector('p')),
     'section นี้เป็นตัวจัดวาง — เพิ่มหรือย้าย section ที่อยู่ข้างในได้ที่แผง “โครงสร้างหน้า”');
+});
+
+// ── 4. ROUND 22 — the panel's promises, matched to what the controls do ────
+
+/**
+ * Round 22 changed COPY ONLY: no control gained, lost or changed a value path,
+ * and no renderer was touched. What changed is what two fields CLAIM.
+ *
+ * The hint is the SECOND span inside a Field's label (fields.jsx), so the
+ * label-only reader used by the union check above cannot see it — which is why
+ * adding a hint could not move a field in or out of that set, asserted below
+ * rather than assumed.
+ *
+ * Every assertion here is on exact, whole strings. Thai qualifies by prefix and
+ * both new hints carry a negation that a substring check would pass without.
+ */
+
+const SECTIONS_DIR = path.resolve(
+  fileURLToPath(new URL('../..', import.meta.url)),
+  'src/components/pageBuilder/sections',
+);
+
+/** Every field in a doc as {label, hint} — hint null when the Field has none. */
+const fieldPairsIn = (doc) => [...doc.querySelectorAll('label')].map((l) => {
+  const spans = [...l.querySelectorAll(':scope > span')];
+  return { label: text(spans[0]), hint: spans.length > 1 ? text(spans[1]) : null };
+});
+
+const hintFor = (doc, label) => fieldPairsIn(doc).find((f) => f.label === label)?.hint ?? null;
+
+const ROUND22_ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ '
+  + 'ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — '
+  + 'section บางชนิดไม่มีส่วนที่ใช้สีเน้น จึงจะไม่เห็นความเปลี่ยนแปลง';
+
+const ROUND22_WIDTH_HINT = 'การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น';
+
+const OLD_UNIVERSAL_ACCENT_HINT = 'มีผลกับ section นี้และ section ที่ซ้อนอยู่ข้างใน';
+
+test('CONTROL: the hint reader sees hints at all, and tells them from labels', () => {
+  /**
+   * Without this, every "the hint equals X" below could be passing on a reader
+   * that returns null for everything — and "the old hint is gone" would be
+   * vacuously true for a panel that still shipped it.
+   */
+  const withHint = domOf(createElement(Field, { label: 'ป้าย', hint: 'คำอธิบาย' }, 'x'));
+  assert.deepEqual(fieldPairsIn(withHint), [{ label: 'ป้าย', hint: 'คำอธิบาย' }]);
+
+  const withoutHint = domOf(createElement(Field, { label: 'ป้าย' }, 'x'));
+  assert.deepEqual(fieldPairsIn(withoutHint), [{ label: 'ป้าย', hint: null }]);
+
+  // The label-only reader still reads the LABEL, so a hint cannot move a field
+  // in or out of the union set above.
+  assert.deepEqual(fieldsIn(withHint), ['ป้าย']);
+
+  // The old string is still MATCHABLE — so its absence below is a real finding.
+  const withOld = domOf(createElement(Field, { label: 'สีเน้น', hint: OLD_UNIVERSAL_ACCENT_HINT }, 'x'));
+  assert.equal(hintFor(withOld, 'สีเน้น'), OLD_UNIVERSAL_ACCENT_HINT);
+});
+
+test('A: the universal accent claim is gone, and the replacement is exactly this', () => {
+  /**
+   * The old hint said the accent has an effect on this section and everything
+   * nested inside it — true for the 13 types that paint with it or forward it,
+   * false for the other 14. That is finding 2 of docs/section-control-audit.md,
+   * stated as a promise to the author. The new copy has the two halves round 21
+   * measured across the nine consumers: the three roles the accent actually has
+   * (ornament, one key figure or link, the button surface), and the fact that a
+   * type with no such surface shows nothing.
+   */
+  for (const type of ['heading', 'rich_text', 'course_card', 'notice', 'tabs']) {
+    assert.equal(hintFor(styleTab(type), 'สีเน้น'), ROUND22_ACCENT_HINT,
+      `${type}: the สีเน้น hint is not the round-22 copy`);
+  }
+
+  // Gone from the rendered panel AND from the source — the second half matters
+  // because a claim kept in a dead branch is one someone will restore.
+  const rendered = renderToStaticMarkup(createElement(StyleTab, {
+    type: 'heading', layout: {}, style: {}, settings: {}, patchKey: noop,
+  }));
+  assert.equal(rendered.includes(OLD_UNIVERSAL_ACCENT_HINT), false,
+    'the panel still renders the old universal accent claim');
+
+  // Against RAW bytes, not the comment-stripped read: the claim must be gone
+  // from the file entirely, including from any prose that restates it.
+  assert.equal(readSource(SRC).raw.includes(OLD_UNIVERSAL_ACCENT_HINT), false,
+    'the old universal accent claim is still somewhere in SettingsPanel.jsx');
+});
+
+test('A: the accent hint is ONE string — it does not vary by type', () => {
+  /**
+   * The decision, asserted rather than described. A per-type accent hint would
+   * need a hand-written 27-entry map with no source to derive it from — the
+   * accent is not in SECTION_STYLE_CAPS, and the only reader-set that exists is
+   * a source scan the browser cannot run (see ACCENT_HINT's note).
+   *
+   * So the hint is deliberately constant, and this pins it: a later round that
+   * makes it per-type must also supply the single source and a test that the
+   * two agree, exactly as the ความกว้าง hint below already does.
+   */
+  const hints = new Set(ALL_SECTION_TYPES.map((t) => hintFor(styleTab(t), 'สีเน้น')));
+  assert.deepEqual([...hints], [ROUND22_ACCENT_HINT]);
+});
+
+test('B: ความกว้าง is still offered on every one of the 27 types', () => {
+  /**
+   * The alternative was to stop offering it on the two card types — an ABSENT
+   * cell instead of an IGNORED one. Rejected (see FIXED_CARD_WIDTH_TYPES), so
+   * this is the exact set that decision produces: a withdrawal shows up here as
+   * two missing members, named.
+   */
+  const offering = ALL_SECTION_TYPES
+    .filter((t) => fieldsIn(styleTab(t)).includes('ความกว้าง')).sort();
+  assert.deepEqual(offering, [...ALL_SECTION_TYPES].sort());
+  assert.equal(offering.length, 27);
+});
+
+test('B: exactly the two self-clamping types say their card width is fixed', () => {
+  const hinted = ALL_SECTION_TYPES
+    .filter((t) => hintFor(styleTab(t), 'ความกว้าง') === ROUND22_WIDTH_HINT).sort();
+  assert.deepEqual(hinted, ['course_card', 'instructor_card']);
+
+  // Every other type's ความกว้าง carries no hint at all — not a different one.
+  const others = ALL_SECTION_TYPES.filter((t) => !hinted.includes(t));
+  assert.deepEqual([...new Set(others.map((t) => hintFor(styleTab(t), 'ความกว้าง')))], [null]);
+});
+
+test('B: the hinted set and the renderers that self-clamp come from ONE source', () => {
+  /**
+   * ── WHY THIS TEST IS THE PRICE OF KEEPING A PER-TYPE LIST ────────────────
+   * FIXED_CARD_WIDTH_TYPES is a hand-written pair in a client component, which
+   * is the drift shape round 18 caught in this very file. What makes it
+   * defensible where an accent map would not be: the thing it describes — a
+   * max-w-sm self-clamp — IS readable off the components, and this puts the two
+   * side by side.
+   *
+   * The scan is the same one test/pure/sectionControlAudit's finding-1 tripwire
+   * uses, deliberately. A third type gaining the clamp, or these two losing it,
+   * reddens BOTH: that one naming the audit row to delete, this one naming the
+   * hint to move.
+   */
+  const clamped = readdirSync(SECTIONS_DIR)
+    .filter((f) => f.endsWith('.jsx'))
+    .filter((f) => /max-w-sm/.test(readSource(`src/components/pageBuilder/sections/${f}`).code))
+    .map((f) => f.replace(/\.jsx$/, '')).sort();
+
+  const hinted = ALL_SECTION_TYPES
+    .filter((t) => hintFor(styleTab(t), 'ความกว้าง') === ROUND22_WIDTH_HINT).sort();
+
+  assert.deepEqual(hinted, clamped,
+    'the panel hints a fixed card width on a different set of types than the ones whose '
+    + 'component actually clamps itself. If a clamp was REMOVED, delete that type from '
+    + 'FIXED_CARD_WIDTH_TYPES — the control now works there and the hint has become a new '
+    + 'lie. If one was ADDED, the panel is silently inert on a type it promises nothing about.');
+});
+
+test('CONTROL: the one-source check catches the two sets disagreeing', () => {
+  /**
+   * Discrimination for the test above, perturbed in BOTH directions — a
+   * comparison that only noticed growth would miss the direction that matters
+   * most, a clamp dropped with the hint left behind.
+   */
+  const base = ['course_card', 'instructor_card'];
+  assert.throws(() => assert.deepEqual([...base, 'price_card'].sort(), base),
+    'a third clamped type does not break the comparison');
+  assert.throws(() => assert.deepEqual(['course_card'], base),
+    'a type losing its clamp does not break the comparison');
+  assert.deepEqual([...base].sort(), base, 'the unperturbed comparison must pass');
+});
+
+test('C: the panel comment corrects the two fields this round made true, and stops there', () => {
+  /**
+   * Round 18 left the opening comment wrong on purpose: correcting it while the
+   * defect stood would have made the code look consistent when it was not.
+   * Round 22 corrects only the halves it made true, and this pins BOTH sides —
+   * including the clause deliberately left open, so a later round cannot
+   * quietly treat it as handled.
+   */
+  // RAW, not `code` — readSource strips comments, and a comment is the subject.
+  const { raw, code } = readSource(SRC);
+  const head = raw.slice(0, raw.indexOf('const ADVANCED_KEYS'));
+  assert.ok(head.length > 400, 'the opening comment block was not located');
+  assert.equal(code.includes('EXACT FOR THREE OF THE FIVE'), false,
+    'CONTROL: the phrases below must live in prose, not in code — if the stripped read still '
+    + 'contains one, this test is matching a string literal and would pass with the comment gone');
+
+  assert.match(head, /EXACT FOR THREE OF THE FIVE/, 'the measured qualification is gone');
+  // Two single-line fragments: the block is hard-wrapped, so a phrase spanning
+  // the wrap is separated by a leading `*` no whitespace class will cross.
+  assert.match(head, /wrap themselves in a small fixed/,
+    'the comment no longer names the clamp that limits containerWidth');
+  assert.match(head, /painted card is 384px at all four settings/,
+    'the comment no longer says what the clamp costs the author');
+  assert.match(head, /universal as a CASCADE/, 'the comment no longer separates cascade from effect');
+
+  /**
+   * The clamp is DESCRIBED there, never spelled. SettingsPanel.jsx sits inside
+   * Tailwind's content globs, and the JIT scans raw file text — a class literal
+   * in a comment is a class the bundle then carries, pinned by prose that no
+   * longer has a reason to exist. It is named exactly once, in this file, which
+   * is not scanned.
+   */
+  assert.equal(/max-w-sm/.test(raw), false,
+    'a Tailwind class literal is back in SettingsPanel.jsx, which Tailwind scans — describe the '
+    + 'utility in prose and let the test tier name it');
+
+  // The open gap is still described as open — not as settled.
+  assert.match(head, /accordion, instructor_card and course_schedule/,
+    'the three types with an unclaimed accent surface are no longer named as an open gap');
+  assert.match(head, /open gap in the renderers/,
+    'the comment stopped saying the remaining accent gap is unfixed');
 });
