@@ -122,6 +122,49 @@ const CASES = [
     className: 'hover:bg-[var(--round-hover-bg)]',
     property: 'background-color',
   },
+  /**
+   * ── ROUND 28: THE PAGE BUILDER'S DARK SURFACES BECOME A VARIABLE ─────────
+   *
+   * Five editor files carried `dark:bg-[#0D1B2A]` — a hex spelling of `9e-navy`
+   * that could not participate in the theme system at all. They now read
+   * `var(--surface-hover)`, which globals.css defines twice (#F8FAFD on :root,
+   * #20344C in .dark) so one class covers both themes.
+   *
+   * That trade is only a gain if the class COMPILES. It is exactly the shape
+   * this file was written for — an arbitrary value wrapping a runtime variable,
+   * which renders perfect markup while emitting no rule — and the surfaces it
+   * paints are the ones nobody looks at twice: a panel hover and a menu
+   * background. A dead rule there is invisible in review and invisible in a
+   * screenshot taken in light mode.
+   *
+   * BOTH FORMS are registered, because they are separately droppable: the
+   * static form is the settings dialog's nav and the breadcrumb card, and the
+   * hover form is every row and icon button in the two panels.
+   */
+  {
+    what: "the page builder panels' hover surface",
+    file: 'src/components/pageBuilder/editor/StructurePanel.jsx',
+    className: 'hover:bg-[var(--surface-hover)]',
+    property: 'background-color',
+    referencesVar: '--surface-hover',
+  },
+  {
+    what: "the page settings dialog's menu surface",
+    file: 'src/components/pageBuilder/editor/PageSettingsDialog.jsx',
+    className: 'bg-[var(--surface-hover)]',
+    property: 'background-color',
+    referencesVar: '--surface-hover',
+  },
+  {
+    // The footer band. A DIFFERENT variable from the two above, deliberately —
+    // the band sits one step off the dialog surface rather than at its hover
+    // tint — so it is registered separately rather than assumed to follow.
+    what: "the page settings dialog's footer band",
+    file: 'src/components/pageBuilder/editor/PageSettingsDialog.jsx',
+    className: 'bg-[var(--surface-muted)]',
+    property: 'background-color',
+    referencesVar: '--surface-muted',
+  },
   {
     /**
      * The hover ring's WIDTH — the half that actually paints.

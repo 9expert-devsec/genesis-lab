@@ -21,14 +21,25 @@ import { labelFor } from '@/lib/pageBuilder/presetLabels';
  * copy or fields changes.
  */
 
+/**
+ * ── ROUND 28: THE FIGMA'S FIELD METRICS, RESOLVED ONTO THE SHARED SCALES ────
+ * The design draws the input at 36.5px tall with 10px of horizontal padding and
+ * a 7px radius, and the label at 11px bold. Three of those four have a nearest
+ * step and take it: px-2.5 IS 10px, py-2 puts the box at 34px, and rounded-9e-sm
+ * IS 8px — one off the drawn 7, and the token wins because a radius token scale
+ * exists and 7 is not on it. The 11px label does NOT have a step; it goes to
+ * text-xs (12px), the scale's smallest, which is round 17's standing ruling and
+ * not a new decision. Only the WEIGHT moves, medium → bold, because that the
+ * scale can express exactly.
+ */
 export const INPUT_CLASS =
   'w-full rounded-9e-sm border border-[var(--surface-border)] bg-[var(--surface)] ' +
-  'px-2 py-1.5 text-xs text-9e-navy dark:text-white';
+  'px-2.5 py-2 text-xs text-9e-navy dark:text-white';
 
 export function Field({ label, hint, children }) {
   return (
     <label className="mb-3 block">
-      <span className="mb-1.5 block text-xs font-medium text-9e-navy dark:text-white/90">{label}</span>
+      <span className="mb-1.5 block text-xs font-bold text-9e-navy dark:text-white/90">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-9e-slate-dp-50">{hint}</span>}
     </label>

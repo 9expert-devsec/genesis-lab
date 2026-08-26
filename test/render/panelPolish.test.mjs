@@ -9,6 +9,7 @@ import { StructurePanel } from '@/components/pageBuilder/editor/StructurePanel';
 import { ALL_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
 import { iconOf, SECTION_ICONS } from '@/lib/pageBuilder/sectionIcons';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { readSource } from '../sourceScan.mjs';
@@ -43,6 +44,17 @@ const CONFIG = path.resolve(fileURLToPath(new URL('../..', import.meta.url)), 't
 const SRC = 'src/components/pageBuilder/editor/StructurePanel.jsx';
 const SETTINGS = 'src/components/pageBuilder/editor/SettingsPanel.jsx';
 const FIELDS = 'src/components/pageBuilder/editor/fields.jsx';
+const SHELL = 'src/components/pageBuilder/editor/EditorShell.jsx';
+const PAGE_SETTINGS = 'src/components/pageBuilder/editor/PageSettingsDialog.jsx';
+const PREVIEW = 'src/components/pageBuilder/editor/PreviewDialog.jsx';
+
+/**
+ * Every file round 28's Figma pass touched. The colour rule below applies to
+ * all six; the size and radius rules keep their original, narrower list,
+ * because those were measured against the two panels and their primitives and
+ * widening them would be a new claim wearing an old test's name.
+ */
+const ROUND_28_FILES = [SRC, SETTINGS, FIELDS, SHELL, PAGE_SETTINGS, PREVIEW];
 
 const PAGE = {
   slug: 's', title: 'T', pageType: 'general', status: 'draft', theme: 'default',
@@ -179,17 +191,45 @@ function importedLucideNames(source) {
 // ── 2. sizes and radii come off the shared scales ──────────────────────────
 
 /**
- * Only FONT SIZE and RADIUS are scanned, deliberately.
+ * FONT SIZE, RADIUS and — as of round 28 — COLOUR are scanned. Bare LENGTHS
+ * still are not.
  *
- * Arbitrary values are not banned in this repo and should not be: the panels
- * legitimately carry colour and length escapes that no token expresses — a dark
- * surface hex, a var() border, and the delete dialog's clamped width. Scanning
- * those would force a growing exception list, which is a guard that has stopped
- * meaning anything. Font size and radius are the two the polish is ABOUT, and
- * both have a scale to be on.
+ * This note used to read "only font size and radius", and gave as its reason
+ * that "the panels legitimately carry colour and length escapes that no token
+ * expresses — a dark surface hex, a var() border, and the delete dialog's
+ * clamped width". Two of those three are still true. THE DARK SURFACE HEX IS
+ * NOT: `dark:bg-[#0D1B2A]` stood in five of these six files, and it was never a
+ * colour no token expressed — #0D1B2A IS `9e-navy`, spelled out. What it
+ * actually was is an opt-out of the theme system, because this repo's dark mode
+ * runs through the scale CSS variables and the `--surface-*` family, and a hex
+ * cannot participate in either. Every one of them is now `var(--surface-hover)`,
+ * which is #F8FAFD in light and #20344C in dark from ONE class.
+ *
+ * So the rule is: no raw hex, anywhere in these six files. A design colour that
+ * has no token is a finding to raise, not a literal to inline — round 28's
+ * brief, and the same reasoning round 17 applied to type sizes in the other
+ * direction. `var(--…)` is explicitly NOT a raw value; it is a token reference,
+ * and it is the mechanism the ban exists to protect.
+ *
+ * Bare lengths stay unscanned for the original reason: a width like
+ * `w-[min(30rem,calc(100vw-2rem))]` or a panel column of 276px is on no scale
+ * because no scale for it exists, and banning those would force the growing
+ * exception list that makes a guard stop meaning anything.
  */
 const arbitraryFontSizes = (code) => [...new Set(code.match(/text-\[[0-9.]+(px|rem)\]/g) ?? [])].sort();
 const arbitraryRadii = (code) => [...new Set(code.match(/rounded(-[a-z]+)?-\[[^\]]+\]/g) ?? [])].sort();
+
+/**
+ * Every hex colour literal in the code — 3, 4, 6 or 8 digits, the four lengths
+ * CSS actually accepts.
+ *
+ * `readSource` has already removed comments, which matters here more than
+ * anywhere else in this file: the note above NAMES `#0D1B2A` in prose, and a
+ * scanner reading raw text would report its own explanation as a violation.
+ * That is defect 1 in test/sourceScan.mjs's list, and the control below proves
+ * this reader is not subject to it.
+ */
+const rawHexes = (code) => [...new Set(code.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [])].sort();
 
 test('the settings panel and its field primitives carry NO off-scale type size', () => {
   /**
@@ -223,6 +263,73 @@ test('CONTROL: the size scanner sees an off-scale value that IS there', () => {
   assert.deepEqual(arbitraryFontSizes('const a = "text-[13px] font-bold";'), ['text-[13px]']);
   assert.deepEqual(arbitraryFontSizes('const a = "text-xs font-bold";'), [],
     'the scanner matches an on-scale size — it would flag everything');
+});
+
+// ── 2b. ROUND 28: no raw colour anywhere the Figma pass reached ────────────
+
+test('no file the Figma pass touched carries a raw hex colour', () => {
+  /**
+   * Exact empty sets, per file, so the failure names WHICH file gained one —
+   * six files sharing one count would report a number nobody can act on.
+   *
+   * This is the round's hard rule stated as a test: the Figma names 30-odd
+   * hexes and every one of them resolved to a token that already existed. Had
+   * one not, the answer was to raise it as a finding, not to inline it — so
+   * a hex reappearing here is either a token that was skipped or a colour
+   * decision taken without one, and both are worth stopping for.
+   */
+  for (const f of ROUND_28_FILES) {
+    assert.deepEqual(rawHexes(readSource(f).code), [],
+      `${f} carries a raw hex colour. Resolve it to a token in tailwind.config.js or a `
+      + '--surface-* / --9e-* CSS variable; a hex opts the surface out of dark mode entirely.');
+  }
+  assert.equal(ROUND_28_FILES.length, 6);
+});
+
+test('CONTROL: the hex scanner sees a hex that IS there, and ignores a comment', () => {
+  // Both halves matter. Without the first, six empty sets could be an empty
+  // scanner; without the second, this file's own prose — which names #0D1B2A
+  // to explain why it is gone — would be reported as a violation.
+  assert.deepEqual(rawHexes('const a = "dark:bg-[#0D1B2A] text-9e-navy";'), ['#0D1B2A']);
+  assert.deepEqual(rawHexes('const a = "bg-[var(--surface-hover)]";'), [],
+    'a var() reference was read as a raw value — that is the mechanism the ban protects');
+  assert.deepEqual(rawHexes('const a = "text-9e-action";'), []);
+
+  // The comment half, through the real reader rather than a hand-written string.
+  const { code } = readSource(SETTINGS);
+  const raw = readFileSync(path.resolve(fileURLToPath(new URL('../..', import.meta.url)), SETTINGS), 'utf8');
+  assert.ok(/#0056D9/.test(raw), 'the fixture is wrong: SettingsPanel no longer names that hex in prose');
+  assert.equal(/#0056D9/.test(code), false, 'the reader left a comment in, so the empty sets above are luck');
+});
+
+test('the ONE surface class that replaced the dark hexes is a real, theme-aware token', () => {
+  /**
+   * The replacement has to be more than "not a hex": `var(--surface-hover)` is
+   * only an improvement if that variable is actually DEFINED in both themes,
+   * with different values. A var() pointing at nothing paints nothing, silently
+   * — the same class of defect tailwindArbitraryValueRules exists for.
+   */
+  const css = readFileSync(
+    path.resolve(fileURLToPath(new URL('../..', import.meta.url)), 'src/app/globals.css'), 'utf8'
+  );
+  const valueIn = (selector) => {
+    const start = css.indexOf(`${selector} {`);
+    assert.notEqual(start, -1, `expected a "${selector}" block in globals.css`);
+    const m = /--surface-hover\s*:\s*([^;]+);/.exec(css.slice(start, css.indexOf('}', start)));
+    assert.ok(m, `--surface-hover is not defined inside "${selector}"`);
+    return m[1].trim();
+  };
+  const light = valueIn(':root');
+  const dark = valueIn('.dark');
+  assert.notEqual(light, dark,
+    '--surface-hover has the same value in both themes, so the surfaces that now read it '
+    + 'are no better off in dark mode than the hex they replaced');
+
+  // …and every file that dropped a hex really did take this token.
+  for (const f of [SRC, SETTINGS, PAGE_SETTINGS, PREVIEW]) {
+    assert.match(readSource(f).code, /var\(--surface-hover\)/,
+      `${f} dropped its dark surface hex without taking the theme-aware token`);
+  }
 });
 
 test('no panel invents a corner radius', () => {
@@ -301,11 +408,33 @@ test('the row still holds one leading icon, the label, and the same six controls
   const actions = [...row.querySelectorAll('button[aria-label]')].map((b) => b.getAttribute('aria-label'));
   assert.deepEqual(actions, ['ขึ้น', 'ลง', 'ทำซ้ำ', 'ลบ', 'ซ่อน section นี้']);
 
-  // Every action keeps the padding that IS its hit area. Measured at 22px square;
-  // the fix for that is width this panel does not have, not a smaller target.
+  /**
+   * Every action keeps the padding that IS its hit area.
+   *
+   * ── ROUND 28 CLOSES THIS, AND THE OLD NOTE HERE SAID IT COULD NOT BE ──────
+   * It read: "Measured at 22px square; the fix for that is width this panel
+   * does not have, not a smaller target." That was true of a 260px column. The
+   * column is 276px now (EditorShell, per the Figma), and the 16px it gained is
+   * what the glyph spends: 4px of padding either side plus a 16px icon is
+   * exactly 24. The padding is unchanged — raising the ICON is what reaches the
+   * floor, and it is the only currency that does not come out of the label.
+   */
   for (const b of row.querySelectorAll('button[aria-label]')) {
     assert.match(b.className, /(^|\s)p-1(\s|$)/, `"${b.getAttribute('aria-label')}" no longer carries its own padding`);
+    const glyph = b.querySelector('svg');
+    assert.notEqual(glyph, null, `"${b.getAttribute('aria-label')}" renders no glyph`);
+    assert.match(glyph.getAttribute('class') ?? '', /(^|\s)h-4 w-4(\s|$)/,
+      `"${b.getAttribute('aria-label')}" is back under the 24px hit area: p-1 (4+4) around a `
+      + '14px glyph is 22px. The panel is 276px wide now — the width to pay for this exists.');
   }
+});
+
+test('CONTROL: the hit-area check discriminates 14px from 16px', () => {
+  // Without this, the class match above could be satisfied by any glyph class
+  // at all, and the 22px shape it exists to reject would sail through.
+  assert.match('h-4 w-4', /(^|\s)h-4 w-4(\s|$)/);
+  assert.doesNotMatch('h-3.5 w-3.5', /(^|\s)h-4 w-4(\s|$)/,
+    'the pre-round-28 glyph size satisfies the assertion, so it is not a hit-area guard');
 });
 
 test('CONTROL: the row-shape assertion notices an added child', () => {

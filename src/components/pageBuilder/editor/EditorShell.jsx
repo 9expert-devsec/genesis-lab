@@ -54,8 +54,13 @@ function ConflictBanner({ message }) {
 function Panel({ title, hint, children, className }) {
   return (
     <section className={className}>
+      {/* The design's EYEBROW: 10px, bold, uppercase, 1.3px of tracking.
+          10px has no step on the shared type scale — round 17's ruling, which
+          this round does not reopen — so it stays at text-xs, the smallest.
+          The tracking DOES land: tracking-widest is 0.1em, which at 12px is
+          1.2px against the drawn 1.3. */}
       <div className="border-b border-[var(--surface-border)] px-3 py-2">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-9e-slate-dp-50">
+        <h2 className="text-xs font-bold uppercase tracking-widest text-9e-slate-dp-50">
           {title}
         </h2>
         {hint && <p className="mt-0.5 text-[10px] normal-case text-9e-slate-dp-50/70">{hint}</p>}
@@ -151,7 +156,21 @@ export function EditorShell() {
         </p>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[260px_1fr_320px]">
+      {/* ── THE TWO SIDE COLUMNS TAKE THE DESIGN'S WIDTHS ────────────────────
+          Structure 260 → 276 and Settings 320 → 330, per the Figma. These are
+          the one measurement round 17 could not fix from inside the panel: it
+          measured the structure row's label budget at 85px top-level and 33.4px
+          on a nested row with a badge, with the action cluster costing 88px and
+          always in flow, and concluded that the remedy was width the panel did
+          not have. It has 16px more of it now, and the four action buttons take
+          8 of that to reach a 24px hit area (see StructurePanel's IconButton) —
+          the trade round 17 refused to make while the width was fixed, because
+          then it could only have been paid for out of the label.
+
+          These are raw pixel columns rather than scale steps because there is
+          no scale for a panel width: the grid template has always been written
+          this way, and Tailwind's spacing scale tops out far below 276. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[276px_1fr_330px]">
         <Panel
           title="โครงสร้างหน้า"
           hint="ลากเพื่อจัดลำดับ"

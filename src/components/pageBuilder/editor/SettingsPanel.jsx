@@ -7,6 +7,8 @@ import { CONTAINER_WIDTHS, SPACING, VISIBILITY, ACCENTS } from '@/lib/schemas/pa
 import { OFFERED_BACKGROUNDS } from '@/lib/pageBuilder/presets';
 import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
 import { labelOf } from '@/lib/pageBuilder/sectionLabels';
+import { iconOf } from '@/lib/pageBuilder/sectionIcons';
+import { cn } from '@/lib/utils';
 import {
   CONTAINER_WIDTH_LABELS, SPACING_LABELS, BACKGROUND_LABELS,
   VISIBILITY_LABELS, ACCENT_LABELS, labelFor,
@@ -139,7 +141,7 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
     const set = advancedKeysSet(advanced);
     return (
       <Group title="ขั้นสูง">
-        <p className="flex items-start gap-1.5 rounded-9e-sm bg-9e-ice px-2 py-2 text-xs text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
+        <p className="flex items-start gap-1.5 rounded-9e-sm bg-[var(--surface-hover)] px-2.5 py-2 text-xs text-9e-slate-dp-50">
           <Lock className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
           <span>
             section นี้มีการปรับแต่งโดย developer ({set.join(', ')}) — คุณแก้ไขไม่ได้
@@ -362,14 +364,51 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
  * assert it directly: the panel itself needs a selection, and only a dispatch
  * can set one (see round 15).
  */
+/**
+ * ── ROUND 28: THE DESIGN'S ORDER, AND THE TWO PLACES IT CANNOT BE FOLLOWED ──
+ * The Figma stacks: eyebrow → heading → type line → breadcrumb card → tabs.
+ *
+ *   eyebrow      is the PANEL header ("ตั้งค่า"), rendered by EditorShell's
+ *                Panel one level up. It is already first, and it stays there.
+ *   heading      is this component's first line, taken from 14px to the
+ *                design's 22px — text-xl (20px) is the nearest step, and there
+ *                is no 22px step to take.
+ *   type line    is NOT a second line here, because the heading already IS the
+ *                type. The design's heading is the section's author-given NAME
+ *                with the type beneath it; ours prints the type once and lets
+ *                the author overrule it in ชื่อเรียกภายใน below. Printing it
+ *                twice is precisely what round 16 removed.
+ *   breadcrumb   is the containment line, promoted from a bare line into the
+ *                design's card. It is ABSENT for a top-level selection rather
+ *                than empty — round 16's ruling, still pinned by a test: a
+ *                card reading "อยู่ใน " with nothing after it would describe a
+ *                containment that does not exist. The design always draws the
+ *                card because its mock is always nested.
+ */
 export function SelectionHeader({ type, parentType }) {
+  /**
+   * The card's glyph is the PARENT's type icon, through the same `iconOf`
+   * registry the structure panel and the section picker read (rounds 9-14).
+   * The design draws an icon here too; taking it from the registry rather than
+   * choosing one means the card names the container with the drawing the author
+   * already met on that container's own row, and this file declares no icon
+   * mapping of its own — the rule panelPolish pins for the structure panel.
+   */
+  const ParentIcon = parentType ? iconOf(parentType) : null;
   return (
     <div className="mb-4" data-testid="settings-header">
-      <p data-testid="settings-header-type" className="text-sm font-bold text-9e-navy dark:text-white">
+      <p data-testid="settings-header-type" className="text-xl font-bold leading-7 text-9e-navy dark:text-white">
         {labelOf(type)}
       </p>
       {parentType && (
-        <p data-testid="settings-header-parent" className="mt-1 text-xs text-9e-slate-dp-50">
+        <p
+          data-testid="settings-header-parent"
+          className={cn(
+            'mt-2 flex h-[50px] items-center gap-2.5 rounded-9e-sm border',
+            'border-[var(--surface-border)] bg-[var(--surface-hover)] px-2.5 text-xs text-9e-slate-dp-50'
+          )}
+        >
+          <ParentIcon className="h-[26px] w-[26px] shrink-0 text-9e-action" aria-hidden />
           อยู่ใน {labelOf(parentType)}
         </p>
       )}
@@ -422,9 +461,23 @@ const BASE_TABS = [
   { key: 'style', label: 'รูปแบบ' },
 ];
 
+/**
+ * ── ROUND 28: THE STRIP BECOMES AN UNDERLINE, PER THE FIGMA ────────────────
+ * A 46px rail with a 2px rule under the active tab, replacing the filled pill
+ * in a tinted tray. Two things about it are deliberate:
+ *
+ *   the inactive tabs carry `border-b-2 border-transparent` rather than no
+ *   border, so switching tabs does not shift the row by 2px; and
+ *   the underline colour is the SAME 9e-action the pill used — the design's
+ *   #0056D9 is a near-miss of the CI's #005CFF, and the token wins.
+ *
+ * The design's tab is 100px wide; ours stay `flex-1` because the strip holds
+ * two or three tabs depending on the section (see hasAdvancedTab) and a fixed
+ * width would leave a ragged gap on the two-tab case.
+ */
 const TAB_TRIGGER_CLASS = [
-  'flex-1 rounded-9e-sm px-2 py-1.5 text-xs font-medium text-9e-slate-dp-50',
-  'data-[state=active]:bg-9e-action/10 data-[state=active]:text-9e-action',
+  'flex-1 border-b-2 border-transparent px-2 text-xs font-medium text-9e-slate-dp-50',
+  'data-[state=active]:border-9e-action data-[state=active]:font-bold data-[state=active]:text-9e-action',
   'hover:text-9e-action',
 ].join(' ');
 
@@ -520,7 +573,7 @@ export function SettingsPanel() {
         <Tabs.List
           data-testid="settings-tabs"
           aria-label="ส่วนของการตั้งค่า"
-          className="mb-4 flex gap-1 rounded-9e-sm bg-9e-ice p-1 dark:bg-[#0D1B2A]"
+          className="mb-4 flex h-[46px] items-stretch border-b border-[var(--surface-border)]"
         >
           {tabs.map((t) => (
             <Tabs.Trigger key={t.key} value={t.key} data-tab={t.key} className={TAB_TRIGGER_CLASS}>

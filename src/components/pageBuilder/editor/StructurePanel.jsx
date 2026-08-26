@@ -59,6 +59,18 @@ function childCountLabel(section) {
 const StructureContext = createContext(null);
 const useStructure = () => useContext(StructureContext);
 
+/**
+ * ── THE HIT AREA REACHES 24px, AND WIDTH IS WHAT PAID FOR IT ───────────────
+ * Round 17 measured this button at 22px square — under the 24px floor — and
+ * declined to fix it, on the grounds that the only currency available inside a
+ * 260px column was the row label's 85px, and buying a hit area out of a label
+ * that already truncates is not a fix.
+ *
+ * Round 28 widened the column to the designed 276px. The 16px that bought is
+ * what this spends: the glyph goes 14 → 16px, which with the SAME `p-1` puts
+ * the target at exactly 24. The padding is deliberately untouched — it IS the
+ * hit area, and test/render/panelPolish asserts every action still carries it.
+ */
 function IconButton({ label, onClick, disabled, danger, children }) {
   return (
     <button
@@ -69,7 +81,7 @@ function IconButton({ label, onClick, disabled, danger, children }) {
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       className={cn(
         'rounded-9e-sm p-1 text-9e-slate-dp-50 transition-colors',
-        'hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#0D1B2A] dark:hover:text-white',
+        'hover:bg-[var(--surface-hover)] hover:text-9e-navy dark:hover:text-white',
         'disabled:pointer-events-none disabled:opacity-30',
         danger && 'hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40'
       )}
@@ -182,7 +194,7 @@ function ConfirmDeleteDialog({ pending, onCancel, onConfirm }) {
               <button
                 ref={cancelRef}
                 type="button"
-                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy dark:text-white hover:bg-[var(--surface-hover)]"
               >
                 ยกเลิก
               </button>
@@ -253,7 +265,7 @@ function SectionNode({ section, path, siblingCount }) {
         className={cn(
           'group flex items-center gap-1 rounded-9e-sm border border-transparent px-1.5 py-1.5 text-xs',
           'cursor-grab active:cursor-grabbing',
-          selected ? 'border-9e-action/40 bg-9e-action/10' : 'hover:bg-9e-ice dark:hover:bg-[#0D1B2A]',
+          selected ? 'border-9e-action/40 bg-9e-action/10' : 'hover:bg-[var(--surface-hover)]',
           isDragging(path) && 'opacity-40',
           // Only ever set on a legal sibling target — see useTreeDrag.js.
           isDropTarget(path) && 'border-t-2 border-t-9e-action'
@@ -324,18 +336,18 @@ function SectionNode({ section, path, siblingCount }) {
 
         <span className="flex shrink-0 items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
           <IconButton label="ขึ้น" disabled={index === 0} onClick={() => move(index - 1)}>
-            <ChevronUp className="h-3.5 w-3.5" />
+            <ChevronUp className="h-4 w-4" />
           </IconButton>
           <IconButton label="ลง" disabled={index === siblingCount - 1} onClick={() => move(index + 1)}>
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-4 w-4" />
           </IconButton>
           <IconButton label="ทำซ้ำ" onClick={() => dispatch({ type: 'DUPLICATE_SECTION', path })}>
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-4 w-4" />
           </IconButton>
           {/* Asks; it does NOT dispatch. REMOVE_SECTION is reached only from
               the confirm dialog below — see requestDelete / ConfirmDeleteDialog. */}
           <IconButton label="ลบ" danger onClick={() => requestDelete(path, section)}>
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-4 w-4" />
           </IconButton>
         </span>
 
@@ -346,7 +358,7 @@ function SectionNode({ section, path, siblingCount }) {
           label={hidden ? 'แสดง section นี้' : 'ซ่อน section นี้'}
           onClick={() => dispatch({ type: 'TOGGLE_SECTION', path })}
         >
-          {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </IconButton>
       </div>
 
@@ -402,7 +414,7 @@ function AddRow({ basePath, count }) {
       className={cn(
         'mt-1 flex w-full items-center gap-1 rounded-9e-sm border border-dashed',
         'border-[var(--surface-border)] px-1.5 py-1.5 text-xs text-9e-slate-dp-50',
-        'hover:border-9e-action/40 hover:bg-9e-ice hover:text-9e-action dark:hover:bg-[#0D1B2A]'
+        'hover:border-9e-action/40 hover:bg-[var(--surface-hover)] hover:text-9e-action'
       )}
     >
       <Plus className="h-3 w-3 shrink-0" aria-hidden />

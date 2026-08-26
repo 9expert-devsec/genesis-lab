@@ -9,6 +9,10 @@ import {
   GeneralSection, SeoSection, JsonLdSection, HistorySection,
 } from '@/components/pageBuilder/editor/PageSettingsDialog';
 import { PreviewSection } from '@/components/pageBuilder/editor/PageSettingsDialog';
+// Round 28. ADDED beside the two statements above rather than folded into
+// either — the standing rule, and the one panelPolish's lucide scanner had to
+// be rewritten for.
+import { SettingsNav } from '@/components/pageBuilder/editor/PageSettingsDialog';
 import { PreviewBody } from '@/components/pageBuilder/editor/PreviewDialog';
 import { readSource } from '../sourceScan.mjs';
 
@@ -485,4 +489,178 @@ test('the JSON-LD section makes a statement and no status claim', () => {
       `the JSON-LD section claims "${claim}". Nothing emits JSON-LD for a builder page — see `
       + 'docs/page-settings-redesign.md §F.2 before adding a status a generator cannot back.');
   }
+});
+
+// ── 6. ROUND 28: the Figma pass, and the two ornaments it decides between ──
+
+/**
+ * The menu chrome, driven by prop rather than by whatever a static render
+ * happens to produce.
+ *
+ * `SettingsNav` is exported for exactly this. The dot and the active state are
+ * both the kind of thing that gets wired to a constant and then looks right
+ * forever, and neither can be driven from `PageSettingsBody` in this tier: the
+ * open section is local state, and the preview status arrives from a server
+ * action through an effect that never runs under renderToStaticMarkup.
+ */
+const nav = (over = {}) => renderToStaticMarkup(createElement(SettingsNav, {
+  section: 'general', onSelect: noop, previewStatus: null, ...over,
+}));
+
+const navDoc = (over) => docOf(nav(over));
+const currentLabels = (doc) => [...doc.querySelectorAll('button[aria-current="true"]')]
+  .map((b) => b.textContent.replace(/\s+/g, ' ').trim());
+
+test('exactly one menu item is current, and it is the SELECTED one — every section', () => {
+  /**
+   * Driven across ALL FIVE sections rather than one. A hardcoded index passes a
+   * single-section check trivially; it cannot pass five, because four of the
+   * five answers would be the same button.
+   */
+  for (const s of PAGE_SETTINGS_SECTIONS) {
+    const doc = navDoc({ section: s.id });
+    assert.deepEqual(currentLabels(doc), [s.label],
+      `selecting "${s.id}" did not mark its own item current — the menu's active state is not `
+      + 'reading the selected section');
+  }
+});
+
+test('CONTROL: a menu hardcoded to one item WOULD fail the sweep above', () => {
+  /**
+   * Discrimination, not decoration. The reader is pointed at a fixed nav whose
+   * "current" never moves; it must agree for one section and disagree for the
+   * other four, which is precisely what a hardcoded index looks like.
+   */
+  const frozen = docOf(nav({ section: 'general' }));
+  assert.deepEqual(currentLabels(frozen), ['ข้อมูลหน้า']);
+  const others = PAGE_SETTINGS_SECTIONS.filter((s) => s.id !== 'general');
+  for (const s of others) {
+    assert.notDeepEqual(currentLabels(frozen), [s.label],
+      'the reader returns the same answer whatever is selected, so the sweep proves nothing');
+  }
+  assert.equal(others.length, 4);
+
+  // …and the reader is not simply returning every button.
+  assert.deepEqual(currentLabels(docOf('<button>ก</button>')), []);
+});
+
+test('the current item is VISUALLY distinct, not only marked in the accessibility tree', () => {
+  /**
+   * aria-current alone is invisible. The design gives the selected item a
+   * filled background and a bold blue label, so the classes must differ too —
+   * asserted as "the current item's class is not any inactive item's class",
+   * which is the weakest true form and cannot be satisfied by a uniform strip.
+   */
+  const doc = navDoc({ section: 'seo' });
+  const buttons = [...doc.querySelectorAll('button')];
+  const current = buttons.find((b) => b.getAttribute('aria-current') === 'true');
+  const rest = buttons.filter((b) => b !== current);
+  assert.equal(rest.length, 4);
+  for (const b of rest) {
+    assert.notEqual(b.className, current.className,
+      'the selected menu item is styled identically to the unselected ones');
+  }
+  // The distinction is the CI's action colour, not a hex and not a near-miss.
+  assert.match(current.className, /bg-9e-action-scale-900/);
+  assert.match(current.className, /text-9e-action/);
+});
+
+test('each menu item carries a glyph, and no two sections share one', () => {
+  /**
+   * Five icons for five sections. A shared glyph is not a crash — it is a menu
+   * where two rows look like the same thing, which is the failure the section
+   * picker's one-icon-per-type rule exists to prevent (rounds 9-14).
+   */
+  const names = PAGE_SETTINGS_SECTIONS.map((s) => s.Icon?.displayName ?? s.Icon?.name);
+  assert.deepEqual(names, ['FileText', 'Search', 'CodeXml', 'Lock', 'History']);
+  assert.equal(new Set(names).size, 5, 'two menu sections draw the same glyph');
+
+  // …and they reach the markup, one per item.
+  assert.equal(navDoc({}).querySelectorAll('button > svg').length, 5);
+});
+
+// ── the preview dot: real state, and only real state ──────────────────────
+
+const dotIn = (over) => navDoc(over).querySelector('[data-testid="nav-preview-dot"]');
+
+test('the preview dot appears for an ACTIVE link, on the preview item alone', () => {
+  const doc = navDoc({ previewStatus: 'active' });
+  const dot = doc.querySelector('[data-testid="nav-preview-dot"]');
+  assert.notEqual(dot, null, 'an enabled preview link shows no dot');
+  assert.equal(
+    dot.closest('button').textContent.replace(/\s+/g, ' ').trim(), 'ลิงก์พรีวิว',
+    'the dot is on some other menu item');
+  assert.equal(doc.querySelectorAll('[data-testid="nav-preview-dot"]').length, 1);
+  // The repo's own success colour, which is what the design's #0AA876 resolves to.
+  assert.match(dot.className, /bg-9e-green-50/);
+});
+
+test('CONTROL: forcing the state off removes the dot — every non-active value', () => {
+  /**
+   * The half that matters. `previewSchema` carries three states and the dialog
+   * can also not know yet, and the dot must be absent for all four — a dot that
+   * is always there is not reporting anything, it is decoration claiming to be
+   * a status.
+   *
+   * `null` is in the list deliberately: it means "not read yet", and an unknown
+   * shown as ON is the worst of the four answers.
+   */
+  for (const status of ['off', 'expired', 'revoked', null]) {
+    assert.equal(dotIn({ previewStatus: status }), null,
+      `the dot is lit for previewStatus=${String(status)} — it is not reading the real state`);
+  }
+  // …and the reader can find a dot when there is one, so the nulls mean something.
+  assert.notEqual(dotIn({ previewStatus: 'active' }), null);
+});
+
+test('CONTROL: a dot hardcoded ON is caught, in source and in render', () => {
+  /**
+   * Two independent catches, because the render check alone can be defeated by
+   * a hardcode that still reads the prop name, and the source check alone
+   * cannot see whether the element renders.
+   *
+   * The source claim: the dot's condition tests the STATUS VALUE. An
+   * unconditional dot, or one gated only on the section id, would not.
+   */
+  const { code } = readSource('src/components/pageBuilder/editor/PageSettingsDialog.jsx');
+  assert.match(code, /previewStatus === 'active'/,
+    'the menu dot no longer tests the preview status against a real value');
+  assert.equal(code.includes('previewStatus={true}'), false);
+  assert.equal(code.includes("previewStatus = 'active'"), false,
+    'the dot defaults to lit — an unread status would render as an enabled link');
+  assert.match(code, /previewStatus = null/, 'the unknown state no longer defaults to "no dot"');
+
+  // The render claim, as a discrimination: the same component, one prop apart,
+  // opposite answers. If these ever agree, the test above is vacuous.
+  assert.notEqual(dotIn({ previewStatus: 'active' }), null);
+  assert.equal(dotIn({ previewStatus: 'off' }), null);
+});
+
+test('the JSON-LD "Auto" pill is NOT built, and the menu makes no claim about it', () => {
+  /**
+   * The Figma puts two ornaments in this menu — a green dot on Preview Link and
+   * an "Auto" pill on JSON-LD. One has a source and one does not, and this is
+   * the assertion that they are treated differently.
+   *
+   * Nothing emits JSON-LD for a builder page (round 27, §F.2), so the pill
+   * would be a badge asserting a generator exists. It is the one design element
+   * deliberately dropped this round. The section's own copy already says so in
+   * words; this pins the MENU, which is where the design drew the pill.
+   */
+  const html = nav({ previewStatus: 'active' });
+  for (const claim of ['Auto', 'auto', 'Types']) {
+    assert.equal(html.includes(`>${claim}<`), false,
+      `the menu renders an "${claim}" badge on a section nothing generates`);
+  }
+  const jsonld = docOf(html).querySelectorAll('button')[2];
+  assert.equal(jsonld.textContent.replace(/\s+/g, ' ').trim(), 'JSON-LD',
+    'the JSON-LD menu item carries something besides its own label');
+  assert.equal(jsonld.querySelectorAll('span').length, 1,
+    'the JSON-LD item grew a second span — the pill is the shape that would arrive as one');
+
+  // CONTROL: the preview item, one along, DOES carry its extra span. So the
+  // count above is a real difference between the two sections, not a nav that
+  // can never hold a badge.
+  const preview = docOf(html).querySelectorAll('button')[3];
+  assert.equal(preview.querySelectorAll('span').length, 2);
 });

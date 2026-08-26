@@ -1,8 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Upload, Loader2 } from 'lucide-react';
+/**
+ * The menu glyphs, as a SECOND lucide statement rather than an edit of the one
+ * above — the standing rule in this directory, and the one
+ * test/render/panelPolish's importedLucideNames scanner exists because of.
+ */
+import { FileText, Search, CodeXml, Lock, History } from 'lucide-react';
+import { getPreviewState } from '@/lib/actions/pageBuilder';
 import { cn } from '@/lib/utils';
 import { PAGE_TYPES, PAGE_THEMES } from '@/lib/schemas/pageBuilder';
 import { isReservedSlug } from '@/lib/pages/reservedSlugs';
@@ -91,7 +98,7 @@ function PromoCoverField({ value, onChange }) {
       )}
       <label className={cn(
         'flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed',
-        'border-[var(--surface-border)] px-2 py-2 text-[11px] text-9e-slate-dp-50',
+        'border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50',
         'hover:border-9e-action/40 hover:text-9e-action',
         busy && 'pointer-events-none opacity-50'
       )}>
@@ -137,12 +144,21 @@ function PromoCoverField({ value, onChange }) {
  * the same menu because that is where an author looks for it, and it announces
  * the difference itself — see PreviewSection.
  */
+/**
+ * ── THE GLYPHS ARE THE DESIGN'S, DRAWN FROM THE LIBRARY THE REPO ALREADY HAS ─
+ * lucide-react is already the source of `iconOf()` (rounds 9-14), so the menu
+ * meets an author with the same drawing hand as the section picker and the
+ * structure rows. The Figma exports its own SVGs; those URLs expire in seven
+ * days and every one of the five has an unmistakable lucide equivalent, so
+ * nothing is downloaded. The one that is a JUDGEMENT rather than a match is
+ * named where it is chosen — see the icon map note in the round report.
+ */
 export const PAGE_SETTINGS_SECTIONS = [
-  { id: 'general', label: 'ข้อมูลหน้า' },
-  { id: 'seo',     label: 'SEO' },
-  { id: 'jsonld',  label: 'JSON-LD' },
-  { id: 'preview', label: 'ลิงก์พรีวิว' },
-  { id: 'history', label: 'ประวัติการเผยแพร่' },
+  { id: 'general', label: 'ข้อมูลหน้า',        Icon: FileText },
+  { id: 'seo',     label: 'SEO',               Icon: Search },
+  { id: 'jsonld',  label: 'JSON-LD',           Icon: CodeXml },
+  { id: 'preview', label: 'ลิงก์พรีวิว',        Icon: Lock },
+  { id: 'history', label: 'ประวัติการเผยแพร่', Icon: History },
 ];
 
 /**
@@ -157,12 +173,22 @@ export const PAGE_SETTINGS_SECTIONS = [
  * two layers each believing they own one concept. So the footer answers the
  * question the author actually has — is this safe yet — instead of offering a
  * second way to make it so.
+ *
+ * ── ROUND 28: IT BECOMES THE DESIGN'S FOOTER BAND ─────────────────────────
+ * The Figma draws a 66px band across the dialog's foot, holding the two
+ * buttons. The band is geometry and the band is kept; what stands in it is
+ * still the save state, for the reason above. So the design's shape arrives
+ * without the design's second save authority — which is the only part of it
+ * that was ever the objection.
  */
 function SaveStateLine({ dirty, saving }) {
   const text = saving ? 'กำลังบันทึก…' : dirty ? 'ยังไม่ได้บันทึก — ระบบจะบันทึกให้อัตโนมัติ' : 'บันทึกแล้ว';
   return (
     <p data-testid="settings-save-state"
-      className="mt-3 border-t border-[var(--surface-border)] pt-2 text-[11px] text-9e-slate-dp-50">
+      className={cn(
+        'flex min-h-[66px] shrink-0 items-center border-t border-[var(--surface-border)]',
+        'bg-[var(--surface-muted)] px-5 text-xs text-9e-slate-dp-50'
+      )}>
       {text}
     </p>
   );
@@ -198,11 +224,11 @@ function SaveStateLine({ dirty, saving }) {
 export function JsonLdSection() {
   return (
     <Group title="JSON-LD">
-      <p className="mb-2 text-[11px] text-9e-slate-dp-50">
+      <p className="mb-2 text-xs text-9e-slate-dp-50">
         ยังไม่มีการสร้าง JSON-LD ให้หน้าที่สร้างด้วย Page Builder — หน้านี้จึงยังไม่ส่งข้อมูล
         structured data ให้ Google
       </p>
-      <p className="text-[11px] text-9e-slate-dp-50">
+      <p className="text-xs text-9e-slate-dp-50">
         เมื่อระบบสร้างให้ได้แล้ว ส่วนนี้จะมีตัวเลือกโหมดและชนิดข้อมูล
         พร้อมตัวอย่างที่ส่งออกจริง
       </p>
@@ -229,16 +255,16 @@ export function JsonLdSection() {
  * shape included. This commit changes where it is reached from, not what it
  * does.
  */
-export function PreviewSection({ page, pageId, tier, open }) {
+export function PreviewSection({ page, pageId, tier, open, onPreviewState }) {
   return (
     <>
       <p
         data-testid="preview-immediate-write"
-        className="mb-3 rounded-9e-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+        className="mb-3 rounded-9e-sm border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
       >
         ส่วนนี้บันทึกลงเซิร์ฟเวอร์ทันทีที่กดปุ่ม — ไม่รอการบันทึกอัตโนมัติเหมือนส่วนอื่น
       </p>
-      <PreviewBody page={page} pageId={pageId} tier={tier} open={open} />
+      <PreviewBody page={page} pageId={pageId} tier={tier} open={open} onState={onPreviewState} />
     </>
   );
 }
@@ -362,7 +388,7 @@ export function SeoSection({ seo, patchSeo }) {
           <Field label="OG image URL">
             <TextInput value={seo.ogImage} onChange={(v) => patchSeo({ ogImage: v })} />
           </Field>
-          <label className="mb-2.5 flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
+          <label className="mb-2.5 flex items-center gap-1.5 text-xs text-9e-navy dark:text-white/90">
             <input type="checkbox" checked={Boolean(seo.noIndex)}
               onChange={(e) => patchSeo({ noIndex: e.target.checked })} />
             ไม่ให้ Google เก็บหน้านี้ (noindex)
@@ -372,45 +398,127 @@ export function SeoSection({ seo, patchSeo }) {
   );
 }
 
-export function PageSettingsBody({ page, pageId, dispatch, open, dirty, saving, tier, initialSection }) {
+/**
+ * The left-hand menu, as a component that takes its state rather than owning it.
+ *
+ * ── WHY IT IS SPLIT OUT, AND IT IS THE SAME REASON AS EVERY OTHER SPLIT HERE ─
+ * Round 28 gives one menu item a STATUS DOT, and a status dot is exactly the
+ * kind of thing that gets hardcoded on and then looks right forever. Taking
+ * `previewStatus` as a prop is what lets the render tier drive it to each of
+ * its real values and assert the dot follows — including the value where the
+ * dot must NOT be there. A menu that read the status itself could only ever be
+ * tested in the state a static render happens to produce.
+ *
+ * ── THE DOT IS THE ONE DESIGN ORNAMENT HERE THAT HAS A SOURCE ─────────────
+ * The Figma puts two decorations in this menu: an "Auto" pill on JSON-LD and a
+ * green dot on Preview Link. They are not the same kind of thing.
+ *
+ * NOTHING emits JSON-LD for a builder page (round 27, and the section below
+ * still says so in words), so the pill would be a claim with no source — it is
+ * deliberately not built. The preview link's state IS real, read fresh from the
+ * server by `getPreviewState`, and `previewSchema` carries the status the dot
+ * shows. So one of the two is built and the other is not, and which is which is
+ * decided by whether anything can answer the question the ornament asks.
+ *
+ * `null` — the status is not known yet, or was never fetched — renders NO dot,
+ * for the same reason a top-level section renders no parent line: an unknown
+ * shown as "off" is a claim, and shown as "on" is a worse one.
+ */
+export function SettingsNav({ section, onSelect, previewStatus }) {
+  return (
+    <nav
+      aria-label="ส่วนของการตั้งค่า"
+      className={cn(
+        'shrink-0 border-b border-[var(--surface-border)] bg-[var(--surface-hover)]',
+        'px-2.5 py-3 sm:w-[190px] sm:border-b-0 sm:border-r'
+      )}
+    >
+      <ul className="flex gap-1 overflow-x-auto sm:flex-col sm:gap-1 sm:overflow-visible">
+        {PAGE_SETTINGS_SECTIONS.map((s) => {
+          const active = section === s.id;
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                aria-current={active ? 'true' : undefined}
+                onClick={() => onSelect(s.id)}
+                className={cn(
+                  'flex h-10 w-full items-center gap-1.5 whitespace-nowrap rounded-9e-sm px-2.5 text-left text-xs',
+                  active
+                    ? 'bg-9e-action-scale-900 font-bold text-9e-action dark:bg-9e-action/20 dark:text-9e-air'
+                    : 'text-9e-slate-dp-50 hover:bg-[var(--surface-hover)] dark:hover:bg-[var(--surface-hover)]'
+                )}
+              >
+                <s.Icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{s.label}</span>
+                {s.id === 'preview' && previewStatus === 'active' && (
+                  <span
+                    data-testid="nav-preview-dot"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-9e-green-50"
+                    aria-hidden
+                  />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+export function PageSettingsBody({
+  page, pageId, dispatch, open, dirty, saving, tier, initialSection, previewStatus = null,
+}) {
   const [section, setSection] = useState(initialSection ?? PAGE_SETTINGS_SECTIONS[0].id);
   const patch = (p) => dispatch({ type: 'PATCH_PAGE', patch: p });
   const patchSeo = (p) => dispatch({ type: 'PATCH_PAGE', patch: { seo: { ...(page?.seo ?? {}), ...p } } });
 
+  /**
+   * ── WHY THE MENU'S COPY OF THE STATUS IS ALSO WRITTEN BY THE SECTION ──────
+   * The dot must be right the moment the dialog opens, so the wrapper reads the
+   * state before any section is visited. The preview section then reads it
+   * again on mount — it needs the expiry date too — and its five buttons CHANGE
+   * that state on click.
+   *
+   * Without the write-back below, revoking a link would leave the dot lit until
+   * the dialog was reopened: a stale ornament asserting the opposite of what
+   * the section three inches to its right says. So the section hands every
+   * fresh read it takes back up, and the two can only ever show one answer.
+   * There is still exactly one authority — the server; this is which local copy
+   * is allowed to go stale, and the answer is neither.
+   */
+  const [sectionStatus, setSectionStatus] = useState(null);
+  const status = sectionStatus ?? previewStatus;
+  /**
+   * MEMOISED because PreviewBody's `refresh` depends on it and its effect
+   * depends on `refresh`. A fresh closure each render would make that effect
+   * re-run every render, and each run fetches — an unbounded request loop, not
+   * a re-render.
+   */
+  const onPreviewState = useCallback((s) => setSectionStatus(s?.status ?? null), []);
+
   return (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <nav aria-label="ส่วนของการตั้งค่า" className="shrink-0 sm:w-44">
-        <ul className="flex gap-1 overflow-x-auto sm:flex-col sm:overflow-visible">
-          {PAGE_SETTINGS_SECTIONS.map((s) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                aria-current={section === s.id ? 'true' : undefined}
-                onClick={() => setSection(s.id)}
-                className={cn(
-                  'w-full whitespace-nowrap rounded-9e-md px-2.5 py-1.5 text-left text-xs',
-                  section === s.id
-                    ? 'bg-9e-ice font-bold text-9e-navy dark:bg-[#0D1B2A] dark:text-white'
-                    : 'text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]'
-                )}
-              >
-                {s.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+        <SettingsNav section={section} onSelect={setSection} previewStatus={status} />
 
-      <div className="min-w-0 flex-1">
-        {section === 'general' && <GeneralSection page={page} patch={patch} />}
-        {section === 'seo' && <SeoSection seo={page?.seo ?? {}} patchSeo={patchSeo} />}
-        {section === 'jsonld' && <JsonLdSection />}
-        {section === 'preview' && <PreviewSection page={page} pageId={pageId} tier={tier} open={open} />}
-        {section === 'history' && <HistorySection pageId={pageId} open={open} />}
-
-        {/* Withheld on the section that writes immediately — see PreviewSection. */}
-        {section !== 'preview' && <SaveStateLine dirty={dirty} saving={saving} />}
+        <div className="min-w-0 flex-1 overflow-y-auto px-6 pb-7 pt-5">
+          {section === 'general' && <GeneralSection page={page} patch={patch} />}
+          {section === 'seo' && <SeoSection seo={page?.seo ?? {}} patchSeo={patchSeo} />}
+          {section === 'jsonld' && <JsonLdSection />}
+          {section === 'preview' && (
+            <PreviewSection
+              page={page} pageId={pageId} tier={tier} open={open}
+              onPreviewState={onPreviewState}
+            />
+          )}
+          {section === 'history' && <HistorySection pageId={pageId} open={open} />}
+        </div>
       </div>
+
+      {/* Withheld on the section that writes immediately — see PreviewSection. */}
+      {section !== 'preview' && <SaveStateLine dirty={dirty} saving={saving} />}
     </div>
   );
 }
@@ -419,22 +527,53 @@ export function PageSettingsBody({ page, pageId, dispatch, open, dirty, saving, 
 export function PageSettingsDialog({ open, onClose, initialSection = null }) {
   const { page, pageId, dispatch, dirty, saving, tier } = useEditor();
 
+  /**
+   * The menu's dot needs the preview status BEFORE the preview section has ever
+   * been opened, and the section is where the state otherwise lives. So the
+   * wrapper takes the opening read — the one moment the section cannot cover —
+   * and the section writes every later read back (see PageSettingsBody).
+   *
+   * The wrapper is also the right half for it: nothing in this tier renders
+   * under renderToStaticMarkup anyway, so an effect here costs no testability.
+   * What the render tier drives instead is `SettingsNav`, by prop.
+   */
+  const [previewStatus, setPreviewStatus] = useState(null);
+  const readPreview = useCallback(() => {
+    if (!pageId) return;
+    getPreviewState(pageId)
+      .then((s) => setPreviewStatus(s?.status ?? null))
+      .catch(() => setPreviewStatus(null));
+  }, [pageId]);
+  useEffect(() => {
+    if (!open) { setPreviewStatus(null); return; }
+    readPreview();
+  }, [open, readPreview]);
+
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(52rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
+            'fixed left-1/2 top-1/2 z-50 flex w-[min(57.5rem,calc(100vw-2rem))] flex-col',
+            '-translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-9e-md border',
+            'border-[var(--surface-border)] bg-[var(--surface)] shadow-9e-lg',
+            'h-[42.5rem] max-h-[calc(100dvh-4rem)]'
           )}
         >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ตั้งค่าหน้า</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-              <X className="h-4 w-4" />
+          <div className="flex min-h-[93px] shrink-0 items-start justify-between border-b border-[var(--surface-border)] px-5 pb-4 pt-5">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-widest text-9e-slate-dp-50">PAGE SETTINGS</p>
+              <Dialog.Title className="mt-0.5 text-xl leading-7 text-9e-navy dark:text-white">ตั้งค่าหน้า</Dialog.Title>
+              <p className="mt-1 text-xs text-9e-slate-dp-50">
+                จัดการข้อมูลหน้า SEO, Structured Data และ Preview Access
+              </p>
+            </div>
+            <Dialog.Close
+              aria-label="ปิด"
+              className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-9e-sm text-9e-slate-dp-50 hover:bg-[var(--surface-hover)]"
+            >
+              <X className="h-5 w-5" />
             </Dialog.Close>
           </div>
           <Dialog.Description className="sr-only">แก้ไขข้อมูลระดับหน้า เช่น ชื่อ, URL, ธีม และ SEO</Dialog.Description>
@@ -450,6 +589,7 @@ export function PageSettingsDialog({ open, onClose, initialSection = null }) {
             key={initialSection ?? 'general'}
             page={page} pageId={pageId} dispatch={dispatch} open={open}
             dirty={dirty} saving={saving} tier={tier} initialSection={initialSection}
+            previewStatus={previewStatus}
           />
         </Dialog.Content>
       </Dialog.Portal>
