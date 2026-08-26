@@ -307,12 +307,26 @@ export function useLeaveGuard(state) {
    * CAPTURE phase on `document`, which is the only position that sees a sidebar
    * link before Next's own handler turns it into a soft navigation.
    *
-   * That position is also why the exclusions below are not paranoia. Capture on
-   * document runs BEFORE every other handler on the page, including
-   * CanvasPanel's own capture-phase handler — so without the `data-pb-canvas`
-   * check this would swallow ordinary section-selection clicks in the editor
-   * canvas, which is the author's main interaction. The canvas already
-   * preventDefaults its own links; it owns everything inside it.
+   * That position is also why the exclusions below are not paranoia: capture on
+   * document runs BEFORE every other handler on the page.
+   *
+   * ── THE CANVAS EXCLUSION IS NOW BELT WITHOUT BRACES, AND IT STAYS ────────
+   * It used to be load-bearing. This listener ran before CanvasPanel's own
+   * capture-phase handler, so without the check it swallowed ordinary
+   * section-selection clicks — the author's main interaction. The canvas now
+   * renders inside an IFRAME, and a click inside a frame never reaches the
+   * parent document at all (measured), so this listener cannot see those clicks
+   * and the check no longer catches anything.
+   *
+   * It is kept rather than deleted because it costs one comparison and it is
+   * exactly what would have to be re-derived if the canvas ever came back out
+   * of the frame. What is NOT kept is the old claim that it is doing work: a
+   * guard described as load-bearing while it is inert is how the next person
+   * reasons wrongly about both files.
+   *
+   * The canvas still preventDefaults its own links, and inside the frame that
+   * is now the ONLY thing between a link in a section and a navigation — see
+   * CanvasPanel, which says so at the handler.
    *
    * The rest are the standard set: leaving via a modified click, a middle
    * click, a download, a new tab, or an external host is not this editor losing
@@ -327,7 +341,7 @@ export function useLeaveGuard(state) {
 
       const a = e.target?.closest?.('a[href]');
       if (!a) return;
-      // The canvas owns its own clicks — see the note above.
+      // Vestigial since the canvas moved into a frame — see the note above.
       if (a.closest('[data-pb-canvas]')) return;
       // New tab / new window (the Preview dialog's link is target="_blank").
       if (a.target && a.target !== '_self') return;

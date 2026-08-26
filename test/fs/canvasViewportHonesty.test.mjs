@@ -3,146 +3,213 @@ import assert from 'node:assert/strict';
 import { readSource, sourceExists } from '../sourceScan.mjs';
 
 /**
- * THE TWO SEAMS test/pure/previewViewportCaveat.test.mjs CANNOT REACH.
+ * The canvas device toggle, now that it tells the truth.
  *
- *   1. THAT THE TOOLBAR ACTUALLY ASKS. A perfect predicate nobody calls leaves
- *      the control lying exactly as before.
- *   2. THAT THE DOCSTRINGS STOPPED CLAIMING THE FALSE THING. The subject there
- *      IS a comment, so it can only be read from `raw` — and that is the one
- *      exception to this suite's strip-comments rule (see run.mjs).
+ * ══ THIS FILE WAS REWRITTEN, NOT EXTENDED, AND THAT WAS THE PLAN ═══════════
  *
- * Both are shape guards on a client component, stated as such.
+ * Its previous version guarded a DIFFERENT commit: the one that replaced a
+ * false claim ("sections reflow exactly as they will in production") with a
+ * caveat, deliberately without fixing anything. It pinned the clamp expression
+ * and VIEWPORT_MAXW verbatim, so that the behavioural fix "cannot be smuggled in
+ * through" the documentation commit — and it said, in its own docstring, that
+ * the docstring guards were "supposed to go red when the claim becomes true
+ * again — at which point the honest move is to rewrite them, not to delete
+ * them."
  *
- * ── WHAT THIS COMMIT DELIBERATELY DOES NOT ASSERT ─────────────────────────
- * Nothing here touches how the preview BEHAVES. The clamp is still a clamp and
- * VISIBILITY_CLASS is untouched; making the preview real is a later round. These
- * guards are written so they survive that round without modification EXCEPT the
- * docstring ones, which are supposed to go red when the claim becomes true again
- * — at which point the honest move is to rewrite them, not to delete them.
+ * The claim is true again. This is that rewrite. The tripwire worked: it made
+ * this round go and read what the previous one had promised, rather than
+ * quietly replacing it.
+ *
+ * ── WHAT IS GUARDED HERE AND WHAT IS NOT ──────────────────────────────────
+ * Source SHAPE only — the wiring the browser measurements depend on. Whether a
+ * media query actually re-based is a browser fact, measured in Chrome by
+ * scripts/_probe-canvas-frame.mjs; whether the frame document gets styles and
+ * the root class is exercised against real DOM in
+ * test/pure/canvasFrameDocument.test.mjs. Neither belongs in a text scan.
  */
 
 const TOOLBAR = 'src/components/pageBuilder/editor/CanvasToolbar.jsx';
 const PANEL = 'src/components/pageBuilder/editor/CanvasPanel.jsx';
-const PURE = 'src/lib/pageBuilder/previewViewportCaveat.js';
+const HOOK = 'src/components/pageBuilder/editor/useCanvasFrame.js';
+const RETIRED = 'src/lib/pageBuilder/previewViewportCaveat.js';
 
 test('CONTROL: the files under scan exist and were really read', () => {
-  for (const rel of [TOOLBAR, PANEL, PURE]) {
+  for (const rel of [TOOLBAR, PANEL, HOOK]) {
     assert.ok(sourceExists(rel), `${rel} is missing`);
     assert.ok(readSource(rel).raw.length > 500, `${rel} read as almost nothing`);
   }
 });
 
-// ── 1. the toolbar imports the pure module AND calls it ─────────────────────
+// ── 1. the caveat module is gone, and nothing reaches for it ────────────────
 
-test('CanvasToolbar imports previewViewportCaveat', () => {
-  // IMPORT ASSERTION → withImports. The CODE view has every import line removed,
-  // so asking it about an import is asking about text that is not there.
-  const { withImports } = readSource(TOOLBAR);
-  assert.match(
-    withImports,
-    /import \{ previewViewportCaveat \} from '@\/lib\/pageBuilder\/previewViewportCaveat'/,
-    'CanvasToolbar no longer imports the caveat module',
-  );
+test('previewViewportCaveat is deleted and unimported', () => {
+  /**
+   * Its own docstring named itself as the thing to delete once the preview
+   * stopped lying: "when the fix lands, this is the thing to delete, along with
+   * the toolbar's call to it." Both halves are asserted, because a deleted
+   * module with a live import is a build error and a live import of a module
+   * that still exists is the fix not having happened.
+   */
+  assert.equal(sourceExists(RETIRED), false,
+    'the caveat module is still on disk. The preview no longer needs a caveat about '
+    + 'breakpoints — it has a real viewport.');
+
+  for (const rel of [TOOLBAR, PANEL]) {
+    assert.doesNotMatch(readSource(rel).withImports, /previewViewportCaveat/,
+      `${rel} still references the retired module`);
+  }
 });
 
-test('CONTROL: that import is invisible to the CODE view', () => {
-  // The precondition the standing rule requires: prove `code` really has been
-  // stripped, so the assertion above cannot quietly be switched to `code` and
-  // keep passing on nothing.
-  const { code } = readSource(TOOLBAR);
-  assert.doesNotMatch(code, /from '@\/lib\/pageBuilder\/previewViewportCaveat'/,
-    'the CODE view still contains import lines — the withImports assertion above '
-    + 'is no longer distinguishable from a code-view one');
-  // …and the identifier IS still visible there, which is what makes the call
-  // assertion below meaningful rather than a second reading of the import.
-  assert.match(code, /previewViewportCaveat/);
+test('CONTROL: the existence probe answers TRUE for a file that is there', () => {
+  // Otherwise "the module is gone" would also be true of a probe that can never
+  // find anything, and would sit green over a file that was never removed.
+  assert.equal(sourceExists(TOOLBAR), true);
+  assert.equal(sourceExists('src/lib/pageBuilder/presets.js'), true);
 });
 
-test('CanvasToolbar CALLS it, on the live viewport, and renders what it returns', () => {
-  const { code } = readSource(TOOLBAR);
-  assert.match(code, /previewViewportCaveat\(previewViewport\)/,
-    'the caveat is no longer computed from the live previewViewport');
-  assert.match(code, /\{caveat && \(/, 'the returned copy is no longer conditionally rendered');
-  assert.match(code, /<span>\{caveat\}<\/span>/,
-    'the caveat is no longer rendered as visible text');
+// ── 2. the canvas is portalled into a frame ────────────────────────────────
+
+test('CanvasPanel renders an iframe and portals the canvas into its document', () => {
+  const { code, withImports } = readSource(PANEL);
+
+  // IMPORT ASSERTIONS → withImports. The CODE view has import lines removed, so
+  // asking it about an import asks about text that is not there.
+  assert.match(withImports, /import \{ createPortal \} from 'react-dom'/,
+    'the portal import is gone');
+  assert.match(withImports, /import \{ useCanvasFrame \} from '\.\/useCanvasFrame'/,
+    'the frame hook is no longer used');
+
+  assert.match(code, /<iframe/, 'the canvas is not in a frame');
+  assert.match(code, /createPortal\(canvas, frameDoc\.body\)/,
+    'the canvas is no longer portalled into the frame document — a second React root '
+    + 'or a re-render would break dispatch staying in scope');
 });
 
-test('the caveat is VISIBLE text, not a title attribute', () => {
-  const { code } = readSource(TOOLBAR);
-  // The whole point of the UI half of this round. A tooltip does not answer a
-  // control that appears to promise a device preview.
-  assert.doesNotMatch(code, /title=\{caveat\}/,
-    'the caveat became a tooltip — it has to be readable without hovering');
+test('the two handlers stay on the PORTALLED subtree, not on the frame element', () => {
+  /**
+   * ── THE ONE THING THAT MAKES SELECTION SURVIVE THE BOUNDARY ─────────────
+   * react-dom attaches its delegated listener set to a portal's CONTAINER, so
+   * handlers on the portalled tree fire inside the frame. Handlers moved onto
+   * the <iframe> element in the parent document would receive nothing at all —
+   * events inside a frame do not cross into the parent — and the failure is
+   * silent: the canvas would simply stop selecting.
+   *
+   * Measured in Chrome (round 19's probe, re-confirmed this round); pinned here
+   * as the shape those measurements assume.
+   */
+  const { code } = readSource(PANEL);
+  const start = code.indexOf('const canvas = (');
+  // Bounded from START, not from the file: the empty-state branch has its own
+  // earlier return, and slicing to the first one gives an empty string that
+  // every match below would then fail against for the wrong reason.
+  const canvas = code.slice(start, code.indexOf('return (', start));
+  assert.ok(canvas.length > 200, 'the canvas subtree was not located');
+  assert.match(canvas, /onClickCapture=\{onClickCapture\}/, 'the select handler left the canvas subtree');
+  assert.match(canvas, /onMouseOver=\{onMouseOver\}/, 'the hover handler left the canvas subtree');
+  assert.match(canvas, /data-pb-canvas=""/, 'the canvas marker left the subtree');
+
+  const frameEl = code.slice(code.indexOf('<iframe'), code.indexOf('{frameDoc ?'));
+  assert.equal(/onClick|onMouseOver/.test(frameEl), false,
+    'a handler is on the iframe element. Events inside a frame never reach the parent, '
+    + 'so it would fire for nothing.');
 });
 
-test('CONTROL: the call probe rejects an import-only file', () => {
-  // Defect 5 in sourceScan.mjs: `import { x }` satisfies a plain includes('x').
-  // Shown here to be distinguishable from a real call site.
-  const importOnly = "import { previewViewportCaveat } from '@/lib/pageBuilder/previewViewportCaveat';";
-  assert.doesNotMatch(importOnly, /previewViewportCaveat\(previewViewport\)/);
-  assert.match("const caveat = previewViewportCaveat(previewViewport);", /previewViewportCaveat\(previewViewport\)/);
+test('the capture-phase preventDefault survives — it is now the ONLY navigation guard', () => {
+  /**
+   * The leave guard's listener is on the PARENT document and cannot see a click
+   * inside the frame (measured: parentDocumentCaptureSawFrameClick === false).
+   * So this preventDefault is the whole of what stops a link in a section from
+   * navigating. It used to be belt and braces; it is now the brace.
+   */
+  const { code } = readSource(PANEL);
+  const handler = code.slice(code.indexOf('const onClickCapture'), code.indexOf('const onMouseOver'));
+  assert.match(handler, /e\.preventDefault\(\)/, 'the canvas would navigate on a link click');
+  assert.match(handler, /e\.stopPropagation\(\)/);
 });
 
-// ── 2. neither file still claims production-accurate reflow ─────────────────
+// ── 3. the clamp is gone; the width is the frame's ─────────────────────────
+
+test('the device widths are the FRAME width, not an outer max-width', () => {
+  const { code } = readSource(PANEL);
+
+  assert.match(code, /export const VIEWPORT_WIDTH = \{ desktop: null, tablet: 768, mobile: 390 \};/,
+    'the width map changed shape — the browser measurements were taken against these three');
+
+  assert.equal(/VIEWPORT_MAXW/.test(code), false, 'the old clamp map is still here');
+  assert.equal(/maxWidth: clampWidth/.test(code), false,
+    'the outer max-width clamp is back. That is the thing that could not drive a media '
+    + 'query, which is the whole reason for the frame.');
+  assert.match(code, /style=\{\{ width: frameWidth \? `\$\{frameWidth\}px` : '100%' \}\}/,
+    'the frame width is applied some other way — a max-width or a class would not set the '
+    + "frame's viewport");
+});
+
+test('CONTROL: the clamp probe would still catch the expression it replaced', () => {
+  // Discrimination. The exact expression the panel carried before this round,
+  // run through the same probes — if these stop matching, the assertions above
+  // have become guards against nothing and would sit green through a revert.
+  const old = "style={clampWidth ? { maxWidth: clampWidth } : undefined}";
+  assert.match(old, /maxWidth: clampWidth/);
+  assert.match('const VIEWPORT_MAXW = { desktop: null, tablet: 768, mobile: 390 };', /VIEWPORT_MAXW/);
+});
+
+// ── 4. no content-driven height, by ruling ─────────────────────────────────
+
+test('the frame is NOT sized to its content', () => {
+  /**
+   * A decision, not an omission. Sizing a frame to its content feeds the height
+   * back into the layout that produced it, and advanced.customHtml lets an
+   * author put a viewport-height box inside the very box being measured. The
+   * frame is pinned to its column and scrolls itself instead; the second
+   * scrollbar is the accepted cost, and a real phone has one too.
+   *
+   * Asserted across BOTH files so the mechanism cannot arrive in whichever one
+   * is not being looked at.
+   */
+  for (const rel of [PANEL, HOOK]) {
+    assert.equal(/ResizeObserver/.test(readSource(rel).code), false,
+      `${rel} observes size. If content-height sync is genuinely needed, that is a round `
+      + 'with its own verification — not a line added here.');
+  }
+});
+
+test('CONTROL: the hook DOES use MutationObserver, so the probe is not blind to observers', () => {
+  // The ResizeObserver assertion must not be passing because the scanner cannot
+  // see observers at all. The hook has two MutationObservers by design.
+  const { code } = readSource(HOOK);
+  assert.match(code, /new MutationObserver/);
+  assert.equal((code.match(/new MutationObserver/g) ?? []).length, 2,
+    'the head-sync and root-class observers are not both present');
+});
+
+// ── 5. the docstrings say what is true now ─────────────────────────────────
 
 const FALSE_CLAIM = /reflow under real (CSS )?media queries exactly as they will in production/;
 
-test('the false claim is gone from BOTH docstrings', () => {
-  // SUBJECT IS A COMMENT → read `raw`. Reading `code` here would pass vacuously
-  // on any file, because the scrubber deletes the sentence under test.
+test('neither file has re-acquired the old over-claim', () => {
+  // SUBJECT IS A COMMENT → read `raw`. The CODE view deletes the sentence under
+  // test, so this would pass vacuously against it.
   for (const rel of [TOOLBAR, PANEL]) {
-    assert.doesNotMatch(readSource(rel).raw, FALSE_CLAIM,
-      `${rel} still says sections reflow exactly as in production. They do not: the `
-      + 'clamp is an outer max-width and Tailwind breakpoints are viewport media queries');
+    assert.doesNotMatch(readSource(rel).raw, FALSE_CLAIM, `${rel} over-claims again`);
   }
 });
 
-test('CONTROL: the false-claim probe would still catch the old sentence', () => {
-  // Discrimination. The exact wording that was in both files before this round,
-  // put through the same regex — if this stops matching, the guard above has
-  // become a guard against nothing and would sit green through a revert.
+test('CONTROL: the over-claim probe still matches the sentence it was written for', () => {
   const oldToolbar = 'so sections reflow under real CSS media queries exactly as they will in production.';
-  const oldPanel = 'the real render inside reflows under real media queries at that width, exactly as it will in production.';
-  assert.match(oldToolbar, FALSE_CLAIM, 'the probe no longer matches the toolbar sentence it was written for');
-  // The panel's wording differs; pinned separately rather than pretending one
-  // regex covers both.
-  assert.match(oldPanel, /reflows under real media queries at that width, exactly as it will in production/);
-  assert.doesNotMatch(readSource(PANEL).raw, /exactly as it will in production/,
-    'CanvasPanel still carries its own version of the claim');
+  assert.match(oldToolbar, FALSE_CLAIM,
+    'the probe no longer matches the sentence it exists to catch, and would sit green through a revert');
 });
 
-test('both docstrings state what IS true instead', () => {
+test('both docstrings name the frame and what it does not reproduce', () => {
   const toolbar = readSource(TOOLBAR).raw;
   const panel = readSource(PANEL).raw;
-  // The parts that were always true and must survive: one real render, not an
-  // iframe, ephemeral state.
-  assert.match(toolbar, /NOT an iframe, NOT a re-render/, 'the toolbar lost the true part');
-  assert.match(toolbar, /Ephemeral view state, never saved/, 'the toolbar lost the ephemeral-state note');
-  assert.match(panel, /NOT an\s+\* *iframe|NOT an iframe/, 'the panel lost the true part');
-  // …and the correction: breakpoints follow the window, visibility inverts.
   for (const [rel, src] of [[TOOLBAR, toolbar], [PANEL, panel]]) {
-    assert.match(src, /invert|INVERT/, `${rel} does not mention that visibility inverts`);
-    assert.match(src, /viewport|VIEWPORT|window/, `${rel} does not say what the breakpoints follow`);
+    assert.match(src, /frame|FRAME/, `${rel} does not say the canvas is framed`);
+    assert.match(src, /viewport|VIEWPORT/, `${rel} does not say what the breakpoints follow now`);
   }
-});
-
-// ── 3. this commit changed no behaviour ─────────────────────────────────────
-
-test('the clamp itself is untouched — this commit is documentation plus a caveat', () => {
-  const { code } = readSource(PANEL);
-  assert.match(code, /const VIEWPORT_MAXW = \{ desktop: null, tablet: 768, mobile: 390 \};/,
-    'VIEWPORT_MAXW changed. The behavioural fix is a separate round on purpose; '
-    + 'this commit has to survive without it and must not smuggle it in');
-  assert.match(code, /style=\{clampWidth \? \{ maxWidth: clampWidth \} : undefined\}/,
-    'the clamp is applied differently now — see above');
-});
-
-test('CONTROL: presets.js still carries the classes the caveat describes', () => {
-  // The caveat's copy is only correct while these are viewport-breakpoint
-  // classes. If VISIBILITY_CLASS ever stops using md:, the caveat is describing
-  // something that no longer happens and must be rewritten with the fix.
-  const presets = readSource('src/lib/pageBuilder/presets.js').code;
-  assert.match(presets, /hidden md:block/, 'desktop_only is no longer a md: breakpoint class');
-  assert.match(presets, /block md:hidden/, 'mobile_only is no longer a md: breakpoint class');
-  assert.match(presets, /sm:grid-cols-2 lg:grid-cols-3/, 'the 3-column preset changed shape');
+  // The part that must NOT be lost in the rewrite: this is still ephemeral view
+  // state, and the published page is untouched.
+  assert.match(toolbar, /Ephemeral view state, never saved/, 'the toolbar lost the ephemeral-state note');
+  assert.match(panel, /published page is untouched|presets\.js/,
+    'the panel no longer says the published page is unaffected');
 });
