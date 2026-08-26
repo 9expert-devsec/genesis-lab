@@ -23,6 +23,7 @@ import { listPublicCourses } from '@/lib/api/public-courses';
 import { planVisibilityRevalidation } from '@/lib/courses/publishVisibilityPlan';
 import { resolveAnchorWrite, ANCHOR } from '@/lib/courses/upstreamAnchorPlan';
 import { buildExtensionUpdate } from '@/lib/courses/extensionUpdate';
+import { sanitiseTopicRichForWrite } from '@/lib/courses/topicEditorSave';
 import { requireAdmin } from '@/lib/actions/auth';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 
@@ -267,7 +268,18 @@ export async function saveCourseExtension(courseId, data) {
    * for `checkAliasAvailable` and below for `revalidatePath`, and normalising
    * it twice would be two implementations of what a stored alias looks like.
    */
-  const update = buildExtensionUpdate({ courseId, data, cleanAlias });
+  /**
+   * ── SANITISED ON WRITE, ON THE SERVER, WHATEVER THE CLIENT DID ──────────
+   * The admin form sanitises before sending, but a server action is a POST
+   * endpoint and the client is not a boundary. `sanitiseTopicRichForWrite`
+   * leaves the payload untouched when the key is absent, so every caller that
+   * does not own this field keeps its leave-alone semantics.
+   */
+  const update = buildExtensionUpdate({
+    courseId,
+    data: sanitiseTopicRichForWrite(data),
+    cleanAlias,
+  });
 
   /**
    * ── THE APP-LEVEL ALIAS CHECK — BELT, WITH THE INDEX AS BRACES ────────────
