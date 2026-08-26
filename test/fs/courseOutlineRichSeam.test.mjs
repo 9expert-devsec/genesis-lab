@@ -145,17 +145,48 @@ test('the rich wrapper is scoped, so its list markers cannot leak', () => {
   const { code } = readSource(CLIENT);
   assert.match(code, /className="topic-rich/, 'the rich wrapper lost its scoping class');
 
+  /**
+   * ── RE-ANCHORED IN B3, AND WIDENED RATHER THAN WEAKENED ──────────────────
+   * The sweep runs from the first `.topic-rich` to END OF FILE, so it covers
+   * everything appended after it. B3 appends a SECOND scoped block,
+   * `.topic-editor-body` — the admin bullet editor's document body, which
+   * mirrors these markers so an admin sees what the page will render.
+   *
+   * The original assertion was `startsWith('.topic-rich')`, which this new
+   * block fails while being perfectly scoped. Loosening it to "starts with a
+   * class" would have thrown the guard away: the thing being prevented is a
+   * BARE `ul li::before`, which would repaint the FAQ answers and the roadmap.
+   *
+   * So the allow-list is now the two scope classes BY NAME. A third block, or
+   * a bare selector, still fails — and adding a scope to this list is a
+   * deliberate edit rather than something a `.`-prefix check waves through.
+   */
+  const SCOPES = ['.topic-rich', '.topic-editor-body'];
   const css = readSource('src/app/globals.css').raw;
   const block = css.slice(css.indexOf('.topic-rich'));
   const selectors = [...block.matchAll(/^(\.[^\s{,]+[^{]*)\{/gm)].map((m) => m[1].trim());
-  assert.ok(selectors.length >= 5, `only ${selectors.length} .topic-rich rules found`);
+  assert.ok(selectors.length >= 5, `only ${selectors.length} scoped rules found`);
   for (const sel of selectors) {
     assert.ok(
-      sel.startsWith('.topic-rich'),
-      `a rule in the topic-rich block is not scoped to it: "${sel}" — it would `
-      + 'repaint the FAQ answers and the roadmap on the same page',
+      SCOPES.some((scope) => sel.startsWith(scope)),
+      `a rule after the topic-rich block is scoped to neither ${SCOPES.join(' nor ')}: `
+      + `"${sel}" — it would repaint the FAQ answers and the roadmap on the same page`,
     );
   }
+});
+
+test('CONTROL: the scoping sweep rejects a bare list selector', () => {
+  /**
+   * The sweep above is only worth anything if it FAILS on the shape it exists
+   * to catch. Without this, widening the allow-list to admit the admin block
+   * could have been widened all the way to "any class" and nothing would have
+   * noticed.
+   */
+  const SCOPES = ['.topic-rich', '.topic-editor-body'];
+  const leaked = ['.topic-rich li::before', 'ul li::before', '.prose ul::marker'];
+  const rejected = leaked.filter((sel) => !SCOPES.some((s) => sel.startsWith(s)));
+  assert.deepEqual(rejected, ['ul li::before', '.prose ul::marker'],
+    'the scope check does not reject an unscoped or foreign selector, so it is not guarding');
 });
 
 test('CONTROL: the CSS block exists and defines three distinct depth markers', () => {

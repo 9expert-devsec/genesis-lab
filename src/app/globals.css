@@ -1202,3 +1202,63 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
   font-size: 0.9em;
 }
 .topic-rich a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ──────────────────────────────────────────────────────────────
+   ADMIN — the section-7 bullet editor's document body.
+
+   Tailwind's preflight strips list markers globally, so a Tiptap
+   editor shows an unstyled run of lines unless told otherwise.
+   The admin has to SEE the nesting they are authoring, or the
+   three-level cap is a rule about something invisible.
+
+   SCOPED TO `.topic-editor-body`, which is set on the ProseMirror
+   element via `editorProps.attributes.class` and appears nowhere
+   else. It deliberately MIRRORS `.topic-rich` above — same three
+   glyphs, same 9e-air marker, same hanging indent — so what the
+   admin authors looks like what the page renders. The two rule
+   blocks are separate because their selectors are: one styles
+   stored HTML on the public page, the other a live editor in the
+   admin, and merging them would put an admin-only concern into a
+   public-page selector.
+   ────────────────────────────────────────────────────────────── */
+
+.topic-editor-body ul { list-style: none; margin: 0; padding: 0; }
+.topic-editor-body ul ul { margin-top: 0.375rem; padding-left: 1.125rem; }
+
+.topic-editor-body li {
+  position: relative;
+  padding-left: 0.875rem;   /* matches .topic-rich — measured off the plain path */
+}
+.topic-editor-body li + li { margin-top: 0.375rem; }
+
+/* Tiptap wraps each item's text in a <p>; the sanitiser unwraps it on save, so
+   it must not add vertical rhythm the stored version will not have. */
+.topic-editor-body li > p { margin: 0; }
+
+.topic-editor-body li::before {
+  content: '\2022';
+  position: absolute;
+  left: 0;
+  color: #48B0FF;                 /* 9e-air — same marker as the public page */
+}
+.topic-editor-body ul ul li::before    { content: '\25E6'; }
+.topic-editor-body ul ul ul li::before { content: '\25AA'; }
+
+.topic-editor-body code {
+  padding: 0.05em 0.3em;
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 0.9em;
+}
+.topic-editor-body a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* The placeholder, from @tiptap/extension-placeholder. Without this the empty
+   editor a title-only row opens with is a blank box with no affordance. */
+.topic-editor-body p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
