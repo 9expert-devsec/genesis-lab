@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CourseOutline } from '@/app/(public)/[...slug]/_components/CourseOutline';
+import { prepareOutlineRichHtml } from '@/lib/courses/courseOutlineView';
 
 /**
  * ══ B2 MUST BE INVISIBLE IN PRODUCTION ═════════════════════════════════════
@@ -197,6 +198,64 @@ test('INERT: invisible characters survive the plain render untouched', () => {
   assert.ok(after(NBSP_ROW).includes(`Product-Market Fit:${nbsp}ตรวจสอบ`), 'U+00A0 was rewritten');
   assert.ok(after(ZWSP_ROW).includes(`${zwsp}เรียนรู้`), 'U+200B was stripped');
   assert.ok(after(DOUBLE_SPACE).includes('GPT Models  GPT-o1'), 'a run of spaces was collapsed');
+});
+
+// ── THE PRODUCTION CHAIN, END TO END ──────────────────────────────────────
+
+test('INERT end-to-end: the REAL extension shapes render byte-identical', () => {
+  /**
+   * ── THE GAP THIS CLOSES ──────────────────────────────────────────────────
+   * Everything above pins the PROP — absent, or explicitly null. Neither is a
+   * production value. What production has is a CourseExtension document, and
+   * what turns that into the prop is `prepareOutlineRichHtml`. Until this test
+   * existed, nothing ran that step.
+   *
+   * ── AND WHAT THE 79 ACTUALLY CARRY, MEASURED ─────────────────────────────
+   * Not `[]`. Counted against live Mongo + MSDB before writing this:
+   *
+   *     courses with NO extension document ....  0   (all 79 have one)
+   *     trainingTopicsRich === [] .............  0
+   *     the key ABSENT from the stored doc ....  79
+   *
+   * The schema's `default: []` applies when a document is CREATED; these rows
+   * predate the field. `getCourseExtension` reads `.lean()` — no Mongoose
+   * hydration, so no defaults are filled — and then `serialize()` JSON
+   * round-trips, which drops undefined outright. So the production value is
+   * `undefined`, and `{}` below is the shape that actually ships.
+   *
+   * `[]` and `null` are pinned anyway: `[]` is what every row written from now
+   * on will carry, and a course could lose its extension row to a delete.
+   */
+  for (const [what, extension] of [
+    ['the shape all 79 carry today — key absent', {}],
+    ['the schema default, which future rows will carry', { trainingTopicsRich: [] }],
+    ['no extension document at all', null],
+    ['an extension that is undefined', undefined],
+    ['a structurally broken field', { trainingTopicsRich: 'not an array' }],
+  ]) {
+    for (const [fixtureName, course] of FIXTURES) {
+      const richHtml = prepareOutlineRichHtml({ course, extension, onStale: () => {} });
+      assert.equal(
+        richHtml, null,
+        `${what}: prepareOutlineRichHtml returned something other than null`,
+      );
+      assert.equal(
+        renderToStaticMarkup(createElement(CourseOutline, { course, richHtml })),
+        before(course),
+        `${what} / ${fixtureName}: the rendered output changed`,
+      );
+    }
+  }
+});
+
+test('INERT end-to-end: nothing in the chain throws on a missing extension', () => {
+  // The seam passes `extension` straight through from resolveCourse, which can
+  // return null for it. A throw here is a 500 on a public course page.
+  for (const extension of [null, undefined, {}, { trainingTopicsRich: null }]) {
+    assert.doesNotThrow(() => prepareOutlineRichHtml({ course: MIXED, extension, onStale: () => {} }));
+  }
+  assert.doesNotThrow(() => prepareOutlineRichHtml({}));
+  assert.doesNotThrow(() => prepareOutlineRichHtml());
 });
 
 test('CONTROL: the byte-identity check CAN fail', () => {
