@@ -165,6 +165,41 @@ const CASES = [
     property: '--tw-ring-color',
     referencesVar: '--round-ring',
   },
+  /**
+   * ── THE PAGE-BUILDER ACCENT (round 24) ──────────────────────────────────
+   *
+   * Registered because round 24 found this file's exact defect shape sitting
+   * unregistered in a shipped component: icon_card's chip asks for a tinted
+   * accent background and Tailwind emits nothing for it (the tripwire below).
+   * These three are the classes round 24 added, and the whole reason they are
+   * here is that "it renders the right class" was already true of the broken
+   * one.
+   *
+   * All three are `text-[var(…)]`-shaped — the case this file was built for —
+   * and each is compiled from ITS OWN component, so a class that survives in
+   * one file and is dropped from another cannot hide behind a shared name.
+   */
+  {
+    what: 'the open accordion item\'s title',
+    file: 'src/components/pageBuilder/sections/accordion.jsx',
+    className: 'text-[var(--pb-accent-text)]',
+    property: 'color',
+    referencesVar: '--pb-accent-text',
+  },
+  {
+    what: 'the open accordion item\'s chevron',
+    file: 'src/components/pageBuilder/sections/accordion.jsx',
+    className: 'text-[var(--pb-accent-fill)]',
+    property: 'color',
+    referencesVar: '--pb-accent-fill',
+  },
+  {
+    what: 'the instructor card\'s specialty chip label',
+    file: 'src/components/pageBuilder/sections/instructor_card.jsx',
+    className: 'text-[var(--pb-accent-fill)]',
+    property: 'color',
+    referencesVar: '--pb-accent-fill',
+  },
 ];
 
 /*
@@ -1511,4 +1546,64 @@ test('CONTROL: the detail file list is the one the render can draw from', async 
     assert.ok(readSource(rel).code.length > 200, `${rel} scrubbed to nothing — the compile input is empty`);
   }
   assert.ok(config.content.some((g) => typeof g === 'string' && g.startsWith('./src/app/')));
+});
+
+// ── ROUND 24 — a shipped class that compiles to nothing, pinned ─────────────
+
+test('AUDIT TRIPWIRE (round 24): icon_card\'s tinted chip background compiles to NO rule', async () => {
+  /**
+   * ── THIS FILE'S OWN DEFECT, FOUND IN A SHIPPED COMPONENT ─────────────────
+   * icon_card renders its icon inside what its docstring calls "a tinted chip",
+   * asking for a tenth-strength accent background. Tailwind cannot apply an
+   * opacity modifier to an arbitrary colour that is a bare custom property — it
+   * has no channels to multiply — so it emits NOTHING, and that chip has been
+   * fully transparent since it shipped.
+   *
+   * It is the exact shape this file exists for: perfect markup, no rule, no
+   * error, and nothing on screen to say so. It went unnoticed because CASES is
+   * a named list and this component was never added to it.
+   *
+   * ── HOW IT SURFACED, WHICH IS THE PART WORTH KEEPING ─────────────────────
+   * Round 24 was told to copy this chip verbatim onto instructor_card. Copying
+   * it would have REPLACED a real background with nothing — a visible
+   * regression produced by faithfully following a precedent that does nothing.
+   * The measurement is what caught it; the instruction would not have.
+   *
+   * SELF-RETIRING, in the manner of docs/section-control-audit.md §9: this goes
+   * red on the day icon_card's chip is given a background that works — most
+   * likely a color-mix arbitrary value, which Tailwind passes through
+   * untouched. When it does, DELETE THIS TEST, register the working class in
+   * CASES above, and let instructor_card adopt the tint (see
+   * test/render/itemAccents, which pins the same decision from the other side).
+   */
+  const { code } = readSource('src/components/pageBuilder/sections/icon_card.jsx');
+  assert.match(code, /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
+    'icon_card no longer carries the tinted chip class at all — if the chip was reworked, this '
+    + 'tripwire and its note in test/render/itemAccents both need deleting');
+
+  const css = await compile([{ raw: code, extension: 'js' }]);
+  assert.deepEqual(declarationsFor(css, 'bg-[color:var(--pb-accent-fill)]/10'), [],
+    'THE TINTED CHIP NOW COMPILES. That is the fix — delete this test, add the class to CASES '
+    + 'above, and give instructor_card the tint it was denied in round 24.');
+
+  // …while the SAME variable in a class Tailwind can type does compile, which
+  // is what makes the emptiness above a property of the modifier and not of the
+  // variable, the file, or the compile harness.
+  const working = declarationsFor(css, 'text-[var(--pb-accent-fill)]');
+  assert.ok(working.some((d) => d.startsWith('color:')),
+    'the unmodified accent class stopped compiling too — then this is not about the opacity '
+    + 'modifier and the diagnosis above is wrong');
+});
+
+test('CONTROL: the opacity modifier works on a NON-arbitrary colour in the same compile', async () => {
+  /**
+   * Discrimination. Without it, "the /10 class emits nothing" could mean the
+   * harness cannot see modified classes at all. A theme-scale colour with the
+   * same modifier is compiled from the same input and must produce a rule.
+   */
+  const css = await compile([{ raw: 'bg-9e-action/10 bg-[color:var(--pb-accent-fill)]/10', extension: 'js' }]);
+  assert.ok(declarationsFor(css, 'bg-9e-action/10').some((d) => d.startsWith('background-color:')),
+    'the harness cannot see an opacity-modified class at all, so the tripwire above proves nothing');
+  assert.deepEqual(declarationsFor(css, 'bg-[color:var(--pb-accent-fill)]/10'), [],
+    'forced into the scan as a raw literal it still emits nothing — this is the modifier, not the scan');
 });

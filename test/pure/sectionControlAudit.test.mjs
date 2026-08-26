@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { backgroundClass, OFFERED_BACKGROUNDS } from '@/lib/pageBuilder/presets';
-import { BACKGROUNDS } from '@/lib/schemas/pageBuilder';
+import { BACKGROUNDS, ALL_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -116,55 +116,75 @@ function buttonHelperConsumers() {
     .sort();
 }
 
-test('AUDIT TRIPWIRE (finding 2): exactly ten section components paint with the accent', () => {
+test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with the accent', () => {
   /**
-   * Nine name the variable themselves; `cta` reaches it through the shared
-   * button helper (price_card does both). Ten types in total, plus the four
+   * Eleven name the variable themselves; `cta` reaches it through the shared
+   * button helper (price_card does both). Twelve types in total, plus the four
    * containers that forward the variable to children without drawing anything
-   * of their own — fourteen with an effect, thirteen without.
+   * of their own — sixteen with an effect, eleven without.
    *
-   * ── THIS TRIPWIRE FIRED IN ROUND 23, AND THIS IS THE RECONCILIATION ──────
-   * `course_schedule` was ADDED: its calendar icon named the default accent's
-   * own colour token directly, so it looked accented and never followed the
-   * author's choice. Round 23 swapped the token for the variable, the scan
-   * found a ninth direct consumer, and this assertion went red naming it —
-   * which is the tripwire doing its job, not a fault to route around.
+   * ── IT FIRED TWICE, AND THE SECOND TIME CLOSED THE FINDING ───────────────
+   * Round 23 added `course_schedule`; round 24 added `accordion` and
+   * `instructor_card`, and this assertion went red naming both. Each time the
+   * reconciliation was the one the message below directs for an ADDED type:
+   * extend the expected set, update finding 2 in docs/section-control-audit.md.
    *
-   * Reconciled exactly as the message below directs for an ADDED type: the
-   * expected set is extended by the one type, and finding 2 is updated in
-   * docs/section-control-audit.md (§10, round 23). The test is NOT deleted,
-   * because deletion is conditioned on the offered set and the reader set
-   * AGREEING, and they still do not — `accordion` and `instructor_card` have a
-   * surface the pattern reaches and take no accent. Two left, not three.
+   * With those three, the behaviour gap finding 2 described is CLOSED: the
+   * number of types that have a surface the accent pattern reaches and do not
+   * take it is now ZERO.
    *
-   * Nothing else about this file's contract changes: it still records measured
-   * state, and the day those two land it goes red again and is deleted then.
+   * ── SO WHY IS THIS TEST STILL HERE ───────────────────────────────────────
+   * Because its stated deletion condition — "once the offered set and the
+   * reader set agree" — CANNOT be met, and round 24 is where that became
+   * visible. The offered set is all 27 types: สีเน้น is in the universal
+   * envelope and always has been. The reader set is 16. The remaining eleven
+   * are not a backlog; they are the types round 21 measured as having no accent
+   * surface at all (a heading is prose, an embed is someone else's iframe, the
+   * four CourseCard types are a shared site component), and round 22 recorded
+   * as correct restraint rather than defects.
+   *
+   * That condition was written when "14 of 27 ignore it" still looked like one
+   * uniform gap. It isn't, so the condition describes a state the design will
+   * never reach, and deleting on it would mean deleting never.
+   *
+   * The test therefore CHANGES CHARACTER rather than retiring. It stopped being
+   * "watch this set grow toward agreement" and became "this set is closed —
+   * nothing joins or leaves it without a deliberate decision". A twelfth
+   * consumer is now a claim that a type has an accent surface after all, which
+   * is exactly the argument that should not be settled silently.
    */
   assert.deepEqual(directAccentConsumers(), [
-    'checklist', 'course_schedule', 'highlight_grid', 'icon_card', 'price_card',
-    'rich_text', 'stat_card', 'tabs', 'timeline',
+    'accordion', 'checklist', 'course_schedule', 'highlight_grid', 'icon_card',
+    'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
   ],
-  'FINDING 2 HAS MOVED: the set of components naming --pb-accent-* changed. If a type was '
-  + 'ADDED, that is a partial fix — update finding 2 in docs/section-control-audit.md, and '
-  + 'delete this test once the offered set and the reader set agree. If one was REMOVED, the '
-  + 'gap just got wider.');
+  'FINDING 2\'S SET MOVED. It is no longer a gap closing — it closed in round 24. An ADDITION '
+  + 'now asserts a type has an accent surface the audit says it does not: make that argument in '
+  + 'docs/section-control-audit.md before extending this list. A REMOVAL means a type stopped '
+  + 'following the author\'s accent, which is the original defect coming back.');
 
   assert.deepEqual(buttonHelperConsumers(), ['cta', 'price_card'],
     'the indirect route changed — accentButtonClass is how cta gets its accent without naming '
     + 'the variable, and it is gated by SECTION_STYLE_CAPS');
 
-  // The union is the ten the audit reports. Written as a union rather than as
-  // an eleventh literal list, so the two routes above stay the only source.
+  // The union is the twelve the audit reports. Written as a union rather than
+  // as a thirteenth literal list, so the two routes above stay the only source.
   const painting = [...new Set([...directAccentConsumers(), ...buttonHelperConsumers()])].sort();
-  assert.equal(painting.length, 10);
+  assert.equal(painting.length, 12);
 
-  // The two types the gap is still open on, named so the next step's target is
-  // stated here rather than only in a document. Both go false when it lands,
-  // which reddens the exact-set assertion above and retires this test.
-  assert.deepEqual(
-    ['accordion', 'instructor_card'].filter((t) => directAccentConsumers().includes(t)), [],
-    'a type the audit lists as an open accent gap now paints with the accent — the exact set '
-    + 'above must be extended in the same commit, and finding 2 updated with it');
+  /**
+   * The eleven with no accent surface, named. This is the half that was only
+   * ever prose before, and it is the half that now carries the meaning: the
+   * complement of the set above is a DECISION per type, not a remainder.
+   */
+  assert.deepEqual(ALL_SECTION_TYPES.filter((t) => !painting.includes(t)).sort(), [
+    'bundle_courses', 'card_grid', 'container', 'course_card', 'course_list',
+    'course_selector', 'custom_css', 'custom_html', 'debug_json', 'embed',
+    'full_width', 'heading', 'image', 'notice', 'two_column',
+  ].sort(),
+  'the set of types that do NOT paint with the accent changed. Four of these are containers '
+  + 'that FORWARD it (card_grid, container, full_width, two_column) and eleven have no accent '
+  + 'surface — see docs/section-control-audit.md §12. A type leaving this list needs the '
+  + 'argument written down first.');
 });
 
 test('CONTROL: the consumer scan reads code, not prose', () => {

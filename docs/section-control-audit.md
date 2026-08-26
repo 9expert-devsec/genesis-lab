@@ -755,3 +755,181 @@ Verified red by three deliberate breaks, all reverted by file copy: the
 hardcoded token restored (caught in three files at once — the wiring test by
 name, finding 2's tripwire, and round 22's new cross-source assertion), the
 semantic badge accented, and the row's primary text accented.
+
+---
+
+## 12. Round 24 — the last two accents, and finding 2 closes
+
+**Appended, not merged.** §8's finding 2 stays as round 18 measured it.
+Measured at `0f7a6e7`.
+
+Step 3 of [docs/control-fix-proposal.md](./control-fix-proposal.md) §6, and the
+first renderer change with a **visible diff at the default accent**. Still
+colour-only: nothing moves, resizes or reflows, measured rather than assumed.
+
+### What changed, per type
+
+| type | element | role | precedent |
+|---|---|---|---|
+| `accordion` | the OPEN item's chevron | `--pb-accent-fill` | `tabs`, the active tab's underline |
+| `accordion` | the OPEN item's title | `--pb-accent-text` | `tabs`, the active tab's label |
+| `instructor_card` | the specialty chips' label | `--pb-accent-fill` | `icon_card`'s chip mark |
+
+`tabs` was read off the code rather than off round 21's note, and the note was
+right: its active branch is one ternary setting **both** an underline in `fill`
+and a label in `text`. Mapped onto the accordion, the rotating chevron is the
+underline (the mark that says which item is active) and the item title is the
+label. Same split, no fourth role, and `SECTION_STYLE_CAPS` untouched.
+
+**The accented title is not a breach of the body-copy rule.** The accented run
+is a button's own label in its active state — the category the text role already
+admits alongside a price, a stat value and a link. The prose beside it does not
+move: the item **body** keeps its muted colour, and a **closed** item's title
+keeps the ordinary heading colour, exactly as an inactive tab does.
+
+### What deliberately did NOT change
+
+**Rules** (either would be a defect):
+
+| type | element | rule |
+|---|---|---|
+| `accordion` | item body | body copy is never accented |
+| `accordion` | closed items' titles and chevrons | not the active member — `tabs` does the same |
+| `instructor_card` | the name | headings are never accented |
+| `instructor_card` | the role and bio | body copy is never accented |
+
+**Judgements**, flagged in-code as candidates rather than settled here: both
+components' own borders and dividers stay neutral. `highlight_grid` shows the
+pattern *permits* an accented border, but that is a decorative left-hand rule on
+a cell, not a component's structural outline — which no consumer accents.
+
+Also untouched: `instructor_card`'s fixed card width. Separate finding, its own
+tripwire, and nothing about a colour belongs in that argument.
+
+### The finding this round did not expect to make
+
+**`icon_card`'s tinted chip background has never rendered.** The precedent this
+round was told to copy verbatim asks for a tenth-strength accent background;
+Tailwind **cannot apply an opacity modifier to an arbitrary colour that is a
+bare custom property** — there are no channels to multiply — so it emits no rule
+at all. That chip has been fully transparent since it shipped, while its own
+docstring describes the icon as sitting "inside a tinted chip".
+
+Confirmed three ways: the class is absent from the compiled stylesheet; it is
+still absent when forced into the scan as a raw literal (so it is the modifier,
+not the scan); and the painted background measures `rgba(0, 0, 0, 0)` in Chrome
+at every accent. A control in the same compile shows `bg-9e-action/10` — the
+same modifier on a theme-scale colour — emitting a real rule.
+
+**So the verbatim copy was not made.** It would have replaced a background these
+chips really have with nothing — a visible regression produced by faithfully
+following a precedent that does nothing. `instructor_card` takes the accent on
+the chip **label** and keeps its neutral surface, and both halves of that
+decision are pinned by tests, from the precedent's side and its own.
+
+This is exactly the defect class `test/fs/tailwindArbitraryValueRules` exists
+for, sitting unregistered because that file's list is named rather than a sweep.
+It now carries a self-retiring tripwire for it, and the three classes this round
+added are registered as cases.
+
+### Finding 2 is CLOSED — and its tripwire's deletion condition is not
+
+| | round 18 | 21 | 23 | 24 |
+|---|---:|---:|---:|---:|
+| direct consumers | 8 | 8 | 9 | **11** |
+| indirect (`accentButtonClass`) | 2 | 2 | 2 | 2 |
+| union that paints | 9 | 9 | 10 | **12** |
+| types with a surface and no accent | — | 3 | 2 | **0** |
+
+The behaviour gap finding 2 described is closed. **Its tripwire is not deleted,
+and the reason is a flaw in how the condition was worded.**
+
+It says to delete "once the offered set and the reader set agree". The offered
+set is all 27 types — สีเน้น is in the universal envelope and always has been.
+The reader set is 16 (12 painting + 4 containers forwarding). The remaining
+eleven are not a backlog: they are the types with no accent surface at all,
+which §10 recorded as correct restraint. **The condition describes a state the
+design will never reach**, because it was written when "14 of 27 ignore it" still
+looked like one uniform gap.
+
+So the tripwire changes character instead of retiring: from *watch this set grow
+toward agreement* to *this set is closed — nothing joins or leaves without a
+decision*. A twelfth direct consumer is now a claim that a type has an accent
+surface after all, which is an argument that should not be settled silently. Its
+complement — the eleven, plus the four forwarding containers — is asserted as an
+exact set for the first time, so the "no accent surface" half stops being prose.
+
+### Tripwires: two fired, both as designed
+
+- **Finding 2's** went red naming `accordion` and `instructor_card`. Reconciled
+  as above.
+- **Round 22's comment clause fired — and that is round 23's repair working.**
+  It was a bare presence check that sat green through the commit that made its
+  sentence false; round 23 re-pointed it at the measured consumer set. This
+  round is the proof: it reddened on the commit that closed the last two,
+  instead of drifting silently a third time. The claim is now stated in the
+  direction that survives — every type either paints or is one the audit records
+  as having no accent surface, with no third category.
+- Findings 1, 3 and 8 stayed green. `instructor_card`'s own `max-w-sm` tripwire
+  in particular: the clamp was not touched.
+
+### Measured — colours, and what an author sees
+
+`scripts/_probe-accordion-instructor-accent.mjs`. The accordion is **mounted in
+JSDOM and really clicked open** — its state is `useState(null)`, so a static
+render only ever shows the branch this round does not change — and that live
+markup is handed to Chrome for the cascade and layout.
+
+At the default accent, before → after:
+
+| element | before | after |
+|---|---|---|
+| open item's title | `rgb(13, 27, 42)` navy | `rgb(0, 92, 255)` action blue |
+| open item's chevron | `rgb(94, 106, 126)` grey | `rgb(0, 92, 255)` action blue |
+| chip label | `rgb(13, 27, 42)` navy | `rgb(0, 92, 255)` action blue |
+| everything else | — | unchanged, chip background included |
+
+Across three accents (default / green / orange) the three changed elements give
+**3 distinct colours each**; every unchanged element gives **1**.
+
+**In words, what is different on an existing published page tomorrow:** an
+opened accordion item's heading text and its ▾ marker turn from dark navy and
+grey to the page's accent blue, and an instructor card's specialty chip labels
+turn from navy to the same blue on the same pale background. Nothing else, and
+only while an item is open — a closed accordion is byte-identical.
+
+### Nothing reflowed
+
+**30 boxes compared** (10 elements × 3 accent cases), before against after:
+**0 moved or resized.** Position and size are identical for the changed elements
+and for their neighbours — the accordion body, the closed rows, the card, the
+name and the role line.
+
+### Public path, and blast radius
+
+`66/68` identical to HEAD, two changed files named: `accordion.jsx` and
+`instructor_card.jsx` — exactly the two intended.
+
+Blast radius re-measured read-only: **0 `accordion` and 0 `instructor_card`
+sections** exist anywhere — 0 live, 0 draft, 0 in `page_versions`, out of 38
+sections. **The same caveat applies**: one database (`9exp_genesis`) at one
+moment, small enough that it may be development or staging. Re-run before this
+reaches a production deploy.
+
+### Tests added
+
+Ten in `test/render/itemAccents.test.mjs`, plus three compile cases and a
+self-retiring tripwire in `test/fs/tailwindArbitraryValueRules.test.mjs`.
+
+**What that render file cannot see is stated in it**, because a green there
+means less than it looks: the accordion's open branch does not exist in a static
+render, and mounting a React root is forbidden in that tier — the runner is
+`isolation:'none'` and a root's globals leak into every other render test, which
+cost 28 unrelated failures once. So the closed branch is rendered, the open
+branch is a source claim, the colour is the probe's, and whether the class
+compiles at all is the Tailwind guard's.
+
+Verified red by five deliberate breaks, all reverted by file copy: the chevron
+hardcode restored, the accordion reverted wholesale, the chip hardcode restored,
+the instructor bio accented, and the accordion body accented. The first three
+were each caught in two or three files at once, by name.

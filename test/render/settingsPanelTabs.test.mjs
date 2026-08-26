@@ -750,39 +750,52 @@ test('C: the panel comment corrects the two fields this round made true, and sto
     + 'utility in prose and let the test tier name it');
 
   /**
-   * The open gap is still described as open — not as settled.
+   * The comment says the accent gap is CLOSED, and this is what stops that
+   * sentence from being a claim nobody checks.
    *
-   * ── ROUND 23 SHRANK THIS LIST, AND THE PIN DID NOT NOTICE ────────────────
-   * It read `accordion, instructor_card and course_schedule` until round 23
-   * gave course_schedule's icon the accent. This assertion stayed GREEN through
-   * that commit, because a `match` asserts the sentence is PRESENT and cannot
-   * see its subject go false. The audit tripwire over the renderers is what
-   * went red, and the comment was corrected from there.
+   * ── IT NAMED THREE TYPES, THEN TWO, THEN NONE ────────────────────────────
+   * Until round 23 it read `accordion, instructor_card and course_schedule`.
+   * That assertion was a bare `match` and it stayed GREEN through the commit
+   * that made the sentence false, because a presence check cannot see its
+   * subject change underneath it — the renderer-side tripwire is what went red.
    *
-   * So the list is now cross-checked against the measured consumer set below
-   * rather than only against itself — the same one-source discipline the
-   * ความกว้าง hint already answers to.
+   * Round 23 answered that by cross-checking the named list against the
+   * measured consumer set. Round 24 is the proof it took: it went red on the
+   * commit that closed the last two, instead of sitting green through it.
+   *
+   * The claim is now stated in the direction that survives — every type either
+   * paints with the accent or is one the audit records as having no accent
+   * surface, with no third category. A regression puts a type back in that
+   * third category and this names it.
    */
-  assert.match(head, /accordion and instructor_card/,
-    'the types with an unclaimed accent surface are no longer named as an open gap');
-  assert.match(head, /open gap in the renderers/,
-    'the comment stopped saying the remaining accent gap is unfixed');
-  assert.equal(/course_schedule — DO have a surface/.test(head), false,
-    'course_schedule is listed as an open accent gap again, but it takes the accent since '
-    + 'round 23 — check test/pure/sectionControlAudit finding 2 for the measured set');
+  assert.match(head, /accent gap in the renderers is closed/,
+    'the comment no longer states the accent gap as closed');
+  assert.equal(/DO have a surface the accent belongs on and\s*\n\s*\*\s*do not take it/.test(head), false,
+    'the comment lists open accent gaps again — if that is real, extend the exact set in '
+    + 'test/pure/sectionControlAudit finding 2 in the same commit');
 
-  // The named-open types must be exactly the ones that do NOT paint with the
-  // accent. Derived from the components, so the sentence cannot drift alone.
+  /**
+   * The measured set, derived from the components. `directAccentConsumers` in
+   * test/pure/sectionControlAudit is the same scan; this file re-derives it
+   * rather than importing across tiers, and the two are asserted equal below so
+   * a divergence is loud.
+   */
   const painting = readdirSync(SECTIONS_DIR)
     .filter((f) => f.endsWith('.jsx'))
     .filter((f) => /--pb-accent-/.test(readSource(`src/components/pageBuilder/sections/${f}`).code))
-    .map((f) => f.replace(/\.jsx$/, ''));
-  for (const t of ['accordion', 'instructor_card']) {
-    assert.equal(painting.includes(t), false,
-      `${t} is named as an open accent gap in SettingsPanel's comment but now paints with the `
-      + 'accent — the comment and the exact set in test/pure/sectionControlAudit both need it');
+    .map((f) => f.replace(/\.jsx$/, '')).sort();
+
+  assert.deepEqual(painting, [
+    'accordion', 'checklist', 'course_schedule', 'highlight_grid', 'icon_card',
+    'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
+  ], 'the components painting with the accent changed — the comment above claims the gap is '
+  + 'closed, so any change here makes that sentence a lie until it is rewritten');
+
+  // The three types the comment named as open across rounds 22-24 are exactly
+  // the three that closed it. Stated so a revert of any ONE is caught here.
+  for (const t of ['accordion', 'instructor_card', 'course_schedule']) {
+    assert.equal(painting.includes(t), true,
+      `${t} stopped painting with the accent — it is one of the three the comment says are no `
+      + 'longer an open gap, so the gap is back and recorded nowhere');
   }
-  assert.equal(painting.includes('course_schedule'), true,
-    'course_schedule stopped painting with the accent — the comment above no longer lists it '
-    + 'as an open gap, so the gap would now be unrecorded anywhere');
 });

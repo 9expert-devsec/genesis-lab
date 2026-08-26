@@ -51,20 +51,23 @@ import { useEditor } from './EditorProvider';
  * ── WHAT THIS COMMENT STILL DOES NOT SAY, ON PURPOSE ───────────────────────
  * Round 18 left the whole paragraph unedited because correcting a comment while
  * the defect stood would make the code look consistent when it was not. That
- * reason expires only for the parts a fix has reached, so the two clauses above
- * describe the promise this panel now makes and stop there. Two types —
- * accordion and instructor_card — DO have a surface the accent belongs on and
- * do not take it; that is an open gap in the renderers, and it is deliberately
- * not written up here as though it were settled. When those land, this note
- * shrinks. docs/control-fix-proposal.md §1 has the sequence.
+ * reason expires only for the parts a fix has reached, and as of round 24 it
+ * has reached all of them: NO type is left that has a surface the accent
+ * belongs on and does not take it. The accent gap in the renderers is closed.
  *
- * It said THREE types until round 23, which gave course_schedule's calendar
- * icon the accent variable. Worth naming how that edit came to be made: the
- * test pinning this sentence asserts the sentence is PRESENT, and a presence
- * check cannot notice its subject becoming false — it stayed green through the
- * commit that made it wrong. What went red was the audit tripwire over the
- * renderers, and this was corrected from there. A pin on prose is only ever as
- * good as the measurement it is read alongside.
+ * What remains is not a backlog. Eleven types still show no effect, and each is
+ * a measured decision rather than an omission — a heading is prose, an embed is
+ * someone else's iframe, the four CourseCard types render a component shared
+ * with non-builder routes. That is why the hint below says a type may have no
+ * accent surface instead of promising every type will change.
+ *
+ * ── HOW THIS SENTENCE GOT CORRECTED IS ITSELF THE LESSON ──────────────────
+ * It named three types, then two, then none. It was WRONG for one commit each
+ * time, because the test pinning it asserted the sentence was PRESENT and a
+ * presence check cannot see its subject become false. What went red both times
+ * was the audit tripwire over the renderers. Since round 23 the pin also
+ * cross-checks the named list against that measured set, so the prose can no
+ * longer drift on its own — which is what made round 24 red it correctly.
  *
  * Deferred to 5b (SectionTypeFields), where the per-type knowledge already lives
  * — each of these is read by SOME components and ignored by the rest, so it
