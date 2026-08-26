@@ -10,6 +10,7 @@ import { isStandalonePromotion } from '@/lib/pageBuilder/promotionMode';
 import { Field, Group, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { useEditor } from './EditorProvider';
 import { VersionHistory } from './VersionHistory';
+import { PreviewBody } from './PreviewDialog';
 
 /**
  * Page-level settings (item 6). Edits the page envelope through PATCH_PAGE, so
@@ -131,14 +132,16 @@ function PromoCoverField({ value, onChange }) {
  * The menu, as data. One declaration, read by the nav and by the body's switch,
  * so a section cannot exist in one and not the other.
  *
- * `preview` is absent here and arrives in the next commit, when PreviewDialog
- * is folded in — its section is the one that writes to the server on click, so
- * it lands with the note that says so rather than ahead of it.
+ * `preview` is the odd one: every other section stages an edit for autosave,
+ * and that one writes to the server the moment a button is pressed. It is in
+ * the same menu because that is where an author looks for it, and it announces
+ * the difference itself — see PreviewSection.
  */
 export const PAGE_SETTINGS_SECTIONS = [
   { id: 'general', label: 'ข้อมูลหน้า' },
   { id: 'seo',     label: 'SEO' },
   { id: 'jsonld',  label: 'JSON-LD' },
+  { id: 'preview', label: 'ลิงก์พรีวิว' },
   { id: 'history', label: 'ประวัติการเผยแพร่' },
 ];
 
@@ -204,6 +207,39 @@ export function JsonLdSection() {
         พร้อมตัวอย่างที่ส่งออกจริง
       </p>
     </Group>
+  );
+}
+
+/**
+ * Preview Link — the ONE section that does not stage its edits.
+ *
+ * ── WHY IT IS ANNOUNCED RATHER THAN BLENDED IN ────────────────────────────
+ * Its five actions write to the server the instant a button is pressed, and
+ * that is their design rather than an oversight: the password is bcrypt-hashed
+ * server-side and its hash must never enter the client working tree, so it
+ * cannot ride autosave the way every other field here does.
+ *
+ * A menu makes five sections look alike. Four of them stage; this one commits,
+ * and what it commits is credentials — the place where being wrong is most
+ * expensive. So it says so at the top, before any control, and the save-state
+ * footer is withheld here: a "saved" line under a section that already wrote
+ * would be answering a question the author did not ask, about the wrong thing.
+ *
+ * The body is unchanged from when it was its own dialog, every action call
+ * shape included. This commit changes where it is reached from, not what it
+ * does.
+ */
+export function PreviewSection({ page, pageId, tier, open }) {
+  return (
+    <>
+      <p
+        data-testid="preview-immediate-write"
+        className="mb-3 rounded-9e-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+      >
+        ส่วนนี้บันทึกลงเซิร์ฟเวอร์ทันทีที่กดปุ่ม — ไม่รอการบันทึกอัตโนมัติเหมือนส่วนอื่น
+      </p>
+      <PreviewBody page={page} pageId={pageId} tier={tier} open={open} />
+    </>
   );
 }
 
@@ -336,8 +372,8 @@ export function SeoSection({ seo, patchSeo }) {
   );
 }
 
-export function PageSettingsBody({ page, pageId, dispatch, open, dirty, saving }) {
-  const [section, setSection] = useState(PAGE_SETTINGS_SECTIONS[0].id);
+export function PageSettingsBody({ page, pageId, dispatch, open, dirty, saving, tier, initialSection }) {
+  const [section, setSection] = useState(initialSection ?? PAGE_SETTINGS_SECTIONS[0].id);
   const patch = (p) => dispatch({ type: 'PATCH_PAGE', patch: p });
   const patchSeo = (p) => dispatch({ type: 'PATCH_PAGE', patch: { seo: { ...(page?.seo ?? {}), ...p } } });
 
@@ -369,17 +405,19 @@ export function PageSettingsBody({ page, pageId, dispatch, open, dirty, saving }
         {section === 'general' && <GeneralSection page={page} patch={patch} />}
         {section === 'seo' && <SeoSection seo={page?.seo ?? {}} patchSeo={patchSeo} />}
         {section === 'jsonld' && <JsonLdSection />}
+        {section === 'preview' && <PreviewSection page={page} pageId={pageId} tier={tier} open={open} />}
         {section === 'history' && <HistorySection pageId={pageId} open={open} />}
 
-        <SaveStateLine dirty={dirty} saving={saving} />
+        {/* Withheld on the section that writes immediately — see PreviewSection. */}
+        {section !== 'preview' && <SaveStateLine dirty={dirty} saving={saving} />}
       </div>
     </div>
   );
 }
 
 
-export function PageSettingsDialog({ open, onClose }) {
-  const { page, pageId, dispatch, dirty, saving } = useEditor();
+export function PageSettingsDialog({ open, onClose, initialSection = null }) {
+  const { page, pageId, dispatch, dirty, saving, tier } = useEditor();
 
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -401,7 +439,18 @@ export function PageSettingsDialog({ open, onClose }) {
           </div>
           <Dialog.Description className="sr-only">แก้ไขข้อมูลระดับหน้า เช่น ชื่อ, URL, ธีม และ SEO</Dialog.Description>
 
-          <PageSettingsBody page={page} pageId={pageId} dispatch={dispatch} open={open} dirty={dirty} saving={saving} />
+          {/*
+            KEYED ON THE REQUESTED SECTION so that opening the dialog from a
+            different trigger really lands there. Without it, whether the menu
+            re-reads initialSection would depend on whether Radix unmounts the
+            content on close — a library policy this behaviour has no business
+            resting on. The key makes it a property of this file instead.
+          */}
+          <PageSettingsBody
+            key={initialSection ?? 'general'}
+            page={page} pageId={pageId} dispatch={dispatch} open={open}
+            dirty={dirty} saving={saving} tier={tier} initialSection={initialSection}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

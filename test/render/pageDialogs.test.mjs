@@ -8,6 +8,7 @@ import {
   PageSettingsBody, PAGE_SETTINGS_SECTIONS,
   GeneralSection, SeoSection, JsonLdSection, HistorySection,
 } from '@/components/pageBuilder/editor/PageSettingsDialog';
+import { PreviewSection } from '@/components/pageBuilder/editor/PageSettingsDialog';
 import { PreviewBody } from '@/components/pageBuilder/editor/PreviewDialog';
 import { readSource } from '../sourceScan.mjs';
 
@@ -74,6 +75,7 @@ const sectionHtml = (id, page) => ({
   general: () => renderToStaticMarkup(createElement(GeneralSection, { page, patch: noopPatch })),
   seo:     () => renderToStaticMarkup(createElement(SeoSection, { seo: page?.seo ?? {}, patchSeo: noopPatch })),
   jsonld:  () => renderToStaticMarkup(createElement(JsonLdSection, {})),
+  preview: () => renderToStaticMarkup(createElement(PreviewSection, { page, pageId: 'p1', tier: TIER, open: true })),
   history: () => renderToStaticMarkup(createElement(HistorySection, { pageId: 'p1', open: true })),
 }[id]());
 
@@ -148,6 +150,17 @@ const SETTINGS_PROMOTION = [
   'ไม่ให้ Google เก็บหน้านี้ (noindex)',
 ];
 
+/**
+ * The union across the WHOLE menu, after commit 3 folded the preview link in.
+ * SETTINGS_GENERAL is spliced in VERBATIM — the capture taken before the menu
+ * existed — and the two preview fields are appended in menu order.
+ */
+const SETTINGS_UNION = [
+  ...SETTINGS_GENERAL,
+  'ตั้งรหัสผ่านใหม่',
+  'หมดอายุเมื่อ',
+];
+
 const PREVIEW_LABELS = ['ตั้งรหัสผ่านใหม่', 'หมดอายุเมื่อ'];
 const PREVIEW_BUTTONS = ['เปิดใช้งาน', 'สุ่มรหัสใหม่', 'ปิดการเข้าถึง'];
 
@@ -167,15 +180,25 @@ test('the union across all menu sections equals the pre-relocation field set', (
    * one scrolling form — which is precisely the change that can lose a field
    * without any section looking wrong.
    */
-  assert.deepEqual(labelsIn(settings()), SETTINGS_GENERAL,
+  assert.deepEqual(labelsIn(settings()), SETTINGS_UNION,
     'the page settings field set changed. A field in NO menu section is invisible from inside '
     + 'every section, which is why this is an exact ordered set and not a lower bound.');
+
+  /**
+   * ── HOW THE SET GREW, AND WHY THAT IS NOT A RELAXATION ───────────────────
+   * Commit 3 moved PreviewDialog in as a section, so its two fields joined this
+   * menu. EXTENDED by exactly that set — the original capture is spliced in
+   * verbatim and the addition is named — never regenerated from the components,
+   * which is the one thing this check must never do.
+   */
+  assert.deepEqual(SETTINGS_UNION.filter((x) => !SETTINGS_GENERAL.includes(x)), PREVIEW_LABELS);
+  assert.deepEqual(SETTINGS_GENERAL.filter((x) => !SETTINGS_UNION.includes(x)), []);
 });
 
-test('the menu declares exactly four sections, and the body renders one per item', () => {
-  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.id), ['general', 'seo', 'jsonld', 'history']);
+test('the menu declares exactly five sections, and the body renders one per item', () => {
+  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.id), ['general', 'seo', 'jsonld', 'preview', 'history']);
   assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.label),
-    ['ข้อมูลหน้า', 'SEO', 'JSON-LD', 'ประวัติการเผยแพร่']);
+    ['ข้อมูลหน้า', 'SEO', 'JSON-LD', 'ลิงก์พรีวิว', 'ประวัติการเผยแพร่']);
 
   // The nav renders one button per declared section — the list and the strip
   // come from ONE declaration, so they cannot disagree about what exists.
@@ -191,6 +214,7 @@ test('each section renders exactly its own fields and none of another section\'s
     general: ['ชื่อหน้า', 'URL (slug)', 'ชนิดหน้า', 'ธีม'],
     seo: ['Meta title', 'Meta description', 'Canonical URL', 'OG image URL', 'ไม่ให้ Google เก็บหน้านี้ (noindex)'],
     jsonld: [],
+    preview: PREVIEW_LABELS,
     history: [],
   };
   for (const [id, expected] of Object.entries(per)) {
@@ -204,7 +228,9 @@ test('each section renders exactly its own fields and none of another section\'s
 
 test('each section carries exactly its own group legend', () => {
   const legends = {
-    general: ['ทั่วไป'], seo: ['SEO'], jsonld: ['JSON-LD'], history: ['ประวัติการเผยแพร่'],
+    general: ['ทั่วไป'], seo: ['SEO'], jsonld: ['JSON-LD'],
+    preview: ['ลิงก์', 'รหัสผ่าน', 'วันหมดอายุ'],   // the absorbed dialog's own three
+    history: ['ประวัติการเผยแพร่'],
   };
   for (const [id, expected] of Object.entries(legends)) {
     assert.deepEqual(groupsIn(sectionHtml(id, PAGE())), expected);
@@ -212,7 +238,8 @@ test('each section carries exactly its own group legend', () => {
 });
 
 test('PageSettingsBody on a PROMOTION page renders the four extra fields too', () => {
-  assert.deepEqual(labelsIn(settings(PROMO())), SETTINGS_PROMOTION,
+  const promotionUnion = [...SETTINGS_PROMOTION, ...PREVIEW_LABELS];
+  assert.deepEqual(labelsIn(settings(PROMO())), promotionUnion,
     'the promotion-only fields changed — these are three of the five the mockups drop');
   // The promotion set is a superset of the general one, in the same order.
   assert.deepEqual(SETTINGS_GENERAL.filter((f) => !SETTINGS_PROMOTION.includes(f)), []);
@@ -226,11 +253,67 @@ test('PreviewBody renders exactly its own fields, groups and buttons', () => {
     'the preview actions changed — each of these buttons calls a tier-gated server action');
 });
 
-test('the two dialogs share NO field — neither leaks into the other', () => {
-  const s = labelsIn(settings(PROMO()));
-  const p = labelsIn(preview());
-  assert.deepEqual(s.filter((f) => p.includes(f)), []);
-  assert.deepEqual(p.filter((f) => s.includes(f)), []);
+test('the absorbed preview section renders exactly what the standalone body did', () => {
+  /**
+   * Commit 3 is navigation. The section wraps the SAME body, so its fields,
+   * groups and buttons must equal the standalone body's — anything else means
+   * the move edited it.
+   */
+  const asSection = sectionHtml('preview', PAGE());
+  const standalone = preview();
+  assert.deepEqual(labelsIn(asSection), labelsIn(standalone));
+  assert.deepEqual(groupsIn(asSection), groupsIn(standalone));
+  assert.deepEqual(buttonsIn(asSection), buttonsIn(standalone));
+
+  // …and no OTHER section shares a field with it.
+  for (const sec of PAGE_SETTINGS_SECTIONS.filter((x) => x.id !== 'preview')) {
+    const overlap = labelsIn(sectionHtml(sec.id, PROMO())).filter((l) => PREVIEW_LABELS.includes(l));
+    assert.deepEqual(overlap, [], 'the ' + sec.id + ' section renders a preview field');
+  }
+});
+
+test('the preview section announces that it writes immediately, and shows no save state', () => {
+  /**
+   * Four sections stage their edits for autosave; this one commits credentials
+   * on click. Under a menu they look alike, so the difference is stated before
+   * any control — and the save-state footer is withheld, because a "saved" line
+   * under a section that already wrote answers the wrong question.
+   */
+  const doc = docOf(body(PAGE(), { tier: TIER, initialSection: 'preview' }));
+  const banner = doc.querySelector('[data-testid="preview-immediate-write"]');
+  assert.notEqual(banner, null, 'the preview section no longer says that it writes immediately');
+  assert.equal(banner.textContent.replace(/\s+/g, ' ').trim(),
+    'ส่วนนี้บันทึกลงเซิร์ฟเวอร์ทันทีที่กดปุ่ม — ไม่รอการบันทึกอัตโนมัติเหมือนส่วนอื่น');
+  assert.equal(doc.querySelector('[data-testid="settings-save-state"]'), null,
+    'the preview section shows a save-state line — it does not ride autosave, so that line '
+    + 'would describe a mechanism this section does not use');
+});
+
+test('CONTROL: every OTHER section does show the save state, and no banner', () => {
+  // Discrimination for the pair above: the withheld footer and the added banner
+  // must both be specific to the preview section, not global.
+  for (const id of ['general', 'seo', 'jsonld', 'history']) {
+    const doc = docOf(body(PAGE(), { tier: TIER, initialSection: id }));
+    assert.notEqual(doc.querySelector('[data-testid="settings-save-state"]'), null, id + ' lost its save state');
+    assert.equal(doc.querySelector('[data-testid="preview-immediate-write"]'), null, id + ' gained the preview banner');
+  }
+});
+
+test('PreviewDialog.jsx no longer exports a dialog — only the body', async () => {
+  /**
+   * J: the standalone dialog is gone and its trigger survives. EditorShell now
+   * opens ONE dialog pointed at a section, so a second surface cannot drift
+   * from the first.
+   */
+  const mod = await import('@/components/pageBuilder/editor/PreviewDialog');
+  assert.deepEqual(Object.keys(mod), ['PreviewBody']);
+
+  const { code } = readSource('src/components/pageBuilder/editor/EditorShell.jsx');
+  assert.equal(code.includes('<PreviewDialog'), false, 'a second preview dialog is mounted again');
+  assert.equal(code.includes("onOpenPreview={() => openSettings('preview')}"), true,
+    'the top bar preview button no longer opens the settings dialog at the preview section');
+  assert.equal(code.includes("onOpenSettings={() => openSettings('general')}"), true,
+    'the settings button no longer opens at the first section');
 });
 
 // ── 2. the five fields the mockups drop ───────────────────────────────────
@@ -294,9 +377,16 @@ test('neither dialog offers a Save or Cancel — autosave owns persistence', () 
 
   // PageSettingsBody renders no button at all today; PreviewBody's three are
   // the preview ACTIONS, which legitimately write immediately.
-  // No SECTION renders a button; the only buttons in the body are the menu's
-  // own nav items, asserted above against the declared section list.
-  for (const s of PAGE_SETTINGS_SECTIONS) assert.deepEqual(buttonsIn(sectionHtml(s.id, PROMO())), []);
+  /**
+   * Exactly ONE section renders buttons, and they are the preview actions —
+   * which legitimately write immediately. Every other section renders none, so
+   * a save control appearing anywhere else is caught here rather than only by
+   * the source check above.
+   */
+  for (const sec of PAGE_SETTINGS_SECTIONS.filter((x) => x.id !== 'preview')) {
+    assert.deepEqual(buttonsIn(sectionHtml(sec.id, PROMO())), [], sec.id + ' grew a button');
+  }
+  assert.deepEqual(buttonsIn(sectionHtml('preview', PROMO())), PREVIEW_BUTTONS);
   assert.deepEqual(buttonsIn(preview()), PREVIEW_BUTTONS);
 });
 

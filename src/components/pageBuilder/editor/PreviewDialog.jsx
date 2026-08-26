@@ -1,15 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { X, Copy, Check, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { Copy, Check, Loader2, ExternalLink, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   enablePreviewLink, regeneratePreviewPassword, setPreviewExpiry, revokePreviewAccess,
   getPreviewState,
 } from '@/lib/actions/pageBuilder';
 import { Field, Group, TextInput, Warn, INPUT_CLASS } from './fields';
-import { useEditor } from './EditorProvider';
 
 /**
  * Preview link management (item 6). Wires the existing preview actions —
@@ -232,32 +230,18 @@ export function PreviewBody({ page, pageId, tier, open }) {
   );
 }
 
-export function PreviewDialog({ open, onClose }) {
-  const { page, pageId, tier } = useEditor();
-
-  return (
-    <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(30rem,calc(100vw-2rem))]',
-            '-translate-x-1/2 -translate-y-1/2 rounded-9e-md border',
-            'border-[var(--surface-border)] bg-[var(--surface)] p-4 shadow-xl',
-            'max-h-[calc(100dvh-4rem)] overflow-y-auto'
-          )}
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">ลิงก์พรีวิว</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
-              <X className="h-4 w-4" />
-            </Dialog.Close>
-          </div>
-          <Dialog.Description className="sr-only">จัดการลิงก์พรีวิวที่ป้องกันด้วยรหัสผ่าน</Dialog.Description>
-
-          <PreviewBody page={page} pageId={pageId} tier={tier} open={open} />
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
+/*
+ * ── THE DIALOG WRAPPER LIVED HERE, AND ROUND 27 ABSORBED IT ───────────────
+ * Preview link management is now a SECTION of the page-settings dialog
+ * (PreviewSection in PageSettingsDialog.jsx), not a dialog of its own. The
+ * two were already siblings opened from one `dialog` state in EditorShell, so
+ * this is a change of destination and nothing else.
+ *
+ * The body above is untouched — every action call shape included. The top
+ * bar's preview button still exists and is still tier-gated; it now opens the
+ * settings dialog AT this section instead of a second dialog.
+ *
+ * The file keeps its name because the body is what it always was, and moving
+ * the code as well as the entry point would have made the diff a rewrite
+ * rather than a relocation.
+ */

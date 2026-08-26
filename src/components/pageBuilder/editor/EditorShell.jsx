@@ -12,7 +12,6 @@ import { CanvasPanel } from './CanvasPanel';
 import { CanvasToolbar } from './CanvasToolbar';
 import { SettingsPanel } from './SettingsPanel';
 import { PageSettingsDialog } from './PageSettingsDialog';
-import { PreviewDialog } from './PreviewDialog';
 import { PublishDialog } from './PublishDialog';
 
 /**
@@ -69,7 +68,15 @@ function Panel({ title, hint, children, className }) {
 export function EditorShell() {
   const { dirty, saving, conflict, error } = useEditor();
   const { saveNow, publish, discard } = useEditorSave();
-  const [dialog, setDialog] = useState(null); // 'settings' | 'preview' | 'publish' | null
+  const [dialog, setDialog] = useState(null); // 'settings' | 'publish' | null
+  /**
+   * Which settings section to open at. The preview link used to be its own
+   * dialog; it is a section now, so the top bar's preview button opens the
+   * settings dialog pointed at it rather than a second surface. Both
+   * triggers survive — only their destination merged.
+   */
+  const [settingsSection, setSettingsSection] = useState('general');
+  const openSettings = (section) => { setSettingsSection(section); setDialog('settings'); };
 
   /**
    * ── Unsaved-changes guard: THREE exits, ONE decision ──────────────────────
@@ -117,13 +124,16 @@ export function EditorShell() {
     <div className="flex h-[100dvh] flex-col">
       <EditorTopBar
         onSave={saveNow}
-        onOpenSettings={() => setDialog('settings')}
-        onOpenPreview={() => setDialog('preview')}
+        onOpenSettings={() => openSettings('general')}
+        onOpenPreview={() => openSettings('preview')}
         onPublish={() => setDialog('publish')}
         onDiscard={discard}
       />
-      <PageSettingsDialog open={dialog === 'settings'} onClose={() => setDialog(null)} />
-      <PreviewDialog open={dialog === 'preview'} onClose={() => setDialog(null)} />
+      <PageSettingsDialog
+        open={dialog === 'settings'}
+        onClose={() => setDialog(null)}
+        initialSection={settingsSection}
+      />
       <PublishDialog open={dialog === 'publish'} onClose={() => setDialog(null)} onPublish={publish} />
       {/* Not part of `dialog`: that state is opened by the top bar's buttons,
           this one by an exit the author attempted. They can never be open at
