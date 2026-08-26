@@ -4,7 +4,10 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 
-import { PageSettingsBody } from '@/components/pageBuilder/editor/PageSettingsDialog';
+import {
+  PageSettingsBody, PAGE_SETTINGS_SECTIONS,
+  GeneralSection, SeoSection, JsonLdSection, HistorySection,
+} from '@/components/pageBuilder/editor/PageSettingsDialog';
 import { PreviewBody } from '@/components/pageBuilder/editor/PreviewDialog';
 import { readSource } from '../sourceScan.mjs';
 
@@ -53,8 +56,33 @@ const PAGE = (over = {}) => ({
 const PROMO = () => PAGE({ pageType: 'promotion', promotionId: '', promotionOrder: 0, promotionCover: '' });
 const TIER = { canUseAdvanced: true, canPublish: true, canManagePreview: true };
 
-const settings = (page = PAGE()) => renderToStaticMarkup(createElement(PageSettingsBody, {
-  page, pageId: 'p1', dispatch: noop, open: true,
+const noopPatch = noop;
+
+/**
+ * The UNION across every menu section, which is what the whole check is for.
+ *
+ * Rendering `PageSettingsBody` alone would show only the ACTIVE section, and a
+ * field lost from an inactive one would be invisible — the exact failure mode
+ * this file exists to catch. So each section is rendered on its own and the
+ * results concatenated, the same way round 15 unions the three tab bodies.
+ *
+ * The order is PAGE_SETTINGS_SECTIONS' order, taken from the component rather
+ * than retyped, so a reordered menu reorders this too and the ordered set below
+ * stays meaningful.
+ */
+const sectionHtml = (id, page) => ({
+  general: () => renderToStaticMarkup(createElement(GeneralSection, { page, patch: noopPatch })),
+  seo:     () => renderToStaticMarkup(createElement(SeoSection, { seo: page?.seo ?? {}, patchSeo: noopPatch })),
+  jsonld:  () => renderToStaticMarkup(createElement(JsonLdSection, {})),
+  history: () => renderToStaticMarkup(createElement(HistorySection, { pageId: 'p1', open: true })),
+}[id]());
+
+const settings = (page = PAGE()) =>
+  PAGE_SETTINGS_SECTIONS.map((s) => sectionHtml(s.id, page)).join('');
+
+/** The body itself — menu chrome plus whichever section is open by default. */
+const body = (page = PAGE(), over = {}) => renderToStaticMarkup(createElement(PageSettingsBody, {
+  page, pageId: 'p1', dispatch: noop, open: true, dirty: false, saving: false, ...over,
 }));
 const preview = (over = {}) => renderToStaticMarkup(createElement(PreviewBody, {
   page: PAGE(), pageId: 'p1', tier: TIER, open: true, ...over,
@@ -131,11 +159,56 @@ const MOCKUP_DROPS = [
 
 // ── 1. the union, exact and ordered ───────────────────────────────────────
 
-test('PageSettingsBody renders exactly the fields it rendered before the split', () => {
+test('the union across all menu sections equals the pre-relocation field set', () => {
+  /**
+   * ── THE SET IS INVARIANT; ONLY ITS ARRANGEMENT CHANGED ───────────────────
+   * The literal below is unchanged from the capture taken before the menu
+   * existed. What changed is how it is GATHERED — from four sections instead of
+   * one scrolling form — which is precisely the change that can lose a field
+   * without any section looking wrong.
+   */
   assert.deepEqual(labelsIn(settings()), SETTINGS_GENERAL,
     'the page settings field set changed. A field in NO menu section is invisible from inside '
     + 'every section, which is why this is an exact ordered set and not a lower bound.');
-  assert.deepEqual(groupsIn(settings()), ['ทั่วไป', 'SEO', 'ประวัติการเผยแพร่']);
+});
+
+test('the menu declares exactly four sections, and the body renders one per item', () => {
+  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.id), ['general', 'seo', 'jsonld', 'history']);
+  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.label),
+    ['ข้อมูลหน้า', 'SEO', 'JSON-LD', 'ประวัติการเผยแพร่']);
+
+  // The nav renders one button per declared section — the list and the strip
+  // come from ONE declaration, so they cannot disagree about what exists.
+  assert.deepEqual(buttonsIn(body()), PAGE_SETTINGS_SECTIONS.map((s) => s.label));
+});
+
+test('each section renders exactly its own fields and none of another section\'s', () => {
+  /**
+   * Round 15's discipline, per section: exact sets, so a field that leaks
+   * across a boundary is caught in both directions at once.
+   */
+  const per = {
+    general: ['ชื่อหน้า', 'URL (slug)', 'ชนิดหน้า', 'ธีม'],
+    seo: ['Meta title', 'Meta description', 'Canonical URL', 'OG image URL', 'ไม่ให้ Google เก็บหน้านี้ (noindex)'],
+    jsonld: [],
+    history: [],
+  };
+  for (const [id, expected] of Object.entries(per)) {
+    assert.deepEqual(labelsIn(sectionHtml(id, PAGE())), expected, `the ${id} section's fields changed`);
+  }
+
+  // Every field belongs to exactly one section — no duplicates across the union.
+  const all = PAGE_SETTINGS_SECTIONS.flatMap((s) => labelsIn(sectionHtml(s.id, PAGE())));
+  assert.equal(new Set(all).size, all.length, 'a field is rendered by more than one section');
+});
+
+test('each section carries exactly its own group legend', () => {
+  const legends = {
+    general: ['ทั่วไป'], seo: ['SEO'], jsonld: ['JSON-LD'], history: ['ประวัติการเผยแพร่'],
+  };
+  for (const [id, expected] of Object.entries(legends)) {
+    assert.deepEqual(groupsIn(sectionHtml(id, PAGE())), expected);
+  }
 });
 
 test('PageSettingsBody on a PROMOTION page renders the four extra fields too', () => {
@@ -221,7 +294,9 @@ test('neither dialog offers a Save or Cancel — autosave owns persistence', () 
 
   // PageSettingsBody renders no button at all today; PreviewBody's three are
   // the preview ACTIONS, which legitimately write immediately.
-  assert.deepEqual(buttonsIn(settings(PROMO())), []);
+  // No SECTION renders a button; the only buttons in the body are the menu's
+  // own nav items, asserted above against the declared section list.
+  for (const s of PAGE_SETTINGS_SECTIONS) assert.deepEqual(buttonsIn(sectionHtml(s.id, PROMO())), []);
   assert.deepEqual(buttonsIn(preview()), PREVIEW_BUTTONS);
 });
 
@@ -268,4 +343,56 @@ test('CONTROL: an altered call shape is caught', () => {
   assert.equal(code.includes('enablePreviewLink(pageId, input, true)'), false);
   assert.equal(code.includes('revokePreviewAccess()'), false,
     'revoke is called with no page id — that would revoke nothing, or the wrong page');
+});
+
+// ── 5. the footer states SAVE STATE, it does not offer a save ─────────────
+
+test('the body ends with a save-state line, in all three states', () => {
+  /**
+   * docs/page-settings-redesign.md §D's resolution, as behaviour: the footer
+   * answers "is this safe yet" instead of offering a second way to make it so.
+   * All three states are asserted because the useful one — dirty — is the one a
+   * mistake would render as "saved".
+   */
+  const stateText = (over) => {
+    const doc = docOf(body(PAGE(), over));
+    return doc.querySelector('[data-testid="settings-save-state"]')?.textContent.replace(/\s+/g, ' ').trim();
+  };
+  assert.equal(stateText({ dirty: false, saving: false }), 'บันทึกแล้ว');
+  assert.equal(stateText({ dirty: true, saving: false }), 'ยังไม่ได้บันทึก — ระบบจะบันทึกให้อัตโนมัติ');
+  assert.equal(stateText({ dirty: true, saving: true }), 'กำลังบันทึก…');
+});
+
+test('CONTROL: the save-state reader would see a different string', () => {
+  // Without this, three equal-checks against one selector could all be passing
+  // on a reader that returns the same thing regardless of props.
+  const a = docOf(body(PAGE(), { dirty: false, saving: false }));
+  const b = docOf(body(PAGE(), { dirty: true, saving: false }));
+  const read = (d) => d.querySelector('[data-testid="settings-save-state"]').textContent.trim();
+  assert.notEqual(read(a), read(b));
+  assert.equal(docOf('<p>x</p>').querySelector('[data-testid="settings-save-state"]'), null);
+});
+
+test('the JSON-LD section makes a statement and no status claim', () => {
+  /**
+   * The mockup drew an "Auto generated" badge, five type chips and a "· 5
+   * Types" card. Nothing emits JSON-LD for a builder page, so each of those
+   * would be a claim with no source. The section says what is true instead.
+   *
+   * Asserted as an ABSENCE of the claim vocabulary as well as a presence of the
+   * copy, because the failure worth catching is a future round adding a chip
+   * back without adding a generator.
+   */
+  const html = sectionHtml('jsonld', PAGE());
+  assert.deepEqual(labelsIn(html), [], 'the JSON-LD section grew a control — nothing reads jsonLd yet');
+  assert.deepEqual(buttonsIn(html), []);
+  assert.deepEqual(groupsIn(html), ['JSON-LD']);
+
+  const text = docOf(html).body.textContent.replace(/\s+/g, ' ').trim();
+  assert.match(text, /ยังไม่มีการสร้าง JSON-LD/, 'the section no longer says that nothing is generated');
+  for (const claim of ['Auto generated', 'Types', 'WebPage', 'BreadcrumbList', 'FAQPage']) {
+    assert.equal(text.includes(claim), false,
+      `the JSON-LD section claims "${claim}". Nothing emits JSON-LD for a builder page — see `
+      + 'docs/page-settings-redesign.md §F.2 before adding a status a generator cannot back.');
+  }
 });
