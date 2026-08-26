@@ -205,7 +205,7 @@ function TypeButton({ type, state, onPick }) {
         'flex items-start justify-between gap-2 rounded-9e-md border border-[var(--surface-border)] px-3 py-2.5 text-left text-[13px]',
         disabled
           ? 'cursor-not-allowed opacity-50'
-          : 'text-9e-navy hover:border-9e-action/40 hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]'
+          : 'text-9e-navy hover:border-9e-action/40 hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy'
       )}
     >
       {/* Leading icon in a tinted rounded tile. The tint is the SAME pair this
@@ -221,7 +221,7 @@ function TypeButton({ type, state, onPick }) {
           className={cn(
             'flex h-7 w-7 shrink-0 items-center justify-center rounded-9e-md',
             disabled
-              ? 'bg-9e-ice text-9e-slate-dp-50 dark:bg-[#0D1B2A]'
+              ? 'bg-9e-ice text-9e-slate-dp-50 dark:bg-9e-navy'
               : 'bg-9e-action/10 text-9e-action'
           )}
           aria-hidden
@@ -247,7 +247,7 @@ function TypeButton({ type, state, onPick }) {
           author sees instead of a clickable button, and a JSX path deleted for
           being cold is a path that is not there when the state comes back. */}
       {state === 'soon' && (
-        <span className="shrink-0 rounded-full bg-9e-ice px-1.5 py-px text-[9px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]">
+        <span className="shrink-0 rounded-full bg-9e-ice px-1.5 py-px text-[9px] text-9e-slate-dp-50 dark:bg-9e-navy">
           เร็ว ๆ นี้
         </span>
       )}
@@ -268,7 +268,7 @@ function AdvancedLockedSummary({ types }) {
   return (
     <p
       data-testid="picker-advanced-locked"
-      className="flex items-start gap-2 rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2.5 text-[12px] text-9e-slate-dp-50 dark:bg-[#0D1B2A]"
+      className="flex items-start gap-2 rounded-9e-md border border-[var(--surface-border)] bg-9e-ice px-3 py-2.5 text-[12px] text-9e-slate-dp-50 dark:bg-9e-navy"
     >
       <Lock className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>
@@ -347,7 +347,7 @@ export function SectionPickerBody({
                   // convention across the builder, not a second one.
                   active
                     ? 'border-9e-action/40 bg-9e-action/10 font-medium text-9e-action'
-                    : 'border-[var(--surface-border)] text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]'
+                    : 'border-[var(--surface-border)] text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy'
                 )}
               >
                 {pill.title}
@@ -541,7 +541,7 @@ export function SectionPicker({ open, onClose, onPick }) {
               natural height and never scrolls away from the close button. */}
           <div data-testid="picker-titlebar" className="mb-3 flex shrink-0 items-center justify-between">
             <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เพิ่ม section</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy">
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>

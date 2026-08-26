@@ -110,7 +110,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
         <p className="truncate text-sm font-bold text-9e-navy dark:text-white">
           {page?.title || '(ไม่มีชื่อ)'}
         </p>
-        <span className="truncate text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+        <span className="truncate text-xs text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
           {statusLine(editor)}
         </span>
       </div>
@@ -119,7 +119,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
         <button
           type="button"
           onClick={onOpenSettings}
-          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy"
         >
           <Settings className="h-4 w-4" /> ตั้งค่าหน้า
         </button>
@@ -127,7 +127,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
           type="button"
           onClick={onSave}
           disabled={saving || Boolean(conflict)}
-          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-9e-navy"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           บันทึกฉบับร่าง
@@ -148,7 +148,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
           onClick={onOpenPreview}
           disabled={!tier?.canManagePreview}
           title={tier?.canManagePreview ? undefined : 'ต้องมีสิทธิ์ marketing ขึ้นไป'}
-          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+          className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-9e-navy"
         >
           <Eye className="h-4 w-4" /> Preview
         </button>

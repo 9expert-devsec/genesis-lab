@@ -172,7 +172,7 @@ export function IconPicker({ value, onChange, invalid }) {
         >
           <span className={cn(
             'flex h-6 w-6 shrink-0 items-center justify-center rounded-9e-md',
-            Icon ? 'bg-9e-action/10 text-9e-action' : 'bg-9e-ice text-9e-slate-dp-50 dark:bg-[#0D1B2A]'
+            Icon ? 'bg-9e-action/10 text-9e-action' : 'bg-9e-ice text-9e-slate-dp-50 dark:bg-9e-navy'
           )} aria-hidden>
             {Icon ? <Icon className="h-4 w-4" /> : <Search className="h-3 w-3" />}
           </span>
@@ -194,7 +194,7 @@ export function IconPicker({ value, onChange, invalid }) {
         >
           <div className="mb-3 flex shrink-0 items-center justify-between">
             <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เลือกไอคอน</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy">
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>

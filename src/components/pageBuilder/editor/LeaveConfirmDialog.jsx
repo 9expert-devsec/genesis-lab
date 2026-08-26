@@ -106,7 +106,7 @@ export function LeaveConfirmDialog({ open, reason, onCancel, onConfirm }) {
               <button
                 ref={cancelRef}
                 type="button"
-                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                className="rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy"
               >
                 อยู่ต่อ
               </button>

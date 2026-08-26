@@ -12,7 +12,7 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { readSource } from '../sourceScan.mjs';
+import { readSource, walkSources } from '../sourceScan.mjs';
 import { compile, declarationsFor, require_ } from '../twCompile.mjs';
 
 /**
@@ -330,6 +330,95 @@ test('the ONE surface class that replaced the dark hexes is a real, theme-aware 
     assert.match(readSource(f).code, /var\(--surface-hover\)/,
       `${f} dropped its dark surface hex without taking the theme-aware token`);
   }
+});
+
+// ── 2c. ROUND 30: THE COLOUR BAN WIDENS TO THE WHOLE EDITOR SURFACE ─────────
+
+/**
+ * Round 28 banned raw hex in the six files its Figma pass reached. Round 30
+ * retires the rest of the editor surface's literals onto the same tokens, so
+ * the ban widens with them: every source file UNDER the editor directory,
+ * walked, rather than a hand-kept list a new file joins unnoticed.
+ *
+ * The scanner grows too. rawHexes above sees only a leading-hash literal, and
+ * the same colour hides as a numeric rgb()/rgba() and inside a [color:...]
+ * arbitrary value — a ban that catches only the shape it looked for is the
+ * false green this suite has hit before. A var() reference is NOT raw: it is
+ * the token indirection the ban protects, so rgb(var(--x)), [color:var(--x)]
+ * and color-mix(in srgb, var(--x) …) all pass.
+ */
+const EDITOR_DIR = 'src/components/pageBuilder/editor';
+
+const rawColors = (code) => [...new Set([
+  ...(code.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []),
+  ...(code.match(/rgba?\(\s*[\d.][^)]*\)/g) ?? []),
+])].sort();
+
+test('no file on the editor surface carries a raw colour literal', () => {
+  const files = walkSources(EDITOR_DIR);
+  assert.ok(files.length >= 20,
+    `the scope walk reached only ${files.length} files — it is not covering the surface`);
+  for (const f of files) {
+    assert.deepEqual(rawColors(f.code), [],
+      `${f.rel} carries a raw colour literal. Resolve it to a 9e-* token or a `
+      + '--surface-* / --9e-* CSS variable; a hex or a numeric rgb() opts the surface out of dark mode.');
+  }
+});
+
+test('CONTROL: the colour scanner catches every form, and reads var()/color-mix as tokens', () => {
+  assert.deepEqual(rawColors('const a = "dark:bg-[#0D1B2A]";'), ['#0D1B2A']);
+  assert.deepEqual(rawColors('const a = "text-[#abc]";'), ['#abc']);
+  assert.deepEqual(rawColors('const a = "outline: 1px solid rgb(0,92,255)";'), ['rgb(0,92,255)']);
+  assert.deepEqual(rawColors('const a = "outline: rgba(0,92,255,.5)";'), ['rgba(0,92,255,.5)']);
+  assert.deepEqual(rawColors('const a = "[color:#ff0000]";'), ['#ff0000']);
+  assert.deepEqual(
+    rawColors('const a = "[color:var(--pb-accent-fill)] bg-[var(--surface-hover)] '
+      + 'rgb(var(--x) / .5) color-mix(in srgb, var(--9e-action) 50%, transparent)";'),
+    [],
+    'a var()/color-mix reference was read as a raw value — that is the mechanism the ban protects');
+});
+
+test('CONTROL: the sweep fails and NAMES a file round 28 did not touch when it gains a hex', () => {
+  // CanvasToolbar is outside ROUND_28_FILES, so a failure here proves the
+  // widened scope — not the old six — carries the ban now.
+  const f = 'src/components/pageBuilder/editor/CanvasToolbar.jsx';
+  const poisoned = readSource(f).code + '\nconst x = "dark:bg-[#0D1B2A]";';
+  assert.deepEqual(rawColors(poisoned), ['#0D1B2A'],
+    'the scanner did not see the spliced hex, so the naming below would prove nothing');
+  assert.throws(
+    () => assert.deepEqual(rawColors(poisoned), [], `${f} carries a raw colour literal.`),
+    (e) => e.message.includes('CanvasToolbar.jsx'),
+    'the failure must name the offending file');
+});
+
+test('the tokens that replaced dark: hexes compile to their colour, not to nothing', async () => {
+  /**
+   * Every hex retired this round was a dark: variant — the case the brief calls
+   * out, where a wrong token shows in one theme and not the other. These are
+   * 9e-* colours from the config (ONE value, both themes), so the RENDERED
+   * colour is read in a browser (the mapping table and scripts/_probe-*); what
+   * this pins is that the dark: utility emits the token's channels rather than
+   * compiling to nothing.
+   */
+  const cases = [
+    ['dark:bg-9e-navy', 'background-color', 'rgb(13 27 42'],
+    ['dark:hover:bg-9e-navy', 'background-color', 'rgb(13 27 42'],
+    ['dark:enabled:hover:bg-9e-navy', 'background-color', 'rgb(13 27 42'],
+    ['dark:text-9e-slate-dp-400', 'color', 'rgb(158 166 178'],
+  ];
+  for (const [cls, prop, channels] of cases) {
+    const css = await compile([{ raw: `const a = "${cls}";`, extension: 'js' }]);
+    const decl = declarationsFor(css, cls).find((d) => d.startsWith(`${prop}:`));
+    assert.ok(decl, `${cls} set no ${prop} — it compiled to nothing`);
+    assert.ok(decl.includes(channels),
+      `${cls} paints "${decl}", not the ${channels} …) channels the token names`);
+  }
+});
+
+test('CONTROL: the compiled-token check rejects a colour class that resolves to nothing', async () => {
+  const css = await compile([{ raw: 'const a = "dark:bg-9e-notacolor";', extension: 'js' }]);
+  assert.deepEqual(declarationsFor(css, 'dark:bg-9e-notacolor'), [],
+    'a non-existent token compiled to a rule, so the emptiness the check rejects is unreachable');
 });
 
 test('no panel invents a corner radius', () => {

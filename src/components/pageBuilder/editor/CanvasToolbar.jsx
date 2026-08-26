@@ -67,7 +67,7 @@ export function CanvasToolbar() {
                 'inline-flex items-center gap-1.5 rounded-[9px] px-2.5 py-1 text-xs font-medium transition-colors',
                 active
                   ? 'bg-9e-action text-white'
-                  : 'text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]'
+                  : 'text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy'
               )}
             >
               <Icon className="h-4 w-4" aria-hidden />

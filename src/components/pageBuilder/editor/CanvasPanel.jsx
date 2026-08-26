@@ -76,12 +76,12 @@ function canvasCss(hoverKey, selKey) {
   const rules = ['[data-pb-canvas] iframe { pointer-events: none; }'];
   if (hoverKey && hoverKey !== selKey) {
     rules.push(
-      `[data-pb-path="${hoverKey}"] { outline: 1px dashed rgba(0,92,255,.5); outline-offset: -1px; }`
+      `[data-pb-path="${hoverKey}"] { outline: 1px dashed color-mix(in srgb, var(--9e-action) 50%, transparent); outline-offset: -1px; }`
     );
   }
   if (selKey) {
     rules.push(
-      `[data-pb-path="${selKey}"] { outline: 2px solid #005CFF; outline-offset: -2px; }`
+      `[data-pb-path="${selKey}"] { outline: 2px solid var(--9e-action); outline-offset: -2px; }`
     );
   }
   return rules.join('\n');

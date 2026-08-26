@@ -38,7 +38,7 @@ function ToolButton({ onClick, active, disabled, label, children }) {
       onClick={onClick}
       className={cn(
         'rounded p-1 text-9e-slate-dp-50 transition-colors',
-        'hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#0D1B2A] dark:hover:text-white',
+        'hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-9e-navy dark:hover:text-white',
         'disabled:pointer-events-none disabled:opacity-30',
         active && 'bg-9e-action/10 text-9e-action'
       )}

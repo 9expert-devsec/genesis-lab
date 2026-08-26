@@ -97,7 +97,7 @@ export function PublishDialog({ open, onClose, onPublish }) {
         >
           <div className="mb-3 flex items-center justify-between">
             <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เผยแพร่หน้านี้</Dialog.Title>
-            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]">
+            <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy">
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>

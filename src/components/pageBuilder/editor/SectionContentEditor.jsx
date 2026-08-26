@@ -648,14 +648,14 @@ function ItemList({ items, set, fields, addLabel, emptyWarn }) {
               <button
                 type="button" data-move="up" data-row={i} disabled={i === 0}
                 aria-label={`ย้ายรายการที่ ${i + 1} ขึ้น`} onClick={() => move(i, 'up')}
-                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-[#0D1B2A]"
+                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
               >
                 <ChevronUp className="h-3 w-3" />
               </button>
               <button
                 type="button" data-move="down" data-row={i} disabled={i === list.length - 1}
                 aria-label={`ย้ายรายการที่ ${i + 1} ลง`} onClick={() => move(i, 'down')}
-                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-[#0D1B2A]"
+                className="rounded p-0.5 text-9e-slate-dp-50 enabled:hover:bg-9e-ice enabled:hover:text-9e-action disabled:opacity-30 dark:enabled:hover:bg-9e-navy"
               >
                 <ChevronDown className="h-3 w-3" />
               </button>
