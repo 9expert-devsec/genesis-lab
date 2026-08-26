@@ -386,6 +386,11 @@ working precedent — but note it would require rewriting `presets.js`'s five
 class maps from `sm:`/`md:`/`lg:` to `@`-variants, which changes the **published**
 page, not only the canvas.
 
+**Round 19 costed the iframe route** — see [docs/canvas-iframe-cost.md](./canvas-iframe-cost.md).
+Headline, because it inverts the obvious estimate: selection and hover cost ZERO
+(React attaches its delegated listeners to a portal container, measured in
+Chrome), and the hard part is keeping the frame sized to its content.
+
 ---
 
 ## 8. Findings, ordered by how likely an author is to hit them
