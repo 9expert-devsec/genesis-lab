@@ -105,29 +105,14 @@ export function MasterclassCard({ course }) {
             )}
           </div>
 
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <span className="text-[28px] font-bold text-[#1d64f2]">
-                {firstBatch.effective_price?.toLocaleString("th-TH")} บาท
-              </span>
-              {firstBatch.is_early_bird && (
-                <span className="text-base text-[#64748b] line-through">
-                  {firstBatch.original_price?.toLocaleString("th-TH")} บาท
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-[#64748b]">
-              {firstBatch.is_early_bird
-                ? "*ราคาพิเศษลงทะเบียนล่วงหน้า Early Bird"
-                : scheduleNote}
-            </p>
-          </div>
-        </div>
-
-        {firstBatch ? (
-          <div className="flex flex-col gap-2">
-            {/* Price */}
-            {/* <div className="flex flex-col gap-1">
+          {/* Guarded because `firstBatch` is undefined whenever a published
+              course has no `open`/`full` batch — getPublishedMasterclasses
+              attaches only those two statuses, so `batches: []` is an ordinary
+              state, not an error. Without this the card throws and takes the
+              whole /masterclass route to a 500. The card's own no-batch state
+              is the `ยังไม่เปิดรับสมัคร` branch at the bottom of this file. */}
+          {firstBatch && (
+            <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <span className="text-[28px] font-bold text-[#1d64f2]">
                   {firstBatch.effective_price?.toLocaleString("th-TH")} บาท
@@ -143,8 +128,12 @@ export function MasterclassCard({ course }) {
                   ? "*ราคาพิเศษลงทะเบียนล่วงหน้า Early Bird"
                   : scheduleNote}
               </p>
-            </div> */}
+            </div>
+          )}
+        </div>
 
+        {firstBatch ? (
+          <div className="flex flex-col gap-2">
             {/* Countdown */}
             {firstBatch.is_early_bird && firstBatch.early_bird_deadline && (
               <div className="flex w-full flex-col gap-2 rounded-xl bg-[#f1f5f9] p-3">
