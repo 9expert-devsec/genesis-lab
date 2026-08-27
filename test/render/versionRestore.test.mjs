@@ -128,10 +128,21 @@ test('the restore goes through the confirmation, and through saveDraftContent', 
     );
   });
 
+  /**
+   * ── AMENDED IN ROUND 37, FLAGGED NOT QUIETLY EDITED ──────────────────────
+   * Round 34 matched `onConfirm={() => restore(pending)}` exactly. Round 37
+   * gave restore a second parameter — which path the author chose — so the
+   * arrow is now `(mode) => restore(pending, mode)`.
+   *
+   * The GUARANTEE is untouched and is still asserted in the same two halves:
+   * restore() has exactly ONE caller, and that caller is the confirmation. Only
+   * the argument list moved. The default itself — that calling with no mode
+   * PRESERVES — is asserted separately in test/render/draftBackupChoice.
+   */
   await t.test('restore() is reached from exactly ONE place: the confirmation accepting', () => {
     assert.equal(countCallSites(src, 'restore'), 1, 'restore() has more than one caller');
     assert.match(
-      src, /onConfirm=\{\(\) => restore\(pending\)\}/,
+      src, /onConfirm=\{\(mode\) => restore\(pending, mode\)\}/,
       'the confirmation no longer is what calls restore()'
     );
   });

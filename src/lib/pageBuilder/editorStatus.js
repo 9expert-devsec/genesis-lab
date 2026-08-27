@@ -143,6 +143,42 @@ export function restoreWouldLoseWork(state) {
 }
 
 /**
+ * Is there a STORED draft that a Draft Backup could actually preserve?
+ *
+ * ── WHY THIS IS NARROWER THAN restoreWouldLoseWork, AND MUST BE ────────────
+ * That function ORs two losses because either makes a restore irreversible, and
+ * the warning has to cover both. This one asks a different question: what can
+ * round 37's backup actually SAVE?
+ *
+ * Only the stored draft. backupDraftBeforeRestore reads the page document on
+ * the server; keystrokes sitting in this tab inside the 5s autosave debounce
+ * have never been sent, so there is nothing on the server to copy. They are
+ * still lost by the reload after a restore, exactly as they were before this
+ * round.
+ *
+ * Keeping the two predicates separate is what lets the dialog offer the backup
+ * only when it means something, and say plainly what it does not cover. Folding
+ * them together would let the UI promise to preserve work it cannot reach.
+ */
+export function backupCanPreserve(state) {
+  return hasPendingDraft(state);
+}
+
+/**
+ * The caveat shown when a restore will lose work the backup cannot reach.
+ *
+ * Empty when there is nothing local pending — the same omit-rather-than-
+ * placeholder rule rounds 33, 35 and 36 followed. Kept out of round 34's
+ * restoreWarning, whose exact strings are asserted, so this is a SECOND line
+ * beside it rather than a rewrite of a guarded sentence.
+ */
+export function unsavedNotBackedUpNote(state) {
+  const localOnly = Boolean(state?.contentDirty) || Boolean(state?.identityDirty);
+  if (!localOnly) return '';
+  return 'การแก้ไขที่ยังไม่บันทึกในแท็บนี้จะไม่ถูกสำรอง เพราะยังไม่ได้ส่งไปที่เซิร์ฟเวอร์';
+}
+
+/**
  * The one line under the page title.
  *
  * The precedence is UNCHANGED from before the split — conflict, then saving,

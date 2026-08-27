@@ -9,8 +9,13 @@ import { History, Loader2 } from 'lucide-react';
  */
 import { RotateCcw, AlertTriangle } from 'lucide-react';
 import { getPageVersions, getPageVersionSnapshot, saveDraftContent } from '@/lib/actions/pageBuilder';
+// Round 37, ADDED rather than folded into the statement above.
+import { backupDraftBeforeRestore } from '@/lib/actions/pageBuilder';
 import { effectiveContent } from '@/lib/pageBuilder/draftState';
 import { canRestoreVersion, restoreWouldLoseWork } from '@/lib/pageBuilder/editorStatus';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory.
+import { backupCanPreserve, unsavedNotBackedUpNote } from '@/lib/pageBuilder/editorStatus';
 // ADDED beside the statements above rather than folded into one — the standing
 // rule in this directory.
 import { versionName } from '@/lib/pageBuilder/versionLabel';
@@ -135,7 +140,7 @@ export function restoreWarning(losesWork, whenText) {
  * — the same rule round 33's preview status card followed: state the case you
  * are actually in, rather than painting every case in the alarming one.
  */
-function ConfirmRestoreDialog({ open, version, losesWork, onCancel, onConfirm }) {
+function ConfirmRestoreDialog({ open, version, losesWork, canBackup, unsavedNote, onCancel, onConfirm }) {
   const cancelRef = useRef(null);
   return (
     <Dialog.Root open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
@@ -162,9 +167,32 @@ function ConfirmRestoreDialog({ open, version, losesWork, onCancel, onConfirm })
               >
                 {restoreWarning(losesWork, versionDescriptor(version))}
               </Dialog.Description>
+              {/*
+                A SECOND line, not a rewrite of the one above: round 34's
+                restoreWarning has its exact strings asserted, and this says
+                something that sentence cannot — that the backup reaches the
+                STORED draft only. Empty when nothing local is pending.
+              */}
+              {unsavedNote && (
+                <p data-testid="confirm-restore-unsaved-note" className="mt-1 text-xs text-amber-700">
+                  {unsavedNote}
+                </p>
+              )}
             </div>
           </div>
-          <div className="mt-4 flex justify-end gap-2">
+          {/*
+            ── TWO PATHS, AND THE PRESERVING ONE IS THE DEFAULT ────────────────
+            Offered only when there is a stored draft a backup could actually
+            save (backupCanPreserve). With nothing to preserve the second button
+            would be a choice between two identical outcomes, which teaches an
+            author that the distinction is decorative.
+
+            The preserving path is default THREE ways that a test can see: it is
+            the primary-styled button, it is the one this dialog calls with no
+            mode argument (restore's own default), and the destructive path is
+            demoted to a plain text button that has to be aimed at.
+          */}
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
             <Dialog.Close asChild>
               <button
                 ref={cancelRef}
@@ -174,13 +202,24 @@ function ConfirmRestoreDialog({ open, version, losesWork, onCancel, onConfirm })
                 ยกเลิก
               </button>
             </Dialog.Close>
+            {canBackup && (
+              <button
+                type="button"
+                data-testid="confirm-restore-replace"
+                onClick={() => onConfirm('replace')}
+                className="rounded-9e-md px-3 py-1.5 text-sm text-red-700 underline decoration-dotted underline-offset-2 hover:bg-red-50"
+              >
+                เขียนทับโดยไม่สำรอง
+              </button>
+            )}
             <button
               type="button"
               data-testid="confirm-restore-accept"
-              onClick={onConfirm}
+              data-default-path={canBackup ? 'backup' : 'replace'}
+              onClick={() => onConfirm()}
               className="rounded-9e-md bg-red-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-red-700"
             >
-              กู้คืนเป็นฉบับร่าง
+              {canBackup ? 'สำรองฉบับร่างเดิมไว้ แล้วกู้คืน' : 'กู้คืนเป็นฉบับร่าง'}
             </button>
           </div>
         </Dialog.Content>
@@ -235,17 +274,53 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
    * effectiveContent's draft branch cannot fire and it picks the snapshot's own
    * content — which is what "restore this version" means.
    */
-  const restore = useCallback(async (version) => {
+  /**
+   * `mode` DEFAULTS TO 'backup' — requirement §9's recommended path, expressed
+   * as a default parameter rather than only as a highlighted button. A default
+   * that lives in the markup is a default the next caller can forget; this one
+   * means `restore(version)` preserves, and destroying takes saying so.
+   */
+  const restore = useCallback(async (version, mode = 'backup') => {
     setPending(null);
     setError('');
     setBusy(version._id);
     try {
+      /**
+       * ── ORDER: READ, THEN BACK UP, THEN OVERWRITE ─────────────────────────
+       * The snapshot fetch comes first because it is READ-ONLY: if the version
+       * has been deleted since this dialog opened, nothing has happened yet and
+       * no pointless backup row was written.
+       *
+       * The backup then comes strictly BEFORE the write that destroys the
+       * draft, and its failure ABORTS. That is the whole ordering argument —
+       * see backupDraftBeforeRestore: a backup written but not replaced is
+       * recoverable, a draft replaced with no backup is the loss this exists to
+       * prevent. backupDraftVersion throws rather than swallowing precisely so
+       * this branch can be taken.
+       */
       const snap = await getPageVersionSnapshot(version._id);
       if (!snap?.snapshot) {
         setError('ไม่พบเวอร์ชันนี้แล้ว — อาจถูกลบไปหลังจากเปิดหน้าต่างนี้');
         setBusy(null);
         return;
       }
+
+      if (mode === 'backup') {
+        const backup = await backupDraftBeforeRestore(pageId, savedUpdatedAt);
+        if (backup?.conflict) {
+          dispatch?.({ type: 'SAVE_CONFLICT', message: backup.error });
+          setBusy(null);
+          return;
+        }
+        if (!backup?.ok) {
+          // ABORT. The draft is untouched, and saying so matters more than
+          // completing the restore the author asked for.
+          setError(backup?.error ?? 'สำรองฉบับร่างไม่สำเร็จ — ยังไม่ได้กู้คืน ฉบับร่างเดิมยังอยู่ครบ');
+          setBusy(null);
+          return;
+        }
+      }
+
       const res = await saveDraftContent(pageId, effectiveContent(snap.snapshot), savedUpdatedAt);
       if (res?.conflict) {
         // The document moved under this tab. The banner owns this state, exactly
@@ -419,8 +494,11 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
         open={pending !== null}
         version={pending}
         losesWork={restoreWouldLoseWork(editor)}
+        canBackup={backupCanPreserve(editor)}
+        unsavedNote={unsavedNotBackedUpNote(editor)}
         onCancel={() => setPending(null)}
-        onConfirm={() => restore(pending)}
+        // No argument: restore's own default is the preserving path.
+        onConfirm={(mode) => restore(pending, mode)}
       />
     </>
   );

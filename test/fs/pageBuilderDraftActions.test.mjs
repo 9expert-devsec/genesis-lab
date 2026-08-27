@@ -1689,4 +1689,147 @@ test('the draft/publish action layer', async (t) => {
       'the backup shape does not normalise through the same pick'
     );
   });
+
+  // ── H / F / I — the restore SEQUENCE, driven. Round 37, commit 2 ─────────
+  //
+  // The dialog is a portal and cannot be clicked here, so these drive the two
+  // ACTIONS in the order the dialog calls them. That is the sequence whose
+  // correctness the round turns on; which button is wired to which mode is
+  // asserted from source in test/render/draftBackupChoice.
+
+  /** The dialog's preserving path: back up, then overwrite. */
+  const restoreWithBackup = async (versionId) => {
+    const tok = token(row());
+    const snap = await getPageVersionSnapshot(versionId);
+    const backup = await backupDraftBeforeRestore(PAGE_ID, tok);
+    if (!backup?.ok) return { aborted: true, backup };
+    const saved = await saveDraftContent(PAGE_ID, effectiveContentOf(snap.snapshot), tok);
+    return { aborted: false, backup, saved };
+  };
+
+  /**
+   * `createdAt: new Date(0)` deliberately. fakeDb's clock starts at a fixed base
+   * (2023-11-14) and every write advances it, so a row CREATED during a test is
+   * stamped from that clock — and a fixture dated 2026 would be "newer" than a
+   * backup written seconds later, inverting the ordering these cases turn on.
+   * Anchoring the pre-existing version below the clock makes any created row
+   * newer by construction rather than by choosing a lucky literal.
+   */
+  const seedVersionRow = (title) => seed('PageVersion', {
+    _id: 'pv-old', pageId: PAGE_ID, label: 'publish', versionNumber: 1,
+    actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date(0),
+    snapshot: { ...draftContent({ title }), slug: 'live-slug', status: 'published' },
+  });
+
+  await scenario('H(i) — NO draft present: nothing is backed up, the restore lands', async () => {
+    seedPage({ status: 'published', publishedVersion: 1, draft: null });
+    seedVersionRow('Version One Content');
+
+    const out = await restoreWithBackup('pv-old');
+    assert.equal(out.aborted, false);
+    assert.equal(out.backup.backedUp, false, 'a backup row was written with no draft to preserve');
+    assert.equal(out.saved.ok, true, out.saved.error);
+    assert.equal(row().draft.title, 'Version One Content', 'the restore did not land');
+    assert.equal(backupRows().length, 0, 'the version list gained a backup row for nothing');
+  });
+
+  await scenario('H(ii) — a STORED draft: it survives as a backup, and the restore lands', async () => {
+    seedPage({ status: 'published', publishedVersion: 1, draft: draftContent({ title: MARKER }) });
+    seedVersionRow('Version One Content');
+
+    const out = await restoreWithBackup('pv-old');
+    assert.equal(out.aborted, false);
+    assert.equal(out.backup.backedUp, true, 'the stored draft was not backed up');
+    assert.equal(row().draft.title, 'Version One Content', 'the restore did not land');
+
+    const [backup] = backupRows();
+    assert.ok(backup, 'no backup row exists');
+    assert.equal(backup.snapshot.title, MARKER, 'the backup does not hold the draft that was replaced');
+
+    // …and the list now shows both, with the backup newest.
+    const rows = await getPageVersions(PAGE_ID);
+    assert.equal(rows.length, 2);
+    assert.equal(isDraftBackup(rows[0]), true, 'the backup is not the newest row');
+    assert.equal(rows[0].versionNumber, null);
+    assert.equal(rows[1].versionNumber, 1, 'the published version lost its number');
+  });
+
+  await scenario('H(iii) — UNSAVED keystrokes are NOT preserved, and nothing pretends they are', async () => {
+    /**
+     * The honest limitation. backupDraftBeforeRestore reads the page document
+     * on the SERVER; edits inside the 5s autosave debounce have never been
+     * sent, so there is nothing to copy. On a page with no stored draft the
+     * backup correctly reports it saved nothing — and the dialog says so
+     * through unsavedNotBackedUpNote rather than implying coverage.
+     */
+    seedPage({ status: 'published', publishedVersion: 1, draft: null });
+    seedVersionRow('Version One Content');
+
+    const out = await restoreWithBackup('pv-old');
+    assert.equal(out.backup.backedUp, false,
+      'the backup claimed to preserve work the server has never seen');
+    assert.equal(backupRows().length, 0);
+    // The local keystrokes are not representable here at all — which IS the
+    // finding: nothing server-side can observe them, so nothing server-side can
+    // save them.
+    assert.equal(row().draft.title, 'Version One Content');
+  });
+
+  await scenario('F — when the OVERWRITE fails, the backup is already safe', async () => {
+    // The recoverable half of the ordering argument, constructed: the backup
+    // lands, the save is then refused, and the author has both their draft and
+    // a copy of it.
+    seedPage({ status: 'published', publishedVersion: 1, draft: draftContent({ title: MARKER }) });
+    seedVersionRow('Version One Content');
+
+    const tok = token(row());
+    const backup = await backupDraftBeforeRestore(PAGE_ID, tok);
+    assert.equal(backup.backedUp, true);
+
+    // A stale token stands in for any reason the second write can fail.
+    const saved = await saveDraftContent(PAGE_ID, draftContent({ title: 'x' }), '2020-01-01T00:00:00.000Z');
+    assert.equal(saved.ok, false, 'precondition: the second write must fail');
+
+    assert.equal(row().draft.title, MARKER, 'the draft was lost despite the write failing');
+    assert.equal(backupRows()[0].snapshot.title, MARKER, 'the backup did not survive');
+  });
+
+  await scenario('F — when the BACKUP fails, the draft is never touched', async () => {
+    // The other order's failure, which is the one that must not happen: the
+    // caller aborts, so the overwrite never runs.
+    seedPage({ status: 'published', publishedVersion: 1, draft: draftContent({ title: MARKER }) });
+    seedVersionRow('Version One Content');
+
+    const PageVersionModel = (await import('@/models/PageVersion')).default;
+    const original = PageVersionModel.create;
+    PageVersionModel.create = async () => { throw new Error('disk on fire'); };
+    let out;
+    try { out = await restoreWithBackup('pv-old'); }
+    finally { PageVersionModel.create = original; }
+
+    assert.equal(out.aborted, true, 'the restore continued after the backup failed');
+    assert.equal(out.backup.ok, false);
+    assert.equal(out.backup.error.includes('disk on fire'), true, 'the failure was swallowed');
+    assert.equal(row().draft.title, MARKER, 'the draft was overwritten with no backup — the loss this round prevents');
+    assert.equal(backupRows().length, 0);
+  });
+
+  await scenario('I — a BACKUP can be restored from, through the same path', async () => {
+    // A row only worth writing if it is reachable. No new action, no new pick:
+    // the same fetch-one and the same effectiveContent round 34 built.
+    seedPage({ status: 'published', publishedVersion: 1, draft: draftContent({ title: 'current work' }) });
+    seed('PageVersion', {
+      _id: 'pv-backup', pageId: PAGE_ID, label: DRAFT_BACKUP_LABEL, versionNumber: null,
+      actor: { id: 'u2', name: 'Restorer C' }, createdAt: new Date('2026-08-27T02:00:00.000Z'),
+      snapshot: draftContent({ title: MARKER }),
+    });
+
+    const out = await restoreWithBackup('pv-backup');
+    assert.equal(out.aborted, false);
+    assert.equal(out.saved.ok, true, out.saved?.error);
+    assert.equal(row().draft.title, MARKER, 'restoring FROM a backup did not land');
+    // …and the draft it replaced was itself backed up, so the sequence composes.
+    const titles = backupRows().map((b) => b.snapshot.title).sort();
+    assert.deepEqual(titles, [MARKER, 'current work'].sort(), 'the second backup was not written');
+  });
 });
