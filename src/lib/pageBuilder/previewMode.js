@@ -94,6 +94,40 @@ export function hasPublishedVersion({ publishedVersion, hasVersionRow }) {
   return (Number.isInteger(publishedVersion) && publishedVersion >= 1) || Boolean(hasVersionRow);
 }
 
+/** The URL of a page's published view. One definition; two callers, so far. */
+export function publishedViewHref(slug) {
+  return `/preview/${encodeURIComponent(String(slug ?? ''))}?${PREVIEW_MODE_PARAM}=published`;
+}
+
+/**
+ * May the editor OFFER a link to the published view?
+ *
+ * THREE conditions, and each one is the difference between an affordance and a
+ * dead end — which is the inert-control class round 18 exists to catch:
+ *
+ *   · a PENDING DRAFT. Without one the editor's content IS the live content,
+ *     so there is nothing to compare and the link answers a question nobody
+ *     has. This is also the condition the pending-draft chip already renders
+ *     on, so the two appear and disappear together.
+ *   · a PUBLISHED VERSION. Offering "see what is live" on a page that has never
+ *     been published leads to the unpublished dead end.
+ *   · an ENABLED PREVIEW LINK. The published view lives behind the same preview
+ *     cookie gate as the draft view — deliberately, because a page whose status
+ *     is draft or closed has live fields the public cannot see. With no preview
+ *     link configured, the destination is the revoked-link dead end.
+ *
+ * The requirement's §4 banner pairs this control with a second sentence —
+ * "การเปลี่ยนแปลงนี้บันทึกแล้ว แต่ยังไม่แสดงบนเว็บไซต์". That sentence is NOT
+ * shipped: it is a fourth way of saying what the pending-draft chip already
+ * says, and round 27 refused a second save vocabulary for exactly this reason
+ * (round 34's saver line respected it). What is new here is the way to go and
+ * look, not another way to be told.
+ */
+export function canOfferPublishedView({ pendingDraft, publishedVersion, hasVersionRow, previewEnabled }) {
+  if (!pendingDraft || !previewEnabled) return false;
+  return hasPublishedVersion({ publishedVersion, hasVersionRow });
+}
+
 /**
  * Is the newest version row the one that produced what is live?
  *

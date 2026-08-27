@@ -9,6 +9,9 @@ import { hasPendingDraft, canDiscardDraft, statusLine } from '@/lib/pageBuilder/
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this directory.
 import { draftSaverLine } from '@/lib/pageBuilder/editorStatus';
+// ADDED beside the two statements above rather than folded into either — the
+// standing rule in this directory.
+import { canOfferPublishedView, publishedViewHref } from '@/lib/pageBuilder/previewMode';
 
 const STATUS_LABEL = {
   draft: 'ฉบับร่าง', scheduled: 'ตั้งเวลา', published: 'เผยแพร่แล้ว',
@@ -95,6 +98,12 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
   const status = page?.status ?? 'draft';
   const pendingDraft = hasPendingDraft(editor);
   const saver = draftSaverLine(editor);
+  const offerPublished = canOfferPublishedView({
+    pendingDraft,
+    publishedVersion: editor?.publishedVersion,
+    hasVersionRow: false,
+    previewEnabled: editor?.previewEnabled,
+  });
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   return (
@@ -110,6 +119,32 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
           >
             มีฉบับร่างที่ยังไม่เผยแพร่
           </span>
+        )}
+        {/*
+          THE WAY TO GO AND LOOK, on the chip's own condition plus two more.
+
+          The requirement puts this above the canvas, paired with a sentence
+          saying the change is saved but not yet on the site. The SENTENCE is
+          not shipped — it is a fourth way of saying what the chip beside it
+          already says, and round 27 refused a second save vocabulary. What is
+          new is the control, so the control is all that is added, and it sits
+          on the fact it relates to rather than in a band of its own.
+
+          A plain anchor, not a button: it is a navigation to a read-only view,
+          it opens in a new tab so the editor is never navigated away from with
+          unsaved work, and rel=noreferrer keeps the admin URL out of the
+          destination's referer.
+        */}
+        {offerPublished && (
+          <a
+            data-testid="view-published-link"
+            href={publishedViewHref(page?.slug)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--surface-border)] px-2 py-0.5 text-[11px] text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy"
+          >
+            <Eye className="h-3 w-3" aria-hidden /> ดูเวอร์ชันที่เผยแพร่อยู่
+          </a>
         )}
         {/*
           WHO holds the pending draft, beside the chip that says one exists —

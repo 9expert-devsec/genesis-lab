@@ -91,6 +91,18 @@ export const initialEditorState = ({
    */
   currentUserName: String(currentUserName ?? ''),
   draftSavedBy: hasUnpublishedDraft(page) ? String(page?.draft?.savedBy?.name ?? '') : '',
+  /**
+   * Two facts about the STORED document that the working view cannot carry,
+   * captured here for the same reason hadDraft is: composeWorkingView keeps
+   * only LIVE_ONLY_KEYS, which derive from the zod schema, and NEITHER field is
+   * in it — publishedVersion deliberately (round 35: absent from the schema is
+   * what makes it unwritable by a client) and `preview` deliberately (round 2).
+   *
+   * Both exist to decide whether the editor may OFFER the published view. See
+   * canOfferPublishedView: a link that leads to a dead end is worse than none.
+   */
+  publishedVersion: Number.isInteger(page?.publishedVersion) ? page.publishedVersion : null,
+  previewEnabled: Boolean(page?.preview?.enabled && page?.preview?.passwordHash),
   selection: null,       // path into `page`, e.g. ['sections', 0, 'content', 'children', 1]
   contentDirty: false,
   identityDirty: false,

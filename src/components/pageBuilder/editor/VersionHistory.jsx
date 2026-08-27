@@ -14,6 +14,9 @@ import { canRestoreVersion, restoreWouldLoseWork } from '@/lib/pageBuilder/edito
 // ADDED beside the statements above rather than folded into one — the standing
 // rule in this directory.
 import { versionName } from '@/lib/pageBuilder/versionLabel';
+// ADDED beside the statements above rather than folded into one — the standing
+// rule in this directory.
+import { canOfferPublishedView, publishedViewHref } from '@/lib/pageBuilder/previewMode';
 import { cn } from '@/lib/utils';
 
 /**
@@ -299,6 +302,30 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
    * vocabulary there and round 34's saver line respected it.
    */
   const liveVersionId = LIVE_STATUSES.includes(editor?.page?.status) ? rows[0]?._id : null;
+  /**
+   * The ปัจจุบัน row also LINKS to the published view — same destination as the
+   * top bar's, through the same helper.
+   *
+   * `hasVersionRow: true` because being in this list IS the row. `pendingDraft`
+   * is not required here and is passed true: the top bar offers the link to
+   * contrast an unpublished edit against what is live, but an author who has
+   * opened the history is asking about versions directly, and the current one
+   * is worth being able to open whether or not anything is pending.
+   *
+   * NO LINK ON ANY OTHER ROW, and that is a scope call rather than an omission.
+   * Viewing an ARBITRARY past version read-only means rendering a stored
+   * snapshot — which reopens the source question round 36 just decided against
+   * for the live view, and needs its own answer for identity drift, for a
+   * snapshot whose schema has since moved, and for what the banner may claim.
+   * That is its own step; half-building it here would put a link on rows that
+   * cannot honour it.
+   */
+  const offerLiveLink = canOfferPublishedView({
+    pendingDraft: true,
+    publishedVersion: editor?.publishedVersion,
+    hasVersionRow: true,
+    previewEnabled: editor?.previewEnabled,
+  });
 
   return (
     <>
@@ -328,6 +355,17 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
                 >
                   ปัจจุบัน
                 </span>
+              )}
+              {v._id === liveVersionId && offerLiveLink && (
+                <a
+                  data-testid="view-published-link"
+                  href={publishedViewHref(editor?.page?.slug)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-1 underline decoration-dotted underline-offset-2 hover:text-9e-navy dark:hover:text-white"
+                >
+                  ดูเวอร์ชันที่เผยแพร่อยู่
+                </a>
               )}
             </span>
             <button
