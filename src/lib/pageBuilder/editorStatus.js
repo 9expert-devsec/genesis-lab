@@ -63,6 +63,45 @@ export function canDiscardDraft(state) {
 }
 
 /**
+ * May the author restore an old version into the draft right now?
+ *
+ * Deliberately NOT canDiscardDraft with a different name. That one requires a
+ * pending draft, because there is nothing to discard without one; this one must
+ * be available precisely when there is NO draft — restoring onto a clean page
+ * is the harmless case and the common one.
+ *
+ * What it shares with discard is the two states where any write is wrong: not
+ * mid-save (the restore would race a write about to land) and not after a
+ * conflict (the stored document has already moved, so this tab's token is
+ * dead and every write through it will be refused).
+ *
+ * And it needs an id. An unsaved page has no history to restore FROM, but the
+ * check is on the id rather than on the history because the restore writes
+ * through saveDraftContent, which requires one.
+ */
+export function canRestoreVersion(state) {
+  return Boolean(state?.pageId) && !state?.saving && !state?.conflict;
+}
+
+/**
+ * Does restoring a version destroy work that exists nowhere else?
+ *
+ * TWO different losses, and the restore confirmation has to speak to whichever
+ * applies:
+ *   · a STORED draft — unpublished content on the server. Overwritten by the
+ *     restore, and until Draft Backup exists (round 33 step 6) it is gone.
+ *   · LOCAL keystrokes — edits in this tab inside the 5s autosave debounce,
+ *     which the reload after a successful restore throws away.
+ *
+ * Either is enough to make the restore irreversible, so they are OR'd rather
+ * than reported separately. The confirmation is shown either way (a restore is
+ * always consequential); this decides only whether it warns about loss.
+ */
+export function restoreWouldLoseWork(state) {
+  return hasPendingDraft(state) || Boolean(state?.contentDirty) || Boolean(state?.identityDirty);
+}
+
+/**
  * The one line under the page title.
  *
  * The precedence is UNCHANGED from before the split — conflict, then saving,

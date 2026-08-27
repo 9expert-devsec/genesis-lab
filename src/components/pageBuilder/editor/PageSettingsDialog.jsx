@@ -269,10 +269,10 @@ export function PreviewSection({ page, pageId, tier, open, onPreviewState }) {
   );
 }
 
-export function HistorySection({ pageId, open }) {
+export function HistorySection({ pageId, open, editor = null }) {
   return (
     <Group title="ประวัติการเผยแพร่">
-      <VersionHistory pageId={pageId} open={open} />
+      <VersionHistory pageId={pageId} open={open} editor={editor} />
     </Group>
   );
 }
@@ -469,6 +469,8 @@ export function SettingsNav({ section, onSelect, previewStatus }) {
 
 export function PageSettingsBody({
   page, pageId, dispatch, open, dirty, saving, tier, initialSection, previewStatus = null,
+  // The editor state, threaded rather than read from context. See VersionHistory.
+  editor = null,
 }) {
   const [section, setSection] = useState(initialSection ?? PAGE_SETTINGS_SECTIONS[0].id);
   const patch = (p) => dispatch({ type: 'PATCH_PAGE', patch: p });
@@ -513,7 +515,7 @@ export function PageSettingsBody({
               onPreviewState={onPreviewState}
             />
           )}
-          {section === 'history' && <HistorySection pageId={pageId} open={open} />}
+          {section === 'history' && <HistorySection pageId={pageId} open={open} editor={editor} />}
         </div>
       </div>
 
@@ -525,7 +527,8 @@ export function PageSettingsBody({
 
 
 export function PageSettingsDialog({ open, onClose, initialSection = null }) {
-  const { page, pageId, dispatch, dirty, saving, tier } = useEditor();
+  const editor = useEditor();
+  const { page, pageId, dispatch, dirty, saving, tier } = editor;
 
   /**
    * The menu's dot needs the preview status BEFORE the preview section has ever
@@ -589,7 +592,7 @@ export function PageSettingsDialog({ open, onClose, initialSection = null }) {
             key={initialSection ?? 'general'}
             page={page} pageId={pageId} dispatch={dispatch} open={open}
             dirty={dirty} saving={saving} tier={tier} initialSection={initialSection}
-            previewStatus={previewStatus}
+            previewStatus={previewStatus} editor={editor}
           />
         </Dialog.Content>
       </Dialog.Portal>
