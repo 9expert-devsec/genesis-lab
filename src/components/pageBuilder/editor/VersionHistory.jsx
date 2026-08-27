@@ -11,6 +11,9 @@ import { RotateCcw, AlertTriangle } from 'lucide-react';
 import { getPageVersions, getPageVersionSnapshot, saveDraftContent } from '@/lib/actions/pageBuilder';
 import { effectiveContent } from '@/lib/pageBuilder/draftState';
 import { canRestoreVersion, restoreWouldLoseWork } from '@/lib/pageBuilder/editorStatus';
+// ADDED beside the statements above rather than folded into one — the standing
+// rule in this directory.
+import { versionName } from '@/lib/pageBuilder/versionLabel';
 import { cn } from '@/lib/utils';
 
 /**
@@ -40,7 +43,8 @@ import { cn } from '@/lib/utils';
  * going to be one.
  *
  * ── THE LIST IS STILL METADATA ONLY ──────────────────────────────────────
- * getPageVersions still projects `label actor createdAt`; the snapshot is
+ * getPageVersions still projects METADATA ONLY — `label actor createdAt`
+ * plus round 35's `versionNumber`, a small integer per row; the snapshot is
  * fetched one at a time, on the click, by getPageVersionSnapshot. That split is
  * the whole reason commit 1 was a new action rather than a wider projection
  * (measured: the snapshot is ~33x the row that displays it), so this file must
@@ -53,11 +57,31 @@ import { cn } from '@/lib/utils';
  */
 
 const LABELS = { publish: 'เผยแพร่', 'pre-rollback': 'ก่อนย้อนกลับ' };
+// The statuses under which the newest version is what the public is reading.
+const LIVE_STATUSES = ['published', 'scheduled'];
 
 function when(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   return d.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/**
+ * How the confirmation refers to the version it is about to restore.
+ *
+ * The date is kept as the lead and the number is APPENDED, rather than the
+ * number replacing it. Two reasons, and the second is the one that decides it:
+ *   · a row with no number (every row until the backfill runs) must still be
+ *     identifiable, and the date always exists;
+ *   · restoreWarning's sentence is built around "เวอร์ชันวันที่ X" and is round
+ *     34's, with its exact strings asserted. Feeding it a richer X leaves that
+ *     function and its tests untouched — a number in the confirmation is not
+ *     worth rewording a guarded sentence for.
+ */
+function versionDescriptor(version) {
+  const date = when(version?.createdAt);
+  const name = versionName(version);
+  return name ? `${date} (${name})` : date;
 }
 
 /**
@@ -123,7 +147,7 @@ function ConfirmRestoreDialog({ open, version, losesWork, onCancel, onConfirm })
                 data-testid="confirm-restore-body"
                 className="mt-1 text-xs text-9e-slate-dp-50"
               >
-                {restoreWarning(losesWork, when(version?.createdAt))}
+                {restoreWarning(losesWork, versionDescriptor(version))}
               </Dialog.Description>
             </div>
           </div>
@@ -260,6 +284,21 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
   }
 
   const allowed = canRestoreVersion(editor);
+  /**
+   * WHICH ROW IS THE ONE THE PUBLIC IS READING.
+   *
+   * `rows` is newest-first, so it is `rows[0]` — but ONLY when the page is
+   * actually in a live status. A page that has been unpublished, closed or
+   * archived still has history, and marking its newest row "ปัจจุบัน" would
+   * state that something is public which is not. Two conditions, both required,
+   * because either alone gives a confident wrong answer.
+   *
+   * This is the version-dialog half of "what version is live". The full answer
+   * is the published-version view, which is round 33 step 5 and not this round;
+   * the top bar deliberately says nothing — round 27 refused a second save
+   * vocabulary there and round 34's saver line respected it.
+   */
+  const liveVersionId = LIVE_STATUSES.includes(editor?.page?.status) ? rows[0]?._id : null;
 
   return (
     <>
@@ -268,9 +307,28 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
           <li key={v._id} className="flex items-start gap-1.5 text-[11px] text-9e-slate-dp-50">
             <History className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">
+              {/*
+                The number leads when there is one. An unnumbered row — every
+                row until the backfill runs — omits the segment entirely rather
+                than printing a placeholder, so an un-migrated deployment reads
+                exactly as it did before this round. versionLabel owns that.
+              */}
+              {versionName(v) && (
+                <span data-testid="version-number" className="font-bold text-9e-navy dark:text-white/90">
+                  {versionName(v)}{' · '}
+                </span>
+              )}
               <span className="text-9e-navy dark:text-white/90">{when(v.createdAt)}</span>
               {' · '}{LABELS[v.label] ?? (v.label || 'snapshot')}
               {v.actor?.name ? ` · ${v.actor.name}` : ''}
+              {v._id === liveVersionId && (
+                <span
+                  data-testid="version-live-marker"
+                  className="ml-1 rounded-full border border-9e-green-800 bg-9e-green-900 px-1.5 py-px text-[10px] font-bold text-9e-navy dark:text-white"
+                >
+                  ปัจจุบัน
+                </span>
+              )}
             </span>
             <button
               type="button"
