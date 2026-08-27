@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Search,
   X,
@@ -17,6 +18,14 @@ import {
   ADMIN_SCHEDULE_MONTHS,
   adminScheduleMonthCols,
 } from '@/lib/adminScheduleHorizon';
+import {
+  arrowState,
+  daysOfMonth,
+  openingMonth,
+  rangeFor,
+  stepMonth,
+  visibleMonthsFrom,
+} from '@/lib/schedule/editorCalendarRange';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -589,14 +598,22 @@ function ScheduleCell({
 
 const DOW_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-function daysInMonth(year, month) {
-  const days = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
-    days.push(new Date(d));
-    d.setDate(d.getDate() + 1);
-  }
-  return days;
+/**
+ * `'2026-12'` → `'ธันวาคม 2569'`. Buddhist era comes from `th-TH` natively —
+ * nothing here adds 543 by hand, the same rule the rest of the schedule code
+ * follows.
+ *
+ * `daysInMonth` used to live here; it moved to editorCalendarRange.js as
+ * `daysOfMonth`, keyed by `YYYY-MM` like everything else the picker passes
+ * around, so the month vocabulary has one spelling instead of two.
+ */
+function monthTitleTh(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key ?? ''));
+  if (!m) return '';
+  return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('th-TH', {
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function ScheduleModal({
@@ -648,29 +665,45 @@ function ScheduleModal({
     return [];
   });
 
-  // Calendar window — start at the hinted month (or current month).
+  // The dates AS STORED, captured once at mount. The navigable range is
+  // derived from these rather than from live `selectedDates`, so that
+  // deselecting a far-out day cannot shrink the range under the user's
+  // cursor while they are still editing.
+  const [storedDates] = useState(selectedDates);
+
+  // Calendar range — src/lib/schedule/editorCalendarRange.js.
   //
-  // THIS 4 IS NOT THE GRID HORIZON. It bounds how many months a user can
-  // scroll while PICKING session dates in this modal — a UI-comfort
-  // number anchored on `initialMonthKey`, not on today. It was equal to
-  // the old grid horizon by coincidence, and the grid's is now
-  // ADMIN_SCHEDULE_MONTHS (12). Do NOT "unify" them: importing that
-  // constant here would render a twelve-month scroll of day grids in a
-  // max-h-80 box and would couple a date picker to a table's width
-  // budget. If this number should change, change it on its own evidence.
-  // test/pure/adminScheduleHorizon.test.mjs pins the separation.
-  const calendarMonths = useMemo(() => {
-    const start = initialMonthKey
-      ? new Date(`${initialMonthKey}-01T00:00:00`)
-      : new Date();
-    if (Number.isNaN(start.getTime())) return [];
-    const months = [];
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-      months.push({ year: d.getFullYear(), month: d.getMonth() });
-    }
-    return months;
-  }, [initialMonthKey]);
+  // THE RANGE NEVER TOUCHES THE GRID. `ADMIN_SCHEDULE_MONTHS` and
+  // `adminScheduleMonthCols` are imported at the top of this FILE for the
+  // admin table's month columns, and they must not reach this picker:
+  // what a user is allowed to PICK is not bounded by what the table can
+  // DISPLAY. Coupling the two is how a round became uneditable in the
+  // first place, and doing it from the other end would be the same bug.
+  //
+  // The opposite question — "will this round actually appear in the
+  // table?" — is genuinely about the grid, and is asked exactly once, at
+  // save time, by `outOfGridDates` below. That one calls the grid helper
+  // directly and deliberately.
+  //
+  // The range is derived from the DATA BEING EDITED, not from the clock
+  // alone. That invariant is the fix; the ±1/±2 year defaults inside the
+  // module are only ergonomics.
+  const calendarRange = useMemo(
+    () => rangeFor({ selectedDates: storedDates }),
+    [storedDates]
+  );
+
+  const [monthCursor, setMonthCursor] = useState(() =>
+    openingMonth({
+      isEdit,
+      selectedDates: storedDates,
+      monthKeyHint: initialMonthKey,
+      range: calendarRange,
+    })
+  );
+
+  const visibleMonths = visibleMonthsFrom(monthCursor, calendarRange);
+  const { canPrev, canNext } = arrowState(monthCursor, calendarRange);
 
   const todayIso = toLocalIso(new Date());
 
@@ -716,6 +749,30 @@ function ScheduleModal({
     )
     .join(', ');
 
+  /**
+   * The selected dates that fall past the LAST COLUMN the admin table draws.
+   *
+   * This is the one place in the modal that is allowed to ask a question about
+   * the grid, because it IS a question about the grid: "will this round appear
+   * in the table after I save it?" The picker's range deliberately knows
+   * nothing about `ADMIN_SCHEDULE_MONTHS` — see `calendarRange` above — but
+   * visibility in the table is exactly what the horizon decides.
+   *
+   * `adminScheduleMonthCols()` is already imported at the top of this file for
+   * the table's own columns, so reading the boundary here adds no coupling that
+   * the file did not already have. It is called directly rather than threaded
+   * in as a prop: a prop would put the grid's reach into the modal's interface,
+   * where a future caller could pass something else and quietly change what the
+   * warning means.
+   */
+  function outOfGridDates(dates) {
+    const last = adminScheduleMonthCols().at(-1);
+    if (!last) return [];
+    // Day 0 of the following month === the last day of the last column.
+    const lastDay = toLocalIso(new Date(last.year, last.month + 1, 0));
+    return dates.filter((d) => d > lastDay);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
@@ -726,6 +783,30 @@ function ScheduleModal({
     if (selectedDates.length === 0) {
       setError('กรุณาเลือกอย่างน้อย 1 วัน');
       return;
+    }
+
+    // WARN ONLY. The round saves exactly as picked whichever way the admin
+    // answers — the dates are never altered and the save is never blocked.
+    // A round past the last column is legitimate; it simply will not be
+    // listed until its month rolls into range, and an admin who does not
+    // know that would think the save failed.
+    const beyond = outOfGridDates(selectedDates);
+    if (beyond.length > 0) {
+      const pretty = beyond
+        .map((d) =>
+          new Date(d + 'T00:00:00').toLocaleDateString('th-TH', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          })
+        )
+        .join(', ');
+      const ok = window.confirm(
+        `วันที่ ${pretty} อยู่นอกช่วง ${ADMIN_SCHEDULE_MONTHS} เดือนที่ตารางนี้แสดง\n\n` +
+          'รอบนี้จะถูกบันทึกตามที่เลือกไว้ แต่จะยังไม่ปรากฏในตารางจนกว่าเดือนดังกล่าว' +
+          'จะเข้ามาอยู่ในช่วงที่แสดง\n\nต้องการบันทึกต่อหรือไม่?'
+      );
+      if (!ok) return;
     }
 
     const fd = new FormData();
@@ -851,58 +932,97 @@ function ScheduleModal({
                 </span>
               )}
             </label>
-            <div className="max-h-80 space-y-4 overflow-y-auto rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 p-3 dark:bg-[#0D1B2A]/60">
-              {calendarMonths.map(({ year, month }) => {
-                const days = daysInMonth(year, month);
-                const firstDow = new Date(year, month, 1).getDay();
-                const monthLabel = new Date(year, month, 1).toLocaleDateString(
-                  'th-TH',
-                  { month: 'long', year: 'numeric' }
-                );
-                return (
-                  <div key={`${year}-${month}`}>
-                    <p className="mb-2 text-center text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                      {monthLabel}
+            <div className="rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 p-3 dark:bg-[#0D1B2A]/60">
+              {/* One row: ‹ | month | month | ›. The arrows step ONE month,
+                  so a round spanning a month boundary (30 ต.ค. + 2 พ.ย.) has
+                  both of its months on screen at once and needs no
+                  navigation at all to select. */}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) => stepMonth(c, -1, calendarRange))
+                  }
+                  disabled={!canPrev}
+                  aria-label="เดือนก่อนหน้า"
+                  className="rounded-9e-sm p-1 text-9e-navy transition-colors hover:bg-9e-action/10 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="grid flex-1 grid-cols-2 gap-3">
+                  {visibleMonths.map((key) => (
+                    <p
+                      key={`label-${key}`}
+                      className="text-center text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]"
+                    >
+                      {monthTitleTh(key)}
                     </p>
-                    <div className="grid grid-cols-7 gap-0.5 text-center">
-                      {DOW_TH.map((d) => (
-                        <div
-                          key={d}
-                          className="py-1 text-[10px] text-9e-slate-dp-50"
-                        >
-                          {d}
-                        </div>
-                      ))}
-                      {Array.from({ length: firstDow }).map((_, i) => (
-                        <div key={`pad-${i}`} />
-                      ))}
-                      {days.map((d) => {
-                        const iso = toLocalIso(d);
-                        const selected = selectedDates.includes(iso);
-                        const isToday = iso === todayIso;
-                        return (
-                          <button
-                            key={iso}
-                            type="button"
-                            onClick={() => toggleDate(iso)}
-                            className={
-                              'mx-auto h-8 w-8 rounded-full text-xs font-medium transition-colors ' +
-                              (selected
-                                ? 'bg-9e-action text-white'
-                                : 'text-9e-navy hover:bg-9e-action/10 dark:text-white') +
-                              (isToday && !selected
-                                ? ' ring-1 ring-9e-action'
-                                : '')
-                            }
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) => stepMonth(c, 1, calendarRange))
+                  }
+                  disabled={!canNext}
+                  aria-label="เดือนถัดไป"
+                  className="rounded-9e-sm p-1 text-9e-navy transition-colors hover:bg-9e-action/10 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {visibleMonths.map((key) => {
+                  const days = daysOfMonth(key);
+                  const firstDow = days.length ? days[0].getDay() : 0;
+                  return (
+                    <div key={key}>
+                      <div className="grid grid-cols-7 gap-0.5 text-center">
+                        {DOW_TH.map((d) => (
+                          <div
+                            key={`${key}-${d}`}
+                            className="py-1 text-[10px] text-9e-slate-dp-50"
                           >
-                            {d.getDate()}
-                          </button>
-                        );
-                      })}
+                            {d}
+                          </div>
+                        ))}
+                        {Array.from({ length: firstDow }).map((_, i) => (
+                          <div key={`${key}-pad-${i}`} />
+                        ))}
+                        {days.map((d) => {
+                          const iso = toLocalIso(d);
+                          const selected = selectedDates.includes(iso);
+                          const isToday = iso === todayIso;
+                          // Past days stay CLICKABLE — backdating a round is
+                          // intended — but render dimmed so it is visible that
+                          // they are in the past. Deliberately NOT `disabled`.
+                          const isPast = iso < todayIso;
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              onClick={() => toggleDate(iso)}
+                              className={
+                                'mx-auto h-8 w-8 rounded-full text-xs font-medium transition-colors ' +
+                                (selected
+                                  ? 'bg-9e-action text-white'
+                                  : 'text-9e-navy hover:bg-9e-action/10 dark:text-white') +
+                                (isPast && !selected ? ' opacity-40' : '') +
+                                (isToday && !selected
+                                  ? ' ring-1 ring-9e-action'
+                                  : '')
+                              }
+                            >
+                              {d.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
