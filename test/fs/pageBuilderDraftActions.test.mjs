@@ -17,6 +17,9 @@ import {
   updatePageStatus,
   createPageBuilderPage,
 } from '@/lib/actions/pageBuilder';
+// A SECOND import statement rather than an edit of the one above — the standing
+// rule in this repo, and what the seam scanners exist to keep true.
+import { getPageVersionSnapshot } from '@/lib/actions/pageBuilder';
 import { getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 
@@ -936,5 +939,121 @@ test('the draft/publish action layer', async (t) => {
     assert.equal(after.title, 'Live Title', 'the discard disturbed the live content');
     assert.equal(after.draft, null);
     assert.equal(count('PageVersion'), 0, 'a discard wrote a snapshot');
+  });
+
+  // ── getPageVersionSnapshot — round 34, commit 1 ───────────────────────────
+  //
+  // THE EXECUTED HALF LIVES HERE, NOT IN ITS OWN FILE, AND THAT IS FORCED.
+  // test/run.mjs uses `isolation: 'none', concurrency: true`, so root-level
+  // tests in DIFFERENT files run concurrently in one process over this file's
+  // module-level fake database. A second fakeDb-owning root test resets this
+  // one's fixtures mid-flight — measured, not feared: it reddened eight cases
+  // here on the first attempt. The header note above explains the within-file
+  // half of the same hazard. There is exactly ONE fakeDb-owning parent in the
+  // suite, and it is this one.
+  //
+  // The SHAPE half — that getPageVersions' projection is still refusing the
+  // snapshot — is source-scanned in test/fs/pageBuilderVersionSnapshot, which
+  // touches no database and is therefore safe as a root test.
+
+  const VERSION_ID = 'v-restore-me';
+  const OTHER_VERSION_ID = 'v-not-this-one';
+
+  /** A snapshot in the shape publishPageStatus stores: a whole page, no draft. */
+  const snapshotDoc = (overrides = {}) => ({
+    _id: PAGE_ID,
+    slug: 'live-slug',
+    title: 'Snapshot Title',
+    status: 'published',
+    theme: 'default',
+    showHeader: true,
+    showFooter: true,
+    showStickyCta: false,
+    sections: [section('s-snap')],
+    seo: { metaTitle: 'snapshot meta' },
+    jsonLd: { mode: 'auto' },
+    promotionCover: '',
+    ...overrides,
+  });
+
+  const seedVersion = (id, overrides = {}) => seed('PageVersion', {
+    _id: id,
+    pageId: PAGE_ID,
+    snapshot: snapshotDoc(),
+    label: 'publish',
+    actor: { id: 'u-pub', name: 'Publisher B' },
+    createdAt: new Date('2026-08-01T03:00:00.000Z'),
+    ...overrides,
+  });
+
+  await scenario('getPageVersionSnapshot returns ONE version, not a list', async () => {
+    seedPage();
+    seedVersion(VERSION_ID);
+    seedVersion(OTHER_VERSION_ID, { snapshot: snapshotDoc({ title: 'The Other One' }) });
+
+    const got = await getPageVersionSnapshot(VERSION_ID);
+    assert.equal(Array.isArray(got), false, 'the fetch-one action returned a list');
+    assert.ok(got, 'no row came back');
+    assert.equal(got.snapshot.title, 'Snapshot Title', 'the wrong version came back');
+    assert.equal(got.label, 'publish');
+    assert.equal(got.actor.name, 'Publisher B');
+    assert.ok(got.createdAt, 'createdAt did not survive the read');
+  });
+
+  await scenario('CONTROL: the OTHER version is reachable by ITS id', async () => {
+    // Without this, the case above passes for an action that ignores its
+    // argument and hands back whichever row it finds first.
+    seedPage();
+    seedVersion(VERSION_ID);
+    seedVersion(OTHER_VERSION_ID, { snapshot: snapshotDoc({ title: 'The Other One' }) });
+
+    const got = await getPageVersionSnapshot(OTHER_VERSION_ID);
+    assert.equal(got.snapshot.title, 'The Other One', 'the id argument is not being honoured');
+  });
+
+  await scenario('a missing id and a missing row both answer null, not a throw', async () => {
+    seedPage();
+    seedVersion(VERSION_ID);
+    assert.equal(await getPageVersionSnapshot(''), null, 'an empty id did not answer null');
+    assert.equal(await getPageVersionSnapshot('v-deleted'), null, 'a missing row did not answer null');
+  });
+
+  await scenario('the fetch-one read NEVER hands back a draft — even when the row carries one', async () => {
+    // A row in the shape updatePageStatus wrote before round 3 retired it: it
+    // snapshots doc.toObject() RAW, so a pending edit went into the archive.
+    // THE TRAP case above pins that writer's behaviour; this pins that the READ
+    // refuses to hand it back. Measured read-only against the real database
+    // before this was written: 0 of 3 stored rows carry one today, so nothing
+    // is being repaired — but both writers are still in the action file.
+    seedPage();
+    seedVersion(VERSION_ID, {
+      snapshot: snapshotDoc({ draft: { title: MARKER, sections: [] } }),
+    });
+
+    const got = await getPageVersionSnapshot(VERSION_ID);
+    assert.equal('draft' in got.snapshot, false, 'the read handed back an unpublished draft');
+    assert.equal(got.snapshot.title, 'Snapshot Title', 'stripping the draft took the content with it');
+  });
+
+  await scenario('CONTROL: that fixture really was carrying a draft', async () => {
+    // Proves the assertion above is observable rather than vacuous — the stored
+    // row must actually be in the state the assertion rules out.
+    seedPage();
+    seedVersion(VERSION_ID, {
+      snapshot: snapshotDoc({ draft: { title: MARKER, sections: [] } }),
+    });
+    const [stored] = all('PageVersion');
+    assert.equal('draft' in stored.snapshot, true, 'the fixture was not in the state under test');
+    assert.equal(stored.snapshot.draft.title, MARKER);
+  });
+
+  await scenario('stripping the draft is not a rewrite — every other key survives', async () => {
+    seedPage();
+    seedVersion(VERSION_ID, { snapshot: snapshotDoc({ draft: null }) });
+    const got = await getPageVersionSnapshot(VERSION_ID);
+    assert.equal('draft' in got.snapshot, false);
+    for (const key of Object.keys(snapshotDoc())) {
+      assert.ok(key in got.snapshot, `stripping the draft dropped ${key}`);
+    }
   });
 });

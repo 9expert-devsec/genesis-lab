@@ -200,6 +200,56 @@ export async function getPageVersions(id) {
 }
 
 /**
+ * ONE version's snapshot, by version id. The read `getPageVersions` refuses.
+ *
+ * ── WHY A SECOND ACTION AND NOT A WIDER PROJECTION ─────────────────────────
+ * Round 33 measured the alternative rather than arguing it. Against this
+ * database: the metadata `getPageVersions` ships is 153 B per row; the snapshot
+ * beside it is 5.0 KB median and 6.7 KB at the top — the snapshot is ~33x the
+ * row that displays it. `getPageVersions` returns up to MAX_VERSION_ROWS and
+ * fires on EVERY dialog open, including the common one where the author only
+ * reads the list; a fetch-one fires on an explicit click, once, for the version
+ * actually chosen. Widening the list would pay 20x the snapshot cost every open
+ * to serve the one case that needs it.
+ *
+ * That ratio is a floor, not a ceiling: a snapshot is the whole page document,
+ * dominated by `sections`, and each section carries `advanced.customHtml` and
+ * `advanced.customCss` — unbounded free text a developer-tier author types by
+ * hand. The pages measured are small ones.
+ *
+ * **getPageVersions' projection is deliberately UNCHANGED.** Avoiding that edit
+ * is the entire reason this function exists; test/fs/pageBuilderVersionSnapshot
+ * pins it so a later round cannot quietly widen the list and leave this here.
+ *
+ * ── WHY IT STRIPS `.draft` ON READ, AND IT IS NOT BELT AND BRACES ──────────
+ * Round 2 strips at WRITE time — but only at one of the three `snapshotVersion`
+ * call sites. `updatePageBuilderPage` and `updatePageStatus` both snapshot
+ * `doc.toObject()` raw, and although round 3 left both without a live caller,
+ * the rows they wrote before that are still stored. So "no snapshot carries a
+ * draft" is a claim about HISTORY, and history is not enforced by today's code.
+ *
+ * Measured, read-only, before this was written: 3 of 3 stored rows carry no
+ * draft, so nothing is being repaired here. It is stripped anyway because the
+ * guarantee this action owes its caller is "what was once PUBLIC", the two
+ * writers that could break it are still in this file, and a restore that
+ * promoted somebody's stale unpublished edit would look exactly like a
+ * successful restore.
+ *
+ * Returns null for a missing id or a missing row — a version can be read from a
+ * dialog that has been open across a delete.
+ */
+export async function getPageVersionSnapshot(versionId) {
+  if (!versionId) return null;
+  await requireAdmin('pages');
+  await dbConnect();
+  const row = await PageVersion.findById(String(versionId))
+    .select('snapshot label actor createdAt')
+    .lean();
+  if (!row) return null;
+  return serialize({ ...row, snapshot: stripDraft(row.snapshot) });
+}
+
+/**
  * Published-only read for the public renderer (Phase 2).
  *
  * `-draft` is a PROJECTION, not a post-filter: an unpublished draft must never
