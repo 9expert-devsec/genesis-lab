@@ -41,6 +41,7 @@ const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 const PAGE_REL = 'src/app/admin/schedules/page.jsx';
 const CLIENT_REL = 'src/app/admin/schedules/_components/SchedulesAdminClient.jsx';
 const RANGE_REL = 'src/lib/schedule/editorCalendarRange.js';
+const WARNING_REL = 'src/lib/schedule/gridWindowWarning.js';
 const HORIZON_MODULE = '@/lib/adminScheduleHorizon';
 
 const pageSrc = read(PAGE_REL);
@@ -147,6 +148,23 @@ test('the grid column loop takes its count from the horizon module, not a litera
 // The picker's range now lives in its own module, so the guard is in two
 // parts: a WHOLE-FILE scan of that module, and a SLICED scan of the modal's
 // call site. They catch different things and neither subsumes the other.
+
+test('the out-of-window warning module names no grid identifier either', () => {
+  // gridWindowWarning.js answers "will the TABLE show this", which IS a grid
+  // question — so it would be the easy place to reach for the horizon. It must
+  // not: the window arrives as two ISO days from the caller, which is what
+  // keeps it unit-testable without the horizon, the fetch or a DOM, and what
+  // keeps the modal the single place that touches adminScheduleMonthCols().
+  const src = scrub(read(WARNING_REL));
+  for (const forbidden of GRID_IDENTIFIERS) {
+    assert.ok(
+      !src.includes(forbidden),
+      `${WARNING_REL} references ${forbidden}. The window must be PASSED IN as ` +
+      `firstDay/lastDay, not read from the horizon here — see this module's ` +
+      `docstring and the modal's gridWindowDays().`,
+    );
+  }
+});
 
 test('the picker range module names no grid identifier ANYWHERE in the file', () => {
   // Whole-file, no anchors. This module answers "what can be picked"; there is
