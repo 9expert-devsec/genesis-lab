@@ -57,7 +57,9 @@ const IDENTITY_SET = new Set(IDENTITY_KEYS);
 // needs the identical composition, and a second copy here would be the thing
 // that drifts. Re-exported so existing importers of this module still resolve.
 export { composeWorkingView };
-export const initialEditorState = ({ page, pageId = null, updatedAt = null }) => ({
+export const initialEditorState = ({
+  page, pageId = null, updatedAt = null, currentUserName = '',
+}) => ({
   page: composeWorkingView(page),
   pageId,                    // null for an unsaved /builder/new page
   savedUpdatedAt: updatedAt, // ONE optimistic-concurrency token for the whole
@@ -68,6 +70,27 @@ export const initialEditorState = ({ page, pageId = null, updatedAt = null }) =>
   // holds `.draft` to look at, and round 5's indicator needs it without a
   // second read.
   hadDraft: hasUnpublishedDraft(page),
+  /**
+   * WHO last saved the stored draft — round 34 commit 3.
+   *
+   * Read from `page.draft.savedBy`, which round 2 stamps on every draft write,
+   * and captured HERE for the same reason `hadDraft` is: composeWorkingView
+   * drops `.draft`, so this is the last moment the stamp is in reach.
+   *
+   * It is NOT `page.updatedBy`. Round 33 measured that field frozen at
+   * creation — publishPageStatus never writes it, updatePageBuilderPage has had
+   * no live caller since round 3, and there are no schema hooks — so it names
+   * whoever CREATED the page, confidently and wrongly. That measurement has its
+   * own tripwire in test/fs/pageBuilderDraftActions, and this round does not
+   * fix the freeze; it just refuses to read the frozen field.
+   *
+   * `currentUserName` is kept beside it because a content save makes THIS
+   * session the draft's saver, and a value that were only ever seeded on load
+   * would keep naming the previous author for the rest of the session — the
+   * same class of quietly-stale display this field exists to avoid.
+   */
+  currentUserName: String(currentUserName ?? ''),
+  draftSavedBy: hasUnpublishedDraft(page) ? String(page?.draft?.savedBy?.name ?? '') : '',
   selection: null,       // path into `page`, e.g. ['sections', 0, 'content', 'children', 1]
   contentDirty: false,
   identityDirty: false,
@@ -184,6 +207,12 @@ export function editorReducer(state, action) {
         // A page that has just had its content saved has a pending draft by
         // definition — round 5's indicator reads this.
         hadDraft: domains.includes('content') ? true : state.hadDraft,
+        // …and THIS session is now the one that saved it. Same condition as
+        // hadDraft, because it is the same event: a content write is exactly
+        // what stamps draft.savedBy on the server. An identity save or a
+        // publish must not move it — the first writes no draft, and the second
+        // clears one (see DRAFT_DISCARDED, which publish also dispatches).
+        draftSavedBy: domains.includes('content') ? state.currentUserName : state.draftSavedBy,
         lastSavedAt: action.at ?? Date.now(),
         // RETAINED, not invented: SAVE_OK already had to name its domains
         // (round 4) so it could clear the right flags. The top bar needs the
@@ -210,10 +239,22 @@ export function editorReducer(state, action) {
     // Nothing reconstructs it here — discard() reloads the route (see
     // useEditorSave.js), and this only stops the guard nagging on the way out.
     case 'DRAFT_DISCARDED':
-      return { ...state, contentDirty: false, hadDraft: false, saving: false, error: null };
+      // draftSavedBy goes with hadDraft, because there is no longer a draft for
+      // anyone to have saved. Leaving it would keep naming a saver for content
+      // that no longer exists — and publish dispatches this too, so it is also
+      // what stops the line surviving a promotion.
+      return {
+        ...state, contentDirty: false, hadDraft: false, draftSavedBy: '',
+        saving: false, error: null,
+      };
 
     case 'RESET':
-      return initialEditorState({ page: action.page, pageId: action.pageId, updatedAt: action.updatedAt });
+      // currentUserName is carried across rather than re-supplied: it describes
+      // the SESSION, which a reset of the document does not change.
+      return initialEditorState({
+        page: action.page, pageId: action.pageId, updatedAt: action.updatedAt,
+        currentUserName: state.currentUserName,
+      });
 
     default:
       return state;

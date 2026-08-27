@@ -30,6 +30,7 @@ export default async function NewBuilderPage() {
       page={blank}
       pageId={null}
       updatedAt={null}
+      currentUserName={user?.name ?? ''}
       tier={{
         canUseAdvanced: canUseAdvanced(user),
         canPublish: canPublish(user),

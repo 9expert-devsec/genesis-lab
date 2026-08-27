@@ -13,9 +13,14 @@ import { EditorShell } from './EditorShell';
  * create→edit transition, which rewrites the URL without a navigation. See
  * useEditorSave.js.
  */
-export function PageBuilderEditor({ page, pageId = null, updatedAt = null, tier }) {
+export function PageBuilderEditor({
+  page, pageId = null, updatedAt = null, tier, currentUserName = '',
+}) {
   return (
-    <EditorProvider page={page} pageId={pageId} updatedAt={updatedAt} tier={tier}>
+    <EditorProvider
+      page={page} pageId={pageId} updatedAt={updatedAt} tier={tier}
+      currentUserName={currentUserName}
+    >
       <EditorShell />
     </EditorProvider>
   );

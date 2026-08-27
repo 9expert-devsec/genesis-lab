@@ -31,10 +31,15 @@ import { resolveBuilderSectionData } from '@/lib/actions/pageBuilder';
  */
 const EditorContext = createContext(null);
 
-export function EditorProvider({ children, page, pageId = null, updatedAt = null, tier }) {
+export function EditorProvider({
+  children, page, pageId = null, updatedAt = null, tier, currentUserName = '',
+}) {
   const [state, dispatch] = useReducer(
     editorReducer,
-    { page, pageId, updatedAt },
+    // currentUserName rides the seed rather than being read from a session hook
+    // here: this file is client-only and the routes already resolve the session
+    // for the tier flags. See initialEditorState for what it is FOR.
+    { page, pageId, updatedAt, currentUserName },
     initialEditorState
   );
 

@@ -6,6 +6,9 @@ import { Eye, Save, Settings, Loader2, AlertTriangle, Trash2 } from 'lucide-reac
 import { cn } from '@/lib/utils';
 import { useEditor } from './EditorProvider';
 import { hasPendingDraft, canDiscardDraft, statusLine } from '@/lib/pageBuilder/editorStatus';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory.
+import { draftSaverLine } from '@/lib/pageBuilder/editorStatus';
 
 const STATUS_LABEL = {
   draft: 'ฉบับร่าง', scheduled: 'ตั้งเวลา', published: 'เผยแพร่แล้ว',
@@ -91,6 +94,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
   const { page, saving, conflict, tier } = editor;
   const status = page?.status ?? 'draft';
   const pendingDraft = hasPendingDraft(editor);
+  const saver = draftSaverLine(editor);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   return (
@@ -105,6 +109,19 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
             className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700"
           >
             มีฉบับร่างที่ยังไม่เผยแพร่
+          </span>
+        )}
+        {/*
+          WHO holds the pending draft, beside the chip that says one exists —
+          the two are one fact about the SERVER and share one condition, so they
+          appear and disappear together. It is deliberately not in statusLine
+          below: that line reports what THIS TAB did, and this is true of a page
+          this tab has never written. Reads draft.savedBy, never updatedBy,
+          which round 33 measured frozen at creation.
+        */}
+        {saver && (
+          <span data-testid="draft-saver-line" className="truncate text-xs text-9e-slate-dp-50 dark:text-9e-slate-dp-400">
+            {saver}
           </span>
         )}
         <p className="truncate text-sm font-bold text-9e-navy dark:text-white">

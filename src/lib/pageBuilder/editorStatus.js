@@ -63,6 +63,47 @@ export function canDiscardDraft(state) {
 }
 
 /**
+ * WHO last saved the pending draft — the one line under the draft chip.
+ *
+ * ── IT READS `draft.savedBy`, AND NOT `updatedBy`, BY MEASUREMENT ─────────
+ * Round 33 measured `page.updatedBy` frozen at creation: publishPageStatus
+ * never writes it, updatePageBuilderPage has had no live caller since round 3,
+ * and the schema has no hooks. So the field that LOOKS like "last edited by"
+ * names whoever created the page. Round 2's `draft.savedBy` is stamped on every
+ * draft write and is the honest answer to this exact question. The freeze has
+ * its own tripwire and is not fixed here.
+ *
+ * ── WHY IT IS NOT PART OF statusLine ──────────────────────────────────────
+ * They are different facts about different subjects. statusLine reports what
+ * THIS TAB just did — dirty, saving, saved N minutes ago — and its whole
+ * vocabulary is about the local write. This reports an attribute of the STORED
+ * draft, and it is true on a page this tab has never written. Folding it in
+ * would make one sentence answer two questions, which is the merge round 27
+ * refused for the settings dialog's save line.
+ *
+ * It is deliberately about WHO and not WHEN. "When" is statusLine's idiom, in
+ * relative minutes, scoped to this session; reusing that phrasing for a server
+ * fact is exactly the second-vocabulary drift to avoid.
+ *
+ * ── TWO EMPTY CASES, BOTH DELIBERATE ──────────────────────────────────────
+ *   · NO PENDING DRAFT — nothing unpublished exists, so nobody last saved one.
+ *     The chip this sits beside is absent for the same reason and on the same
+ *     condition, so the pair cannot disagree.
+ *   · A DRAFT WITH NO NAME — `savedBy` defaults to `{ id: '', name: '' }`, so a
+ *     session with no name stamps an anonymous draft. Renders nothing rather
+ *     than inventing a category like "unknown user": round 26 declined to draw
+ *     the preview dialog's "created by" line for the same reason, and an
+ *     invented placeholder is worse than an absent line because it looks like
+ *     data.
+ */
+export function draftSaverLine(state) {
+  if (!hasPendingDraft(state)) return '';
+  const name = String(state?.draftSavedBy ?? '').trim();
+  if (!name) return '';
+  return `แก้ไขล่าสุดโดย ${name}`;
+}
+
+/**
  * May the author restore an old version into the draft right now?
  *
  * Deliberately NOT canDiscardDraft with a different name. That one requires a
