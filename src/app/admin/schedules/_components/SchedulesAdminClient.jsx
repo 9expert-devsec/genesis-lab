@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useCallback, useMemo, useState, useTransition } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronDown,
   ChevronLeft,
@@ -15,8 +15,12 @@ import {
   deleteSchedule,
 } from '@/lib/actions/schedules';
 import {
-  ADMIN_SCHEDULE_MONTHS,
   adminScheduleMonthCols,
+  adminScheduleSelectableMonthKeys,
+  adminScheduleSelectableWindowDays,
+  resolveAdminScheduleRange,
+  ADMIN_SCHEDULE_MONTHS,
+  ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL,
 } from '@/lib/adminScheduleHorizon';
 import {
   arrowState,
@@ -73,39 +77,89 @@ function monthKey(v) {
   if (Number.isNaN(d.getTime())) return null;
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+/** `YYYY-MM` → the 1st of that month, local time. For the from/to dropdowns. */
+function monthKeyToDate(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key ?? ''));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : new Date(NaN);
+}
 
 // ── main component ─────────────────────────────────────────────────
 
+/**
+ * ── THE FILTERS ARE PROPS, AND THE URL IS WRITTEN IN ONE PLACE ──────────────
+ *
+ * `search`, `filterProgram`, `filterStatus`, `monthFrom` and `monthTo` are
+ * read from `searchParams` by page.jsx and passed down — the same shape as
+ * AuditLogClient / CoursesAdminClient, the reference implementations
+ * test/fs/urlFilterNoState.test.mjs holds this screen to. The three plain
+ * filters used to be `useState`, seeded from nothing and reset on every
+ * navigation; the month range is new in this round and was written straight
+ * into this shape rather than added as a fourth filter onto a broken one.
+ */
 export function SchedulesAdminClient({
   schedules,
   courses,
   programs = [],
   scheduleLocals = [],
   instructors = [],
+  search = '',
+  filterProgram = '',
+  filterStatus = '',
+  monthFrom,
+  monthTo,
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [busyId, setBusyId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
 
-  // filters
-  const [search, setSearch]               = useState('');
-  const [filterProgram, setFilterProgram] = useState('');
-  const [filterStatus, setFilterStatus]   = useState('');
-  const [collapsed, setCollapsed]         = useState({});
-  const [modal, setModal]                 = useState(null);
+  const [collapsed, setCollapsed] = useState({});
+  const [modal, setModal]         = useState(null);
+
+  /**
+   * The next URL, serialised FROM THE PROPS — the one and only writer.
+   * Same shape as AuditLogClient / CoursesAdminClient's `navigate`.
+   */
+  const navigate = useCallback(
+    (overrides = {}) => {
+      const next = { search, filterProgram, filterStatus, monthFrom, monthTo, ...overrides };
+      const params = new URLSearchParams();
+      Object.entries(next).forEach(([k, v]) => {
+        const value = String(v ?? '').trim();
+        if (value) params.set(k, value);
+      });
+      const qs = params.toString();
+      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+    },
+    [router, pathname, search, filterProgram, filterStatus, monthFrom, monthTo]
+  );
+
+  // The from/to dropdowns' own option list — every month the admin may
+  // select, independent of what is currently rendered. See
+  // adminScheduleSelectableRange's docstring for why this reach is fixed at
+  // 12 months back / 24 forward and must not import the editor picker's
+  // identical-looking constants.
+  const selectableMonthKeys = useMemo(() => adminScheduleSelectableMonthKeys(), []);
+
+  // The untouched default view, for the ล้างตัวกรอง gate below. Recomputed
+  // once per mount rather than per render for the same reason ScheduleClient
+  // freezes its own `defaults` in state: a page left open across the 1st of
+  // the month must not have its "N filters active" badge light up on its own.
+  const [defaultRange] = useState(() => resolveAdminScheduleRange(new Date()));
 
   // ── month column headers ───────────────────────────────────────
-  // Columns and the page's MSDB `to` bound both come out of
-  // adminScheduleHorizon, so the window rendered here is the window
-  // fetched — a row can no longer arrive with no column to land in.
+  // Columns are built for the SELECTED monthFrom/monthTo span, not a fixed
+  // horizon — page.jsx resolves and clamps that span before it ever reaches
+  // here, and derives the MSDB `to` bound from the same span, so the window
+  // rendered here is still the window fetched.
   const monthCols = useMemo(
     () =>
-      adminScheduleMonthCols().map((c) => ({
+      adminScheduleMonthCols(new Date(), { fromKey: monthFrom, toKey: monthTo }).map((c) => ({
         ...c,
         label: TH_MONTH_FMT.format(new Date(c.year, c.month, 1)),
       })),
-    []
+    [monthFrom, monthTo]
   );
 
   // ── lookups ────────────────────────────────────────────────────
@@ -275,26 +329,39 @@ export function SchedulesAdminClient({
         </div>
       )}
 
-      {/* ── Filter bar ─────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* ── Filter bar ─────────────────────────────────────────────────
+          Restyled to the public /schedule bar's visual language (rounded-xl,
+          gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
+          FilterSelect. The table itself is unchanged this round. */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[240px] flex-1">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
             aria-hidden="true"
           />
+          {/* Uncontrolled and re-keyed on `search`, committing on Enter or
+              blur — same pattern as CoursesAdminClient's box, so the URL
+              (not this component) is the only place the term lives. */}
           <input
+            key={search}
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="ค้นหาหลักสูตร..."
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white pl-8 pr-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+            defaultValue={search}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                navigate({ search: e.currentTarget.value });
+              }
+            }}
+            onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
+            placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
+            className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
           />
         </div>
 
         <select
           value={filterProgram}
-          onChange={(e) => setFilterProgram(e.target.value)}
-          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          onChange={(e) => navigate({ filterProgram: e.target.value })}
+          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
         >
           <option value="">ทุกโปรแกรม</option>
           {programs.map((p) => {
@@ -308,14 +375,53 @@ export function SchedulesAdminClient({
 
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          onChange={(e) => navigate({ filterStatus: e.target.value })}
+          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
         >
           <option value="">ทุกสถานะ</option>
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
+          <select
+            value={monthFrom}
+            onChange={(e) => navigate({ monthFrom: e.target.value })}
+            aria-label="เดือนเริ่มต้น"
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            {selectableMonthKeys.map((key) => (
+              <option key={key} value={key}>
+                {TH_MONTH_FMT.format(monthKeyToDate(key))}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
+          <select
+            value={monthTo}
+            onChange={(e) => navigate({ monthTo: e.target.value })}
+            aria-label="เดือนสุดท้าย"
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            {selectableMonthKeys.map((key) => (
+              <option key={key} value={key} disabled={key < monthFrom}>
+                {TH_MONTH_FMT.format(monthKeyToDate(key))}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+          <button
+            type="button"
+            onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+          >
+            ล้างตัวกรอง
+          </button>
+        )}
 
         <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {visibleCount} / {schedules.length} รอบ
@@ -353,8 +459,8 @@ export function SchedulesAdminClient({
         <ScheduleModal
           mode={modal.mode}
           schedule={modal.schedule}
-          initialCourseCode={modal.courseCode ?? null}
-          initialMonthKey={modal.monthKeyHint ?? null}
+          courseCodeHint={modal.courseCode ?? null}
+          monthKeyHint={modal.monthKeyHint ?? null}
           courses={courses}
           instructors={instructors}
           localBySchedId={localBySchedId}
@@ -623,8 +729,8 @@ function monthTitleTh(key) {
 function ScheduleModal({
   mode,
   schedule,
-  initialCourseCode,
-  initialMonthKey,
+  courseCodeHint,
+  monthKeyHint,
   courses,
   instructors,
   localBySchedId,
@@ -636,14 +742,14 @@ function ScheduleModal({
   const [error, setError] = useState(null);
 
   // Course
-  const initialCode = (() => {
+  const startingCourseCode = (() => {
     if (isEdit) {
       const c = schedule?.course;
       if (typeof c === 'object' && c?.course_id) return String(c.course_id);
     }
-    return initialCourseCode || '';
+    return courseCodeHint || '';
   })();
-  const [courseCode, setCourseCode] = useState(initialCode);
+  const [courseCode, setCourseCode] = useState(startingCourseCode);
   const [courseSearch, setCourseSearch] = useState('');
 
   const filteredCourses = useMemo(() => {
@@ -701,7 +807,7 @@ function ScheduleModal({
     openingMonth({
       isEdit,
       selectedDates: storedDates,
-      monthKeyHint: initialMonthKey,
+      monthKeyHint,
       range: calendarRange,
     })
   );
@@ -729,18 +835,18 @@ function ScheduleModal({
   const [signupUrl, setSignupUrl] = useState(schedule?.signup_url ?? '');
 
   // Local sidecar
-  const initialLocal = isEdit
+  const existingLocal = isEdit
     ? localBySchedId.get(String(schedule?._id)) ?? null
     : null;
   const [maxSeats, setMaxSeats] = useState(
-    initialLocal?.max_seats != null ? String(initialLocal.max_seats) : ''
+    existingLocal?.max_seats != null ? String(existingLocal.max_seats) : ''
   );
   const [priceOverride, setPriceOverride] = useState(
-    initialLocal?.price_override != null ? String(initialLocal.price_override) : ''
+    existingLocal?.price_override != null ? String(existingLocal.price_override) : ''
   );
   const [instructorIds, setInstructorIds] = useState(
-    Array.isArray(initialLocal?.instructor_ids)
-      ? initialLocal.instructor_ids.map(String)
+    Array.isArray(existingLocal?.instructor_ids)
+      ? existingLocal.instructor_ids.map(String)
       : []
   );
 
@@ -760,36 +866,33 @@ function ScheduleModal({
     .join(', ');
 
   /**
-   * The admin table's visible window, as two ISO days.
+   * The admin table's MAXIMUM SELECTABLE window, as two ISO days — not the
+   * currently rendered columns.
    *
-   * This is the one place in the modal allowed to ask the grid anything,
-   * because it IS a question about the grid: "will this round appear in the
-   * table after I save it?" The picker's range deliberately knows nothing about
-   * `ADMIN_SCHEDULE_MONTHS` — see `calendarRange` above — but visibility in the
-   * table is exactly what the horizon decides.
+   * THIS CHANGED IN THE ROUND THAT MADE THE TABLE'S RANGE ADJUSTABLE. Before
+   * that, "the table's window" and "the table's reach" were the same fixed
+   * 12 months, so classifying against the rendered columns and against the
+   * outer boundary gave the same answer. Once an admin can move the from/to
+   * dropdowns, they stop agreeing: a date outside TODAY'S chosen months but
+   * inside `adminScheduleSelectableRange()` is not a problem, because the
+   * admin can widen the dropdowns and see it. Only a date outside the outer
+   * boundary is genuinely unreachable — no dropdown selection could ever
+   * show it — which is the only case worth warning about here.
    *
-   * `adminScheduleMonthCols()` is already imported at the top of this file for
-   * the table's own columns, so reading the boundary here adds no coupling the
-   * file did not already have. It is called directly rather than threaded in as
-   * a prop: a prop would put the grid's reach into the modal's interface, where
-   * a future caller could pass something else and quietly change what the
-   * warning means.
+   * This is still the one place in the modal allowed to ask the grid
+   * anything, because it IS a question about the grid: "could this round
+   * ever appear in the table after I save it?" The picker's range
+   * deliberately knows nothing about the admin table — see `calendarRange`
+   * above — but reachability in the table is exactly what the horizon
+   * module decides.
    *
-   * BOTH ENDS, not just the last column. The first version of this checked only
-   * `> lastDay`, and the unguarded backward direction is what let a stray click
-   * on 2025-09-23 remove a 30 Oct / 2 Nov round from the table with no way to
-   * reopen it. See src/lib/schedule/gridWindowWarning.js.
+   * BOTH ENDS, not just the last column. The first version of this checked
+   * only `> lastDay`, and the unguarded backward direction is what let a
+   * stray click on 2025-09-23 remove a 30 Oct / 2 Nov round from the table
+   * with no way to reopen it. See src/lib/schedule/gridWindowWarning.js.
    */
   function gridWindowDays() {
-    const cols = adminScheduleMonthCols();
-    const first = cols[0];
-    const last = cols.at(-1);
-    if (!first || !last) return { firstDay: null, lastDay: null };
-    return {
-      firstDay: toLocalIso(new Date(first.year, first.month, 1)),
-      // Day 0 of the following month === the last day of the last column.
-      lastDay: toLocalIso(new Date(last.year, last.month + 1, 0)),
-    };
+    return adminScheduleSelectableWindowDays();
   }
 
   function submitNow() {
@@ -831,7 +934,7 @@ function ScheduleModal({
     // condition rather than a second derivation of one.
     const warning = warningTextTh(
       classifyAgainstWindow(selectedDates, gridWindowDays()),
-      ADMIN_SCHEDULE_MONTHS
+      ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL
     );
     if (warning) {
       setPendingWarning(warning);

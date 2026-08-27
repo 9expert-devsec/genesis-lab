@@ -8,7 +8,9 @@ import {
 } from '@/lib/schedule/gridWindowWarning';
 import {
   ADMIN_SCHEDULE_MONTHS,
+  ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL,
   adminScheduleMonthCols,
+  adminScheduleSelectableWindowDays,
 } from '@/lib/adminScheduleHorizon';
 
 // The first version of this warning looked only PAST the last column. The
@@ -129,9 +131,68 @@ test('the warning always states that nothing was altered', () => {
   }
 });
 
-// ── it is measured against the REAL grid window ────────────────────────────
+// ── re-based on the MAXIMUM SELECTABLE range, not the current view ─────────
+//
+// The admin table's from/to month range became user-adjustable in the round
+// that added this section. Before that, "the table's window" and "the
+// table's reach" were the same fixed 12 months, so classifying against the
+// rendered columns and against the outer selectable boundary gave the same
+// answer — which is what the ORIGINAL version of this test (classifying
+// against `adminScheduleMonthCols()`) exercised. Once the dropdowns can move,
+// the two stop agreeing: a date outside TODAY'S chosen months but inside the
+// SELECTABLE range is not a problem, because the admin can just widen the
+// dropdowns and see it. Only a date outside the selectable range's outer edge
+// is genuinely unreachable. `SchedulesAdminClient.jsx`'s `gridWindowDays()`
+// was re-pointed at `adminScheduleSelectableWindowDays()` for exactly this
+// reason, and this file now measures against the same function it calls.
 
-test('against the real grid columns, the incident dates classify as they did live', () => {
+test('a date outside the CURRENT VIEW but inside the selectable range does not warn', () => {
+  // 2025-09-23 is the incident's own stray date — 11 months before
+  // 2026-08-27, i.e. inside a 12-month-back selectable range even though it
+  // is well before any month a default or narrow current view would show.
+  const now = new Date(2026, 7, 27); // 2026-08-27
+  const window = adminScheduleSelectableWindowDays(now);
+
+  const c = classifyAgainstWindow(['2025-09-23', '2026-10-30', '2026-11-02'], window);
+  assert.equal(
+    c.hasWarning, false,
+    'a date the admin can still reach by widening the from/to dropdowns must not warn',
+  );
+  assert.equal(c.disappears, false);
+});
+
+test('a date OUTSIDE the selectable range still warns and still disappears', () => {
+  // 12 months back is the selectable floor at this `now` (2025-08); a date a
+  // further month back (2025-07) is outside it no matter how the admin sets
+  // the dropdowns — genuinely unreachable, and the disappearing case still
+  // applies because it is the EARLIEST date.
+  const now = new Date(2026, 7, 27); // 2026-08-27
+  const window = adminScheduleSelectableWindowDays(now);
+  assert.equal(window.firstDay, '2025-08-01', 'sanity: the selectable floor for this `now`');
+
+  const c = classifyAgainstWindow(['2025-07-15', '2026-10-30'], window);
+  assert.equal(c.hasWarning, true);
+  assert.equal(c.disappears, true, 'still unreachable by any dropdown selection — still severe');
+
+  const w = warningTextTh(c, ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL);
+  assert.equal(w.severe, true);
+});
+
+test('a date past the selectable FORWARD edge still warns as the non-severe, waiting case', () => {
+  const now = new Date(2026, 7, 27); // 2026-08-27
+  const window = adminScheduleSelectableWindowDays(now);
+  assert.equal(window.lastDay, '2028-08-31', 'sanity: the selectable ceiling for this `now`');
+
+  const c = classifyAgainstWindow(['2026-10-30', '2028-09-01'], window);
+  assert.equal(c.hasWarning, true);
+  assert.equal(c.disappears, false, 'placement is by the first date, which is in range');
+});
+
+test('against the real grid columns, the CURRENT VIEW alone would have missed the incident', () => {
+  // CONTROL for the re-basing itself: if `gridWindowDays()` still classified
+  // against the currently rendered columns (the pre-fix shape), the incident
+  // dates would still register as a warning today — proving the two windows
+  // are genuinely different rather than the fix being a no-op.
   const cols = adminScheduleMonthCols(new Date(2026, 7, 27));
   const firstDay = `${cols[0].key}-01`;
   const last = cols.at(-1);
@@ -142,7 +203,7 @@ test('against the real grid columns, the incident dates classify as they did liv
     ['2025-09-23', '2026-10-30', '2026-11-02'],
     { firstDay, lastDay: iso },
   );
-  assert.equal(damaged.disappears, true, 'this is the round that actually vanished');
+  assert.equal(damaged.disappears, true, 'against the narrow current view this still disappears');
 
   const repaired = classifyAgainstWindow(['2026-10-30', '2026-11-02'], { firstDay, lastDay: iso });
   assert.equal(repaired.hasWarning, false, 'and the repaired round is clean');

@@ -4,7 +4,10 @@ import { listPrograms } from '@/lib/api/programs';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
 import { requirePage } from '@/lib/rbac/guard';
-import { adminScheduleWindow } from '@/lib/adminScheduleHorizon';
+import {
+  adminScheduleWindow,
+  resolveAdminScheduleRange,
+} from '@/lib/adminScheduleHorizon';
 import { SchedulesAdminClient } from './_components/SchedulesAdminClient';
 
 export const metadata = {
@@ -14,17 +17,43 @@ export const metadata = {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export default async function AdminSchedulesPage() {
+/**
+ * Filters — including the month range — live in searchParams, not client
+ * state: see SchedulesAdminClient's header note and
+ * test/fs/urlFilterNoState.test.mjs, which now guards this screen too.
+ */
+export default async function AdminSchedulesPage({ searchParams }) {
   await requirePage('schedules');
 
+  const sp = (await searchParams) ?? {};
+  const one = (key) => {
+    const raw = sp?.[key];
+    return (Array.isArray(raw) ? raw[0] : raw ?? '').toString();
+  };
+  const search = one('search');
+  const filterProgram = one('filterProgram');
+  const filterStatus = one('filterStatus');
+
+  // `now` is read ONCE and threaded through both calls below, so the
+  // resolved range and the fetch bound derived from it cannot disagree by a
+  // moment crossed between two separate `new Date()` reads.
+  const now = new Date();
+  const { from: monthFrom, to: monthTo } = resolveAdminScheduleRange(now, {
+    fromKey: one('monthFrom') || undefined,
+    toKey: one('monthTo') || undefined,
+  });
+
   // The grid renders one column per month; this window must be the SAME
-  // window. `adminScheduleWindow` derives `to` from the last rendered
-  // column (its last day) rather than adding N months to today, so MSDB
-  // cannot return a row that lands outside every column and gets dropped
-  // client-side — which is what the old `today + 4 months` bound did to
-  // anything dated after the final column. Both sides read
-  // ADMIN_SCHEDULE_MONTHS; see src/lib/adminScheduleHorizon.js.
-  const { from, to } = adminScheduleWindow();
+  // window the admin selected. `adminScheduleWindow` derives `to` from the
+  // last rendered column (its last day) rather than adding N months to
+  // today, so MSDB cannot return a row that lands outside every column and
+  // gets dropped client-side — which is what the old `today + 4 months`
+  // bound did to anything dated after the final column. See
+  // src/lib/adminScheduleHorizon.js.
+  const { from, to } = adminScheduleWindow(now, {
+    fromKey: monthFrom,
+    toKey: monthTo,
+  });
 
   const [scheduleRes, courseRes, programRes, instructorRes] =
     await Promise.allSettled([
@@ -66,6 +95,11 @@ export default async function AdminSchedulesPage() {
         programs={programs}
         scheduleLocals={scheduleLocals}
         instructors={instructors}
+        search={search}
+        filterProgram={filterProgram}
+        filterStatus={filterStatus}
+        monthFrom={monthFrom}
+        monthTo={monthTo}
       />
     </div>
   );
