@@ -287,6 +287,52 @@ test('the draft/publish action layer', async (t) => {
     );
   });
 
+  /**
+   * ── SELF-RETIRING (round 33). DELETE THIS WHEN IT GOES RED ────────────────
+   * `publishPageStatus` does NOT stamp `updatedBy`. Its $set is status, the two
+   * dates, the promoted content and `draft: null` — nothing else. The only
+   * writers of `updatedBy` are createPageBuilderPage, duplicatePageBuilderPage
+   * and updatePageBuilderPage, and the last of those has had NO LIVE CALLER
+   * since round 3. There are no Mongoose hooks on the schema. So on any page
+   * edited since it was created, `page.updatedBy` names its CREATOR.
+   *
+   * This is asserted because the field is the obvious-looking source for the
+   * "ผู้แก้ไขล่าสุด" / "ผู้เผยแพร่" lines the version requirements ask for, and
+   * it would answer them confidently and wrongly. The honest sources are
+   * `draft.savedBy` while an edit is pending and `PageVersion.actor` after a
+   * publish — see docs/version-model-proposal.md §0b, §D, §E.
+   *
+   * A RED HERE IS NOT A BUG. It means publish now stamps the actor, the trap is
+   * gone, and this case has paid its debt — delete it.
+   */
+  await scenario('publish does NOT stamp updatedBy — it stays the creator (round 33)', async () => {
+    const before = copy(seedPage({
+      status: 'draft',
+      draft: draftContent(),
+      createdBy: { id: 'u-author', name: 'Author A' },
+      updatedBy: { id: 'u-author', name: 'Author A' },
+    }));
+
+    // A DIFFERENT, NAMED actor publishes — so this cannot pass by both sides
+    // being anonymous, and the name below cannot be a coincidence.
+    setSessionUser({ id: 'u-publisher', name: 'Publisher B', tier: 'developer' });
+    const res = await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+    assert.equal(res.ok, true, res.error);   // not vacuous: the publish landed
+
+    const after = row();
+    assert.equal(after.status, 'published', 'precondition: the publish really went live');
+    assert.deepEqual(
+      after.updatedBy, { id: 'u-author', name: 'Author A' },
+      'publish now stamps updatedBy — the round-33 trap is gone, delete this case'
+    );
+
+    // CONTROL for the same fact from the other side: the publisher IS recorded,
+    // just not on the page. This is the source docs/version-model-proposal.md
+    // §D tells a "ผู้เผยแพร่" line to read.
+    const [version] = all('PageVersion');
+    assert.equal(version.actor.name, 'Publisher B', 'the snapshot lost the publisher');
+  });
+
   await scenario('the snapshot never carries a draft — not even when the page had one', async () => {
     const before = copy(seedPage({ status: 'draft', draft: draftContent({ title: MARKER }) }));
     await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
