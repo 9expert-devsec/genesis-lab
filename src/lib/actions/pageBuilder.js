@@ -30,6 +30,9 @@ import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 import { reidSection, stripImageOwnership } from '@/lib/pageBuilder/reidSection';
 import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
 import { recordAudit, snapshotVersion } from '@/lib/pages/pageAudit';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { backupDraftVersion } from '@/lib/pages/pageAudit';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { draftContentSchema } from '@/lib/schemas/pageBuilder';
 import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS, STATUS_KEYS } from '@/lib/schemas/pageBuilder';
@@ -904,6 +907,77 @@ export async function publishPageStatus(id, statusPatch, expectedUpdatedAt) {
     return { ok: true, status: updated.status, updatedAt: updated.updatedAt?.toISOString() };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'อัปเดตสถานะไม่สำเร็จ' };
+  }
+}
+
+/**
+ * Preserve the current draft as a Draft Backup. Round 37, requirement §6/§9.
+ *
+ * ── TWO EFFECTS, TWO WRITES, AND THE ORDER IS THE SAFETY ──────────────────
+ * "Back up the draft" and "replace it with an older version" touch DIFFERENT
+ * collections — page_versions and page_builder_pages — so they cannot be one
+ * write without a transaction, and this deployment has no replica set to run
+ * one on. Two writes it is, and the only question that matters is which order
+ * fails safe:
+ *
+ *   backup THEN replace — if the replace fails, the author still has their
+ *     draft, untouched, plus one redundant row. Untidy, fully recoverable.
+ *   replace THEN backup — if the backup fails, the draft is already gone and
+ *     there is nothing left to write. That is the loss this round exists to
+ *     prevent.
+ *
+ * So the backup goes first, in its own action, and the caller does not proceed
+ * unless it succeeded. That is also why backupDraftVersion throws rather than
+ * swallowing like everything else in pageAudit: a swallowed failure here would
+ * report a safety net that is not there.
+ *
+ * ── IT DOES NOT TOUCH THE PAGE DOCUMENT, WHICH IS WHAT MAKES TWO CALLS SAFE ─
+ * Writing to page_versions leaves the page's own `updatedAt` alone, so the
+ * caller's `expectedUpdatedAt` is STILL VALID for the saveDraftContent that
+ * follows. The two calls therefore cannot race each other's token, and no new
+ * conflict window is opened by splitting them.
+ *
+ * NOTHING TO BACK UP IS A SUCCESS, not an error: restoring onto a page with no
+ * pending draft destroys nothing, and the caller should carry on. It answers
+ * `{ ok: true, backedUp: false }` so the caller can tell the two apart.
+ *
+ * This action writes NO draft. saveDraftContent remains the single write path
+ * into `.draft` — round 8's shape, counted in test/render/publishedViewEntry.
+ */
+export async function backupDraftBeforeRestore(id, expectedUpdatedAt) {
+  const session = await requireAdmin('pages');
+  if (!id) return { ok: false, error: 'Missing page id' };
+  if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  await dbConnect();
+
+  const existing = await PageBuilder.findById(id).lean();
+  if (!existing) return { ok: false, error: 'ไม่พบหน้าเพจ' };
+
+  // The SAME optimistic check every other draft-surface write makes. A restore
+  // must not be the one path that backs up a document that has since moved.
+  const conflict = draftConflict(existing, expectedUpdatedAt);
+  if (conflict) return conflict;
+
+  if (!hasUnpublishedDraft(existing)) return { ok: true, backedUp: false };
+
+  const actor = await currentUserStamp(session);
+  try {
+    // effectiveContent, not `existing.draft`: it picks exactly
+    // DRAFT_CONTENT_KEYS and drops the server-set savedAt/savedBy stamps, which
+    // are not content and must not travel into a snapshot. It is also the same
+    // shape the restore reads back out, so a backup round-trips through the
+    // path a published version already uses.
+    const { id: versionId } = await backupDraftVersion({
+      pageId: id, content: effectiveContent(existing), actor,
+    });
+    await recordAudit({
+      pageId: id, pageType: AUDIT_TYPE, action: 'draft.backup',
+      before: { hadDraft: true }, after: { backupVersionId: versionId }, actor,
+    });
+    return { ok: true, backedUp: true, versionId };
+  } catch (err) {
+    // Surfaced, never swallowed — the caller must NOT go on to overwrite.
+    return { ok: false, error: err?.message ?? 'สำรองฉบับร่างไม่สำเร็จ' };
   }
 }
 

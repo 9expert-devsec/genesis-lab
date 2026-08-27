@@ -27,6 +27,9 @@
 
 import { dbConnect } from '@/lib/db/connect';
 import PageVersion from '@/models/PageVersion';
+// ADDED beside the two statements above rather than folded into either — the
+// standing rule in this repo.
+import { DRAFT_BACKUP_LABEL } from '@/lib/pageBuilder/versionLabel';
 
 /**
  * The newest version row's metadata, or null when the page has no history.
@@ -41,7 +44,24 @@ export async function getPublishedVersionMeta(pageId) {
   const key = String(pageId ?? '');
   if (!key) return null;
   await dbConnect();
-  const row = await PageVersion.find({ pageId: key })
+  /**
+   * ── BACKUPS ARE EXCLUDED IN THE QUERY, NOT AFTER IT ───────────────────────
+   * Round 37 put draft backups in this collection, and a backup is newer than
+   * the publish it protects. Without this filter, the FIRST restore-over-a-draft
+   * would make a backup the newest row — and this function feeds a PUBLIC page
+   * that names a publisher and a publish time. It would credit the author who
+   * happened to restore, at the moment they restored, as the person who
+   * published what visitors are reading.
+   *
+   * `$ne` on the backup label rather than `label: 'publish'`: rows written
+   * before the label vocabulary settled carry '' and are genuine publishes, so
+   * an allow-list would silently drop them. Excluding the one kind that is
+   * definitely not a publish is the filter that is correct for both.
+   *
+   * Filtered in the QUERY so a backup's actor never leaves the database on this
+   * path at all — the same reasoning `-draft` gets on every public page read.
+   */
+  const row = await PageVersion.find({ pageId: key, label: { $ne: DRAFT_BACKUP_LABEL } })
     .select('versionNumber actor createdAt')   // NEVER snapshot
     .sort({ createdAt: -1 })
     .limit(1)

@@ -1,16 +1,25 @@
 /**
  * Audit-log + version-snapshot writers for pages.
  *
- * Both MUST NEVER block a save: every function swallows its own errors, so a
- * caller can `await` them without a failed audit/version write ever surfacing
- * as a failed mutation. A lost audit row or snapshot is acceptable; a lost
- * save is not.
+ * TWO OF THE THREE MUST NEVER BLOCK A SAVE: recordAudit and snapshotVersion
+ * swallow their own errors, so a caller can `await` them without a failed
+ * audit/version write ever surfacing as a failed mutation. A lost audit row or
+ * snapshot is acceptable; a lost save is not.
+ *
+ * THE THIRD IS THE EXACT INVERSE, and it is not an oversight.
+ * backupDraftVersion (round 37) THROWS, because its row is the safety net for
+ * an overwrite that happens next: reporting success it did not achieve would
+ * let the caller destroy the draft it was written to preserve. Its own note
+ * says so at length; do not "make it consistent".
  *
  * Server-only (imports mongoose models).
  */
 
 import PageAuditLog from '@/models/PageAuditLog';
 import PageVersion from '@/models/PageVersion';
+// ADDED beside the two statements above rather than folded into either — the
+// standing rule in this repo.
+import { DRAFT_BACKUP_LABEL } from '@/lib/pageBuilder/versionLabel';
 
 
 /**
@@ -94,4 +103,46 @@ export async function snapshotVersion({ pageId, snapshot, label, actor, versionN
       `history is now missing a publish: ${err?.message ?? err}`
     );
   }
+}
+
+/**
+ * Preserve the CURRENT draft as a Draft Backup — round 37.
+ *
+ * ── IT DOES NOT SWALLOW, AND THAT IS THE WHOLE POINT ───────────────────────
+ * Every other writer in this file swallows: a lost audit row or a lost publish
+ * snapshot must never fail the save that produced it, because the save is the
+ * thing of value and the record is the by-product.
+ *
+ * Here the relation is INVERTED. This row is written so that the very next
+ * effect — overwriting the author's draft with an older version — is not a
+ * loss. A swallowed failure would mean the caller proceeds to overwrite, having
+ * been told the safety net is in place when it is not, and the draft is gone
+ * with nothing to recover it from. That is precisely the outcome round 37
+ * exists to prevent, so this one THROWS and its caller aborts.
+ *
+ * If you are tempted to make this consistent with its neighbours: the
+ * inconsistency is the design. Read the ordering note in
+ * backupDraftBeforeRestore.
+ *
+ * `content` must already be picked to DRAFT_CONTENT_KEYS by the caller —
+ * effectiveContent does that, and doing it here would put a second picker
+ * beside the one draftState.js exists to be.
+ */
+export async function backupDraftVersion({ pageId, content, actor }) {
+  const key = String(pageId ?? '');
+  if (!key) throw new Error('backupDraftVersion: missing pageId');
+  if (!content || typeof content !== 'object' || !Object.keys(content).length) {
+    throw new Error('backupDraftVersion: refusing to back up empty content');
+  }
+  const row = await PageVersion.create({
+    pageId: key,
+    snapshot: content,
+    label: DRAFT_BACKUP_LABEL,
+    actor: actor ?? { id: '', name: '' },
+    // NEVER a number. A backup is not a published version and must not consume
+    // one — requirement §6. Null keeps it outside round 35's partial unique
+    // index, which is what lets many backups coexist on one page.
+    versionNumber: null,
+  });
+  return { id: String(row._id) };
 }

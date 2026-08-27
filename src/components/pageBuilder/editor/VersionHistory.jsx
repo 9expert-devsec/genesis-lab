@@ -14,6 +14,9 @@ import { canRestoreVersion, restoreWouldLoseWork } from '@/lib/pageBuilder/edito
 // ADDED beside the statements above rather than folded into one — the standing
 // rule in this directory.
 import { versionName } from '@/lib/pageBuilder/versionLabel';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this directory.
+import { versionRowLabel, isDraftBackup, DRAFT_BACKUP_LABEL } from '@/lib/pageBuilder/versionLabel';
 // ADDED beside the statements above rather than folded into one — the standing
 // rule in this directory.
 import { canOfferPublishedView, publishedViewHref } from '@/lib/pageBuilder/previewMode';
@@ -59,7 +62,14 @@ import { cn } from '@/lib/utils';
  * rather than a bare "no data" that reads as something being broken.
  */
 
-const LABELS = { publish: 'เผยแพร่', 'pre-rollback': 'ก่อนย้อนกลับ' };
+const LABELS = {
+  publish: 'เผยแพร่',
+  'pre-rollback': 'ก่อนย้อนกลับ',
+  // Round 37. Without this the row would render the raw ASCII 'draft-backup' in
+  // a Thai list, through the fallback below — the exact leak round 33 predicted
+  // when it asked where a backup would live.
+  [DRAFT_BACKUP_LABEL]: 'สำรองไว้ก่อนกู้คืน',
+};
 // The statuses under which the newest version is what the public is reading.
 const LIVE_STATUSES = ['published', 'scheduled'];
 
@@ -301,7 +311,18 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
    * the top bar deliberately says nothing — round 27 refused a second save
    * vocabulary there and round 34's saver line respected it.
    */
-  const liveVersionId = LIVE_STATUSES.includes(editor?.page?.status) ? rows[0]?._id : null;
+  /**
+   * WHICH ROW IS LIVE — now the newest row that is a VERSION, not simply the
+   * newest row.
+   *
+   * Round 35 wrote `rows[0]`, which was exact while every row was a publish.
+   * Round 37 breaks that: a backup is written at restore time and is therefore
+   * NEWER than the publish it protects, so `rows[0]` would put ปัจจุบัน on a
+   * backup — naming as live a thing that was never public, on the first restore
+   * any page ever performs.
+   */
+  const newestVersion = rows.find((v) => !isDraftBackup(v));
+  const liveVersionId = LIVE_STATUSES.includes(editor?.page?.status) ? newestVersion?._id : null;
   /**
    * The ปัจจุบัน row also LINKS to the published view — same destination as the
    * top bar's, through the same helper.
@@ -323,7 +344,9 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
   const offerLiveLink = canOfferPublishedView({
     pendingDraft: true,
     publishedVersion: editor?.publishedVersion,
-    hasVersionRow: true,
+    // Round 37: being in this list is no longer proof of a PUBLISHED version —
+    // a page whose only rows are backups has never published anything.
+    hasVersionRow: Boolean(newestVersion),
     previewEnabled: editor?.previewEnabled,
   });
 
@@ -340,9 +363,9 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
                 than printing a placeholder, so an un-migrated deployment reads
                 exactly as it did before this round. versionLabel owns that.
               */}
-              {versionName(v) && (
+              {versionRowLabel(v) && (
                 <span data-testid="version-number" className="font-bold text-9e-navy dark:text-white/90">
-                  {versionName(v)}{' · '}
+                  {versionRowLabel(v)}{' · '}
                 </span>
               )}
               <span className="text-9e-navy dark:text-white/90">{when(v.createdAt)}</span>

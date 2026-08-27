@@ -20,6 +20,11 @@ import {
 // A SECOND import statement rather than an edit of the one above — the standing
 // rule in this repo, and what the seam scanners exist to keep true.
 import { getPageVersionSnapshot } from '@/lib/actions/pageBuilder';
+// Round 37, ADDED beside the statements above rather than folded into any.
+import { backupDraftBeforeRestore } from '@/lib/actions/pageBuilder';
+import { getPageVersions } from '@/lib/actions/pageBuilder';
+import { DRAFT_BACKUP_LABEL, isDraftBackup, versionRowLabel } from '@/lib/pageBuilder/versionLabel';
+import { effectiveContent as effectiveContentOf } from '@/lib/pageBuilder/draftState';
 import { getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
 import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 
@@ -1531,5 +1536,157 @@ test('the draft/publish action layer', async (t) => {
     assert.equal(meta.props.versionLabel, 'เวอร์ชัน 4', 'the number should still come from the live doc');
     assert.equal(meta.props.publisher, '', 'the wrong publisher was named');
     assert.equal(meta.props.publishedAt, null, 'the wrong publish time was shown');
+  });
+
+  // ── DRAFT BACKUP — round 37, commit 1 ────────────────────────────────────
+  //
+  // Still inside this one parent (gate item 5 / round 34): these call the real
+  // actions against this file's fake database.
+
+  const backupRows = () => all('PageVersion').filter(isDraftBackup);
+
+  await scenario('a backup carries NO version number, and the row is labelled', async () => {
+    const before = copy(seedPage({ status: 'published', publishedVersion: 2, draft: draftContent({ title: MARKER }) }));
+    const res = await backupDraftBeforeRestore(PAGE_ID, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.equal(res.backedUp, true, 'a page with a draft reported nothing to back up');
+
+    const [row] = backupRows();
+    assert.ok(row, 'no backup row was written');
+    assert.equal(row.label, DRAFT_BACKUP_LABEL);
+    assert.equal(row.versionNumber, null, 'a backup consumed a version number');
+    assert.equal(row.pageId, PAGE_ID);
+  });
+
+  await scenario('CONTROL: a numbered backup WOULD be a different row, and is refused by shape', () => {
+    // The index behaviour itself is measured against a real Mongo index in
+    // scripts/_probe-round37-index.mjs (two null rows accepted, a duplicate
+    // number rejected with E11000). What is asserted here is the WRITER's
+    // contract: it must never hand a number out.
+    assert.equal(isDraftBackup({ label: DRAFT_BACKUP_LABEL }), true);
+    assert.equal(isDraftBackup({ label: 'publish' }), false);
+    assert.equal(versionRowLabel({ label: DRAFT_BACKUP_LABEL, versionNumber: null }), 'สำรองฉบับร่าง');
+    // …and a backup that HAD taken a number would render as a version, which is
+    // the confusion the numberless rule exists to prevent.
+    assert.equal(versionRowLabel({ label: 'publish', versionNumber: 4 }), 'เวอร์ชัน 4');
+  });
+
+  await scenario('the backup stores exactly the nine DRAFT_CONTENT_KEYS — no stamps', async () => {
+    // effectiveContent, not `existing.draft`: savedAt/savedBy are server-set and
+    // are not content. Storing them would put them back into a snapshot that
+    // the restore path then picks from.
+    const before = copy(seedPage({ status: 'published', draft: draftContent({ title: MARKER }) }));
+    await backupDraftBeforeRestore(PAGE_ID, token(before));
+    const [row] = backupRows();
+    assert.deepEqual(Object.keys(row.snapshot).sort(), [...DRAFT_CONTENT_KEYS].sort());
+    assert.equal(row.snapshot.title, MARKER, 'the backup did not capture the draft');
+    for (const stamp of ['savedAt', 'savedBy']) {
+      assert.equal(stamp in row.snapshot, false, `the backup carried the ${stamp} stamp`);
+    }
+  });
+
+  await scenario('the backup does NOT touch the draft, and leaves the token valid', async () => {
+    // What makes two calls safe rather than a new race: page_versions and
+    // page_builder_pages are different collections, so the page's updatedAt does
+    // not move and the caller's expectedUpdatedAt still holds for the save that
+    // follows.
+    const before = copy(seedPage({ status: 'published', draft: draftContent({ title: MARKER }) }));
+    const tok = token(before);
+    const res = await backupDraftBeforeRestore(PAGE_ID, tok);
+    assert.equal(res.ok, true, res.error);
+
+    const after = row();
+    assert.equal(after.draft.title, MARKER, 'the backup disturbed the draft it was preserving');
+    assert.equal(token(after), tok, 'the backup moved the page token');
+
+    // …and the follow-up save is accepted with the SAME token.
+    const saved = await saveDraftContent(PAGE_ID, draftContent({ title: 'Restored' }), tok);
+    assert.equal(saved.ok, true, saved.error);
+    assert.equal(row().draft.title, 'Restored');
+  });
+
+  await scenario('no draft to back up is a SUCCESS, and writes nothing', async () => {
+    const before = copy(seedPage({ status: 'published', draft: null }));
+    const res = await backupDraftBeforeRestore(PAGE_ID, token(before));
+    assert.equal(res.ok, true, res.error);
+    assert.equal(res.backedUp, false, 'an absent draft reported a backup');
+    assert.equal(count('PageVersion'), 0, 'a row was written with nothing to preserve');
+  });
+
+  await scenario('a stale token is refused — a backup is not the one write that skips the check', async () => {
+    seedPage({ status: 'published', draft: draftContent() });
+    const res = await backupDraftBeforeRestore(PAGE_ID, '2020-01-01T00:00:00.000Z');
+    assert.equal(res.ok, false);
+    assert.equal(res.conflict, true, 'a stale backup was not reported as a conflict');
+    assert.equal(count('PageVersion'), 0);
+  });
+
+  await scenario('B — the ปัจจุบัน marker names the newest VERSION, never a backup', async () => {
+    /**
+     * The specific case round 37 was told to verify rather than reason about.
+     * A backup is written at restore time and is therefore NEWER than the
+     * publish it protects, so `rows[0]` — round 35's rule — would put the
+     * live marker on a backup the first time any page restores.
+     */
+    seedPage({ status: 'published', publishedVersion: 2 });
+    seed('PageVersion', {
+      _id: 'pv-pub', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 2,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+    seed('PageVersion', {
+      _id: 'pv-backup', pageId: PAGE_ID, snapshot: {}, label: DRAFT_BACKUP_LABEL, versionNumber: null,
+      actor: { id: 'u2', name: 'Restorer C' }, createdAt: new Date('2026-08-27T02:00:00.000Z'),
+    });
+
+    const rows = await getPageVersions(PAGE_ID);
+    assert.equal(rows[0]._id, 'pv-backup', 'precondition: the backup IS the newest row');
+    const newestVersion = rows.find((v) => !isDraftBackup(v));
+    assert.equal(newestVersion._id, 'pv-pub', 'the newest VERSION is not the publish row');
+    assert.notEqual(newestVersion._id, rows[0]._id,
+      'the fixture cannot distinguish the two rules — it proves nothing');
+  });
+
+  await scenario('B — the PUBLIC published-version reader skips backups entirely', async () => {
+    // The one that reaches a public page. Without the query filter it would name
+    // the person who restored, at the moment they restored, as the publisher of
+    // what visitors are reading.
+    seedPage({ status: 'published', preview: PREVIEW, publishedVersion: 2, draft: null });
+    seed('PageVersion', {
+      _id: 'pv-pub', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 2,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+    seed('PageVersion', {
+      _id: 'pv-backup', pageId: PAGE_ID, snapshot: {}, label: DRAFT_BACKUP_LABEL, versionNumber: null,
+      actor: { id: 'u2', name: 'Restorer C' }, createdAt: new Date('2026-08-27T02:00:00.000Z'),
+    });
+
+    const meta = named(await drivePreview({ mode: 'published' }), 'PublishedMeta');
+    assert.ok(meta, 'the meta strip did not render');
+    assert.equal(meta.props.publisher, 'Publisher B', 'a restorer was named as the publisher');
+    assert.equal(meta.props.publishedAt, '2026-08-20T02:00:00.000Z', 'the backup time was shown as a publish time');
+    assert.equal(meta.props.versionLabel, 'เวอร์ชัน 2');
+  });
+
+  await scenario('C — one fetch-one serves both shapes, and the PICK is what normalises them', async () => {
+    // A version's snapshot is a whole page; a backup's is the nine content keys.
+    // effectiveContent picks DRAFT_CONTENT_KEYS off either, so the restore path
+    // is identical and neither shape can reach the draft unfiltered.
+    seedPage({ status: 'published' });
+    seed('PageVersion', {
+      _id: 'pv-backup', pageId: PAGE_ID, label: DRAFT_BACKUP_LABEL, versionNumber: null,
+      actor: { id: 'u2', name: 'Restorer C' }, createdAt: new Date('2026-08-27T02:00:00.000Z'),
+      snapshot: draftContent({ title: MARKER }),
+    });
+
+    const got = await getPageVersionSnapshot('pv-backup');
+    assert.ok(got, 'a backup row is not readable through the fetch-one');
+    assert.equal(got.label, DRAFT_BACKUP_LABEL);
+    assert.equal(got.versionNumber, null);
+    assert.equal(got.snapshot.title, MARKER);
+    // The guard: the pick yields exactly the nine keys from EITHER shape.
+    assert.deepEqual(
+      Object.keys(effectiveContentOf(got.snapshot)).sort(), [...DRAFT_CONTENT_KEYS].sort(),
+      'the backup shape does not normalise through the same pick'
+    );
   });
 });

@@ -34,6 +34,50 @@
  * would present that as a fact.
  */
 
+/**
+ * ── DRAFT BACKUP — round 37 ────────────────────────────────────────────────
+ * A backup lives in `page_versions` as a row whose `label` is this string and
+ * whose `versionNumber` is null. ONE definition, because five places now ask
+ * "is this row a backup": the writer, the list's label map, the current-version
+ * marker, the public published-version reader, and the offer-a-link gate.
+ *
+ * WHY THE SAME COLLECTION. The row is a content snapshot keyed by pageId,
+ * sorted by createdAt, shown in the same dialog and restored by the same path —
+ * that is PageVersion's exact shape. A second collection would duplicate the
+ * model, the index, the serializer and the Cloudinary-ownership reasoning in
+ * snapshotVersion's comment for one boolean's worth of difference.
+ *
+ * WHY A NUMBERLESS ROW IS SAFE, measured rather than assumed
+ * (scripts/_probe-round37-index.mjs, against a scratch collection carrying the
+ * exact index round 35 declared): two rows with `versionNumber: null` on one
+ * page are ACCEPTED, a row with the field absent is ACCEPTED, and a DUPLICATE
+ * numbered row is still REJECTED with E11000. Round 35 chose
+ * `partialFilterExpression: { versionNumber: { $type: 'number' } }` precisely so
+ * unnumbered rows fall outside the index; a backup is the first thing to use it.
+ */
+export const DRAFT_BACKUP_LABEL = 'draft-backup';
+
+/** Is this row a draft backup rather than a published version? */
+export function isDraftBackup(version) {
+  return version?.label === DRAFT_BACKUP_LABEL;
+}
+
+/**
+ * What LEADS a row in the history list.
+ *
+ * A published version leads with its number. A backup has none — it must not
+ * take one (requirement §6) — so it leads with what it IS instead.
+ *
+ * Deliberately NOT folded into versionName. That function answers "what is this
+ * version's number", round 35's tests pin it to return '' when there is none,
+ * and a backup genuinely has none: teaching it to return a word for a row with
+ * no number would make it answer two different questions depending on the row.
+ */
+export function versionRowLabel(version) {
+  if (isDraftBackup(version)) return 'สำรองฉบับร่าง';
+  return versionName(version);
+}
+
 /** Is this a version number the UI may show? */
 export function hasVersionNumber(version) {
   const n = version?.versionNumber;
