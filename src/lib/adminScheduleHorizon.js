@@ -19,10 +19,22 @@
  * takes the last day of the last column. The window fetched and the window
  * rendered cannot diverge without one of them being rewritten.
  *
- * NOT the modal's date-picker calendar. `calendarMonths` in
- * SchedulesAdminClient.jsx bounds how far a user can scroll while picking
- * session dates — a different concept that merely happened to be 4 too.
- * See the comment there. Do not import this constant into it.
+ * NOT the modal's date-picker range. src/lib/schedule/editorCalendarRange.js
+ * bounds how far a user can navigate while picking session dates. It is a
+ * DIFFERENT CONCEPT: this horizon decides what the admin TABLE displays, that
+ * range decides what a user may PICK. Do not import this constant into it, and
+ * do not pass this constant into it from the modal.
+ *
+ * The two were once numerically equal — both 4 — and the picker was rewritten
+ * precisely because tying what can be edited to a clock-derived window made 15
+ * of 90 live rounds uneditable (measured 2026-08-27). Tying it to the table's
+ * reach instead would be the same defect from the other end. The picker's range
+ * is derived from the DATA BEING EDITED; see that module's docstring.
+ *
+ * The reverse direction is legitimate and is used: the modal asks this module
+ * where the last column falls in order to WARN, at save time, that a round will
+ * not be listed yet. "Will this appear in the table" is a question about the
+ * table. "What may I pick" is not.
  *
  * Dependency-free by design (no next/*, no db, no models) so the server
  * page, the client component, and the `pure` test tier can all import it.

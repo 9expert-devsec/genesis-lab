@@ -9,17 +9,22 @@ import {
   adminScheduleMonthCols,
   adminScheduleWindow,
 } from '@/lib/adminScheduleHorizon';
+import {
+  EDITOR_RANGE_MONTHS_BACK,
+  EDITOR_RANGE_MONTHS_FORWARD,
+  rangeFor,
+} from '@/lib/schedule/editorCalendarRange';
+import { scrubSource } from '../sourceScan.mjs';
 
 // The admin schedule grid's horizon was the literal `4` in three places that
 // must agree — the MSDB `to` bound, the column loop, and the Thai subtitle —
-// and in a fourth, `calendarMonths`, that must NOT. Two failure modes:
+// and in a fourth, the modal's date picker, that must NOT. Two failure modes:
 //
 //   1. The three drift apart. Nothing enforced their agreement; they agreed
 //      only because one person wrote them in one sitting.
-//   2. Someone "unifies" all four. `calendarMonths` bounds the modal date
-//      picker's scroll — a coincidentally-equal number, not the same concept.
-//      Coupling it to the grid renders a 12-month day-grid scroll inside a
-//      max-h-80 box.
+//   2. Someone "unifies" all four. The picker bounds what a user may PICK — a
+//      coincidentally-equal number, not the same concept as what the table can
+//      DISPLAY.
 //
 // They also never actually agreed. The old bound was `today + N months`
 // (2026-07-29 → 2026-11-29) while the last column was the month containing
@@ -35,10 +40,34 @@ const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8');
 
 const PAGE_REL = 'src/app/admin/schedules/page.jsx';
 const CLIENT_REL = 'src/app/admin/schedules/_components/SchedulesAdminClient.jsx';
+const RANGE_REL = 'src/lib/schedule/editorCalendarRange.js';
 const HORIZON_MODULE = '@/lib/adminScheduleHorizon';
 
 const pageSrc = read(PAGE_REL);
 const clientSrc = read(CLIENT_REL);
+
+/**
+ * The grid's vocabulary. Any of these appearing where the PICKER's range is
+ * decided means the two concepts have been fused.
+ */
+const GRID_IDENTIFIERS = [
+  'ADMIN_SCHEDULE_MONTHS',
+  'adminScheduleMonthCols',
+  'adminScheduleWindow',
+  'adminScheduleHorizon',
+];
+
+/**
+ * Source with comments and imports removed — the suite's standing rule (see
+ * test/sourceScan.mjs, defects 1, 2 and 5: a docstring that NAMES a symbol, or
+ * a sentence saying a module does NOT use one, satisfies a bare `includes()`
+ * and turns a guard green for the wrong reason).
+ *
+ * It matters here specifically: the range block in SchedulesAdminClient.jsx
+ * carries a comment explaining WHY it must not touch the grid, and that comment
+ * necessarily names the very identifiers this file forbids.
+ */
+const scrub = (text) => scrubSource(text, { stripImports: true });
 
 /**
  * Slice the source between two anchors. THROWS when an anchor is missing
@@ -115,40 +144,92 @@ test('the grid column loop takes its count from the horizon module, not a litera
 
 // ── 2. the false friend stays separate ────────────────────────────────────
 
-test('calendarMonths keeps its OWN literal and does not import the grid constant', () => {
-  const block = sliceBlock(
-    clientSrc, 'calendarMonths',
-    'const calendarMonths = useMemo(',
-    '}, [initialMonthKey]);',
-  );
+// The picker's range now lives in its own module, so the guard is in two
+// parts: a WHOLE-FILE scan of that module, and a SLICED scan of the modal's
+// call site. They catch different things and neither subsumes the other.
 
-  const loop = block.match(/for\s*\(\s*let\s+i\s*=\s*0;\s*i\s*<\s*(\d+)\s*;/);
-  assert.ok(
-    loop,
-    'calendarMonths no longer bounds its loop with a numeric literal. If it now ' +
-    'reads ADMIN_SCHEDULE_MONTHS, REVERT: this is the modal date picker\'s scroll ' +
-    'window, not the grid horizon. It was equal to the old horizon (4) by ' +
-    'coincidence. A 12-month day-grid scroll inside a max-h-80 box is not a ' +
-    'cleanup.\n\nBlock as found:\n' + block.slice(0, 400),
-  );
+test('the picker range module names no grid identifier ANYWHERE in the file', () => {
+  // Whole-file, no anchors. This module answers "what can be picked"; there is
+  // no legitimate reason for any grid identifier to appear in it, at any depth,
+  // in any function. A scan with no anchors cannot rot the way a sliced one can
+  // — which is exactly why the old anchored version of this assertion had to be
+  // re-pointed the moment the picker was redesigned.
+  const src = scrub(read(RANGE_REL));
 
-  for (const forbidden of [
-    'ADMIN_SCHEDULE_MONTHS',
-    'adminScheduleMonthCols',
-    'adminScheduleWindow',
-    'adminScheduleHorizon',
-  ]) {
+  for (const forbidden of GRID_IDENTIFIERS) {
     assert.ok(
-      !block.includes(forbidden),
-      `calendarMonths references ${forbidden} — the date picker must not be ` +
-      `coupled to the table's horizon.`,
+      !src.includes(forbidden),
+      `${RANGE_REL} references ${forbidden}.\n\n` +
+      `FALSE FRIEND. The grid horizon and the picker's range are both "a number ` +
+      `of months" and they are not the same concept: the horizon decides what the ` +
+      `admin TABLE displays, the range decides what a user may PICK. Fusing them ` +
+      `means a round outside the table's reach can no longer be corrected — which ` +
+      `is the defect this module was written to remove (15 of 90 live rounds were ` +
+      `uneditable on 2026-08-27).\n\n` +
+      `If the picker's reach should change, change the constants in this module ` +
+      `on their own evidence.`,
     );
   }
+});
 
-  // Recorded, not enforced as policy: this number may change on its own
-  // evidence (picker ergonomics). It must simply never change BECAUSE the grid
-  // horizon changed.
-  assert.equal(loop[1], '4', `calendarMonths currently spans ${loop[1]} months`);
+test('the modal does not PASS the grid horizon into the picker range', () => {
+  // Sliced, and it has to be: SchedulesAdminClient.jsx legitimately imports
+  // ADMIN_SCHEDULE_MONTHS and adminScheduleMonthCols for the table's own
+  // columns and for the out-of-grid save warning, so a whole-file scan here
+  // would be a false positive. What is forbidden is those values reaching the
+  // RANGE — as an argument, a default, or a clamp.
+  const block = sliceBlock(
+    scrub(clientSrc), 'picker range',
+    'const calendarRange = useMemo(',
+    'const todayIso =',
+  );
+
+  for (const forbidden of GRID_IDENTIFIERS) {
+    assert.ok(
+      !block.includes(forbidden),
+      `the modal passes ${forbidden} into the picker's range.\n\n` +
+      `FALSE FRIEND — see the note on the range module's own guard. The range ` +
+      `must be derived from the DATA BEING EDITED and the clock, never from how ` +
+      `far the table happens to reach.\n\n` +
+      `The opposite direction is fine and is deliberate: the save-time ` +
+      `out-of-grid warning DOES call the grid helper, because "will this round ` +
+      `appear in the table" genuinely is a question about the grid. That call ` +
+      `lives in outOfGridDates, outside this block.\n\n` +
+      `Block as found:\n${block.slice(0, 400)}`,
+    );
+  }
+});
+
+// Replaces the old source-regex that asserted the picker bounded its loop with
+// a numeric literal. Importing the module and exercising it is strictly
+// stronger: it pins BEHAVIOUR rather than the shape of an expression, so a
+// reformulation that keeps the behaviour no longer reddens anything, and one
+// that breaks it reddens this whether or not a literal is still present.
+// (test/sourceScan.mjs calls that failure mode defect 7.)
+test('the picker range is its own concept, with its own constants and its own reach', () => {
+  assert.notEqual(
+    EDITOR_RANGE_MONTHS_FORWARD, ADMIN_SCHEDULE_MONTHS,
+    'the picker\'s forward reach is now numerically equal to the grid horizon. That ' +
+    'is not automatically wrong, but it is how the previous coincidence started — ' +
+    'the old picker span and the old horizon were both 4. If this equality is ' +
+    'intended, say so here explicitly rather than leaving it to be read as shared.',
+  );
+
+  const now = new Date(2026, 7, 27);
+  const { min, max } = rangeFor({ now, selectedDates: [] });
+  assert.equal(min, '2025-08', `expected ${EDITOR_RANGE_MONTHS_BACK} months back`);
+  assert.equal(max, '2028-08', `expected ${EDITOR_RANGE_MONTHS_FORWARD} months forward`);
+
+  // THE INVARIANT, asserted here too and not only in the module's own file:
+  // this is the guard that would catch someone "simplifying" the range back
+  // onto the clock. A date past the grid's last column must still be pickable.
+  const pastTheGrid = adminScheduleWindow(now).to.slice(0, 4) + '-12-31';
+  const widened = rangeFor({ now, selectedDates: [pastTheGrid] });
+  assert.ok(
+    pastTheGrid.slice(0, 7) <= widened.max,
+    `a stored date past the grid's last column (${pastTheGrid}) must remain pickable — ` +
+    'the table\'s reach does not bound the picker\'s.',
+  );
 });
 
 // ── 3. fetch bound ⇔ column count, provably ───────────────────────────────
