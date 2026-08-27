@@ -26,6 +26,10 @@ import {
   stepMonth,
   visibleMonthsFrom,
 } from '@/lib/schedule/editorCalendarRange';
+import {
+  classifyAgainstWindow,
+  warningTextTh,
+} from '@/lib/schedule/gridWindowWarning';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -682,8 +686,8 @@ function ScheduleModal({
   //
   // The opposite question — "will this round actually appear in the
   // table?" — is genuinely about the grid, and is asked exactly once, at
-  // save time, by `outOfGridDates` below. That one calls the grid helper
-  // directly and deliberately.
+  // save time, by `gridWindowDays` below. That one calls the grid helper
+  // directly and deliberately, and it checks BOTH ends of the window.
   //
   // The range is derived from the DATA BEING EDITED, not from the clock
   // alone. That invariant is the fix; the ±1/±2 year defaults inside the
@@ -707,7 +711,13 @@ function ScheduleModal({
 
   const todayIso = toLocalIso(new Date());
 
+  // The out-of-window confirm step. Null = not asking. Set by handleSubmit,
+  // cleared whenever the dates change, so an admin who goes back and fixes the
+  // stray day is not still looking at a warning about it.
+  const [pendingWarning, setPendingWarning] = useState(null);
+
   function toggleDate(iso) {
+    setPendingWarning(null);
     setSelectedDates((cur) =>
       cur.includes(iso) ? cur.filter((d) => d !== iso) : [...cur, iso].sort()
     );
@@ -750,65 +760,39 @@ function ScheduleModal({
     .join(', ');
 
   /**
-   * The selected dates that fall past the LAST COLUMN the admin table draws.
+   * The admin table's visible window, as two ISO days.
    *
-   * This is the one place in the modal that is allowed to ask a question about
-   * the grid, because it IS a question about the grid: "will this round appear
-   * in the table after I save it?" The picker's range deliberately knows
-   * nothing about `ADMIN_SCHEDULE_MONTHS` — see `calendarRange` above — but
-   * visibility in the table is exactly what the horizon decides.
+   * This is the one place in the modal allowed to ask the grid anything,
+   * because it IS a question about the grid: "will this round appear in the
+   * table after I save it?" The picker's range deliberately knows nothing about
+   * `ADMIN_SCHEDULE_MONTHS` — see `calendarRange` above — but visibility in the
+   * table is exactly what the horizon decides.
    *
    * `adminScheduleMonthCols()` is already imported at the top of this file for
-   * the table's own columns, so reading the boundary here adds no coupling that
-   * the file did not already have. It is called directly rather than threaded
-   * in as a prop: a prop would put the grid's reach into the modal's interface,
-   * where a future caller could pass something else and quietly change what the
+   * the table's own columns, so reading the boundary here adds no coupling the
+   * file did not already have. It is called directly rather than threaded in as
+   * a prop: a prop would put the grid's reach into the modal's interface, where
+   * a future caller could pass something else and quietly change what the
    * warning means.
+   *
+   * BOTH ENDS, not just the last column. The first version of this checked only
+   * `> lastDay`, and the unguarded backward direction is what let a stray click
+   * on 2025-09-23 remove a 30 Oct / 2 Nov round from the table with no way to
+   * reopen it. See src/lib/schedule/gridWindowWarning.js.
    */
-  function outOfGridDates(dates) {
-    const last = adminScheduleMonthCols().at(-1);
-    if (!last) return [];
-    // Day 0 of the following month === the last day of the last column.
-    const lastDay = toLocalIso(new Date(last.year, last.month + 1, 0));
-    return dates.filter((d) => d > lastDay);
+  function gridWindowDays() {
+    const cols = adminScheduleMonthCols();
+    const first = cols[0];
+    const last = cols.at(-1);
+    if (!first || !last) return { firstDay: null, lastDay: null };
+    return {
+      firstDay: toLocalIso(new Date(first.year, first.month, 1)),
+      // Day 0 of the following month === the last day of the last column.
+      lastDay: toLocalIso(new Date(last.year, last.month + 1, 0)),
+    };
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-    if (!courseCode) {
-      setError('กรุณาเลือกหลักสูตร');
-      return;
-    }
-    if (selectedDates.length === 0) {
-      setError('กรุณาเลือกอย่างน้อย 1 วัน');
-      return;
-    }
-
-    // WARN ONLY. The round saves exactly as picked whichever way the admin
-    // answers — the dates are never altered and the save is never blocked.
-    // A round past the last column is legitimate; it simply will not be
-    // listed until its month rolls into range, and an admin who does not
-    // know that would think the save failed.
-    const beyond = outOfGridDates(selectedDates);
-    if (beyond.length > 0) {
-      const pretty = beyond
-        .map((d) =>
-          new Date(d + 'T00:00:00').toLocaleDateString('th-TH', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-          })
-        )
-        .join(', ');
-      const ok = window.confirm(
-        `วันที่ ${pretty} อยู่นอกช่วง ${ADMIN_SCHEDULE_MONTHS} เดือนที่ตารางนี้แสดง\n\n` +
-          'รอบนี้จะถูกบันทึกตามที่เลือกไว้ แต่จะยังไม่ปรากฏในตารางจนกว่าเดือนดังกล่าว' +
-          'จะเข้ามาอยู่ในช่วงที่แสดง\n\nต้องการบันทึกต่อหรือไม่?'
-      );
-      if (!ok) return;
-    }
-
+  function submitNow() {
     const fd = new FormData();
     fd.set('course_id',   courseCode);
     fd.set('dates_json',  JSON.stringify(selectedDates));
@@ -827,6 +811,34 @@ function ScheduleModal({
       if (res?.ok) onSaved();
       else setError(res?.error ?? 'บันทึกไม่สำเร็จ');
     });
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+    if (!courseCode) {
+      setError('กรุณาเลือกหลักสูตร');
+      return;
+    }
+    if (selectedDates.length === 0) {
+      setError('กรุณาเลือกอย่างน้อย 1 วัน');
+      return;
+    }
+
+    // WARN ONLY. The dates are never altered and the save is never blocked —
+    // the confirm step below only decides whether the admin has SEEN this.
+    // `warning` is null when there is nothing to say, so it is its own
+    // condition rather than a second derivation of one.
+    const warning = warningTextTh(
+      classifyAgainstWindow(selectedDates, gridWindowDays()),
+      ADMIN_SCHEDULE_MONTHS
+    );
+    if (warning) {
+      setPendingWarning(warning);
+      return;
+    }
+
+    submitNow();
   }
 
   return (
@@ -1151,23 +1163,81 @@ function ScheduleModal({
           </div>
         </form>
 
+        {/* Out-of-window confirm step. In-modal rather than window.confirm so
+            the offending dates can actually be LISTED and so the severe case
+            (the round disappears from the table) can be styled as such. It
+            never blocks: บันทึกต่อ saves exactly what was picked. */}
+        {pendingWarning && (
+          <div
+            role="alertdialog"
+            aria-label={pendingWarning.title}
+            className={
+              'border-t px-5 py-4 ' +
+              (pendingWarning.severe
+                ? 'border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40'
+                : 'border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40')
+            }
+          >
+            <p
+              className={
+                'text-sm font-bold ' +
+                (pendingWarning.severe
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-amber-800 dark:text-amber-300')
+              }
+            >
+              {pendingWarning.title}
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-9e-navy dark:text-[#cbd5e1]">
+              {pendingWarning.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs font-medium text-9e-navy dark:text-white">
+              วันที่อยู่นอกช่วง: {pendingWarning.dates.join(', ')}
+            </p>
+          </div>
+        )}
+
         {/* Footer (sticky) */}
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--surface-border)] bg-white px-5 py-3 dark:bg-[#111d2c]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-          >
-            ยกเลิก
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={pending || !courseCode}
-            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
-          >
-            {pending ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
-          </button>
+          {pendingWarning ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPendingWarning(null)}
+                className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                กลับไปแก้ไขวันที่
+              </button>
+              <button
+                type="button"
+                onClick={submitNow}
+                disabled={pending}
+                className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+              >
+                {pending ? 'กำลังบันทึก…' : 'บันทึกต่อ'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={pending || !courseCode}
+                className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+              >
+                {pending ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
