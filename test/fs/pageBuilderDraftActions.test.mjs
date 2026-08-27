@@ -1261,4 +1261,275 @@ test('the draft/publish action layer', async (t) => {
       `the copy carries a counter of ${copyDoc.publishedVersion}`
     );
   });
+
+  // ── /preview/[slug], DRIVEN — round 36, commit 1 ─────────────────────────
+  //
+  // Still inside this one parent (gate item 5 / round 34): the route calls the
+  // real getPageBuilderPageBySlugAny, so it needs this file's fake database,
+  // and a second fakeDb-owning root test resets these fixtures mid-flight.
+  //
+  // WHY DRIVEN AND NOT SOURCE-SCANNED. This is a PUBLIC route, and the claims
+  // that matter are about what it renders in each state — which content reaches
+  // the view, and which banner sits above it. A source scan cannot tell a gate
+  // that RUNS from a gate that is merely present, and round 18's inert-control
+  // rule applies to security gates before anything else.
+  //
+  // The component is async and returns an element tree, so it is CALLED rather
+  // than rendered: PageBuilderView is itself async and renderToStaticMarkup
+  // cannot await it. Reading the returned tree is the stronger assertion
+  // anyway — the exact `page` object handed to the view is what a leak test
+  // needs to see, and markup would only show its rendered residue.
+
+  const PREVIEW = {
+    enabled: true,
+    passwordHash: '$2a$10$fakehashfortestingonly',
+    passwordUpdatedAt: new Date('2026-08-01T00:00:00.000Z'),
+    expireDate: null,
+  };
+
+  /** Walk a returned element tree and collect elements by their component name. */
+  const flatten = (node, out = []) => {
+    if (node == null || typeof node !== 'object') return out;
+    if (Array.isArray(node)) { for (const n of node) flatten(n, out); return out; }
+    out.push(node);
+    flatten(node.props?.children, out);
+    return out;
+  };
+  const named = (tree, name) => flatten(tree).find((el) => {
+    const t = el?.type;
+    return typeof t === 'function' && (t.name === name || t.displayName === name);
+  });
+
+  /**
+   * Drive the real route. `authed` mints a genuine cookie through the real
+   * signPreviewCookie, so the gate is exercised rather than bypassed.
+   */
+  async function drivePreview({ slug = 'real-slug', mode, authed = true } = {}) {
+    process.env.AUTH_SECRET = process.env.AUTH_SECRET || 'round36-preview-secret';
+    const headers = await import('../stub-next-headers.mjs');
+    const { signPreviewCookie, previewCookieName } = await import('@/lib/pageBuilder/previewSession');
+    const { default: PreviewPage } = await import('@/app/(public)/preview/[slug]/page');
+
+    const stored = row();
+    if (authed && stored?.preview?.passwordHash) {
+      const minted = signPreviewCookie(slug, stored.preview);
+      headers.setCookies(minted ? { [previewCookieName(slug)]: minted.value } : {});
+    } else {
+      headers.clearCookies();
+    }
+    try {
+      return await PreviewPage({
+        params: Promise.resolve({ slug }),
+        searchParams: Promise.resolve(mode ? { mode } : {}),
+      });
+    } finally {
+      headers.clearCookies();
+    }
+  }
+
+  const bannerText = (tree) => {
+    const banner = named(tree, 'PreviewBanner');
+    return banner ? banner.props : null;
+  };
+  const viewPage = (tree) => named(tree, 'PageBuilderView')?.props?.page ?? null;
+  const gateState = (tree) => named(tree, 'PreviewGate')?.props?.state ?? null;
+
+  const { PREVIEW_BANNERS, previewBanner } = await import('@/lib/pageBuilder/previewMode');
+
+  await scenario('PRECONDITION: the gate refuses an unauthenticated request in BOTH modes', async () => {
+    // The security property round 5 established, re-checked for the new mode:
+    // no cookie means no content, and the published mode must not be a way
+    // around it.
+    seedPage({ status: 'published', preview: PREVIEW, publishedVersion: 1 });
+    seed('PageVersion', {
+      _id: 'pv1', pageId: PAGE_ID, snapshot: { title: 'Live Title' },
+      label: 'publish', versionNumber: 1, actor: { id: 'u1', name: 'Publisher B' },
+      createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+    for (const mode of [undefined, 'published']) {
+      // eslint-disable-next-line no-await-in-loop
+      const tree = await drivePreview({ mode, authed: false });
+      assert.equal(gateState(tree), 'locked', `mode ${mode ?? 'draft'} served content with no cookie`);
+      assert.equal(viewPage(tree), null, `mode ${mode ?? 'draft'} handed a page to the view unauthenticated`);
+    }
+  });
+
+  await scenario('STATE 1 — published, no pending draft: the live document, published banner', async () => {
+    seedPage({ status: 'published', preview: PREVIEW, publishedVersion: 2, draft: null });
+    seed('PageVersion', {
+      _id: 'pv2', pageId: PAGE_ID, snapshot: { title: 'archived copy' },
+      label: 'publish', versionNumber: 2, actor: { id: 'u1', name: 'Publisher B' },
+      createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const tree = await drivePreview({ mode: 'published' });
+    assert.equal(gateState(tree), null, 'a gate was returned for an authenticated request');
+    assert.equal(previewBanner(bannerText(tree)), PREVIEW_BANNERS.published);
+    assert.equal(viewPage(tree).title, 'Live Title', 'the view did not get the live content');
+  });
+
+  await scenario('STATE 2 — published WITH a pending draft: still the live document', async () => {
+    // The leak test that matters most for this round. MARKER lives only in the
+    // draft; if it reaches the published view, an unpublished edit is being
+    // shown under a banner saying visitors are seeing it.
+    seedPage({
+      status: 'published', preview: PREVIEW, publishedVersion: 2,
+      draft: draftContent({ title: MARKER }),
+    });
+    seed('PageVersion', {
+      _id: 'pv2', pageId: PAGE_ID, snapshot: { title: 'archived copy' },
+      label: 'publish', versionNumber: 2, actor: { id: 'u1', name: 'Publisher B' },
+      createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const tree = await drivePreview({ mode: 'published' });
+    const shown = viewPage(tree);
+    assert.equal(previewBanner(bannerText(tree)), PREVIEW_BANNERS.published);
+    assert.equal(shown.title, 'Live Title', 'the published view rendered the draft');
+    assert.equal('draft' in shown, false, 'the draft key reached the rendered page object');
+    assert.equal(JSON.stringify(shown).includes(MARKER), false,
+      'the draft leaked into the published view');
+  });
+
+  await scenario('CONTROL: the DRAFT mode on that same page DOES show the draft', async () => {
+    // Proves the leak assertion above is observable rather than vacuous — the
+    // marker must be reachable through the other mode, on the same fixture.
+    seedPage({
+      status: 'published', preview: PREVIEW, publishedVersion: 2,
+      draft: draftContent({ title: MARKER }),
+    });
+    seed('PageVersion', {
+      _id: 'pv2', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 2,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const tree = await drivePreview({ mode: undefined });
+    const shown = viewPage(tree);
+    assert.equal(shown.title, MARKER, 'the draft mode stopped showing the draft');
+    assert.equal(previewBanner(bannerText(tree)), PREVIEW_BANNERS.draftPending);
+    // …and the LIVE content must not leak the other way either.
+    assert.equal(JSON.stringify(shown).includes('Live Title'), false,
+      'the published content leaked into the draft view');
+  });
+
+  await scenario('STATE 3 — never published: a dead end, and no content at all', async () => {
+    // createPageBuilderPage populates the LIVE fields at creation, so this page
+    // HAS content where the published view reads from. Rendering it would claim
+    // visitors are seeing something they have never been shown.
+    seedPage({ status: 'draft', preview: PREVIEW, draft: draftContent() });
+    assert.equal(count('PageVersion'), 0, 'precondition: no history');
+
+    const tree = await drivePreview({ mode: 'published' });
+    assert.equal(gateState(tree), 'unpublished');
+    assert.equal(viewPage(tree), null, 'a never-published page handed content to the view');
+  });
+
+  await scenario('STATE 4 — closed after publishing: history survives, and so does the view', async () => {
+    // A closed page still HAS a published version; it simply is not public any
+    // more. The route shows it — the banner's claim is about the version, and
+    // the author asked for it explicitly from an admin surface.
+    seedPage({ status: 'closed', preview: PREVIEW, publishedVersion: 1, draft: null });
+    seed('PageVersion', {
+      _id: 'pv1', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 1,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const tree = await drivePreview({ mode: 'published' });
+    assert.equal(gateState(tree), null, 'a closed page was refused the published view');
+    assert.equal(viewPage(tree).title, 'Live Title');
+  });
+
+  await scenario('the meta strip names version, time and publisher off the right sources', async () => {
+    seedPage({ status: 'published', preview: PREVIEW, publishedVersion: 2, draft: null });
+    seed('PageVersion', {
+      _id: 'pv2', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 2,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const meta = named(await drivePreview({ mode: 'published' }), 'PublishedMeta');
+    assert.ok(meta, 'the meta strip did not render');
+    assert.equal(meta.props.versionLabel, 'เวอร์ชัน 2', 'the number is not the live counter');
+    assert.equal(meta.props.publisher, 'Publisher B');
+    assert.equal(meta.props.publishedAt, '2026-08-20T02:00:00.000Z');
+  });
+
+  await scenario('an un-backfilled page OMITS the number and keeps the rest', async () => {
+    // Round 35's rule, followed rather than re-decided: no counter, no number,
+    // no placeholder — and the row's facts still stand because the drift the
+    // trust rule guards against cannot be observed without both numbers.
+    seedPage({ status: 'published', preview: PREVIEW, draft: null });
+    seed('PageVersion', {
+      _id: 'pv0', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: null,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+    });
+
+    const meta = named(await drivePreview({ mode: 'published' }), 'PublishedMeta');
+    assert.equal(meta.props.versionLabel, '', 'a placeholder was rendered for a missing number');
+    assert.equal(meta.props.versionLabel.includes('undefined'), false);
+    assert.equal(meta.props.publisher, 'Publisher B', 'the publisher was suppressed with the number');
+  });
+
+  await scenario('THE DRIFT CASE: a slug renamed after the last publish', async () => {
+    /**
+     * The measurement that decides A.
+     *
+     * updatePageIdentity (round 3) writes slug/pageType/promotionId LIVE without
+     * publishing, so a page renamed since its last publish has a live document
+     * the newest snapshot does not match. The banner claims
+     * "ผู้เข้าชมเว็บไซต์กำลังเห็นเวอร์ชันนี้" — a statement about NOW — so the
+     * view must carry the identity the public is reading, not the archived one.
+     *
+     * PageBuilderView does not itself render a slug, so this is asserted on the
+     * page object handed to it: that is where the difference between the two
+     * candidate sources actually lives, and any later consumer (a canonical URL,
+     * step 5's own metadata) reads it from there.
+     */
+    seedPage({
+      slug: 'renamed-after-publish', status: 'published', preview: PREVIEW,
+      publishedVersion: 1, draft: null,
+    });
+    seed('PageVersion', {
+      _id: 'pv-old', pageId: PAGE_ID, label: 'publish', versionNumber: 1,
+      actor: { id: 'u1', name: 'Publisher B' },
+      createdAt: new Date('2026-08-20T02:00:00.000Z'),
+      // The archived identity — what the page was called at publish time.
+      snapshot: { slug: 'slug-at-publish-time', title: 'Live Title', pageType: 'general' },
+    });
+
+    const shown = viewPage(await drivePreview({ slug: 'renamed-after-publish', mode: 'published' }));
+    assert.equal(shown.slug, 'renamed-after-publish',
+      'the published view rendered the ARCHIVED identity — visitors are not seeing that page');
+    assert.equal(shown.slug === 'slug-at-publish-time', false,
+      'the snapshot identity reached the view');
+  });
+
+  await scenario('CONTROL: the two identities really do differ on that fixture', async () => {
+    // Without this, the assertion above passes for a fixture whose snapshot
+    // happens to carry the same slug — i.e. for no drift at all.
+    seedPage({ slug: 'renamed-after-publish', status: 'published', preview: PREVIEW, publishedVersion: 1 });
+    seed('PageVersion', {
+      _id: 'pv-old', pageId: PAGE_ID, label: 'publish', versionNumber: 1,
+      actor: { id: 'u1', name: 'Publisher B' }, createdAt: new Date('2026-08-20T02:00:00.000Z'),
+      snapshot: { slug: 'slug-at-publish-time', title: 'Live Title' },
+    });
+    const [archived] = all('PageVersion');
+    assert.equal(row().slug, 'renamed-after-publish');
+    assert.equal(archived.snapshot.slug, 'slug-at-publish-time');
+    assert.notEqual(row().slug, archived.snapshot.slug, 'the fixture has no drift to detect');
+  });
+
+  await scenario('a row BEHIND the counter is not credited — a lost snapshot', async () => {
+    // publishedVersion 4 with the newest surviving row at 3: that row belongs to
+    // an earlier publish, so naming its actor would credit the wrong person.
+    seedPage({ status: 'published', preview: PREVIEW, publishedVersion: 4, draft: null });
+    seed('PageVersion', {
+      _id: 'pv3', pageId: PAGE_ID, snapshot: {}, label: 'publish', versionNumber: 3,
+      actor: { id: 'u9', name: 'Earlier Publisher' }, createdAt: new Date('2026-08-01T02:00:00.000Z'),
+    });
+
+    const meta = named(await drivePreview({ mode: 'published' }), 'PublishedMeta');
+    assert.equal(meta.props.versionLabel, 'เวอร์ชัน 4', 'the number should still come from the live doc');
+    assert.equal(meta.props.publisher, '', 'the wrong publisher was named');
+    assert.equal(meta.props.publishedAt, null, 'the wrong publish time was shown');
+  });
 });

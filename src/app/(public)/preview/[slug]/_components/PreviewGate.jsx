@@ -52,6 +52,26 @@ export function PreviewGate({ slug, state }) {
       />
     );
   }
+  /**
+   * Round 36: asked for the PUBLISHED version of a page that has never been
+   * published. A dead end of the same SHAPE as the two above, and reached only
+   * after the cookie has been verified — so it is not an access refusal, it is
+   * "there is nothing of that kind to show".
+   *
+   * It lives here rather than as a notice in the route because this component
+   * already owns every form-less dead end on this surface, and a second one
+   * beside it would be the copy that drifts. The category genuinely differs —
+   * the two above are about the LINK, this is about the PAGE — which is why the
+   * body says so instead of offering to contact an administrator.
+   */
+  if (state === 'unpublished') {
+    return (
+      <DeadEnd
+        title="หน้านี้ยังไม่เคยเผยแพร่"
+        body="ยังไม่มีเวอร์ชันที่เผยแพร่ให้ดู — เนื้อหาที่มีอยู่ยังเป็นฉบับร่างทั้งหมด กด “เผยแพร่” ก่อนจึงจะมีเวอร์ชันให้เปรียบเทียบ"
+      />
+    );
+  }
 
   return (
     <Shell>

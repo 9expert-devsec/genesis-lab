@@ -3,8 +3,15 @@ import { notFound } from 'next/navigation';
 import { getPageBuilderPageBySlugAny } from '@/lib/actions/pageBuilder';
 import { PageBuilderView } from '@/components/pageBuilder/PageBuilderView';
 import { previewCookieName, verifyPreviewCookie } from '@/lib/pageBuilder/previewSession';
-import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
+import { composeWorkingView, hasUnpublishedDraft, stripDraft } from '@/lib/pageBuilder/draftState';
 import { PreviewGate } from './_components/PreviewGate';
+// ADDED beside the statements above rather than folded into them — the standing
+// rule in this repo.
+import {
+  resolvePreviewMode, previewBanner, hasPublishedVersion, versionRowMatchesLive,
+} from '@/lib/pageBuilder/previewMode';
+import { versionName } from '@/lib/pageBuilder/versionLabel';
+import { getPublishedVersionMeta } from '@/lib/pages/publishedVersion';
 
 /**
  * /preview/[slug] — password-protected preview of a DRAFT builder page (§13).
@@ -45,18 +52,56 @@ export const metadata = {
 // target it (every scoped selector is prefixed with #<sectionId>, and this
 // banner is not a descendant of any section), and customHtml cannot inject a
 // <style> to hide it (the shared sanitizer drops <style> entirely).
-function PreviewBanner({ pending }) {
+function PreviewBanner({ mode, pending }) {
   return (
-    <div className="sticky top-0 z-[9999] border-b border-9e-lime bg-9e-lime px-4 py-2 text-center text-sm font-bold text-9e-navy">
-      {pending
-        ? 'ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — ห้ามแชร์ลิงก์นี้ต่อ'
-        : 'หน้านี้ไม่มีฉบับร่างที่รอเผยแพร่ — ตัวอย่างนี้ตรงกับหน้าที่เผยแพร่อยู่ในขณะนี้'}
+    <div
+      data-testid="preview-banner"
+      className="sticky top-0 z-[9999] border-b border-9e-lime bg-9e-lime px-4 py-2 text-center text-sm font-bold text-9e-navy"
+    >
+      {previewBanner({ mode, pending })}
     </div>
   );
 }
 
-export default async function PreviewPage({ params }) {
+/**
+ * Who published what is on screen, and when. Published mode only.
+ *
+ * Rendered OUTSIDE PageBuilderView for the banner's reason: no section's scoped
+ * customCss can target it (every scoped selector is prefixed with #<sectionId>
+ * and this is not a descendant of any section) and customHtml cannot inject a
+ * <style> to hide it (the shared sanitizer drops <style> entirely). A strip
+ * that a page's own authored CSS could remove would be worse than no strip.
+ *
+ * EVERY FIELD OMITS ITSELF RATHER THAN PLACEHOLDING, which is round 35's rule
+ * for an unnumbered version and round 26's for an actor that cannot be read.
+ * On a database where round 35's backfill has not run, the number is absent and
+ * this strip simply carries the date.
+ */
+function PublishedMeta({ versionLabel, publisher, publishedAt }) {
+  const when = publishedAt ? new Date(publishedAt) : null;
+  const stamp = when && !Number.isNaN(when.getTime())
+    ? when.toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' })
+    : '';
+  if (!versionLabel && !stamp && !publisher) return null;
+  return (
+    <div
+      data-testid="published-meta"
+      className="border-b border-[var(--surface-border)] bg-[var(--surface)] px-4 py-1.5 text-center text-xs text-9e-slate-dp-50"
+    >
+      {versionLabel && <span data-testid="published-meta-version" className="font-bold text-9e-navy dark:text-white">{versionLabel}</span>}
+      {versionLabel && stamp ? ' · ' : ''}
+      {stamp && <span data-testid="published-meta-time">{`เผยแพร่เมื่อ ${stamp}`}</span>}
+      {(versionLabel || stamp) && publisher ? ' · ' : ''}
+      {publisher && <span data-testid="published-meta-publisher">{`โดย ${publisher}`}</span>}
+    </div>
+  );
+}
+
+export default async function PreviewPage({ params, searchParams }) {
   const { slug } = await params;
+  // Resolved BEFORE the read purely so the value is in scope below; it gates
+  // nothing and reaches nothing until every terminal check has passed.
+  const mode = resolvePreviewMode(await searchParams);
   const page = await getPageBuilderPageBySlugAny(slug);
   if (!page) notFound();
 
@@ -88,9 +133,59 @@ export default async function PreviewPage({ params }) {
   // published content while the editor showed something else, under a banner
   // claiming it was the draft.
   const pending = hasUnpublishedDraft(page);
+
+  if (mode === 'published') {
+    /**
+     * ── THE PUBLISHED VERSION IS THE LIVE DOCUMENT, NOT THE NEWEST SNAPSHOT ──
+     * The banner's claim is "ผู้เข้าชมเว็บไซต์กำลังเห็นเวอร์ชันนี้" — a statement
+     * about what visitors are reading RIGHT NOW, which is by definition the live
+     * document. A snapshot is a record of a past moment, and the two can drift:
+     * updatePageIdentity (round 3) writes slug/pageType/promotionId live WITHOUT
+     * publishing, so after a rename the newest snapshot carries the old
+     * identity. Rendering it would make the banner's claim false about a page
+     * the public is reading under a different one.
+     *
+     * The NUMBER comes from the live document too — publishedVersion, which
+     * round 35 $inc-s inside the very same atomic write that sets the live
+     * content. So the number and the content it names can never disagree, and
+     * neither depends on the history collection still holding the row.
+     *
+     * The version ROW supplies only what the live document does not store:
+     * who published, and when. (There is no publishedBy/publishedAt on the page
+     * — round 33 measured updatedBy frozen at creation, and it is not used here
+     * for that reason.)
+     *
+     * This read happens AFTER the three gates and the cookie check, never
+     * before: an unauthenticated request must still cost nothing beyond the
+     * page lookup, and must still contain nothing but the gate.
+     */
+    const meta = await getPublishedVersionMeta(page._id);
+    if (!hasPublishedVersion({ publishedVersion: page.publishedVersion, hasVersionRow: Boolean(meta) })) {
+      return <PreviewGate slug={slug} state="unpublished" />;
+    }
+    // A row whose number disagrees with the live counter belongs to an EARLIER
+    // publish — its snapshot write was lost — so naming its actor would credit
+    // the wrong person. Silence beats a confident wrong name.
+    const trusted = meta && versionRowMatchesLive({
+      publishedVersion: page.publishedVersion,
+      rowVersionNumber: meta.versionNumber,
+    });
+    return (
+      <>
+        <PreviewBanner mode={mode} pending={pending} />
+        <PublishedMeta
+          versionLabel={versionName({ versionNumber: page.publishedVersion })}
+          publisher={trusted ? meta.publisher : ''}
+          publishedAt={trusted ? meta.publishedAt : null}
+        />
+        <PageBuilderView page={stripDraft(page)} />
+      </>
+    );
+  }
+
   return (
     <>
-      <PreviewBanner pending={pending} />
+      <PreviewBanner mode={mode} pending={pending} />
       <PageBuilderView page={composeWorkingView(page)} />
     </>
   );

@@ -48,6 +48,18 @@ export const STUBS = {
   // webhook handler/route code can be exercised under this loader.
   'next/cache': path.join(ROOT, 'test', 'stub-next-cache.mjs'),
   'next/server': path.join(ROOT, 'test', 'stub-next-server.mjs'),
+  // cookies() reads Next's per-request async context and throws outside a
+  // request. Round 36 drives /preview/[slug] directly to prove what it renders
+  // in each state, which is not something a source scan can establish.
+  'next/headers': path.join(ROOT, 'test', 'stub-next-headers.mjs'),
+  // PreviewGate calls useActionState (React 19; installed React is 18.3.1) and
+  // imports an action whose graph reaches the db layer. See the stub for what
+  // stubbing it costs and what covers the gap.
+  // Keyed on the RELATIVE specifier the route actually writes, and only that:
+  // an '@/...' key would be a second entry nothing resolves through, and
+  // stubExportParity would then try to import the real module to compare it —
+  // which is the very thing that cannot load here.
+  './_components/PreviewGate': path.join(ROOT, 'test', 'stub-preview-gate.mjs'),
   // The header's nav-preview server actions import @/lib/db/connect, which
   // throws at module load with no MONGODB_URI. They are never called during a
   // server render — see the stub for the full note.

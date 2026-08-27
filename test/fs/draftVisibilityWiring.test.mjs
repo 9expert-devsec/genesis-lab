@@ -170,12 +170,37 @@ test('the preview route renders the composed view, and gates BEFORE it', () => {
   assert.ok(gateAt < composeAt, 'the content is composed before the cookie gate returns');
 });
 
+/**
+ * ── RE-POINTED IN ROUND 36, AND FLAGGED RATHER THAN QUIETLY EDITED ─────────
+ * Round 5 wrote this against the route file, where both banner strings were
+ * inline ternary branches. Round 36 added a THIRD state (the published view),
+ * and three states written inline is exactly the shape that lets two of them be
+ * reachable at once — so the set moved to lib/pageBuilder/previewMode.js as one
+ * frozen object selected by a total function.
+ *
+ * The GUARANTEE is unchanged and is asserted in the same two halves: the exact
+ * strings still exist, and the banner is still driven by the STORED draft
+ * rather than by anything local to the tab. What moved is which file owns the
+ * strings — and that they now partition, which the route file could never have
+ * shown, is proven in test/pure/previewMode.
+ */
 test('the banner states WHICH case the reader is looking at', () => {
   const { code } = readSource('src/app/(public)/preview/[slug]/page.jsx');
-  assert.ok(code.includes('ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — ห้ามแชร์ลิงก์นี้ต่อ'), 'the draft banner text changed');
+  const banners = readSource('src/lib/pageBuilder/previewMode.js').code;
+
+  assert.ok(banners.includes('ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — ห้ามแชร์ลิงก์นี้ต่อ'), 'the draft banner text changed');
   assert.ok(
-    code.includes('หน้านี้ไม่มีฉบับร่างที่รอเผยแพร่ — ตัวอย่างนี้ตรงกับหน้าที่เผยแพร่อยู่ในขณะนี้'),
+    banners.includes('หน้านี้ไม่มีฉบับร่างที่รอเผยแพร่ — ตัวอย่างนี้ตรงกับหน้าที่เผยแพร่อยู่ในขณะนี้'),
     'the no-draft banner text is missing'
   );
+  // Round 36's third state, pinned beside the two it joined.
+  assert.ok(
+    banners.includes('กำลังดูเวอร์ชันที่เผยแพร่อยู่ — ผู้เข้าชมเว็บไซต์กำลังเห็นเวอร์ชันนี้'),
+    'the published banner text is missing'
+  );
+
+  // Still driven by the stored draft, and the route still reads it — the half
+  // of the original assertion that was never about where the strings live.
   assert.match(code, /const pending = hasUnpublishedDraft\(page\);/, 'the banner is not driven by the stored draft');
+  assert.match(code, /previewBanner\(\{ mode, pending \}\)/, 'the route no longer selects the banner by mode + pending');
 });
