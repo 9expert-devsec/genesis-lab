@@ -1056,4 +1056,209 @@ test('the draft/publish action layer', async (t) => {
       assert.ok(key in got.snapshot, `stripping the draft dropped ${key}`);
     }
   });
+
+  // ── version NUMBERS — round 35, commit 1 ──────────────────────────────────
+  //
+  // Still inside this one parent, for gate item 5's reason: the runner is
+  // isolation:'none' with concurrency:true, so a second fakeDb-owning root test
+  // resets this one's fixtures mid-flight. Extending the owner is the only
+  // shape available, and round 34 measured what happens otherwise.
+
+  /** The numbers on a page's version rows, oldest row first. */
+  const versionNumbers = () => all('PageVersion')
+    .slice()
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+    .map((v) => v.versionNumber);
+
+  await scenario('a publish increments the page counter and stamps the row', async () => {
+    const before = copy(seedPage({ status: 'draft', draft: draftContent() }));
+    assert.equal(before.publishedVersion, undefined, 'precondition: the page has no counter yet');
+
+    const res = await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+    assert.equal(res.ok, true, res.error);
+
+    assert.equal(row().publishedVersion, 1, 'the counter did not reach 1');
+    assert.deepEqual(versionNumbers(), [1], 'the snapshot was not stamped with the counter');
+  });
+
+  await scenario('the number is the POST-increment value — the first version is 1, never 0', async () => {
+    // $inc runs before the stamp is read off the result. A 0 in the data would
+    // mean the stamp was taken from the pre-increment document, and
+    // versionLabel refuses to render a 0 for exactly that reason.
+    const before = copy(seedPage({ status: 'draft', draft: draftContent() }));
+    await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+    const [first] = all('PageVersion');
+    assert.equal(first.versionNumber, 1);
+    assert.notEqual(first.versionNumber, 0, 'the stamp was read before the increment');
+  });
+
+  await scenario('EVERY publish counts — a republish with no draft mints the next number', async () => {
+    // Round 35's rule, chosen deliberately: one PageVersion row is one version
+    // number, always. Round 2 already snapshots a same-status republish; if
+    // that call did NOT increment, two rows would SHARE a number, which is a
+    // worse failure than a number that moves for a no-op.
+    const first = copy(seedPage({ status: 'published', draft: draftContent() }));
+    const r1 = await publishPageStatus(PAGE_ID, { status: 'published' }, token(first));
+    assert.equal(r1.ok, true, r1.error);
+
+    const second = row();
+    assert.equal(second.draft, null, 'precondition: the republish has NO draft pending');
+    assert.equal(second.status, 'published', 'precondition: already published');
+
+    const r2 = await publishPageStatus(PAGE_ID, { status: 'published' }, token(second));
+    assert.equal(r2.ok, true, r2.error);
+
+    assert.equal(count('PageVersion'), 2, 'precondition: round 2 still snapshots a republish');
+    assert.deepEqual(versionNumbers(), [1, 2], 'a republish reused or skipped a number');
+    assert.equal(row().publishedVersion, 2);
+  });
+
+  await scenario('CONTROL: the numbers are DISTINCT, so a shared number would be caught', () => {
+    // Without this, [1, 2] above could be read as "the assertion happens to
+    // match"; this states the property the assertion is standing in for.
+    assert.notDeepEqual([1, 2], [1, 1]);
+    assert.equal(new Set([1, 1]).size, 1, 'a duplicated number would look distinct to a Set check');
+  });
+
+  for (const target of ['draft', 'closed', 'archived']) {
+    // eslint-disable-next-line no-await-in-loop
+    await scenario(`a ${target} target does NOT increment and does NOT stamp`, async () => {
+      const before = copy(seedPage({ status: 'published', publishedVersion: 4 }));
+      const res = await publishPageStatus(PAGE_ID, { status: target }, token(before));
+      assert.equal(res.ok, true, res.error);
+      assert.equal(row().publishedVersion, 4, `a ${target} target moved the counter`);
+      assert.equal(count('PageVersion'), 0, `a ${target} target wrote a version row`);
+    });
+  }
+
+  await scenario('CONTROL: the same fixture DOES increment on a publish target', () => {
+    // Proves the three cases above are about the branch, not about a fixture
+    // that cannot increment at all.
+    return (async () => {
+      const before = copy(seedPage({ status: 'published', publishedVersion: 4 }));
+      const res = await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+      assert.equal(res.ok, true, res.error);
+      assert.equal(row().publishedVersion, 5, 'the publish branch stopped incrementing');
+      assert.deepEqual(versionNumbers(), [5]);
+    })();
+  });
+
+  await scenario('the counter survives history being deleted — it is not derived from it', async () => {
+    // The reason the counter lives on the PAGE. Item 5b's GC is expected to
+    // prune snapshots one day; a number derived from how many rows still exist
+    // would start handing out numbers that had already been used.
+    const before = copy(seedPage({ status: 'published', draft: draftContent() }));
+    await publishPageStatus(PAGE_ID, { status: 'published' }, token(before));
+    await publishPageStatus(PAGE_ID, { status: 'published' }, token(row()));
+    assert.deepEqual(versionNumbers(), [1, 2], 'precondition: two versions exist');
+
+    // Delete the whole history, as a GC would.
+    const PageVersionModel = (await import('@/models/PageVersion')).default;
+    await PageVersionModel.deleteMany({ pageId: PAGE_ID });
+    assert.equal(count('PageVersion'), 0, 'precondition: history is gone');
+
+    const r3 = await publishPageStatus(PAGE_ID, { status: 'published' }, token(row()));
+    assert.equal(r3.ok, true, r3.error);
+    assert.deepEqual(versionNumbers(), [3], 'the number restarted after history was deleted');
+  });
+
+  await scenario('CONTROL: a count()-derived number WOULD have repeated there', () => {
+    // The same situation, priced under the rejected design. With the history
+    // emptied, countDocuments is 0, so count()+1 is 1 — a number already used.
+    const derived = (existingRowCount) => existingRowCount + 1;
+    assert.equal(derived(0), 1, 'the derived design would mint 1 again after a GC');
+    assert.notEqual(derived(0), 3, 'and 3 is what the counter actually minted');
+  });
+
+  await scenario('THE RACE: two publishes through the TOCTOU window get distinct numbers', async () => {
+    /**
+     * The measurement `$inc` was chosen for, exercised rather than asserted.
+     *
+     * publishPageStatus reads `existing` in a SEPARATE query before its write,
+     * so two calls carrying the same token can both clear draftConflict and
+     * both reach findByIdAndUpdate. Started together, they interleave at the
+     * awaits between the read and the write, which is exactly that window.
+     */
+    const before = copy(seedPage({ status: 'published' }));
+    const sharedToken = token(before);
+    const rowsBefore = count('PageVersion');
+    assert.equal(rowsBefore, 0, 'precondition: no history yet');
+
+    const results = await Promise.all([
+      publishPageStatus(PAGE_ID, { status: 'published' }, sharedToken),
+      publishPageStatus(PAGE_ID, { status: 'published' }, sharedToken),
+    ]);
+
+    const landed = results.filter((r) => r?.ok);
+    assert.equal(
+      landed.length, 2,
+      'the window was NOT exercised — only one call landed, so this proves nothing about $inc'
+    );
+
+    const numbers = all('PageVersion').map((v) => v.versionNumber).sort();
+    assert.equal(numbers.length, 2, 'one publish overwrote the other’s version row');
+    assert.deepEqual(numbers, [1, 2], 'the racing publishes did not get distinct numbers');
+    assert.equal(new Set(numbers).size, 2, 'the two numbers collided');
+    assert.equal(row().publishedVersion, 2, 'the counter did not reach 2');
+  });
+
+  await scenario('CONTROL: count()+1 would have handed BOTH racers the same number', async () => {
+    // The discrimination for the case above. Both racers read the collection
+    // before either wrote, so a derived design computes the same value twice —
+    // and the unique index would then reject the second row, losing a snapshot.
+    const before = copy(seedPage({ status: 'published' }));
+    const sharedToken = token(before);
+    const seenByBothRacers = count('PageVersion');   // what each read would see
+    const derived = (rowsSeen) => rowsSeen + 1;
+
+    await Promise.all([
+      publishPageStatus(PAGE_ID, { status: 'published' }, sharedToken),
+      publishPageStatus(PAGE_ID, { status: 'published' }, sharedToken),
+    ]);
+
+    assert.equal(derived(seenByBothRacers), 1);
+    assert.deepEqual(
+      [derived(seenByBothRacers), derived(seenByBothRacers)], [1, 1],
+      'the derived design is being credited with distinct numbers it cannot produce'
+    );
+    // …while what actually happened did not repeat.
+    assert.deepEqual(all('PageVersion').map((v) => v.versionNumber).sort(), [1, 2]);
+  });
+
+  await scenario('a duplicate does NOT go unnoticed — snapshotVersion logs before it swallows', async () => {
+    // The index is the backstop; this is what makes the backstop audible.
+    // snapshotVersion must never fail a save, so it still swallows — but a
+    // swallowed duplicate-key would mean a lost snapshot with no trace.
+    const { snapshotVersion } = await import('@/lib/pages/pageAudit');
+    const PageVersionModel = (await import('@/models/PageVersion')).default;
+    const original = PageVersionModel.create;
+    const errors = [];
+    const spy = console.error;
+    console.error = (...args) => errors.push(args.join(' '));
+    PageVersionModel.create = async () => { throw new Error('E11000 duplicate key'); };
+    try {
+      await snapshotVersion({ pageId: PAGE_ID, snapshot: { title: 'x' }, label: 'publish', versionNumber: 7 });
+    } finally {
+      PageVersionModel.create = original;
+      console.error = spy;
+    }
+    assert.equal(errors.length, 1, 'a failed snapshot was swallowed with no trace');
+    assert.equal(errors[0].includes('E11000'), true, 'the log does not carry the cause');
+    assert.equal(errors[0].includes('7'), true, 'the log does not say which version was lost');
+  });
+
+  await scenario('a duplicated page starts its own numbering at zero', async () => {
+    // publishedVersion is destructured OUT of the copy. Left in, a duplicate of
+    // a page at version 9 would mint version 10 as its FIRST publish.
+    seedPage({ status: 'published', publishedVersion: 9 });
+    const res = await duplicatePageBuilderPage(PAGE_ID);
+    assert.equal(res.ok, true, res.error);
+    const copyDoc = all('PageBuilder').find((p) => String(p._id) !== PAGE_ID);
+    assert.ok(copyDoc, 'the duplicate was not created');
+    assert.notEqual(copyDoc.publishedVersion, 9, 'the copy inherited the original’s counter');
+    assert.ok(
+      copyDoc.publishedVersion === 0 || copyDoc.publishedVersion === undefined,
+      `the copy carries a counter of ${copyDoc.publishedVersion}`
+    );
+  });
 });

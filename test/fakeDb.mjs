@@ -250,9 +250,28 @@ export function makeModel(name) {
       const row = rows(name).find((r) => String(r._id) === String(id));
       if (!row) return null;
       const set = update?.$set ?? {};
-      const unsupported = Object.keys(update ?? {}).filter((k) => k !== '$set');
+      const inc = update?.$inc ?? {};
+      const unsupported = Object.keys(update ?? {}).filter((k) => k !== '$set' && k !== '$inc');
       if (unsupported.length) {
         throw new Error(`fakeDb: unsupported update operator(s) ${unsupported.join(', ')}`);
+      }
+      /**
+       * `$inc` — round 35's publish counter.
+       *
+       * Applied here, synchronously, with no await between the read and the
+       * write, which is what makes it a faithful stand-in for Mongo's
+       * DOCUMENT-LEVEL atomicity rather than a convenience. That property is
+       * the whole point of the operator: publishPageStatus reads `existing` in
+       * a separate query, so two publishes can both clear the conflict check
+       * and both arrive here, and each must leave with a DIFFERENT number.
+       * A version of this that read the field, awaited, and then wrote would
+       * hand them the same one and quietly agree with a count()+1 design.
+       *
+       * A missing field starts at 0, as Mongo does.
+       */
+      for (const [k, delta] of Object.entries(inc)) {
+        if (k.includes('.')) throw new Error('fakeDb: $inc on a nested path is not supported');
+        row[k] = (typeof row[k] === 'number' ? row[k] : 0) + delta;
       }
       for (const [k, v] of Object.entries(set)) {
         if (k.includes('.')) {

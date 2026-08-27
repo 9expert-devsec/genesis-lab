@@ -43,12 +43,30 @@ function projectionOf(text) {
 test('getPageVersions still refuses the snapshot', async (t) => {
   const src = readFileSync(ACTIONS_SRC, 'utf8');
 
-  await t.test('the projection is exactly the three metadata fields', () => {
+  /**
+   * ── AMENDED IN ROUND 35, AND THE AMENDMENT IS THE INTERESTING PART ───────
+   * This read `['actor', 'createdAt', 'label']` when round 34 wrote it. Round
+   * 35 added `versionNumber` to the projection, so the exact set moved.
+   *
+   * That is a WIDENING of the list projection, which is precisely what this
+   * file exists to resist — so it does not get to happen quietly. What the
+   * guard is actually for is stated in its own title: the list must never ship
+   * a SNAPSHOT, because a snapshot is a whole page document and the list is 20
+   * rows on every dialog open (measured round 34: ~33x the row that displays
+   * it). `versionNumber` is a small integer, on every row, needed to render the
+   * row itself. It is not the payload this guard was built against.
+   *
+   * The FORM is unchanged and that is deliberate: still an exact set, so the
+   * next widening is caught the same way this one was; still a by-name refusal
+   * of `snapshot` below; still a control that proves the exact-set form
+   * discriminates. Only the expected set moved, and only by the one field.
+   */
+  await t.test('the projection is exactly the metadata fields', () => {
     const projection = projectionOf(src);
     assert.notEqual(projection, null, 'getPageVersions no longer has a .select() — read it again');
     assert.deepEqual(
       projection.split(/\s+/).filter(Boolean).sort(),
-      ['actor', 'createdAt', 'label'],
+      ['actor', 'createdAt', 'label', 'versionNumber'],
       'getPageVersions projection changed — the fetch-one action exists to avoid this'
     );
   });
@@ -65,8 +83,8 @@ test('getPageVersions still refuses the snapshot', async (t) => {
     // widen spliced in. If this does not throw, the two cases above prove
     // nothing — they would pass for a projection already widened.
     const widened = src.replace(
-      /(export async function getPageVersions\([\s\S]*?)\.select\(\s*'label actor createdAt'\s*\)/,
-      "$1.select('snapshot label actor createdAt')"
+      /(export async function getPageVersions\([\s\S]*?)\.select\(\s*'label actor createdAt versionNumber'\s*\)/,
+      "$1.select('snapshot label actor createdAt versionNumber')"
     );
     assert.notEqual(widened, src, 'the splice did not apply — this control is inert, fix it');
 
@@ -75,7 +93,7 @@ test('getPageVersions still refuses the snapshot', async (t) => {
     assert.throws(
       () => assert.deepEqual(
         projection.split(/\s+/).filter(Boolean).sort(),
-        ['actor', 'createdAt', 'label']
+        ['actor', 'createdAt', 'label', 'versionNumber']
       ),
       /Expected values to be/,
       'the key-set assertion does NOT catch a widened projection'

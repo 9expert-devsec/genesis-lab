@@ -192,7 +192,7 @@ export async function getPageVersions(id) {
   await requireAdmin('pages');
   await dbConnect();
   const rows = await PageVersion.find({ pageId: String(id) })
-    .select('label actor createdAt')   // NOT snapshot — see above
+    .select('label actor createdAt versionNumber')   // NOT snapshot — see above
     .sort({ createdAt: -1 })
     .limit(MAX_VERSION_ROWS)
     .lean();
@@ -243,7 +243,7 @@ export async function getPageVersionSnapshot(versionId) {
   await requireAdmin('pages');
   await dbConnect();
   const row = await PageVersion.findById(String(versionId))
-    .select('snapshot label actor createdAt')
+    .select('snapshot label actor createdAt versionNumber')
     .lean();
   if (!row) return null;
   return serialize({ ...row, snapshot: stripDraft(row.snapshot) });
@@ -543,7 +543,14 @@ export async function duplicatePageBuilderPage(id) {
   // stripped below: a copy must not silently inherit someone else's
   // UNREVIEWED pending edit. The duplicate starts with no draft at all, so its
   // first publish ships what the copier can actually see on screen.
-  const { _id, createdAt, updatedAt, slugHistory, preview, draft, ...rest } = src;
+  // `publishedVersion` joins this list for the same reason `draft` is in it: a
+  // copy has published NOTHING, so it must not inherit a counter. Left in
+  // `rest`, a duplicate of a page at version 9 would start at 9 and its first
+  // publish would mint version 10 — a page whose history has one row numbered
+  // ten. The copy starts at the field's default of 0.
+  const {
+    _id, createdAt, updatedAt, slugHistory, preview, draft, publishedVersion, ...rest
+  } = src;
 
   try {
     const doc = await PageBuilder.create({
@@ -827,8 +834,30 @@ export async function publishPageStatus(id, statusPatch, expectedUpdatedAt) {
   const actor = await currentUserStamp(session);
 
   try {
+    /**
+     * ── ONE WRITE, NOW CARRYING THE COUNTER ────────────────────────────────
+     * `$inc` rides the SAME findByIdAndUpdate rounds 2-4 built. It is not a
+     * second round-trip and must not become one: a separate increment would
+     * carry an `expectedUpdatedAt` this write has already invalidated — the
+     * exact failure the "why one write" note above this function describes —
+     * and would leave a window where the page is published but unnumbered.
+     *
+     * The ordering is: expectedUpdatedAt is checked on `existing` far above,
+     * this write applies status + promoted draft + the increment atomically,
+     * and the snapshot below reads the POST-increment value off the result. So
+     * the number a row carries is the one the document actually reached, not
+     * one computed alongside it.
+     *
+     * ── ONE CONDITION FOR BOTH, ON PURPOSE ────────────────────────────────
+     * `isPublishTarget` gates the increment and the snapshot, and it is the
+     * same name in both places rather than two equivalent tests. See the
+     * snapshot block for why they must never drift apart.
+     */
+    const update = { $set: set };
+    if (isPublishTarget) update.$inc = { publishedVersion: 1 };
+
     const updated = await PageBuilder.findByIdAndUpdate(
-      id, { $set: set }, { new: true, runValidators: true }
+      id, update, { new: true, runValidators: true }
     );
     if (!updated) return { ok: false, error: 'ไม่พบหน้าเพจ' };
     bustCaches(updated, existing.slug);
@@ -849,8 +878,27 @@ export async function publishPageStatus(id, statusPatch, expectedUpdatedAt) {
       // PUBLIC. It must never carry a pending edit — and on this branch the
       // draft has just been cleared anyway, so this is belt and braces against
       // the field ever arriving some other way.
+      //
+      // ── EVERY PUBLISH IS A VERSION, INCLUDING A REPUBLISH ───────────────
+      // The number is stamped on the SAME condition that writes the row, from
+      // the same `isPublishTarget`, and that pairing is the rule rather than a
+      // coincidence: one PageVersion row is one version number, always.
+      //
+      // The alternative — "a republish with no content change is not a new
+      // version" — was considered and rejected. It does not merely produce
+      // fewer numbers; it produces two rows sharing one, because round 2
+      // already snapshots every publish-state call and that is not being
+      // changed. A repeated number is a worse failure than a number that
+      // increments for a no-op, because "never reused" is the property the
+      // whole design is built to guarantee. Skipping the SNAPSHOT instead
+      // would trade it for a publish with no recoverable record, which round 2
+      // fixed on purpose.
+      //
+      // So: the counter counts publishes, not content changes. A republish is
+      // a moment something became public, which is what a version is here.
       await snapshotVersion({
         pageId: id, snapshot: stripDraft(updated.toObject()), label: 'publish', actor,
+        versionNumber: updated.publishedVersion,
       });
     }
     return { ok: true, status: updated.status, updatedAt: updated.updatedAt?.toISOString() };

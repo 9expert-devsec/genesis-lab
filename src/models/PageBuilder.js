@@ -199,6 +199,35 @@ const PageBuilderSchema = new mongoose.Schema(
     // then quietly discard it.
     draft: { type: mongoose.Schema.Types.Mixed, default: null },
 
+    /**
+     * How many times this page has been PUBLISHED — the version counter.
+     *
+     * `$inc`-ed by exactly one, inside the same single findByIdAndUpdate that
+     * publishPageStatus already uses to promote the draft, and the resulting
+     * value is stamped onto the PageVersion row that write produces. One
+     * document write, so there is no window in which the counter and the
+     * history disagree.
+     *
+     * ── WHY IT LIVES HERE AND NOT ON THE HISTORY ──────────────────────────
+     * Deriving the next number from `PageVersion.countDocuments` would tie it
+     * to how many rows still EXIST. Item 5b's reference-counted GC is expected
+     * to delete snapshots eventually, and the moment it did, the next publish
+     * would reuse a number that had already been handed out. A counter on the
+     * page cannot be moved by deleting history.
+     *
+     * `$inc` rather than read-then-write for the same reason at a smaller
+     * scale: draftConflict reads `updatedAt` in a SEPARATE query before this
+     * write, so two publishes that both clear that check both reach the write.
+     * `$inc` is atomic at the document level and hands them 1 and 2; a
+     * `count() + 1` computed from the read hands them both the same number.
+     *
+     * NEVER CLIENT-WRITABLE: absent from pageBuilderSchema, and therefore from
+     * DRAFT_CONTENT_KEYS, IDENTITY_KEYS and STATUS_KEYS. Every action builds
+     * its `$set` from one of those lists or from literals, so no request can
+     * reach this field. Same posture as `preview` and `draft.savedBy`.
+     */
+    publishedVersion: { type: Number, default: 0 },
+
     // Audit — same shape as CustomPage.
     createdBy: { id: { type: String }, name: { type: String } },
     updatedBy: { id: { type: String }, name: { type: String } },
