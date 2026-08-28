@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo. Round 39: the custom-colour vocabulary and its one regex.
+import { COLOR_MODES, GRADIENT_DIRECTIONS, HEX_COLOR_RE } from '@/lib/pageBuilder/customColor';
 
 /**
  * Shared section foundation — the ENVELOPE every section carries, plus the
@@ -30,6 +33,16 @@ export const ACCENTS           = ['brand_blue', 'navy', 'cyan', 'purple', 'orang
 export const CARD_STYLES       = ['plain', 'border', 'shadow', 'filled', 'gradient'];
 export const BUTTON_STYLES     = ['primary', 'secondary', 'outline', 'ghost'];
 
+/**
+ * ── ROUND 39: THE CUSTOM-COLOUR VOCABULARY ─────────────────────────────────
+ * IMPORTED, not restated. `COLOR_MODES` and `GRADIENT_DIRECTIONS` belong with
+ * the CSS they turn into, and a second copy here is the drift this file's own
+ * "named constants — single source" header exists to prevent. The regex is
+ * imported for the same reason: what counts as an author colour is decided in
+ * exactly one place, and the schema is one of its two enforcement points.
+ */
+export { COLOR_MODES, GRADIENT_DIRECTIONS } from '@/lib/pageBuilder/customColor';
+
 // COLUMNS is the only mixed-type preset (numbers 1-4 plus 'auto_fit'), so it
 // can't use z.enum (strings only) — build a literal union instead.
 const columnsSchema = z.union([
@@ -41,6 +54,41 @@ const columnsSchema = z.union([
 // settings.* applies to EVERY section (container/spacing/background/
 // visibility), so these carry defaults. The example JSON uses
 // containerWidth: 'large'.
+/**
+ * An author-entered colour, as the schema sees it — round 39.
+ *
+ * `HEX_COLOR_RE` is imported rather than written here: this value reaches a
+ * style attribute, and "what counts as a colour" having two definitions is how
+ * one of them ends up laxer than the other. See lib/pageBuilder/customColor.js
+ * for what is accepted and what each rejection is for.
+ */
+const hexColor = z.string().regex(HEX_COLOR_RE, 'ต้องเป็นรหัสสีแบบ #RRGGBB');
+
+/**
+ * `settings.backgroundCustom` — the two stops and the direction.
+ *
+ * ── EVERY FIELD IS OPTIONAL, AND SO IS THE BLOCK ──────────────────────────
+ * Deliberately, and it is the load-bearing choice of this commit. A `.default()`
+ * anywhere in here would mean the next save of ANY page writes new keys into
+ * every one of its sections — 18 live sections across the corpus today, none of
+ * which asked for a colour. Optional-and-absent means a page nobody edits
+ * stores exactly what it stored before, and a page someone edits stores nothing
+ * new unless they actually chose a colour.
+ *
+ * `to` accepts the empty string as well as a hex, because EMPTY IS A VALUE
+ * here: it is how "one stop" is spelled. See customBackgroundStyle — an absent
+ * second stop is a flat colour, and a second stop equal to the first is a
+ * gradient. The schema has to be able to express the difference or the renderer
+ * cannot honour it.
+ */
+export const backgroundCustomSchema = z
+  .object({
+    from:      hexColor.optional(),
+    to:        z.union([hexColor, z.literal('')]).optional(),
+    direction: z.enum(GRADIENT_DIRECTIONS).optional(),
+  })
+  .optional();
+
 export const settingsSchema = z
   .object({
     containerWidth: z.enum(CONTAINER_WIDTHS).default('large'),
@@ -48,6 +96,14 @@ export const settingsSchema = z
     spacingBottom:  z.enum(SPACING).default('medium'),
     background:     z.enum(BACKGROUNDS).default('default'),
     visibility:     z.enum(VISIBILITY).default('all'),
+    /**
+     * ROUND 39. Absent means `preset` — the mode is not defaulted, it is
+     * INFERRED FROM ABSENCE, which is what keeps every stored section byte-
+     * identical until somebody chooses otherwise. `background` above keeps its
+     * default and its meaning unchanged and is what `preset` mode resolves.
+     */
+    backgroundMode:   z.enum(COLOR_MODES).optional(),
+    backgroundCustom: backgroundCustomSchema,
   })
   .default({});
 
@@ -100,6 +156,18 @@ export const styleSchema = z
     accentColor: z.enum(ACCENTS).optional(),
     cardStyle:   z.enum(CARD_STYLES).optional(),
     buttonStyle: z.enum(BUTTON_STYLES).optional(),
+    /**
+     * ROUND 39, same shape and same reason as `backgroundMode` above: absent
+     * means `preset`, so nothing is written for a section nobody recolours.
+     *
+     * `accentColor` keeps its enum and its meaning — it is what `preset` mode
+     * resolves — and its SCOPE is unchanged. The accent still reaches icons,
+     * accent rules, buttons, links and key figures, in this section and in the
+     * sections nested inside it. Narrowing it to buttons would restyle every
+     * section already using it, which is a change nobody asked for.
+     */
+    accentMode:   z.enum(COLOR_MODES).optional(),
+    accentCustom: hexColor.optional(),
   })
   .default({});
 
