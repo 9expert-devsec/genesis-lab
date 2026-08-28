@@ -4,6 +4,11 @@ import { getActivePromotions, getSlugMap, getActiveBuilderPromotions } from '@/l
 import { getActivePromotionBanners } from '@/lib/actions/promotion-banner';
 import { builderPromotionToCard, orderedPromotionCards } from '@/lib/pageBuilder/promotionMode';
 import { PromotionBannerCarousel } from '@/components/promotions/PromotionBannerCarousel';
+// ROUND 43, ADDED beside the statements above rather than folded into one —
+// the standing rule in this repo. The two date helpers that used to live in
+// this file moved there; see that module's header for what they were getting
+// wrong and for the measurement that decided it.
+import { dateRangeLabel } from '@/lib/promotions/promotionDateLabel';
 
 export const revalidate = 3600;
 
@@ -13,25 +18,22 @@ export const metadata = {
     'รวมโปรโมชั่นและส่วนลดพิเศษสำหรับหลักสูตรอบรมจาก 9Expert Training',
 };
 
-const THAI_MONTHS = [
-  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
-];
-
-function formatThaiDate(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  // Buddhist year (พ.ศ. = ค.ศ. + 543)
-  const year = d.getFullYear() + 543;
-  return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${year}`;
-}
-
-function dateRangeLabel(startISO, endISO) {
-  const end = formatThaiDate(endISO);
-  if (!end) return null;
-  return `วันนี้ - ${end}`;
-}
+/*
+ * ── THE DATE LABEL MOVED OUT — ROUND 43 ───────────────────────────────────
+ * `THAI_MONTHS`, `formatThaiDate` and `dateRangeLabel` were here, and the
+ * formatter read `getDate()` / `getMonth()` / `getFullYear()` — the RUNTIME's
+ * zone. This is a server component with `revalidate = 3600`, so exactly one
+ * zone decides and on Vercel it is UTC: the grid named a UTC day to an
+ * audience reading it in Bangkok. Measured over all 23 end dates that reach
+ * this label, both builder rows were shown a day EARLIER than the last day
+ * they are actually visible.
+ *
+ * They now live in lib/promotions/promotionDateLabel.js, pinned to the site's
+ * zone through the module that owns it. They moved rather than being fixed in
+ * place because a route file's exports are constrained by the framework, so
+ * nothing in the suite could reach them to assert what they RENDER — and the
+ * defect was a rendered string.
+ */
 
 // ONE card for both sources — fed a uniform view-model (see cardFromMsdb /
 // builderPromotionToCard). NOT forked into builder/MSDB variants: the two are
