@@ -375,7 +375,10 @@ export function SchedulesAdminClient({
             จัดการตารางอบรม
           </h1>
           <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และวิทยากรเก็บใน Genesis
+            {/* No longer advertises max_seats and วิทยากร as things this
+                screen edits — their inputs are gone from the modal. The values
+                are still STORED and still shown on the round boxes below. */}
+            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — ราคาต่อรอบเก็บใน Genesis
           </p>
         </div>
         <button
@@ -533,7 +536,6 @@ export function SchedulesAdminClient({
           courseCodeHint={modal.courseCode ?? null}
           monthKeyHint={modal.monthKeyHint ?? null}
           courses={courses}
-          instructors={instructors}
           localBySchedId={localBySchedId}
           onClose={() => setModal(null)}
           onSaved={() => {
@@ -1047,7 +1049,11 @@ function ScheduleModal({
   courseCodeHint,
   monthKeyHint,
   courses,
-  instructors,
+  // `instructors` was a prop here, for the วิทยากร checkbox list. That list is
+  // gone, so the modal no longer needs the roster — but the GRID still does
+  // (ScheduleCell renders the teacher names of rounds that have one), so the
+  // page still fetches it and SchedulesAdminClient still builds `instructorById`
+  // from it. Only the modal's copy of the prop was dropped.
   localBySchedId,
   onClose,
   onSaved,
@@ -1153,23 +1159,37 @@ function ScheduleModal({
   const existingLocal = isEdit
     ? localBySchedId.get(String(schedule?._id)) ?? null
     : null;
-  const [maxSeats, setMaxSeats] = useState(
-    existingLocal?.max_seats != null ? String(existingLocal.max_seats) : ''
-  );
+  /*
+   * ── จำนวนที่นั่ง (max_seats) AND วิทยากร (instructor_ids) NO LONGER HAVE
+   *    INPUTS HERE. THE DATA IS DELIBERATELY KEPT. ──────────────────────────
+   *
+   * Both inputs were removed from the "ข้อมูลเฉพาะ Genesis" block below because
+   * nothing in Genesis consumes either value today beyond the admin grid cell
+   * that displays it. NOTHING ELSE WAS REMOVED WITH THEM:
+   *
+   *   · the schema still declares both (models/ScheduleLocal.js) — do NOT drop
+   *     the columns;
+   *   · the stored values are untouched — 5 rows carry a `max_seats` and 4
+   *     carry an `instructor_ids` roster as of this change;
+   *   · the grid still RENDERS both, so the data stays visible even though it
+   *     is no longer editable from this modal.
+   *
+   * `max_seats` in particular is expected BACK: it is wanted for in-house
+   * quotation requests. This is a UI removal precisely so that restoring it is
+   * re-adding an input, not recovering data from a backup.
+   *
+   * The save path is what makes that safe. `sidecarSetFields`
+   * (lib/schedule/scheduleLocalFields) writes ONLY the keys the form sends, so
+   * an absent input leaves the stored value alone rather than nulling it — read
+   * that module before adding, removing or renaming anything in this block.
+   *
+   * `price_override` KEEPS its input: unlike the other two it has live public
+   * readers (the registration wizard's per-round price) and it decides the
+   * amount charged through Omise (lib/registration/resolve-price.js).
+   */
   const [priceOverride, setPriceOverride] = useState(
     existingLocal?.price_override != null ? String(existingLocal.price_override) : ''
   );
-  const [instructorIds, setInstructorIds] = useState(
-    Array.isArray(existingLocal?.instructor_ids)
-      ? existingLocal.instructor_ids.map(String)
-      : []
-  );
-
-  function toggleInstructor(id) {
-    setInstructorIds((cur) =>
-      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
-    );
-  }
 
   const datesPretty = selectedDates
     .map((d) =>
@@ -1217,9 +1237,22 @@ function ScheduleModal({
     fd.set('status',      status);
     fd.set('type',        type);
     fd.set('signup_url',  signupUrl);
-    if (maxSeats) fd.set('max_seats', maxSeats);
-    if (priceOverride !== '') fd.set('price_override', priceOverride);
-    for (const id of instructorIds) fd.append('instructor_ids', id);
+    /*
+     * `max_seats` and `instructor_ids` are NOT SET AT ALL — not '', not 0, not
+     * an empty append. Their inputs are gone (see the note by `priceOverride`'s
+     * state), and the sidecar writer treats an absent key as "leave the stored
+     * value alone". Setting them to anything here, including a blank, would
+     * erase the five seat counts and four rosters currently stored.
+     *
+     * `price_override` IS set unconditionally, blank included, and that is the
+     * other half of the same rule: its input is still on screen, so the form is
+     * authoritative for it and an admin clearing the box must be able to reset
+     * the round to the course's normal price. Sending the key with '' is how
+     * that reaches `toNullableNum` as null. The old `!== ''` guard meant a
+     * cleared price silently kept the old override once the writer stopped
+     * clobbering.
+     */
+    fd.set('price_override', priceOverride);
     if (isEdit) fd.set('schedule_id', schedule._id);
 
     startTransition(async () => {
@@ -1512,54 +1545,20 @@ function ScheduleModal({
             <p className="mb-2 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
               ข้อมูลเฉพาะ Genesis (ไม่ส่งไป MSDB)
             </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  จำนวนที่นั่ง (max_seats)
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={maxSeats}
-                  onChange={(e) => setMaxSeats(e.target.value)}
-                  placeholder="ไม่จำกัด"
-                  className={inputCls}
-                />
-              </label>
+            {/*
+              จำนวนที่นั่ง (max_seats) and วิทยากร (instructor_ids) were the
+              other two inputs in this block. They are REMOVED FROM THE UI ONLY
+              — the schema keeps both fields, the stored rows keep their values,
+              and no migration was written. `max_seats` is expected to return
+              for in-house quotation requests. The full note, including why an
+              omitted key can no longer overwrite stored data, is at the
+              `priceOverride` state declaration above.
 
-              <div>
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  วิทยากร
-                </span>
-                <div className="mt-1 max-h-28 divide-y divide-[var(--surface-border)] overflow-y-auto rounded-9e-md border border-[var(--surface-border)]">
-                  {instructors.length === 0 && (
-                    <p className="px-3 py-2 text-center text-xs text-9e-slate-dp-50">
-                      ยังไม่มีวิทยากร
-                    </p>
-                  )}
-                  {instructors.map((inst) => {
-                    const id = String(inst._id);
-                    return (
-                      <label
-                        key={id}
-                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]/60"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={instructorIds.includes(id)}
-                          onChange={() => toggleInstructor(id)}
-                          className="h-3.5 w-3.5"
-                        />
-                        <span className="text-xs text-9e-navy dark:text-white">
-                          {inst.name}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
+              Now a single column: two of the three cells are gone, and
+              `md:grid-cols-2` would strand the price at half width with nothing
+              beside it.
+            */}
+            <div className="grid gap-3">
               <label className="block">
                 <span className="text-sm font-medium text-9e-navy dark:text-white">
                   ราคาต่อท่าน (บาท, ต่อรอบ)
