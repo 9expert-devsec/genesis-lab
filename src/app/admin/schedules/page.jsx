@@ -1,6 +1,7 @@
 import { ADMIN_SCHEDULE_STATUSES, listSchedules } from '@/lib/api/schedules';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import { listPrograms } from '@/lib/api/programs';
+import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
 import { requirePage } from '@/lib/rbac/guard';
@@ -80,8 +81,38 @@ export default async function AdminSchedulesPage({ searchParams }) {
     scheduleRes.status === 'fulfilled' ? scheduleRes.value.items ?? [] : [];
   const courses =
     courseRes.status === 'fulfilled' ? courseRes.value.items ?? [] : [];
-  const programs =
+  const rawPrograms =
     programRes.status === 'fulfilled' ? programRes.value.items ?? [] : [];
+
+  /**
+   * ── THE SAME PROGRAM ORDER THE PUBLIC /schedule TABLE GROUPS BY ────────────
+   *
+   * `getOrderedPrograms` is the admin-curated ProgramOrder sort, and it is what
+   * `(public)/schedule/page.jsx` already feeds its client (see the identical
+   * call there). The admin grid used to sort its groups by `localeCompare`
+   * instead, so the two surfaces disagreed about where a programme sits — the
+   * public table showing Claude AI above Power BI while the admin listed
+   * AI Builder, Canva, Claude AI. The client ranks groups by THIS ARRAY's
+   * order, exactly as ScheduleClient's `grouped` does.
+   *
+   * ── BUT THE HIDDEN ONES ARE APPENDED, NOT DROPPED ─────────────────────────
+   * `getOrderedPrograms` also FILTERS OUT programmes flagged `isHidden`, which
+   * is right for a public page and wrong here: hiding a programme from the
+   * website must not make its courses unmanageable, and this is the screen
+   * where their rounds are edited. So the ordered list is the head and every
+   * programme it dropped is appended, in upstream order. The client's rank
+   * lookup then places hidden programmes last (as an unranked group already
+   * was), and the filter dropdown — which reads the same prop — keeps offering
+   * every programme it offered before.
+   */
+  const orderedPrograms = await getOrderedPrograms(rawPrograms).catch(
+    () => rawPrograms
+  );
+  const orderedIds = new Set(orderedPrograms.map((p) => String(p._id ?? p.program_id ?? '')));
+  const programs = [
+    ...orderedPrograms,
+    ...rawPrograms.filter((p) => !orderedIds.has(String(p._id ?? p.program_id ?? ''))),
+  ];
   const instructors =
     instructorRes.status === 'fulfilled' ? instructorRes.value : [];
 
