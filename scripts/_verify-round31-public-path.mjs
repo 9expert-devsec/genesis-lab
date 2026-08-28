@@ -108,7 +108,17 @@ function closureOf(files) {
 const { files: closure, unresolved } = closureOf(entries);
 
 // ── what changed against HEAD, normalised ─────────────────────────────────
-const changed = execFileSync('git', ['diff', '--name-only', 'HEAD'], { encoding: 'utf8' })
+/**
+ * ROUND 41 added BASE_REF, and nothing else in this file moved.
+ *
+ * The method is round 20's and the controls are round 31's; what a later round
+ * needs is to point the same comparison at the commit its work started from,
+ * because by the time the round's last commit is being verified the earlier
+ * ones are already in HEAD and invisible to a diff against it. Defaulting to
+ * HEAD keeps every previous invocation identical.
+ */
+const BASE_REF = process.env.BASE_REF ?? 'HEAD';
+const changed = execFileSync('git', ['diff', '--name-only', BASE_REF], { encoding: 'utf8' })
   .split('\n').map((s) => s.trim()).filter(Boolean);
 const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' })
   .split('\n').map((s) => s.trim()).filter(Boolean);
@@ -117,8 +127,8 @@ const touched = [...new Set([...changed, ...untracked])];
 /** Truly different from HEAD once line endings are normalised away. */
 function differsFromHead(relPath) {
   let head;
-  try { head = execFileSync('git', ['show', 'HEAD:' + relPath], { encoding: 'utf8' }); }
-  catch { return true; } // new file — no HEAD side to compare
+  try { head = execFileSync('git', ['show', BASE_REF + ':' + relPath], { encoding: 'utf8' }); }
+  catch { return true; } // new file — no base-side to compare
   let now;
   try { now = readFileSync(path.join(ROOT, relPath), 'utf8'); }
   catch { return true; } // deleted
@@ -140,8 +150,20 @@ const libInClosure = [...closure].filter((f) => f.startsWith('src/lib/')).length
 // ── CONTROL 2: the intersection CAN come back non-zero ────────────────────
 // The same operation, over a closure with one genuinely-changed file spliced
 // in. If this does not report exactly that file, the zero above means nothing.
+/**
+ * ── ROUND 41 CORRECTED THIS CONTROL'S ARITHMETIC ──────────────────────────
+ * It asserted the spliced run returns EXACTLY the witness, which is only right
+ * when the UN-spliced intersection is empty. Round 41's is the first run with a
+ * non-empty one — lib/pageBuilder/auditTrail.js sits in the public closure,
+ * because the catch-all route imports the actions module that imports it — and
+ * the control read as broken while the measurement it guards was fine.
+ *
+ * The claim was always "splicing adds exactly the witness". It is now stated
+ * that way, and the witness is picked from OUTSIDE the closure so that splicing
+ * it can change the answer at all.
+ */
 const spliced = new Set(closure);
-const witness = touchedReal.find((f) => /\.(js|jsx|mjs)$/.test(f));
+const witness = touchedReal.find((f) => /\.(js|jsx|mjs)$/.test(f) && !closure.has(f));
 if (witness) spliced.add(witness);
 const controlHits = touchedReal.filter((f) => spliced.has(f));
 
@@ -169,7 +191,9 @@ const out = {
   '── CONTROL 2: the intersection can go non-zero ──': '',
   witnessSplicedIntoClosure: witness ?? null,
   hitsWithWitnessSpliced: controlHits,
-  controlDiscriminates: Boolean(witness) && controlHits.length === 1 && controlHits[0] === witness,
+  controlDiscriminates: Boolean(witness)
+    && controlHits.length === publicChanged.length + 1
+    && controlHits.includes(witness),
 };
 
 console.log(JSON.stringify(out, null, 2));
