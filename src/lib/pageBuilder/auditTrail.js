@@ -226,3 +226,185 @@ export const AUDIT_TRAIL_NOTE =
 
 /** Said in place of the list when a page has no rows at all. */
 export const AUDIT_TRAIL_EMPTY = 'ยังไม่มีการดำเนินการที่บันทึกไว้สำหรับหน้านี้';
+
+/**
+ * ── ROUND 41: CONSECUTIVE RUNS COLLAPSE ───────────────────────────────────
+ *
+ * The list is written one row per autosave TICK. Round 38 measured that as the
+ * growth mechanism and paginated against it; what it did not do is make the
+ * page readable. A real screenshot of one page shows ~20 consecutive
+ * `บันทึกฉบับร่าง โดย Yanisa P.` rows between 11:25 and 12:02, with the
+ * `เผยแพร่` and the `สร้างรหัสพรีวิวใหม่` that happened in the middle of them
+ * buried in the run. The trail records the two things an author came for and
+ * shows them at a twentieth of the vertical space it gives to the autosaver.
+ *
+ * So consecutive rows of the SAME action by the SAME actor become one row. It
+ * is a DISPLAY transform and nothing else: the read is unchanged, the
+ * projection is unchanged, the sort is unchanged, and the cursor still steps
+ * through stored rows rather than through groups.
+ *
+ * ── WHICH ACTIONS MAY COLLAPSE, AND WHY THE SET IS ONE ────────────────────
+ * The test is not "can this action repeat" — several can. It is: does the row
+ * carry anything a reader loses when it is folded into a count? A row says
+ * WHAT KIND, BY WHOM, WHEN. Folding preserves the first two and replaces the
+ * third with a span, so the loss is always "the individual timestamps of the
+ * N events". That loss is acceptable exactly when the events are not
+ * individually consequential.
+ *
+ *   · `draft.save` — one per autosave tick, machine-paced rather than authored.
+ *     No individual tick is an event anybody looks for; the RUN is the fact.
+ *     COLLAPSES.
+ *   · `update` — can repeat (an author edits several settings fields). Each one
+ *     is an authored change to page IDENTITY: `update` records `{slug,status}`,
+ *     and a slug edit moves the page's URL and writes a 301. Three separate
+ *     identity edits at three separate times is exactly what an audit reader is
+ *     there for. DOES NOT COLLAPSE.
+ *   · `status` — each is a transition the public sees. DOES NOT COLLAPSE.
+ *   · `draft.discard` — each destroyed unpublished work. DOES NOT COLLAPSE.
+ *   · `draft.backup` — each one IS a row in `page_versions` that can still be
+ *     restored. Folding three into one count hides that there are three
+ *     distinct recoverable artefacts. DOES NOT COLLAPSE.
+ *   · `preview.*` — `preview.regenerate` legitimately repeats, and each repeat
+ *     invalidates a code somebody may be holding. A credential sequence is the
+ *     last thing to summarise. DOES NOT COLLAPSE.
+ *   · `create` / `delete` — cannot repeat consecutively on one page at all.
+ *
+ *   · `publish` — MUST NEVER BE ADDED TO THIS SET. Every publish mints a new
+ *     `PageVersion` and changes what the public is reading; two publishes are
+ *     two distinct public states of the site. Collapsing them would report one
+ *     event where there were two, and this trail is the only place the timing
+ *     of an individual publish is recorded — `PageVersion` carries the number
+ *     and the actor, and round 38 measured that an audit row cannot be joined
+ *     to it. So the timing record would be destroyed with no second source to
+ *     recover it from. It is named in THIS COMMENT rather than guarded a second
+ *     time in the code below, because a second guard would mean a test that
+ *     plants `publish` in this set could not go red — and a control that cannot
+ *     fire is not a control (see the redundancy note in test/run.mjs).
+ */
+export const AUDIT_COLLAPSIBLE_ACTIONS = Object.freeze(['draft.save']);
+
+const COLLAPSIBLE = new Set(AUDIT_COLLAPSIBLE_ACTIONS);
+
+/** May consecutive rows of this action be folded into one? */
+export function isCollapsibleAction(action) {
+  return COLLAPSIBLE.has(String(action ?? '').trim());
+}
+
+/**
+ * WHO a row belongs to, for run purposes.
+ *
+ * The id leads and the name follows, joined by a separator no name can carry.
+ * Two different people who happen to share a display name must not merge, and
+ * `actor` defaults to `{ id: '', name: '' }` — so anonymous rows key alike and
+ * DO merge, which is right: they are the same page's autosave ticks with
+ * nobody named on either.
+ */
+function actorKeyOf(row) {
+  return `${String(row?.actor?.id ?? '')}␟${auditActorName(row)}`;
+}
+
+/**
+ * Fold consecutive same-action, same-actor rows into groups. PURE.
+ *
+ * Input is the rows in the order the read returned them — newest first — and
+ * the output is in that same order. Nothing is re-sorted and nothing is
+ * de-duplicated: the compound cursor already guarantees no row arrives twice,
+ * and re-sorting here would be a second opinion about an order the query
+ * decided (round 38's rule, unchanged).
+ *
+ * ── `more`, AND THE PAGE BOUNDARY ─────────────────────────────────────────
+ * The caller holds the rows it has ACCUMULATED across every fetch so far, and
+ * groups that whole array. That is what makes a run split across a fetch
+ * boundary re-merge into one group carrying the true total when page 2 lands:
+ * the count is a function of the accumulated rows, so it can only ever grow. A
+ * group that reset its count on page 2 — which is what grouping each page
+ * separately and concatenating the results would produce — is a lie about what
+ * happened, and this shape makes that unrepresentable rather than merely
+ * avoided.
+ *
+ * What remains is the OTHER half of the same seam, and it is the half that can
+ * still lie. The OLDEST group in a partially-loaded list touches rows that have
+ * not been fetched: a run of 60 autosaves loaded 25 at a time would read as 25
+ * while the truth is at least 60. So when the read offered a cursor, the last
+ * group is marked `openEnded` and its count is rendered as a LOWER BOUND rather
+ * than as a total. Loading the next page merges the real rows in, and the bound
+ * either grows or — when the run genuinely ended at that row — becomes exact.
+ *
+ * A group of ONE is never a lower bound worth saying: it prints no count at
+ * all, so it makes no claim that could be short. `openEnded` is still set on
+ * it, and the renderer simply has nothing to qualify.
+ */
+export function groupAuditRows(rows, { more = false } = {}) {
+  const list = Array.isArray(rows) ? rows : [];
+  const groups = [];
+  for (const row of list) {
+    if (!row) continue;
+    const action = String(row.action ?? '').trim();
+    const actorKey = actorKeyOf(row);
+    const prev = groups[groups.length - 1];
+    if (prev && isCollapsibleAction(action) && prev.action === action && prev.actorKey === actorKey) {
+      prev.count += 1;
+      prev.oldest = row;
+      continue;
+    }
+    groups.push({
+      // The NEWEST row's id: a group's head never changes as older rows merge
+      // into it, so a React key built on it is stable across a page load.
+      key: String(row._id ?? ''),
+      action,
+      actorKey,
+      actorName: auditActorName(row),
+      count: 1,
+      newest: row,
+      oldest: row,
+      openEnded: false,
+    });
+  }
+  if (more && groups.length) groups[groups.length - 1].openEnded = true;
+  return groups;
+}
+
+/**
+ * The WHEN half of a collapsed row: oldest first, newest second.
+ *
+ * Both halves are PARAMETERS for round 38's reason — `toLocaleString` is
+ * timezone-dependent, so a function formatting its own dates could only be
+ * asserted by value on the machine that wrote the assertion.
+ *
+ * A run entirely inside one displayed minute formats to two identical strings,
+ * and repeating that string either side of a dash reads as a rendering fault
+ * rather than as a short run. It collapses to the single text.
+ */
+export function auditSpanText(oldestText, newestText) {
+  const from = String(oldestText ?? '').trim();
+  const to = String(newestText ?? '').trim();
+  if (!from) return to;
+  if (!to || from === to) return from;
+  return `${from} – ${to}`;
+}
+
+/**
+ * One GROUP as a sentence.
+ *
+ * A group of one delegates to `auditRowLine` rather than reproducing it, so the
+ * two can never phrase the same facts differently — a group of one must read as
+ * a row rather than as a run of one, because a printed count of one states a
+ * run that is not there. The component takes the same branch explicitly at its
+ * call site; this is the guarantee for every other caller.
+ *
+ * Order is action, then the count, then who, then when: the verb is what the
+ * reader scans for, and the count is what tells them how much of the list this
+ * one line just absorbed.
+ */
+export function auditGroupLine(group, whenText) {
+  if (!group) return '';
+  if (!(group.count > 1)) return auditRowLine(group.newest, whenText);
+  const label = auditActionLabel(group.action);
+  if (!label) return '';
+  const name = String(group.actorName ?? '').trim();
+  const when = String(whenText ?? '').trim();
+  const parts = [label, `${group.openEnded ? 'อย่างน้อย ' : ''}${group.count} ครั้ง`];
+  if (name) parts.push(`โดย ${name}`);
+  if (when) parts.push(`เมื่อ ${when}`);
+  return parts.join(' ');
+}

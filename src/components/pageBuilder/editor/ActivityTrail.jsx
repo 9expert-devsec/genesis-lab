@@ -8,6 +8,9 @@ import { getPageAuditLog } from '@/lib/actions/pageBuilder';
 import {
   auditRowLine, AUDIT_TRAIL_NOTE, AUDIT_TRAIL_EMPTY,
 } from '@/lib/pageBuilder/auditTrail';
+// ROUND 41, ADDED beside the statement above rather than folded into it — the
+// standing rule in this directory.
+import { groupAuditRows, auditGroupLine, auditSpanText } from '@/lib/pageBuilder/auditTrail';
 
 /**
  * Activity trail — every recorded action on one page, newest first.
@@ -48,6 +51,19 @@ import {
  *
  * It adds NO save or status vocabulary — round 27's rule, respected by rounds
  * 34 and 36. Nothing here is a control; the section is a list and a note.
+ *
+ * ── ONE ROW PER RUN, NOT ONE ROW PER TICK — ROUND 41 ──────────────────────
+ * Consecutive rows of the same action by the same actor render as ONE row
+ * carrying the count and the time span. Only `draft.save` folds, and
+ * auditTrail.js states the reasoning for each of the twelve live actions —
+ * including why `publish` must never join the set.
+ *
+ * It is a transform over `rows`, computed at render. Nothing about the fetch
+ * moves: the same page size, the same compound cursor, the same append. The
+ * grouping runs over the rows ACCUMULATED so far rather than per page, so a run
+ * split across a fetch boundary re-merges with the true total instead of
+ * restarting its count — and until the next page is fetched the oldest group
+ * says so, because its run may continue into rows nobody has read yet.
  *
  * ── PAGINATED, AND THE BUTTON IS THE ONLY WAY DEEPER ──────────────────────
  * Nothing prunes `page_audit_logs` and one autosave tick writes one row, so a
@@ -137,14 +153,32 @@ export function ActivityTrail({ pageId, open, initialRows = null, initialCursor 
     return <p className="text-[11px] text-9e-slate-dp-50">{AUDIT_TRAIL_EMPTY}</p>;
   }
 
+  /**
+   * The transform, over the ACCUMULATED rows and not per page.
+   *
+   * `more` is the cursor: while one exists the oldest group's run may continue
+   * into rows that have not been fetched, so its count is a lower bound rather
+   * than a total. See groupAuditRows for the whole seam argument.
+   */
+  const groups = groupAuditRows(rows, { more: Boolean(cursor) });
+
   return (
     <>
       <ul className="space-y-1">
-        {rows.map((r) => (
-          <li key={r._id} className="flex items-start gap-1.5 text-[11px] text-9e-slate-dp-50">
+        {groups.map((g) => (
+          <li key={g.key} className="flex items-start gap-1.5 text-[11px] text-9e-slate-dp-50">
             <ScrollText className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
             <span data-testid="activity-row" className="min-w-0 flex-1">
-              {auditRowLine(r, when(r.createdAt))}
+              {/*
+                A GROUP OF ONE GOES THROUGH THE ROW COMPOSER — literally the
+                same call round 38 made, so a single action cannot acquire a
+                run's phrasing by accident. auditGroupLine delegates identically
+                for every other caller; the branch is explicit here because this
+                is the one place where "it must not read as a group" is visible.
+              */}
+              {g.count > 1
+                ? auditGroupLine(g, auditSpanText(when(g.oldest.createdAt), when(g.newest.createdAt)))
+                : auditRowLine(g.newest, when(g.newest.createdAt))}
             </span>
           </li>
         ))}
