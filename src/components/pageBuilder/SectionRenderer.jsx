@@ -3,8 +3,23 @@ import { sanitizePageHtml } from '@/lib/customPages/sanitizePageHtml';
 import { scopeCss, isValidSectionId } from '@/lib/pageBuilder/scopeCss';
 import { slotsOf, MAX_SECTION_DEPTH } from '@/lib/pageBuilder/containerSlots';
 import {
-  containerWidthClass, spacingTopClass, spacingBottomClass, backgroundClass,
-  isDarkBackground, visibilityClass, isHiddenVisibility, accentVars,
+  containerWidthClass, spacingTopClass, spacingBottomClass,
+  visibilityClass, isHiddenVisibility,
+} from '@/lib/pageBuilder/presets';
+/**
+ * Round 39, ADDED beside the statement above rather than folded into it — the
+ * standing rule in this repo.
+ *
+ * `backgroundClass`, `isDarkBackground` and `accentVars` LEFT the statement
+ * above, and that removal is load-bearing rather than tidying. Each of the four
+ * below wraps one of them and answers identically for any section that has not
+ * chosen a custom colour; keeping the raw three importable here would leave a
+ * path that resolves a colour WITHOUT consulting the mode, which is how a
+ * custom background ends up painted under a preset class. There is one path,
+ * and a test asserts this file cannot reach the other.
+ */
+import {
+  backgroundClassFor, backgroundStyleFor, isDarkBackgroundFor, accentVarsFor,
 } from '@/lib/pageBuilder/presets';
 
 import { HeadingSection } from './sections/heading';
@@ -227,23 +242,48 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
   // whitelist (never a second, drift-prone copy).
   const cleanHtml = advanced.customHtml ? sanitizePageHtml(advanced.customHtml) : '';
 
+  /**
+   * ── ROUND 39: THE SAME THREE CALLS, THROUGH THE MODE-AWARE RESOLVERS ─────
+   * `backgroundClassFor` / `isDarkBackgroundFor` / `accentVarsFor` each wrap the
+   * function that used to be called here and return exactly its answer unless
+   * the author chose `custom`. A section stored before round 39 has no mode, so
+   * this renders byte-identically to what it rendered before — which is the
+   * property the model commit was built around and is asserted by name.
+   *
+   * The custom background is an INLINE STYLE and cannot be a class: Tailwind's
+   * JIT only emits classes it can see as literals, and an author's colour is a
+   * runtime string. That is also why the preset class has to be SUPPRESSED
+   * rather than merely overridden — see backgroundClassFor.
+   */
   const outerClass = cn(
-    backgroundClass(settings.background),
+    backgroundClassFor(settings),
     spacingTopClass(settings.spacingTop),
     spacingBottomClass(settings.spacingBottom),
-    isDarkBackground(settings.background) && 'text-9e-ice',
+    isDarkBackgroundFor(settings) && 'text-9e-ice',
     visibilityClass(settings.visibility),
     advanced.customClass || null,
   );
-  // Section accent override cascades to descendants via CSS vars.
-  const outerStyle = style.accentColor ? accentVars(style.accentColor) : undefined;
+  /**
+   * Section accent override cascades to descendants via CSS vars — unchanged,
+   * and the cascade is the whole reason a custom accent needs nothing else.
+   * The twelve components that paint with the accent read
+   * `var(--pb-accent-fill|text|on)`; this sets those three variables on the
+   * section wrapper, so a custom colour reaches EXACTLY the surfaces a preset
+   * reaches, by the same mechanism, without any of them being touched.
+   *
+   * Merged with the background style rather than either winning: they are
+   * disjoint properties (custom properties vs background-color/-image) and one
+   * `style` attribute has to carry both.
+   */
+  const outerStyle = { ...accentVarsFor(style), ...backgroundStyleFor(settings) };
+  const hasOuterStyle = Object.keys(outerStyle).length > 0;
 
   return (
     <section
       id={domId}
       data-pb-path={path ? path.join('.') : undefined}
       className={outerClass || undefined}
-      style={outerStyle}
+      style={hasOuterStyle ? outerStyle : undefined}
     >
       {scopedCss && <style dangerouslySetInnerHTML={{ __html: scopedCss }} />}
       <div className={cn('mx-auto px-4', containerWidthClass(settings.containerWidth))}>
