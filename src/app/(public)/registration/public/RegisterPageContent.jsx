@@ -9,7 +9,11 @@ import { resolveScheduleStatusBatch } from '@/lib/schedule-status';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { getCourseExtension } from '@/lib/actions/course-extensions';
 import { getScheduleLocals } from '@/lib/actions/schedules';
-import { siteCurrentYear } from '@/lib/articlePublishTime';
+import { siteCurrentYear, siteTodayKey } from '@/lib/articlePublishTime';
+import {
+  excludeStartedRounds,
+  startedRounds,
+} from '@/lib/schedule/roundHasStarted';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
 import { courseHref } from '@/lib/utils';
 
@@ -77,16 +81,59 @@ export async function RegisterPageContent({ searchParams, step }) {
     // land on a wizard whose carousel did not contain it — step 1 rendered
     // nothing and said nothing. The round has to ARRIVE before RegisterWizard
     // can tell the user it is full.
+    /**
+     * ── `includeStarted`, ON A PUBLIC PAGE, AND IT IS NOT A LOOPHOLE ─────────
+     *
+     * A round that has begun is NOT bookable and never reaches the carousel —
+     * the partition below is what removes it, using the same predicate the
+     * fetch layer applies by default. This page opts out of the fetch-level
+     * filter only so it can SEE the excluded rounds and tell the visitor which
+     * of two things went wrong.
+     *
+     * `?class=` links live in bookmarks, emails and shared messages, and
+     * /schedule is ISR-cached for 30 minutes, so for half an hour after
+     * midnight the public table still renders a live link to a round that
+     * started at 00:00. Without this, that click lands on a carousel with the
+     * round silently absent — a documented dead end (see RegisterWizard, where
+     * a `?class=` id resolving to nothing fails closed and says nothing). That
+     * silence is acceptable for a stale or bogus id and NOT acceptable for a
+     * round we deliberately hid this morning.
+     *
+     * The two states have different remedies — "pick another round" versus
+     * "this link is stale" — so they are kept apart rather than merged into one
+     * message. That distinction is only makeable HERE, because after the fetch
+     * filter both look identical: absent.
+     */
     listSchedulesByCourse(course._id, {
       limit: 20,
       status: PUBLIC_SCHEDULE_STATUSES,
+      includeStarted: true,
     }),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getCourseExtension(course.course_id).catch(() => null),
   ]);
 
   // Apply admin status overrides (open → closed, scheduled changes).
-  const schedules = await resolveScheduleStatusBatch(rawSchedules);
+  const resolved = await resolveScheduleStatusBatch(rawSchedules);
+
+  /**
+   * THE PARTITION. One clock read, one predicate, two disjoint lists.
+   *
+   * `todayKey` is read ONCE and threaded into both calls rather than each
+   * deriving its own — two reads either side of midnight could put the same
+   * round in both lists or in neither, and the wizard's message would then
+   * depend on which of two Dates won.
+   *
+   * `schedules` is exactly what the fetch layer would have returned with the
+   * default filter, so the carousel, the wizard and every other public surface
+   * still agree about what is bookable. `startedScheduleIds` carries only ids —
+   * the wizard needs to recognise one, never to render one.
+   */
+  const todayKey = siteTodayKey();
+  const schedules = excludeStartedRounds(resolved, todayKey);
+  const startedScheduleIds = startedRounds(resolved, todayKey)
+    .map((s) => String(s?._id ?? ''))
+    .filter(Boolean);
 
   const earlyBirdScheduleId =
     earlyBirdMap[String(course.course_id).toUpperCase()] ?? null;
@@ -141,6 +188,7 @@ export async function RegisterPageContent({ searchParams, step }) {
         <RegisterWizard
           course={course}
           schedules={schedules}
+          startedScheduleIds={startedScheduleIds}
           initialClassId={initialClassId}
           earlyBirdScheduleId={earlyBirdScheduleId}
           step={step}
