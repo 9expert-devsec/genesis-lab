@@ -3,6 +3,9 @@
 import { AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { labelFor } from '@/lib/pageBuilder/presetLabels';
+// Round 39, ADDED beside the statement above rather than folded into it — the
+// standing rule in this directory.
+import { isHexColor, COLOR_INPUT_FALLBACK } from '@/lib/pageBuilder/customColor';
 
 /**
  * Shared form primitives for the settings panel (5a envelope + 5b per-type
@@ -78,6 +81,55 @@ export function TextInput({ value, onChange, invalid, ...rest }) {
       className={cn(INPUT_CLASS, invalid && 'border-red-400')}
       {...rest}
     />
+  );
+}
+
+/**
+ * A colour input — round 39. The swatch picker and the hex box are ONE control.
+ *
+ * ── WHY BOTH HALVES ────────────────────────────────────────────────────────
+ * The picker is how a colour is chosen and the text box is how a BRAND colour
+ * is entered: an author with `#0d1b2a` in a style guide pastes it, and hunting
+ * for it in a gradient square is not a thing anyone should have to do. They read
+ * and write the same value, so neither is a second authority.
+ *
+ * ── THE PICKER'S STARTING POSITION IS NOT A STORED VALUE ───────────────────
+ * `<input type="color">` has no empty state — handed nothing it shows black. So
+ * an untouched control opens on COLOR_INPUT_FALLBACK, which is derived from the
+ * pinned navy triple rather than written as a literal (round 30's ban is on a
+ * colour DECIDED in source). Nothing writes it: `onChange` only fires when the
+ * author actually picks, and the text box passes its value through raw so a
+ * half-typed hex is stored as typed and refused by the schema rather than
+ * silently corrected under the cursor.
+ */
+export function ColorInput({ value, onChange, invalid, placeholder }) {
+  const swatch = isHexColor(value) ? value : COLOR_INPUT_FALLBACK;
+  /**
+   * A `div`, NOT a `span`, and it is not a style choice. `Field` renders
+   * `<label><span>label</span>{children}<span>hint</span></label>`, and every
+   * hint reader in the test tier takes the SECOND direct `span` child. A span
+   * wrapper here becomes that second child and the hint silently reads empty —
+   * which is exactly what happened, on a control whose hint is the round's
+   * caveat copy. Conforming to the contract beats bending three readers.
+   */
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="color"
+        aria-label="เลือกสี"
+        value={swatch}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-10 shrink-0 cursor-pointer rounded-9e-sm border border-[var(--surface-border)] bg-[var(--surface)] p-0.5"
+      />
+      <input
+        type="text"
+        value={value ?? ''}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid || undefined}
+        className={cn(INPUT_CLASS, 'font-mono', invalid && 'border-red-400')}
+      />
+    </div>
   );
 }
 

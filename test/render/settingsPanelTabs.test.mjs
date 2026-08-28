@@ -70,8 +70,25 @@ const advancedTab = (advanced, canUseAdvanced) => domOf(createElement(AdvancedGr
  * The three universal envelope groups, which are what the รูปแบบ tab adds on
  * top of whatever SectionTypeFields contributes for the type.
  */
-const ENVELOPE_FIELDS = ['ความกว้าง', 'ระยะห่างด้านบน', 'ระยะห่างด้านล่าง', 'พื้นหลัง', 'แสดงบน', 'สีเน้น'];
-const ENVELOPE_GROUPS = ['การจัดวาง', 'พื้นหลังและการแสดงผล', 'สไตล์'];
+/**
+ * AMENDED, round 39. The field set is unchanged in MEMBERSHIP — the same six
+ * envelope controls — but two things moved, both deliberately:
+ *   · สีเน้น -> สีองค์ประกอบ. The control's SCOPE is untouched; the name is what
+ *     was wrong. See ACCENT_HINT in SettingsPanel.jsx.
+ *   · the ORDER changed with the regrouping below: แสดงบน left the background
+ *     group and now follows the two colour controls.
+ * The four custom-colour fields are NOT here: they are conditional on the
+ * author having chosen กำหนดเอง, and this list is what an untouched section
+ * renders. They have their own exact-set assertions in customColorPanel.
+ */
+const ENVELOPE_FIELDS = ['ความกว้าง', 'ระยะห่างด้านบน', 'ระยะห่างด้านล่าง', 'พื้นหลัง', 'สีองค์ประกอบ', 'แสดงบน'];
+/**
+ * AMENDED, round 39. พื้นหลังและการแสดงผล + สไตล์ -> สี + การแสดงผล.
+ * สไตล์ held ONE child and read as though it might own the background too,
+ * which is what made the two colour controls look overlapping; visibility sat
+ * in the background group for want of anywhere else and is not a colour.
+ */
+const ENVELOPE_GROUPS = ['การจัดวาง', 'สี', 'การแสดงผล'];
 const ADVANCED_FIELDS = ['Section ID (anchor)', 'Custom class', 'Custom CSS', 'Custom HTML'];
 
 // ── 1. each tab renders exactly its own group's fields ─────────────────────
@@ -574,9 +591,18 @@ const fieldPairsIn = (doc) => [...doc.querySelectorAll('label')].map((l) => {
 
 const hintFor = (doc, label) => fieldPairsIn(doc).find((f) => f.label === label)?.hint ?? null;
 
+/**
+ * AMENDED, round 39 — ONE WORD, and the assertion's guarantee is unchanged.
+ * The field was renamed สีเน้น -> สีองค์ประกอบ, so the hint that names it says
+ * the new name. Every clause round 22 wrote is still here and still true: the
+ * three roles, the cascade into nested sections, and the types that show
+ * nothing. A custom accent changes the VALUE the three variables carry, not
+ * which components read them, so the final clause did not need weakening.
+ */
+const ACCENT_FIELD_LABEL = 'สีองค์ประกอบ';
 const ROUND22_ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ '
   + 'ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — '
-  + 'section บางชนิดไม่มีส่วนที่ใช้สีเน้น จึงจะไม่เห็นความเปลี่ยนแปลง';
+  + 'section บางชนิดไม่มีส่วนที่ใช้สีองค์ประกอบ จึงจะไม่เห็นความเปลี่ยนแปลง';
 
 const ROUND22_WIDTH_HINT = 'การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น';
 
@@ -614,8 +640,8 @@ test('A: the universal accent claim is gone, and the replacement is exactly this
    * type with no such surface shows nothing.
    */
   for (const type of ['heading', 'rich_text', 'course_card', 'notice', 'tabs']) {
-    assert.equal(hintFor(styleTab(type), 'สีเน้น'), ROUND22_ACCENT_HINT,
-      `${type}: the สีเน้น hint is not the round-22 copy`);
+    assert.equal(hintFor(styleTab(type), ACCENT_FIELD_LABEL), ROUND22_ACCENT_HINT,
+      `${type}: the สีองค์ประกอบ hint is not the round-22 copy`);
   }
 
   // Gone from the rendered panel AND from the source — the second half matters
@@ -643,7 +669,7 @@ test('A: the accent hint is ONE string — it does not vary by type', () => {
    * makes it per-type must also supply the single source and a test that the
    * two agree, exactly as the ความกว้าง hint below already does.
    */
-  const hints = new Set(ALL_SECTION_TYPES.map((t) => hintFor(styleTab(t), 'สีเน้น')));
+  const hints = new Set(ALL_SECTION_TYPES.map((t) => hintFor(styleTab(t), ACCENT_FIELD_LABEL)));
   assert.deepEqual([...hints], [ROUND22_ACCENT_HINT]);
 });
 

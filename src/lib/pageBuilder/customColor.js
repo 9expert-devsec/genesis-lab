@@ -161,6 +161,25 @@ function channels(hex) {
   return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }
 
+/** [r, g, b] → `#rrggbb`. The inverse, for the one caller below. */
+function toHex(rgb) {
+  return `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * What an `<input type="color">` shows before the author has chosen anything.
+ *
+ * It needs SOME value — the element has no empty state, and a browser handed
+ * one coerces it to black. DERIVED from the pinned navy triple rather than
+ * written as a literal, which is the same reason the triples exist: round 30's
+ * ban is on a colour DECIDED in source, and this is the CI's own text navy
+ * arrived at by arithmetic from the token it already mirrors.
+ *
+ * It is a starting position for a picker, never a stored value: nothing writes
+ * it, and a control that has not been touched still stores nothing at all.
+ */
+export const COLOR_INPUT_FALLBACK = toHex(THEME_TEXT_RGB.navy);
+
 /** WCAG 2.1 relative luminance — the sRGB linearisation, verbatim. */
 function luminance([r, g, b]) {
   const lin = [r, g, b].map((c) => {

@@ -14,6 +14,16 @@ import {
   VISIBILITY_LABELS, ACCENT_LABELS, labelFor,
 } from '@/lib/pageBuilder/presetLabels';
 import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+// Round 39, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory.
+import { ColorInput } from './fields';
+import {
+  CUSTOM_COLOR_OPTION, CUSTOM_COLOR_LABEL, GRADIENT_DIRECTION_LABELS,
+} from '@/lib/pageBuilder/presetLabels';
+import {
+  isHexColor, GRADIENT_DIRECTIONS, DEFAULT_GRADIENT_DIRECTION,
+  backgroundContrastOk, accentContrastOk,
+} from '@/lib/pageBuilder/customColor';
 import { SectionContentEditor } from './SectionContentEditor';
 import { SectionTypeFields } from './SectionTypeFields';
 import { getAt, parentSectionPath } from './pagePath';
@@ -231,9 +241,80 @@ export function ContentTab({ type, content, advanced, resolved, patch }) {
  * cascade clause is kept from the old hint because it was the true half — four
  * container types forward the variables to their children.
  */
+/**
+ * ── ROUND 39: ONE WORD CHANGED, AND ONLY BECAUSE THE FIELD WAS RENAMED ─────
+ * `สีเน้น` became `สีองค์ประกอบ`, so the hint that describes it says the new
+ * name. Nothing else moved, and nothing else could: the SCOPE is unchanged —
+ * icons, accent rules, buttons, links and key figures, in this section and in
+ * the sections nested inside it, which is round 21's measured three roles.
+ *
+ * Narrowing the name to something like สีปุ่มกด was the alternative and it is
+ * worse: eleven of the twelve consuming types paint something that is not a
+ * button, so the field would then be lying about eleven of its twelve effects
+ * — and any narrowing of the SCOPE to match would silently restyle every
+ * section already using it.
+ *
+ * The final clause is still true after this round, and that matters more than
+ * usual now that a custom colour makes the accent feel more powerful: fifteen
+ * of the 27 types show nothing of their own — eleven have no accent surface at
+ * all and four are containers that forward the variables to their children. A
+ * custom accent changes the VALUE those variables carry and not which
+ * components read them, so the set is exactly the set it was.
+ */
 const ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น ปุ่ม ลิงก์ และตัวเลขสำคัญ '
   + 'ทั้งใน section นี้และ section ที่ซ้อนอยู่ข้างใน — '
-  + 'section บางชนิดไม่มีส่วนที่ใช้สีเน้น จึงจะไม่เห็นความเปลี่ยนแปลง';
+  + 'section บางชนิดไม่มีส่วนที่ใช้สีองค์ประกอบ จึงจะไม่เห็นความเปลี่ยนแปลง';
+
+/**
+ * ── THE CUSTOM-MODE CAVEAT, AND WHAT IT DELIBERATELY DOES NOT CLAIM ────────
+ * The brief asked this to say "a custom colour does not change in dark mode",
+ * contrasted against a preset that follows it. The first half is true. THE
+ * CONTRAST IS NOT, and it was measured rather than assumed
+ * (scripts/_probe-round39-colours-browser.mjs, four conditions, with a control
+ * proving the dark block was live): NOTHING in this colour system follows dark
+ * mode — not a preset background, not a preset accent. The brand scale tokens
+ * are re-declared identically in `.dark` or not re-declared there at all, by
+ * design; the 91 variables that do differ are the surface/text families the
+ * presets never resolve through.
+ *
+ * So the sentence says what IS true of custom mode — the colour is used as
+ * entered and the system adjusts it for neither the theme nor dark mode — and
+ * claims nothing about what a preset would have done instead. A caveat that
+ * promised a contrast an author could not observe would be the same class of
+ * lie as a control nothing reads, which is what this panel exists to avoid.
+ *
+ * The one real thing custom mode gives up IS the theme, and it is the half of
+ * the sentence that was measured to vary: a section with no accent inherits the
+ * page theme's accent (#005CFF on default, #9124FF on ai_purple).
+ */
+const CUSTOM_COLOR_CAVEAT = 'สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — '
+  + 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด';
+
+/** The hex box's placeholder. Not a colour — six letters standing for digits. */
+const HEX_PLACEHOLDER = '#RRGGBB';
+
+/**
+ * ── THE CONTRAST WARNINGS: THEY WARN, THEY DO NOT ENFORCE ──────────────────
+ * Neither one changes a value, blocks a save, or picks a text colour. Deriving
+ * text from the author's background would put a second authority beside the
+ * theme, which is what rounds 21-25 spent four rounds removing from
+ * container.jsx; the warning is the whole of the intervention.
+ *
+ * 4.5:1 is WCAG 2.1 SC 1.4.3 (Contrast (Minimum)) for normal text — the 3:1
+ * large-text allowance is not used, because the control cannot know what size
+ * text will sit on the surface and a threshold assuming the generous case stays
+ * quiet exactly when it matters.
+ *
+ * TWO warnings and not one shared threshold, because they ask different
+ * questions and a single answer would be wrong about one of them. Measured:
+ * yellow is 16.20:1 against the dark text token and 1.03:1 against the light
+ * one, so it is a perfectly readable BACKGROUND and an unreadable ACCENT TEXT.
+ */
+const BACKGROUND_CONTRAST_WARNING =
+  'สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG';
+
+const ACCENT_CONTRAST_WARNING =
+  'สีนี้อาจอ่านยากเมื่อใช้เป็นตัวอักษรบนพื้นหลังสว่าง — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG';
 
 /**
  * The two types whose card width is fixed, so ความกว้าง cannot change what the
@@ -266,16 +347,49 @@ const FIXED_CARD_WIDTH_TYPES = ['course_card', 'instructor_card'];
 const FIXED_CARD_WIDTH_HINT = 'การ์ดชนิดนี้กว้างคงที่เท่ากับตอนอยู่ในกริด จึงไม่เปลี่ยนขนาดที่เห็น';
 
 /**
- * The รูปแบบ tab: the per-type layout/style fields, then the three universal
- * envelope groups.
+ * The รูปแบบ tab: the per-type layout/style fields, then the universal envelope
+ * groups.
  *
- * ── THE SPLIT FOLLOWS THE ORDER THAT WAS ALREADY HERE ──────────────────────
- * Nothing is regrouped, reordered within a group, or moved between groups.
- * This is the same JSX, in the same sequence, lifted out of the panel body so
- * that a tab can hold it — and so that a test can render one tab's fields
- * without the editor context a full panel needs.
+ * ── THE SPLIT FOLLOWED THE ORDER THAT WAS ALREADY HERE ─────────────────────
+ * When this tab was extracted, nothing was regrouped, reordered within a group,
+ * or moved between groups — the same JSX in the same sequence, lifted out so a
+ * tab could hold it and a test could render it without the editor context.
+ *
+ * ROUND 39 IS THE FIRST REGROUPING, and it is deliberate rather than incidental.
+ * See the note above the สี group for what moved and why.
  */
 export function StyleTab({ type, layout, style, settings, patchKey }) {
+  /**
+   * ── THE MODE IS FOLDED INTO THE VALUE SELECT, NOT BESIDE IT ──────────────
+   * An author is making ONE choice — what colour is this — and splitting it
+   * into "which mode" and "which value" would be two controls for one decision.
+   * The accent select already carried a non-enum sentinel (`''` = ตามธีมของหน้า)
+   * so this is the panel's own precedent rather than a new shape.
+   *
+   * The STORED shape stays two fields, because the mode and the preset are
+   * genuinely different facts: switching to กำหนดเอง and back must return the
+   * preset the author had, not reset it. So `background`/`accentColor` are left
+   * untouched when custom is chosen, and the mode alone moves.
+   */
+  const backgroundIsCustom = settings.backgroundMode === 'custom';
+  const accentIsCustom = style.accentMode === 'custom';
+  const bgCustom = settings.backgroundCustom ?? {};
+
+  /** Choosing in the background select: a preset value, or the custom sentinel. */
+  const pickBackgroundMode = (v) => (v === CUSTOM_COLOR_OPTION
+    ? { backgroundMode: 'custom' }
+    // `undefined` rather than 'preset' — absence IS preset, and writing the
+    // word would put a key into every section that ever opened this control.
+    : { backgroundMode: undefined, background: v });
+
+  const pickAccentMode = (v) => (v === CUSTOM_COLOR_OPTION
+    ? { accentMode: 'custom' }
+    : { accentMode: undefined, accentColor: v || undefined });
+
+  /** Merge one field of the custom background, keeping the other two. */
+  const patchCustomBackground = (patch) =>
+    patchKey('settings', { backgroundCustom: { ...bgCustom, ...patch } });
+
   return (
     <>
       <SectionTypeFields
@@ -307,33 +421,110 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
         </Field>
       </Group>
 
-      <Group title="พื้นหลังและการแสดงผล">
-        <Field label="พื้นหลัง">
-          <Select
-            value={settings.background} options={OFFERED_BACKGROUNDS} labels={BACKGROUND_LABELS}
-            onChange={(v) => patchKey('settings', { background: v })}
-          />
-        </Field>
-        <Field label="แสดงบน" hint={settings.visibility === 'hidden' ? 'section นี้จะไม่แสดงที่ใดเลย' : undefined}>
-          <Select
-            value={settings.visibility} options={VISIBILITY} labels={VISIBILITY_LABELS}
-            onChange={(v) => patchKey('settings', { visibility: v })}
-          />
-        </Field>
-      </Group>
+      {/*
+        ── ROUND 39 REGROUPED, AND THE OLD GROUPING IS WHY ─────────────────
+        Until now this was พื้นหลังและการแสดงผล (background + visibility) and
+        สไตล์ (the accent, alone). Two problems, and this round makes both
+        worse before it fixes them:
 
-      <Group title="สไตล์">
-        <Field label="สีเน้น" hint={ACCENT_HINT}>
+        · สไตล์ HELD ONE CHILD. A group of one is a heading with no work to do,
+          and "สไตล์" is broad enough to sound like it might own the background
+          too — which is exactly why the two colour controls read as
+          overlapping. Adding a second colour control under it would have
+          doubled that ambiguity.
+        · VISIBILITY WAS IN THE BACKGROUND GROUP for want of anywhere else. It
+          is not a colour, and with four more colour fields arriving it would
+          have been one device-display control lost at the bottom of a paint
+          box.
+
+        So: ONE group named for what it contains — สี, holding both colours and
+        nothing else — and การแสดงผล for the control that was never about
+        colour. The two colour controls sitting side by side under one honest
+        heading is what makes their relationship legible, rather than two
+        headings whose boundary an author has to guess.
+      */}
+      <Group title="สี">
+        <Field label="พื้นหลัง">
           <select
             className={INPUT_CLASS}
-            value={style.accentColor ?? ''}
-            onChange={(e) => patchKey('style', { accentColor: e.target.value || undefined })}
+            value={backgroundIsCustom ? CUSTOM_COLOR_OPTION : (settings.background ?? 'default')}
+            onChange={(e) => patchKey('settings', pickBackgroundMode(e.target.value))}
+          >
+            {OFFERED_BACKGROUNDS.map((b) => (
+              <option key={b} value={b}>{labelFor(BACKGROUND_LABELS, b)}</option>
+            ))}
+            <option value={CUSTOM_COLOR_OPTION}>{CUSTOM_COLOR_LABEL}</option>
+          </select>
+        </Field>
+
+        {backgroundIsCustom && (
+          <>
+            <Field label="สีเริ่มต้น" hint={CUSTOM_COLOR_CAVEAT}>
+              <ColorInput
+                value={bgCustom.from} placeholder={HEX_PLACEHOLDER}
+                invalid={Boolean(bgCustom.from) && !isHexColor(bgCustom.from)}
+                onChange={(v) => patchCustomBackground({ from: v })}
+              />
+            </Field>
+            {!backgroundContrastOk(bgCustom) && <Warn>{BACKGROUND_CONTRAST_WARNING}</Warn>}
+
+            <Field label="สีที่สอง" hint="เว้นว่างไว้ถ้าต้องการสีพื้นเรียบสีเดียว">
+              <ColorInput
+                value={bgCustom.to} placeholder={HEX_PLACEHOLDER}
+                invalid={Boolean(bgCustom.to) && !isHexColor(bgCustom.to)}
+                onChange={(v) => patchCustomBackground({ to: v })}
+              />
+            </Field>
+
+            {/* Offered only with a second stop: a direction for one colour is a
+                control that cannot change anything, which is the shape this
+                whole panel exists to avoid. */}
+            {isHexColor(bgCustom.to) && (
+              <Field label="ทิศทางไล่สี">
+                <Select
+                  value={bgCustom.direction ?? DEFAULT_GRADIENT_DIRECTION}
+                  options={GRADIENT_DIRECTIONS} labels={GRADIENT_DIRECTION_LABELS}
+                  onChange={(v) => patchCustomBackground({ direction: v })}
+                />
+              </Field>
+            )}
+          </>
+        )}
+
+        <Field label="สีองค์ประกอบ" hint={ACCENT_HINT}>
+          <select
+            className={INPUT_CLASS}
+            value={accentIsCustom ? CUSTOM_COLOR_OPTION : (style.accentColor ?? '')}
+            onChange={(e) => patchKey('style', pickAccentMode(e.target.value))}
           >
             <option value="">ตามธีมของหน้า</option>
             {ACCENTS.map((a) => (
               <option key={a} value={a}>{labelFor(ACCENT_LABELS, a)}</option>
             ))}
+            <option value={CUSTOM_COLOR_OPTION}>{CUSTOM_COLOR_LABEL}</option>
           </select>
+        </Field>
+
+        {accentIsCustom && (
+          <>
+            <Field label="สีที่กำหนดเอง" hint={CUSTOM_COLOR_CAVEAT}>
+              <ColorInput
+                value={style.accentCustom} placeholder={HEX_PLACEHOLDER}
+                invalid={Boolean(style.accentCustom) && !isHexColor(style.accentCustom)}
+                onChange={(v) => patchKey('style', { accentCustom: v })}
+              />
+            </Field>
+            {!accentContrastOk(style.accentCustom) && <Warn>{ACCENT_CONTRAST_WARNING}</Warn>}
+          </>
+        )}
+      </Group>
+
+      <Group title="การแสดงผล">
+        <Field label="แสดงบน" hint={settings.visibility === 'hidden' ? 'section นี้จะไม่แสดงที่ใดเลย' : undefined}>
+          <Select
+            value={settings.visibility} options={VISIBILITY} labels={VISIBILITY_LABELS}
+            onChange={(v) => patchKey('settings', { visibility: v })}
+          />
         </Field>
       </Group>
     </>
