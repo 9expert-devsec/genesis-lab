@@ -34,108 +34,128 @@ export function InstructorsAdminClient({ instructors }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-9e-navy dark:text-white">
-            จัดการวิทยากร
-          </h1>
-          <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            เพิ่ม/แก้ไขข้อมูลวิทยากร — รูปเก็บที่ Cloudinary, master อยู่ที่ MSDB
-          </p>
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-9e-navy dark:text-white">
+              จัดการวิทยากร
+            </h1>
+            <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              เพิ่ม/แก้ไขข้อมูลวิทยากร — รูปเก็บที่ Cloudinary, master อยู่ที่ MSDB
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing('new')}
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
+          >
+            + เพิ่มวิทยากร
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing('new')}
-          className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
-        >
-          + เพิ่มวิทยากร
-        </button>
-      </div>
 
-      {msg && (
-        <div
-          className={
-            'rounded-9e-md px-3 py-2 text-sm ' +
-            (msg.type === 'ok'
-              ? 'border border-green-200 bg-green-50 text-green-700'
-              : 'border border-red-200 bg-red-50 text-red-700')
-          }
-        >
-          {msg.text}
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {instructors.length === 0 && (
-          <p className="col-span-full rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
-            ยังไม่มีวิทยากร — กด <strong>+ เพิ่มวิทยากร</strong>
-          </p>
+        {msg && (
+          <div
+            className={
+              'rounded-9e-md px-3 py-2 text-sm ' +
+              (msg.type === 'ok'
+                ? 'border border-green-200 bg-green-50 text-green-700'
+                : 'border border-red-200 bg-red-50 text-red-700')
+            }
+          >
+            {msg.text}
+          </div>
         )}
-        {instructors.map((i) => {
-          const busy = busyId === i._id;
-          return (
-            <div
-              key={i._id}
-              className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]"
-            >
-              <div className="relative h-40 bg-9e-ice dark:bg-[#0D1B2A]">
-                {i.image_url ? (
-                  <Image
-                    src={i.image_url}
-                    alt={i.name}
-                    fill
-                    sizes="(max-width: 640px) 100vw, 33vw"
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-9e-slate-dp-50">
-                    ไม่มีรูป
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {instructors.length === 0 && (
+            <p className="col-span-full rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
+              ยังไม่มีวิทยากร — กด <strong>+ เพิ่มวิทยากร</strong>
+            </p>
+          )}
+          {instructors.map((i) => {
+            const busy = busyId === i._id;
+            return (
+              <div
+                key={i._id}
+                className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]"
+              >
+                <div className="relative h-40 bg-9e-ice dark:bg-[#0D1B2A]">
+                  {i.image_url ? (
+                    <Image
+                      src={i.image_url}
+                      alt={i.name}
+                      fill
+                      sizes="(max-width: 640px) 100vw, 33vw"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-9e-slate-dp-50">
+                      ไม่มีรูป
+                    </div>
+                  )}
+                  {!i.is_active && (
+                    <span className="absolute right-2 top-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700">
+                      Inactive
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-2 p-4">
+                  <h3 className="text-sm font-bold text-9e-navy dark:text-white">{i.name}</h3>
+                  {i.title && (
+                    <p className="text-xs text-9e-slate-dp-50">{i.title}</p>
+                  )}
+                  {Array.isArray(i.specialties) && i.specialties.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {i.specialties.slice(0, 4).map((s) => (
+                        <span key={s} className="rounded-full bg-9e-ice px-2 py-0.5 text-[10px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-1 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(i)}
+                      className="flex-1 rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                    >
+                      แก้ไข
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(i)}
+                      disabled={busy}
+                      className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {busy ? '…' : 'ลบ'}
+                    </button>
                   </div>
-                )}
-                {!i.is_active && (
-                  <span className="absolute right-2 top-2 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700">
-                    Inactive
-                  </span>
-                )}
-              </div>
-              <div className="space-y-2 p-4">
-                <h3 className="text-sm font-bold text-9e-navy dark:text-white">{i.name}</h3>
-                {i.title && (
-                  <p className="text-xs text-9e-slate-dp-50">{i.title}</p>
-                )}
-                {Array.isArray(i.specialties) && i.specialties.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {i.specialties.slice(0, 4).map((s) => (
-                      <span key={s} className="rounded-full bg-9e-ice px-2 py-0.5 text-[10px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white">
-                        {s}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-1 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setEditing(i)}
-                    className="flex-1 rounded border border-[var(--surface-border)] px-2 py-1 text-xs text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                  >
-                    แก้ไข
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(i)}
-                    disabled={busy}
-                    className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-50"
-                  >
-                    {busy ? '…' : 'ลบ'}
-                  </button>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
+      {/*
+        Rendered as a SIBLING of the page wrapper, not a child of it.
+
+        `space-y-*` compiles to
+            .space-y-N > :not([hidden]) ~ :not([hidden]) { margin-top: … }
+        — a rule about CHILDREN. With the modal inside the wrapper its overlay
+        picked up that margin-top; the overlay's own `inset-0` sets top AND
+        bottom to 0 with height auto, which is over-constrained, so the margin
+        won and the fixed layer was pushed down, leaving a band of page showing
+        across the top of the viewport. Nothing on the overlay was wrong.
+
+        This one is `space-y-6`, so its band was 24px rather than the 16px on
+        the schedules screen — same defect, different gap. Fixed at the
+        relationship rather than with an `!mt-0` on the overlay: any margin
+        utility on any future wrapper would re-break that patch, while a sibling
+        cannot be reached by `space-y-*` at all. See SchedulesAdminClient for
+        the full note, including why not a portal.
+      */}
       {editing && (
         <InstructorModal
           instructor={editing === 'new' ? null : editing}
@@ -146,7 +166,7 @@ export function InstructorsAdminClient({ instructors }) {
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 

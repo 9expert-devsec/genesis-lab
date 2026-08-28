@@ -367,168 +367,200 @@ export function SchedulesAdminClient({
   }
 
   return (
-    <div className="space-y-4 p-1">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-9e-navy dark:text-white">
-            จัดการตารางอบรม
-          </h1>
-          <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            {/* Names what this screen can EDIT. วิทยากร is deliberately absent:
-                it has no input in the modal any more, though the stored names
-                are still shown on the round boxes below. */}
-            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และราคาต่อรอบเก็บใน Genesis
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => openCreate()}
-          className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
-        >
-          + เพิ่มตารางอบรม
-        </button>
-      </div>
-
-      {msg && (
-        <div
-          className={
-            'rounded-9e-md px-3 py-2 text-sm ' +
-            (msg.type === 'ok'
-              ? 'border border-green-200 bg-green-50 text-green-700'
-              : 'border border-red-200 bg-red-50 text-red-700')
-          }
-        >
-          {msg.text}
-        </div>
-      )}
-
-      {/* ── Filter bar ─────────────────────────────────────────────────
-          Restyled to the public /schedule bar's visual language (rounded-xl,
-          gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
-          FilterSelect. The table itself is unchanged this round. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
-            aria-hidden="true"
-          />
-          {/* Uncontrolled and re-keyed on `search`, committing on Enter or
-              blur — same pattern as CoursesAdminClient's box, so the URL
-              (not this component) is the only place the term lives. */}
-          <input
-            key={search}
-            type="text"
-            defaultValue={search}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                navigate({ search: e.currentTarget.value });
-              }
-            }}
-            onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
-            placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
-            className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          />
-        </div>
-
-        <select
-          value={filterProgram}
-          onChange={(e) => navigate({ filterProgram: e.target.value })}
-          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-        >
-          <option value="">ทุกโปรแกรม</option>
-          {programs.map((p) => {
-            const id = String(p._id ?? p.program_id ?? '');
-            const label = p.program_name ?? p.name ?? p.label ?? id;
-            return (
-              <option key={id} value={id}>{label}</option>
-            );
-          })}
-        </select>
-
-        <select
-          value={filterStatus}
-          onChange={(e) => navigate({ filterStatus: e.target.value })}
-          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-        >
-          <option value="">ทุกสถานะ</option>
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
-          <select
-            value={monthFrom}
-            onChange={(e) => navigate({ monthFrom: e.target.value })}
-            aria-label="เดือนเริ่มต้น"
-            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          >
-            {selectableMonthKeys.map((key) => (
-              <option key={key} value={key}>
-                {TH_MONTH_FMT.format(monthKeyToDate(key))}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
-          <select
-            value={monthTo}
-            onChange={(e) => navigate({ monthTo: e.target.value })}
-            aria-label="เดือนสุดท้าย"
-            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          >
-            {selectableMonthKeys.map((key) => (
-              <option key={key} value={key} disabled={key < monthFrom}>
-                {TH_MONTH_FMT.format(monthKeyToDate(key))}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+    <>
+      <div className="space-y-4 p-1">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-9e-navy dark:text-white">
+              จัดการตารางอบรม
+            </h1>
+            <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              {/* Names what this screen can EDIT. วิทยากร is deliberately absent:
+                  it has no input in the modal any more, though the stored names
+                  are still shown on the round boxes below. */}
+              แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และราคาต่อรอบเก็บใน Genesis
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
-            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+            onClick={() => openCreate()}
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
           >
-            ล้างตัวกรอง
+            + เพิ่มตารางอบรม
           </button>
+        </div>
+
+        {msg && (
+          <div
+            className={
+              'rounded-9e-md px-3 py-2 text-sm ' +
+              (msg.type === 'ok'
+                ? 'border border-green-200 bg-green-50 text-green-700'
+                : 'border border-red-200 bg-red-50 text-red-700')
+            }
+          >
+            {msg.text}
+          </div>
         )}
 
-        <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          {visibleCount} / {schedules.length} รอบ
-        </span>
-      </div>
+        {/* ── Filter bar ─────────────────────────────────────────────────
+            Restyled to the public /schedule bar's visual language (rounded-xl,
+            gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
+            FilterSelect. The table itself is unchanged this round. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+              aria-hidden="true"
+            />
+            {/* Uncontrolled and re-keyed on `search`, committing on Enter or
+                blur — same pattern as CoursesAdminClient's box, so the URL
+                (not this component) is the only place the term lives. */}
+            <input
+              key={search}
+              type="text"
+              defaultValue={search}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  navigate({ search: e.currentTarget.value });
+                }
+              }}
+              onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
+              placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
+              className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            />
+          </div>
 
-      {/* ── Program groups ─────────────────────────────────────── */}
-      {programGroups.length === 0 && (
-        <div className="rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
-          ไม่พบหลักสูตรที่ตรงกับตัวกรอง
+          <select
+            value={filterProgram}
+            onChange={(e) => navigate({ filterProgram: e.target.value })}
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            <option value="">ทุกโปรแกรม</option>
+            {programs.map((p) => {
+              const id = String(p._id ?? p.program_id ?? '');
+              const label = p.program_name ?? p.name ?? p.label ?? id;
+              return (
+                <option key={id} value={id}>{label}</option>
+              );
+            })}
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => navigate({ filterStatus: e.target.value })}
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            <option value="">ทุกสถานะ</option>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
+            <select
+              value={monthFrom}
+              onChange={(e) => navigate({ monthFrom: e.target.value })}
+              aria-label="เดือนเริ่มต้น"
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            >
+              {selectableMonthKeys.map((key) => (
+                <option key={key} value={key}>
+                  {TH_MONTH_FMT.format(monthKeyToDate(key))}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
+            <select
+              value={monthTo}
+              onChange={(e) => navigate({ monthTo: e.target.value })}
+              aria-label="เดือนสุดท้าย"
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            >
+              {selectableMonthKeys.map((key) => (
+                <option key={key} value={key} disabled={key < monthFrom}>
+                  {TH_MONTH_FMT.format(monthKeyToDate(key))}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+            <button
+              type="button"
+              onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+            >
+              ล้างตัวกรอง
+            </button>
+          )}
+
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            {visibleCount} / {schedules.length} รอบ
+          </span>
         </div>
-      )}
 
-      <div className="space-y-3">
-        {programGroups.map((group) => (
-          <ProgramGroup
-            key={group.id}
-            group={group}
-            monthCols={monthCols}
-            scheduleMap={scheduleMap}
-            filterStatus={filterStatus}
-            localBySchedId={localBySchedId}
-            instructorById={instructorById}
-            collapsed={Boolean(collapsed[group.id])}
-            busyId={busyId}
-            onToggle={() => toggleCollapse(group.id)}
-            onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-          />
-        ))}
+        {/* ── Program groups ─────────────────────────────────────── */}
+        {programGroups.length === 0 && (
+          <div className="rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
+            ไม่พบหลักสูตรที่ตรงกับตัวกรอง
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {programGroups.map((group) => (
+            <ProgramGroup
+              key={group.id}
+              group={group}
+              monthCols={monthCols}
+              scheduleMap={scheduleMap}
+              filterStatus={filterStatus}
+              localBySchedId={localBySchedId}
+              instructorById={instructorById}
+              collapsed={Boolean(collapsed[group.id])}
+              busyId={busyId}
+              onToggle={() => toggleCollapse(group.id)}
+              onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
       </div>
 
+      {/*
+        ── THE MODAL IS A SIBLING OF THE PAGE, NOT A CHILD OF IT ──────────────
+        It used to sit INSIDE the `space-y-4` wrapper above, and that produced a
+        white band across the top of the viewport on every modal on this screen.
+
+        `space-y-4` compiles to
+            .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem }
+        — a rule about CHILDREN, which the overlay was one of. So the overlay
+        got `margin-top: 16px`. Its own `inset-0` sets top AND bottom to 0 with
+        height auto, which is over-constrained: the margin wins, the box is
+        pushed down 16px and its resolved height shrinks by the same amount.
+        DevTools reported it as 2560x1261 with margin `16px 0px 0px`, and the
+        page showed through the gap.
+
+        `inset-0` could never have caused that, and nothing on the overlay
+        itself was wrong — which is why the fix is here, at the ancestor
+        relationship, and not an `!mt-0` bolted onto the overlay. Any margin
+        utility on any future wrapper would re-break that patch; a sibling
+        cannot be reached by `space-y-*` at all.
+
+        NOT a portal, deliberately. A portal to document.body would also solve
+        it and would additionally immunise the overlay against an ancestor
+        `transform`/`filter`/`contain`, which would break `position: fixed`
+        containment outright. There is no such ancestor here — the admin layout
+        is `flex h-screen overflow-hidden` with a scrolling `<main>`, and a
+        transform would have produced something far worse than a 16px band — so
+        a portal would buy protection against a hazard that is not present, at
+        the cost of an SSR mount guard and a change to every modal on the admin.
+        If one is ever introduced, revisit; today this is the smaller true fix.
+      */}
       {modal && (
         <ScheduleModal
           mode={modal.mode}
@@ -544,7 +576,7 @@ export function SchedulesAdminClient({
           }}
         />
       )}
-    </div>
+    </>
   );
 }
 
