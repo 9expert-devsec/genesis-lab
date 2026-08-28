@@ -23,6 +23,12 @@
  *   2. The Gallery tab is `hidden`, not unmounted. Its rows are ordinary React
  *      state with no `name` attributes, so they never enter FormData — they are
  *      compared here explicitly. Being present is not being changed.
+ *   3. Section 7's RICH bullets are the same kind of thing: React state with no
+ *      `name`, lifted out of TrainingTopicsEditor. They must be compared here
+ *      because a FORMATTING-ONLY edit — bolding a word, nesting a bullet —
+ *      leaves the plain projection in the hidden input byte-identical. Without
+ *      this entry the guard would report CLEAN and let the admin navigate away
+ *      from work the form is holding.
  *
  * `order` is deliberately dropped from the gallery comparison: it is positional
  * and is renumbered on save, so carrying it would report a change for a list
@@ -53,6 +59,16 @@ export function courseEditorSignature({ formEntries = [], extension = {} } = {})
     alt: str(item?.alt),
   }));
 
+  /**
+   * The rich bullets as stored: a flat `string[]`, one sanitised entry per
+   * kept row. Compared as-is because that IS what would be written — the
+   * array is already normalised by `buildTopicSavePayload`, and `[]` (no rich
+   * copy) and a populated array are exactly the two states the save can send.
+   */
+  const trainingTopicsRich = Array.isArray(extension.trainingTopicsRich)
+    ? extension.trainingTopicsRich.map(str)
+    : [];
+
   return JSON.stringify({
     form,
     ext: {
@@ -63,6 +79,7 @@ export function courseEditorSignature({ formEntries = [], extension = {} } = {})
       tags: str(extension.tags),
       isPublished: extension.isPublished !== false,
       gallery,
+      trainingTopicsRich,
     },
   });
 }

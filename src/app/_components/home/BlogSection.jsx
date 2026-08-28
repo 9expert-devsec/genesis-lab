@@ -3,11 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ExternalLink, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSwipe } from '@/hooks/useSwipe';
 import { ProgramOverlay, SkillChips } from '@/components/articles/ArticleTaxonomyChips';
 import { clampSlideIndex, perPageForWidth } from '@/lib/blogSliderLayout';
+
+/** ROUND HS-C: same whole-section fade-up as ProgramSelector, for consistency. */
+const FADE_UP_VARIANTS = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
+};
 
 /**
  * Real articles only — server fetches via `getFeaturedArticlesForLanding`
@@ -19,6 +26,9 @@ import { clampSlideIndex, perPageForWidth } from '@/lib/blogSliderLayout';
  * auto-advancing carousel with dot indicators.
  */
 export function BlogSection({ articles = [], programNames = {}, skillNames = {} }) {
+  // Hooks before the early return — React requires unconditional hook calls.
+  const shouldReduceMotion = useReducedMotion();
+
   if (articles.length === 0) return null;
 
   const blogs = articles.map((a) => ({
@@ -37,8 +47,18 @@ export function BlogSection({ articles = [], programNames = {}, skillNames = {} 
     slug:      `/articles/${a.slug}`,
   }));
 
+  // ROUND HS-B: bg-[var(--page-bg)], no dark: override — --page-bg is
+  // 0D1B2A in dark mode, the same value dark:bg-9e-navy used to name
+  // explicitly, so the override was redundant once the base class reads
+  // the var directly.
   return (
-    <section className="bg-9e-ice px-4 py-12 dark:bg-9e-navy lg:px-6">
+    <motion.section
+      className="bg-[var(--page-bg)] px-4 py-12 lg:px-6"
+      variants={FADE_UP_VARIANTS}
+      initial={shouldReduceMotion ? false : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.2 }}
+    >
       <div className="mx-auto max-w-[1200px]">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -76,7 +96,7 @@ export function BlogSection({ articles = [], programNames = {}, skillNames = {} 
           <BlogCarousel blogs={blogs} programNames={programNames} skillNames={skillNames} />
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 

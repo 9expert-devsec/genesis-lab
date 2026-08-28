@@ -21,8 +21,15 @@ import { PublicHeaderClient } from './PublicHeaderClient';
  *
  * Both reads are best-effort. The header renders even on failure;
  * the mega trigger degrades to a plain link, the dropdown to config.
+ *
+ * `overlay` is the ONE prop this shell takes, and it is pure pass-through: the
+ * page that renders a full-bleed hero directly under the header opts in, and
+ * the header then starts transparent and switches to its normal per-theme
+ * colours at the bottom of that hero. It defaults to FALSE so every route that
+ * renders <PublicHeader /> — the (public) group layout, not-found — is
+ * unchanged. Today only src/app/page.jsx passes it.
  */
-export async function PublicHeader() {
+export async function PublicHeader({ overlay = false }) {
   const [programs, dynamicCareerPaths, tnhsCourses, navOnlineCourses, navMenuData, navMasterclasses] =
     await Promise.all([
       listPrograms()
@@ -73,6 +80,7 @@ export async function PublicHeader() {
       navOnlineCourses={navOnlineCourses}
       navMenuData={navMenuData}
       navMasterclasses={navMasterclasses}
+      overlay={overlay}
     />
   );
 }

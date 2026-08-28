@@ -823,6 +823,15 @@ export async function updateRegistrationRound(id, { classId, attendanceMode } = 
     // That is why requirement 5 (a stored round that is no longer listed still
     // renders, marked) is load-bearing rather than defensive.
     status: PUBLIC_SCHEDULE_STATUSES,
+    // includeStarted — the public surfaces drop a round once its first training
+    // day arrives. This is the ADMIN correction path and must not: requirement 3
+    // enforces "the round belongs to this course" BY CONSTRUCTION, from this
+    // very list, so a narrower list here would not merely hide a round — it
+    // would REFUSE a legitimate correction onto a round that started this
+    // morning, with the misleading error "รอบที่เลือกไม่ได้อยู่ในหลักสูตรของรายการนี้".
+    // The picker at admin/registrations/[id] opts out identically; the two
+    // lists must be the same list.
+    includeStarted: true,
   }).catch(() => ({ items: null }));
 
   if (!rounds) return { ok: false, error: 'ไม่สามารถอ่านรอบอบรมของหลักสูตรนี้ได้ กรุณาลองใหม่' };

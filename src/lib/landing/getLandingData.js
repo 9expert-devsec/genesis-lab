@@ -15,6 +15,37 @@
 import { dbConnect } from '@/lib/db/connect';
 import LandingCache from '@/models/LandingCache';
 import { dropHiddenCourses, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
+import { siteTodayKey } from '@/lib/articlePublishTime';
+import { excludeStartedRounds } from '@/lib/schedule/roundHasStarted';
+
+/**
+ * Drop rounds that have already begun from every course in the snapshot.
+ *
+ * ── ON THE READ, NOT ON THE WRITE, AND THAT IS THE WHOLE POINT ──────────────
+ * `syncLandingData` also calls `listSchedulesByCourse`, which now excludes
+ * started rounds by default — so the snapshot is already filtered when it is
+ * written. That is not enough. The cron runs `0 * /3 * * *`: filtering only at
+ * write time would leave a round that started at midnight sitting on THE MOST
+ * VISITED PAGE ON THE SITE for up to three hours, against ~30 minutes
+ * everywhere else. Re-applying it here costs one pass over a handful of arrays
+ * and makes the home page's staleness its own ISR window rather than the cron's.
+ *
+ * Exactly the reasoning `dropHiddenCourses` is applied here for, and the shape
+ * is deliberately the same so the two read-time narrowings sit side by side
+ * instead of one being a special case.
+ *
+ * The cron's OUTPUT IS NOT CHANGED. The snapshot may hold a round this function
+ * hides; that is intended, because "has it started" is a question about NOW and
+ * a snapshot cannot answer it for a moment that has not happened yet.
+ */
+function dropStartedRounds(courses) {
+  if (!Array.isArray(courses)) return [];
+  const todayKey = siteTodayKey();
+  return courses.map((c) => ({
+    ...c,
+    schedules: excludeStartedRounds(c?.schedules, todayKey),
+  }));
+}
 
 const CACHE_KEY = 'homepage_v1';
 const CURRENT_SCHEMA_VERSION = 1;
@@ -82,9 +113,12 @@ export async function getLandingData() {
       // program/skill rows, not courses; `onlineCoursesForSection` comes from
       // the separate /online-course domain, which CourseExtension does not
       // extend and which has no isPublished of ours to read.
-      newCoursesWithSchedules: dropHiddenCourses(
-        cache.data?.newCoursesWithSchedules,
-        hidden
+      // Two read-time narrowings, composed: hide withdrawn courses, then drop
+      // rounds that have already begun. Order is irrelevant — one filters
+      // courses, the other filters each survivor's rounds — and this nesting
+      // reads in the order the sentence does.
+      newCoursesWithSchedules: dropStartedRounds(
+        dropHiddenCourses(cache.data?.newCoursesWithSchedules, hidden)
       ),
       _meta: {
         status: cache.status ?? 'unknown',

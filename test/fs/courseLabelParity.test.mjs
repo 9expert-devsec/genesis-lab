@@ -67,17 +67,20 @@ for (const { id, file } of PUBLIC_SECTIONS) {
 // ── The admin form uses the constant rather than its own wording ────────────
 
 for (const { id, field } of PUBLIC_SECTIONS) {
-  test(`${field}: the form label comes from the shared constant`, () => {
+  test(`${field}: the form label is the shared constant and nothing else`, () => {
     const { code } = readSource(FORM);
-    // `${COURSE_SECTION_LABELS.<id>} (<field>)` — the key stays in parentheses,
-    // which is for developers and is deliberately NOT part of the parity rule.
-    const expected = new RegExp(
-      `COURSE_SECTION_LABELS\\.${id}\\}\\s*\\(${field}\\)`
-    );
     assert.match(
-      code, expected,
+      code, new RegExp(`COURSE_SECTION_LABELS\\.${id}\\b`),
       `the ${field} label does not read COURSE_SECTION_LABELS.${id} — it has gone `
       + 'back to a hand-written string and can drift from the public heading'
+    );
+    // U4B: the ` (<field>)` suffix that used to follow the constant is gone.
+    // Asserted per-field rather than only in the sweep below, so the failure
+    // names which label regressed.
+    assert.ok(
+      !new RegExp(`COURSE_SECTION_LABELS\\.${id}\\}?\\s*\\(${field}\\)`).test(code),
+      `the ${field} label has the "(${field})" suffix back — U4B removed it so `
+      + 'the admin heading reads exactly as the public page does'
     );
   });
 }
@@ -109,15 +112,84 @@ test('the RETIRED wordings are gone from the form', () => {
   }
 });
 
-// ── The key in parentheses stays ────────────────────────────────────────────
+// ── The key in parentheses is GONE ──────────────────────────────────────────
 
-test('every renamed label still carries its field key', () => {
-  // That half is for developers reading the form beside the API, and the
-  // instruction was explicit that it stays.
+/**
+ * ── THIS RULE WAS INVERTED IN U4B, DELIBERATELY ─────────────────────────────
+ * It used to assert the opposite: that every renamed label still carried its
+ * `(field_name)` key, "for developers reading the form beside the API", and the
+ * round that wrote it recorded that keeping the key was an explicit
+ * instruction. U4B reverses that instruction on UAT feedback — an admin
+ * filling the form should see the same words the public page prints, with no
+ * schema vocabulary in the way.
+ *
+ * The developer aid is not simply lost: `name=` is still the field name on
+ * every input, and the one genuinely non-obvious mapping (`title`, which stores
+ * the body) keeps its explanation in that field's `hint`.
+ */
+
+/** Every visible label/title string the form renders, as literal source text. */
+function labelStrings(code) {
+  return [
+    ...code.matchAll(/(?:label|title)=(?:"([^"]*)"|\{`([^`]*)`\})/g),
+  ].map((m) => m[1] ?? m[2]);
+}
+
+/** The field names whose suffix U4B stripped — section 6 plus the sweep. */
+const STRIPPED_KEYS = [
+  'course_name', 'course_id', 'course_teaser', 'title', 'course_cover_url',
+  'course_trainingdays', 'course_traininghours', 'course_levels',
+  'course_price', 'course_netprice', 'sort_order', 'previous_course',
+  'program', 'bullets',
+  ...PUBLIC_SECTIONS.map((s) => s.field),
+];
+
+test('no visible label carries a technical field name in parentheses', () => {
+  // Scoped to label/title PROPS rather than the whole file on purpose: `(title)`
+  // and `(program)` also occur in ordinary JS (arrow params, comments), and a
+  // whole-file scan would redden on those and prove nothing.
   const { code } = readSource(FORM);
-  for (const { field } of PUBLIC_SECTIONS) {
-    assert.ok(code.includes(`(${field})`), `the ${field} label lost its key`);
+  const offenders = [];
+  for (const label of labelStrings(code)) {
+    for (const key of STRIPPED_KEYS) {
+      if (label.includes(`(${key})`)) offenders.push(`${key} in "${label}"`);
+    }
   }
+  assert.deepEqual(
+    offenders, [],
+    'a field-name suffix came back into a visible label:\n  ' + offenders.join('\n  ')
+  );
+});
+
+test('CONTROL: the label extractor actually finds the form\'s labels', () => {
+  // Without this, the sweep above would pass trivially on a regex that matched
+  // nothing — which is exactly how a "does not contain" guard goes blind.
+  const { code } = readSource(FORM);
+  const labels = labelStrings(code);
+  assert.ok(labels.length > 20, `only ${labels.length} label strings extracted`);
+  assert.ok(labels.includes('ชื่อหลักสูตร *'), 'the first field label was not extracted');
+});
+
+test('the parentheticals that are NOT field names are left alone', () => {
+  // The sweep must not turn into "strip every parenthesis". These six carry
+  // guidance — a Thai gloss, a document type, a language code — and one of them
+  // (Certificate) is not even the field name: that input is
+  // `course_certificate_status`.
+  const { code } = readSource(FORM);
+  const labels = labelStrings(code);
+  for (const kept of [
+    'Public (เผยแพร่บนเว็บ)',
+    'In-house (รับจัดในองค์กร)',
+    'มอบใบรับรอง (Certificate)',
+    'ภาษาไทย (TH)',
+    'ภาษาอังกฤษ (EN)',
+  ]) {
+    assert.ok(labels.includes(kept), `the guidance parenthetical "${kept}" was stripped too`);
+  }
+  assert.ok(
+    code.includes('title="7b. ไฟล์หลักสูตร (Course Outline PDF)"'),
+    'the Course Outline PDF section title lost its document-type gloss',
+  );
 });
 
 // ── The nav agrees by construction, asserted so the import cannot be undone ─

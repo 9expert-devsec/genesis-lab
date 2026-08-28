@@ -141,6 +141,65 @@ module.exports = {
         '9e-page':   '500ms',  // Page transitions
       },
 
+      // ── Home hero ambient motion ──────────────────────────────────
+      //
+      // DECLARED HERE, NOT AS `animate-[...]` ARBITRARY VALUES IN JSX, and the
+      // reason is the failure this repo has already shipped: an arbitrary class
+      // assembled from anything but a complete literal emits perfect markup and
+      // ZERO CSS, and a markup assertion cannot see it. A named utility is a
+      // plain literal at every call site — `animate-9e-shoot-a` — with the
+      // timing in one reviewable place instead of inline in a template.
+      //
+      // Only `transform` and `opacity` are animated: both are composited, so
+      // neither forces layout or a paint of the 2880px background photo.
+      //
+      // Every one of these is switched OFF, not slowed, under
+      // prefers-reduced-motion — see the block in globals.css keyed on the
+      // data attribute these elements carry.
+      keyframes: {
+        // A streak crossing part of the frame, upper-right → lower-left, then
+        // a long dormant tail. The whole visible pass is the first ~10% of the
+        // cycle; the remaining 90% is the element sitting invisible off its
+        // travel line, which is what makes it a rare event rather than a
+        // meteor shower. dx:dy = -42:30 sets the 35° travel angle the streak
+        // graphic is rotated to match.
+        'hero-shoot': {
+          '0%':          { transform: 'translate3d(0, 0, 0)', opacity: '0' },
+          '1.5%':        { opacity: '1' },
+          '8%':          { opacity: '1' },
+          '10%':         { transform: 'translate3d(-42vw, 30vw, 0)', opacity: '0' },
+          '100%':        { transform: 'translate3d(-42vw, 30vw, 0)', opacity: '0' },
+        },
+        // Slow brightness breathing for the small background stars.
+        'hero-twinkle': {
+          '0%, 100%': { opacity: '0.25' },
+          '50%':      { opacity: '0.9' },
+        },
+        // The mascot's drift. DOWNWARD ONLY, by design: the moon's painted
+        // bottom edge is flush with the hero's lower boundary, so lifting it
+        // would open a gap and expose the flat cut edge of the artwork. Moving
+        // down instead keeps the edge flush — the overflow-hidden section
+        // clips the extra pixels — and no horizontal component, because the
+        // measured clearance to the text column is only 49px at 1440/2560.
+        'hero-float': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0)' },
+          '50%':      { transform: 'translate3d(0, 7px, 0)' },
+        },
+      },
+      animation: {
+        // Three streaks. Different DURATIONS, not just different delays: with
+        // co-prime-ish periods the three never re-synchronise, so the sky does
+        // not read as a loop. `both` fill is load-bearing — without it each
+        // streak sits visible at its start point during its delay.
+        '9e-shoot-a': 'hero-shoot 8s ease-in 1.4s infinite both',
+        '9e-shoot-b': 'hero-shoot 11s ease-in 5.2s infinite both',
+        '9e-shoot-c': 'hero-shoot 14s ease-in 9.7s infinite both',
+        '9e-twinkle-a': 'hero-twinkle 3.7s ease-in-out infinite',
+        '9e-twinkle-b': 'hero-twinkle 5.3s ease-in-out 1.1s infinite',
+        '9e-twinkle-c': 'hero-twinkle 6.9s ease-in-out 2.4s infinite',
+        '9e-float': 'hero-float 4s ease-in-out infinite',
+      },
+
       // ── Brand Gradients ───────────────────────────────────────────
       backgroundImage: {
         '9e-gradient-hero':      'linear-gradient(to right, #005CFF, #48B0FF)',
@@ -181,7 +240,12 @@ module.exports = {
       //       — the dock is the ONE fixed box holding back-to-top and the chat
       //         launcher; neither child carries a z-index of its own.
       //   60  PublicHeader                 (above the hero cover slider)
-      //   70, 80  reserved for future chrome
+      //   70  CookieBannerPreview          (TEMPORARY — round CB-A2)
+      //       — bottom-edge consent chrome, above the dock and the header so
+      //         page chrome cannot cover it, below the whole overlay tier so
+      //         anything the user opened deliberately still wins. Frees this
+      //         rung again when the preview wrapper is deleted.
+      //   80  reserved for future chrome
       // Overlay tier — must cover all chrome; kept as arbitrary values so the
       // ladder above stays readable, low → high:
       //   9000  SitePopup                (promotional image overlay)

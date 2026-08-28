@@ -129,14 +129,51 @@ export function siteDateParts(iso) {
  * fixed when the HTML was built, which is what makes server and client agree by
  * construction rather than by luck.
  *
- * It is the only function in this module that reads the clock, which is why it
- * is the only one a test cannot pin to a fixture — every consumer takes the year
- * as an argument precisely so the test can supply its own.
+ * It is one of only TWO functions in this module that read the clock — see
+ * `siteTodayKey` below — which is why they are the only two a test cannot pin to
+ * a fixture. Every consumer takes the answer as an argument precisely so the
+ * test can supply its own.
  *
  * @returns {number}
  */
 export function siteCurrentYear() {
   return siteDateParts(new Date()).year;
+}
+
+/**
+ * Today's calendar day AS SEEN IN BANGKOK, as `'YYYY-MM-DD'`.
+ *
+ * ── WHY THE BOUNDARY HAS TO BE THIS ZONE AND NOT THE RUNTIME'S ──────────────
+ * The rule it serves is "a training round disappears from the public site the
+ * moment its FIRST day arrives", and "arrives" means local midnight in Bangkok
+ * — the timezone the courses are taught in and the admins work in.
+ *
+ * Vercel runs in UTC. Bangkok is UTC+7 with no DST, so for the first SEVEN
+ * HOURS of every Bangkok day the UTC date is still yesterday. A boundary read
+ * with `new Date().getDate()` would therefore keep every round that starts
+ * today visible until 07:00 Bangkok, every single day — not an edge case once a
+ * year but a seven-hour hole every morning, at exactly the hours a customer is
+ * most likely to be looking for a course starting that day.
+ *
+ * ── AND WHY IT IS BUILT FROM `siteDateParts` RATHER THAN FORMATTED DIRECTLY ──
+ * `Intl.DateTimeFormat('en-CA')` renders `YYYY-MM-DD` natively and would be one
+ * line. It is not used, because this module already owns exactly one zone-pinned
+ * parts reader and a second formatter would be a second place for the timezone
+ * to be spelled — the precise defect `SITE_TIME_ZONE` exists to prevent. Padding
+ * two numbers is cheaper than a second source of truth.
+ *
+ * The returned string is directly comparable with `<=` against any other
+ * `YYYY-MM-DD` key, which is the whole reason the key shape is a string: it
+ * sorts lexicographically in calendar order, so "has this round started" is a
+ * string comparison with no Date arithmetic and no zone left to get wrong.
+ *
+ * @param {Date} [now] injectable ONLY so the timezone behaviour itself can be
+ *   tested at a pinned instant. Production callers pass nothing.
+ * @returns {string} e.g. `'2026-08-28'`
+ */
+export function siteTodayKey(now = new Date()) {
+  const { year, month, day } = siteDateParts(now);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 /**

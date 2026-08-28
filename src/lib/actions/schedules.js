@@ -22,6 +22,11 @@ import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { resolveCourseObjectId } from '@/lib/api/resolveIds';
 import ScheduleLocal from '@/models/ScheduleLocal';
+// `toNullableNum` is deliberately NOT imported: every numeric sidecar field is
+// coerced inside `sidecarSetFields` now, and importing it here would invite the
+// next edit to read a sidecar key directly off the FormData again — which is
+// exactly the clobber that module exists to prevent.
+import { sidecarSetFields, toStr, toStrArr } from '@/lib/schedule/scheduleLocalFields';
 
 const ADMIN_PATH = '/admin/schedules';
 
@@ -42,9 +47,13 @@ function scheduleFields(courseIdString, body, formData) {
     signup_url: body.signup_url,
     // Local-only sidecar fields; MSDB never sees these, so without them the
     // trail would be silent about half of what the form actually changed.
-    max_seats:      toNullableNum(formData.get('max_seats')),
-    price_override: toNullableNum(formData.get('price_override')),
-    instructor_ids: toStrArr(formData.getAll('instructor_ids')),
+    //
+    // SPREAD, so the trail records only the fields the form ACTUALLY SENT. It
+    // used to read all three unconditionally, which wrote `max_seats: null`
+    // into the `after` snapshot of every save that did not carry the key —
+    // a trail claiming an admin cleared a value they never saw. The keys the
+    // form omits are now simply absent here, which is the truth.
+    ...sidecarSetFields(formData),
   };
 }
 
@@ -79,21 +88,13 @@ function bustScheduleCaches(courseObjectId) {
   }
 }
 
-function toStr(v) {
-  return typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim();
-}
-function toStrArr(v) {
-  if (Array.isArray(v)) return v.map(toStr).filter(Boolean);
-  if (typeof v === 'string' && v.length > 0) {
-    return v.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return [];
-}
-function toNullableNum(v) {
-  if (v === '' || v == null) return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+/*
+ * `toStr`, `toStrArr` and `toNullableNum` were declared here. They moved to
+ * lib/schedule/scheduleLocalFields (imported above) so that `sidecarSetFields`
+ * and this file cannot disagree about what an empty seat count or a blank price
+ * coerces to — the two now share one definition rather than each holding a
+ * copy. Behaviour is byte-for-byte what it was; only the address changed.
+ */
 
 /**
  * Pull dates from the form. Accepts either repeated `dates` keys
@@ -126,6 +127,20 @@ function shapeMsdbPayload(courseObjectId, formData) {
   };
 }
 
+/**
+ * Upsert the Genesis-only sidecar.
+ *
+ * ── THE `$set` IS PARTIAL, AND THAT IS THE WHOLE POINT ──────────────────────
+ * The three sidecar keys come from `sidecarSetFields`, which returns ONLY the
+ * ones the form actually carried. This block used to read all three
+ * unconditionally, and `FormData.get` answers `null` for a key that was never
+ * sent — so every save silently overwrote every sidecar field, whether or not
+ * the form had an input for it. See that module's docstring for the full
+ * reasoning and for why presence, not emptiness, is the test.
+ *
+ * The two identity fields stay unconditional: they are what the upsert matches
+ * and labels on, and they are always derived from the request rather than typed.
+ */
 async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
   if (!msdbScheduleId) return;
   await dbConnect();
@@ -135,9 +150,7 @@ async function upsertLocal({ msdbScheduleId, courseIdString, formData }) {
       $set: {
         msdb_schedule_id: String(msdbScheduleId),
         course_id:        courseIdString,
-        max_seats:        toNullableNum(formData.get('max_seats')),
-        price_override:   toNullableNum(formData.get('price_override')),
-        instructor_ids:   toStrArr(formData.getAll('instructor_ids')),
+        ...sidecarSetFields(formData),
       },
     },
     { upsert: true, new: true }

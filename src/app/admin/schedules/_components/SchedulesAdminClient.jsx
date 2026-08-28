@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { Fragment, useCallback, useMemo, useState, useTransition } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Search,
   X,
@@ -14,9 +15,30 @@ import {
   deleteSchedule,
 } from '@/lib/actions/schedules';
 import {
-  ADMIN_SCHEDULE_MONTHS,
   adminScheduleMonthCols,
+  adminScheduleSelectableMonthKeys,
+  adminScheduleSelectableWindowDays,
+  resolveAdminScheduleRange,
+  ADMIN_SCHEDULE_MONTHS,
+  ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL,
 } from '@/lib/adminScheduleHorizon';
+import {
+  arrowState,
+  daysOfMonth,
+  openingMonth,
+  rangeFor,
+  stepMonth,
+  visibleMonthsFrom,
+} from '@/lib/schedule/editorCalendarRange';
+import {
+  classifyAgainstWindow,
+  warningTextTh,
+} from '@/lib/schedule/gridWindowWarning';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { laneLayout } from '@/lib/schedule/monthLanes';
+import { monthLabel } from '@/lib/schedule/monthWindow';
+import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
+import { resolveScheduleBadge } from '@/lib/scheduleStatus';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -25,16 +47,43 @@ const STATUS_OPTIONS = [
   { value: 'nearly_full', label: 'Nearly Full' },
   { value: 'full',        label: 'Full' },
 ];
-const STATUS_DOT = {
-  open:        'bg-green-500',
-  nearly_full: 'bg-amber-500',
-  full:        'bg-red-500',
-};
+/**
+ * ── THE ROUND'S DOT USED TO BE THE STATUS. IT IS THE DELIVERY TYPE NOW ──────
+ *
+ * A local `STATUS_DOT` map (green / amber / red) lived here and coloured the
+ * dot at the head of every round box. That is not what the dot means on
+ * /schedule: there the dot and the box's border carry the TRAINING TYPE from
+ * lib/schedule/trainingTypeColor, and the status is a word underneath. Two
+ * surfaces showing the same round with the same dot meaning two different
+ * things is the drift this repo already paid for once with four copies of the
+ * type palette (see that module's docstring), so the map is gone rather than
+ * kept beside the shared one.
+ *
+ * Nothing is lost by dropping it: the status is now READ AS TEXT rather than
+ * inferred from a colour, and its colours come from `resolveScheduleBadge`, the
+ * same single fallback policy every other surface renders a status from.
+ */
 
 const TYPE_OPTIONS = [
   { value: 'classroom', label: 'Classroom' },
   { value: 'hybrid',    label: 'Hybrid' },
 ];
+
+/**
+ * Display names for the dot's tooltip.
+ *
+ * Deliberately NOT `TYPE_OPTIONS`, and deliberately covering `online`, which
+ * that list does not: TYPE_OPTIONS is the editor's `<select>` and is limited to
+ * the two types an admin may CREATE, while a round arriving from MSDB can carry
+ * any type the palette knows. Reusing the select's list would leave an online
+ * round's green dot with no name at all — the one case where the tooltip is
+ * doing real work, because green is the type this screen cannot produce.
+ */
+const TYPE_LABEL = {
+  classroom: 'Classroom',
+  hybrid:    'Hybrid',
+  online:    'Online',
+};
 
 const TH_MONTH_FMT = new Intl.DateTimeFormat('th-TH', {
   year: '2-digit',
@@ -53,46 +102,98 @@ function toLocalIso(d) {
   const day = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-/** `YYYY-MM` key derived from a date-ish input (local). */
-function monthKey(v) {
-  if (!v) return null;
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+/*
+ * A local `monthKey(v)` stood here. It had ONE caller — the schedule map's
+ * first-date bucketing — and that bucketing is exactly what
+ * lib/schedule/monthLanes replaced (see `scheduleMap` below). It is deleted
+ * rather than left exported-by-proximity: a private "which month is this
+ * round in" helper sitting beside code that must ask `roundSpanIndices` that
+ * question instead is how the first-date answer grows back.
+ */
+
+/** `YYYY-MM` → the 1st of that month, local time. For the from/to dropdowns. */
+function monthKeyToDate(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key ?? ''));
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : new Date(NaN);
 }
 
 // ── main component ─────────────────────────────────────────────────
 
+/**
+ * ── THE FILTERS ARE PROPS, AND THE URL IS WRITTEN IN ONE PLACE ──────────────
+ *
+ * `search`, `filterProgram`, `filterStatus`, `monthFrom` and `monthTo` are
+ * read from `searchParams` by page.jsx and passed down — the same shape as
+ * AuditLogClient / CoursesAdminClient, the reference implementations
+ * test/fs/urlFilterNoState.test.mjs holds this screen to. The three plain
+ * filters used to be `useState`, seeded from nothing and reset on every
+ * navigation; the month range is new in this round and was written straight
+ * into this shape rather than added as a fourth filter onto a broken one.
+ */
 export function SchedulesAdminClient({
   schedules,
   courses,
   programs = [],
   scheduleLocals = [],
   instructors = [],
+  search = '',
+  filterProgram = '',
+  filterStatus = '',
+  monthFrom,
+  monthTo,
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [busyId, setBusyId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [, startTransition] = useTransition();
 
-  // filters
-  const [search, setSearch]               = useState('');
-  const [filterProgram, setFilterProgram] = useState('');
-  const [filterStatus, setFilterStatus]   = useState('');
-  const [collapsed, setCollapsed]         = useState({});
-  const [modal, setModal]                 = useState(null);
+  const [collapsed, setCollapsed] = useState({});
+  const [modal, setModal]         = useState(null);
+
+  /**
+   * The next URL, serialised FROM THE PROPS — the one and only writer.
+   * Same shape as AuditLogClient / CoursesAdminClient's `navigate`.
+   */
+  const navigate = useCallback(
+    (overrides = {}) => {
+      const next = { search, filterProgram, filterStatus, monthFrom, monthTo, ...overrides };
+      const params = new URLSearchParams();
+      Object.entries(next).forEach(([k, v]) => {
+        const value = String(v ?? '').trim();
+        if (value) params.set(k, value);
+      });
+      const qs = params.toString();
+      startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+    },
+    [router, pathname, search, filterProgram, filterStatus, monthFrom, monthTo]
+  );
+
+  // The from/to dropdowns' own option list — every month the admin may
+  // select, independent of what is currently rendered. See
+  // adminScheduleSelectableRange's docstring for why this reach is fixed at
+  // 12 months back / 24 forward and must not import the editor picker's
+  // identical-looking constants.
+  const selectableMonthKeys = useMemo(() => adminScheduleSelectableMonthKeys(), []);
+
+  // The untouched default view, for the ล้างตัวกรอง gate below. Recomputed
+  // once per mount rather than per render for the same reason ScheduleClient
+  // freezes its own `defaults` in state: a page left open across the 1st of
+  // the month must not have its "N filters active" badge light up on its own.
+  const [defaultRange] = useState(() => resolveAdminScheduleRange(new Date()));
 
   // ── month column headers ───────────────────────────────────────
-  // Columns and the page's MSDB `to` bound both come out of
-  // adminScheduleHorizon, so the window rendered here is the window
-  // fetched — a row can no longer arrive with no column to land in.
+  // Columns are built for the SELECTED monthFrom/monthTo span, not a fixed
+  // horizon — page.jsx resolves and clamps that span before it ever reaches
+  // here, and derives the MSDB `to` bound from the same span, so the window
+  // rendered here is still the window fetched.
   const monthCols = useMemo(
     () =>
-      adminScheduleMonthCols().map((c) => ({
+      adminScheduleMonthCols(new Date(), { fromKey: monthFrom, toKey: monthTo }).map((c) => ({
         ...c,
         label: TH_MONTH_FMT.format(new Date(c.year, c.month, 1)),
       })),
-    []
+    [monthFrom, monthTo]
   );
 
   // ── lookups ────────────────────────────────────────────────────
@@ -111,39 +212,48 @@ export function SchedulesAdminClient({
   }, [instructors]);
 
   /**
-   * Bucket schedules by course AND by month. MSDB returns
-   * `schedule.course` as either a populated object (`{ _id, course_id,
-   * course_name, … }`) or a bare ObjectId string — and the bare form
-   * is more likely right after a write before the next round-trip
-   * populates it. We index under BOTH the ObjectId AND the human
-   * `course_id` code so the row lookup in `ProgramGroup` can fall back
-   * to whichever key matches the course in hand.
+   * Bucket schedules BY COURSE ONLY. MSDB returns `schedule.course` as either
+   * a populated object (`{ _id, course_id, course_name, … }`) or a bare
+   * ObjectId string — and the bare form is more likely right after a write
+   * before the next round-trip populates it. We index under BOTH the ObjectId
+   * AND the human `course_id` code so the row lookup in `ProgramGroup` can fall
+   * back to whichever key matches the course in hand.
    *
    *   key shape:  `<ObjectId>` OR `<course_id>`
-   *   value:      { 'YYYY-MM': [schedule, …] }
+   *   value:      [schedule, …]
    *
-   * Duplicate schedules across both keys are deduped by `_id` so a
-   * lookup never returns the same row twice.
+   * Duplicate schedules across both keys are deduped by `_id` so a lookup never
+   * returns the same row twice.
+   *
+   * ── THE SECOND KEY — THE MONTH — IS GONE, AND THAT IS THE FIX ─────────────
+   * This map used to be `{ 'YYYY-MM': [schedule, …] }`, keyed by
+   * `monthKey(s.dates?.[0])` — THE MONTH OF THE ROUND'S FIRST DATE ONLY. That
+   * is the identical defect `lib/schedule/monthLanes` was written to remove
+   * from the public table, and it produced two visible faults here:
+   *
+   *   · a 30 ต.ค. – 2 พ.ย. round sat entirely inside the ต.ค. column and its
+   *     label read `30-2`, a range that does not exist in October;
+   *   · a round whose FIRST date fell before the selected window but whose
+   *     later dates fell inside it was bucketed under a month with no column
+   *     and vanished from the grid completely.
+   *
+   * Which columns a round occupies is now `roundSpanIndices`' single answer,
+   * reached through `laneLayout` below — the same one the public table, its
+   * course filter and its mobile card all read.
    */
   const scheduleMap = useMemo(() => {
     const map = new Map();
 
-    function push(key, monthK, s) {
-      if (!key || !monthK) return;
-      if (!map.has(key)) map.set(key, {});
-      const bucket = map.get(key);
-      if (!bucket[monthK]) bucket[monthK] = [];
-      // Dedupe: same schedule may land under both the ObjectId and the
-      // course_id key. Keep it once per (key, monthK) bucket.
-      if (!bucket[monthK].some((x) => String(x._id) === String(s._id))) {
-        bucket[monthK].push(s);
-      }
+    function push(key, s) {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      const list = map.get(key);
+      // Dedupe: the same schedule lands under both the ObjectId and the
+      // course_id key. Keep it once per key.
+      if (!list.some((x) => String(x._id) === String(s._id))) list.push(s);
     }
 
     for (const s of schedules) {
-      const monthK = monthKey(s.dates?.[0]);
-      if (!monthK) continue;
-
       let oid = '';
       let codeKey = '';
       if (typeof s.course === 'object' && s.course !== null) {
@@ -153,8 +263,8 @@ export function SchedulesAdminClient({
         oid = String(s.course);
       }
 
-      push(oid, monthK, s);
-      push(codeKey, monthK, s);
+      push(oid, s);
+      push(codeKey, s);
     }
     return map;
   }, [schedules]);
@@ -186,12 +296,40 @@ export function SchedulesAdminClient({
       groups.get(id).courses.push(c);
     }
 
+    /**
+     * ── RANKED BY THE `programs` PROP, WHICH IS THE PUBLIC TABLE'S ORDER ─────
+     *
+     * This block is ScheduleClient's `grouped` reducer, same shape and same
+     * tie-breaks: rank by position in the parent's `programs` array, fall to
+     * `Infinity` for anything the array does not name, and break ties on the
+     * Thai collation of the name.
+     *
+     * It used to be `localeCompare` ALONE, which is why /admin/schedules listed
+     * AI Builder, Canva, Claude AI while /schedule — reading the admin-curated
+     * ProgramOrder through `getOrderedPrograms` — put Claude AI above Power BI.
+     * page.jsx now runs that same call and hands the result down, so the two
+     * tables group in one order. See its docstring for why the programmes
+     * `getOrderedPrograms` hides are appended rather than dropped: they land
+     * at `Infinity` here, after every ranked group, and stay reachable.
+     *
+     * `__none__` — courses with no programme at all — still sorts dead last,
+     * after even the unranked ones, which is what it did before.
+     */
+    const orderRank = new Map(
+      programs.map((p, i) => [String(p.program_name ?? p.name ?? ''), i])
+    );
+    const rankOf = (g) =>
+      orderRank.has(g.name) ? orderRank.get(g.name) : Infinity;
+
     return [...groups.values()].sort((a, b) => {
       if (a.id === '__none__') return 1;
       if (b.id === '__none__') return -1;
+      const ra = rankOf(a);
+      const rb = rankOf(b);
+      if (ra !== rb) return ra - rb;
       return a.name.localeCompare(b.name, 'th');
     });
-  }, [courses, search, filterProgram]);
+  }, [courses, search, filterProgram, programs]);
 
   // count of schedules currently shown (status-aware; the program /
   // search filters only hide courses, not schedules themselves, so we
@@ -237,7 +375,10 @@ export function SchedulesAdminClient({
             จัดการตารางอบรม
           </h1>
           <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และวิทยากรเก็บใน Genesis
+            {/* No longer advertises max_seats and วิทยากร as things this
+                screen edits — their inputs are gone from the modal. The values
+                are still STORED and still shown on the round boxes below. */}
+            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — ราคาต่อรอบเก็บใน Genesis
           </p>
         </div>
         <button
@@ -262,26 +403,39 @@ export function SchedulesAdminClient({
         </div>
       )}
 
-      {/* ── Filter bar ─────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* ── Filter bar ─────────────────────────────────────────────────
+          Restyled to the public /schedule bar's visual language (rounded-xl,
+          gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
+          FilterSelect. The table itself is unchanged this round. */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-[240px] flex-1">
           <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
             aria-hidden="true"
           />
+          {/* Uncontrolled and re-keyed on `search`, committing on Enter or
+              blur — same pattern as CoursesAdminClient's box, so the URL
+              (not this component) is the only place the term lives. */}
           <input
+            key={search}
             type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="ค้นหาหลักสูตร..."
-            className="w-full rounded-9e-md border border-[var(--surface-border)] bg-white pl-8 pr-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+            defaultValue={search}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                navigate({ search: e.currentTarget.value });
+              }
+            }}
+            onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
+            placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
+            className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
           />
         </div>
 
         <select
           value={filterProgram}
-          onChange={(e) => setFilterProgram(e.target.value)}
-          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          onChange={(e) => navigate({ filterProgram: e.target.value })}
+          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
         >
           <option value="">ทุกโปรแกรม</option>
           {programs.map((p) => {
@@ -295,14 +449,53 @@ export function SchedulesAdminClient({
 
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+          onChange={(e) => navigate({ filterStatus: e.target.value })}
+          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
         >
           <option value="">ทุกสถานะ</option>
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
+          <select
+            value={monthFrom}
+            onChange={(e) => navigate({ monthFrom: e.target.value })}
+            aria-label="เดือนเริ่มต้น"
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            {selectableMonthKeys.map((key) => (
+              <option key={key} value={key}>
+                {TH_MONTH_FMT.format(monthKeyToDate(key))}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
+          <select
+            value={monthTo}
+            onChange={(e) => navigate({ monthTo: e.target.value })}
+            aria-label="เดือนสุดท้าย"
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            {selectableMonthKeys.map((key) => (
+              <option key={key} value={key} disabled={key < monthFrom}>
+                {TH_MONTH_FMT.format(monthKeyToDate(key))}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+          <button
+            type="button"
+            onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
+            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+          >
+            ล้างตัวกรอง
+          </button>
+        )}
 
         <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
           {visibleCount} / {schedules.length} รอบ
@@ -340,10 +533,9 @@ export function SchedulesAdminClient({
         <ScheduleModal
           mode={modal.mode}
           schedule={modal.schedule}
-          initialCourseCode={modal.courseCode ?? null}
-          initialMonthKey={modal.monthKeyHint ?? null}
+          courseCodeHint={modal.courseCode ?? null}
+          monthKeyHint={modal.monthKeyHint ?? null}
           courses={courses}
-          instructors={instructors}
           localBySchedId={localBySchedId}
           onClose={() => setModal(null)}
           onSaved={() => {
@@ -373,6 +565,10 @@ function ProgramGroup({
   onDelete,
 }) {
   const Icon = collapsed ? ChevronRight : ChevronDown;
+  // What `laneLayout` and `roundSpanIndices` speak: contiguous ascending
+  // `YYYY-MM`. `adminScheduleMonthCols` already produces exactly that, so the
+  // packing sees the same window the header row does — the two cannot drift.
+  const monthKeys = monthCols.map((m) => m.key);
   return (
     <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
       <button
@@ -412,85 +608,97 @@ function ProgramGroup({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--surface-border)]">
+            {/*
+              NO `divide-y` any more. A course is now one or more LANE rows plus
+              its own `+ รอบ` row, so a divider between every `<tr>` would draw a
+              line THROUGH a course rather than between two of them. The bottom
+              border moves onto the LAST row of each course instead — the same
+              thing ScheduleClient does with `li === lanes.length - 1`.
+            */}
+            <tbody>
               {group.courses.map((course) => {
                 const cid = String(course._id ?? '');
-                // Lookup fallback chain: prefer the ObjectId because
-                // it's globally unique, fall back to the human
-                // `course_id` code (the second key we indexed in
-                // scheduleMap) so a bare-ObjectId-only schedule still
-                // resolves when MSDB hasn't populated yet.
-                const buckets =
+                // Lookup fallback chain: prefer the ObjectId because it's
+                // globally unique, fall back to the human `course_id` code (the
+                // second key we indexed in scheduleMap) so a bare-ObjectId-only
+                // schedule still resolves when MSDB hasn't populated yet.
+                const rounds = (
                   scheduleMap.get(cid) ??
                   scheduleMap.get(String(course.course_id ?? '')) ??
-                  {};
-                return (
-                  <tr
-                    key={course.course_id || cid}
-                    className="hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40"
-                  >
-                    <td className="px-3 py-3 font-mono text-[11px] text-9e-slate-dp-50">
-                      {course.course_id}
-                    </td>
-                    <td className="px-3 py-3 text-9e-navy dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 max-w-[260px] truncate">
-                          {course.course_name_th || course.course_name}
-                        </span>
-                        {/* Inline shortcut: open the modal with this course
-                            pre-filled. No month hint — admin picks dates
-                            in the calendar grid themselves. */}
-                        <button
-                          type="button"
-                          onClick={() => onAdd(course.course_id, null)}
-                          className="shrink-0 whitespace-nowrap rounded-full border border-green-400 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
-                        >
-                          + รอบ
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 text-center text-xs text-9e-slate-dp-50">
-                      {course.course_trainingdays || '—'}
-                    </td>
-                    <td className="px-2 py-3 text-right text-xs text-9e-slate-dp-50">
-                      {Number.isFinite(Number(course.course_price))
-                        ? Number(course.course_price).toLocaleString()
-                        : '—'}
-                    </td>
+                  []
+                ).filter((s) => !filterStatus || s.status === filterStatus);
 
-                    {monthCols.map((m) => {
-                      const cellSchedules = (buckets[m.key] ?? []).filter(
-                        (s) => !filterStatus || s.status === filterStatus
-                      );
-                      return (
+                /*
+                  ONE OR MORE LANES per course, packed like a Gantt chart by
+                  lib/schedule/monthLanes — THE SAME packing the public table
+                  uses, so the two surfaces cannot disagree about which months a
+                  round occupies.
+
+                  A round crossing months must SPAN them while a round inside one
+                  month stays ALIGNED under it, and when those two overlap a
+                  single <tr> cannot do both: there is nowhere to put a <td> at
+                  พ.ย. in a row that already carries a colSpan=2 covering
+                  ต.ค.+พ.ย. So the course row becomes lanes and the four course
+                  columns rowSpan across them.
+                */
+                const lanes = laneLayout(rounds, monthKeys).lanes;
+
+                /*
+                  ── THE `+ รอบ` BUTTONS GET A LANE OF THEIR OWN, ALWAYS ───────
+                  They used to sit inside each month cell, beneath that month's
+                  rounds. A colSpan cell CONSUMES the columns it covers, so a
+                  round crossing ต.ค.+พ.ย. would have swallowed BOTH months'
+                  buttons — the change that fixes the label would have removed
+                  the only way to add a round to either month.
+
+                  A row of its own makes the guarantee absolute instead of
+                  conditional: it is emitted for EVERY course, carries exactly
+                  one <td> per month column, and no colSpan above it can ever
+                  reach into it. Every month keeps its own reachable button
+                  whatever the rounds are doing.
+                */
+                const rowCount = lanes.length + 1;
+
+                return (
+                  <Fragment key={course.course_id || cid}>
+                    {lanes.map((lane, li) => (
+                      <tr
+                        key={`lane-${li}`}
+                        className="hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40"
+                      >
+                        {li === 0 && courseCells(course, rowCount, onAdd)}
+                        {laneCells({
+                          lane,
+                          columnCount: monthCols.length,
+                          localBySchedId,
+                          instructorById,
+                          busyId,
+                          onEdit,
+                          onDelete,
+                        })}
+                      </tr>
+                    ))}
+
+                    <tr className="border-b border-[var(--surface-border)] last:border-0 hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40">
+                      {/* A course with no visible round has no lane at all, so
+                          the course columns ride on this row instead. */}
+                      {lanes.length === 0 && courseCells(course, rowCount, onAdd)}
+                      {monthCols.map((m) => (
                         <td
                           key={m.key}
                           className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
                         >
-                          <div className="flex flex-col items-stretch gap-1.5">
-                            {cellSchedules.map((s) => (
-                              <ScheduleCell
-                                key={s._id}
-                                schedule={s}
-                                local={localBySchedId.get(String(s._id))}
-                                instructorById={instructorById}
-                                busy={busyId === s._id}
-                                onEdit={() => onEdit(s)}
-                                onDelete={() => onDelete(s._id)}
-                              />
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => onAdd(course.course_id, m.key)}
-                              className="whitespace-nowrap rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
-                            >
-                              + รอบ
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onAdd(course.course_id, m.key)}
+                            className="w-full whitespace-nowrap rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
+                          >
+                            + รอบ
+                          </button>
                         </td>
-                      );
-                    })}
-                  </tr>
+                      ))}
+                    </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -498,6 +706,174 @@ function ProgramGroup({
         </div>
       )}
     </div>
+  );
+}
+
+// ── the four course columns ───────────────────────────────────────
+
+/**
+ * The course's own cells — code, name, days, price — rendered ONCE and spanning
+ * every row the course occupies.
+ *
+ * They belong to the COURSE, not to a lane, so they are emitted on the first
+ * row and `rowSpan` across the rest. `rowSpan` is omitted rather than set to 1
+ * when the course has only its `+ รอบ` row: React emits `rowspan="1"`, a no-op
+ * that would change the markup of every single-row course on the page.
+ *
+ * `align-top` so the course name lines up with the FIRST lane rather than
+ * floating in the middle of a tall multi-lane course.
+ */
+function courseCells(course, rowCount, onAdd) {
+  const rowSpan = rowCount > 1 ? rowCount : undefined;
+  return [
+    <td
+      key="code"
+      rowSpan={rowSpan}
+      className="px-3 py-3 align-top font-mono text-[11px] text-9e-slate-dp-50"
+    >
+      {course.course_id}
+    </td>,
+    <td
+      key="name"
+      rowSpan={rowSpan}
+      className="px-3 py-3 align-top text-9e-navy dark:text-white"
+    >
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 max-w-[260px] truncate">
+          {course.course_name_th || course.course_name}
+        </span>
+        {/* Inline shortcut: open the modal with this course pre-filled. No
+            month hint — admin picks dates in the calendar grid themselves. */}
+        <button
+          type="button"
+          onClick={() => onAdd(course.course_id, null)}
+          className="shrink-0 whitespace-nowrap rounded-full border border-green-400 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
+        >
+          + รอบ
+        </button>
+      </div>
+    </td>,
+    <td
+      key="days"
+      rowSpan={rowSpan}
+      className="px-2 py-3 align-top text-center text-xs text-9e-slate-dp-50"
+    >
+      {course.course_trainingdays || '—'}
+    </td>,
+    <td
+      key="price"
+      rowSpan={rowSpan}
+      className="px-2 py-3 align-top text-right text-xs text-9e-slate-dp-50"
+    >
+      {Number.isFinite(Number(course.course_price))
+        ? Number(course.course_price).toLocaleString()
+        : '—'}
+    </td>,
+  ];
+}
+
+// ── one lane's month cells ────────────────────────────────────────
+
+/**
+ * One lane's `<td>`s, walked left to right across every month column.
+ *
+ * ── WHY IT WALKS COLUMNS RATHER THAN MAPPING CELLS ──────────────────────────
+ * A `colSpan` cell CONSUMES the columns it covers, so the columns a lane emits
+ * and the cells it holds are not the same list. `lane.map(...)` would emit one
+ * `<td>` per cell and leave every gap unfilled, shearing the row left. The
+ * cursor is the whole mechanism: it advances past a spanned cell and emits an
+ * empty `<td>` for anything the lane does not cover.
+ *
+ * THE TOTAL COLSPAN OF THE RETURNED CELLS IS EXACTLY `columnCount`. An
+ * off-by-one here shears the grid — every month column after the mistake shows
+ * the wrong month's rounds — and no visual check catches it reliably, so a
+ * render test asserts the arithmetic directly.
+ *
+ * ── AND WHY THE GAP IS BLANK RATHER THAN AN EM-DASH ─────────────────────────
+ * The public table's empty first-lane cell renders `—` for "no round this
+ * month". Here it must not: every month on this grid already carries a `+ รอบ`
+ * button one row below, which says "nothing here, add one" more usefully than a
+ * dash and without competing with it for the reader's attention.
+ */
+function laneCells({
+  lane,
+  columnCount,
+  localBySchedId,
+  instructorById,
+  busyId,
+  onEdit,
+  onDelete,
+}) {
+  const out = [];
+  let col = 0;
+
+  const gap = (key) => (
+    <td
+      key={key}
+      className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
+    />
+  );
+
+  for (const cell of lane) {
+    while (col < cell.startIdx) {
+      out.push(gap(`gap-${col}`));
+      col += 1;
+    }
+    out.push(
+      <td
+        key={`cell-${cell.startIdx}`}
+        // Omitted rather than set to 1 for a single-month cell — `colspan="1"`
+        // is a no-op that would change the markup of every cell on the page.
+        colSpan={cell.span > 1 ? cell.span : undefined}
+        className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
+      >
+        <div className="flex flex-col items-stretch gap-1.5">
+          {cell.rounds.map((s) => (
+            <ScheduleCell
+              key={s._id}
+              schedule={s}
+              local={localBySchedId.get(String(s._id))}
+              instructorById={instructorById}
+              busy={busyId === s._id}
+              onEdit={() => onEdit(s)}
+              onDelete={() => onDelete(s._id)}
+            />
+          ))}
+          <ContinuationNote cell={cell} />
+        </div>
+      </td>,
+    );
+    col = cell.endIdx + 1;
+  }
+
+  while (col < columnCount) {
+    out.push(gap(`gap-${col}`));
+    col += 1;
+  }
+  return out;
+}
+
+/**
+ * `← ต่อจาก ส.ค.` / `ต่อ ม.ค. →` — a round that continues outside the selected
+ * month range.
+ *
+ * A round whose real span reaches past the visible columns is still SHOWN, in
+ * whatever space is visible, and its label is not shortened: `formatRoundDays`
+ * prints every day of the round including the days in the invisible month. What
+ * would otherwise be missing is any sign that the cell is a fragment — and on
+ * THIS screen that matters more than on the public one, because an admin
+ * reading a fragment as the whole round would widen the from/to range looking
+ * for a round that is already on screen. Same wording and same treatment as
+ * ScheduleClient's note, deliberately.
+ */
+function ContinuationNote({ cell }) {
+  if (!cell.clippedBefore && !cell.clippedAfter) return null;
+  return (
+    <span className="text-[10px] leading-none text-9e-slate-dp-50">
+      {cell.clippedBefore ? `← ต่อจาก ${monthLabel(cell.beforeKey)}` : null}
+      {cell.clippedBefore && cell.clippedAfter ? ' ' : null}
+      {cell.clippedAfter ? `ต่อ ${monthLabel(cell.afterKey)} →` : null}
+    </span>
   );
 }
 
@@ -511,19 +887,69 @@ function ScheduleCell({
   onEdit,
   onDelete,
 }) {
-  // Day-of-month range — same convention as MSDB admin (e.g. "11-12").
-  const days = [...(schedule.dates ?? [])]
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b)
-    .map((d) => d.getDate());
+  /**
+   * ── THE LABEL COMES FROM THE SHARED FORMATTER. IT USED TO BE A SIXTH ONE ───
+   *
+   * What stood here was `${days[0]}-${days[days.length - 1]}` — first date to
+   * last date, with no check that the days between exist. It is the SAME defect
+   * lib/schedule/roundDateLabel was written to remove from five public
+   * formatters, and on this screen it was actively misreporting stored data:
+   *
+   *   dates 16 and 18 ก.ย. → rendered `16-18`, advertising a 17th that is not
+   *                          in the round;
+   *   dates 30 ต.ค. and 2 พ.ย. → rendered `30-2`, a range that does not exist
+   *                          in any month.
+   *
+   * `formatRoundDays` collapses maximal CONSECUTIVE runs to their endpoints and
+   * LISTS everything else, so those become `16, 18` and `30 ต.ค. - 2 พ.ย.`.
+   * No day is ever dropped and no day is ever invented.
+   *
+   * Called with neither `showMonth` nor `showYear`, exactly as the public
+   * table calls it: every column header here carries its own month AND its
+   * Buddhist year (`TH_MONTH_FMT`), so a single-month round needs neither. A
+   * round that CROSSES a month prints its months regardless of `showMonth` —
+   * that rule lives in the formatter, and it is what makes the spanning cell
+   * next to it readable.
+   */
+  const dateLabel = formatRoundDays(schedule.dates);
 
-  const dateLabel =
-    days.length === 0
-      ? '—'
-      : days.length === 1
-        ? String(days[0])
-        : `${days[0]}-${days[days.length - 1]}`;
+  /**
+   * The dot AND the border are the DELIVERY TYPE, from the one shared palette;
+   * the status is the word underneath. Same anatomy as /schedule's round box.
+   *
+   * Inline `style`, never `border-[${color}]`: Tailwind scans source text and
+   * never evaluates it, so a template literal in a class name compiles to no
+   * class at all and fails SILENTLY as an unbordered box.
+   */
+  const color = trainingTypeColor(schedule.type);
+
+  /**
+   * `.state`, NOT `.action` — and this is the one place this surface departs
+   * from ScheduleClient's cell on purpose.
+   *
+   * lib/scheduleStatus splits the two fields precisely so each surface names
+   * the one it means: `state` is what the round IS, `action` is what a VISITOR
+   * can do about it. The public cell is a registration link, so it carries the
+   * action ('ลงทะเบียน' for an open round). This cell is a management control
+   * — nobody registers from /admin/schedules — so an imperative to register
+   * would be wrong here in exactly the way that module's docstring describes.
+   * `state` gives 'เปิดรับ' / 'ใกล้เต็ม' / 'เต็ม', which is the fact an admin
+   * is reading. The colours are the shared ones either way.
+   */
+  const statusStyle = resolveScheduleBadge(schedule.status);
+
+  /**
+   * A full round is not registerable, and the public ruling is that its
+   * non-editable affordances show `cursor-not-allowed`. Read off
+   * `resolveScheduleBadge().status` rather than `schedule.status === 'full'` so
+   * the alias spellings that module normalises are covered too.
+   *
+   * แก้ไข AND ลบ ARE EXEMPT, and that exemption is the point: an admin must be
+   * able to edit and delete a sold-out round — it is the round most likely to
+   * need its seat count or status corrected. So the cursor rule sits on the BOX
+   * and both buttons re-assert `cursor-pointer` over it.
+   */
+  const isFull = statusStyle?.status === 'full';
 
   const teacherNames =
     (local?.instructor_ids ?? [])
@@ -531,43 +957,53 @@ function ScheduleCell({
       .filter(Boolean);
 
   return (
-    <div className="rounded-9e-md border border-[var(--surface-border)] bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]">
+    <div
+      className={
+        'flex flex-col items-center gap-0.5 rounded-9e-md border bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]' +
+        (isFull ? ' cursor-not-allowed' : '')
+      }
+      style={{ borderColor: color }}
+    >
       <div className="flex items-center justify-center gap-1.5">
         <span
-          className={
-            'inline-block h-1.5 w-1.5 rounded-full ' +
-            (STATUS_DOT[schedule.status] ?? 'bg-gray-400')
-          }
-          aria-label={schedule.status}
+          className="inline-block h-2 w-2 flex-none rounded-full"
+          style={{ backgroundColor: color }}
+          title={TYPE_LABEL[schedule.type] ?? TYPE_LABEL.classroom}
         />
-        <span className="font-medium text-9e-navy dark:text-white">
+        <span className="font-bold leading-none text-9e-navy dark:text-white">
           {dateLabel}
         </span>
       </div>
+      {/* Omitted entirely when the status is missing/blank, as on /schedule. */}
+      {statusStyle && (
+        <div className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
+          {statusStyle.state}
+        </div>
+      )}
       {local?.max_seats != null && (
-        <div className="mt-0.5 text-[10px] text-9e-slate-dp-50">
+        <div className="text-[10px] text-9e-slate-dp-50">
           {local.max_seats} ที่
         </div>
       )}
       {local?.price_override != null && (
-        <div className="mt-0.5 text-[10px] font-medium text-9e-action">
+        <div className="text-[10px] font-medium text-9e-action">
           ฿{Number(local.price_override).toLocaleString('th-TH')}
         </div>
       )}
       {teacherNames.length > 0 && (
         <div
-          className="mt-0.5 truncate text-[10px] text-9e-slate-dp-50"
+          className="max-w-full truncate text-[10px] text-9e-slate-dp-50"
           title={teacherNames.join(', ')}
         >
           {teacherNames[0]}
           {teacherNames.length > 1 ? ` +${teacherNames.length - 1}` : ''}
         </div>
       )}
-      <div className="mt-1 flex items-center justify-center gap-1.5">
+      <div className="flex items-center justify-center gap-1.5">
         <button
           type="button"
           onClick={onEdit}
-          className="text-[10px] text-9e-action hover:underline"
+          className="cursor-pointer text-[10px] text-9e-action hover:underline"
         >
           แก้ไข
         </button>
@@ -576,7 +1012,7 @@ function ScheduleCell({
           type="button"
           onClick={onDelete}
           disabled={busy}
-          className="text-[10px] text-red-500 hover:underline disabled:opacity-50"
+          className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? '…' : 'ลบ'}
         </button>
@@ -589,23 +1025,35 @@ function ScheduleCell({
 
 const DOW_TH = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-function daysInMonth(year, month) {
-  const days = [];
-  const d = new Date(year, month, 1);
-  while (d.getMonth() === month) {
-    days.push(new Date(d));
-    d.setDate(d.getDate() + 1);
-  }
-  return days;
+/**
+ * `'2026-12'` → `'ธันวาคม 2569'`. Buddhist era comes from `th-TH` natively —
+ * nothing here adds 543 by hand, the same rule the rest of the schedule code
+ * follows.
+ *
+ * `daysInMonth` used to live here; it moved to editorCalendarRange.js as
+ * `daysOfMonth`, keyed by `YYYY-MM` like everything else the picker passes
+ * around, so the month vocabulary has one spelling instead of two.
+ */
+function monthTitleTh(key) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(key ?? ''));
+  if (!m) return '';
+  return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('th-TH', {
+    month: 'long',
+    year: 'numeric',
+  });
 }
 
 function ScheduleModal({
   mode,
   schedule,
-  initialCourseCode,
-  initialMonthKey,
+  courseCodeHint,
+  monthKeyHint,
   courses,
-  instructors,
+  // `instructors` was a prop here, for the วิทยากร checkbox list. That list is
+  // gone, so the modal no longer needs the roster — but the GRID still does
+  // (ScheduleCell renders the teacher names of rounds that have one), so the
+  // page still fetches it and SchedulesAdminClient still builds `instructorById`
+  // from it. Only the modal's copy of the prop was dropped.
   localBySchedId,
   onClose,
   onSaved,
@@ -615,14 +1063,14 @@ function ScheduleModal({
   const [error, setError] = useState(null);
 
   // Course
-  const initialCode = (() => {
+  const startingCourseCode = (() => {
     if (isEdit) {
       const c = schedule?.course;
       if (typeof c === 'object' && c?.course_id) return String(c.course_id);
     }
-    return initialCourseCode || '';
+    return courseCodeHint || '';
   })();
-  const [courseCode, setCourseCode] = useState(initialCode);
+  const [courseCode, setCourseCode] = useState(startingCourseCode);
   const [courseSearch, setCourseSearch] = useState('');
 
   const filteredCourses = useMemo(() => {
@@ -648,33 +1096,55 @@ function ScheduleModal({
     return [];
   });
 
-  // Calendar window — start at the hinted month (or current month).
+  // The dates AS STORED, captured once at mount. The navigable range is
+  // derived from these rather than from live `selectedDates`, so that
+  // deselecting a far-out day cannot shrink the range under the user's
+  // cursor while they are still editing.
+  const [storedDates] = useState(selectedDates);
+
+  // Calendar range — src/lib/schedule/editorCalendarRange.js.
   //
-  // THIS 4 IS NOT THE GRID HORIZON. It bounds how many months a user can
-  // scroll while PICKING session dates in this modal — a UI-comfort
-  // number anchored on `initialMonthKey`, not on today. It was equal to
-  // the old grid horizon by coincidence, and the grid's is now
-  // ADMIN_SCHEDULE_MONTHS (12). Do NOT "unify" them: importing that
-  // constant here would render a twelve-month scroll of day grids in a
-  // max-h-80 box and would couple a date picker to a table's width
-  // budget. If this number should change, change it on its own evidence.
-  // test/pure/adminScheduleHorizon.test.mjs pins the separation.
-  const calendarMonths = useMemo(() => {
-    const start = initialMonthKey
-      ? new Date(`${initialMonthKey}-01T00:00:00`)
-      : new Date();
-    if (Number.isNaN(start.getTime())) return [];
-    const months = [];
-    for (let i = 0; i < 4; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-      months.push({ year: d.getFullYear(), month: d.getMonth() });
-    }
-    return months;
-  }, [initialMonthKey]);
+  // THE RANGE NEVER TOUCHES THE GRID. `ADMIN_SCHEDULE_MONTHS` and
+  // `adminScheduleMonthCols` are imported at the top of this FILE for the
+  // admin table's month columns, and they must not reach this picker:
+  // what a user is allowed to PICK is not bounded by what the table can
+  // DISPLAY. Coupling the two is how a round became uneditable in the
+  // first place, and doing it from the other end would be the same bug.
+  //
+  // The opposite question — "will this round actually appear in the
+  // table?" — is genuinely about the grid, and is asked exactly once, at
+  // save time, by `gridWindowDays` below. That one calls the grid helper
+  // directly and deliberately, and it checks BOTH ends of the window.
+  //
+  // The range is derived from the DATA BEING EDITED, not from the clock
+  // alone. That invariant is the fix; the ±1/±2 year defaults inside the
+  // module are only ergonomics.
+  const calendarRange = useMemo(
+    () => rangeFor({ selectedDates: storedDates }),
+    [storedDates]
+  );
+
+  const [monthCursor, setMonthCursor] = useState(() =>
+    openingMonth({
+      isEdit,
+      selectedDates: storedDates,
+      monthKeyHint,
+      range: calendarRange,
+    })
+  );
+
+  const visibleMonths = visibleMonthsFrom(monthCursor, calendarRange);
+  const { canPrev, canNext } = arrowState(monthCursor, calendarRange);
 
   const todayIso = toLocalIso(new Date());
 
+  // The out-of-window confirm step. Null = not asking. Set by handleSubmit,
+  // cleared whenever the dates change, so an admin who goes back and fixes the
+  // stray day is not still looking at a warning about it.
+  const [pendingWarning, setPendingWarning] = useState(null);
+
   function toggleDate(iso) {
+    setPendingWarning(null);
     setSelectedDates((cur) =>
       cur.includes(iso) ? cur.filter((d) => d !== iso) : [...cur, iso].sort()
     );
@@ -686,26 +1156,40 @@ function ScheduleModal({
   const [signupUrl, setSignupUrl] = useState(schedule?.signup_url ?? '');
 
   // Local sidecar
-  const initialLocal = isEdit
+  const existingLocal = isEdit
     ? localBySchedId.get(String(schedule?._id)) ?? null
     : null;
-  const [maxSeats, setMaxSeats] = useState(
-    initialLocal?.max_seats != null ? String(initialLocal.max_seats) : ''
-  );
+  /*
+   * ── จำนวนที่นั่ง (max_seats) AND วิทยากร (instructor_ids) NO LONGER HAVE
+   *    INPUTS HERE. THE DATA IS DELIBERATELY KEPT. ──────────────────────────
+   *
+   * Both inputs were removed from the "ข้อมูลเฉพาะ Genesis" block below because
+   * nothing in Genesis consumes either value today beyond the admin grid cell
+   * that displays it. NOTHING ELSE WAS REMOVED WITH THEM:
+   *
+   *   · the schema still declares both (models/ScheduleLocal.js) — do NOT drop
+   *     the columns;
+   *   · the stored values are untouched — 5 rows carry a `max_seats` and 4
+   *     carry an `instructor_ids` roster as of this change;
+   *   · the grid still RENDERS both, so the data stays visible even though it
+   *     is no longer editable from this modal.
+   *
+   * `max_seats` in particular is expected BACK: it is wanted for in-house
+   * quotation requests. This is a UI removal precisely so that restoring it is
+   * re-adding an input, not recovering data from a backup.
+   *
+   * The save path is what makes that safe. `sidecarSetFields`
+   * (lib/schedule/scheduleLocalFields) writes ONLY the keys the form sends, so
+   * an absent input leaves the stored value alone rather than nulling it — read
+   * that module before adding, removing or renaming anything in this block.
+   *
+   * `price_override` KEEPS its input: unlike the other two it has live public
+   * readers (the registration wizard's per-round price) and it decides the
+   * amount charged through Omise (lib/registration/resolve-price.js).
+   */
   const [priceOverride, setPriceOverride] = useState(
-    initialLocal?.price_override != null ? String(initialLocal.price_override) : ''
+    existingLocal?.price_override != null ? String(existingLocal.price_override) : ''
   );
-  const [instructorIds, setInstructorIds] = useState(
-    Array.isArray(initialLocal?.instructor_ids)
-      ? initialLocal.instructor_ids.map(String)
-      : []
-  );
-
-  function toggleInstructor(id) {
-    setInstructorIds((cur) =>
-      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
-    );
-  }
 
   const datesPretty = selectedDates
     .map((d) =>
@@ -715,6 +1199,70 @@ function ScheduleModal({
       })
     )
     .join(', ');
+
+  /**
+   * The admin table's MAXIMUM SELECTABLE window, as two ISO days — not the
+   * currently rendered columns.
+   *
+   * THIS CHANGED IN THE ROUND THAT MADE THE TABLE'S RANGE ADJUSTABLE. Before
+   * that, "the table's window" and "the table's reach" were the same fixed
+   * 12 months, so classifying against the rendered columns and against the
+   * outer boundary gave the same answer. Once an admin can move the from/to
+   * dropdowns, they stop agreeing: a date outside TODAY'S chosen months but
+   * inside `adminScheduleSelectableRange()` is not a problem, because the
+   * admin can widen the dropdowns and see it. Only a date outside the outer
+   * boundary is genuinely unreachable — no dropdown selection could ever
+   * show it — which is the only case worth warning about here.
+   *
+   * This is still the one place in the modal allowed to ask the grid
+   * anything, because it IS a question about the grid: "could this round
+   * ever appear in the table after I save it?" The picker's range
+   * deliberately knows nothing about the admin table — see `calendarRange`
+   * above — but reachability in the table is exactly what the horizon
+   * module decides.
+   *
+   * BOTH ENDS, not just the last column. The first version of this checked
+   * only `> lastDay`, and the unguarded backward direction is what let a
+   * stray click on 2025-09-23 remove a 30 Oct / 2 Nov round from the table
+   * with no way to reopen it. See src/lib/schedule/gridWindowWarning.js.
+   */
+  function gridWindowDays() {
+    return adminScheduleSelectableWindowDays();
+  }
+
+  function submitNow() {
+    const fd = new FormData();
+    fd.set('course_id',   courseCode);
+    fd.set('dates_json',  JSON.stringify(selectedDates));
+    fd.set('status',      status);
+    fd.set('type',        type);
+    fd.set('signup_url',  signupUrl);
+    /*
+     * `max_seats` and `instructor_ids` are NOT SET AT ALL — not '', not 0, not
+     * an empty append. Their inputs are gone (see the note by `priceOverride`'s
+     * state), and the sidecar writer treats an absent key as "leave the stored
+     * value alone". Setting them to anything here, including a blank, would
+     * erase the five seat counts and four rosters currently stored.
+     *
+     * `price_override` IS set unconditionally, blank included, and that is the
+     * other half of the same rule: its input is still on screen, so the form is
+     * authoritative for it and an admin clearing the box must be able to reset
+     * the round to the course's normal price. Sending the key with '' is how
+     * that reaches `toNullableNum` as null. The old `!== ''` guard meant a
+     * cleared price silently kept the old override once the writer stopped
+     * clobbering.
+     */
+    fd.set('price_override', priceOverride);
+    if (isEdit) fd.set('schedule_id', schedule._id);
+
+    startTransition(async () => {
+      const res = isEdit
+        ? await updateSchedule(fd)
+        : await createSchedule(fd);
+      if (res?.ok) onSaved();
+      else setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+    });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -728,24 +1276,20 @@ function ScheduleModal({
       return;
     }
 
-    const fd = new FormData();
-    fd.set('course_id',   courseCode);
-    fd.set('dates_json',  JSON.stringify(selectedDates));
-    fd.set('status',      status);
-    fd.set('type',        type);
-    fd.set('signup_url',  signupUrl);
-    if (maxSeats) fd.set('max_seats', maxSeats);
-    if (priceOverride !== '') fd.set('price_override', priceOverride);
-    for (const id of instructorIds) fd.append('instructor_ids', id);
-    if (isEdit) fd.set('schedule_id', schedule._id);
+    // WARN ONLY. The dates are never altered and the save is never blocked —
+    // the confirm step below only decides whether the admin has SEEN this.
+    // `warning` is null when there is nothing to say, so it is its own
+    // condition rather than a second derivation of one.
+    const warning = warningTextTh(
+      classifyAgainstWindow(selectedDates, gridWindowDays()),
+      ADMIN_SCHEDULE_SELECTABLE_MONTHS_TOTAL
+    );
+    if (warning) {
+      setPendingWarning(warning);
+      return;
+    }
 
-    startTransition(async () => {
-      const res = isEdit
-        ? await updateSchedule(fd)
-        : await createSchedule(fd);
-      if (res?.ok) onSaved();
-      else setError(res?.error ?? 'บันทึกไม่สำเร็จ');
-    });
+    submitNow();
   }
 
   return (
@@ -851,58 +1395,97 @@ function ScheduleModal({
                 </span>
               )}
             </label>
-            <div className="max-h-80 space-y-4 overflow-y-auto rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 p-3 dark:bg-[#0D1B2A]/60">
-              {calendarMonths.map(({ year, month }) => {
-                const days = daysInMonth(year, month);
-                const firstDow = new Date(year, month, 1).getDay();
-                const monthLabel = new Date(year, month, 1).toLocaleDateString(
-                  'th-TH',
-                  { month: 'long', year: 'numeric' }
-                );
-                return (
-                  <div key={`${year}-${month}`}>
-                    <p className="mb-2 text-center text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                      {monthLabel}
+            <div className="rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 p-3 dark:bg-[#0D1B2A]/60">
+              {/* One row: ‹ | month | month | ›. The arrows step ONE month,
+                  so a round spanning a month boundary (30 ต.ค. + 2 พ.ย.) has
+                  both of its months on screen at once and needs no
+                  navigation at all to select. */}
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) => stepMonth(c, -1, calendarRange))
+                  }
+                  disabled={!canPrev}
+                  aria-label="เดือนก่อนหน้า"
+                  className="rounded-9e-sm p-1 text-9e-navy transition-colors hover:bg-9e-action/10 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <div className="grid flex-1 grid-cols-2 gap-3">
+                  {visibleMonths.map((key) => (
+                    <p
+                      key={`label-${key}`}
+                      className="text-center text-xs font-medium text-9e-slate-dp-50 dark:text-[#94a3b8]"
+                    >
+                      {monthTitleTh(key)}
                     </p>
-                    <div className="grid grid-cols-7 gap-0.5 text-center">
-                      {DOW_TH.map((d) => (
-                        <div
-                          key={d}
-                          className="py-1 text-[10px] text-9e-slate-dp-50"
-                        >
-                          {d}
-                        </div>
-                      ))}
-                      {Array.from({ length: firstDow }).map((_, i) => (
-                        <div key={`pad-${i}`} />
-                      ))}
-                      {days.map((d) => {
-                        const iso = toLocalIso(d);
-                        const selected = selectedDates.includes(iso);
-                        const isToday = iso === todayIso;
-                        return (
-                          <button
-                            key={iso}
-                            type="button"
-                            onClick={() => toggleDate(iso)}
-                            className={
-                              'mx-auto h-8 w-8 rounded-full text-xs font-medium transition-colors ' +
-                              (selected
-                                ? 'bg-9e-action text-white'
-                                : 'text-9e-navy hover:bg-9e-action/10 dark:text-white') +
-                              (isToday && !selected
-                                ? ' ring-1 ring-9e-action'
-                                : '')
-                            }
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setMonthCursor((c) => stepMonth(c, 1, calendarRange))
+                  }
+                  disabled={!canNext}
+                  aria-label="เดือนถัดไป"
+                  className="rounded-9e-sm p-1 text-9e-navy transition-colors hover:bg-9e-action/10 disabled:cursor-not-allowed disabled:opacity-30 dark:text-white"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {visibleMonths.map((key) => {
+                  const days = daysOfMonth(key);
+                  const firstDow = days.length ? days[0].getDay() : 0;
+                  return (
+                    <div key={key}>
+                      <div className="grid grid-cols-7 gap-0.5 text-center">
+                        {DOW_TH.map((d) => (
+                          <div
+                            key={`${key}-${d}`}
+                            className="py-1 text-[10px] text-9e-slate-dp-50"
                           >
-                            {d.getDate()}
-                          </button>
-                        );
-                      })}
+                            {d}
+                          </div>
+                        ))}
+                        {Array.from({ length: firstDow }).map((_, i) => (
+                          <div key={`${key}-pad-${i}`} />
+                        ))}
+                        {days.map((d) => {
+                          const iso = toLocalIso(d);
+                          const selected = selectedDates.includes(iso);
+                          const isToday = iso === todayIso;
+                          // Past days stay CLICKABLE — backdating a round is
+                          // intended — but render dimmed so it is visible that
+                          // they are in the past. Deliberately NOT `disabled`.
+                          const isPast = iso < todayIso;
+                          return (
+                            <button
+                              key={iso}
+                              type="button"
+                              onClick={() => toggleDate(iso)}
+                              className={
+                                'mx-auto h-8 w-8 rounded-full text-xs font-medium transition-colors ' +
+                                (selected
+                                  ? 'bg-9e-action text-white'
+                                  : 'text-9e-navy hover:bg-9e-action/10 dark:text-white') +
+                                (isPast && !selected ? ' opacity-40' : '') +
+                                (isToday && !selected
+                                  ? ' ring-1 ring-9e-action'
+                                  : '')
+                              }
+                            >
+                              {d.getDate()}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -962,54 +1545,20 @@ function ScheduleModal({
             <p className="mb-2 text-xs font-semibold text-9e-slate-dp-50 dark:text-[#94a3b8]">
               ข้อมูลเฉพาะ Genesis (ไม่ส่งไป MSDB)
             </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  จำนวนที่นั่ง (max_seats)
-                </span>
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={maxSeats}
-                  onChange={(e) => setMaxSeats(e.target.value)}
-                  placeholder="ไม่จำกัด"
-                  className={inputCls}
-                />
-              </label>
+            {/*
+              จำนวนที่นั่ง (max_seats) and วิทยากร (instructor_ids) were the
+              other two inputs in this block. They are REMOVED FROM THE UI ONLY
+              — the schema keeps both fields, the stored rows keep their values,
+              and no migration was written. `max_seats` is expected to return
+              for in-house quotation requests. The full note, including why an
+              omitted key can no longer overwrite stored data, is at the
+              `priceOverride` state declaration above.
 
-              <div>
-                <span className="text-sm font-medium text-9e-navy dark:text-white">
-                  วิทยากร
-                </span>
-                <div className="mt-1 max-h-28 divide-y divide-[var(--surface-border)] overflow-y-auto rounded-9e-md border border-[var(--surface-border)]">
-                  {instructors.length === 0 && (
-                    <p className="px-3 py-2 text-center text-xs text-9e-slate-dp-50">
-                      ยังไม่มีวิทยากร
-                    </p>
-                  )}
-                  {instructors.map((inst) => {
-                    const id = String(inst._id);
-                    return (
-                      <label
-                        key={id}
-                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-9e-ice dark:hover:bg-[#0D1B2A]/60"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={instructorIds.includes(id)}
-                          onChange={() => toggleInstructor(id)}
-                          className="h-3.5 w-3.5"
-                        />
-                        <span className="text-xs text-9e-navy dark:text-white">
-                          {inst.name}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
+              Now a single column: two of the three cells are gone, and
+              `md:grid-cols-2` would strand the price at half width with nothing
+              beside it.
+            */}
+            <div className="grid gap-3">
               <label className="block">
                 <span className="text-sm font-medium text-9e-navy dark:text-white">
                   ราคาต่อท่าน (บาท, ต่อรอบ)
@@ -1031,23 +1580,81 @@ function ScheduleModal({
           </div>
         </form>
 
+        {/* Out-of-window confirm step. In-modal rather than window.confirm so
+            the offending dates can actually be LISTED and so the severe case
+            (the round disappears from the table) can be styled as such. It
+            never blocks: บันทึกต่อ saves exactly what was picked. */}
+        {pendingWarning && (
+          <div
+            role="alertdialog"
+            aria-label={pendingWarning.title}
+            className={
+              'border-t px-5 py-4 ' +
+              (pendingWarning.severe
+                ? 'border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40'
+                : 'border-amber-300 bg-amber-50 dark:border-amber-900/60 dark:bg-amber-950/40')
+            }
+          >
+            <p
+              className={
+                'text-sm font-bold ' +
+                (pendingWarning.severe
+                  ? 'text-red-700 dark:text-red-300'
+                  : 'text-amber-800 dark:text-amber-300')
+              }
+            >
+              {pendingWarning.title}
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-xs text-9e-navy dark:text-[#cbd5e1]">
+              {pendingWarning.lines.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs font-medium text-9e-navy dark:text-white">
+              วันที่อยู่นอกช่วง: {pendingWarning.dates.join(', ')}
+            </p>
+          </div>
+        )}
+
         {/* Footer (sticky) */}
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-[var(--surface-border)] bg-white px-5 py-3 dark:bg-[#111d2c]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-          >
-            ยกเลิก
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={pending || !courseCode}
-            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
-          >
-            {pending ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
-          </button>
+          {pendingWarning ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setPendingWarning(null)}
+                className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                กลับไปแก้ไขวันที่
+              </button>
+              <button
+                type="button"
+                onClick={submitNow}
+                disabled={pending}
+                className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+              >
+                {pending ? 'กำลังบันทึก…' : 'บันทึกต่อ'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-9e-md border border-[var(--surface-border)] px-4 py-2 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={pending || !courseCode}
+                className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+              >
+                {pending ? 'กำลังบันทึก…' : isEdit ? 'บันทึก' : 'สร้างตารางอบรม'}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

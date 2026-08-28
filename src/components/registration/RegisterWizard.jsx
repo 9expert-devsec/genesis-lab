@@ -58,6 +58,20 @@ const FORMDATA_KEY = "registration-public-formdata-v1";
 export function RegisterWizard({
   course,
   schedules,
+  /**
+   * Ids of this course's rounds that have ALREADY BEGUN, and are therefore
+   * absent from `schedules`.
+   *
+   * Ids only, never rounds: nothing here may render one. It exists so a
+   * `?class=` link to a round that started this morning can be told apart from
+   * a `?class=` link that is simply stale — see the notice in StepForm. The two
+   * lists are disjoint by construction, partitioned once in RegisterPageContent
+   * from a single clock read.
+   *
+   * Defaults to empty so a caller that omits it degrades to exactly the old
+   * behaviour: fail closed, silently.
+   */
+  startedScheduleIds = [],
   initialClassId,
   earlyBirdScheduleId = null,
   step = 1,
@@ -310,6 +324,7 @@ export function RegisterWizard({
         <StepForm
           course={course}
           schedules={schedules}
+          startedScheduleIds={startedScheduleIds}
           initialClassId={initialClassId}
           initialValues={formData ?? restoredFromStorage}
           onSubmit={handleFormSubmit}
@@ -399,6 +414,7 @@ function Stepper({ currentStep, omisePaymentEnabled = false }) {
 export function StepForm({
   course,
   schedules,
+  startedScheduleIds = [],
   initialClassId,
   initialValues,
   onSubmit,
@@ -537,6 +553,46 @@ export function StepForm({
    */
   const activeRoundIsFull =
     normalizeScheduleStatus(activeSchedule?.status) === "full";
+
+  /**
+   * ── THE THIRD NAMED STATE: THE ROUND HAS ALREADY BEGUN ─────────────────────
+   *
+   * A round vanishes from every public surface the moment its first training
+   * day arrives, so a `?class=` link to one resolves to nothing in `schedules`
+   * — indistinguishable, from inside this component, from a stale or bogus id.
+   * `startedScheduleIds` is what makes it distinguishable: RegisterPageContent
+   * partitions the fetch once and hands down both halves.
+   *
+   * This matters because the link is very often OUR OWN and only minutes old.
+   * /schedule is ISR-cached for 30 minutes, so just after midnight the public
+   * table still renders a live link to a round that started at 00:00.
+   *
+   * ── IT OUTRANKS `activeRoundIsFull`, RATHER THAN RELYING ON DISJOINTNESS ──
+   * `activeRoundIsFull` requires the round to BE in `schedules`; this one
+   * requires it to be in `startedScheduleIds`, and RegisterPageContent builds
+   * those as disjoint halves of one partition — so in practice at most one is
+   * ever true.
+   *
+   * The notice below does NOT lean on that. "Disjoint by construction" is a
+   * property of a different file, and if it ever stopped holding the visitor
+   * would get two contradictory red sentences stacked on top of each other.
+   * So the full-round notice is explicitly suppressed when the round has
+   * started, and started wins because it is the stronger fact: a round that has
+   * begun cannot be booked whatever its seat status says.
+   *
+   * ── AND IT DOES NOT SWALLOW THE BOGUS-ID CASE ────────────────────────────
+   * An id in NEITHER list still falls through to the original behaviour: fail
+   * closed, no reveal, no message. That silence is deliberate and is preserved
+   * exactly — "this round started, pick another" and "this link points at
+   * nothing we can identify" have different remedies, and one shared sentence
+   * would be wrong for both. See the note at the notices below.
+   */
+  const startedIds = useMemo(
+    () => new Set((startedScheduleIds ?? []).map(String)),
+    [startedScheduleIds],
+  );
+  const activeRoundHasStarted =
+    Boolean(selectedScheduleId) && startedIds.has(String(selectedScheduleId));
 
   const {
     register,
@@ -718,20 +774,38 @@ export function StepForm({
           </div>
         )}
 
-        {/* The one line that turns a dead-end into an explanation. Rendered
-            ONLY for the round-is-full case — a `?class=` id that resolves to
-            nothing at all still fails closed silently, because the two states
-            have genuinely different remedies (pick another round vs. this link
-            is stale) and one shared message would be wrong for both.
+        {/* ── THREE OUTCOMES, TWO SENTENCES, AND THE SILENCE IS THE THIRD ───
+            A `?class=` id that resolves to nothing we can NAME still fails
+            closed silently. That is not an oversight and must not be "fixed"
+            by widening either message below to cover it: the three states have
+            genuinely different remedies —
 
-            Red, matching the เต็ม badge the carousel is drawing a few pixels
-            above, so the sentence reads as that badge explained rather than as
-            an unrelated form error. `role="status"` and not an alert: nothing
-            has failed and nothing was submitted — the user has simply landed
-            somewhere that cannot proceed. */}
-        {activeRoundIsFull && (
+              full     → pick another round; this one exists and is sold out
+              started  → pick another round; this one exists and has begun
+              unknown  → we cannot say. The id may be mistyped, the round may
+                         have been deleted upstream, or it may sit outside this
+                         page's limit-20 window. Guessing out loud would be
+                         worse than the carousel, which can actually fix it.
+
+            The first two are red, matching the เต็ม badge the carousel draws a
+            few pixels above, so each sentence reads as that badge explained
+            rather than as an unrelated form error. `role="status"` and not an
+            alert on both: nothing has failed and nothing was submitted — the
+            visitor has simply landed somewhere that cannot proceed.
+
+            "started" outranks "full" — see `activeRoundHasStarted`. In practice
+            the two lists are disjoint and only one can be true; the explicit
+            suppression is here so that a change to how the page partitions them
+            can never stack two contradictory red sentences on the visitor. */}
+        {activeRoundIsFull && !activeRoundHasStarted && (
           <p role="status" className="mt-3 text-sm font-medium text-[#ff4b55]">
             รอบอบรมนี้เต็มแล้ว กรุณาเลือกรอบอื่นจากรายการด้านบน
+          </p>
+        )}
+
+        {activeRoundHasStarted && (
+          <p role="status" className="mt-3 text-sm font-medium text-[#ff4b55]">
+            รอบนี้เริ่มอบรมแล้ว กรุณาเลือกรอบอื่น
           </p>
         )}
 

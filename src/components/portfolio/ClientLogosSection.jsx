@@ -44,7 +44,13 @@ export default function ClientLogosSection({ logos }) {
        * only to cancel the panel's `dark:py-8`; with the panel gone there is
        * nothing to compensate, and a theme-conditional padding would be the
        * very reflow-on-toggle it was added to prevent. */
-      className="overflow-hidden bg-[var(--page-bg-muted)] py-20 dark:bg-[var(--page-bg)]"
+      /* ROUND HS-B: bg-[var(--page-bg)] alone, no dark: override — --page-bg
+         already differs FFFFFF (light) / 0D1B2A (dark) in globals.css, so the
+         explicit dark:bg-[var(--page-bg)] this used to carry was redundant
+         (it named the same var the base class now already resolves under
+         .dark). Dropping bg-[var(--page-bg-muted)] also means the section no
+         longer stands out as a distinct muted band from its neighbours. */
+      className="overflow-hidden bg-[var(--page-bg)] py-20"
     >
       <div className="mx-auto max-w-[1200px] text-center">
         <h2 className="font-heading text-[28px] font-bold text-9e-navy dark:text-white">

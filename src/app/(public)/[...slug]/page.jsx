@@ -22,6 +22,7 @@ import { CourseTarget } from './_components/CourseTarget';
 import { CoursePrerequisites } from './_components/CoursePrerequisites';
 import { CourseRequirements } from './_components/CourseRequirements';
 import { CourseOutline } from './_components/CourseOutline';
+import { prepareOutlineRichHtml } from '@/lib/courses/courseOutlineView';
 import { CourseRoadmap } from './_components/CourseRoadmap';
 import { SidebarNav } from './_components/SidebarNav';
 import { CourseSectionTabs } from './_components/CourseSectionTabs';
@@ -876,7 +877,16 @@ function CourseDetail({
             <CourseTarget course={course} />
             <CoursePrerequisites course={course} />
             <CourseRequirements course={course} />
-            <CourseOutline course={course} />
+            {/* Rich section-7 bullets are resolved and SANITISED SERVER-SIDE.
+                CourseOutline is a client component; importing the sanitiser
+                there would ship parse5 + sanitize-html to the browser to
+                re-clean stored content on every page view. Returns null for
+                every course today — no rich copy exists and there is no
+                backfill — so the plain path is reached exactly as before. */}
+            <CourseOutline
+              course={course}
+              richHtml={prepareOutlineRichHtml({ course, extension })}
+            />
             <CourseRoadmap course={course} />
             <FaqAccordionSection
               faqs={faqs}

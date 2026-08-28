@@ -235,10 +235,11 @@ export function PolicyDraftNotice({ detail }) {
 /**
  * TIER 1 — the content is REAL, but the policy is not yet in force.
  *
- * /privacy-policy and /cookie-policy. Their text came from the company's own
- * source documents, so the draft banner's wording was actively false on them:
- * it called counsel-drafted policy "ตัวอย่างประกอบการออกแบบ" and denied it was
- * "เงื่อนไขที่บริษัทกำหนด". Both clauses are gone here.
+ * /privacy-policy, /cookie-policy, /terms and /refund-policy. Their text came
+ * from the company's own source documents, so the draft banner's wording was
+ * actively false on them: it called counsel-drafted policy
+ * "ตัวอย่างประกอบการออกแบบ" and denied it was "เงื่อนไขที่บริษัทกำหนด". Both
+ * clauses are gone here.
  *
  * What remains true, and all this says: the site is not in production, so the
  * policy has never taken effect, and counsel has not reviewed it.
@@ -253,9 +254,18 @@ export function PolicyDraftNotice({ detail }) {
  * The same rule governs every `detail` line passed in here: say what is NOT
  * done, never what is supposedly in progress.
  *
+ * ── THE BODY USED TO NAME PDPA AND A DPO EMAIL ──────────────────────────────
+ * That wording was written when only /privacy-policy and /cookie-policy used
+ * this component and got baked into the shared body instead of a per-page
+ * `detail`. /terms and /refund-policy are not PDPA documents, so reusing it
+ * verbatim put a false regulatory citation and an unrelated contact address on
+ * both. The body is now generic; a page that needs to name PDPA or the DPO
+ * does so through its own `detail` prop, or its sidebar `help` card, the way
+ * /privacy-policy already does.
+ *
  * Still full-bleed for the same reason as tier 2, but built from semantic
  * tokens and role="note" — this is a status, not a warning, and it should not
- * compete with the amber slab on the two pages that genuinely need one.
+ * compete with the amber slab on the pages that genuinely need one.
  */
 export function PolicyStatusNotice({ detail }) {
   return (
@@ -265,20 +275,7 @@ export function PolicyStatusNotice({ detail }) {
       role="note"
       headingId="policy-status-heading"
       heading="ฉบับก่อนเริ่มใช้บังคับ — ยังไม่ผ่านการตรวจทานโดยที่ปรึกษากฎหมาย"
-      body={
-        <>
-          เนื้อหาในหน้านี้จัดทำขึ้นตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562
-          (PDPA) และยังไม่มีผลบังคับใช้
-          โดยจะเริ่มมีผลเมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ หากมีข้อสงสัย
-          กรุณาติดต่อเจ้าหน้าที่คุ้มครองข้อมูลส่วนบุคคล (DPO) ที่{' '}
-          <a
-            href="mailto:dpo@9expert.co.th"
-            className="font-semibold text-9e-action hover:underline dark:text-[#48B0FF]"
-          >
-            dpo@9expert.co.th
-          </a>
-        </>
-      }
+      body="เนื้อหาในหน้านี้ยังไม่มีผลบังคับใช้ โดยจะเริ่มมีผลเมื่อเว็บไซต์เปิดให้บริการอย่างเป็นทางการ"
       detail={detail}
     />
   );

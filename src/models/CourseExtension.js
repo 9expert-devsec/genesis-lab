@@ -158,6 +158,50 @@ const CourseExtensionSchema = new mongoose.Schema(
     // the 3-way payment choice (quote / credit card / QR PromptPay).
     // When false (default), the course uses the original quote-only flow.
     omisePaymentEnabled: { type: Boolean, default: false },
+
+    /**
+     * ── RICH SECTION-7 BULLETS — PER ROW, INDEX-ALIGNED WITH MSDB ───────────
+     *
+     * Genesis-owned formatting for `training_topics`. MSDB keeps receiving the
+     * plain projection in its exact current shape, `[{ title, bullets[] }]`,
+     * because its own admin form still edits that field with plain <input>s and
+     * every consortium consumer reads it through GET /api/ai/public-course.
+     *
+     * ── ONE ENTRY PER MSDB ROW, NOT ONE BLOB FOR THE SECTION ───────────────
+     * `trainingTopicsRich[i]` is the HTML for `training_topics[i].bullets`.
+     * Two reasons it is per-row rather than a single whole-section string:
+     *
+     *   · ROW TITLES STAY PLAIN AND MSDB-OWNED, by settled agreement. A single
+     *     blob would have to carry the titles inside its own markup to express
+     *     the section's structure, which is precisely the ownership line this
+     *     split exists to hold.
+     *   · The editor replaces the per-ROW bullets control, not the section. A
+     *     blob would force it to re-derive row boundaries from markup on every
+     *     keystroke.
+     *
+     * An entry may be '' — row i simply has no rich copy. 125 of the 829 live
+     * rows carry no bullets at all, so that is the ordinary case, not an error.
+     *
+     * ── ABSENT / EMPTY IS THE SENTINEL, AND THERE IS NO BACKFILL ───────────
+     * `[]` means "no rich copy exists for this course". That is all 79 courses
+     * today and will stay so until an admin edits one; nothing migrates them.
+     * Every reader must treat it as "render the plain MSDB rows exactly as
+     * today" — see lib/courses/topicRichState.js, which is the ONE function
+     * allowed to make that decision.
+     *
+     * ── A REAL [String], NOT JSON IN A STRING ──────────────────────────────
+     * A JSON-encoded string would add a parse failure mode — a corrupt field
+     * that throws or silently decodes to something else — and buy nothing Mongo
+     * does not already do. The array is the shape; the database stores the
+     * shape.
+     *
+     * ── IT HAS NO FALLBACK IN saveCourseExtension's UPDATE LITERAL ─────────
+     * Omitting the key means UNTOUCHED, not "reset to []". That is the whole
+     * point of the key-presence selection in that action, and the only reason
+     * this field can be added to a live collection safely: every existing
+     * caller omits it, and every existing caller must therefore leave it alone.
+     */
+    trainingTopicsRich: { type: [String], default: [] },
   },
   { timestamps: true, collection: 'course_extensions' }
 );
