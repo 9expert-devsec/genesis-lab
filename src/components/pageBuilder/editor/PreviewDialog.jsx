@@ -8,6 +8,9 @@ import {
   getPreviewState,
 } from '@/lib/actions/pageBuilder';
 import { Field, Group, TextInput, Warn, INPUT_CLASS } from './fields';
+// ROUND 43, ADDED beside the statements above rather than folded into one —
+// the standing rule in this directory.
+import { toDateInput } from '@/lib/pageBuilder/publishWindow';
 
 /**
  * Preview link management (item 6). Wires the existing preview actions —
@@ -208,7 +211,7 @@ export function PreviewBody({ page, pageId, tier, open, onState }) {
                   {state.status === 'active' ? 'เปิดใช้งานอยู่' : state.status === 'expired' ? 'หมดอายุแล้ว' : 'ปิดอยู่'}
                 </span>
                 <span className="block text-xs text-9e-slate-dp-50">
-                  {state.expireDate ? `หมดอายุ ${String(state.expireDate).slice(0, 10)}` : 'ไม่มีวันหมดอายุ'}
+                  {state.expireDate ? `หมดอายุ ${toDateInput(state.expireDate)}` : 'ไม่มีวันหมดอายุ'}
                 </span>
               </span>
             </div>
@@ -261,11 +264,25 @@ export function PreviewBody({ page, pageId, tier, open, onState }) {
             </p>
           </Group>
 
+          {/*
+            ── ROUND 43: THE READ GOES THROUGH THE SAME MODULE AS THE WRITE ──
+            Both places above and below read `String(v).slice(0, 10)`, which is
+            the UTC calendar date. That is NOT a defect here and was not one
+            before: the values this surface can hold are UTC midnight (the old
+            writer) and 16:59:59.999Z (the new one), and the UTC day of both is
+            the Bangkok day the author typed. It agreed by arithmetic.
+
+            It now agrees by CONSTRUCTION. The slice is only ever right for a
+            positive UTC offset and an end-of-day anchor; `toDateInput` asks
+            the question the label is actually making a claim about — which
+            Bangkok day is this instant in — and it is the same function that
+            reads the publish window back into its own date box.
+          */}
           <Group title="วันหมดอายุ">
-            <Field label="หมดอายุเมื่อ" hint="เว้นว่าง = ไม่มีวันหมดอายุ">
+            <Field label="หมดอายุเมื่อ" hint="เว้นว่าง = ไม่มีวันหมดอายุ · ใช้ได้ถึงสิ้นวันนั้น (เวลาไทย)">
               <input type="date" className={INPUT_CLASS}
                 key={state?.expireDate ?? 'none'}   // re-seed when the fresh read lands
-                defaultValue={state?.expireDate ? String(state.expireDate).slice(0, 10) : ''}
+                defaultValue={toDateInput(state?.expireDate)}
                 disabled={!pageId || !tier?.canManagePreview}
                 onChange={(e) => onExpiry(e.target.value)} />
             </Field>

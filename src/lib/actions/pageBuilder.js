@@ -40,6 +40,11 @@ import { stripDraft, effectiveContent, hasUnpublishedDraft } from '@/lib/pageBui
 // Round 38, ADDED beside the statements above rather than folded into any —
 // the standing rule in this repo.
 import PageAuditLog from '@/models/PageAuditLog';
+// ROUND 43, ADDED beside the statements above rather than folded into any of
+// them — the standing rule in this file. Round 42's conversion, reused: it
+// already owns "the last instant of this named day, in Asia/Bangkok", and it
+// already refuses a calendar date that does not exist.
+import { windowEndFromInput } from '@/lib/pageBuilder/publishWindow';
 import {
   AUDIT_TRAIL_PAGE_SIZE, AUDIT_TRAIL_SORT, AUDIT_TRAIL_FIELDS,
   buildPageAuditQuery, encodeAuditTrailCursor,
@@ -1442,6 +1447,44 @@ export async function getPreviewState(id) {
   });
 }
 
+/**
+ * ── ROUND 43: THE EXPIRY DAY IS A DAY, AND IT IS A BANGKOK ONE ────────────
+ * This read `const d = new Date(expireDate)` on the bare `YYYY-MM-DD` the
+ * dialog sends. Two things followed, and the first is the reported defect:
+ *
+ *   1. THE DATE-ONLY FORM PARSES AS UTC MIDNIGHT. So an author who set the
+ *      link to expire "28 Aug" got `2026-08-28T00:00:00.000Z`, which is
+ *      07:00 that same Bangkok MORNING. The link died before most of the day
+ *      it named. Same family as round 42's publish-window bug, opposite
+ *      mechanism: that one was a date-TIME form parsed in the runtime's zone,
+ *      this one is a date-ONLY form pinned to the wrong zone.
+ *
+ *   2. `Number.isNaN` WAS THE ONLY VALIDATION, and it lets most junk through.
+ *      Measured against this exact call: '2026-02-31' becomes 3 March,
+ *      '2026-02-29' becomes 1 March, '2026-08' becomes 1 August, '2026'
+ *      becomes 1 January, and '2026-8-28' falls back to the implementation's
+ *      own parser and is read as LOCAL time. Five of eight junk inputs stored
+ *      a real date nobody typed. That matters more here than in a dialog: this
+ *      is a server action, so the client is not its only caller.
+ *
+ * Both are fixed by handing the value to round 42's conversion, which already
+ * owns "the last instant of this named day, in the site's zone" and already
+ * refuses a date that does not exist. It is IMPORTED rather than adapted —
+ * one definition of end-of-day for the whole codebase is the entire point, and
+ * a second copy here is exactly the drift lib/articlePublishTime.js's header
+ * was written about.
+ *
+ * WHY THE COMPARISONS ARE UNTOUCHED. All three places that ask "has this link
+ * expired" — verifyPreviewPassword below, the public preview route, and
+ * previewSession's TTL cap — test `stored < now`, which makes the stored
+ * instant the LAST VALID one. That is already the right rule for an end-of-day
+ * value; it was the value that was wrong. Round 42 left `isPubliclyVisible`
+ * byte-identical for the same reason.
+ *
+ * WHAT AN EMPTY BOX MEANS IS UNCHANGED: no expiry. What changed is that a
+ * NON-EMPTY box which is not a real calendar date is now an error rather than
+ * a silent roll-over.
+ */
 export async function setPreviewExpiry(id, expireDate) {
   const session = await requireAdmin('pages');
   if (!requirePreviewTier(session)) return { ok: false, error: 'ต้องมีสิทธิ์ marketing ขึ้นไป' };
@@ -1450,9 +1493,9 @@ export async function setPreviewExpiry(id, expireDate) {
   await dbConnect();
   let when = null;
   if (expireDate) {
-    const d = new Date(expireDate);
-    if (Number.isNaN(d.getTime())) return { ok: false, error: 'วันหมดอายุไม่ถูกต้อง' };
-    when = d;
+    const iso = windowEndFromInput(expireDate);
+    if (!iso) return { ok: false, error: 'วันหมดอายุไม่ถูกต้อง' };
+    when = new Date(iso);
   }
   const expired = when && when.getTime() < Date.now();
   const doc = await setPreview(id, {
