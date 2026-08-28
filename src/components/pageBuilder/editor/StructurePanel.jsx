@@ -215,7 +215,10 @@ function ConfirmDeleteDialog({ pending, onCancel, onConfirm }) {
 
 function SectionNode({ section, path, siblingCount }) {
   const { dispatch, selection } = useEditor();
-  const { getRowProps, isDragging, isDropTarget, requestDelete, isExpanded, toggleExpanded } = useStructure();
+  const {
+    getDragSourceProps, getDropTargetProps, isDragging, isDropTarget,
+    requestDelete, isExpanded, toggleExpanded,
+  } = useStructure();
 
   const index = path[path.length - 1];
   const slots = slotsOf(section?.type);
@@ -260,7 +263,27 @@ function SectionNode({ section, path, siblingCount }) {
   const move = (to) => dispatch({ type: 'MOVE_SECTION', path, to });
 
   return (
-    <li>
+    /**
+     * ── ROUND 40: THE `<li>` IS THE DROP TARGET, AND THE CARD IS NOT ────────
+     * The `<li>` holds the card AND, when the container is open, its drawer —
+     * they are siblings, not parent and child. Round 29 named the consequence
+     * and it is why this had to move: an indicator drawn on the CARD renders at
+     * the top of a 54px box that may be sitting above 300px of drawer, so it
+     * points at a boundary the drop would not land on. Measured on the round-29
+     * fixture: one open container's `<li>` is 1308px tall against its card's 54.
+     *
+     * The indicator is therefore on the element whose top edge IS the insertion
+     * point for the whole subtree.
+     *
+     * `position: relative` because the indicator is an inset element rather than
+     * a border: a border-top here would shift every row below it by 2px on
+     * hover, which is the jitter round 31 removed from the tab strip.
+     */
+    <li
+      {...getDropTargetProps(path)}
+      className={cn('relative', isDropTarget(path) && 'before:absolute before:inset-x-0 before:-top-1'
+        + ' before:h-0.5 before:rounded-full before:bg-9e-action before:content-[""]')}
+    >
       {/* The row is the drag source and drop target, NOT a control: selection
           is the label button below. A role="button" here would nest the eye and
           menu buttons inside a button, which is invalid and costs keyboard
@@ -284,7 +307,7 @@ function SectionNode({ section, path, siblingCount }) {
           overridden, the tint when neither is. All three resolve to the CI
           action token — no colour is taken from the design (rounds 28/30/39). */}
       <div
-        {...getRowProps(path)}
+        {...getDragSourceProps(path)}
         className={cn(
           // ── C's TRADE, AND IT IS THE PADDING THAT GAVE WAY ────────────────
           // The design draws px 8 gap 6. Both were built and MEASURED at 276px:
@@ -302,14 +325,11 @@ function SectionNode({ section, path, siblingCount }) {
           selected
             ? 'border-9e-action/40 bg-gradient-to-r from-9e-action/10 to-transparent'
             : 'border-[var(--surface-border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]',
-          isDragging(path) && 'opacity-40',
-          // Only ever set on a legal sibling target — see useTreeDrag.js.
-          isDropTarget(path) && 'border-t-2 border-t-9e-action'
+          isDragging(path) && 'opacity-40'
         )}
       >
         {/* The inset left bar. An element rather than a border, because the
-            card already spends its border on the selected outline and a second
-            border-left would fight the drop indicator's border-top. */}
+            card already spends its border on the selected outline. */}
         {selected && (
           <span
             data-testid="row-selected-bar"

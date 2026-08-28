@@ -283,11 +283,26 @@ test('the ROW is still the drag source — no handle was added and nothing moved
   const inner = [...doc.querySelectorAll('li > div[draggable] [draggable]')];
   assert.deepEqual(inner, [], 'something inside the row is draggable — the drag source has moved');
 
-  // The hook is untouched: the props still go on the row div.
+  /**
+   * ── AMENDED, ROUND 40, AND THE GUARANTEE IS UNCHANGED ────────────────────
+   * This read `{...getRowProps(path)}`. Round 40 split that hook in two: the
+   * DRAG SOURCE stays on the card (this assertion, renamed) and the DROP TARGET
+   * moved to the `<li>`, because an expanded container's drawer is a sibling of
+   * the card and an indicator on the card alone points at a boundary the drop
+   * would not land on.
+   *
+   * What this test claims is what it always claimed: the row — not a handle —
+   * is what the author grabs, and the hook still knows nothing about a handle.
+   * Round 40 re-measured and reached round 32's conclusion again: at 276px a
+   * handle plus a tile plus the 96px cluster leaves a nested label at zero.
+   * (Round 32's "24.4px" above is stale; the measured figure is 14.38px, and
+   * the correction is in round 40's report rather than edited into this note.)
+   */
   const { code } = readSource(SRC);
-  assert.match(code, /\{\.\.\.getRowProps\(path\)\}/, 'the drag props are no longer spread onto the row');
+  assert.match(code, /\{\.\.\.getDragSourceProps\(path\)\}/,
+    'the drag SOURCE props are no longer spread onto the row');
   assert.equal(readSource('src/components/pageBuilder/editor/useTreeDrag.js').code.includes('handle'), false,
-    'useTreeDrag learned about a handle — that is round 29 step 5, not this round');
+    'useTreeDrag learned about a handle — that is round 29 step 5, and round 40 measured it out again');
 });
 
 test('the leading column is one box wide whether it holds an icon or a disclosure', () => {

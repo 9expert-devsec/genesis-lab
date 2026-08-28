@@ -74,12 +74,27 @@ export function useTreeDrag(onMove) {
     setOverKey(null);
   }, []);
 
-  const getRowProps = useCallback((path) => ({
+  /**
+   * ── ROUND 40: THE SOURCE AND THE TARGET ARE NO LONGER ONE ELEMENT ────────
+   * They were, because the row div was both. Round 40's card makes that wrong:
+   * an EXPANDED container's drawer is a SIBLING of the card inside the same
+   * `<li>`, so a drop indicator drawn on the card renders above a drawer that
+   * can be 300px tall — pointing at a gap the drop would not land in. The
+   * indicator has to span the whole subtree, which means the `<li>`.
+   *
+   * The SOURCE stays on the card. That is deliberate and it is not the same
+   * decision: making the `<li>` draggable would make a container's entire open
+   * subtree the grab area, so a drag begun on a CHILD card would be claimed by
+   * the ancestor. `onDragStart`'s stopPropagation guards the child-first case
+   * today only because the card is the innermost draggable; keeping the source
+   * on the card is what keeps that true.
+   */
+  const getDragSourceProps = useCallback((path) => ({
     draggable: true,
 
     onDragStart: (e) => {
-      // The innermost row owns the drag; without this the ancestor row's
-      // handler would fire next and claim it.
+      // The innermost card owns the drag; without this the ancestor's handler
+      // would fire next and claim it.
       e.stopPropagation();
       fromRef.current = path;
       setDragKey(pathKey(path));
@@ -90,6 +105,19 @@ export function useTreeDrag(onMove) {
       }
     },
 
+    onDragEnd: clear,
+  }), [clear]);
+
+  /**
+   * The drop half — goes on the `<li>`, which is card + drawer.
+   *
+   * `<li>`s NEST (a child's sits inside its parent's drawer, inside the
+   * parent's own `<li>`), so both handlers stopPropagation: without it a hover
+   * over a child would also mark its ancestor, and two indicators would draw at
+   * once. That was already true of the row div for a different reason; here it
+   * is load-bearing rather than defensive.
+   */
+  const getDropTargetProps = useCallback((path) => ({
     onDragOver: (e) => {
       e.stopPropagation();
       if (!isSiblingMove(fromRef.current, path)) {
@@ -113,8 +141,6 @@ export function useTreeDrag(onMove) {
       // Re-check rather than trust the hover: the only path to a move.
       if (isSiblingMove(from, to)) onMove(from, indexOf(to));
     },
-
-    onDragEnd: clear,
   }), [clear, onMove]);
 
   /** The row being dragged (dim it). */
@@ -125,7 +151,7 @@ export function useTreeDrag(onMove) {
   // Stable identity: this is handed straight to a context provider, so a fresh
   // object each render would re-render every row on any parent render.
   return useMemo(
-    () => ({ getRowProps, isDragging, isDropTarget }),
-    [getRowProps, isDragging, isDropTarget]
+    () => ({ getDragSourceProps, getDropTargetProps, isDragging, isDropTarget }),
+    [getDragSourceProps, getDropTargetProps, isDragging, isDropTarget]
   );
 }
