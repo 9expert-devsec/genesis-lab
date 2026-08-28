@@ -238,19 +238,36 @@ function ConfirmRestoreDialog({ open, version, losesWork, canBackup, unsavedNote
  * It defaults to null — the production state — and test/render/versionRestore
  * asserts HistorySection still passes nothing, which is what keeps every claim
  * about a row a claim about production rather than about a fixture.
+ *
+ * ROUND 41 adds `initialSelectedId` for exactly the same reason and under
+ * exactly the same rule. Which entry the detail panel is showing is state that
+ * a CLICK sets, and the runner cannot click; without a seed the only reachable
+ * detail would be the default one, and "the selection drives the panel" could
+ * not be told apart from "the panel is hardcoded to the newest row". The same
+ * pinned test asserts HistorySection passes neither.
  */
-export function VersionHistory({ pageId, open, editor = null, initialRows = null }) {
+export function VersionHistory({ pageId, open, editor = null, initialRows = null, initialSelectedId = null }) {
   const savedUpdatedAt = editor?.savedUpdatedAt ?? null;
   const dispatch = editor?.dispatch ?? null;
   const [rows, setRows] = useState(initialRows);
   const [error, setError] = useState('');
   const [pending, setPending] = useState(null);   // the version awaiting confirmation
   const [busy, setBusy] = useState(null);         // the version id being restored
+  /**
+   * WHICH entry the detail panel is showing.
+   *
+   * An ID rather than the row object: rows are replaced wholesale by the fetch
+   * below, so a held object would go stale the moment the list reloads and the
+   * panel would render a version that is no longer in the list beside it. The
+   * id is resolved against the CURRENT rows on every render, and falls back to
+   * the newest when it resolves to nothing.
+   */
+  const [selectedId, setSelectedId] = useState(initialSelectedId);
 
   useEffect(() => {
     if (!open || !pageId) return undefined;
     let alive = true;
-    setRows(null); setError('');
+    setRows(null); setError(''); setSelectedId(null);
     getPageVersions(pageId)
       .then((r) => { if (alive) setRows(Array.isArray(r) ? r : []); })
       .catch((e) => { if (alive) setError(e?.message ?? 'โหลดประวัติไม่สำเร็จ'); });
@@ -425,70 +442,218 @@ export function VersionHistory({ pageId, open, editor = null, initialRows = null
     previewEnabled: editor?.previewEnabled,
   });
 
+  /**
+   * ── THE SELECTED ENTRY ────────────────────────────────────────────────────
+   * Resolved against the CURRENT rows, defaulting to the newest. Defaulting is
+   * not the same as hardcoding: `selectedId` genuinely decides, and it is only
+   * when it names nothing in the list — before the first click, and after a
+   * reload dropped the row it named — that the head stands in.
+   */
+  const selected = rows.find((v) => v._id === selectedId) ?? rows[0];
+  const selectedIsBackup = isDraftBackup(selected);
+  /**
+   * ── WHERE EACH FIELD OF THE DETAIL COMES FROM ─────────────────────────────
+   * All four are the ROW's own, which is to say `PageVersion`'s, and that is
+   * round 36's ruling rather than a convenience:
+   *
+   *   · the version number — `versionNumber`, through versionRowLabel, which
+   *     omits it rather than printing a placeholder when there is none.
+   *   · the date and time  — `createdAt`, through the same formatter the
+   *     timeline uses one column over.
+   *   · the publisher      — `actor`, and NOT the audit log. Round 38 measured
+   *     that no audit row carries a version number or a version id, so a
+   *     publish row cannot be joined to the version it produced; a second
+   *     answer here could disagree with this one and nothing could arbitrate.
+   *   · the kind           — `label`, through the same map the timeline uses.
+   *
+   * A row with no actor name renders NO publisher field rather than a dash or
+   * an "unknown": round 26 declined an invented placeholder on the same ground
+   * and auditActorName repeats it — a placeholder looks like data.
+   */
+  const detailWhenLabel = selectedIsBackup ? 'วันที่สำรอง' : 'วันที่เผยแพร่';
+  const detailWhoLabel = selectedIsBackup ? 'ผู้ดำเนินการ' : 'ผู้เผยแพร่';
+  const selectedActor = String(selected?.actor?.name ?? '').trim();
+
   return (
     <>
-      <ul className="space-y-1">
-        {rows.map((v) => (
-          <li key={v._id} className="flex items-start gap-1.5 text-[11px] text-9e-slate-dp-50">
-            <History className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1">
-              {/*
-                The number leads when there is one. An unnumbered row — every
-                row until the backfill runs — omits the segment entirely rather
-                than printing a placeholder, so an un-migrated deployment reads
-                exactly as it did before this round. versionLabel owns that.
-              */}
-              {versionRowLabel(v) && (
-                <span data-testid="version-number" className="font-bold text-9e-navy dark:text-white/90">
-                  {versionRowLabel(v)}{' · '}
-                </span>
-              )}
-              <span className="text-9e-navy dark:text-white/90">{when(v.createdAt)}</span>
-              {' · '}{LABELS[v.label] ?? (v.label || 'snapshot')}
-              {v.actor?.name ? ` · ${v.actor.name}` : ''}
-              {v._id === liveVersionId && (
-                <span
-                  data-testid="version-live-marker"
-                  className="ml-1 rounded-full border border-9e-green-800 bg-9e-green-900 px-1.5 py-px text-[10px] font-bold text-9e-navy dark:text-white"
+      {/*
+        ── TWO COLUMNS: A TIMELINE AND A DETAIL ────────────────────────────────
+        The version-history frames draw a left rail of entries and a right panel
+        for the one selected. What arrives from them is the SHAPE; every colour
+        is a token, per rounds 28/30/39 — the frames' own hexes are never read.
+
+        Widths are measured against the dialog rounds 12/13 fixed at 920x680:
+        the body's content box is 680px wide (920 less two borders, less the
+        190px nav, less px-6 either side), so the rail takes 240px, the gap 16px
+        and the panel the remaining 424px.
+
+        ONE SCROLLBAR, which is round 13's split. The dialog body already scrolls
+        and the columns sit inside it in normal flow; the panel is `sticky` so it
+        stays with the reader as the rail runs past, rather than becoming a
+        second scrolling region.
+      */}
+      <div className="flex flex-col gap-4 sm:flex-row">
+        <div className="w-full shrink-0 sm:w-[240px]">
+          <ul className="space-y-0.5">
+            {rows.map((v) => (
+              <li key={v._id}>
+                <button
+                  type="button"
+                  data-testid="version-entry"
+                  data-selected={v._id === selected?._id ? 'true' : 'false'}
+                  onClick={() => setSelectedId(v._id)}
+                  className={cn(
+                    'flex w-full items-start gap-2 rounded-9e-sm border px-2 py-1.5 text-left',
+                    'text-[11px] text-9e-slate-dp-50',
+                    v._id === selected?._id
+                      ? 'border-9e-action bg-[var(--surface-hover)]'
+                      : 'border-transparent hover:bg-[var(--surface-hover)]'
+                  )}
                 >
-                  ปัจจุบัน
-                </span>
-              )}
-              {v._id === liveVersionId && offerLiveLink && (
-                <a
-                  data-testid="view-published-link"
-                  href={publishedViewHref(editor?.page?.slug)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-1 underline decoration-dotted underline-offset-2 hover:text-9e-navy dark:hover:text-white"
-                >
-                  ดูเวอร์ชันที่เผยแพร่อยู่
-                </a>
-              )}
+                  {/*
+                    ── THE STATUS DOT, AND WHY A BACKUP'S DIFFERS ──────────────
+                    A published version is a FILLED dot: it was public, and one
+                    of them still is. A backup is a HOLLOW dot, because it was
+                    never public — round 37 built it as a row that protects a
+                    draft, and it carries no version number to lead with. Two
+                    kinds of thing in one list have to be told apart before they
+                    are read, which a shared glyph cannot do.
+                  */}
+                  <span
+                    data-testid="version-dot"
+                    data-kind={isDraftBackup(v) ? 'backup' : 'version'}
+                    aria-hidden
+                    className={cn(
+                      'mt-1 h-2 w-2 shrink-0 rounded-full border',
+                      isDraftBackup(v)
+                        ? 'border-9e-slate-dp-50 bg-[var(--surface)]'
+                        : 'border-9e-action bg-9e-action'
+                    )}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1">
+                      {/*
+                        The number leads when there is one. An unnumbered row —
+                        every row until the backfill runs — omits the segment
+                        entirely rather than printing a placeholder, so an
+                        un-migrated deployment reads exactly as it did before
+                        round 35. versionLabel owns that, and it is the same
+                        helper that gives a backup its word instead.
+                      */}
+                      {versionRowLabel(v) && (
+                        <span data-testid="version-number" className="font-bold text-9e-navy dark:text-white/90">
+                          {versionRowLabel(v)}
+                        </span>
+                      )}
+                      {v._id === liveVersionId && (
+                        <span
+                          data-testid="version-live-marker"
+                          className="rounded-full border border-9e-green-800 bg-9e-green-900 px-1.5 py-px text-[10px] font-bold text-9e-navy dark:text-white"
+                        >
+                          ปัจจุบัน
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-0.5 block truncate">
+                      {when(v.createdAt)}
+                      {' · '}{LABELS[v.label] ?? (v.label || 'snapshot')}
+                      {v.actor?.name ? ` · ${v.actor.name}` : ''}
+                    </span>
+                  </span>
+                </button>
+                {/*
+                  The link stays ON THE ROW rather than moving into the panel: it
+                  belongs to the ปัจจุบัน marker beside it — one fact, one place
+                  — and round 36's gate is about which ROW is current.
+                */}
+                {v._id === liveVersionId && offerLiveLink && (
+                  <a
+                    data-testid="view-published-link"
+                    href={publishedViewHref(editor?.page?.slug)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-6 inline-block text-[10px] underline decoration-dotted underline-offset-2 hover:text-9e-navy dark:hover:text-white"
+                  >
+                    ดูเวอร์ชันที่เผยแพร่อยู่
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[10px] text-9e-slate-dp-50/80">
+            เก็บ 20 รายการล่าสุด · การกู้คืนจะเขียนเป็น “ฉบับร่าง” ไม่เปลี่ยนหน้าที่เผยแพร่อยู่ทันที
+          </p>
+        </div>
+
+        <div
+          data-testid="version-detail"
+          className={cn(
+            'min-w-0 flex-1 self-start rounded-9e-md border border-[var(--surface-border)]',
+            'bg-[var(--surface-muted)] p-3 sm:sticky sm:top-0'
+          )}
+        >
+          <p className="flex items-center gap-1.5 text-xs font-bold text-9e-navy dark:text-white">
+            <History className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span data-testid="version-detail-title">
+              {versionRowLabel(selected) || (LABELS[selected?.label] ?? (selected?.label || 'snapshot'))}
             </span>
+          </p>
+          <dl className="mt-2 space-y-1 text-[11px] text-9e-slate-dp-50">
+            <div className="flex gap-2">
+              <dt className="w-[76px] shrink-0">ชนิด</dt>
+              <dd data-testid="version-detail-kind" className="min-w-0 flex-1 text-9e-navy dark:text-white/90">
+                {LABELS[selected?.label] ?? (selected?.label || 'snapshot')}
+              </dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-[76px] shrink-0">{detailWhenLabel}</dt>
+              <dd data-testid="version-detail-when" className="min-w-0 flex-1 text-9e-navy dark:text-white/90">
+                {when(selected?.createdAt)}
+              </dd>
+            </div>
+            {selectedActor && (
+              <div className="flex gap-2">
+                <dt className="w-[76px] shrink-0">{detailWhoLabel}</dt>
+                <dd data-testid="version-detail-actor" className="min-w-0 flex-1 text-9e-navy dark:text-white/90">
+                  {selectedActor}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {/*
+            ── THE ACTIONS LIVE HERE NOW, AND THERE IS STILL ONE ───────────────
+            Round 34 put a restore button on every row; the row was then number,
+            date, label, actor, marker, link AND button on one line, which is
+            the density this round is about. The button moves to the panel and
+            acts on the SELECTED entry — one control instead of twenty, aimed by
+            the same click that decides what the panel is describing.
+
+            Nothing about the write moved. Same confirmation, same
+            `restoreWouldLoseWork`, same round 37 preserving default, same single
+            `saveDraftContent` call site — test/render/versionRestore counts the
+            doors and still finds one.
+          */}
+          <div className="mt-3 flex items-center gap-2 border-t border-[var(--surface-border)] pt-2.5">
             <button
               type="button"
               data-testid="restore-version-button"
-              onClick={() => setPending(v)}
+              onClick={() => setPending(selected)}
               disabled={!allowed || busy !== null}
               title={allowed ? undefined : 'กู้คืนไม่ได้ระหว่างกำลังบันทึกหรือเมื่อการแก้ไขชนกัน'}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-1.5 py-0.5',
-                'border-[var(--surface-border)] text-[10px] text-9e-navy',
+                'inline-flex shrink-0 items-center gap-1 rounded-9e-sm border px-2 py-1',
+                'border-[var(--surface-border)] text-[11px] text-9e-navy',
                 'hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-9e-navy'
               )}
             >
-              {busy === v._id
+              {busy === selected?._id
                 ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                 : <RotateCcw className="h-3 w-3" aria-hidden />}
               กู้คืน
             </button>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-1.5 text-[10px] text-9e-slate-dp-50/80">
-        เก็บ 20 รายการล่าสุด · การกู้คืนจะเขียนเป็น “ฉบับร่าง” ไม่เปลี่ยนหน้าที่เผยแพร่อยู่ทันที
-      </p>
+          </div>
+        </div>
+      </div>
 
       <ConfirmRestoreDialog
         open={pending !== null}

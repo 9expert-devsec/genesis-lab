@@ -52,11 +52,37 @@ const historyDoc = (over = {}) => docOf(renderToStaticMarkup(createElement(Versi
 
 const restoreButtons = (doc) => [...doc.querySelectorAll('[data-testid="restore-version-button"]')];
 
-test('every version row carries its own restore control', async (t) => {
-  await t.test('one restore button per row, and the rows are still there', () => {
+/**
+ * ── AMENDED IN ROUND 41, FLAGGED NOT QUIETLY EDITED ─────────────────────────
+ * Round 34 put a restore button on EVERY row and this test counted them: two
+ * rows, two buttons. Round 41 splits the section into a timeline and a detail
+ * panel, and the action moves to the panel — one button, acting on the selected
+ * entry, aimed by the same click that decides what the panel describes. The
+ * row was otherwise number, date, label, actor, marker, link AND button on one
+ * line, which is the density that round is about.
+ *
+ * WHAT CHANGED IS THE COUNT AND THE VARIABLE THE onClick NAMES. Every claim
+ * about BEHAVIOUR is unchanged and still asserted below: the control is
+ * enabled on a clean saved page, disabled mid-save and after a conflict and
+ * with no editor, present with no draft, opens the confirmation rather than
+ * restoring, and reaches saveDraftContent through exactly one call site. The
+ * three assertions that moved were about WHERE the button is, not what it does.
+ */
+test('the selected version carries the restore control', async (t) => {
+  await t.test('ONE restore button, in the detail panel, with the rows still there', () => {
     const doc = historyDoc();
     assert.equal(doc.querySelectorAll('li').length, 2, 'the list stopped rendering its rows');
-    assert.equal(restoreButtons(doc).length, 2, 'there is not one restore control per version');
+    assert.equal(restoreButtons(doc).length, 1, 'the restore control is not exactly one');
+    assert.equal(
+      doc.querySelector('[data-testid="version-detail"]').contains(restoreButtons(doc)[0]), true,
+      'the restore control is not inside the detail panel'
+    );
+    // …and no row kept one, which is the half of the move that could regress
+    // silently by leaving both.
+    for (const li of doc.querySelectorAll('li')) {
+      assert.equal(li.querySelector('[data-testid="restore-version-button"]'), null,
+        'a timeline row still carries its own restore button');
+    }
   });
 
   await t.test('CONTROL: no rows means no restore controls', () => {
@@ -64,6 +90,8 @@ test('every version row carries its own restore control', async (t) => {
     // pair of buttons unrelated to the data.
     const doc = historyDoc({ initialRows: [] });
     assert.equal(restoreButtons(doc).length, 0, 'a restore control rendered with no versions');
+    assert.equal(doc.querySelector('[data-testid="version-detail"]'), null,
+      'a detail panel rendered with nothing to detail');
     assert.equal(
       doc.body.textContent.includes('ยังไม่มีประวัติ'), true,
       'the empty state stopped saying that history is written on publish'
@@ -84,7 +112,10 @@ test('every version row carries its own restore control', async (t) => {
     ];
     for (const [name, over] of cases) {
       const buttons = restoreButtons(historyDoc(over));
-      assert.equal(buttons.length, 2, `the rows stopped rendering ${name}`);
+      // ROUND 41: one control rather than one per row — see the block above.
+      assert.equal(buttons.length, 1, `the control stopped rendering ${name}`);
+      assert.equal(historyDoc(over).querySelectorAll('li').length, 2,
+        `the rows stopped rendering ${name}`);
       for (const b of buttons) {
         assert.equal(b.hasAttribute('disabled'), true, `restore is offered ${name}`);
       }
@@ -114,12 +145,17 @@ test('the restore goes through the confirmation, and through saveDraftContent', 
   // comments, so no matcher can be satisfied by prose about the code.
   const src = readSource(SRC).withImports;
 
-  await t.test('the row button OPENS the confirmation — it does not restore', () => {
+  await t.test('the restore button OPENS the confirmation — it does not restore', () => {
     // The claim the portal makes unreachable by rendering. If the button called
     // restore directly the dialog would still render, still be correct, and
     // still be bypassed on every click.
+    //
+    // ROUND 41, FLAGGED: round 34 matched `setPending(v)` — the row's own
+    // binding inside `rows.map`. The button is now in the detail panel and the
+    // binding it stages is `selected`. The claim is identical: the click stages
+    // a version for the confirmation and does not write.
     assert.match(
-      src, /data-testid="restore-version-button"[\s\S]{0,200}?onClick=\{\(\) => setPending\(v\)\}/,
+      src, /data-testid="restore-version-button"[\s\S]{0,200}?onClick=\{\(\) => setPending\(selected\)\}/,
       'the restore button no longer opens the confirmation'
     );
     assert.equal(
@@ -266,6 +302,10 @@ test('the seed prop is a test seed and production passes nothing', async (t) => 
       'the production call site changed — re-read what it now passes');
     assert.equal(settings.includes('initialRows'), false,
       'production seeds the list, so every row assertion above is about a fixture');
+    // ROUND 41's second seed, pinned by the same rule: a selection that leaked
+    // into production would open the panel on a row nobody chose.
+    assert.equal(settings.includes('initialSelectedId'), false,
+      'production seeds the selection, so the detail assertions are about a fixture');
   });
 
   await t.test('and unseeded, the component is in its loading state', () => {
