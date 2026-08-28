@@ -264,18 +264,59 @@ function SectionNode({ section, path, siblingCount }) {
       {/* The row is the drag source and drop target, NOT a control: selection
           is the label button below. A role="button" here would nest the eye and
           menu buttons inside a button, which is invalid and costs keyboard
-          access to the very actions the row exists for. */}
+          access to the very actions the row exists for.
+
+          ── ROUND 40: THE ROW IS A CARD ─────────────────────────────────────
+          Round 29's step 4. The design draws a bordered, padded, two-line card
+          with a filled tile and a selected state carrying a gradient, a border
+          and an inset left bar. What follows is that shape resolved onto this
+          repo's scales and tokens — see the tile's own note for the two
+          geometry values that could not be taken literally.
+
+          `items-start`, not `items-center`: the text block is two lines and the
+          controls align to the FIRST one, or a card whose subtitle wraps drops
+          its buttons half a line and the column of controls stops being a
+          column.
+
+          The selected state carries three signals because the design does, and
+          each survives a different failure: the left bar is visible when the
+          card is clipped at its leading edge, the border when a background is
+          overridden, the tint when neither is. All three resolve to the CI
+          action token — no colour is taken from the design (rounds 28/30/39). */}
       <div
         {...getRowProps(path)}
         className={cn(
-          'group flex items-center gap-1 rounded-9e-sm border border-transparent px-1.5 py-1.5 text-xs',
+          // ── C's TRADE, AND IT IS THE PADDING THAT GAVE WAY ────────────────
+          // The design draws px 8 gap 6. Both were built and MEASURED at 276px:
+          // a nested row's label button went from 14.38px to 2.38px, because
+          // the extra 4px of padding and 2px on each of five gaps come out of
+          // the one flexible child. So the card keeps gap-1 (4px) and px-1.5
+          // (6px) — the values the row already had — and everything else the
+          // design gives: the tile, the border, the radius, the two-line block,
+          // the three-signal selected state and 8px between cards.
+          //
+          // What did NOT give way, per round 29's verdict and this round's rule:
+          // all four action buttons, the eye, and the 24px hit-area floor.
+          'group relative flex items-start gap-1 rounded-9e-sm border px-1.5 py-1.5 text-xs',
           'cursor-grab active:cursor-grabbing',
-          selected ? 'border-9e-action/40 bg-9e-action/10' : 'hover:bg-[var(--surface-hover)]',
+          selected
+            ? 'border-9e-action/40 bg-gradient-to-r from-9e-action/10 to-transparent'
+            : 'border-[var(--surface-border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)]',
           isDragging(path) && 'opacity-40',
           // Only ever set on a legal sibling target — see useTreeDrag.js.
           isDropTarget(path) && 'border-t-2 border-t-9e-action'
         )}
       >
+        {/* The inset left bar. An element rather than a border, because the
+            card already spends its border on the selected outline and a second
+            border-left would fight the drop indicator's border-top. */}
+        {selected && (
+          <span
+            data-testid="row-selected-bar"
+            className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-9e-action"
+            aria-hidden
+          />
+        )}
         {/* ── ONE LEADING COLUMN, 24px WIDE, TWO THINGS IN IT ────────────────
             A container gets the disclosure control; a leaf gets round 17's type
             icon, centred in a box of the same size so the two line up down the
@@ -317,8 +358,39 @@ function SectionNode({ section, path, siblingCount }) {
             />
           </IconButton>
         ) : (
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center">
-            <TypeIcon className="h-3.5 w-3.5 text-9e-slate-dp-50/60" aria-hidden />
+          /**
+           * ── THE TILE, AND THE TWO NUMBERS THAT COULD NOT BE TAKEN ──────────
+           * The design draws 29×29 at radius 7 with an 18px glyph. This is 24×24
+           * at radius 8 with a 14px glyph, and both departures are the standing
+           * rule rather than a compromise:
+           *
+           *   · 29 and 7 are on no scale this repo has. Round 17 established
+           *     there are radius tokens (8/12/16/24) and NO custom spacing
+           *     scale, and moved these panels onto Tailwind's stock steps rather
+           *     than minting one. `rounded-9e-sm` IS 8px — one off the drawn 7,
+           *     and the token wins for the same reason it won in round 28.
+           *   · 24 is also the width every other leading slot in this list has
+           *     had since round 32, and the disclosure control a container gets
+           *     instead is 24. A tile of 29 would put the tiles and the chevrons
+           *     on different left edges down the list, which is the "two lists
+           *     interleaved" reading the shared column was built to prevent.
+           *
+           * MEASURED COST, and it is why 24 rather than 29 mattered: at 276px a
+           * nested row's label button is 14.38px wide TODAY. Five more pixels of
+           * tile takes it to nine. See the round report.
+           *
+           * A container still gets the disclosure control and no tile — round
+           * 32's ruling, unchanged: a container always states its type in text,
+           * so the glyph is the one place it would say it twice.
+           */
+          <span
+            data-testid="row-tile"
+            className={cn(
+              'flex h-6 w-6 shrink-0 items-center justify-center rounded-9e-sm',
+              selected ? 'bg-9e-action/15 text-9e-action' : 'bg-[var(--surface-muted)] text-9e-slate-dp-50'
+            )}
+          >
+            <TypeIcon className="h-3.5 w-3.5" aria-hidden />
           </span>
         )}
 
@@ -422,9 +494,46 @@ function SectionNode({ section, path, siblingCount }) {
         const slotLabel = SLOT_LABELS[slot];
         return (
           <div key={slot} className="ml-3 border-l border-[var(--surface-border)] pl-1.5">
-            {slotLabel && (
-              <p className="px-1.5 pb-0.5 pt-2 text-xs uppercase tracking-wide text-9e-slate-dp-50/70">{slotLabel}</p>
-            )}
+            {/* ── ROUND 40: THE DRAWER HEADER AND ITS COUNT BADGE ────────────
+                Round 29 lists a `COMPONENTS` header with a count badge. Both
+                are here, with two departures from what it draws:
+
+                THE WORD IS THE SLOT'S OWN, NOT "COMPONENTS". A single-slot
+                container has no slot name to show and gets the generic word;
+                `two_column` has two slots and each keeps its own name, because
+                a drawer headed COMPONENTS twice would say nothing about which
+                column an author is looking at. SLOT_LABELS is still the one
+                place a slot is named — this reads it rather than restating it.
+
+                THE BADGE COUNTS THIS SLOT AND NEVER SUMS. Round 16 built
+                sectionChildCounts per-slot and refused to sum across slots for
+                exactly this shape; a `two_column` holding 2 and 2 shows 2 on
+                each drawer, never 4 anywhere. The number here is the length of
+                the slot the drawer is drawing, so it cannot sum by
+                construction — there is no second slot in scope to add.
+
+                THE SIZE IS THE SCALE'S, NOT THE DESIGN'S 8px. Round 17 ruled
+                there is no type token family here and moved these panels onto
+                Tailwind's stock scale, whose smallest step is 12px. Round 28's
+                pin allows exactly THREE off-scale sizes in this file and gives
+                the reason: each sits where the row's label measurably has no
+                width to give. Neither of these does — the drawer header owns a
+                full line with nothing competing — so the exception does not
+                apply and both take text-xs. The pin stays at three. */}
+            <p className="flex items-center gap-1.5 px-1.5 pb-0.5 pt-2">
+              <span
+                data-testid="slot-header"
+                className="text-xs font-bold uppercase tracking-wide text-9e-slate-dp-50/70"
+              >
+                {slotLabel ?? 'Components'}
+              </span>
+              <span
+                data-testid="slot-count"
+                className="rounded-full border border-[var(--surface-border)] px-1.5 text-xs text-9e-slate-dp-50"
+              >
+                {kids.length}
+              </span>
+            </p>
             <SectionList sections={kids} basePath={[...path, 'content', slot]} />
           </div>
         );
@@ -494,8 +603,12 @@ function AddRow({ basePath, count }) {
 function SectionList({ sections, basePath, addRow = true }) {
   return (
     <>
+      {/* ROUND 40: 8px between cards — the one spacing value the design gives
+          that this repo's scale expresses exactly (space-y-2 IS 8px). Cards
+          need separation to read as cards; the 2px this carried did not give
+          it. */}
       {sections.length > 0 && (
-        <ul className="space-y-0.5">
+        <ul className="space-y-2">
           {sections.map((section, i) => (
             <SectionNode
               key={section?.id ?? `${basePath.join('.')}.${i}`}

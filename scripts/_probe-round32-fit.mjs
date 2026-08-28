@@ -86,8 +86,20 @@ const designPage = [
     sec('c5k' + i, 'rich_text', {}, { name: 'ข้อ ' + (i + 1) })) }, { name: 'คำถามที่พบบ่อย' }),
   sec('c6', 'course_list', {}, { name: 'Bundle Courses' }),
 ];
-/** Every container in the fixture above, as context keys. */
-const ALL_OPEN = ['sections.0', 'sections.1', 'sections.2', 'sections.3', 'sections.4'];
+/**
+ * Every container in the fixture above, BY SECTION ID.
+ *
+ * ── CORRECTED IN ROUND 40, AND THE OLD VALUE WAS SILENTLY WRONG ───────────
+ * These were context PATHS ('sections.0', …). Round 32 shipped expansion keyed
+ * by section ID — its own note says path-keying broke when a reorder moved a
+ * container — but this probe was never moved to the fixed key form. So every
+ * seed missed, the "expanded" page rendered COLLAPSED, and the probe reported
+ * the same 286px for both states without ever failing.
+ *
+ * The assertion below is what stops that recurring: a seed that opens nothing
+ * is now a hard error rather than a number that looks plausible.
+ */
+const ALL_OPEN = ['c1', 'c2', 'c3', 'c4', 'c5'];
 
 const render = (sections, expanded = []) => renderToStaticMarkup(
   createElement(EditorProvider,
@@ -151,6 +163,15 @@ document.getElementById('out').textContent = JSON.stringify({
   expanded: heightOf('design-expanded'),
   collapsedFitsWithoutScrolling: heightOf('design-collapsed').renderedHeight <= budget,
   expandedFitsWithoutScrolling: heightOf('design-expanded').renderedHeight <= budget,
+  /**
+   * THE SEED ACTUALLY OPENED SOMETHING. Round 40 found this probe seeding
+   * expansion with context PATHS against an ID-keyed set: every seed missed and
+   * both states reported the collapsed height, identically, for four rounds.
+   * An expanded page must have strictly more rows than the collapsed one, and
+   * saying so here is what makes the pair of numbers above mean anything.
+   */
+  EXPANSION_SEED_WORKED:
+    heightOf('design-expanded').allRows > heightOf('design-collapsed').allRows,
   FIT_COLLAPSED_topLevel: (function () {
     const el = document.getElementById('design-collapsed');
     const s = el.querySelector('[data-testid="structure-scroll"]');

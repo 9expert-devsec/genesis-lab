@@ -82,10 +82,17 @@ const depths = [
   sec('t', 'heading', { text: 'หัวข้อยาวพอที่จะถูกตัดท้ายในคอลัมน์แคบ' }),
 ];
 
-const render = (sections) => renderToStaticMarkup(
+/**
+ * ROUND 40: the container is SEEDED OPEN. Round 32 shipped collapsed-by-default
+ * AFTER this probe was written, so from that round on there were no nested rows
+ * in the DOM at all and 'nestedRow' reported null — a missing measurement that
+ * looked like an absent case. Seeded by section ID, which is the key form round
+ * 32's own fix uses.
+ */
+const render = (sections, expanded = ['c']) => renderToStaticMarkup(
   createElement(EditorProvider,
     { page: { ...PAGE, sections }, pageId: 'p1', updatedAt: 'T0', tier: TIER },
-    createElement(StructurePanel, {})));
+    createElement(StructurePanel, { initialExpanded: expanded })));
 
 const css = (await postcss([tailwindcss({
   presets: [require_(path.join(ROOT, 'tailwind.config.js'))],
@@ -128,7 +135,11 @@ function anatomy(row) {
   const label = row.querySelector(':scope > button');
   const pos = row.querySelector('[data-testid="row-position"]');
   const icon = row.querySelector(':scope > svg');
-  const cluster = row.querySelector(':scope > span.flex.shrink-0');
+  // ROUND 40: was ':scope > span.flex.shrink-0', which also matches the LEAF's
+  // 24px type-icon box — the first such span in the row — so every reading was
+  // 24 rather than the cluster's real width. Selected by what only the cluster
+  // has: it is the span that CONTAINS the action buttons.
+  const cluster = [...row.querySelectorAll(':scope > span')].find((sp) => sp.querySelector('button'));
   const eye = [...row.querySelectorAll(':scope > button[aria-label]')].pop();
   const posBox = pos ? pos.getBoundingClientRect().width : 0;
   const gap = parseFloat(getComputedStyle(row).columnGap) || 0;
