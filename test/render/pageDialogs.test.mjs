@@ -13,6 +13,10 @@ import { PreviewSection } from '@/components/pageBuilder/editor/PageSettingsDial
 // either — the standing rule, and the one panelPolish's lucide scanner had to
 // be rewritten for.
 import { SettingsNav } from '@/components/pageBuilder/editor/PageSettingsDialog';
+// Round 38, ADDED beside the statements above rather than folded into any.
+import { ActivitySection } from '@/components/pageBuilder/editor/PageSettingsDialog';
+import { ActivityTrail } from '@/components/pageBuilder/editor/ActivityTrail';
+import { AUDIT_TRAIL_NOTE, AUDIT_TRAIL_EMPTY } from '@/lib/pageBuilder/auditTrail';
 import { PreviewBody } from '@/components/pageBuilder/editor/PreviewDialog';
 import { readSource } from '../sourceScan.mjs';
 
@@ -81,6 +85,9 @@ const sectionHtml = (id, page) => ({
   jsonld:  () => renderToStaticMarkup(createElement(JsonLdSection, {})),
   preview: () => renderToStaticMarkup(createElement(PreviewSection, { page, pageId: 'p1', tier: TIER, open: true })),
   history: () => renderToStaticMarkup(createElement(HistorySection, { pageId: 'p1', open: true })),
+  // Round 38. Takes no `editor` — see ActivitySection: this list writes nothing
+  // and decides nothing from local state, so it is not handed the document.
+  activity: () => renderToStaticMarkup(createElement(ActivitySection, { pageId: 'p1', open: true })),
 }[id]());
 
 const settings = (page = PAGE()) =>
@@ -199,10 +206,16 @@ test('the union across all menu sections equals the pre-relocation field set', (
   assert.deepEqual(SETTINGS_GENERAL.filter((x) => !SETTINGS_UNION.includes(x)), []);
 });
 
-test('the menu declares exactly five sections, and the body renders one per item', () => {
-  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.id), ['general', 'seo', 'jsonld', 'preview', 'history']);
+test('the menu declares exactly six sections, and the body renders one per item', () => {
+  // AMENDED, round 38: five -> six. `activity` is the audit log's surface, and
+  // it is a separate item rather than a group under ประวัติการเผยแพร่ because
+  // that one lists VERSIONS and this one lists ACTIONS — see the note on the
+  // declaration. The assertion's guarantee is unchanged: an exact ordered set,
+  // and one nav button per declared section from ONE declaration.
+  assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.id),
+    ['general', 'seo', 'jsonld', 'preview', 'history', 'activity']);
   assert.deepEqual(PAGE_SETTINGS_SECTIONS.map((s) => s.label),
-    ['ข้อมูลหน้า', 'SEO', 'JSON-LD', 'ลิงก์พรีวิว', 'ประวัติการเผยแพร่']);
+    ['ข้อมูลหน้า', 'SEO', 'JSON-LD', 'ลิงก์พรีวิว', 'ประวัติการเผยแพร่', 'ประวัติการดำเนินการ']);
 
   // The nav renders one button per declared section — the list and the strip
   // come from ONE declaration, so they cannot disagree about what exists.
@@ -220,6 +233,8 @@ test('each section renders exactly its own fields and none of another section\'s
     jsonld: [],
     preview: PREVIEW_LABELS,
     history: [],
+    // Round 38: a list and a note, no controls — the same shape as jsonld.
+    activity: [],
   };
   for (const [id, expected] of Object.entries(per)) {
     assert.deepEqual(labelsIn(sectionHtml(id, PAGE())), expected, `the ${id} section's fields changed`);
@@ -235,6 +250,7 @@ test('each section carries exactly its own group legend', () => {
     general: ['ทั่วไป'], seo: ['SEO'], jsonld: ['JSON-LD'],
     preview: ['ลิงก์', 'รหัสผ่าน', 'วันหมดอายุ'],   // the absorbed dialog's own three
     history: ['ประวัติการเผยแพร่'],
+    activity: ['ประวัติการดำเนินการ'],
   };
   for (const [id, expected] of Object.entries(legends)) {
     assert.deepEqual(groupsIn(sectionHtml(id, PAGE())), expected);
@@ -296,7 +312,7 @@ test('the preview section announces that it writes immediately, and shows no sav
 test('CONTROL: every OTHER section does show the save state, and no banner', () => {
   // Discrimination for the pair above: the withheld footer and the added banner
   // must both be specific to the preview section, not global.
-  for (const id of ['general', 'seo', 'jsonld', 'history']) {
+  for (const id of ['general', 'seo', 'jsonld', 'history', 'activity']) {
     const doc = docOf(body(PAGE(), { tier: TIER, initialSection: id }));
     assert.notEqual(doc.querySelector('[data-testid="settings-save-state"]'), null, id + ' lost its save state');
     assert.equal(doc.querySelector('[data-testid="preview-immediate-write"]'), null, id + ' gained the preview banner');
@@ -513,9 +529,10 @@ const currentLabels = (doc) => [...doc.querySelectorAll('button[aria-current="tr
 
 test('exactly one menu item is current, and it is the SELECTED one — every section', () => {
   /**
-   * Driven across ALL FIVE sections rather than one. A hardcoded index passes a
-   * single-section check trivially; it cannot pass five, because four of the
-   * five answers would be the same button.
+   * Driven across ALL SIX sections rather than one. A hardcoded index passes a
+   * single-section check trivially; it cannot pass six, because five of the
+   * six answers would be the same button. (Round 38 amended five to six — the
+   * sweep is over PAGE_SETTINGS_SECTIONS and widened with it.)
    */
   for (const s of PAGE_SETTINGS_SECTIONS) {
     const doc = navDoc({ section: s.id });
@@ -538,7 +555,7 @@ test('CONTROL: a menu hardcoded to one item WOULD fail the sweep above', () => {
     assert.notDeepEqual(currentLabels(frozen), [s.label],
       'the reader returns the same answer whatever is selected, so the sweep proves nothing');
   }
-  assert.equal(others.length, 4);
+  assert.equal(others.length, 5);   // round 38: five sections beside general
 
   // …and the reader is not simply returning every button.
   assert.deepEqual(currentLabels(docOf('<button>ก</button>')), []);
@@ -555,7 +572,7 @@ test('the current item is VISUALLY distinct, not only marked in the accessibilit
   const buttons = [...doc.querySelectorAll('button')];
   const current = buttons.find((b) => b.getAttribute('aria-current') === 'true');
   const rest = buttons.filter((b) => b !== current);
-  assert.equal(rest.length, 4);
+  assert.equal(rest.length, 5);   // round 38: five items beside the current one
   for (const b of rest) {
     assert.notEqual(b.className, current.className,
       'the selected menu item is styled identically to the unselected ones');
@@ -567,16 +584,18 @@ test('the current item is VISUALLY distinct, not only marked in the accessibilit
 
 test('each menu item carries a glyph, and no two sections share one', () => {
   /**
-   * Five icons for five sections. A shared glyph is not a crash — it is a menu
+   * Six icons for six sections — round 38 added ScrollText for the activity
+   * trail rather than reusing History, because two items drawn with one glyph
+   * read as two halves of the same thing. A shared glyph is not a crash — it is a menu
    * where two rows look like the same thing, which is the failure the section
    * picker's one-icon-per-type rule exists to prevent (rounds 9-14).
    */
   const names = PAGE_SETTINGS_SECTIONS.map((s) => s.Icon?.displayName ?? s.Icon?.name);
-  assert.deepEqual(names, ['FileText', 'Search', 'CodeXml', 'Lock', 'History']);
-  assert.equal(new Set(names).size, 5, 'two menu sections draw the same glyph');
+  assert.deepEqual(names, ['FileText', 'Search', 'CodeXml', 'Lock', 'History', 'ScrollText']);
+  assert.equal(new Set(names).size, 6, 'two menu sections draw the same glyph');
 
   // …and they reach the markup, one per item.
-  assert.equal(navDoc({}).querySelectorAll('button > svg').length, 5);
+  assert.equal(navDoc({}).querySelectorAll('button > svg').length, 6);
 });
 
 // ── the preview dot: real state, and only real state ──────────────────────
@@ -663,4 +682,163 @@ test('the JSON-LD "Auto" pill is NOT built, and the menu makes no claim about it
   // can never hold a badge.
   const preview = docOf(html).querySelectorAll('button')[3];
   assert.equal(preview.querySelectorAll('span').length, 2);
+});
+
+// ── ROUND 38: the activity trail ──────────────────────────────────────────
+//
+// The audit log's surface. Everything here is about what it says and, more,
+// about what it deliberately does NOT — the stored rows support one question
+// and three neighbouring ones look answerable and are not.
+
+const trail = (over = {}) => renderToStaticMarkup(createElement(ActivityTrail, {
+  pageId: 'p1', open: true, ...over,
+}));
+const trailText = (html) => docOf(html).body.textContent.replace(/\s+/g, ' ').trim();
+
+const AUDIT_ROWS = [
+  { _id: 'a3', action: 'publish',      actor: { id: 'u1', name: 'Yanisa P.' },  createdAt: '2026-08-28T01:32:21.623Z' },
+  { _id: 'a2', action: 'draft.backup', actor: { id: 'u2', name: 'Pirasak S.' }, createdAt: '2026-08-27T02:20:49.130Z' },
+  { _id: 'a1', action: 'draft.save',   actor: { id: '',   name: '' },           createdAt: '2026-08-27T02:19:34.396Z' },
+];
+
+test('the activity section renders one row per recorded action, newest first', () => {
+  const rows = [...docOf(trail({ initialRows: AUDIT_ROWS }))
+    .querySelectorAll('[data-testid="activity-row"]')]
+    .map((n) => n.textContent.replace(/\s+/g, ' ').trim());
+  assert.equal(rows.length, 3);
+  // The order is the READ's order, reproduced — this list does not re-sort.
+  assert.match(rows[0], /^เผยแพร่ โดย Yanisa P\. เมื่อ /);
+  assert.match(rows[1], /^สำรองฉบับร่าง โดย Pirasak S\. เมื่อ /);
+  // An anonymous actor drops the clause rather than inventing a name.
+  assert.match(rows[2], /^บันทึกฉบับร่าง เมื่อ /);
+  assert.equal(rows[2].includes('โดย'), false, 'an anonymous row invented an actor');
+});
+
+test('the sentence comes from auditRowLine, not from a second formatting here', () => {
+  const { code } = readSource('src/components/pageBuilder/editor/ActivityTrail.jsx');
+  assert.match(code, /auditRowLine\(/, 'the component no longer calls the one composer');
+  for (const piece of ['โดย ', 'เมื่อ ']) {
+    assert.equal(code.includes(`'${piece}`) || code.includes(`\`${piece}`), false,
+      `ActivityTrail builds the row sentence inline with "${piece}". auditTrail.js owns that `
+      + 'composition so the pure tests can assert it by value.');
+  }
+});
+
+test('the empty page says so, and the note says what the trail does not record', () => {
+  assert.equal(trailText(trail({ initialRows: [] })), AUDIT_TRAIL_EMPTY);
+  // The note rides WITH the list, not instead of it — an author reading a run of
+  // draft-save rows would otherwise take the trail for a change log.
+  assert.ok(trailText(trail({ initialRows: AUDIT_ROWS })).includes(AUDIT_TRAIL_NOTE),
+    'the list no longer says that it does not record what changed');
+  assert.equal(trailText(trail({ initialRows: [] })).includes(AUDIT_TRAIL_NOTE), false,
+    'the note is shown with no list — it explains a list that is not there');
+});
+
+test('the load-more control appears only when the read offered a cursor', () => {
+  const withCursor = docOf(trail({ initialRows: AUDIT_ROWS, initialCursor: '2026-08-27T02:19:34.396Z|a1' }));
+  const more = withCursor.querySelector('[data-testid="activity-more"]');
+  assert.notEqual(more, null, 'a paginated trail offered no way to reach the older rows');
+  assert.equal(more.textContent.replace(/\s+/g, ' ').trim(), 'ดูรายการก่อนหน้า');
+  // CONTROL: no cursor, no control — otherwise it would offer a page that is not there.
+  assert.equal(docOf(trail({ initialRows: AUDIT_ROWS })).querySelector('[data-testid="activity-more"]'), null);
+});
+
+/**
+ * The three surfaces this round DECLINED, asserted as absences in the rendered
+ * output — round 27's JSON-LD claim-vocabulary shape, for the same reason: the
+ * failure worth catching is a later round adding one back without adding the
+ * data behind it.
+ */
+const DECLINED_IN_MARKUP = Object.freeze([
+  ['a version number beside a publish row',
+    ['เวอร์ชัน', 'version', 'v1', '#1'],
+    'no audit row carries a versionNumber or a version id — 1 stored publish row against 3 '
+    + 'stored versions. PageVersion.actor is the authority (round 36)'],
+  ['what changed',
+    ['hadDraft', 'hasDraft', 'เปลี่ยนจาก', '->'],
+    'before/after are presence flags — 18 of 20 draft.save rows are unchanged on both halves '
+    + '— and the read does not ship them'],
+  ['the last-edited-by sentence',
+    ['แก้ไขล่าสุด'],
+    'draft.savedBy answers it on the live document (round 34) and is state rather than an '
+    + 'inference over the newest row of a class'],
+]);
+
+test('the trail claims none of the three declined surfaces', () => {
+  const text = trailText(trail({ initialRows: AUDIT_ROWS, initialCursor: 'c|1' }));
+  for (const [what, vocabulary, evidence] of DECLINED_IN_MARKUP) {
+    for (const claim of vocabulary) {
+      assert.equal(text.includes(claim), false,
+        `the activity trail renders "${claim}", which belongs to the declined surface `
+        + `"${what}". It was declined because ${evidence}.`);
+    }
+  }
+});
+
+test('CONTROL: the same reader DOES catch each declined claim when planted', () => {
+  // Without this, the sweep above passes for a reader that sees nothing. One
+  // planted claim per declined surface, so no branch of the list is untested.
+  for (const [, vocabulary] of DECLINED_IN_MARKUP) {
+    const planted = trailText(`<p>${vocabulary[0]}</p>`);
+    assert.equal(planted.includes(vocabulary[0]), true, 'the reader cannot see planted markup');
+  }
+  // …and it is reading the rendered text, not an empty string.
+  assert.ok(trailText(trail({ initialRows: AUDIT_ROWS })).includes('เผยแพร่'));
+});
+
+test('the trail reads the AUDIT log and no second source', () => {
+  /**
+   * J and the single-source rule together. `getPageVersions` answers a
+   * neighbouring question in the section one menu item up, and a component that
+   * called both would be two answers to "what happened to this page" in one
+   * dialog — the second-authority shape rounds 21-25 spent four rounds removing.
+   */
+  const { withImports } = readSource('src/components/pageBuilder/editor/ActivityTrail.jsx');
+  assert.match(withImports, /getPageAuditLog/, 'the trail no longer reads the audit log');
+  for (const other of ['getPageVersions', 'getPageVersionSnapshot', 'savedBy', 'updatedBy']) {
+    assert.equal(withImports.includes(other), false,
+      `ActivityTrail reaches for '${other}'. The audit log is its only source; every other `
+      + 'fact in this dialog has an owner already.');
+  }
+});
+
+test('CONTROL: the same check catches the trail pointed at the other source', () => {
+  // Without this, the assertion above passes for a check that matches nothing.
+  const planted = "import { getPageVersions } from '@/lib/actions/pageBuilder';\n";
+  const caught = ['getPageVersions', 'getPageVersionSnapshot'].filter((n) => planted.includes(n));
+  assert.deepEqual(caught, ['getPageVersions']);
+});
+
+test('the seed props are TEST seeds and production passes neither', () => {
+  // Same rule, and the same reason, as VersionHistory's: the effect never runs
+  // under renderToStaticMarkup, so the list markup is only reachable by seeding
+  // state — and a seed that leaked into production would render a fixture.
+  const { code } = readSource('src/components/pageBuilder/editor/PageSettingsDialog.jsx');
+  assert.equal(code.includes('initialRows'), false, 'ActivitySection hands ActivityTrail a seed');
+  assert.equal(code.includes('initialCursor'), false, 'ActivitySection hands ActivityTrail a cursor');
+  // …and unseeded, the component is in its loading state rather than "empty".
+  assert.equal(trailText(trail()), 'กำลังโหลด…');
+  assert.notEqual(trailText(trail()), AUDIT_TRAIL_EMPTY,
+    'an unloaded trail claims the page has no recorded actions');
+});
+
+test('an unsaved page is told why there is nothing, not shown an empty trail', () => {
+  assert.equal(trailText(trail({ pageId: '' })),
+    'ยังไม่ได้บันทึกหน้านี้ — ยังไม่มีการดำเนินการที่บันทึกไว้');
+});
+
+test('the activity section adds NO save or status vocabulary', () => {
+  /**
+   * Round 27's rule, respected by rounds 34 and 36. The section is a list and a
+   * note; it offers no control that writes and makes no claim about saving.
+   */
+  const html = sectionHtml('activity', PAGE());
+  assert.deepEqual(labelsIn(html), [], 'the activity section grew a field');
+  assert.deepEqual(buttonsIn(html), [], 'the activity section grew a control');
+  assert.deepEqual(groupsIn(html), ['ประวัติการดำเนินการ']);
+  for (const claim of ['บันทึกแล้ว', 'ยังไม่ได้บันทึก', 'กำลังบันทึก']) {
+    assert.equal(trailText(html).includes(claim), false,
+      `the activity section says "${claim}" — that is the save-state line's vocabulary, and `
+      + 'it belongs to the dialog footer, not to a read-only list');
+  }
 });

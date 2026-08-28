@@ -312,11 +312,16 @@ test('CONTROL: the same scan catches a second source of that sentence', () => {
   // Without this, the assertion above passes for a scan that matches nothing.
   // The second source is HANDED to the walk rather than written to disk — the
   // rule being pinned is "exactly one", so the control has to produce a two.
-  const planted = { rel: 'src/lib/pageBuilder/auditTrail.js', code: `x = '${SAVER_SENTENCE} y';` };
-  assert.deepEqual(saverSentenceOwners([planted]), [
-    'src/lib/pageBuilder/editorStatus.js',
-    'src/lib/pageBuilder/auditTrail.js',
-  ], 'the scan cannot see a second source at all');
+  //
+  // Asserted as a DELTA rather than as an exact list, deliberately: an exact
+  // list makes this control go red alongside the pin whenever a real second
+  // source appears, and two reds naming one defect is a worse signal than one.
+  // What this has to prove is only that the scan can see a planted owner.
+  const planted = { rel: 'src/plant/second-source.js', code: `x = '${SAVER_SENTENCE} y';` };
+  const before = saverSentenceOwners();
+  const after = saverSentenceOwners([planted]);
+  assert.equal(after.length, before.length + 1, 'the scan cannot see a second source at all');
+  assert.ok(after.includes('src/plant/second-source.js'));
 });
 
 // ── the two sentences the surface renders ───────────────────────────────────

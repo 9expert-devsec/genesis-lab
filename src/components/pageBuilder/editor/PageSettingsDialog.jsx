@@ -18,6 +18,10 @@ import { Field, Group, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { useEditor } from './EditorProvider';
 import { VersionHistory } from './VersionHistory';
 import { PreviewBody } from './PreviewDialog';
+// Round 38, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory.
+import { ScrollText } from 'lucide-react';
+import { ActivityTrail } from './ActivityTrail';
 
 /**
  * Page-level settings (item 6). Edits the page envelope through PATCH_PAGE, so
@@ -159,6 +163,25 @@ export const PAGE_SETTINGS_SECTIONS = [
   { id: 'jsonld',  label: 'JSON-LD',           Icon: CodeXml },
   { id: 'preview', label: 'ลิงก์พรีวิว',        Icon: Lock },
   { id: 'history', label: 'ประวัติการเผยแพร่', Icon: History },
+  /**
+   * ── THE SIXTH, ROUND 38 ───────────────────────────────────────────────────
+   * A separate item rather than a second group under ประวัติการเผยแพร่. That
+   * one lists VERSIONS — things that were published and can be restored; this
+   * lists ACTIONS, most of which produced no version and none of which can be
+   * acted on. One title cannot be right for both, and putting them together
+   * would invite the join between a publish row and a version row that the
+   * stored shape cannot support (see ActivityTrail).
+   *
+   * `ประวัติการดำเนินการ` is not a new vocabulary: it is the phrase this admin
+   * already uses for an audit trail — the registrations detail screen, the
+   * course detail screen and /admin/audit-log all carry it. Meeting the author
+   * with the word they have already learned is worth more than a novel one.
+   *
+   * ITS OWN GLYPH. `History` belongs to the section above; two items drawn with
+   * one icon would read as two halves of the same thing, which is exactly the
+   * conflation the separate item exists to avoid.
+   */
+  { id: 'activity', label: 'ประวัติการดำเนินการ', Icon: ScrollText },
 ];
 
 /**
@@ -273,6 +296,24 @@ export function HistorySection({ pageId, open, editor = null }) {
   return (
     <Group title="ประวัติการเผยแพร่">
       <VersionHistory pageId={pageId} open={open} editor={editor} />
+    </Group>
+  );
+}
+
+/**
+ * Round 38 — the audit log's surface.
+ *
+ * Takes NO `editor`, and that is the difference from HistorySection above
+ * rather than an oversight. The version list needs the editor because it
+ * WRITES: a restore carries the conflict token, dispatches a conflict and reads
+ * the page's status to mark the live row. This list writes nothing and decides
+ * nothing from local state — it renders server rows and stops. Threading the
+ * editor in would hand a read-only surface the ability to change the document.
+ */
+export function ActivitySection({ pageId, open }) {
+  return (
+    <Group title="ประวัติการดำเนินการ">
+      <ActivityTrail pageId={pageId} open={open} />
     </Group>
   );
 }
@@ -516,6 +557,7 @@ export function PageSettingsBody({
             />
           )}
           {section === 'history' && <HistorySection pageId={pageId} open={open} editor={editor} />}
+          {section === 'activity' && <ActivitySection pageId={pageId} open={open} />}
         </div>
       </div>
 
