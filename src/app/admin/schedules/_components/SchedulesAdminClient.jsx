@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState, useTransition } from 'react';
+import { Fragment, useCallback, useMemo, useState, useTransition } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronDown,
@@ -34,6 +34,11 @@ import {
   classifyAgainstWindow,
   warningTextTh,
 } from '@/lib/schedule/gridWindowWarning';
+import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { laneLayout } from '@/lib/schedule/monthLanes';
+import { monthLabel } from '@/lib/schedule/monthWindow';
+import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
+import { resolveScheduleBadge } from '@/lib/scheduleStatus';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -42,16 +47,43 @@ const STATUS_OPTIONS = [
   { value: 'nearly_full', label: 'Nearly Full' },
   { value: 'full',        label: 'Full' },
 ];
-const STATUS_DOT = {
-  open:        'bg-green-500',
-  nearly_full: 'bg-amber-500',
-  full:        'bg-red-500',
-};
+/**
+ * ── THE ROUND'S DOT USED TO BE THE STATUS. IT IS THE DELIVERY TYPE NOW ──────
+ *
+ * A local `STATUS_DOT` map (green / amber / red) lived here and coloured the
+ * dot at the head of every round box. That is not what the dot means on
+ * /schedule: there the dot and the box's border carry the TRAINING TYPE from
+ * lib/schedule/trainingTypeColor, and the status is a word underneath. Two
+ * surfaces showing the same round with the same dot meaning two different
+ * things is the drift this repo already paid for once with four copies of the
+ * type palette (see that module's docstring), so the map is gone rather than
+ * kept beside the shared one.
+ *
+ * Nothing is lost by dropping it: the status is now READ AS TEXT rather than
+ * inferred from a colour, and its colours come from `resolveScheduleBadge`, the
+ * same single fallback policy every other surface renders a status from.
+ */
 
 const TYPE_OPTIONS = [
   { value: 'classroom', label: 'Classroom' },
   { value: 'hybrid',    label: 'Hybrid' },
 ];
+
+/**
+ * Display names for the dot's tooltip.
+ *
+ * Deliberately NOT `TYPE_OPTIONS`, and deliberately covering `online`, which
+ * that list does not: TYPE_OPTIONS is the editor's `<select>` and is limited to
+ * the two types an admin may CREATE, while a round arriving from MSDB can carry
+ * any type the palette knows. Reusing the select's list would leave an online
+ * round's green dot with no name at all — the one case where the tooltip is
+ * doing real work, because green is the type this screen cannot produce.
+ */
+const TYPE_LABEL = {
+  classroom: 'Classroom',
+  hybrid:    'Hybrid',
+  online:    'Online',
+};
 
 const TH_MONTH_FMT = new Intl.DateTimeFormat('th-TH', {
   year: '2-digit',
@@ -70,13 +102,15 @@ function toLocalIso(d) {
   const day = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-/** `YYYY-MM` key derived from a date-ish input (local). */
-function monthKey(v) {
-  if (!v) return null;
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+/*
+ * A local `monthKey(v)` stood here. It had ONE caller — the schedule map's
+ * first-date bucketing — and that bucketing is exactly what
+ * lib/schedule/monthLanes replaced (see `scheduleMap` below). It is deleted
+ * rather than left exported-by-proximity: a private "which month is this
+ * round in" helper sitting beside code that must ask `roundSpanIndices` that
+ * question instead is how the first-date answer grows back.
+ */
+
 /** `YYYY-MM` → the 1st of that month, local time. For the from/to dropdowns. */
 function monthKeyToDate(key) {
   const m = /^(\d{4})-(\d{2})$/.exec(String(key ?? ''));
@@ -178,39 +212,48 @@ export function SchedulesAdminClient({
   }, [instructors]);
 
   /**
-   * Bucket schedules by course AND by month. MSDB returns
-   * `schedule.course` as either a populated object (`{ _id, course_id,
-   * course_name, … }`) or a bare ObjectId string — and the bare form
-   * is more likely right after a write before the next round-trip
-   * populates it. We index under BOTH the ObjectId AND the human
-   * `course_id` code so the row lookup in `ProgramGroup` can fall back
-   * to whichever key matches the course in hand.
+   * Bucket schedules BY COURSE ONLY. MSDB returns `schedule.course` as either
+   * a populated object (`{ _id, course_id, course_name, … }`) or a bare
+   * ObjectId string — and the bare form is more likely right after a write
+   * before the next round-trip populates it. We index under BOTH the ObjectId
+   * AND the human `course_id` code so the row lookup in `ProgramGroup` can fall
+   * back to whichever key matches the course in hand.
    *
    *   key shape:  `<ObjectId>` OR `<course_id>`
-   *   value:      { 'YYYY-MM': [schedule, …] }
+   *   value:      [schedule, …]
    *
-   * Duplicate schedules across both keys are deduped by `_id` so a
-   * lookup never returns the same row twice.
+   * Duplicate schedules across both keys are deduped by `_id` so a lookup never
+   * returns the same row twice.
+   *
+   * ── THE SECOND KEY — THE MONTH — IS GONE, AND THAT IS THE FIX ─────────────
+   * This map used to be `{ 'YYYY-MM': [schedule, …] }`, keyed by
+   * `monthKey(s.dates?.[0])` — THE MONTH OF THE ROUND'S FIRST DATE ONLY. That
+   * is the identical defect `lib/schedule/monthLanes` was written to remove
+   * from the public table, and it produced two visible faults here:
+   *
+   *   · a 30 ต.ค. – 2 พ.ย. round sat entirely inside the ต.ค. column and its
+   *     label read `30-2`, a range that does not exist in October;
+   *   · a round whose FIRST date fell before the selected window but whose
+   *     later dates fell inside it was bucketed under a month with no column
+   *     and vanished from the grid completely.
+   *
+   * Which columns a round occupies is now `roundSpanIndices`' single answer,
+   * reached through `laneLayout` below — the same one the public table, its
+   * course filter and its mobile card all read.
    */
   const scheduleMap = useMemo(() => {
     const map = new Map();
 
-    function push(key, monthK, s) {
-      if (!key || !monthK) return;
-      if (!map.has(key)) map.set(key, {});
-      const bucket = map.get(key);
-      if (!bucket[monthK]) bucket[monthK] = [];
-      // Dedupe: same schedule may land under both the ObjectId and the
-      // course_id key. Keep it once per (key, monthK) bucket.
-      if (!bucket[monthK].some((x) => String(x._id) === String(s._id))) {
-        bucket[monthK].push(s);
-      }
+    function push(key, s) {
+      if (!key) return;
+      if (!map.has(key)) map.set(key, []);
+      const list = map.get(key);
+      // Dedupe: the same schedule lands under both the ObjectId and the
+      // course_id key. Keep it once per key.
+      if (!list.some((x) => String(x._id) === String(s._id))) list.push(s);
     }
 
     for (const s of schedules) {
-      const monthK = monthKey(s.dates?.[0]);
-      if (!monthK) continue;
-
       let oid = '';
       let codeKey = '';
       if (typeof s.course === 'object' && s.course !== null) {
@@ -220,8 +263,8 @@ export function SchedulesAdminClient({
         oid = String(s.course);
       }
 
-      push(oid, monthK, s);
-      push(codeKey, monthK, s);
+      push(oid, s);
+      push(codeKey, s);
     }
     return map;
   }, [schedules]);
@@ -253,12 +296,40 @@ export function SchedulesAdminClient({
       groups.get(id).courses.push(c);
     }
 
+    /**
+     * ── RANKED BY THE `programs` PROP, WHICH IS THE PUBLIC TABLE'S ORDER ─────
+     *
+     * This block is ScheduleClient's `grouped` reducer, same shape and same
+     * tie-breaks: rank by position in the parent's `programs` array, fall to
+     * `Infinity` for anything the array does not name, and break ties on the
+     * Thai collation of the name.
+     *
+     * It used to be `localeCompare` ALONE, which is why /admin/schedules listed
+     * AI Builder, Canva, Claude AI while /schedule — reading the admin-curated
+     * ProgramOrder through `getOrderedPrograms` — put Claude AI above Power BI.
+     * page.jsx now runs that same call and hands the result down, so the two
+     * tables group in one order. See its docstring for why the programmes
+     * `getOrderedPrograms` hides are appended rather than dropped: they land
+     * at `Infinity` here, after every ranked group, and stay reachable.
+     *
+     * `__none__` — courses with no programme at all — still sorts dead last,
+     * after even the unranked ones, which is what it did before.
+     */
+    const orderRank = new Map(
+      programs.map((p, i) => [String(p.program_name ?? p.name ?? ''), i])
+    );
+    const rankOf = (g) =>
+      orderRank.has(g.name) ? orderRank.get(g.name) : Infinity;
+
     return [...groups.values()].sort((a, b) => {
       if (a.id === '__none__') return 1;
       if (b.id === '__none__') return -1;
+      const ra = rankOf(a);
+      const rb = rankOf(b);
+      if (ra !== rb) return ra - rb;
       return a.name.localeCompare(b.name, 'th');
     });
-  }, [courses, search, filterProgram]);
+  }, [courses, search, filterProgram, programs]);
 
   // count of schedules currently shown (status-aware; the program /
   // search filters only hide courses, not schedules themselves, so we
@@ -492,6 +563,10 @@ function ProgramGroup({
   onDelete,
 }) {
   const Icon = collapsed ? ChevronRight : ChevronDown;
+  // What `laneLayout` and `roundSpanIndices` speak: contiguous ascending
+  // `YYYY-MM`. `adminScheduleMonthCols` already produces exactly that, so the
+  // packing sees the same window the header row does — the two cannot drift.
+  const monthKeys = monthCols.map((m) => m.key);
   return (
     <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
       <button
@@ -531,85 +606,97 @@ function ProgramGroup({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--surface-border)]">
+            {/*
+              NO `divide-y` any more. A course is now one or more LANE rows plus
+              its own `+ รอบ` row, so a divider between every `<tr>` would draw a
+              line THROUGH a course rather than between two of them. The bottom
+              border moves onto the LAST row of each course instead — the same
+              thing ScheduleClient does with `li === lanes.length - 1`.
+            */}
+            <tbody>
               {group.courses.map((course) => {
                 const cid = String(course._id ?? '');
-                // Lookup fallback chain: prefer the ObjectId because
-                // it's globally unique, fall back to the human
-                // `course_id` code (the second key we indexed in
-                // scheduleMap) so a bare-ObjectId-only schedule still
-                // resolves when MSDB hasn't populated yet.
-                const buckets =
+                // Lookup fallback chain: prefer the ObjectId because it's
+                // globally unique, fall back to the human `course_id` code (the
+                // second key we indexed in scheduleMap) so a bare-ObjectId-only
+                // schedule still resolves when MSDB hasn't populated yet.
+                const rounds = (
                   scheduleMap.get(cid) ??
                   scheduleMap.get(String(course.course_id ?? '')) ??
-                  {};
-                return (
-                  <tr
-                    key={course.course_id || cid}
-                    className="hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40"
-                  >
-                    <td className="px-3 py-3 font-mono text-[11px] text-9e-slate-dp-50">
-                      {course.course_id}
-                    </td>
-                    <td className="px-3 py-3 text-9e-navy dark:text-white">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 max-w-[260px] truncate">
-                          {course.course_name_th || course.course_name}
-                        </span>
-                        {/* Inline shortcut: open the modal with this course
-                            pre-filled. No month hint — admin picks dates
-                            in the calendar grid themselves. */}
-                        <button
-                          type="button"
-                          onClick={() => onAdd(course.course_id, null)}
-                          className="shrink-0 whitespace-nowrap rounded-full border border-green-400 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
-                        >
-                          + รอบ
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-2 py-3 text-center text-xs text-9e-slate-dp-50">
-                      {course.course_trainingdays || '—'}
-                    </td>
-                    <td className="px-2 py-3 text-right text-xs text-9e-slate-dp-50">
-                      {Number.isFinite(Number(course.course_price))
-                        ? Number(course.course_price).toLocaleString()
-                        : '—'}
-                    </td>
+                  []
+                ).filter((s) => !filterStatus || s.status === filterStatus);
 
-                    {monthCols.map((m) => {
-                      const cellSchedules = (buckets[m.key] ?? []).filter(
-                        (s) => !filterStatus || s.status === filterStatus
-                      );
-                      return (
+                /*
+                  ONE OR MORE LANES per course, packed like a Gantt chart by
+                  lib/schedule/monthLanes — THE SAME packing the public table
+                  uses, so the two surfaces cannot disagree about which months a
+                  round occupies.
+
+                  A round crossing months must SPAN them while a round inside one
+                  month stays ALIGNED under it, and when those two overlap a
+                  single <tr> cannot do both: there is nowhere to put a <td> at
+                  พ.ย. in a row that already carries a colSpan=2 covering
+                  ต.ค.+พ.ย. So the course row becomes lanes and the four course
+                  columns rowSpan across them.
+                */
+                const lanes = laneLayout(rounds, monthKeys).lanes;
+
+                /*
+                  ── THE `+ รอบ` BUTTONS GET A LANE OF THEIR OWN, ALWAYS ───────
+                  They used to sit inside each month cell, beneath that month's
+                  rounds. A colSpan cell CONSUMES the columns it covers, so a
+                  round crossing ต.ค.+พ.ย. would have swallowed BOTH months'
+                  buttons — the change that fixes the label would have removed
+                  the only way to add a round to either month.
+
+                  A row of its own makes the guarantee absolute instead of
+                  conditional: it is emitted for EVERY course, carries exactly
+                  one <td> per month column, and no colSpan above it can ever
+                  reach into it. Every month keeps its own reachable button
+                  whatever the rounds are doing.
+                */
+                const rowCount = lanes.length + 1;
+
+                return (
+                  <Fragment key={course.course_id || cid}>
+                    {lanes.map((lane, li) => (
+                      <tr
+                        key={`lane-${li}`}
+                        className="hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40"
+                      >
+                        {li === 0 && courseCells(course, rowCount, onAdd)}
+                        {laneCells({
+                          lane,
+                          columnCount: monthCols.length,
+                          localBySchedId,
+                          instructorById,
+                          busyId,
+                          onEdit,
+                          onDelete,
+                        })}
+                      </tr>
+                    ))}
+
+                    <tr className="border-b border-[var(--surface-border)] last:border-0 hover:bg-9e-ice/30 dark:hover:bg-[#0D1B2A]/40">
+                      {/* A course with no visible round has no lane at all, so
+                          the course columns ride on this row instead. */}
+                      {lanes.length === 0 && courseCells(course, rowCount, onAdd)}
+                      {monthCols.map((m) => (
                         <td
                           key={m.key}
                           className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
                         >
-                          <div className="flex flex-col items-stretch gap-1.5">
-                            {cellSchedules.map((s) => (
-                              <ScheduleCell
-                                key={s._id}
-                                schedule={s}
-                                local={localBySchedId.get(String(s._id))}
-                                instructorById={instructorById}
-                                busy={busyId === s._id}
-                                onEdit={() => onEdit(s)}
-                                onDelete={() => onDelete(s._id)}
-                              />
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => onAdd(course.course_id, m.key)}
-                              className="whitespace-nowrap rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
-                            >
-                              + รอบ
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onAdd(course.course_id, m.key)}
+                            className="w-full whitespace-nowrap rounded border border-green-300 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
+                          >
+                            + รอบ
+                          </button>
                         </td>
-                      );
-                    })}
-                  </tr>
+                      ))}
+                    </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -617,6 +704,174 @@ function ProgramGroup({
         </div>
       )}
     </div>
+  );
+}
+
+// ── the four course columns ───────────────────────────────────────
+
+/**
+ * The course's own cells — code, name, days, price — rendered ONCE and spanning
+ * every row the course occupies.
+ *
+ * They belong to the COURSE, not to a lane, so they are emitted on the first
+ * row and `rowSpan` across the rest. `rowSpan` is omitted rather than set to 1
+ * when the course has only its `+ รอบ` row: React emits `rowspan="1"`, a no-op
+ * that would change the markup of every single-row course on the page.
+ *
+ * `align-top` so the course name lines up with the FIRST lane rather than
+ * floating in the middle of a tall multi-lane course.
+ */
+function courseCells(course, rowCount, onAdd) {
+  const rowSpan = rowCount > 1 ? rowCount : undefined;
+  return [
+    <td
+      key="code"
+      rowSpan={rowSpan}
+      className="px-3 py-3 align-top font-mono text-[11px] text-9e-slate-dp-50"
+    >
+      {course.course_id}
+    </td>,
+    <td
+      key="name"
+      rowSpan={rowSpan}
+      className="px-3 py-3 align-top text-9e-navy dark:text-white"
+    >
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 max-w-[260px] truncate">
+          {course.course_name_th || course.course_name}
+        </span>
+        {/* Inline shortcut: open the modal with this course pre-filled. No
+            month hint — admin picks dates in the calendar grid themselves. */}
+        <button
+          type="button"
+          onClick={() => onAdd(course.course_id, null)}
+          className="shrink-0 whitespace-nowrap rounded-full border border-green-400 bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700 hover:bg-green-100"
+        >
+          + รอบ
+        </button>
+      </div>
+    </td>,
+    <td
+      key="days"
+      rowSpan={rowSpan}
+      className="px-2 py-3 align-top text-center text-xs text-9e-slate-dp-50"
+    >
+      {course.course_trainingdays || '—'}
+    </td>,
+    <td
+      key="price"
+      rowSpan={rowSpan}
+      className="px-2 py-3 align-top text-right text-xs text-9e-slate-dp-50"
+    >
+      {Number.isFinite(Number(course.course_price))
+        ? Number(course.course_price).toLocaleString()
+        : '—'}
+    </td>,
+  ];
+}
+
+// ── one lane's month cells ────────────────────────────────────────
+
+/**
+ * One lane's `<td>`s, walked left to right across every month column.
+ *
+ * ── WHY IT WALKS COLUMNS RATHER THAN MAPPING CELLS ──────────────────────────
+ * A `colSpan` cell CONSUMES the columns it covers, so the columns a lane emits
+ * and the cells it holds are not the same list. `lane.map(...)` would emit one
+ * `<td>` per cell and leave every gap unfilled, shearing the row left. The
+ * cursor is the whole mechanism: it advances past a spanned cell and emits an
+ * empty `<td>` for anything the lane does not cover.
+ *
+ * THE TOTAL COLSPAN OF THE RETURNED CELLS IS EXACTLY `columnCount`. An
+ * off-by-one here shears the grid — every month column after the mistake shows
+ * the wrong month's rounds — and no visual check catches it reliably, so a
+ * render test asserts the arithmetic directly.
+ *
+ * ── AND WHY THE GAP IS BLANK RATHER THAN AN EM-DASH ─────────────────────────
+ * The public table's empty first-lane cell renders `—` for "no round this
+ * month". Here it must not: every month on this grid already carries a `+ รอบ`
+ * button one row below, which says "nothing here, add one" more usefully than a
+ * dash and without competing with it for the reader's attention.
+ */
+function laneCells({
+  lane,
+  columnCount,
+  localBySchedId,
+  instructorById,
+  busyId,
+  onEdit,
+  onDelete,
+}) {
+  const out = [];
+  let col = 0;
+
+  const gap = (key) => (
+    <td
+      key={key}
+      className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
+    />
+  );
+
+  for (const cell of lane) {
+    while (col < cell.startIdx) {
+      out.push(gap(`gap-${col}`));
+      col += 1;
+    }
+    out.push(
+      <td
+        key={`cell-${cell.startIdx}`}
+        // Omitted rather than set to 1 for a single-month cell — `colspan="1"`
+        // is a no-op that would change the markup of every cell on the page.
+        colSpan={cell.span > 1 ? cell.span : undefined}
+        className="border-l border-[var(--surface-border)] px-2 py-2 align-top text-center"
+      >
+        <div className="flex flex-col items-stretch gap-1.5">
+          {cell.rounds.map((s) => (
+            <ScheduleCell
+              key={s._id}
+              schedule={s}
+              local={localBySchedId.get(String(s._id))}
+              instructorById={instructorById}
+              busy={busyId === s._id}
+              onEdit={() => onEdit(s)}
+              onDelete={() => onDelete(s._id)}
+            />
+          ))}
+          <ContinuationNote cell={cell} />
+        </div>
+      </td>,
+    );
+    col = cell.endIdx + 1;
+  }
+
+  while (col < columnCount) {
+    out.push(gap(`gap-${col}`));
+    col += 1;
+  }
+  return out;
+}
+
+/**
+ * `← ต่อจาก ส.ค.` / `ต่อ ม.ค. →` — a round that continues outside the selected
+ * month range.
+ *
+ * A round whose real span reaches past the visible columns is still SHOWN, in
+ * whatever space is visible, and its label is not shortened: `formatRoundDays`
+ * prints every day of the round including the days in the invisible month. What
+ * would otherwise be missing is any sign that the cell is a fragment — and on
+ * THIS screen that matters more than on the public one, because an admin
+ * reading a fragment as the whole round would widen the from/to range looking
+ * for a round that is already on screen. Same wording and same treatment as
+ * ScheduleClient's note, deliberately.
+ */
+function ContinuationNote({ cell }) {
+  if (!cell.clippedBefore && !cell.clippedAfter) return null;
+  return (
+    <span className="text-[10px] leading-none text-9e-slate-dp-50">
+      {cell.clippedBefore ? `← ต่อจาก ${monthLabel(cell.beforeKey)}` : null}
+      {cell.clippedBefore && cell.clippedAfter ? ' ' : null}
+      {cell.clippedAfter ? `ต่อ ${monthLabel(cell.afterKey)} →` : null}
+    </span>
   );
 }
 
@@ -630,19 +885,69 @@ function ScheduleCell({
   onEdit,
   onDelete,
 }) {
-  // Day-of-month range — same convention as MSDB admin (e.g. "11-12").
-  const days = [...(schedule.dates ?? [])]
-    .map((d) => new Date(d))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .sort((a, b) => a - b)
-    .map((d) => d.getDate());
+  /**
+   * ── THE LABEL COMES FROM THE SHARED FORMATTER. IT USED TO BE A SIXTH ONE ───
+   *
+   * What stood here was `${days[0]}-${days[days.length - 1]}` — first date to
+   * last date, with no check that the days between exist. It is the SAME defect
+   * lib/schedule/roundDateLabel was written to remove from five public
+   * formatters, and on this screen it was actively misreporting stored data:
+   *
+   *   dates 16 and 18 ก.ย. → rendered `16-18`, advertising a 17th that is not
+   *                          in the round;
+   *   dates 30 ต.ค. and 2 พ.ย. → rendered `30-2`, a range that does not exist
+   *                          in any month.
+   *
+   * `formatRoundDays` collapses maximal CONSECUTIVE runs to their endpoints and
+   * LISTS everything else, so those become `16, 18` and `30 ต.ค. - 2 พ.ย.`.
+   * No day is ever dropped and no day is ever invented.
+   *
+   * Called with neither `showMonth` nor `showYear`, exactly as the public
+   * table calls it: every column header here carries its own month AND its
+   * Buddhist year (`TH_MONTH_FMT`), so a single-month round needs neither. A
+   * round that CROSSES a month prints its months regardless of `showMonth` —
+   * that rule lives in the formatter, and it is what makes the spanning cell
+   * next to it readable.
+   */
+  const dateLabel = formatRoundDays(schedule.dates);
 
-  const dateLabel =
-    days.length === 0
-      ? '—'
-      : days.length === 1
-        ? String(days[0])
-        : `${days[0]}-${days[days.length - 1]}`;
+  /**
+   * The dot AND the border are the DELIVERY TYPE, from the one shared palette;
+   * the status is the word underneath. Same anatomy as /schedule's round box.
+   *
+   * Inline `style`, never `border-[${color}]`: Tailwind scans source text and
+   * never evaluates it, so a template literal in a class name compiles to no
+   * class at all and fails SILENTLY as an unbordered box.
+   */
+  const color = trainingTypeColor(schedule.type);
+
+  /**
+   * `.state`, NOT `.action` — and this is the one place this surface departs
+   * from ScheduleClient's cell on purpose.
+   *
+   * lib/scheduleStatus splits the two fields precisely so each surface names
+   * the one it means: `state` is what the round IS, `action` is what a VISITOR
+   * can do about it. The public cell is a registration link, so it carries the
+   * action ('ลงทะเบียน' for an open round). This cell is a management control
+   * — nobody registers from /admin/schedules — so an imperative to register
+   * would be wrong here in exactly the way that module's docstring describes.
+   * `state` gives 'เปิดรับ' / 'ใกล้เต็ม' / 'เต็ม', which is the fact an admin
+   * is reading. The colours are the shared ones either way.
+   */
+  const statusStyle = resolveScheduleBadge(schedule.status);
+
+  /**
+   * A full round is not registerable, and the public ruling is that its
+   * non-editable affordances show `cursor-not-allowed`. Read off
+   * `resolveScheduleBadge().status` rather than `schedule.status === 'full'` so
+   * the alias spellings that module normalises are covered too.
+   *
+   * แก้ไข AND ลบ ARE EXEMPT, and that exemption is the point: an admin must be
+   * able to edit and delete a sold-out round — it is the round most likely to
+   * need its seat count or status corrected. So the cursor rule sits on the BOX
+   * and both buttons re-assert `cursor-pointer` over it.
+   */
+  const isFull = statusStyle?.status === 'full';
 
   const teacherNames =
     (local?.instructor_ids ?? [])
@@ -650,43 +955,53 @@ function ScheduleCell({
       .filter(Boolean);
 
   return (
-    <div className="rounded-9e-md border border-[var(--surface-border)] bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]">
+    <div
+      className={
+        'flex flex-col items-center gap-0.5 rounded-9e-md border bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]' +
+        (isFull ? ' cursor-not-allowed' : '')
+      }
+      style={{ borderColor: color }}
+    >
       <div className="flex items-center justify-center gap-1.5">
         <span
-          className={
-            'inline-block h-1.5 w-1.5 rounded-full ' +
-            (STATUS_DOT[schedule.status] ?? 'bg-gray-400')
-          }
-          aria-label={schedule.status}
+          className="inline-block h-2 w-2 flex-none rounded-full"
+          style={{ backgroundColor: color }}
+          title={TYPE_LABEL[schedule.type] ?? TYPE_LABEL.classroom}
         />
-        <span className="font-medium text-9e-navy dark:text-white">
+        <span className="font-bold leading-none text-9e-navy dark:text-white">
           {dateLabel}
         </span>
       </div>
+      {/* Omitted entirely when the status is missing/blank, as on /schedule. */}
+      {statusStyle && (
+        <div className={`text-[10px] font-bold leading-none ${statusStyle.text}`}>
+          {statusStyle.state}
+        </div>
+      )}
       {local?.max_seats != null && (
-        <div className="mt-0.5 text-[10px] text-9e-slate-dp-50">
+        <div className="text-[10px] text-9e-slate-dp-50">
           {local.max_seats} ที่
         </div>
       )}
       {local?.price_override != null && (
-        <div className="mt-0.5 text-[10px] font-medium text-9e-action">
+        <div className="text-[10px] font-medium text-9e-action">
           ฿{Number(local.price_override).toLocaleString('th-TH')}
         </div>
       )}
       {teacherNames.length > 0 && (
         <div
-          className="mt-0.5 truncate text-[10px] text-9e-slate-dp-50"
+          className="max-w-full truncate text-[10px] text-9e-slate-dp-50"
           title={teacherNames.join(', ')}
         >
           {teacherNames[0]}
           {teacherNames.length > 1 ? ` +${teacherNames.length - 1}` : ''}
         </div>
       )}
-      <div className="mt-1 flex items-center justify-center gap-1.5">
+      <div className="flex items-center justify-center gap-1.5">
         <button
           type="button"
           onClick={onEdit}
-          className="text-[10px] text-9e-action hover:underline"
+          className="cursor-pointer text-[10px] text-9e-action hover:underline"
         >
           แก้ไข
         </button>
@@ -695,7 +1010,7 @@ function ScheduleCell({
           type="button"
           onClick={onDelete}
           disabled={busy}
-          className="text-[10px] text-red-500 hover:underline disabled:opacity-50"
+          className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? '…' : 'ลบ'}
         </button>

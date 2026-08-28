@@ -88,6 +88,12 @@ export const STUBS = {
   // AdminBannerList imports deleteBanner for its row button; that chain reaches
   // next-auth → next/headers AND mongoose. Same reasoning as every line above.
   '@/lib/actions/banners': path.join(ROOT, 'test', 'stub-banner-actions.mjs'),
+  // SchedulesAdminClient imports createSchedule/updateSchedule/deleteSchedule
+  // for its modal submit and its per-round buttons; that chain reaches
+  // next-auth → next/headers AND mongoose. Same reasoning as every line above.
+  // Added with the admin grid's month-lane rework, which is the first render
+  // test this screen has ever had.
+  '@/lib/actions/schedules': path.join(ROOT, 'test', 'stub-schedule-actions.mjs'),
 };
 
 // The repo omits extensions on relative/alias imports (the bundler adds them);
