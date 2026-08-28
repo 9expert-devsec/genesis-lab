@@ -191,6 +191,26 @@ const undiscovered = onDisk.filter((f) => !enumerated.has(f));
 // the runner is not reporting failures. Manual by design — see the case file.
 if (process.env.CANARY) files.push(path.join(TEST_DIR, 'canary.case.mjs'));
 
+// Undeclared before this fix — `pass`/`fail`/`bump`/`perFile` were referenced
+// with no `let`/`const` anywhere in the file. Reading an unbound identifier
+// throws ReferenceError unconditionally (strict mode is implicit in an ES
+// module), but that only happens once the FIRST 'test:pass'/'test:fail' event
+// fires, which is why `npm test` hung producing no output rather than crashing
+// immediately: a separate defect (a pure-tier test missing a dependency
+// override and falling through to a real DB call — see the commit message)
+// meant no test ever completed, so this line never even executed.
+//
+// `perFile` is seeded with every ENUMERATED file at 0 so the "contributed ZERO
+// tests" meta-control below can see a file that never bumped, not just one
+// that isn't in the map at all.
+let pass = 0;
+let fail = 0;
+const perFile = new Map(files.map((f) => [f, 0]));
+function bump(e) {
+  const f = e?.file;
+  if (f && perFile.has(f)) perFile.set(f, perFile.get(f) + 1);
+}
+
 const stream = run({ files, isolation: 'none', concurrency: true });
 stream.on('test:pass', (e) => { pass += 1; bump(e); });
 stream.on('test:fail', (e) => { fail += 1; bump(e); });

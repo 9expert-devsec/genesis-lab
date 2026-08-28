@@ -43,6 +43,14 @@ function harness({ hidden = [], upstream = UPSTREAM } = {}) {
         calls.hiddenReads += 1;
         return new Set(hidden);
       },
+      // Without this override, listPublicCourses' third param falls through to
+      // its real default (loadCourseOrder), which calls dbConnect() — a genuine
+      // Mongo connection attempt with no reachable dev DB from this test env, so
+      // every call in this file hung forever instead of running. `=> null`
+      // matches the "read failed / nothing seeded" case already used at the
+      // sibling assertion in test/pure/listPublicCoursesOrder.test.mjs:110 and
+      // leaves ordering untouched (unrelated to what this file is testing).
+      loadOrder: async () => null,
     },
   };
 }
