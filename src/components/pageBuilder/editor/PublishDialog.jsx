@@ -9,6 +9,9 @@ import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 import { Field, Group, Warn, INPUT_CLASS } from './fields';
 import { useEditor } from './EditorProvider';
 import { hasPendingDraft } from '@/lib/pageBuilder/editorStatus';
+// ROUND 42, ADDED beside the statements above rather than folded into one —
+// the standing rule in this directory.
+import { toDateInput, windowStartFromInput, windowEndFromInput } from '@/lib/pageBuilder/publishWindow';
 
 /**
  * Publish / schedule / retire (item 7).
@@ -46,22 +49,44 @@ const REASON_TEXT = {
   not_public_status:  'สถานะนี้ไม่เปิดให้สาธารณะเข้าถึง',
 };
 
-const toInput = (v) => (v ? String(v).slice(0, 10) : '');
-const fromInput = (v) => (v ? new Date(`${v}T00:00:00`).toISOString() : null);
+/**
+ * ── ROUND 42: THE WINDOW CONVERSION MOVED OUT, AND WAS WRONG TWICE ────────
+ * These were two lines here:
+ *
+ *     const toInput   = (v) => (v ? String(v).slice(0, 10) : '');
+ *     const fromInput = (v) => (v ? new Date(`${v}T00:00:00`).toISOString() : null);
+ *
+ * `fromInput` pinned an END date to 00:00, so a page whose window ended
+ * "today" was expired for the whole of today — the reported defect — and it
+ * parsed in the RUNTIME's zone, so the instant stored for one typed date
+ * depended on whose machine saved it. `toInput` then read the UTC calendar
+ * date back, which for anything a Bangkok browser wrote is the day BEFORE what
+ * was typed; round-tripping walked both dates backwards.
+ *
+ * All three now live in lib/pageBuilder/publishWindow.js, which states the
+ * timezone decision and imports the zone from the module that already owned it.
+ * They are up there and not down here because this dialog is a Radix portal —
+ * it renders zero bytes under renderToStaticMarkup (round 27 measured that), so
+ * a rule expressed in this file cannot be asserted by value at all.
+ *
+ * TWO functions for the two ends, not one with a flag: start-of-day and
+ * end-of-day are opposite anchors, and a caller that passes the wrong boolean
+ * gets a silently wrong window.
+ */
 
 export function PublishDialog({ open, onClose, onPublish }) {
   const editor = useEditor();
   const { page, tier } = editor;
   const [status, setStatus] = useState(page?.status ?? 'draft');
-  const [start, setStart] = useState(toInput(page?.publishStartDate));
-  const [end, setEnd] = useState(toInput(page?.publishEndDate));
+  const [start, setStart] = useState(toDateInput(page?.publishStartDate));
+  const [end, setEnd] = useState(toDateInput(page?.publishEndDate));
 
   // Evaluate the page AS IT WOULD BE SAVED, with the same predicate the public
   // route uses — not a paraphrase of it.
   const next = {
     status,
-    publishStartDate: fromInput(start),
-    publishEndDate: fromInput(end),
+    publishStartDate: windowStartFromInput(start),
+    publishEndDate: windowEndFromInput(end),
   };
   const willBeVisible = isPubliclyVisible(next);
   const reason = invisibleReason(next);
@@ -140,10 +165,15 @@ export function PublishDialog({ open, onClose, onPublish }) {
           </Group>
 
           <Group title="ช่วงเวลา">
-            <Field label="วันเริ่ม" hint="เว้นว่าง = ทันทีที่เผยแพร่">
+            {/*
+              The hints name the ZONE, because the answer is not the visitor's
+              and not the author's laptop's — it is the site's, and an author
+              editing from anywhere else has no other way to find that out.
+            */}
+            <Field label="วันเริ่ม" hint="เว้นว่าง = ทันทีที่เผยแพร่ · เริ่มตั้งแต่ต้นวันนั้น (เวลาไทย)">
               <input type="date" className={INPUT_CLASS} value={start} onChange={(e) => setStart(e.target.value)} />
             </Field>
-            <Field label="วันสิ้นสุด" hint="เว้นว่าง = ไม่มีวันสิ้นสุด">
+            <Field label="วันสิ้นสุด" hint="เว้นว่าง = ไม่มีวันสิ้นสุด · เข้าได้ถึงสิ้นวันนั้น (เวลาไทย)">
               <input type="date" className={INPUT_CLASS} value={end} onChange={(e) => setEnd(e.target.value)} />
             </Field>
           </Group>
