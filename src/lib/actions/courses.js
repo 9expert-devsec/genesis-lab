@@ -8,9 +8,13 @@
  * only have to:
  *   1. Forward the form payload to MSDB (msdb-write helpers).
  *   2. Revalidate the admin list path so the table refreshes.
+ *   3. Bust the public read-side tags (updateCourse only — see below).
  *
- * Public-page revalidation is handled by the inbound webhook
- * (`course.created` / `course.updated` / `course.deleted`).
+ * Public-page revalidation is ALSO triggered by the inbound MSDB webhook
+ * (`course.created` / `course.updated` / `course.deleted`), but that is an
+ * upstream push this app does not control the subscription for. updateCourse
+ * busts courseTag/publicCourseTag/UPSTREAM_TAGS.PUBLIC_COURSES itself so an
+ * edit is not silently dependent on that webhook reaching this domain.
  *
  * Field mapping — Genesis form ↔ MSDB PublicCourse (curl-verified):
  *   course_name          ← course display name
@@ -67,6 +71,8 @@ import {
   resolveCourseObjectIds,
   resolveCourseObjectId,
 } from '@/lib/api/resolveIds';
+import { bustUpstream, courseTag, publicCourseTag, UPSTREAM_TAGS } from '@/lib/api/bustUpstream';
+import { derivedCoursePath } from '@/lib/courses/renameCacheFanout';
 
 const ADMIN_PATH = '/admin/courses';
 
@@ -428,6 +434,36 @@ export async function updateCourse(id, formData) {
     const { item } = await msdbUpdate('public-course', id, payload);
     revalidatePath(ADMIN_PATH);
     revalidatePath(`${ADMIN_PATH}/${id}/edit`);
+
+    /**
+     * BUST THE PUBLIC READ-SIDE TAGS. Without this, `getCourseByCode` and
+     * `getPublicCourse` keep serving the pre-edit row for up to 3600s — the
+     * two `revalidatePath` calls above only refresh the ADMIN routes, which
+     * read MSDB uncached. Today this gap is masked by the MSDB
+     * `course.updated` webhook busting the same tags on its own delivery, but
+     * this domain is not confirmed as a subscriber in production, so the bust
+     * belongs here regardless of whether that webhook arrives.
+     *
+     * Tag builders imported from bustUpstream.js — the same module
+     * renameCacheFanout.js:73-76 uses — rather than retyped literals, so a
+     * rename of the read-side template cannot silently desync from this call.
+     * `publicCourseTag(id)` because the admin edit route (this one) hands
+     * `getPublicCourse` an ObjectId, not the code — see renameCacheFanout.js's
+     * header for why both forms are tagged.
+     *
+     * NAME-LEVEL PROOF ONLY: this cannot be observed behaving correctly from
+     * here (no request context to re-read through), and test/pure/
+     * courseUpdateTagBust.test.mjs proves the tag NAMES match the read side
+     * byte-for-byte — it does not and cannot prove the cache actually goes
+     * stale-then-fresh.
+     */
+    bustUpstream(
+      UPSTREAM_TAGS.PUBLIC_COURSES,
+      courseTag(body.course_id),
+      publicCourseTag(body.course_id),
+      publicCourseTag(id),
+    );
+    revalidatePath(derivedCoursePath(body.course_id));
 
     // NO `before`, deliberately. Capturing it would mean an extra uncached MSDB
     // round-trip on every course edit — a 10 s-timeout network call, paid every
