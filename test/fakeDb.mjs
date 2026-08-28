@@ -96,19 +96,70 @@ function valueAt(doc, path) {
 }
 
 function matchOne(actual, expected) {
+  /**
+   * A Date is `typeof 'object'`, so it reached the operator branch below and
+   * crashed on `expected.$in.map` — round 38 found this by passing one. Nothing
+   * had filtered on a bare Date before (the equality branch further down only
+   * ever fired with a Date on the ACTUAL side), so the bug was latent rather
+   * than newly introduced. Handled here, ahead of the operator branch, because
+   * a Date is a VALUE and never a set of operators.
+   */
+  if (expected instanceof Date) {
+    return new Date(actual ?? 0).getTime() === expected.getTime();
+  }
   if (expected !== null && typeof expected === 'object' && !Array.isArray(expected)) {
     const ops = Object.keys(expected);
-    const unknown = ops.filter((o) => o !== '$in' && o !== '$ne');
+    const unknown = ops.filter((o) => o !== '$in' && o !== '$ne' && o !== '$lt');
     if (unknown.length) {
       throw new Error(`fakeDb: unsupported query operator(s) ${unknown.join(', ')} — add it deliberately`);
     }
     if ('$ne' in expected) return String(actual) !== String(expected.$ne);
+    /**
+     * `$lt` — ADDED DELIBERATELY in round 38, for the audit trail's cursor.
+     *
+     * getPageAuditLog pages on the compound key `(createdAt, _id)`, so its
+     * filter is `{ $or: [ {createdAt:{$lt:c}}, {createdAt:c, _id:{$lt:id}} ] }`
+     * and BOTH halves have to evaluate here or the fake answers a query the
+     * database would answer differently — which is the false green this file's
+     * own note ("a fake that answers every question is its own false green")
+     * exists to refuse.
+     *
+     * Dates compare as instants and everything else as strings, matching the
+     * equality branch below. The fake's ids are zero-padded (`fakeid…0007`), so
+     * a string comparison orders them the way Mongo orders ObjectIds — which is
+     * what makes the tie-break testable at all.
+     */
+    if ('$lt' in expected) {
+      const bound = expected.$lt;
+      if (actual instanceof Date || bound instanceof Date) {
+        return new Date(actual ?? 0).getTime() < new Date(bound ?? 0).getTime();
+      }
+      return String(actual) < String(bound);
+    }
     return expected.$in.map(String).includes(String(actual));
   }
   if (expected instanceof Date || actual instanceof Date) {
     return new Date(actual ?? 0).getTime() === new Date(expected ?? 0).getTime();
   }
   return String(actual) === String(expected);
+}
+
+/**
+ * Order two stored values the way the sort above needs them.
+ *
+ * Dates (and date-shaped strings) compare as instants; anything else compares
+ * as a string. Same split as matchOne's `$lt`, so a cursor and the sort it
+ * pages against cannot disagree inside the fake.
+ */
+function compareValues(a, b) {
+  if (a instanceof Date || b instanceof Date) {
+    const at = new Date(a ?? 0).getTime();
+    const bt = new Date(b ?? 0).getTime();
+    return at === bt ? 0 : at < bt ? -1 : 1;
+  }
+  const as = String(a ?? '');
+  const bs = String(b ?? '');
+  return as === bs ? 0 : as < bs ? -1 : 1;
 }
 
 function matches(doc, filter) {
@@ -167,11 +218,24 @@ class Query {
     const list = Array.isArray(out) ? out : [out];
     let result = list;
     if (this._sort) {
-      const [key, dir] = Object.entries(this._sort)[0];
+      /**
+       * EVERY key, in order — round 38. This read only the FIRST key until the
+       * audit trail arrived sorting on `(createdAt, _id)`, and a fake that
+       * ignored the tie-break would order same-millisecond rows by insertion
+       * while Mongo ordered them by `_id`. The pagination test would then have
+       * been asserting the fake's accident rather than the query's rule.
+       *
+       * `compare` is Date-aware first, so the existing `createdAt`/`updatedAt`
+       * sorts behave exactly as they did, and falls back to a string compare
+       * for keys like `_id` that `new Date()` turns into NaN.
+       */
+      const entries = Object.entries(this._sort);
       result = [...result].sort((a, b) => {
-        const av = new Date(valueAt(a, key) ?? 0).getTime();
-        const bv = new Date(valueAt(b, key) ?? 0).getTime();
-        return dir < 0 ? bv - av : av - bv;
+        for (const [key, dir] of entries) {
+          const cmp = compareValues(valueAt(a, key), valueAt(b, key));
+          if (cmp !== 0) return dir < 0 ? -cmp : cmp;
+        }
+        return 0;
       });
     }
     if (this._skip) result = result.slice(this._skip);

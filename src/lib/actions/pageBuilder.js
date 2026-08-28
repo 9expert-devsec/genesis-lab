@@ -37,6 +37,13 @@ import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { draftContentSchema } from '@/lib/schemas/pageBuilder';
 import { DRAFT_CONTENT_KEYS, IDENTITY_KEYS, STATUS_KEYS } from '@/lib/schemas/pageBuilder';
 import { stripDraft, effectiveContent, hasUnpublishedDraft } from '@/lib/pageBuilder/draftState';
+// Round 38, ADDED beside the statements above rather than folded into any —
+// the standing rule in this repo.
+import PageAuditLog from '@/models/PageAuditLog';
+import {
+  AUDIT_TRAIL_PAGE_SIZE, AUDIT_TRAIL_SORT, AUDIT_TRAIL_FIELDS,
+  buildPageAuditQuery, encodeAuditTrailCursor,
+} from '@/lib/pageBuilder/auditTrail';
 
 const ADMIN_PATH = '/admin/pages';
 // DISPLAY cap for the admin history list only — how many rows the UI shows,
@@ -250,6 +257,59 @@ export async function getPageVersionSnapshot(versionId) {
     .lean();
   if (!row) return null;
   return serialize({ ...row, snapshot: stripDraft(row.snapshot) });
+}
+
+/**
+ * One page of one page's ACTIVITY TRAIL — READ ONLY. Newest first.
+ *
+ * Round 2 has written a `PageAuditLog` row on every mutation here since the
+ * draft/published split, and until now nothing read one back. This is that
+ * read, and it is deliberately narrow: every rule it obeys lives in
+ * `lib/pageBuilder/auditTrail.js`, which is pure and carries the measurement
+ * behind each one. If you are about to add a condition here, it belongs there.
+ *
+ * ── WHAT IT DOES NOT RETURN, AND WHY THAT IS THE POINT ────────────────────
+ * `AUDIT_TRAIL_FIELDS` is `action actor createdAt`. `before`/`after` are
+ * withheld because they are PRESENCE FLAGS rather than field-level values —
+ * measured: 18 of 20 `draft.save` rows are `{hadDraft:true} -> {hasDraft:true}`
+ * and 23 of 25 `update` rows have the two halves identical. Shipping them would
+ * invite a caller to render a change arrow between two identical strings while
+ * the edit that actually happened stayed invisible, which is the round-18
+ * failure: a surface claiming something nothing can verify. `sectionId`/`field`
+ * are withheld because they are empty on every stored row.
+ *
+ * ── PAGINATED, NOT CAPPED ─────────────────────────────────────────────────
+ * Unlike `getPageVersions`, which takes `MAX_VERSION_ROWS` off the top of a
+ * list that grows once per publish. This collection grows once per AUTOSAVE
+ * TICK and nothing prunes it — there is no equivalent of the prune round 2
+ * removed from `PageVersion`, because there never was one. So the older half of
+ * a busy page's trail has to be reachable rather than silently cut off.
+ *
+ * `AUDIT_TRAIL_PAGE_SIZE + 1` rows are fetched to learn whether a next page
+ * exists without a second `countDocuments` — the `readAuditLog.js` precedent,
+ * and the reason it gives: counting a growing append-only collection is what
+ * cursor pagination exists to avoid.
+ *
+ * Empty is a NORMAL state, not a failure — a page created before round 2, or
+ * one whose rows were never written because `recordAudit` swallows its own
+ * errors by design.
+ */
+export async function getPageAuditLog(id, { cursor = null } = {}) {
+  const filter = buildPageAuditQuery({ pageId: id, cursor });
+  if (!filter) return { rows: [], nextCursor: null };
+  await requireAdmin('pages');
+  await dbConnect();
+  const docs = await PageAuditLog.find(filter)
+    .select(AUDIT_TRAIL_FIELDS)          // NOT before/after — see above
+    .sort(AUDIT_TRAIL_SORT)
+    .limit(AUDIT_TRAIL_PAGE_SIZE + 1)
+    .lean();
+  const hasMore = docs.length > AUDIT_TRAIL_PAGE_SIZE;
+  const rows = hasMore ? docs.slice(0, AUDIT_TRAIL_PAGE_SIZE) : docs;
+  return {
+    rows: serialize(rows),
+    nextCursor: hasMore ? encodeAuditTrailCursor(rows[rows.length - 1]) : null,
+  };
 }
 
 /**

@@ -23,6 +23,11 @@ import { getPageVersionSnapshot } from '@/lib/actions/pageBuilder';
 // Round 37, ADDED beside the statements above rather than folded into any.
 import { backupDraftBeforeRestore } from '@/lib/actions/pageBuilder';
 import { getPageVersions } from '@/lib/actions/pageBuilder';
+// Round 38, ADDED beside the statements above rather than folded into any.
+import { getPageAuditLog } from '@/lib/actions/pageBuilder';
+import {
+  AUDIT_TRAIL_PAGE_SIZE, buildPageAuditQuery, parseAuditTrailCursor,
+} from '@/lib/pageBuilder/auditTrail';
 import { DRAFT_BACKUP_LABEL, isDraftBackup, versionRowLabel } from '@/lib/pageBuilder/versionLabel';
 import { effectiveContent as effectiveContentOf } from '@/lib/pageBuilder/draftState';
 import { getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
@@ -1831,5 +1836,204 @@ test('the draft/publish action layer', async (t) => {
     // …and the draft it replaced was itself backed up, so the sequence composes.
     const titles = backupRows().map((b) => b.snapshot.title).sort();
     assert.deepEqual(titles, [MARKER, 'current work'].sort(), 'the second backup was not written');
+  });
+
+  // ── ROUND 38: the audit log gets a READ path ───────────────────────────────
+  //
+  // `PageAuditLog` has been written on every mutation here since round 2 and
+  // read by nothing. These cases EXECUTE getPageAuditLog rather than scanning
+  // it, because what is at stake is behaviour: which fields come back, and
+  // whether a page boundary loses a row.
+  //
+  // The rows are produced by the REAL actions wherever a real action writes the
+  // one the case is about, so the trail under test is the trail production
+  // writes. `seedAuditRow` exists only for the volume and tie-break cases,
+  // which need more rows than an action sequence would produce and need control
+  // over `createdAt` that the fake's advancing clock does not give.
+
+  /** One audit row, straight into the collection. */
+  const seedAuditRow = (i, over = {}) => seed('PageAuditLog', {
+    _id: `audit${String(i).padStart(4, '0')}`,
+    pageId: PAGE_ID,
+    pageType: 'builder',
+    action: 'draft.save',
+    sectionId: '',
+    field: '',
+    before: { hadDraft: true },
+    after: { hasDraft: true },
+    actor: { id: 'u1', name: 'Dev' },
+    // Below the fake's clock base, ASCENDING with i, so row i+1 is newer than
+    // row i and nothing an action writes during the case can land among them.
+    createdAt: new Date(1000 + i * 1000),
+    ...over,
+  });
+
+  const auditIds = (res) => res.rows.map((r) => String(r._id));
+
+  await scenario('the read returns the projection and NOTHING else', async () => {
+    seedPage();
+    // A real action, so the row under test is one production writes.
+    await saveDraftContent(PAGE_ID, draftContent(), token(row()));
+    assert.equal(count('PageAuditLog'), 1, 'precondition: the save wrote its audit row');
+
+    const { rows, nextCursor } = await getPageAuditLog(PAGE_ID);
+    assert.equal(rows.length, 1);
+    assert.equal(nextCursor, null);
+    assert.deepEqual(Object.keys(rows[0]).sort(), ['_id', 'action', 'actor', 'createdAt']);
+    assert.equal(rows[0].action, 'draft.save');
+    assert.equal(rows[0].actor.name, 'Dev');
+
+    // By name, so a failure says WHICH field came back. Each is excluded for a
+    // measured reason — see lib/pageBuilder/auditTrail.js.
+    for (const field of ['before', 'after', 'sectionId', 'field', 'pageType']) {
+      assert.equal(field in rows[0], false,
+        `getPageAuditLog shipped '${field}'. before/after are PRESENCE FLAGS, not values, `
+        + 'and shipping them invites a caller to render them as if they were.');
+    }
+  });
+
+  await scenario('CONTROL: the stored row really does carry the fields the read drops', async () => {
+    // Without this, the exclusion above passes for a writer that never wrote
+    // them — the check would be pinning an absence nothing created.
+    seedPage();
+    await saveDraftContent(PAGE_ID, draftContent(), token(row()));
+    const [stored] = all('PageAuditLog');
+    assert.deepEqual(stored.before, { hadDraft: false });
+    assert.deepEqual(stored.after, { hasDraft: true });
+    assert.equal(stored.pageType, 'builder');
+    assert.equal('sectionId' in stored, true);
+    assert.equal('field' in stored, true);
+  });
+
+  await scenario('a page with MANY actions reads back newest first', async () => {
+    seedPage({ status: 'published', publishedVersion: 1 });
+    // Four real actions, in order, each writing its own row.
+    await saveDraftContent(PAGE_ID, draftContent(), token(row()));
+    await updatePageIdentity(PAGE_ID, { slug: 'renamed-slug' }, token(row()));
+    await publishPageStatus(PAGE_ID, { status: 'published' }, token(row()));
+    await discardDraftContent(PAGE_ID, token(row()));
+
+    const { rows } = await getPageAuditLog(PAGE_ID);
+    assert.deepEqual(rows.map((r) => r.action),
+      ['draft.discard', 'publish', 'update', 'draft.save'],
+      'the trail is not newest-first, or an action stopped recording');
+  });
+
+  await scenario('a page with NO actions returns empty — a normal state, not a failure', async () => {
+    seedPage();
+    assert.deepEqual(await getPageAuditLog(PAGE_ID), { rows: [], nextCursor: null });
+  });
+
+  await scenario('a blank id returns empty rather than every page in the collection', async () => {
+    seedPage();
+    seedAuditRow(1);
+    seedAuditRow(2, { pageId: 'some-other-page' });
+    assert.deepEqual(await getPageAuditLog(''), { rows: [], nextCursor: null });
+    assert.deepEqual(await getPageAuditLog(null), { rows: [], nextCursor: null });
+    // …and a real id returns ONLY its own page's rows.
+    assert.deepEqual(auditIds(await getPageAuditLog(PAGE_ID)), ['audit0001']);
+  });
+
+  await scenario('the newest row after a round-37 restore is the BACKUP, then the save', async () => {
+    // The third fixture: a page whose newest activity is a restore. Driven
+    // through the real two-write sequence, so the order is the one the editor
+    // produces rather than one this test arranged.
+    seedPage({ status: 'published', publishedVersion: 1, draft: draftContent({ title: 'current work' }) });
+    seedVersionRow('Version One Content');
+    const out = await restoreWithBackup('pv-old');
+    assert.equal(out.aborted, false, 'precondition: the restore ran');
+
+    const { rows } = await getPageAuditLog(PAGE_ID);
+    assert.deepEqual(rows.map((r) => r.action), ['draft.save', 'draft.backup'],
+      'a restore no longer leaves the backup and the save it protected, in that order');
+    // The backup row names its actor and nothing about the version it copied —
+    // the trail cannot join a row to a version, so it must not appear to.
+    assert.equal(rows[1].actor.name, 'Dev');
+    assert.equal('after' in rows[1], false, 'the backup row shipped its backupVersionId');
+  });
+
+  // ── the page boundary ─────────────────────────────────────────────────────
+
+  await scenario('exactly one page of rows offers no next page', async () => {
+    seedPage();
+    for (let i = 1; i <= AUDIT_TRAIL_PAGE_SIZE; i += 1) seedAuditRow(i);
+    const res = await getPageAuditLog(PAGE_ID);
+    assert.equal(res.rows.length, AUDIT_TRAIL_PAGE_SIZE);
+    assert.equal(res.nextCursor, null,
+      'a full first page offered a second one — the +1 fetch is off by one');
+  });
+
+  await scenario('one row past the boundary pages without losing or repeating a row', async () => {
+    seedPage();
+    const total = AUDIT_TRAIL_PAGE_SIZE + 1;
+    for (let i = 1; i <= total; i += 1) seedAuditRow(i);
+
+    const first = await getPageAuditLog(PAGE_ID);
+    assert.equal(first.rows.length, AUDIT_TRAIL_PAGE_SIZE);
+    assert.ok(first.nextCursor, 'no cursor was offered for the row past the boundary');
+
+    const second = await getPageAuditLog(PAGE_ID, { cursor: first.nextCursor });
+    assert.equal(second.rows.length, 1, 'the second page did not hold the one remaining row');
+    assert.equal(second.nextCursor, null);
+
+    const seen = [...auditIds(first), ...auditIds(second)];
+    assert.equal(new Set(seen).size, total, 'a row was repeated across the boundary');
+    assert.deepEqual([...seen].sort(),
+      Array.from({ length: total }, (_, i) => `audit${String(i + 1).padStart(4, '0')}`).sort(),
+      'a row was SKIPPED across the boundary — the failure a cursor exists to prevent');
+    // Newest first, across both pages.
+    assert.equal(seen[0], `audit${String(total).padStart(4, '0')}`);
+    assert.equal(seen[seen.length - 1], 'audit0001');
+  });
+
+  /**
+   * A page whose two OLDEST rows share a millisecond, so the page boundary
+   * falls between them.
+   *
+   * The tie has to be at the boundary to be worth anything, and the boundary is
+   * at the OLD end of a newest-first page: rows 1 and 2 tie, rows 3..26 are
+   * strictly newer, so page one holds the 24 newer rows plus one of the tied
+   * pair and page two must find the other.
+   */
+  const seedTieAtBoundary = () => {
+    const tie = new Date(1000);
+    seedAuditRow(1, { createdAt: tie });
+    seedAuditRow(2, { createdAt: tie });
+    for (let i = 3; i <= AUDIT_TRAIL_PAGE_SIZE + 1; i += 1) seedAuditRow(i);
+  };
+
+  await scenario('SAME-MILLISECOND rows straddling the boundary keep the tie-break', async () => {
+    // The reason the cursor is compound rather than a createdAt alone. Two rows
+    // share an instant and the page edge falls between them; a flat `$lt` would
+    // drop the second one and the trail would look complete.
+    seedPage();
+    seedTieAtBoundary();
+
+    const first = await getPageAuditLog(PAGE_ID);
+    assert.equal(first.rows.length, AUDIT_TRAIL_PAGE_SIZE);
+    assert.equal(auditIds(first).at(-1), 'audit0002', 'the boundary did not land on the tie');
+
+    const second = await getPageAuditLog(PAGE_ID, { cursor: first.nextCursor });
+    const seen = [...auditIds(first), ...auditIds(second)];
+    assert.equal(new Set(seen).size, seen.length, 'a tied row was repeated');
+    assert.deepEqual(auditIds(second), ['audit0001'],
+      'the tied row on the far side of the boundary was SKIPPED');
+  });
+
+  await scenario('CONTROL: a flat createdAt cursor DOES lose the tied row', async () => {
+    // Without this, the tie case above passes for a fake that cannot express
+    // the failure. Same fixture, the tie-break clause removed by hand.
+    seedPage();
+    seedTieAtBoundary();
+
+    const first = await getPageAuditLog(PAGE_ID);
+    const flat = buildPageAuditQuery({ pageId: PAGE_ID, cursor: first.nextCursor });
+    // The compound $or replaced by the naive bound a first attempt would write.
+    delete flat.$or;
+    flat.createdAt = { $lt: parseAuditTrailCursor(first.nextCursor).createdAt };
+    const PageAuditLogModel = (await import('@/models/PageAuditLog')).default;
+    const lost = await PageAuditLogModel.find(flat).select('action').sort({ createdAt: -1 }).lean();
+    assert.equal(lost.length, 0,
+      'the flat bound did NOT lose the tied row, so the compound case above proves nothing');
   });
 });
