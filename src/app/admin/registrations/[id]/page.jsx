@@ -46,6 +46,14 @@ async function roundsForRegistration(doc) {
     const { items } = await listSchedulesByCourse(course._id, {
       limit: 50,
       status: PUBLIC_SCHEDULE_STATUSES,
+      // includeStarted — the public surfaces drop a round once its first day
+      // arrives; this picker must NOT. It exists so an admin can CORRECT which
+      // round an attendee is on, and the correction most likely to be needed is
+      // the one made on or after the training day itself. The matching
+      // validation in updateRegistrationRound opts out for the same reason —
+      // if the two lists disagreed, the picker would offer a round the save
+      // then refuses.
+      includeStarted: true,
     });
     return items ?? [];
   } catch {

@@ -6,8 +6,50 @@
  */
 
 import { aiFetch, unwrap } from './client';
+import { siteTodayKey } from '@/lib/articlePublishTime';
+import { excludeStartedRounds } from '@/lib/schedule/roundHasStarted';
 
 const PATH = '/schedules';
+
+/**
+ * ── STARTED ROUNDS ARE EXCLUDED BY DEFAULT ──────────────────────────────────
+ *
+ * A round disappears from the PUBLIC site the moment its FIRST training day
+ * arrives. Upstream cannot do this: `/schedules` filters
+ * `dates: {$elemMatch: {$gte: from}}` — "any day today or later" — so a 13–14
+ * ส.ค. round matches on its own first day and survives. On 13 ส.ค. 2026 the
+ * public table still listed it.
+ *
+ * The narrowing therefore happens here, on the two helpers every public surface
+ * reaches through, rather than in each of the eight call sites — which is also
+ * why the default is ON. A new public surface gets the rule by existing; a
+ * surface that must NOT have it has to say so, in writing, at its call site.
+ * The opposite default would mean every future page silently reintroduces the
+ * defect until someone remembers.
+ *
+ * THREE CALLERS OPT OUT, all of them admin, all of them deliberately:
+ *   · app/admin/page.jsx            — the dashboard's open-rounds count
+ *   · app/admin/registrations/[id]  — the round picker for a correction
+ *   · lib/actions/registrations.js  — updateRegistrationRound's validation
+ * An admin has to be able to see, pick and edit a round that has already begun.
+ * `listSchedules` is not touched at all: /admin/schedules is its only caller and
+ * that table must keep showing started and finished rounds.
+ *
+ * ── `from` IS DELIBERATELY NOT MOVED TO BANGKOK ─────────────────────────────
+ * `getAllSchedules` still derives `from` with the runtime's local getters, i.e.
+ * UTC on Vercel. That looks like the same timezone bug and is not: a UTC date is
+ * either the same as Bangkok's or ONE DAY EARLIER, never later, so the fetch
+ * returns a SUPERSET of what the rule needs and the filter below — which is
+ * Bangkok-pinned — does the narrowing exactly. Moving `from` would additionally
+ * change how many rows the admin dashboard counts for seven hours a day, which
+ * is an admin behaviour change this round is not making. One boundary, one
+ * timezone, one place: `siteTodayKey`.
+ *
+ * The filter runs AFTER `unwrap`, in our own JS, so it re-evaluates on every
+ * render even when the Next data cache serves the body from memory. Staleness is
+ * therefore bounded by each page's own ISR window and never by the 30-minute
+ * fetch cache.
+ */
 
 /**
  * ── THE `status` OPT-IN ─────────────────────────────────────────────────────
@@ -82,13 +124,21 @@ export async function listSchedules({
  * Items reference their course via the `course` ObjectId (the same
  * convention `listSchedulesByCourse` reads on the way in). The page
  * server component re-attaches schedules to course rows by `_id`.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.status] — see PUBLIC_SCHEDULE_STATUSES above.
+ * @param {boolean} [opts.includeStarted=false] — keep rounds whose first
+ *   training day has already arrived. ADMIN CALLERS ONLY; see the block comment
+ *   at the top of this file.
  */
-export async function getAllSchedules({ status } = {}) {
+export async function getAllSchedules({ status, includeStarted = false } = {}) {
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  return listSchedules({ from: `${yyyy}-${mm}-${dd}`, status });
+  const res = await listSchedules({ from: `${yyyy}-${mm}-${dd}`, status });
+  if (includeStarted) return res;
+  return { ...res, items: excludeStartedRounds(res?.items, siteTodayKey()) };
 }
 
 /**
@@ -101,6 +151,9 @@ export async function getAllSchedules({ status } = {}) {
  * @param {object} [options]
  * @param {number} [options.limit=20]
  * @param {string} [options.status] — see PUBLIC_SCHEDULE_STATUSES above.
+ * @param {boolean} [options.includeStarted=false] — keep rounds whose first
+ *   training day has already arrived. ADMIN CALLERS ONLY; see the block comment
+ *   at the top of this file for the three that pass it and why.
  *
  * Without `status`, upstream auto-filters to the registerable statuses and
  * dates >= today, so a `full` round never arrives. The registration page, the
@@ -134,5 +187,7 @@ export async function listSchedulesByCourse(courseObjectId, options = {}) {
     revalidate: 1800,
     tags: [`schedules:course:${courseObjectId}`],
   });
-  return unwrap(raw);
+  const res = unwrap(raw);
+  if (options.includeStarted) return res;
+  return { ...res, items: excludeStartedRounds(res?.items, siteTodayKey()) };
 }
