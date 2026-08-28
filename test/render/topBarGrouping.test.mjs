@@ -56,6 +56,9 @@ const topBar = (page = PAGE()) => new JSDOM(`<!doctype html><body>${renderToStat
     }))
 )}</body>`).window.document;
 
+/** Round 42: the two texts the primary button may carry, and no others. */
+const PRIMARY_LABELS = ['เผยแพร่', 'จัดการการเผยแพร่'];
+
 const buttonLabels = (doc) => [...doc.querySelectorAll('button')]
   .map((b) => b.textContent.replace(/\s+/g, ' ').trim()).filter(Boolean);
 
@@ -77,7 +80,24 @@ const INVENTORY = Object.freeze([
   ['บันทึกฉบับร่าง',             'the editor’s original bar', (d) => buttonLabels(d).includes('บันทึกฉบับร่าง')],
   ['ทิ้งฉบับร่าง',               'round 5',  (d) => buttonLabels(d).includes('ทิ้งฉบับร่าง')],
   ['Preview',                  'the editor’s original bar', (d) => buttonLabels(d).includes('Preview')],
-  ['เผยแพร่',                    'the editor’s original bar', (d) => buttonLabels(d).includes('เผยแพร่')],
+  /**
+   * ── AMENDED IN ROUND 42, FLAGGED NOT QUIETLY EDITED ──────────────────────
+   * This entry read `buttonLabels(d).includes('เผยแพร่')`. Round 42 gives the
+   * primary button two labels — เผยแพร่ when the page is not currently public,
+   * จัดการการเผยแพร่ when it is — because PublishDialog is also where a page is
+   * taken DOWN and the old label gave nobody a reason to look there.
+   *
+   * The inventory's CLAIM is unchanged: the primary action is still in the bar.
+   * What changed is that the claim can no longer be spelled as one literal, so
+   * it is spelled as the element plus the exact set of texts it may carry —
+   * which is stricter than the old `includes`, not looser. The two labels
+   * themselves are asserted against their conditions in
+   * test/render/publishStatusWording.
+   */
+  ['the primary action', 'the editor’s original bar', (d) => {
+    const b = d.querySelector('[data-testid="publish-button"]');
+    return Boolean(b) && PRIMARY_LABELS.includes(b.textContent.trim());
+  }],
 ]);
 
 test('every element the bar carried is still in it — nothing was removed', () => {
@@ -151,7 +171,11 @@ test('the primary action stands outside the secondary cluster', () => {
   assert.ok(publish, 'the publish button is gone');
   assert.equal(cluster.contains(publish), false,
     'เผยแพร่ is back inside the row of secondary buttons');
-  assert.equal(publish.textContent.trim(), 'เผยแพร่');
+  // ROUND 42, FLAGGED: the label is conditional now. PAGE() is published with
+  // no window, so it IS publicly visible and reads as status management. The
+  // condition itself is tested in test/render/publishStatusWording.
+  assert.equal(publish.textContent.trim(), 'จัดการการเผยแพร่');
+  assert.ok(PRIMARY_LABELS.includes(publish.textContent.trim()));
 
   // The four that stay: settings, preview, save, discard — and only those.
   assert.deepEqual([...cluster.querySelectorAll('button')].map((b) => b.textContent.replace(/\s+/g, ' ').trim()),
@@ -179,7 +203,9 @@ const WIRING = Object.freeze([
   ['Preview',       /onClick=\{onOpenPreview\}/],
   ['บันทึกฉบับร่าง',  /onClick=\{onSave\}/],
   ['ทิ้งฉบับร่าง',    /onClick=\{\(\) => setConfirmDiscard\(true\)\}/],
-  ['เผยแพร่',        /onClick=\{onPublish\}/],
+  // ROUND 42: named by role rather than by label, since the label is now
+  // conditional. The BINDING it asserts is round 41's and did not move.
+  ['the primary', /onClick=\{onPublish\}/],
 ]);
 
 test('every button dispatches exactly what it dispatched before', () => {

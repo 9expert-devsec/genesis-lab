@@ -121,7 +121,15 @@ export function PublishDialog({ open, onClose, onPublish }) {
           )}
         >
           <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">เผยแพร่หน้านี้</Dialog.Title>
+            {/*
+              ROUND 42: "เผยแพร่หน้านี้" named ONE of the five things this
+              dialog does. An author who came to take a page down read a title
+              that said the opposite and had no reason to believe the control
+              was here. The title now names the subject rather than one verb;
+              the five options, their labels and what each dispatches are
+              untouched.
+            */}
+            <Dialog.Title className="text-sm font-bold text-9e-navy dark:text-white">สถานะการเผยแพร่</Dialog.Title>
             <Dialog.Close aria-label="ปิด" className="rounded p-1 text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-9e-navy">
               <X className="h-4 w-4" />
             </Dialog.Close>

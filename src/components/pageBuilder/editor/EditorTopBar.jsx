@@ -12,6 +12,34 @@ import { draftSaverLine } from '@/lib/pageBuilder/editorStatus';
 // ADDED beside the two statements above rather than folded into either — the
 // standing rule in this directory.
 import { canOfferPublishedView, publishedViewHref } from '@/lib/pageBuilder/previewMode';
+// ROUND 42, ADDED beside the statements above rather than folded into any of
+// them — the standing rule in this directory.
+import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
+
+/**
+ * ── THE PRIMARY BUTTON'S TWO LABELS — ROUND 42 ────────────────────────────
+ * PublishDialog has offered all five statuses since round 5, `draft` among
+ * them ("ยกเลิกเผยแพร่ กลับไปแก้ไข"). Nothing was missing. What was missing was
+ * a REASON TO LOOK: the button said เผยแพร่ and the dialog said เผยแพร่หน้านี้,
+ * so an author wanting to take a page DOWN had no path to the control that
+ * does it. This is a wording change and only a wording change — same button,
+ * same handler, same dialog, same five options.
+ *
+ * WHICH LABEL IS DECIDED BY THE SAME QUESTION THE ROUTE ASKS. Not
+ * `status === 'published'`: round 5 shipped the status-vs-visibility
+ * distinction and visibility.js's header exists so a second copy of it cannot
+ * drift. The two genuinely disagree, in both directions, and each disagreement
+ * is a case where the wrong label sends an author the wrong way:
+ *
+ *   · published + past its วันสิ้นสุด → NOT public. The badge says เผยแพร่แล้ว
+ *     and the URL 404s. "จัดการการเผยแพร่" would invite them to manage
+ *     something that is already down; เผยแพร่ is what they actually need.
+ *   · scheduled + start date reached → IS public. Nothing ever flips
+ *     `scheduled` to `published`, so a status test would offer เผยแพร่ for a
+ *     page that is live right now — and hide the way to take it down.
+ */
+const PUBLISH_LABEL = 'เผยแพร่';
+const MANAGE_LABEL = 'จัดการการเผยแพร่';
 
 const STATUS_LABEL = {
   draft: 'ฉบับร่าง', scheduled: 'ตั้งเวลา', published: 'เผยแพร่แล้ว',
@@ -127,6 +155,16 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
   const status = page?.status ?? 'draft';
   const pendingDraft = hasPendingDraft(editor);
   const saver = draftSaverLine(editor);
+  /**
+   * Is this page public RIGHT NOW — the route's own question, on the same
+   * predicate, against the page as it is stored.
+   *
+   * `now` is left to the function's default here, exactly as PublishDialog
+   * already leaves it: the answer is about this moment, and an admin route is
+   * session-gated and dynamic, so the server render and the hydration are
+   * milliseconds apart. What it must never become is a local paraphrase.
+   */
+  const livePublic = isPubliclyVisible(page);
   // Round 5's line, given a name only so the separator below can ask whether it
   // has anything to separate. Same call, same function, same fact.
   const state = statusLine(editor);
@@ -267,10 +305,12 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
         </div>
 
         {/*
-          The rule IS the regrouping. เผยแพร่ is the only control in this bar
-          that changes what the public reads, and it was last in a row of five
-          equals. It keeps its handler, its tier gate and its conflict guard
-          exactly; what it gains is a boundary and a little more room.
+          The rule IS the regrouping (round 41). This is the only control in
+          the bar that changes what the public reads, and it was last in a row
+          of five equals. It keeps its handler, its tier gate and its conflict
+          guard exactly; what it gained there was a boundary and a little more
+          room, and what it gains in round 42 is a label that admits it also
+          takes a page down.
         */}
         <span aria-hidden className="h-6 w-px shrink-0 bg-[var(--surface-border)]" />
         <button
@@ -284,7 +324,7 @@ export function EditorTopBar({ onSave, onOpenSettings, onOpenPreview, onPublish,
             'bg-9e-action hover:bg-9e-brand disabled:opacity-50'
           )}
         >
-          เผยแพร่
+          {livePublic ? MANAGE_LABEL : PUBLISH_LABEL}
         </button>
       </div>
 
