@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Eye, X } from 'lucide-react';
+import { ChevronLeft, Eye, ExternalLink, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
 import {
   saveCourseExtension,
@@ -165,6 +165,11 @@ export function CourseForm({
   // Stamp of the last fully-successful save. Shown in the header, and dropped
   // the moment the form is edited again so it can never describe stale state.
   const [savedAt, setSavedAt] = useState(null);
+  // Set only when a "บันทึกแล้วดูหน้าจริง" submit reaches courseSaveOutcome's
+  // allOk — i.e. BOTH MSDB and the extension landed. Gates the "เปิดหน้าจริง"
+  // reveal below the header; see the R1 note in handleSubmit for why this is a
+  // second click rather than an immediate window.open().
+  const [previewReady, setPreviewReady] = useState(false);
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
@@ -390,8 +395,13 @@ export function CourseForm({
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // open-in-new-tab
       const anchor = e.target?.closest?.('a[href]');
       if (!anchor) return;
-      // Preview is target="_blank": a new tab is not an exit, and prompting for
-      // it would be the false positive that discredits the whole guard.
+      // ดูหน้าจริง and the post-save เปิดหน้าจริง reveal are both target="_blank":
+      // a new tab is not an exit, and prompting for one here would be the false
+      // positive that discredits the whole guard. Both still warn about
+      // SAVED-ONLY content on their own — ดูหน้าจริง via its own onClick
+      // confirm() when dirty, เปิดหน้าจริง by only existing once a save
+      // actually landed — this generic same-tab-navigation guard was never the
+      // mechanism for that and still is not.
       if (anchor.target && anchor.target !== '_self') return;
       if (anchor.hasAttribute('download')) return;
       const raw = anchor.getAttribute('href');
@@ -633,8 +643,20 @@ export function CourseForm({
      * admin typed still in it, so the retry costs them nothing. Reporting
      * "success" on a partial save is the one outcome that must be impossible.
      */
+    /**
+     * ── R1: "บันทึกแล้วดูหน้าจริง" reuses THIS handler, not a second one ────
+     * Both submit buttons below are `type="submit"` inside the same <form>, so
+     * either one runs handleSubmit unchanged — no forked save path to drift
+     * from the plain "บันทึก" button. `submitter` (native, off the SubmitEvent)
+     * is read HERE, synchronously, inside the real click's call stack — never
+     * after an `await` — because that is what a browser gesture is scoped to.
+     * It is only ever used to decide whether to REVEAL a plain `<a>` after
+     * success; nothing here calls window.open() itself.
+     */
+    const wantsPreviewAfterSave = e.nativeEvent?.submitter?.dataset?.intent === 'save-and-preview';
     setSaveReport(null);
     setAliasError(null);
+    setPreviewReady(false);
     startTransition(async () => {
       const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
         ok: false,
@@ -675,6 +697,10 @@ export function CourseForm({
         baselineRef.current = snapshot();
         setDirty(false);
         setSavedAt(Date.now());
+        // Success is the JOINT condition (outcome.allOk === both stores
+        // landed) — reached this line. A PARTIAL save falls through to the
+        // branch below instead and never sets this.
+        if (wantsPreviewAfterSave) setPreviewReady(true);
         return;
       }
 
@@ -1251,10 +1277,10 @@ export function CourseForm({
 
           {/* Both of the next two need a course that EXISTS UPSTREAM, so they
               are hidden while creating: the promos/FAQ page is keyed by a code
-              that has not been saved yet, and Preview would open the public URL
-              of a course that is not there. Rendering either would be a link
-              that 404s by construction. They appear on the edit page the create
-              flow redirects to. */}
+              that has not been saved yet, and ดูหน้าจริง would open the public
+              URL of a course that is not there. Rendering either would be a
+              link that 404s by construction. They appear on the edit page the
+              create flow redirects to. */}
           {!isCreate && (
           <>
           {/* The four editors that stayed on /admin/courses/[courseId]. The
@@ -1270,14 +1296,53 @@ export function CourseForm({
             โปรโมชัน / Early Bird / FAQ / ชำระเงิน
           </Link>
 
+          {/* R1: NOT "Preview" — this opens the PUBLIC page, which reads MSDB
+              fresh and therefore shows only whatever the last successful save
+              wrote, never edits still sitting in this form's uncontrolled
+              inputs. Renamed so the label stops promising something it cannot
+              do; title/tooltip repeats it for anyone who does not read the
+              button text. When the form is dirty this would silently open the
+              PRE-edit page with no indication anything is stale, so it warns
+              first instead — see "บันทึกแล้วดูหน้าจริง" below for the save-first
+              path. */}
           <a
             href={previewHref}
             target="_blank"
             rel="noopener noreferrer"
+            title="แสดงเฉพาะเนื้อหาที่บันทึกล่าสุด ไม่รวมการแก้ไขที่ยังไม่ได้บันทึก"
+            onClick={(e) => {
+              if (
+                dirty
+                && !window.confirm(
+                  'หน้านี้แสดงเฉพาะเนื้อหาที่บันทึกล่าสุด ไม่รวมการแก้ไขที่ยังไม่ได้บันทึก '
+                  + 'ต้องการเปิดดูหน้าเดิม (ก่อนแก้ไขล่าสุด) หรือไม่?'
+                )
+              ) {
+                e.preventDefault();
+              }
+            }}
             className="inline-flex items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
           >
-            <Eye className="h-4 w-4" /> Preview
+            <Eye className="h-4 w-4" /> ดูหน้าจริง
           </a>
+
+          {/* R2: revealed ONLY after a "บันทึกแล้วดูหน้าจริง" submit reaches
+              courseSaveOutcome's allOk — never on a partial save, and never
+              via a scripted window.open() (see the R1 note in handleSubmit).
+              Gated on `!dirty` too, the same way "✓ บันทึกสำเร็จ" above is: the
+              moment the admin edits again this page would be stale exactly
+              like ดูหน้าจริง, and re-deriving that from `previewReady` alone
+              would leave it claiming freshness it no longer has. */}
+          {previewReady && !dirty && (
+            <a
+              href={previewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-9e-md border border-green-300 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-950/70"
+            >
+              <ExternalLink className="h-4 w-4" /> เปิดหน้าจริง
+            </a>
+          )}
           </>
           )}
 
@@ -1317,6 +1382,21 @@ export function CourseForm({
                   ? 'สร้างหลักสูตร'
                   : 'บันทึก'}
           </button>
+
+          {/* R1: "save then view" — needs a course that EXISTS UPSTREAM
+              already, same reason ดูหน้าจริง itself is hidden while creating.
+              `data-intent` is how handleSubmit tells this submit apart from
+              the plain "บันทึก" one — see its `wantsPreviewAfterSave` read. */}
+          {!isCreate && (
+            <button
+              type="submit"
+              data-intent="save-and-preview"
+              disabled={pending}
+              className="rounded-9e-md border border-9e-action px-4 py-1.5 text-sm font-bold text-9e-action hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+            >
+              {pending ? 'กำลังบันทึก…' : 'บันทึกแล้วดูหน้าจริง'}
+            </button>
+          )}
         </div>
       </header>
 
