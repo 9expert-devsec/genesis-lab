@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Image from 'next/image';
 import { Star } from 'lucide-react';
 import {
@@ -12,45 +12,127 @@ import { DragHandle } from '@/components/ui/DragHandle';
 import { useAddedRowSink } from '@/app/admin/_components/AddedRowChannel';
 import { insertFeaturedRow } from '@/lib/featuredListOrder';
 
+/**
+ * DEFERRED (STAGED) REORDER — same shape as
+ * featured-courses/_components/FeaturedCourseList.jsx, which itself matches
+ * courses/_components/CoursesAdminClient.jsx's ProgramGroupBody (dirty /
+ * error / saving state, explicit save + cancel, resetItems on cancel). See
+ * that file's header comment for the full reasoning; this is a near-
+ * identical copy differing only in model and field names — the round that
+ * introduced this deliberately did NOT extract a shared component while
+ * also changing save semantics on three screens with no prior suite
+ * baseline to catch a mistake (see the round's report for that reasoning).
+ */
 export function FeaturedReviewList({ items: initial }) {
-  async function persistReorder(newOrder, prevOrder) {
-    const prevIndex = new Map(prevOrder.map((c, idx) => [c._id, idx]));
-    const updates = newOrder
-      .map((c, newIdx) => {
-        const wasIdx = prevIndex.get(c._id);
-        if (wasIdx === newIdx) return null;
-        const fd = new FormData();
-        fd.set('sort_order', String(newIdx));
-        fd.set('active', String(c.active));
-        return updateFeaturedReview(c._id, fd);
-      })
-      .filter(Boolean);
-    if (updates.length > 0) await Promise.all(updates);
-  }
-
   const {
     items,
     setItems,
+    resetItems,
     draggingIndex,
     dragOverIndex,
     getDragProps,
-  } = useDragReorder(initial, async (next, prev) => {
-    setItems(next.map((c, idx) => ({ ...c, sort_order: idx })));
-    setBusyId('__reorder__');
-    try {
-      await persistReorder(next, prev);
-    } finally {
-      setBusyId(null);
-    }
-  });
-  // This list OWNS the rows; the add form is a SIBLING under the server page.
-  // The created row arrives through AddedRowChannel and is placed by the same
-  // comparator the server reads with: { sort_order: 1, createdAt: -1 }.
-  useAddedRowSink((doc) => setItems((cur) => insertFeaturedRow(cur, doc)));
+  } = useDragReorder(initial, () => setDirty(true));
 
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const baselineRef = useRef(initial);
+
+  const [pendingAdds, setPendingAdds] = useState([]);
+
+  useAddedRowSink((doc) => {
+    if (dirty) {
+      setPendingAdds((cur) => [...cur, doc]);
+      return;
+    }
+    setItems((cur) => {
+      const next = insertFeaturedRow(cur, doc);
+      baselineRef.current = next;
+      return next;
+    });
+  });
+
+  useEffect(() => {
+    if (dirty || pendingAdds.length === 0) return;
+    setItems((cur) => {
+      let next = cur;
+      for (const doc of pendingAdds) next = insertFeaturedRow(next, doc);
+      baselineRef.current = next;
+      return next;
+    });
+    setPendingAdds([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
+
+  // beforeunload ONLY — a PARTIAL guard, stated plainly: it does not cover
+  // Next.js client-side navigation. See FeaturedCourseList.jsx's header note
+  // for why (ProgramGroupBody has no guard at all to copy; CourseForm.jsx's
+  // is inline, not an exported/reusable hook).
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
 
   const [busyId, setBusyId] = useState(null);
   const [, startTransition] = useTransition();
+
+  function cancel() {
+    resetItems(baselineRef.current);
+    setDirty(false);
+    setError(null);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+
+    const prevIndex = new Map(baselineRef.current.map((c, idx) => [c._id, idx]));
+    const changed = items
+      .map((c, newIdx) => ({ item: c, newIdx }))
+      .filter(({ item, newIdx }) => prevIndex.get(item._id) !== newIdx);
+
+    if (changed.length === 0) {
+      baselineRef.current = items;
+      setDirty(false);
+      setSaving(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      changed.map(async ({ item, newIdx }, i) => {
+        const fd = new FormData();
+        fd.set('sort_order', String(newIdx));
+        fd.set('active', String(item.active));
+        fd.set('skipSync', i === 0 ? 'false' : 'true');
+        const res = await updateFeaturedReview(item._id, fd);
+        if (res?.ok === false) throw new Error(res.error || 'บันทึกไม่สำเร็จ');
+        return item;
+      })
+    );
+
+    const failed = results
+      .map((r, i) => (r.status === 'rejected' ? changed[i].item : null))
+      .filter(Boolean);
+
+    if (failed.length > 0) {
+      setError(
+        `บันทึกลำดับไม่สำเร็จ ${failed.length} รายการ: `
+        + failed.map((c) => c.review?.reviewerName || c.review_id).join(', ')
+        + ' — ลองบันทึกอีกครั้ง'
+      );
+      setSaving(false);
+      return;
+    }
+
+    const saved = items.map((c, idx) => ({ ...c, sort_order: idx }));
+    setItems(saved);
+    baselineRef.current = saved;
+    setDirty(false);
+    setSaving(false);
+  }
 
   async function handleDelete(id) {
     if (!confirm('ลบออกจาก featured?')) return;
@@ -68,7 +150,12 @@ export function FeaturedReviewList({ items: initial }) {
     fd.set('active', String(!item.active));
     setBusyId(item._id);
     startTransition(async () => {
-      await updateFeaturedReview(item._id, fd);
+      const res = await updateFeaturedReview(item._id, fd);
+      if (res?.ok === false) {
+        alert(res.error || 'สลับสถานะไม่สำเร็จ');
+        setBusyId(null);
+        return;
+      }
       setItems(
         items.map((c) =>
           c._id === item._id ? { ...c, active: !c.active } : c
@@ -78,37 +165,55 @@ export function FeaturedReviewList({ items: initial }) {
     });
   }
 
-  async function handleReorder(item, direction) {
+  function handleReorder(item, direction) {
     const idx = items.findIndex((c) => c._id === item._id);
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= items.length) return;
-
-    const a = items[idx];
-    const b = items[swapIdx];
-
-    const fdA = new FormData();
-    fdA.set('sort_order', String(b.sort_order));
-    fdA.set('active', String(a.active));
-    const fdB = new FormData();
-    fdB.set('sort_order', String(a.sort_order));
-    fdB.set('active', String(b.active));
-
-    setBusyId(item._id);
-    startTransition(async () => {
-      await Promise.all([
-        updateFeaturedReview(a._id, fdA),
-        updateFeaturedReview(b._id, fdB),
-      ]);
-      const next = [...items];
-      next[idx] = { ...a, sort_order: b.sort_order };
-      next[swapIdx] = { ...b, sort_order: a.sort_order };
-      setItems(next.sort((x, y) => x.sort_order - y.sort_order));
-      setBusyId(null);
-    });
+    const next = [...items];
+    [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+    setItems(next);
+    setDirty(true);
   }
 
   return (
-    <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white">
+    <div className="flex flex-col gap-3">
+      {dirty && (
+        <div className="flex flex-wrap items-center gap-3 rounded-9e-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+          <span className="font-semibold">
+            ยังไม่บันทึกลำดับ — การบันทึกจะเขียนตำแหน่งของรีวิวที่ถูกย้ายเท่านั้น
+          </span>
+          {pendingAdds.length > 0 && (
+            <span>
+              และมีรีวิวใหม่ {pendingAdds.length} รายการที่เพิ่มไว้ระหว่างนี้ —
+              จะแสดงในตารางหลังบันทึกหรือยกเลิก
+            </span>
+          )}
+          <span className="ml-auto inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded bg-9e-action px-2.5 py-1 text-xs font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+            >
+              {saving ? 'กำลังบันทึก…' : 'บันทึกลำดับ'}
+            </button>
+            <button
+              type="button"
+              onClick={cancel}
+              disabled={saving}
+              className="rounded border border-[var(--surface-border)] px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+          </span>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="text-sm font-medium text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[var(--surface-border)] bg-9e-ice">
@@ -238,6 +343,7 @@ export function FeaturedReviewList({ items: initial }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
