@@ -142,10 +142,38 @@ export async function updateFeaturedCourse(id, formData) {
   const sort_order = Number(formData.get('sort_order') ?? 0);
   const active = formData.get('active') === 'true';
 
-  await FeaturedCourse.findByIdAndUpdate(id, { sort_order, active });
+  /**
+   * `skipSync` — set on all-but-one call by FeaturedCourseList's
+   * deferred-save reorder batch, which calls this action once per CHANGED
+   * row via Promise.allSettled. Without this, N changed rows would each
+   * schedule their own triggerLandingSync() — N overlapping 5-15s
+   * landing-snapshot rebuilds for one save. The batch designates exactly one
+   * of its calls to carry skipSync=false, so a save collapses to ONE sync
+   * regardless of how many rows moved — and because the batch only reaches
+   * its "fully succeeded" branch when every call (including the
+   * skipSync=false one) has landed, that one call is guaranteed to have run
+   * whenever a sync is expected. `handleToggle`'s own single-row call never
+   * sets this flag, so an active/inactive toggle still syncs immediately, as
+   * before.
+   */
+  const skipSync = formData.get('skipSync') === 'true';
+
+  /**
+   * TRY/CATCH ADDED (was previously absent — a thrown Mongo error propagated
+   * as an unhandled rejection to whichever caller awaited this, with no
+   * {ok:false} to check). Every caller was enumerated before this change
+   * (FeaturedCourseList.jsx: the reorder-save batch, handleToggle; no caller
+   * anywhere else in the repo) and each now handles ok:false explicitly.
+   */
+  try {
+    await FeaturedCourse.findByIdAndUpdate(id, { sort_order, active });
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' };
+  }
+
   revalidatePath('/');
   revalidatePath('/admin/featured-courses');
-  triggerLandingSync();
+  if (!skipSync) triggerLandingSync();
   return { ok: true };
 }
 
