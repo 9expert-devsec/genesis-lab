@@ -133,13 +133,25 @@ export function isValidThaiPhone(raw) {
 
 /**
  * The single formatter every surface calls — schemas (on write, via
- * `.transform()`), and the client (on blur). Domestic numbers become
- * "0XX-XXX-XXXX" (mobile) or "0X-XXX-XXXX" (landline), with " ต่อ <ext>"
- * appended when an extension is present. A valid foreign number is returned
- * trimmed but otherwise UNCHANGED — its internal structure is unknown, so
- * nothing is regrouped. An invalid value returns `null`: the caller must
- * leave the field exactly as the user typed it and let the validator's error
- * speak, never silently drop or rewrite digits it could not make sense of.
+ * `.transform()`), and the client (on blur). Domestic numbers become:
+ *
+ *   mobile (10 digits)                    "0XX-XXX-XXXX"   e.g. 081-234-5678
+ *   landline, Bangkok/metro (base "02")   "0X-XXX-XXXX"    e.g. 02-219-4304
+ *   landline, any other province          "0XX-XXX-XXX"    e.g. 038-123-456
+ *
+ * with " ต่อ <ext>" appended when an extension is present. The landline split
+ * is NOT uniform: "02" is the only 2-digit Thai area code (Bangkok/metro);
+ * every other province — 032, 038, 042, 053, 077, ... — uses a 3-digit area
+ * code, so grouping every landline as 2-3-4 (an earlier version of this
+ * function did) misformats every one of them. This does not change WHICH
+ * numbers validate — see classify()/isValidThaiPhone, untouched — only how an
+ * already-valid 9-digit landline is grouped for display.
+ *
+ * A valid foreign number is returned trimmed but otherwise UNCHANGED — its
+ * internal structure is unknown, so nothing is regrouped. An invalid value
+ * returns `null`: the caller must leave the field exactly as the user typed
+ * it and let the validator's error speak, never silently drop or rewrite
+ * digits it could not make sense of.
  *
  * IDEMPOTENT: formatting an already-formatted value reproduces it, because
  * digit-stripping ignores the dashes/spaces it already added. This is what
@@ -152,10 +164,16 @@ export function formatThaiPhone(raw) {
   if (c.kind === 'foreign') return String(raw ?? '').trim();
 
   const { base, extension } = c;
-  const core =
-    base.length === 10
-      ? `${base.slice(0, 3)}-${base.slice(3, 6)}-${base.slice(6, 10)}`
-      : `${base.slice(0, 2)}-${base.slice(2, 5)}-${base.slice(5, 9)}`;
+  let core;
+  if (base.length === 10) {
+    core = `${base.slice(0, 3)}-${base.slice(3, 6)}-${base.slice(6, 10)}`;
+  } else if (base.startsWith('02')) {
+    // Bangkok/metro — the only 2-digit Thai area code.
+    core = `${base.slice(0, 2)}-${base.slice(2, 5)}-${base.slice(5, 9)}`;
+  } else {
+    // Every other province — 3-digit area code + 6-digit subscriber.
+    core = `${base.slice(0, 3)}-${base.slice(3, 6)}-${base.slice(6, 9)}`;
+  }
   return extension ? `${core} ต่อ ${extension}` : core;
 }
 

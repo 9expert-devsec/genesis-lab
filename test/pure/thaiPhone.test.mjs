@@ -192,6 +192,51 @@ test('formatting is idempotent for every shape', () => {
   }
 });
 
+// ── Landline grouping: "02" is the only 2-digit area code ─────────────────
+// (Commit 5) 01/03/04/05/07 use a 3-digit area code + 6-digit subscriber
+// (3-3-3); "02" (Bangkok/metro) is the sole 2-3-4 exception. One case per
+// prefix class, each asserting the EXACT output string.
+
+test('landline grouping — 01 prefix uses 3-3-3', () => {
+  assert.equal(formatThaiPhone('012345678'), '012-345-678');
+});
+
+test('landline grouping — 02 (Bangkok/metro) stays 2-3-4, the sole exception', () => {
+  assert.equal(formatThaiPhone('022194304'), '02-219-4304');
+});
+
+test('landline grouping — 03 prefix uses 3-3-3', () => {
+  assert.equal(formatThaiPhone('032123456'), '032-123-456');
+});
+
+test('landline grouping — 04 prefix uses 3-3-3', () => {
+  assert.equal(formatThaiPhone('042123456'), '042-123-456');
+});
+
+test('landline grouping — 05 prefix uses 3-3-3', () => {
+  assert.equal(formatThaiPhone('053123456'), '053-123-456');
+});
+
+test('landline grouping — 07 prefix uses 3-3-3', () => {
+  assert.equal(formatThaiPhone('077123456'), '077-123-456');
+});
+
+test('an extension on a 3-digit-area-code (non-02) number formats after the 3-3-3 core', () => {
+  assert.equal(formatThaiPhone('038123456 ต่อ 999'), '038-123-456 ต่อ 999');
+});
+
+test('formatting stays idempotent for the new 3-3-3 shape', () => {
+  for (const v of ['038123456', '038-123-456', '038123456 ต่อ 999', '038-123-456 ต่อ 999']) {
+    const once = formatThaiPhone(v);
+    const twice = formatThaiPhone(once);
+    assert.equal(twice, once, `formatting "${v}" is not stable under re-formatting`);
+  }
+  // And the fixed point is exactly the 3-3-3 string, not merely stable at
+  // whatever it happens to be — a formatter that always returned its input
+  // unchanged would also pass the loop above.
+  assert.equal(formatThaiPhone('038123456'), '038-123-456');
+});
+
 // ── Accepted input characters ────────────────────────────────────────────
 
 test('digits, +, space, -, (), and the extension markers are allowed characters', () => {
