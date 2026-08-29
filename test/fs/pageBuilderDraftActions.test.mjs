@@ -266,6 +266,72 @@ test('the draft/publish action layer', async (t) => {
     );
   });
 
+  /**
+   * ── ROUND 51: THE SAME RULE, FOR THE SINGLE-VALUE FIELDS ────────────────
+   * Step 4 replaced `course_card`'s and `course_schedule`'s bare text boxes
+   * with a picker. The list control's rule carries over unchanged: the stored
+   * code is the authority and the catalogue is consulted only for a name, so a
+   * code the catalogue lacks must survive the round trip.
+   *
+   * ADDED here beside round 47's, not in a file of its own — this is the ONE
+   * fakeDb-owning parent, and the note above getPageVersionSnapshot explains
+   * why a second one reddens this file's fixtures mid-flight.
+   *
+   * The single-value case loses MORE than the list case when it goes wrong. A
+   * dropped entry in a list of six leaves five; a dropped `courseId` leaves the
+   * section with nothing to resolve, and §D.2 measured what that publishes —
+   * 84 bytes, byte-identical to a section that draws nothing. Round 50
+   * reproduced the 84 and measured price-off at 1882, so the two states stay
+   * distinguishable; an emptied code would not be.
+   */
+  await scenario('a save keeps an UNRESOLVABLE course_card code, byte for byte', async () => {
+    const before = copy(seedPage());
+    const card = {
+      ...section('s-card', 'course_card'),
+      content: { courseId: 'ZZ-NO-SUCH-COURSE', showPrice: true },
+    };
+    const res = await saveDraftContent(
+      PAGE_ID, draftContent({ sections: [card] }), token(before)
+    );
+    assert.equal(res.ok, true, res.error);
+    const stored = row().draft.sections[0].content;
+    assert.equal(stored.courseId, 'ZZ-NO-SUCH-COURSE', 'the save dropped a code it could not resolve');
+    assert.equal(stored.showPrice, true, 'round 50 field lost on the way through');
+  });
+
+  await scenario('CONTROL: the same save DOES store the courseId it was given', async () => {
+    // Without this, the case above passes against a save that stored nothing at
+    // all and compared undefined to undefined.
+    const before = copy(seedPage());
+    const card = { ...section('s-card', 'course_card'), content: { courseId: 'CLAUDE-AI' } };
+    await saveDraftContent(PAGE_ID, draftContent({ sections: [card] }), token(before));
+    assert.equal(row().draft.sections[0].content.courseId, 'CLAUDE-AI');
+  });
+
+  await scenario('a save keeps an UNRESOLVABLE course_schedule code too', async () => {
+    const before = copy(seedPage());
+    const sched = {
+      ...section('s-sched', 'course_schedule'),
+      content: { courseId: 'ZZ-NO-SUCH-COURSE', limit: 0 },
+    };
+    const res = await saveDraftContent(
+      PAGE_ID, draftContent({ sections: [sched] }), token(before)
+    );
+    assert.equal(res.ok, true, res.error);
+    assert.equal(row().draft.sections[0].content.courseId, 'ZZ-NO-SUCH-COURSE');
+  });
+
+  await scenario('a hand-typed code is stored verbatim — not trimmed further, not case-folded', async () => {
+    // Direct entry trims and does nothing else (§F.3, §G step 3). Four of 79
+    // upstream ids are mixed-case and the course query is exact-match, so a
+    // fold anywhere on this path would make those four unreferenceable.
+    const before = copy(seedPage());
+    const card = { ...section('s-card', 'course_card'), content: { courseId: 'MixedCase-Code' } };
+    await saveDraftContent(PAGE_ID, draftContent({ sections: [card] }), token(before));
+    assert.equal(row().draft.sections[0].content.courseId, 'MixedCase-Code',
+      'the save normalised a code the author typed');
+  });
+
   await scenario('saveDraftContent rejects a stale expectedUpdatedAt', async () => {
     const before = copy(seedPage());
     const stale = new Date(new Date(before.updatedAt).getTime() - 5000).toISOString();

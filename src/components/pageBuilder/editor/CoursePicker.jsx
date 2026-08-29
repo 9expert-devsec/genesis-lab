@@ -7,6 +7,12 @@ import { cn } from '@/lib/utils';
 import { filterCourseOptions, courseOptionLabel } from '@/lib/courses/courseOptionFilter';
 import { moveInArray } from './pagePath';
 import { FieldBlock, INPUT_CLASS } from './fields';
+// ADDED beside the statements above rather than replacing one — the standing
+// rule in this repo. Step 4's single-value control reuses the admin course
+// form's one-course combobox instead of writing a second one; see
+// CourseSelectPicker at the foot of this file for what that costs and what it
+// deliberately does not touch.
+import { CourseSearchSelect } from '@/app/admin/courses/_components/CourseSearchSelect';
 
 /**
  * Choosing courses from a list, instead of typing codes into a textarea.
@@ -77,6 +83,36 @@ import { FieldBlock, INPUT_CLASS } from './fields';
  * re-implements matching inline, and its inline copy filters on
  * `course_name_th`, a field 0 of 79 rows carry.
  */
+
+/**
+ * What a directly-typed code becomes when it is stored: TRIMMED, and nothing
+ * else. Round 51.
+ *
+ * A function rather than an inline `typed.trim()` because the inline version is
+ * untestable from the render tier — the handler only runs under a real click —
+ * and a break control proved that concretely: folding the typed code to upper
+ * case left the ENTIRE suite green. The drive probe caught it, but the probe is
+ * not part of `npm test`, so nothing that runs on every commit was holding this.
+ *
+ * Case is NOT folded. Four of 79 upstream ids are mixed-case and the course
+ * query is exact-match, so a fold here makes those four unreferenceable — the
+ * failure would appear as "the code I typed does not resolve" with nothing on
+ * screen connecting it to a normalisation that happened on the way in. Nothing
+ * else is normalised either (§F.3): no case change, no separator rewriting, no
+ * rejection. A code upstream has not published yet must stay authorable.
+ *
+ * Returns '' for anything that is not a non-blank string, which the caller
+ * treats as "do nothing" rather than as "clear the field".
+ *
+ * USED BY THE SINGLE-VALUE CONTROL ONLY. `CourseIdsPicker` states the same rule
+ * inline, as round 49 wrote it, and is left exactly as it was: its guard in
+ * test/render/coursePicker pins that expression as source text, so routing it
+ * through here would have forced an amendment to a round-49 test for a refactor
+ * this round did not need. Unifying the two is a change of its own.
+ */
+export function directEntryCode(raw) {
+  return typeof raw === 'string' ? raw.trim() : '';
+}
 
 /** code → name, for the rows. Built once per catalogue rather than per row. */
 export function courseNameByCode(courses) {
@@ -387,6 +423,121 @@ export function CourseIdsPicker({ value, onChange, courses = [], label, hint }) 
             เพิ่ม
           </button>
         </div>
+      </div>
+    </FieldBlock>
+  );
+}
+
+/**
+ * ── STEP 4: THE SAME IDEA FOR ONE VALUE ────────────────────────────────────
+ * `course_card` and `course_schedule` reference ONE course, not an ordered
+ * list. §F.5 deferred them out of step 3 deliberately: a different shape, no
+ * shared code with `CourseIdsPicker` beyond the catalogue prop, and converting
+ * them alongside the riskiest step would have doubled its surface for no shared
+ * work. This is that follow-on.
+ *
+ * ── IT REUSES CourseSearchSelect, WHICH ALREADY SOLVED THIS ────────────────
+ * §F.1 named it as the right prior art and it is: it is the admin course form's
+ * one-course combobox, it matches through `filterCourseOptions`, and its header
+ * already states the stale-code rule in the words this round needs — a saved
+ * course missing from `options` keeps its stored code and shows it verbatim,
+ * because silently clearing a field whose target moved is the wipe-on-unrelated-
+ * edit class this repo keeps hitting.
+ *
+ * So the combobox is NOT re-implemented here. What this wrapper adds is the two
+ * things that are page-builder facts rather than course-form facts:
+ *
+ *   · THE MARK. CourseSearchSelect shows an unresolvable code but does not say
+ *     it could not name it. Round 49 settled the house wording for that —
+ *     “ไม่ทราบชื่อ”, a statement about THIS CATALOGUE and never a claim the
+ *     course does not exist. The mark lives here rather than in the shared
+ *     component precisely so the course form's appearance does not shift.
+ *   · DIRECT ENTRY. CourseSearchSelect's visible box is a SEARCH box: typing a
+ *     code the catalogue lacks filters to nothing and there is no way to commit
+ *     it. That would break §G step 3's rule that a code upstream has not
+ *     published yet stays authorable. Adding a “use what I typed” row to the
+ *     shared component would put a new option in the course form's dropdown, so
+ *     the direct-entry box lives here too — the same control round 49 gave the
+ *     list, with append swapped for replace.
+ *
+ * ── AND THE DIALOG QUESTION, ANSWERED THE OTHER WAY ────────────────────────
+ * The list control's dialog STAYS OPEN after a pick, because building a list of
+ * six means six picks. Here the listbox CLOSES on commit, and that is not a
+ * preference: one value has exactly one pick, so a control left open after it
+ * would be covering the warnings underneath — which for `course_card` is the
+ * ไม่พบคอร์สรหัสนี้ line an author most needs to read at exactly that moment.
+ * It is also CourseSearchSelect's existing behaviour, so this is a reason to
+ * reuse rather than a change to make.
+ *
+ * NOTHING HERE VALIDATES, REJECTS OR NORMALISES A CODE (§F.3). What is typed is
+ * stored trimmed and otherwise verbatim; case is not folded, because four of 79
+ * upstream ids are mixed-case and the course query is exact-match.
+ */
+export function CourseSelectPicker({
+  value, onChange, courses = [], label, hint, invalid = false, placeholder,
+}) {
+  const code = typeof value === 'string' ? value.trim() : '';
+  const names = useMemo(() => courseNameByCode(courses), [courses]);
+  // A statement about the catalogue only. The resolver owns existence and keeps
+  // its own warning underneath this control — the two are read at different
+  // moments through different caches and are allowed to disagree (§G step 2).
+  const unnamed = code !== '' && !names.has(code);
+
+  const [typed, setTyped] = useState('');
+  const useTyped = () => {
+    const next = directEntryCode(typed);
+    if (!next) return;
+    onChange(next);
+    setTyped('');
+  };
+
+  return (
+    <FieldBlock label={label} hint={hint}>
+      <CourseSearchSelect
+        value={code}
+        onChange={(next) => onChange(typeof next === 'string' ? next : '')}
+        options={courses}
+        label={label}
+        emptyLabel="— ยังไม่ได้เลือกคอร์ส —"
+        placeholder={placeholder ?? 'พิมพ์เพื่อค้นหารหัสหรือชื่อคอร์ส'}
+        inputClassName={cn(INPUT_CLASS, invalid && 'border-red-400')}
+        /**
+         * NO CAP, and this is the one prop that had to be added to the shared
+         * component. Its default of 50 over 79 courses would silently withhold
+         * 28 of them on a broad query — the same measurement that kept a cap
+         * off the list control.
+         */
+        limit={null}
+      />
+
+      {unnamed && (
+        <span
+          data-testid="course-select-unnamed"
+          className="mt-1 block text-[10px] text-amber-700 dark:text-amber-400"
+        >
+          ไม่ทราบชื่อ
+        </span>
+      )}
+
+      <div className="mt-2 flex items-center gap-1.5">
+        <input
+          type="text"
+          data-testid="course-select-code-input"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); useTyped(); } }}
+          placeholder="หรือพิมพ์รหัสคอร์สเอง เช่น MSE-AI"
+          aria-label="พิมพ์รหัสคอร์สเพื่อระบุเอง"
+          className={INPUT_CLASS}
+        />
+        <button
+          type="button"
+          data-testid="course-select-code-use"
+          onClick={useTyped}
+          className="shrink-0 rounded-9e-sm border border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50 hover:border-9e-action/40 hover:text-9e-action"
+        >
+          ใช้รหัสนี้
+        </button>
       </div>
     </FieldBlock>
   );

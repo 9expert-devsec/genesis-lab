@@ -15,7 +15,7 @@ import { moveInArray } from './pagePath';
 import { duplicateCourseCodes } from './duplicateCodes';
 // Round 48, ADDED beside the line above. The picker that replaces this file's
 // course textarea; see CoursePicker.jsx for the rule it must not break.
-import { CourseIdsPicker } from './CoursePicker';
+import { CourseIdsPicker, CourseSelectPicker } from './CoursePicker';
 import { IconPicker } from './IconPicker';
 import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
@@ -485,14 +485,22 @@ function CourseIdsWarnings({ ids, resolved }) {
  * a การ์ดคอร์ส next to “ราคาพิเศษ 4,900 บาท” in a การ์ดราคา and nothing says
  * which applies; the hint is what tells them this is the control for that.
  */
-function CourseCardEditor({ content, patch, resolved }) {
+function CourseCardEditor({ content, patch, resolved, courses }) {
   const courseId = String(content?.courseId ?? '').trim();
   const notFound = courseId !== '' && resolved === null;
   return (
     <>
-      <Field label="รหัสคอร์ส (course_id)" hint="เช่น MSE-AI — ใช้รหัสจากระบบคอร์ส">
-        <TextInput value={content?.courseId} onChange={(v) => patch({ courseId: v })} invalid={notFound} />
-      </Field>
+      <CourseSelectPicker
+        value={content?.courseId}
+        onChange={(courseId) => patch({ courseId })}
+        courses={courses}
+        label="คอร์ส (course_id)"
+        hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ"
+        invalid={notFound}
+      />
+      {/* Round 50's price switch, unmoved and unchanged: it stays BELOW the
+          course reference, because the code is what the card is and the price
+          is a fact about what that card says. Its own tests still drive it. */}
       <Field
         label="ราคาบนการ์ด"
         hint="ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว จะได้ไม่มีราคาสองชุดพูดคนละอย่างบนหน้าเดียวกัน"
@@ -622,7 +630,7 @@ function CourseListEditor({ content, patch, resolved, courses }) {
   );
 }
 
-function CourseScheduleEditor({ content, patch, resolved }) {
+function CourseScheduleEditor({ content, patch, resolved, courses }) {
   const courseId = String(content?.courseId ?? '').trim();
   // `resolved` is the schedules SAMPLE (tri-state): undefined = fetching, [] =
   // fetched with no upcoming rounds (bad code, or a real course with none open),
@@ -631,9 +639,14 @@ function CourseScheduleEditor({ content, patch, resolved }) {
   const emptySample = courseId !== '' && Array.isArray(resolved) && resolved.length === 0;
   return (
     <>
-      <Field label="รหัสคอร์ส (course_id)" hint="เช่น MSE-AI — จะดึงรอบที่เปิดรับสมัครของคอร์สนี้">
-        <TextInput value={content?.courseId} onChange={(v) => patch({ courseId: v })} invalid={emptySample} />
-      </Field>
+      <CourseSelectPicker
+        value={content?.courseId}
+        onChange={(courseId) => patch({ courseId })}
+        courses={courses}
+        label="คอร์ส (course_id)"
+        hint="เลือกจากรายการ หรือพิมพ์รหัสเองถ้ายังไม่มีในรายการ — จะดึงรอบที่เปิดรับสมัครของคอร์สนี้"
+        invalid={emptySample}
+      />
       {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
       {emptySample && (
         <Warn tone="red">ไม่พบรอบที่เปิดรับสมัครของคอร์สนี้ตอนนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>
