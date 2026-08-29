@@ -142,6 +142,53 @@ test('CONTROL: stripping non-digits BEFORE checking for + would silently accept 
   assert.equal(isValidThaiPhone(rawPlus66), true, 'the real (raw-first) validator still accepts it via the +66 branch');
 });
 
+// ── +66 must genuinely CONVERT to domestic, not merely fall through to the
+//    generic foreign path and happen to land inside its 8-15 digit window ──
+//
+// Owed from a prior review round's own finding (M4): disabling the +66
+// branch left every existing "+66 is accepted" test green, because the
+// broken branch's fallthrough — treating the value as generic "+" plus
+// 8-15 digits — still accepted the two examples then in use (11 digits
+// after the +, comfortably inside 8-15). A test built the same way as those
+// could never catch a broken +66 branch; only a value that the +66 CONVERSION
+// makes invalid, while the GENERIC foreign path would accept, can.
+
+test('"+661234567" is rejected — proves +66 genuinely converts, not just falls through as foreign', () => {
+  // +66 -> drop "66", prepend "0" -> "01234567" = 8 digits, prefix "01",
+  // which needs exactly 9 -> INVALID under the real conversion.
+  // But read as a generic foreign number it is "+" plus 9 digits (661234567),
+  // squarely inside the accepted 8-15 window — so a BROKEN +66 branch (one
+  // that fails to convert and falls through to the generic foreign check)
+  // would wrongly accept this exact value. A correct implementation must not.
+  assert.equal(isValidThaiPhone('+661234567'), false);
+});
+
+test('MIRROR: a +66 value that IS valid domestically after conversion stays valid', () => {
+  // +66 -> "0" + "1234567890" is 11 digits, prefix "01" -> landline branch,
+  // 9-14 digits accepted, so 11 is within range -> VALID.
+  assert.equal(isValidThaiPhone('+661234567890'), true);
+});
+
+test('CONTROL: disabling the +66 branch reddens the rejection test above, restored', () => {
+  // Reproduces the M4 finding directly, as an embedded fixture: a validator
+  // whose +66 branch has been disabled (falls straight to the generic
+  // foreign check) wrongly accepts "+661234567", because 9 digits after the
+  // "+" is inside the 8-15 window. This is the shape the real mutation in
+  // this round's control run applied to src/lib/registration/thaiPhone.js
+  // itself (see the commit message for the redden/restore against the real
+  // file); this fixture pins the same reasoning permanently in-suite.
+  function classifyBrokenPlus66(raw) {
+    const trimmed = String(raw ?? '').trim();
+    if (trimmed[0] !== '+') return null; // not exercised by this fixture
+    const digitsAfterPlus = trimmed.slice(1).replace(/\D/g, '');
+    // The +66 branch is GONE — every "+" value falls straight through here.
+    return digitsAfterPlus.length >= 8 && digitsAfterPlus.length <= 15;
+  }
+  assert.equal(classifyBrokenPlus66('+661234567'), true, 'the broken fixture does not even reproduce the bug — this control is not meaningful');
+  // ...and the REAL validator, with the branch intact, disagrees:
+  assert.equal(isValidThaiPhone('+661234567'), false);
+});
+
 test('empty and whitespace-only values are invalid', () => {
   assert.equal(isValidThaiPhone(''), false);
   assert.equal(isValidThaiPhone('   '), false);
