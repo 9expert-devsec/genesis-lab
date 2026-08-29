@@ -226,27 +226,52 @@ export function Warn({ children, tone = 'amber' }) {
  * Keeping `type="checkbox"` is also why round 50's panel-agrees-with-page test
  * survives this commit unmodified: the markup it reads is still there.
  *
- * ── STATE IS EXPOSED AS ASCII, DELIBERATELY ───────────────────────────────
- * `data-state` is "on" / "off", not Thai. เปิด CONTAINS ปิด as a substring —
- * U+0E40 then ปิด — so a test reading Thai on/off words out of markup passes on
- * the wrong one, which is this repo's attribute-substring trap wearing a
- * different hat. `aria-checked` is set explicitly for the same reason: it is a
- * value to assert on rather than a presence.
+ * ── STATE IS EXPOSED AS ASCII, AND ALSO IN WORDS — ROUND 53 ───────────────
+ * `data-state` is "on" / "off" and is what every test reads. It is unchanged
+ * from round 52 and is deliberately ASCII: a Thai state word cannot be matched
+ * as a substring, because the negative CONTAINS the positive (ไม่แสดง contains
+ * แสดง, exactly as เปิด contains ปิด). That is this repo's attribute-substring
+ * trap wearing a different hat, and `aria-checked` is set explicitly for the
+ * same reason — a value to assert on rather than a presence.
  *
- * NO VISIBLE TEXT AT ALL — no state word, no caption. A switch's position is
- * what says on or off; a word beside it would be a second place to read the
- * same fact. The SETTING is named by the enclosing Field, whose <label> also
- * makes that name the accessible name for this input, so a caption here would
- * be a second one of those too.
+ * ROUND 52 CONCLUDED FROM THAT THAT THE SWITCH SHOULD CARRY NO WORDS. That was
+ * the wrong conclusion and a screenshot settled it: a bare switch is a grey
+ * circle, and reading it requires knowing that knob-left means off. The trap is
+ * real, but it is a TEST-WRITING problem and an author must not pay for it — so
+ * the words are back, `onLabel` / `offLabel`, and the tests match ELEMENT TEXT
+ * rather than substrings, which is what this repo already does for every other
+ * Thai label. A control in test/render/priceToggleLegibility proves a
+ * bare-substring matcher cannot tell the two states apart here.
  *
- * The first draft carried an optional label span at an off-scale type size.
- * Nothing passed it, and this file's own guard in test/render/panelPolish went
- * red naming the class — these primitives sit on the shared scale, whose
- * smallest step is 12px, and the header above says so. Both problems were the
- * same surface, so it is gone rather than restyled.
+ * The state word is a SECOND reading of one fact, and that is the point of it:
+ * position and word say the same thing, so an author who does not know the
+ * convention can still read the control. It is not a second source of truth —
+ * both derive from `checked` in this one expression.
+ *
+ * ── ROUND 52 ALSO SAID THIS WAS THE CODEBASE'S FIRST TOGGLE. IT WAS NOT ────
+ * Three hand-rolled ones already existed and its search missed them, because it
+ * looked for role="switch" and aria-checked and all three are bare <button>s
+ * carrying neither: MasterclassCourseFormClient, MasterclassBatchListClient and
+ * CourseFaqManager. They are NOT consolidated here — that is three admin
+ * surfaces this round has no business restyling — but two things were taken
+ * from them rather than invented, because a house size that already exists is
+ * worth matching: the track/knob proportion and the travel.
+ *
+ * What was NOT taken is their colour. All three name a green and a dark blue
+ * as raw hex literals in source, which is a guard violation everywhere the hex
+ * scanner reaches — those files simply are not scanned. Round 30's rule
+ * stands: an author's colour is DATA, a source colour is a TOKEN. The track
+ * here paints with the action token, which is the page builder panel's own
+ * interactive colour.
+ *
+ * TYPE SIZE is the shared scale's smallest step. Round 17 minted no type
+ * tokens, and this file's own guard in test/render/panelPolish holds these
+ * primitives to that scale — round 52's first run came back 6-failures-not-5
+ * on exactly that, from a size written as an arbitrary value.
  */
-export function Toggle({ checked, onChange }) {
+export function Toggle({ checked, onChange, onLabel, offLabel }) {
   const on = checked === true;
+  const word = on ? onLabel : offLabel;
   return (
     <span className="flex items-center gap-2">
       <input
@@ -261,19 +286,26 @@ export function Toggle({ checked, onChange }) {
       <span
         aria-hidden="true"
         className={cn(
-          'relative h-4 w-7 shrink-0 rounded-full border transition-colors',
-          'border-[var(--surface-border)] bg-[var(--surface-muted)]',
+          'relative h-5 w-9 shrink-0 rounded-full border transition-colors',
+          'border-9e-slate-lt-400 bg-9e-slate-lt-400',
+          'dark:border-9e-slate-dp-50 dark:bg-9e-slate-dp-50',
           'peer-checked:border-9e-action peer-checked:bg-9e-action',
+          'dark:peer-checked:border-9e-action dark:peer-checked:bg-9e-action',
           'peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand peer-focus-visible:ring-offset-1',
           // The knob is a DESCENDANT of this span, not a sibling of the input,
           // so a bare peer variant on the knob itself would compile to a
           // sibling selector that never matches. Reach down from here, where
           // the peer relationship actually holds — CookieBanner's lesson.
-          'peer-checked:[&>span]:translate-x-3',
+          'peer-checked:[&>span]:translate-x-4',
         )}
       >
-        <span className="absolute left-0.5 top-0.5 block h-2.5 w-2.5 rounded-full bg-white transition-transform" />
+        <span className="absolute left-0.5 top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-transform" />
       </span>
+      {word && (
+        <span data-testid="toggle-state" className="text-xs text-9e-navy dark:text-white/90">
+          {word}
+        </span>
+      )}
     </span>
   );
 }

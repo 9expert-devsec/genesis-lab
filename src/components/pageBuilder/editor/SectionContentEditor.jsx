@@ -512,17 +512,36 @@ function CourseCardEditor({ content, patch, resolved, courses }) {
         * The COPY moved with the shape. A checkbox's box text says what ticking
         * it means (“แสดงราคาคอร์สบนการ์ดนี้”); a switch's label says what the
         * setting IS, so that sentence became the label and the old label
-        * “ราคาบนการ์ด” — a topic, not a setting — is gone. The hint is
-        * unchanged: its job is to say WHEN to reach for this, not what the
-        * control does mechanically.
+        * “ราคาบนการ์ด” — a topic, not a setting — is gone.
+        *
+        * ── ROUND 53 MADE IT LEGIBLE, AND CHANGED NOTHING ELSE ─────────────
+        * A screenshot of the shipped control: a grey circle, no colour
+        * difference between its two states, and a three-line hint. Reading it
+        * required knowing that knob-left means off. Three fixes, all
+        * presentation:
+        *
+        *   · A STATE WORD — แสดง / ไม่แสดง — so the control says what it is
+        *     doing rather than only showing it. Round 52 left this out because
+        *     ไม่แสดง CONTAINS แสดง and that breaks substring matchers; the
+        *     answer is to match element text in the tests, not to withhold a
+        *     word from the author.
+        *   · COLOUR on the track when on, so the two states differ at a glance.
+        *   · A SHORTER HINT. It ran to three lines. Its JOB is unchanged — it
+        *     says WHEN to reach for this, never what the control mechanically
+        *     does — and the switch plus its state word now say the rest.
+        *
+        * The expression below is still round 50's, byte for byte, and what the
+        * toggle dispatches is still round 52's.
         */}
       <Field
         label="แสดงราคาบนการ์ด"
-        hint="ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว จะได้ไม่มีราคาสองชุดพูดคนละอย่างบนหน้าเดียวกัน"
+        hint="ปิดเมื่อหน้านี้มีการ์ดราคาอยู่แล้ว"
       >
         <Toggle
           checked={content?.showPrice !== false}
           onChange={(next) => patch({ showPrice: next })}
+          onLabel="แสดง"
+          offLabel="ไม่แสดง"
         />
       </Field>
       {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}

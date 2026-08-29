@@ -320,10 +320,18 @@ const panel = (content) => renderToStaticMarkup(
  *     attribute-substring trap in a new place, and the fix is the standing one:
  *     assert on a VALUE, never on a name.
  */
+/**
+ * ── ROUND 53 AMENDED ONE STRING IN THE NEXT TEST, AND NOTHING ELSE ────────
+ * The CLAIM is round 50's, unchanged: the panel offers the control, names the
+ * setting, and carries a hint saying WHEN to reach for it, beside the course
+ * code. Only the hint's TEXT moved — it ran to three lines on screen and round
+ * 53 cut it to one. Its job did not change, and the assertion still reads the
+ * whole hint rather than a fragment of it.
+ */
 test('the panel offers the switch, its label and its hint, beside the course code', () => {
   const markup = panel({ courseId: 'MSDB' });
   assert.ok(markup.includes('แสดงราคาบนการ์ด'), 'the switch lost its label');
-  assert.ok(markup.includes('ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว'), 'the hint is gone');
+  assert.ok(markup.includes('ปิดเมื่อหน้านี้มีการ์ดราคาอยู่แล้ว'), 'the hint is gone');
   assert.ok(markup.includes('role="switch"'), 'the control is no longer a switch');
   // Beside the code, not somewhere else in the panel.
   assert.ok(markup.indexOf('รหัสคอร์ส') < markup.indexOf('แสดงราคาบนการ์ด'),
