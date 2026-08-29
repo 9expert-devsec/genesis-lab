@@ -80,8 +80,8 @@ export function sanitizePhoneText(text) {
   return [...String(text ?? '')].filter(isAllowedPhoneChar).join('');
 }
 
-const MOBILE_PREFIXES = new Set(['06', '08', '09']);
-const LANDLINE_PREFIXES = new Set(['01', '02', '03', '04', '05', '07']);
+export const MOBILE_PREFIXES = new Set(['06', '08', '09']);
+export const LANDLINE_PREFIXES = new Set(['01', '02', '03', '04', '05', '07']);
 
 /** Step 2, applied to an already-digits-only string. Internal. */
 function classifyDomesticDigits(digits) {
@@ -98,6 +98,27 @@ function classifyDomesticDigits(digits) {
     return { kind: 'invalid' };
   }
   return { kind: 'invalid' };
+}
+
+/**
+ * Slices `digits` into runs of `sizes[i]` characters each, left to right,
+ * joined with "-", stopping as soon as digits run out — the ONE grouping
+ * primitive formatThaiPhone (a full, already-validated base) and
+ * formatThaiPhoneProgressive (a base still being typed) both call. Given the
+ * full-length base a validated number always has, this produces exactly the
+ * fixed grouping formatThaiPhone always returned; given a shorter, growing
+ * base it produces whatever prefix of that grouping fits so far. One
+ * function, so the two callers cannot drift apart on how a base is split.
+ */
+function groupCore(digits, sizes) {
+  const groups = [];
+  let i = 0;
+  for (const size of sizes) {
+    if (i >= digits.length) break;
+    groups.push(digits.slice(i, i + size));
+    i += size;
+  }
+  return groups.join('-');
 }
 
 /**
@@ -166,15 +187,56 @@ export function formatThaiPhone(raw) {
   const { base, extension } = c;
   let core;
   if (base.length === 10) {
-    core = `${base.slice(0, 3)}-${base.slice(3, 6)}-${base.slice(6, 10)}`;
+    core = groupCore(base, [3, 3, 4]);
   } else if (base.startsWith('02')) {
     // Bangkok/metro — the only 2-digit Thai area code.
-    core = `${base.slice(0, 2)}-${base.slice(2, 5)}-${base.slice(5, 9)}`;
+    core = groupCore(base, [2, 3, 4]);
   } else {
     // Every other province — 3-digit area code + 6-digit subscriber.
-    core = `${base.slice(0, 3)}-${base.slice(3, 6)}-${base.slice(6, 9)}`;
+    core = groupCore(base, [3, 3, 3]);
   }
   return extension ? `${core} ต่อ ${extension}` : core;
+}
+
+/**
+ * Best-effort grouping for a number still being typed. Unlike formatThaiPhone,
+ * this NEVER decides validity and NEVER drops a digit — it groups whatever
+ * digits are present so far using the same groupCore() a finished number
+ * uses, so a half-typed landline or mobile number already looks like its
+ * final shape instead of jumping into grouped form only once complete.
+ *
+ *   fewer than 2 digits, or a prefix in neither class -> digits, ungrouped
+ *   mobile (06/08/09)          -> 3-3-4, as far as the digits reach
+ *   landline (01/02/03/04/05/07) -> the Commit 5 grouping (02: 2-3-4, else
+ *     3-3-3) for the first 9 digits, as far as they reach; anything past the
+ *     9th is an in-progress extension, appended as " ต่อ " + those digits
+ *   a leading "+" on the raw string -> the raw string, unchanged; foreign
+ *     numbers have no known internal structure to group progressively
+ *
+ * A mobile number typed past 10 digits (already invalid, but this function
+ * does not judge that) keeps its grouped first 10 and appends anything
+ * further un-grouped, rather than silently discarding it.
+ */
+export function formatThaiPhoneProgressive(raw) {
+  if (String(raw ?? '').trim().startsWith('+')) return raw;
+
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (digits.length < 2) return digits;
+
+  const prefix = digits.slice(0, 2);
+  if (MOBILE_PREFIXES.has(prefix)) {
+    const base = digits.slice(0, 10);
+    const overflow = digits.slice(10);
+    return groupCore(base, [3, 3, 4]) + overflow;
+  }
+  if (LANDLINE_PREFIXES.has(prefix)) {
+    const sizes = prefix === '02' ? [2, 3, 4] : [3, 3, 3];
+    const base = digits.slice(0, 9);
+    const extension = digits.slice(9);
+    const core = groupCore(base, sizes);
+    return extension ? `${core} ต่อ ${extension}` : core;
+  }
+  return digits;
 }
 
 /**

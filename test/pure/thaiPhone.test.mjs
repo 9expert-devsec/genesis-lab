@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   isValidThaiPhone,
   formatThaiPhone,
+  formatThaiPhoneProgressive,
   isAllowedPhoneChar,
   sanitizePhoneText,
   thaiPhone,
@@ -282,6 +283,66 @@ test('formatting stays idempotent for the new 3-3-3 shape', () => {
   // whatever it happens to be — a formatter that always returned its input
   // unchanged would also pass the loop above.
   assert.equal(formatThaiPhone('038123456'), '038-123-456');
+});
+
+// ── Progressive (in-progress) formatting — Commit 8 ────────────────────────
+// formatThaiPhoneProgressive groups whatever digits are typed so far. It
+// never judges validity and never drops a digit — contrast formatThaiPhone,
+// which returns null for anything not fully valid.
+
+test('progressive: fewer than 2 digits is returned as-is, ungrouped', () => {
+  assert.equal(formatThaiPhoneProgressive('0'), '0');
+  assert.equal(formatThaiPhoneProgressive(''), '');
+});
+
+test('progressive: a prefix in neither class is returned as digits, ungrouped', () => {
+  assert.equal(formatThaiPhoneProgressive('00123'), '00123');
+  assert.equal(formatThaiPhoneProgressive('99'), '99');
+});
+
+test('progressive: mobile groups 3-3-4 as far as the digits reach', () => {
+  assert.equal(formatThaiPhoneProgressive('081'), '081');
+  assert.equal(formatThaiPhoneProgressive('08123'), '081-23');
+  assert.equal(formatThaiPhoneProgressive('0812345678'), '081-234-5678');
+});
+
+test('progressive: landline groups the Commit 5 shape as far as the digits reach', () => {
+  assert.equal(formatThaiPhoneProgressive('022'), '02-2');
+  assert.equal(formatThaiPhoneProgressive('022194304'), '02-219-4304');
+  assert.equal(formatThaiPhoneProgressive('0221943041'), '02-219-4304 ต่อ 1');
+  assert.equal(formatThaiPhoneProgressive('038123456'), '038-123-456');
+});
+
+test('progressive: a leading "+" is returned unchanged — no progressive grouping for foreign numbers', () => {
+  assert.equal(formatThaiPhoneProgressive('+66 81 234 5'), '+66 81 234 5');
+  assert.equal(formatThaiPhoneProgressive('+1 212 555'), '+1 212 555');
+});
+
+// INVARIANT: formatThaiPhone and formatThaiPhoneProgressive must never
+// disagree on a value the suite already treats as fully valid domestic
+// (raw, no leading "+" — the "+" case is a disjoint codepath on both sides,
+// see the test above). Both call the SAME internal grouping helper
+// (groupCore, in thaiPhone.js) for exactly this reason: there is nowhere for
+// the two to drift apart. Drawn from this file's own already-established
+// valid-domestic fixtures.
+const VALID_DOMESTIC_FIXTURES = [
+  '0812345678', '0612345678', '0912345678',
+  '022194304', '02-219-4304', '02219430412345', '0221943045',
+  '012194304', '032194304', '042194304', '052194304', '072194304',
+  '022194304 ต่อ 10155', '022194304 ext 10155', '022194304 x10155', '022194304 #10155',
+  '012345678', '032123456', '042123456', '053123456', '077123456',
+  '038123456', '038-123-456', '038123456 ต่อ 999', '038-123-456 ต่อ 999',
+];
+
+test('INVARIANT: formatThaiPhoneProgressive agrees with formatThaiPhone on every fully-valid domestic fixture', () => {
+  for (const v of VALID_DOMESTIC_FIXTURES) {
+    assert.equal(isValidThaiPhone(v), true, `fixture "${v}" is not actually valid — the invariant test itself is wrong`);
+    assert.equal(
+      formatThaiPhoneProgressive(v),
+      formatThaiPhone(v),
+      `progressive and full formatting disagree on "${v}"`
+    );
+  }
 });
 
 // ── Accepted input characters ────────────────────────────────────────────
