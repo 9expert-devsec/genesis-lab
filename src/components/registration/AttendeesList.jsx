@@ -246,14 +246,17 @@ function AttendeeBlock({ index, displayIndex, register, error, isSubmitted }) {
               aria-invalid={!!err.lastName}
             />
           </FieldGroup>
-          <FieldGroup label="อีเมล" error={err.email?.message} required>
+          {/* อีเมล/เบอร์โทร are OPTIONAL for an attendee — no `required` prop,
+              unlike ชื่อ/นามสกุล above. Coordinator's equivalent fields in
+              CoordinatorFields.jsx are untouched and stay required. */}
+          <FieldGroup label="อีเมล" error={err.email?.message}>
             <Input
               type="email"
               {...register(`attendees.${index}.email`)}
               aria-invalid={!!err.email}
             />
           </FieldGroup>
-          <FieldGroup label="เบอร์โทร" error={phoneReveal.shouldShow ? err.phone?.message : undefined} required>
+          <FieldGroup label="เบอร์โทร" error={phoneReveal.shouldShow ? err.phone?.message : undefined}>
             <Input
               placeholder="0812345678"
               {...phoneProps}
