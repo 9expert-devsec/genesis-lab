@@ -787,7 +787,7 @@ export function StepForm({
               </div>
               <div className="text-xs text-[var(--text-secondary)]">
                 {activeSchedule.type === "hybrid"
-                  ? "Hybrid (Classroom + MS Teams)"
+                  ? "Hybrid — เลือกอบรมได้ 1 รูปแบบ ระหว่าง Classroom หรือ MS Teams"
                   : "Classroom"}
               </div>
               {!showPickerBox && (
