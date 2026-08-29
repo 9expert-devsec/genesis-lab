@@ -242,6 +242,13 @@ test('round 50 price switch is still there and still defaults to on', () => {
   // pins that moving the course control did not displace or unwire it. No
   // parallel assertions about what the toggle does.
   const html = panel('course_card', { courseId: 'MSE-AI' }, CATALOGUE[1]);
-  assert.ok(html.includes('ราคาบนการ์ด'), 'the price switch left the tab');
-  assert.match(html, /type="checkbox"[^>]*checked/, 'the switch stopped defaulting to on');
+  assert.ok(html.includes('แสดงราคาบนการ์ด'), 'the price switch left the tab');
+  /**
+   * ROUND 52 amended the line below, and the CLAIM is unchanged: the switch is
+   * still there and still defaults to on. It read `/type="checkbox"[^>]*checked/`
+   * — a bare attribute NAME — and round 52 made that vacuous, because the
+   * toggle emits `aria-checked`, which contains "checked". Measured: it matched
+   * even the OFF state, where no `checked` attribute exists. Value, not name.
+   */
+  assert.match(html, /data-state="on"/, 'the switch stopped defaulting to on');
 });

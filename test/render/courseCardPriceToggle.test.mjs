@@ -298,28 +298,64 @@ test('the static emptiness rule keys on the course code, not on the price', () =
 const panel = (content) => renderToStaticMarkup(
   createElement(SectionContentEditor, { type: 'course_card', content, patch: () => {}, resolved: undefined }));
 
+/**
+ * ── ROUND 52 AMENDED THE NEXT TWO TESTS, AND ONLY THEIR OBSERVATIONS ──────
+ * The control became a toggle switch. Both CLAIMS are round 50's, unchanged —
+ * the panel names the setting and carries its hint beside the course code, and
+ * the panel agrees with the page in all three stored states. What each test
+ * LOOKS AT had to move, for two different reasons, and neither is cosmetic:
+ *
+ *   · THE COPY. A checkbox's box text says what ticking it means; a switch's
+ *     label says what the setting IS. “แสดงราคาคอร์สบนการ์ดนี้” became the
+ *     label “แสดงราคาบนการ์ด”, and the old topic-shaped label “ราคาบนการ์ด” is
+ *     gone. Note it is a SUBSTRING of the new label, so the old assertion on it
+ *     would have stayed green through the rename — the string asserted is now
+ *     the whole label.
+ *
+ *   · THE STATE MATCH, which had gone VACUOUS. `/type="checkbox"[^>]*checked/`
+ *     matched a bare attribute NAME, and the switch emits `aria-checked`, which
+ *     CONTAINS “checked”. Measured: that regex now matches all three states
+ *     including the OFF one, where no `checked` attribute exists at all — so
+ *     the `doesNotMatch` half could never fail again. This is the repo's
+ *     attribute-substring trap in a new place, and the fix is the standing one:
+ *     assert on a VALUE, never on a name.
+ */
 test('the panel offers the switch, its label and its hint, beside the course code', () => {
   const markup = panel({ courseId: 'MSDB' });
-  assert.ok(markup.includes('ราคาบนการ์ด'), 'the switch lost its label');
-  assert.ok(markup.includes('แสดงราคาคอร์สบนการ์ดนี้'), 'the switch lost its text');
+  assert.ok(markup.includes('แสดงราคาบนการ์ด'), 'the switch lost its label');
   assert.ok(markup.includes('ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว'), 'the hint is gone');
-  assert.ok(markup.includes('type="checkbox"'), 'the switch is not a checkbox');
+  assert.ok(markup.includes('role="switch"'), 'the control is no longer a switch');
   // Beside the code, not somewhere else in the panel.
-  assert.ok(markup.indexOf('รหัสคอร์ส') < markup.indexOf('ราคาบนการ์ด'),
+  assert.ok(markup.indexOf('รหัสคอร์ส') < markup.indexOf('แสดงราคาบนการ์ด'),
     'the switch moved away from the course code');
 });
 
-test('the panel shows the switch TICKED when the field is absent', () => {
+test('the panel shows the switch ON when the field is absent', () => {
   /**
-   * The panel and the page must agree. An unticked box over a page that shows
-   * the price is the panel lying — and absent is the state EVERY stored card is
-   * in right now, so this is not an edge case, it is the only case.
+   * The panel and the page must agree. An off switch over a page that shows the
+   * price is the panel lying — and absent is the state EVERY stored card is in
+   * right now, so this is not an edge case, it is the only case.
    */
-  assert.match(panel({ courseId: 'MSDB' }), /type="checkbox"[^>]*checked/,
-    'a card stored before this commit shows an unticked box while its page shows the price');
-  assert.match(panel({ courseId: 'MSDB', showPrice: true }), /type="checkbox"[^>]*checked/);
-  assert.doesNotMatch(panel({ courseId: 'MSDB', showPrice: false }), /type="checkbox"[^>]*checked/,
-    'a deliberately-off card shows a ticked box');
+  assert.match(panel({ courseId: 'MSDB' }), /data-state="on"/,
+    'a card stored before round 50 shows an OFF switch while its page shows the price');
+  assert.match(panel({ courseId: 'MSDB', showPrice: true }), /data-state="on"/);
+  assert.match(panel({ courseId: 'MSDB', showPrice: false }), /data-state="off"/,
+    'a deliberately-off card does not show an off switch');
+  assert.doesNotMatch(panel({ courseId: 'MSDB', showPrice: false }), /data-state="on"/,
+    'an off card also reports itself on');
+});
+
+test('CONTROL — the state match is on a VALUE, so it can still fail', () => {
+  /**
+   * The assertion that caught the vacuous match, kept as the thing that stops
+   * it coming back. A bare-name regex matches every state; the value regex
+   * separates them. If these two ever agree, the test above has stopped
+   * measuring anything.
+   */
+  const off = panel({ courseId: 'MSDB', showPrice: false });
+  assert.match(off, /type="checkbox"[^>]*checked/, 'the bare-name match is no longer vacuous — re-check the trap');
+  assert.doesNotMatch(off, /data-state="on"/, 'the value match went vacuous too');
+  assert.ok(!/\schecked=/.test(off), 'the OFF switch emitted a real checked attribute');
 });
 
 test('the editor reads the SAME absent-means-on expression as the renderer', () => {

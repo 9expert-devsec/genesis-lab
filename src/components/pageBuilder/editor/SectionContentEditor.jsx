@@ -17,7 +17,7 @@ import { duplicateCourseCodes } from './duplicateCodes';
 // course textarea; see CoursePicker.jsx for the rule it must not break.
 import { CourseIdsPicker, CourseSelectPicker } from './CoursePicker';
 import { IconPicker } from './IconPicker';
-import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
+import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS, Toggle } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
 
 /**
@@ -501,18 +501,29 @@ function CourseCardEditor({ content, patch, resolved, courses }) {
       {/* Round 50's price switch, unmoved and unchanged: it stays BELOW the
           course reference, because the code is what the card is and the price
           is a fact about what that card says. Its own tests still drive it. */}
+      {/**
+        * Round 52 changed this control's SHAPE and nothing else. The expression
+        * below is round 50's, byte for byte, and it has to be: the key is
+        * ABSENT on every card stored before round 50 — `.lean()` applies no
+        * Mongoose defaults and serialisation drops undefined keys — so a
+        * truthiness check here would show an off switch over a page that shows
+        * the price. The panel would be lying about the page, for every card.
+        *
+        * The COPY moved with the shape. A checkbox's box text says what ticking
+        * it means (“แสดงราคาคอร์สบนการ์ดนี้”); a switch's label says what the
+        * setting IS, so that sentence became the label and the old label
+        * “ราคาบนการ์ด” — a topic, not a setting — is gone. The hint is
+        * unchanged: its job is to say WHEN to reach for this, not what the
+        * control does mechanically.
+        */}
       <Field
-        label="ราคาบนการ์ด"
+        label="แสดงราคาบนการ์ด"
         hint="ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว จะได้ไม่มีราคาสองชุดพูดคนละอย่างบนหน้าเดียวกัน"
       >
-        <span className="flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
-          <input
-            type="checkbox"
-            checked={content?.showPrice !== false}
-            onChange={(e) => patch({ showPrice: e.target.checked })}
-          />
-          แสดงราคาคอร์สบนการ์ดนี้
-        </span>
+        <Toggle
+          checked={content?.showPrice !== false}
+          onChange={(next) => patch({ showPrice: next })}
+        />
       </Field>
       {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
       {notFound && <Warn tone="red">ไม่พบคอร์สรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}

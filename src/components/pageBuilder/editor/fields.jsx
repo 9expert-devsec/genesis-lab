@@ -202,3 +202,78 @@ export function Warn({ children, tone = 'amber' }) {
     </p>
   );
 }
+
+/**
+ * A TOGGLE SWITCH, for one boolean whose setting has a name — round 52.
+ *
+ * ── THERE WAS NO PRIMITIVE TO REUSE, AND THAT WAS MEASURED ────────────────
+ * Nothing in this codebase renders a switch. `src/components/ui/` has
+ * `checkbox.jsx` and no switch; `@radix-ui/react-switch` is not a dependency
+ * (dialog, dropdown-menu, label, slot and tabs are); nothing under
+ * `components/pageBuilder/` carries `role="switch"`. The settings dialog's SEO
+ * indexing control is a plain checkbox and its preview section is a row of
+ * buttons plus a status dot — neither is a switch. So this is the FIRST, and it
+ * lives here beside Field and TextInput so it can be the only one.
+ *
+ * ── IT IS A REAL CHECKBOX WEARING A SWITCH ROLE ───────────────────────────
+ * The input stays a native control — focusable, space-toggleable, correctly
+ * announced — and the visible track is a sibling driven by `peer-checked:`.
+ * That is CookieBanner's rule, whose own note earned it: “rather than a div
+ * wearing a switch costume”. `role="switch"` is what changes the announcement
+ * from “checkbox, checked” to “switch, on”, which is the whole difference
+ * between the two shapes.
+ *
+ * Keeping `type="checkbox"` is also why round 50's panel-agrees-with-page test
+ * survives this commit unmodified: the markup it reads is still there.
+ *
+ * ── STATE IS EXPOSED AS ASCII, DELIBERATELY ───────────────────────────────
+ * `data-state` is "on" / "off", not Thai. เปิด CONTAINS ปิด as a substring —
+ * U+0E40 then ปิด — so a test reading Thai on/off words out of markup passes on
+ * the wrong one, which is this repo's attribute-substring trap wearing a
+ * different hat. `aria-checked` is set explicitly for the same reason: it is a
+ * value to assert on rather than a presence.
+ *
+ * NO VISIBLE TEXT AT ALL — no state word, no caption. A switch's position is
+ * what says on or off; a word beside it would be a second place to read the
+ * same fact. The SETTING is named by the enclosing Field, whose <label> also
+ * makes that name the accessible name for this input, so a caption here would
+ * be a second one of those too.
+ *
+ * The first draft carried an optional label span at an off-scale type size.
+ * Nothing passed it, and this file's own guard in test/render/panelPolish went
+ * red naming the class — these primitives sit on the shared scale, whose
+ * smallest step is 12px, and the header above says so. Both problems were the
+ * same surface, so it is gone rather than restyled.
+ */
+export function Toggle({ checked, onChange }) {
+  const on = checked === true;
+  return (
+    <span className="flex items-center gap-2">
+      <input
+        type="checkbox"
+        role="switch"
+        checked={on}
+        aria-checked={on}
+        data-state={on ? 'on' : 'off'}
+        onChange={(e) => onChange(e.target.checked)}
+        className="peer sr-only"
+      />
+      <span
+        aria-hidden="true"
+        className={cn(
+          'relative h-4 w-7 shrink-0 rounded-full border transition-colors',
+          'border-[var(--surface-border)] bg-[var(--surface-muted)]',
+          'peer-checked:border-9e-action peer-checked:bg-9e-action',
+          'peer-focus-visible:ring-2 peer-focus-visible:ring-9e-brand peer-focus-visible:ring-offset-1',
+          // The knob is a DESCENDANT of this span, not a sibling of the input,
+          // so a bare peer variant on the knob itself would compile to a
+          // sibling selector that never matches. Reach down from here, where
+          // the peer relationship actually holds — CookieBanner's lesson.
+          'peer-checked:[&>span]:translate-x-3',
+        )}
+      >
+        <span className="absolute left-0.5 top-0.5 block h-2.5 w-2.5 rounded-full bg-white transition-transform" />
+      </span>
+    </span>
+  );
+}
