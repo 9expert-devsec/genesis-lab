@@ -17,7 +17,7 @@ import { duplicateCourseCodes } from './duplicateCodes';
 // course textarea; see CoursePicker.jsx for the rule it must not break.
 import { CourseIdsPicker, CourseSelectPicker } from './CoursePicker';
 import { IconPicker } from './IconPicker';
-import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS, Toggle } from './fields';
+import { Field, FieldBlock, Select, TextInput, TextArea, Warn, INPUT_CLASS, Toggle } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
 
 /**
@@ -70,11 +70,35 @@ function HeadingEditor({ content, patch }) {
 }
 
 // ── rich_text ────────────────────────────────────────────────────────
+/**
+ * ── FieldBlock, NOT Field, AND THAT IS THE WHOLE BUG FIX (round 55) ───────
+ * `Field` renders a `<label>`. A `<label>` with no `for` forwards a click on
+ * any non-interactive part of itself to its FIRST LABELABLE DESCENDANT, and
+ * `<button>` is labelable — so wrapping this editor in one made the toolbar's
+ * first button, ตัวหนา (bold), the control for the entire field.
+ *
+ * Measured on the mounted component: the label contains 14 toolbar buttons and
+ * the contenteditable surface, and `label.control` resolves to the bold button.
+ * A click on the field's own caption reaches that button.
+ *
+ * That is the reported defect in both its halves. Clicking the text toggles
+ * bold because the click is forwarded to the bold button; and typed text comes
+ * out bold because clicking into the editor to start typing IS such a click, so
+ * the author is already in bold before the first keystroke. One cause, two
+ * symptoms — the mark is REAL, not a CSS weight, because what runs is Tiptap's
+ * own toggleBold command.
+ *
+ * Round 49 wrote `FieldBlock` for exactly this and said so in its header: a
+ * `<label>` is right for ONE input and wrong for a composite control containing
+ * buttons. It reached the course picker's rows and not this file, which had the
+ * same shape and 14 more buttons. Nothing else changes — FieldBlock emits the
+ * same caption and hint markup, so the field looks identical.
+ */
 function RichTextSectionEditor({ content, patch }) {
   return (
-    <Field label="เนื้อหา">
+    <FieldBlock label="เนื้อหา">
       <RichTextEditor doc={content?.doc} onChange={(doc) => patch({ doc })} />
-    </Field>
+    </FieldBlock>
   );
 }
 

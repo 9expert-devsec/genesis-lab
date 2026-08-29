@@ -27,6 +27,24 @@ import { richTextExtensions } from './tiptapExtensions';
  * never has to wonder which editor is meant.
  */
 
+/**
+ * ── onMouseDown preventDefault IS NOT OPTIONAL ON A TIPTAP TOOLBAR ────────
+ * Round 55, and a SEPARATE finding from the bug that round fixed — the label
+ * capture in SectionContentEditor was the cause of the reported symptoms; this
+ * is a second defect found while tracing it, and it is stated separately rather
+ * than folded in.
+ *
+ * Pressing a toolbar button moves focus out of the contenteditable, and the
+ * browser collapses the selection when it does. `onClick` then runs against an
+ * editor that no longer has the range the author had selected, so
+ * `chain().focus().toggleBold()` re-focuses and applies the mark to a collapsed
+ * cursor instead of to the words that were highlighted.
+ *
+ * Cancelling the default action of MOUSEDOWN is what keeps the selection: the
+ * button never takes focus, so nothing is stolen, and the click still fires.
+ * This is the standard requirement for a ProseMirror/Tiptap toolbar and it was
+ * missing here.
+ */
 function ToolButton({ onClick, active, disabled, label, children }) {
   return (
     <button
@@ -35,6 +53,7 @@ function ToolButton({ onClick, active, disabled, label, children }) {
       aria-label={label}
       aria-pressed={active || undefined}
       disabled={disabled}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn(
         'rounded p-1 text-9e-slate-dp-50 transition-colors',
