@@ -10,6 +10,10 @@ import {
 import { isPubliclyVisible, invisibleReason } from '@/lib/pageBuilder/visibility';
 // ADDED beside the statements above rather than folded into one.
 import { SITE_TIME_ZONE, SITE_UTC_OFFSET } from '@/lib/articlePublishTime';
+// Round 54, ADDED beside the statements above rather than folded into one.
+// The three inline TZ blocks this file used restored with a delete, which is
+// not a restore — see withTZ's header, and the note in promotionDateLabel.
+import { withTZ } from '../withTZ.mjs';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -65,14 +69,8 @@ const OLD_CONVERSION = (v) => new Date(`${v}T00:00:00`).toISOString();
 
 test('the conversion does not depend on the machine that runs it', () => {
   const seen = new Set();
-  const original = process.env.TZ;
-  try {
-    for (const tz of ['Asia/Bangkok', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
-      process.env.TZ = tz;
-      seen.add(`${windowStartFromInput(DAY)}|${windowEndFromInput(DAY)}`);
-    }
-  } finally {
-    if (original === undefined) delete process.env.TZ; else process.env.TZ = original;
+  for (const tz of ['Asia/Bangkok', 'UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+    withTZ(tz, () => seen.add(`${windowStartFromInput(DAY)}|${windowEndFromInput(DAY)}`));
   }
   assert.equal(seen.size, 1, `the window moved with the runtime zone: ${[...seen].join(' vs ')}`);
   assert.deepEqual([...seen], [`${DAY_START_UTC}|${LAST_VISIBLE_UTC}`]);
@@ -86,14 +84,8 @@ test('CONTROL: the OLD conversion really did move with the zone', () => {
    * proving nothing about the new one either.
    */
   const seen = new Set();
-  const original = process.env.TZ;
-  try {
-    for (const tz of ['Asia/Bangkok', 'UTC', 'America/Los_Angeles']) {
-      process.env.TZ = tz;
-      seen.add(OLD_CONVERSION(DAY));
-    }
-  } finally {
-    if (original === undefined) delete process.env.TZ; else process.env.TZ = original;
+  for (const tz of ['Asia/Bangkok', 'UTC', 'America/Los_Angeles']) {
+    withTZ(tz, () => seen.add(OLD_CONVERSION(DAY)));
   }
   assert.ok(seen.size > 1,
     'the old conversion produced one answer across three zones, so this suite cannot '
@@ -213,16 +205,12 @@ test('CONTROL: the OLD pair DID walk backwards, one day per save', () => {
   // Without this, "no drift" would pass for a round trip that never moved for
   // an unrelated reason. This is the measured defect, reproduced.
   const oldTo = (v) => (v ? String(v).slice(0, 10) : '');
-  const original = process.env.TZ;
-  try {
-    process.env.TZ = 'Asia/Bangkok';
+  withTZ('Asia/Bangkok', () => {
     let v = '2026-08-27T17:00:00.000Z'; // what a Bangkok browser stored for 28 Aug
     assert.equal(oldTo(v), '2026-08-27', 'precondition: the box already reads a day early');
     v = OLD_CONVERSION(oldTo(v));
     assert.equal(oldTo(v), '2026-08-26', 'the old pair did not walk — the fixture proves nothing');
-  } finally {
-    if (original === undefined) delete process.env.TZ; else process.env.TZ = original;
-  }
+  });
 });
 
 // ── the conversion is TOTAL ────────────────────────────────────────────────

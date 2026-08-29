@@ -7,6 +7,8 @@ import { formatThaiDate, dateRangeLabel } from '@/lib/promotions/promotionDateLa
 import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
 import { windowEndFromInput } from '@/lib/pageBuilder/publishWindow';
 import { readSource } from '../sourceScan.mjs';
+// Round 54, ADDED beside the statements above rather than folded into one.
+import { withTZ } from '../withTZ.mjs';
 
 /**
  * ROUND 43, commit 2 — /promotions was naming a UTC day to a Bangkok audience.
@@ -22,16 +24,19 @@ import { readSource } from '../sourceScan.mjs';
 const PAGE = 'src/app/(public)/promotions/page.jsx';
 const MODULE = 'src/lib/promotions/promotionDateLabel.js';
 
-/** Run `fn` with the process pinned to `tz`, then put it back. */
-function inZone(tz, fn) {
-  const original = process.env.TZ;
-  try {
-    process.env.TZ = tz;
-    return fn();
-  } finally {
-    if (original === undefined) delete process.env.TZ; else process.env.TZ = original;
-  }
-}
+/**
+ * ── ROUND 54: THIS HELPER USED TO LEAK ITS LAST ZONE ──────────────────────
+ * It restored with a delete, and TZ is normally unset, so that branch is the
+ * one that ran. Deleting TZ does NOT put the OS zone back — withTZ's header
+ * measured that, and round 54 measured it again on this clone: after this file
+ * ran, the process was left in Pacific/Kiritimati, the last zone in ZONES.
+ *
+ * The runner is one process shared by every file, so that zone was the ambient
+ * zone for whatever ran next until some withTZ caller assigned a real value
+ * back. Now it is the shared helper. Every assertion below is unchanged — only
+ * the restore moved.
+ */
+const inZone = withTZ;
 
 const ZONES = ['UTC', 'Asia/Bangkok', 'America/Los_Angeles', 'Pacific/Kiritimati'];
 
