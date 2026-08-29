@@ -14,8 +14,25 @@ import { cn, courseHref, formatDuration, formatPrice } from '@/lib/utils';
  *
  * Server Component — no interactivity beyond the link/button, so we
  * keep this render path off the client bundle.
+ *
+ * ── `showPrice` (round 50) ──────────────────────────────────────────────────
+ * ADDED beside the contract above rather than folded into it — the standing
+ * rule in this repo.
+ *
+ * OPTIONAL, DEFAULTING TO TRUE, and the default is what keeps this safe: every
+ * existing caller (the /training-course grid, CourseCardGroup, the page-builder
+ * section) passes nothing, so `showPrice` is `true` and `true && <span/>`
+ * renders the span — byte-for-byte the markup this component emitted before the
+ * prop existed. Measured, not asserted; see test/render/courseCardPriceToggle.
+ *
+ * ONE CALLER SETS IT: the page-builder's course_card section, where an author
+ * has turned the price off because a `การ์ดราคา` on the same page is the thing
+ * speaking about price. It hides the PRICE and nothing else — no alternate
+ * price, no substitute text. A card that wants to state a different price is a
+ * `การ์ดราคา`, and letting this one do it would be a second authority over the
+ * same fact.
  */
-export function CourseCard({ course, className }) {
+export function CourseCard({ course, className, showPrice = true }) {
   if (!course) return null;
 
   const {
@@ -66,9 +83,11 @@ export function CourseCard({ course, className }) {
               {duration}
             </span>
           )}
-          <span className="text-right text-base font-bold text-[var(--text-primary)]">
-            {formatPrice(price)}
-          </span>
+          {showPrice && (
+            <span className="text-right text-base font-bold text-[var(--text-primary)]">
+              {formatPrice(price)}
+            </span>
+          )}
         </div>
       </div>
 

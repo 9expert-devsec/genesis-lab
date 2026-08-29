@@ -470,6 +470,21 @@ function CourseIdsWarnings({ ids, resolved }) {
   );
 }
 
+/**
+ * Round 50 added the price switch BESIDE the course code, in this tab, because
+ * the price is a fact about what this card SAYS — not about how it looks — and
+ * the author reaching for it has a page problem, not a styling one.
+ *
+ * `content?.showPrice !== false` here is the SAME expression the renderer uses,
+ * and it has to be: the field is absent on every card stored before this
+ * commit, and a `=== true` check would show the box unticked while the page
+ * showed the price. The panel would be lying about the page.
+ *
+ * The hint says WHAT IT IS FOR, not what it does — the box's own text already
+ * says what it does. An author arrives here because their page shows ฿12,900 in
+ * a การ์ดคอร์ส next to “ราคาพิเศษ 4,900 บาท” in a การ์ดราคา and nothing says
+ * which applies; the hint is what tells them this is the control for that.
+ */
 function CourseCardEditor({ content, patch, resolved }) {
   const courseId = String(content?.courseId ?? '').trim();
   const notFound = courseId !== '' && resolved === null;
@@ -477,6 +492,19 @@ function CourseCardEditor({ content, patch, resolved }) {
     <>
       <Field label="รหัสคอร์ส (course_id)" hint="เช่น MSE-AI — ใช้รหัสจากระบบคอร์ส">
         <TextInput value={content?.courseId} onChange={(v) => patch({ courseId: v })} invalid={notFound} />
+      </Field>
+      <Field
+        label="ราคาบนการ์ด"
+        hint="ปิดเมื่อหน้านี้มีการ์ดราคาบอกราคาอยู่แล้ว จะได้ไม่มีราคาสองชุดพูดคนละอย่างบนหน้าเดียวกัน"
+      >
+        <span className="flex items-center gap-1.5 text-[11px] text-9e-navy dark:text-white/90">
+          <input
+            type="checkbox"
+            checked={content?.showPrice !== false}
+            onChange={(e) => patch({ showPrice: e.target.checked })}
+          />
+          แสดงราคาคอร์สบนการ์ดนี้
+        </span>
       </Field>
       {courseId === '' && <Warn>ยังไม่ได้ระบุคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
       {notFound && <Warn tone="red">ไม่พบคอร์สรหัสนี้ — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
