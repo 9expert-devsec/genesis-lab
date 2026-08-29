@@ -55,16 +55,28 @@ const CHILD = path.join(ROOT, 'test', 'canvasFrameAttach.case.mjs');
 /**
  * NODE_ENV IS NAMED RATHER THAN INHERITED, and that is not tidying.
  *
- * Other files in this suite set `process.env.NODE_ENV = 'production'` to drive
- * the production branches of components that have them — SectionRenderer's
- * unknown-type block is one — and `spawnSync` inherits the environment as it
- * stands at the moment it is called. Under `npm test` that is a race: the child
- * then resolves React's PRODUCTION build, where `act` throws outright.
+ * `spawnSync` inherits the environment as it stands, and under `npm test` that
+ * environment has NODE_ENV=production — so the child would resolve React's
+ * PRODUCTION build, where `act` throws outright. Naming the value is what makes
+ * this file's result independent of how it was invoked.
  *
  * Measured: the child ran clean standalone and exited 1 with
  * “act(...) is not supported in production builds of React” inside the full
- * suite. Naming the value makes this file's result independent of whichever
- * other file happened to be mid-test.
+ * suite.
+ *
+ * ── ROUND 54 CORRECTED THE REASON, NOT THE FIX ──────────────────────────
+ * This note used to say that OTHER FILES set NODE_ENV mid-run and that the
+ * inheritance was therefore A RACE. It is not, and no file has to be
+ * mid-anything for the pin to be needed.
+ *
+ * Measured across the whole tree: the only writer inside `npm test` is
+ * test/run.mjs, at module scope, BEFORE the loader is registered and before
+ * `run()` imports a single file. The value is 'production' from before file one
+ * and never moves. So the inheritance is DETERMINISTIC, not raced — which
+ * makes this pin more necessary rather than less, because it is wrong on every
+ * run rather than on unlucky ones.
+ *
+ * The pin stays. test/fs/envMutationGuard is what keeps the premise true.
  */
 const run = spawnSync(process.execPath, [CHILD], {
   cwd: ROOT,
