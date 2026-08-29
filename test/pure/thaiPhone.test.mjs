@@ -7,6 +7,7 @@ import {
   isAllowedPhoneChar,
   sanitizePhoneText,
   thaiPhone,
+  THAI_PHONE_ERROR_MESSAGE,
 } from '@/lib/registration/thaiPhone';
 
 /**
@@ -242,4 +243,30 @@ test('CONTROL: without .transform, the parsed value would still be the raw strin
   const res = bare.safeParse({ phone: '022194304 ต่อ 10155' });
   assert.equal(res.success, true);
   assert.equal(res.data.phone, '022194304 ต่อ 10155', 'the un-transformed schema unexpectedly already formats — this control is not meaningful');
+});
+
+// ── The error message must never advertise a number the validator rejects ──
+
+test('every example number in THAI_PHONE_ERROR_MESSAGE actually validates', () => {
+  // Parsed straight out of the live message string, not retyped here — an
+  // edit to the message that changes or adds an example is what this test
+  // must catch, and it can only do that by reading the same text a customer
+  // would see.
+  const examplesText = THAI_PHONE_ERROR_MESSAGE.split('เช่น')[1] ?? '';
+  const examples = examplesText.split('/').map((s) => s.trim()).filter(Boolean);
+  assert.ok(examples.length >= 3, 'could not parse example numbers out of the message — has its shape changed?');
+  for (const example of examples) {
+    assert.equal(
+      isValidThaiPhone(example),
+      true,
+      `"${example}" is advertised in the error message but the validator rejects it`
+    );
+  }
+});
+
+test('CONTROL: parsing finds exactly the three examples the message currently carries', () => {
+  // Proves the parse above is not accidentally empty or over-matching.
+  const examplesText = THAI_PHONE_ERROR_MESSAGE.split('เช่น')[1] ?? '';
+  const examples = examplesText.split('/').map((s) => s.trim()).filter(Boolean);
+  assert.deepEqual(examples, ['081-234-5678', '02-123-4567 ต่อ 10155', '+66 81 234 5678']);
 });

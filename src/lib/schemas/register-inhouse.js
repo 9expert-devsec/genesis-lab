@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
-import { thaiPhone } from '@/lib/registration/thaiPhone';
-
-// Message text unchanged this round — see register-public.js's note on the
-// same constant for why, and this ticket's report for the accuracy question.
-const PHONE_MESSAGE = 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)';
+import { thaiPhone, THAI_PHONE_ERROR_MESSAGE } from '@/lib/registration/thaiPhone';
 
 // ── Address schemas ────────────────────────────────────────────────
 //
@@ -109,7 +105,7 @@ export const inhouseRegistrationSchema = z
     contactRole:          z.string().trim().max(100).optional().or(z.literal('')),
     contactDepartment:    z.string().trim().max(100).optional().or(z.literal('')),
     contactEmail:         z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-    contactPhone:         thaiPhone(z.string().trim(), PHONE_MESSAGE),
+    contactPhone:         thaiPhone(z.string().trim(), THAI_PHONE_ERROR_MESSAGE),
     contactLine:          z.string().trim().max(50).optional().or(z.literal('')),
     preferredContact:     z.enum(['phone', 'email', 'line']).default('email'),
     preferredContactTime: z.enum(['morning', 'afternoon', 'business']).default('business'),

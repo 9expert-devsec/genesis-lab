@@ -52,6 +52,23 @@
  * ต/่/อ and any Latin letter outside e/x/t, which is the whole point: a
  * customer cannot type "เบอร์นี้ไม่มี" or "call me" into this field.
  */
+
+/**
+ * THE ONE customer-facing error message, used by BOTH schemas — do not
+ * duplicate this literal. Teaches by example (one of each accepted shape:
+ * mobile, landline + extension, +country) rather than by digit counts, which
+ * is easier for a customer to pattern-match against their own number than a
+ * rule like "9 digits, or 10, or 8-15 after a +" would be.
+ *
+ * The three examples are asserted, in test/pure/thaiPhone.test.mjs, to
+ * actually pass isValidThaiPhone — parsed straight out of THIS string, so an
+ * edit that changes an example without checking it still validates is what
+ * that test is for. The message must never advertise an input the validator
+ * rejects.
+ */
+export const THAI_PHONE_ERROR_MESSAGE =
+  'รูปแบบเบอร์โทรไม่ถูกต้อง — เช่น 081-234-5678 / 02-123-4567 ต่อ 10155 / +66 81 234 5678';
+
 const ALLOWED_PHONE_CHAR = /^[0-9+\-() extตอ่#]$/i;
 
 export function isAllowedPhoneChar(ch) {
