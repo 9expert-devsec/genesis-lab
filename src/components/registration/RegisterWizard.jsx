@@ -551,6 +551,63 @@ export function StepForm({
   const showPickerBox = !roundChosen || pickerForcedOpen;
   const handleChangeRound = () => setPickerForcedOpen(true);
 
+  /**
+   * ── CONFIRM DIALOG ON CHANGING ROUNDS ────────────────────────────────────
+   * A click in the carousel only asks for confirmation when it could
+   * actually SURPRISE the user: the box is open BECAUSE they clicked
+   * "เปลี่ยนรอบ" (pickerForcedOpen) — meaning a round was already chosen and
+   * something they may have already started filling in below assumes it —
+   * AND the click names a round OTHER than the one already chosen.
+   *
+   *   pickerForcedOpen is false  → the very first pick (no round chosen yet,
+   *                                the ขอใบเสนอราคา Public path). Nothing to
+   *                                confirm — straight through.
+   *   id === selectedScheduleId  → re-clicking the round already chosen.
+   *                                Nothing changes; just collapse the box,
+   *                                same as if they had clicked away.
+   *   otherwise                  → stage it in pendingRoundId and ask.
+   *
+   * pendingRoundId is local state — like pickerForcedOpen, no URL, no
+   * navigation — cancel is a pure no-op and confirm funnels through the
+   * EXACT SAME handleSelectSchedule a first pick uses, so it is subject to
+   * the exact same downstream effects (attendanceMode included — see the
+   * schedule-sync effect above; S5 found it already correct on every
+   * selectedScheduleId change, this path is no exception).
+   */
+  const [pendingRoundId, setPendingRoundId] = useState(null);
+
+  const handleCarouselSelect = (id) => {
+    if (!pickerForcedOpen) {
+      handleSelectSchedule(id);
+      return;
+    }
+    if (id === selectedScheduleId) {
+      setPickerForcedOpen(false);
+      return;
+    }
+    setPendingRoundId(id);
+  };
+
+  const handleConfirmChangeRound = () => {
+    if (pendingRoundId == null) return;
+    handleSelectSchedule(pendingRoundId);
+    setPendingRoundId(null);
+  };
+
+  const handleCancelChangeRound = () => setPendingRoundId(null);
+
+  // Escape cancels, same as the ยกเลิก button — the existing inline confirm
+  // dialogs in this file (StepPreview's "ยืนยันการส่งข้อมูล") have no such
+  // listener; this one adds it because the ticket requires it.
+  useEffect(() => {
+    if (pendingRoundId == null) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") handleCancelChangeRound();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pendingRoundId]);
+
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't
   // overwrite a restored attendanceMode (e.g. after clicking "แก้ไข" back
@@ -770,7 +827,7 @@ export function StepForm({
             <ScheduleCarousel
               schedules={schedules}
               selectedId={selectedScheduleId}
-              onSelect={handleSelectSchedule}
+              onSelect={handleCarouselSelect}
               earlyBirdScheduleId={earlyBirdScheduleId}
               currentYear={currentYear}
             />
@@ -852,6 +909,39 @@ export function StepForm({
           <p className="mt-2 text-xs text-red-500">{errors.classId.message}</p>
         )}
       </section>
+
+      {pendingRoundId != null && (() => {
+        const pendingSchedule = scheduleById.get(pendingRoundId);
+        // pendingRoundId only ever comes from a card the carousel itself
+        // rendered, so this always resolves — the fallback is defensive, not
+        // a reachable branch.
+        const pendingDateLabel = pendingSchedule
+          ? formatClassDates(pendingSchedule.dates)
+          : "";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={handleCancelChangeRound}
+          >
+            <div
+              className="w-full max-w-sm rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-9e-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-base text-[var(--text-primary)]">
+                ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่ {pendingDateLabel} ใช่หรือไม่
+              </p>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <Button type="button" variant="outline" onClick={handleCancelChangeRound}>
+                  ยกเลิก
+                </Button>
+                <Button type="button" variant="cta" onClick={handleConfirmChangeRound}>
+                  ยืนยัน
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {formRevealed && (
         <>

@@ -721,6 +721,160 @@ test('CONTROL: the type-label change does not alter scheduleType, attendanceMode
   assert.ok(src.includes('data-section="attendance-mode"'), 'the attendance-mode selector section is still present, untouched');
 });
 
+// ── Confirm dialog on changing rounds — Commit D ───────────────────────────
+//
+// pendingRoundId (staging a click that needs confirming) is pure local
+// state, exactly like pickerForcedOpen before it — no prop reaches it, so a
+// static render cannot open the dialog directly. What CAN be proven by
+// rendering is the field-survival OUTCOME once a round changes (shared with
+// the เปลี่ยนรอบ test above, since confirm funnels through the exact same
+// handleSelectSchedule); what needs source-wiring proof is WHEN the dialog
+// is staged at all, since that decision lives entirely in local state.
+
+// Normalises CRLF -> LF so the multi-line regexes below (which assume \n)
+// match regardless of the checked-out line-ending convention.
+const srcText = () =>
+  readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8').replace(/\r\n/g, '\n');
+
+test('CONTROL: a dialog IS staged for a different round while เปลี่ยนรอบ is open', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(!pickerForcedOpen\) \{\n\s*handleSelectSchedule\(id\);\n\s*return;\n\s*\}\n\s*if \(id === selectedScheduleId\) \{\n\s*setPickerForcedOpen\(false\);\n\s*return;\n\s*\}\n\s*setPendingRoundId\(id\);/,
+    'handleCarouselSelect only stages pendingRoundId after both earlier returns have been ruled out'
+  );
+});
+
+test('no dialog on the first pick — pickerForcedOpen is false, straight through to handleSelectSchedule', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleCarouselSelect = \(id\) => \{\n\s*if \(!pickerForcedOpen\) \{\n\s*handleSelectSchedule\(id\);\n\s*return;\n\s*\}/,
+    'the FIRST check handleCarouselSelect makes is "no round chosen yet" — and it returns immediately, before pendingRoundId is ever touched'
+  );
+});
+
+test('no dialog when re-clicking the already-chosen round — collapses instead', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(id === selectedScheduleId\) \{\n\s*setPickerForcedOpen\(false\);\n\s*return;\n\s*\}/,
+    'the same-round case returns via setPickerForcedOpen(false), never reaching setPendingRoundId'
+  );
+});
+
+test('CONTROL: the three handleCarouselSelect branches are mutually exclusive returns, not fallthrough', () => {
+  // Every branch above ends in `return` (or is the function's last statement)
+  // — the redden control for this file mutates the middle `return` away, so
+  // this is the affirmative half: the source as it stands really does have it.
+  const src = srcText();
+  const fn = src.slice(src.indexOf('const handleCarouselSelect'), src.indexOf('const handleConfirmChangeRound'));
+  assert.equal((fn.match(/return;/g) || []).length, 2, 'exactly two early returns before the final setPendingRoundId(id) statement');
+});
+
+test('cancel touches ONLY pendingRoundId — the round, the strip, and every form field are left alone', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleCancelChangeRound = \(\) => setPendingRoundId\(null\);/,
+    'handleCancelChangeRound is a single statement: clear the pending id, nothing else'
+  );
+  // Negative check: this exact line must not ALSO call handleSelectSchedule,
+  // setSelectedScheduleId, or router — the hard constraint this dialog exists
+  // under (cancel = true no-op).
+  const line = src.split('\n').find((l) => l.includes('const handleCancelChangeRound ='));
+  assert.ok(line, 'handleCancelChangeRound found in source');
+  assert.ok(!line.includes('handleSelectSchedule'), 'cancel must not select a round');
+  assert.ok(!line.includes('router'), 'cancel must not navigate');
+});
+
+test('CONTROL: Escape is wired to the SAME cancel handler as the ยกเลิก button and the backdrop', () => {
+  const src = srcText();
+  assert.match(src, /if \(e\.key === "Escape"\) handleCancelChangeRound\(\);/, 'Escape calls handleCancelChangeRound');
+  assert.match(src, /onClick=\{handleCancelChangeRound\}/, 'the backdrop overlay and/or ยกเลิก button call it too');
+  // Both the backdrop div and the ยกเลิก button share this exact prop — count
+  // confirms it is wired in more than the one place, not just Escape alone.
+  assert.ok((src.match(/onClick=\{handleCancelChangeRound\}/g) || []).length >= 2, 'wired on both the backdrop and the cancel button');
+});
+
+test('confirm funnels through the SAME handleSelectSchedule a first pick uses — no separate/duplicated round-setting path', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleConfirmChangeRound = \(\) => \{\n\s*if \(pendingRoundId == null\) return;\n\s*handleSelectSchedule\(pendingRoundId\);\n\s*setPendingRoundId\(null\);\n\s*\};/,
+    'handleConfirmChangeRound calls handleSelectSchedule directly, not a parallel setSelectedScheduleId'
+  );
+});
+
+test('confirm updates the round and preserves a filled field — same outcome เปลี่ยนรอบ already proved, now via the confirm path', () => {
+  // Confirm's ONLY effect on the round is calling handleSelectSchedule — the
+  // exact function a direct pick already uses — so the field-survival outcome
+  // is identical to the "เปลี่ยนรอบ re-opens..." test above and is proven the
+  // same way: two renders, the second with the id handleSelectSchedule's own
+  // router.replace('?class=<id>') would have put in the URL after confirm.
+  const before = render({ initialClassId: SEP._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(before.includes(probe), `${what} present before confirming a round change`);
+  }
+  const afterConfirm = render({ initialClassId: OCT._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(afterConfirm.includes(probe), `${what} survived confirming a round change`);
+  }
+  assert.ok(afterConfirm.includes('15-16 ต.ค. 2569'), 'strip shows the confirmed round');
+});
+
+test('the dialog body date comes from formatClassDates — the SAME formatter the summary strip uses — never hand-formatted', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const pendingDateLabel = pendingSchedule\n\s*\? formatClassDates\(pendingSchedule\.dates\)\n\s*: "";/,
+    'pendingDateLabel is computed by formatClassDates, not a second date formatter'
+  );
+  assert.match(
+    src,
+    /ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่ \{pendingDateLabel\} ใช่หรือไม่/,
+    'the exact body sentence, interpolating that same value'
+  );
+});
+
+test('CONTROL: the dialog copy is the exact specified strings — confirm/cancel button labels included', () => {
+  const src = srcText();
+  assert.ok(src.includes('ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่'), 'body opening');
+  assert.ok(src.includes('ใช่หรือไม่'), 'body closing');
+  assert.match(src, />\s*ยืนยัน\s*<\/Button>/, 'confirm button label');
+  assert.match(src, />\s*ยกเลิก\s*<\/Button>/, 'cancel button label — note this string also appears on the unrelated StepPreview submit-confirm dialog, so this alone does not prove THIS dialog; paired with the pendingDateLabel test above, which is unique to it');
+});
+
+// ── attendanceMode after confirming a round-type change — S5 / Commit D ────
+//
+// S5 (this round's own survey): the schedule-sync effect already resets
+// attendanceMode on every selectedScheduleId change — "classroom" for a
+// non-hybrid target, undefined (left for the user to choose) for a hybrid
+// one — regardless of what the PREVIOUS round's type was. Confirming a round
+// change updates selectedScheduleId through no path other than
+// handleSelectSchedule, so this was ALREADY correct before Commit D and nothing
+// new was added for it — this test pins that finding, not a new behaviour.
+
+test('S5: attendanceMode is already cleared on every selectedScheduleId change, hybrid or not — confirm adds no second path', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(sch\?\.type !== "hybrid"\) \{\n\s*setValue\("attendanceMode", "classroom"\);\n\s*\} else \{\n\s*setValue\("attendanceMode", undefined\);\n\s*\}/,
+    'the schedule-sync effect sets attendanceMode for BOTH directions on every selectedScheduleId change'
+  );
+  // The effect's own dependency array — confirm's handleSelectSchedule updates
+  // exactly this state, so it cannot bypass the effect.
+  assert.match(src, /\}, \[selectedScheduleId, scheduleById, setValue\]\);/, 'the effect re-runs on every selectedScheduleId change, confirm-triggered ones included');
+  // And confirm's own handler, proven above, calls handleSelectSchedule — never
+  // setValue("attendanceMode", ...) directly, which would be a second,
+  // divergent path this test is here to rule out.
+  const confirmFn = src.slice(
+    src.indexOf('const handleConfirmChangeRound'),
+    src.indexOf('const handleCancelChangeRound')
+  );
+  assert.ok(!confirmFn.includes('attendanceMode'), 'confirm does not set attendanceMode itself — it defers entirely to the existing effect');
+});
+
 // ── Note for the next reader ───────────────────────────────────────────────
 
 test('WHY the probes are what they are: RHF inputs are uncontrolled in SSR', () => {
