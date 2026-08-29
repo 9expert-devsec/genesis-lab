@@ -407,7 +407,7 @@ export function ReviewAndPayStep({
 
           {data.invoice && (
             <Section
-              title="ใบเสนอราคา / ใบกำกับภาษี"
+              title="ข้อมูลสำหรับออกใบเสนอราคา"
               collapsible
               open={openSections.invoice}
               onToggle={() => toggleSection("invoice")}
