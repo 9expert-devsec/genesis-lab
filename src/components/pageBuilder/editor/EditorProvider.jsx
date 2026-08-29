@@ -33,6 +33,7 @@ const EditorContext = createContext(null);
 
 export function EditorProvider({
   children, page, pageId = null, updatedAt = null, tier, currentUserName = '',
+  courses = [],
 }) {
   const [state, dispatch] = useReducer(
     editorReducer,
@@ -89,6 +90,18 @@ export function EditorProvider({
       saving: isSaving(state),
       dispatch,
       tier, // { canUseAdvanced, canPublish, canManagePreview } — server-resolved
+      /**
+       * The course catalogue, read-only, beside `tier` and for the same
+       * reason: the route resolves it server-side and the client only reads
+       * it. A projection — {course_id, course_name} — never the full rows;
+       * see lib/pageBuilder/courseCatalogue.js for the 194.6x that decides.
+       *
+       * NOT A SECOND SOURCE OF TRUTH. `resolvedData` above is what says
+       * whether an authored code resolves, and the warnings read that alone.
+       * This is a list to choose FROM. A code missing from it is displayed
+       * and saved regardless, so its absence asserts nothing.
+       */
+      courses,
       resolvedData, // id-keyed data map for data-backed sections (2C.2a)
       previewViewport, setPreviewViewport, // ephemeral canvas device-preview width
       // The currently selected section (or null). Paths, not ids — ids are not

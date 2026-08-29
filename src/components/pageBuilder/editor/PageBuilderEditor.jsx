@@ -14,12 +14,12 @@ import { EditorShell } from './EditorShell';
  * useEditorSave.js.
  */
 export function PageBuilderEditor({
-  page, pageId = null, updatedAt = null, tier, currentUserName = '',
+  page, pageId = null, updatedAt = null, tier, currentUserName = '', courses = [],
 }) {
   return (
     <EditorProvider
       page={page} pageId={pageId} updatedAt={updatedAt} tier={tier}
-      currentUserName={currentUserName}
+      currentUserName={currentUserName} courses={courses}
     >
       <EditorShell />
     </EditorProvider>
