@@ -201,7 +201,12 @@ export function AdvancedGroup({ path, advanced, canUseAdvanced, dispatch }) {
  * wrapping it buys the tests a component that renders exactly what the tab
  * renders rather than something assembled a second way.
  */
-export function ContentTab({ type, content, advanced, resolved, patch }) {
+/**
+ * `courses` is the catalogue, DEFAULTED so this body still renders without
+ * one. That default is not a convenience: it is what lets the render tier
+ * drive this tab with no provider, which round 47's warning tests do.
+ */
+export function ContentTab({ type, content, advanced, resolved, patch, courses = [] }) {
   return (
     <SectionContentEditor
       type={type}
@@ -209,6 +214,7 @@ export function ContentTab({ type, content, advanced, resolved, patch }) {
       advanced={advanced}
       resolved={resolved}
       patch={patch}
+      courses={courses}
     />
   );
 }
@@ -673,7 +679,7 @@ const TAB_TRIGGER_CLASS = [
 ].join(' ');
 
 export function SettingsPanel() {
-  const { page, selected, selection, dispatch, tier, resolvedData } = useEditor();
+  const { page, selected, selection, dispatch, tier, resolvedData, courses } = useEditor();
 
   /**
    * ── WHICH TAB IS OPEN IS VIEW STATE, NOT DOCUMENT STATE ──────────────────
@@ -781,6 +787,7 @@ export function SettingsPanel() {
             content={selected.content}
             advanced={selected.advanced}
             resolved={resolvedData?.[selected.id]}
+            courses={courses}
             patch={(patch) => patchKey('content', patch)}
           />
         </Tabs.Content>

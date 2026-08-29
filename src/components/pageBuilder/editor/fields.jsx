@@ -49,6 +49,29 @@ export function Field({ label, hint, children }) {
   );
 }
 
+/**
+ * `Field`, for a control that is NOT a single input — added round 47/48.
+ *
+ * `Field` wraps its children in a `<label>`, which is right for one input and
+ * wrong for a list of rows: a `<label>` forwards a click on any non-interactive
+ * part of itself to the first labelable control inside it, and `<button>` is
+ * labelable. Wrapping the course picker's rows in `Field` would mean a stray
+ * click on the padding fired “move row 1 up”.
+ *
+ * Same markup and the same class strings otherwise, so the two look identical
+ * in the panel — which is the point of it living here rather than being an
+ * inline copy of Field's classes in one component.
+ */
+export function FieldBlock({ label, hint, children }) {
+  return (
+    <div className="mb-3 block">
+      <span className="mb-1.5 block text-xs font-bold text-9e-navy dark:text-white/90">{label}</span>
+      {children}
+      {hint && <span className="mt-1 block text-xs text-9e-slate-dp-50">{hint}</span>}
+    </div>
+  );
+}
+
 export function Group({ title, children }) {
   return (
     <fieldset className="mb-5 border-t border-[var(--surface-border)] pt-3">

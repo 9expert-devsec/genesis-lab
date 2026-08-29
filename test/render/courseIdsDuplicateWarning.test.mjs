@@ -140,13 +140,23 @@ test('an empty list still says only that it is empty', () => {
 
 // ── warn, never edit ──────────────────────────────────────────────────────
 
+/**
+ * ── AMENDED IN ROUND 48 — the only case in this file that changed ─────────
+ * It read the `<textarea>`'s joined value. Round 48 replaced that control with
+ * the picker, so there is no textarea to read; the other eleven cases in this
+ * file passed unmodified against the new control, because they assert on the
+ * warnings and the warnings did not move.
+ *
+ * THE CLAIM IS UNCHANGED and is what matters: the control shows the stored
+ * array as it is stored, repeats included. Only the way to observe it moved —
+ * from one joined string to one row per entry.
+ */
 test('the field still shows BOTH copies — nothing de-duplicates the control', () => {
-  // The textarea's value is the stored array joined. If anything de-duplicated
-  // on the way to the control, the author would see one line where they wrote
-  // two and their next save would store one.
+  // If anything de-duplicated on the way to the control, the author would see
+  // two rows where they wrote three and their next save would store two.
   const html = draw('course_selector', { courseIds: ['A', 'B', 'A'] }, [course('A')]);
-  const textarea = html.slice(html.indexOf('<textarea'), html.indexOf('</textarea>'));
-  assert.equal(textarea.includes('A\nB\nA'), true, `the control rewrote the list: ${textarea}`);
+  const codes = [...html.matchAll(/data-testid="course-row" data-code="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(codes, ['A', 'B', 'A'], `the control rewrote the list: ${codes.join(',')}`);
 });
 
 test('SOURCE: nothing in the warnings path sorts, filters or de-duplicates', () => {

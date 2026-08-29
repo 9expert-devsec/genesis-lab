@@ -144,14 +144,35 @@ test('the declared key set is exactly two keys', () => {
   assert.deepEqual([...CATALOGUE_KEYS], ['course_id', 'course_name']);
 });
 
-test('nothing consumes the catalogue yet — this step is inert', () => {
-  // REPORTED, not enforced: step 3 will make this false on purpose, and a test
-  // that went red for intended work would be a landmine rather than a guard.
-  // It is asserted as a COUNT so the day it changes, the diff says which file
-  // started reading it — which is the fact worth carrying into step 3.
+/**
+ * ── AMENDED IN ROUND 48 — the tripwire fired, as designed ─────────────────
+ * Round 47 asserted that NOTHING consumed the catalogue, because step 2 was
+ * inert and that was the point: the projection could be measured before any UI
+ * depended on the answer. Its own note said step 3 would make the assertion
+ * false on purpose and that it was written as a LIST so the day it changed, the
+ * diff would name which file started reading it.
+ *
+ * It did exactly that. Step 3 turned it red with
+ * `SettingsPanel.jsx, SectionContentEditor.jsx already reads it`.
+ *
+ * So the assertion is replaced rather than deleted, and it now says the useful
+ * thing for a consumed catalogue: these files and no others. An unrelated
+ * component quietly starting to read the catalogue — and so quietly treating a
+ * snapshot as authoritative — is the failure worth catching from here on.
+ */
+test('the catalogue is consumed by EXACTLY the files on the picker path', () => {
   const editorDir = 'src/components/pageBuilder/editor/';
   const consumers = ['CanvasPanel.jsx', 'SettingsPanel.jsx', 'SectionPicker.jsx', 'StructurePanel.jsx',
-    'EditorShell.jsx', 'EditorTopBar.jsx', 'SectionContentEditor.jsx']
+    'EditorShell.jsx', 'EditorTopBar.jsx', 'SectionContentEditor.jsx', 'CoursePicker.jsx']
     .filter((f) => /\bcourses\b/.test(readSource(editorDir + f).code.replace(/bundle_courses/g, '')));
-  assert.deepEqual(consumers, [], `step 2 is not inert: ${consumers.join(', ')} already reads it`);
+  assert.deepEqual(consumers, ['SettingsPanel.jsx', 'SectionContentEditor.jsx', 'CoursePicker.jsx']);
+});
+
+test('CONTROL: the reader can tell a consumer from a non-consumer', () => {
+  // Otherwise the list above is satisfied by a matcher that answers the same
+  // way for every file — in either direction.
+  const editorDir = 'src/components/pageBuilder/editor/';
+  const reads = (f) => /\bcourses\b/.test(readSource(editorDir + f).code.replace(/bundle_courses/g, ''));
+  assert.equal(reads('CoursePicker.jsx'), true);
+  assert.equal(reads('CanvasPanel.jsx'), false);
 });

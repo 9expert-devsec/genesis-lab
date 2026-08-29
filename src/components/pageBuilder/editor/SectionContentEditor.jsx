@@ -13,6 +13,9 @@ import { moveInArray } from './pagePath';
 // and plain JS on purpose — see duplicateCodes.js for why it is not in
 // lib/pageBuilder/sectionLabels.js with the other content predicate.
 import { duplicateCourseCodes } from './duplicateCodes';
+// Round 48, ADDED beside the line above. The picker that replaces this file's
+// course textarea; see CoursePicker.jsx for the rule it must not break.
+import { CourseIdsPicker } from './CoursePicker';
 import { IconPicker } from './IconPicker';
 import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
@@ -392,14 +395,20 @@ function EmbedEditor({ content, patch }) {
 // this one (the whole point of the fail-closed warnings is that authors trust
 // them). The `undefined` guard below is what keeps that trust intact.
 
-// A newline-per-id textarea for authored course-id lists.
-function CourseIdsField({ value, onChange, hint }) {
-  const ids = Array.isArray(value) ? value : [];
-  return (
-    <Field label="รหัสคอร์ส (บรรทัดละ 1 รหัส)" hint={hint ?? 'เช่น MSE-AI — ใช้รหัสจากระบบคอร์ส'}>
-      <TextArea value={ids.join('\n')} onChange={(v) => onChange(v.split('\n').map((s) => s.trim()))} rows={4} />
-    </Field>
-  );
+/**
+ * The authored course list — a picker since round 48, a newline-per-id textarea
+ * before it. ONE component serving course_selector, bundle_courses and
+ * course_list[manual], which is why replacing it reaches three of the five
+ * course-referencing section types at once.
+ *
+ * `courses` is the catalogue round 47 threaded down from the route: a
+ * projection, {course_id, course_name}, and authoritative for NOTHING. It
+ * supplies rows to choose from and names to show. It defaults to empty, and an
+ * empty catalogue is still a working control — every stored code keeps its row,
+ * and a code can still be typed.
+ */
+function CourseIdsField({ value, onChange, hint, courses }) {
+  return <CourseIdsPicker value={value} onChange={onChange} courses={courses} hint={hint} />;
 }
 
 /**
@@ -489,22 +498,22 @@ function InstructorCardEditor({ content, patch, resolved }) {
   );
 }
 
-function CourseSelectorEditor({ content, patch, resolved }) {
+function CourseSelectorEditor({ content, patch, resolved, courses }) {
   return (
     <>
       <Field label="หัวข้อ (ไม่บังคับ)">
         <TextInput value={content?.heading} onChange={(v) => patch({ heading: v })} />
       </Field>
-      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} courses={courses} />
       <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
     </>
   );
 }
 
-function BundleCoursesEditor({ content, patch, resolved }) {
+function BundleCoursesEditor({ content, patch, resolved, courses }) {
   return (
     <>
-      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+      <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} courses={courses} />
       <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
     </>
   );
@@ -535,7 +544,7 @@ const COURSE_LIST_SOURCE_LABELS = {
   program: 'ตามโปรแกรม (Program)',
 };
 
-function CourseListEditor({ content, patch, resolved }) {
+function CourseListEditor({ content, patch, resolved, courses }) {
   const source = content?.source ?? 'manual';
   const isDerived = source === 'skill' || source === 'program';
   const filter = String(content?.filter ?? '').trim();
@@ -570,7 +579,7 @@ function CourseListEditor({ content, patch, resolved }) {
         </>
       ) : (
         <>
-          <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} />
+          <CourseIdsField value={content?.courseIds} onChange={(courseIds) => patch({ courseIds })} courses={courses} />
           <CourseIdsWarnings ids={content?.courseIds} resolved={resolved} />
         </>
       )}
@@ -795,7 +804,7 @@ const CONTENT_EDITORS = {
   ),
 };
 
-export function SectionContentEditor({ type, content, patch, advanced, resolved }) {
+export function SectionContentEditor({ type, content, patch, advanced, resolved, courses = [] }) {
   const Editor = CONTENT_EDITORS[type];
   if (!Editor) {
     // Containers hold child sections, not content — the tree edits those.
@@ -809,5 +818,5 @@ export function SectionContentEditor({ type, content, patch, advanced, resolved 
   // course/instructor, or list) only by the 2C.2a data-backed editors — it is
   // what turns the edit-time fetch into a fail-closed warning instead of a
   // placeholder. The rest ignore both.
-  return <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} />;
+  return <Editor content={content ?? {}} patch={patch} advanced={advanced} resolved={resolved} courses={courses} />;
 }
