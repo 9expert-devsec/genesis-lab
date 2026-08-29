@@ -1167,7 +1167,7 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         </Section>
 
         {data.invoice && (
-          <Section title="ใบเสนอราคา / ใบกำกับภาษี">
+          <Section title="ข้อมูลสำหรับออกใบเสนอราคา">
             <InvoiceView invoice={data.invoice} />
           </Section>
         )}
