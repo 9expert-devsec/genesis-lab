@@ -1,6 +1,7 @@
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
 import { formatTHB } from '@/lib/pricing';
 import { formatSiteDateTime } from '@/lib/articlePublishTime';
+import { orNotSpecified } from '@/lib/orNotSpecified';
 
 /**
  * Paid-receipt email — sent once a card / PromptPay charge succeeds.
@@ -106,8 +107,8 @@ export function paidReceiptEmail({
                           <td style="padding: 8px; border: 1px solid #e2e8f0; font-weight: ${i === 0 && coordinatorIsAttending ? '600' : '400'};">
                             ${a.firstName} ${a.lastName}${i === 0 && coordinatorIsAttending ? ' <span style="color:#6b7280;font-size:11px;">(ผู้ประสานงาน)</span>' : ''}
                           </td>
-                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${a.email}</td>
-                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${a.phone}</td>
+                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${orNotSpecified(a.email)}</td>
+                          <td style="padding: 8px; border: 1px solid #e2e8f0;">${orNotSpecified(a.phone)}</td>
                         </tr>`).join('')}
                       </tbody>
                     </table>
@@ -273,7 +274,7 @@ ${showInvoice ? `
   * อีเมลฉบับนี้เป็นใบเสร็จอย่างย่อ ใบกำกับภาษีฉบับเต็มจะจัดส่งภายหลัง
 ` : ''}${showAttendees ? `
 รายชื่อผู้เข้าอบรม (${attendeesCount} ท่าน):
-${attendees.map((a, i) => `  ${i + 1}. ${a.firstName} ${a.lastName} | ${a.email} | ${a.phone}${i === 0 && coordinatorIsAttending ? ' (ผู้ประสานงาน)' : ''}`).join('\n')}
+${attendees.map((a, i) => `  ${i + 1}. ${a.firstName} ${a.lastName} | ${orNotSpecified(a.email)} | ${orNotSpecified(a.phone)}${i === 0 && coordinatorIsAttending ? ' (ผู้ประสานงาน)' : ''}`).join('\n')}
 ` : !attendeesListProvided ? '\n* รายชื่อผู้เข้าอบรมจะแจ้งภายหลัง\n' : ''}
 หากมีข้อสงสัย:
 โทร: 02-219-4304

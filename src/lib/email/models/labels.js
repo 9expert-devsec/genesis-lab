@@ -24,6 +24,7 @@
  */
 
 import { formatInvoiceBranchLabel } from '@/lib/registration/branchLabel';
+import { orNotSpecified } from '@/lib/orNotSpecified';
 
 export const ATTENDANCE_TEAMS = 'Online via Microsoft Teams';
 export const ATTENDANCE_CLASSROOM = 'Classroom';
@@ -146,8 +147,15 @@ export function buildAttendeeBlocks({
           items: list.map((a, i) => ({
             index: i + 1,
             name: `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim(),
-            email: a?.email ?? '',
-            phone: a?.phone ?? '',
+            // Attendee email/phone are optional at intake (register-public.js's
+            // attendeeSchema) — a blank one renders as NOT_SPECIFIED_LABEL here,
+            // at the model-builder boundary, so the Postmark template payload
+            // (and the hard-coded fallback templates, which read the SAME
+            // attendees array upstream of this builder) never has to know the
+            // difference between "blank" and "not specified". Still a plain
+            // string under the existing key — no shape change.
+            email: orNotSpecified(a?.email),
+            phone: orNotSpecified(a?.phone),
             // The coordinator, when attending, is prepended server-side by the
             // route — so slot 0 and only slot 0 can carry the marker.
             is_coordinator: i === 0 && Boolean(coordinatorIsAttending),
