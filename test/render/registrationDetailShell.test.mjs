@@ -7,6 +7,7 @@ import { InhouseDetailClient } from '@/app/admin/registrations/inhouse/_componen
 import { NEUTRAL_STATUS_BADGE, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import { DETAIL_HEADING_LABEL } from '@/lib/registrations/detailHeading';
 import { refNo } from '@/lib/refNo';
+import { NOT_SPECIFIED_LABEL } from '@/lib/orNotSpecified';
 
 /**
  * THE RESTYLED DETAIL SCREENS: the tabs, the dark strip, the status bar and the
@@ -880,31 +881,36 @@ test('only the two FIXED columns are px; the three content columns are proportio
     'the shares above name different columns than the header renders');
 });
 
-test('an attendee with a name and no contact details renders TWO dashes, not empty cells', () => {
+test('an attendee with a name and no contact details renders the placeholder TWICE, not empty cells', () => {
   /**
    * A table CELL may not simply vanish — the column would misalign — so the
-   * attendee table is the one place on these screens where a dash is right, and
-   * this pins that it is a dash rather than a blank.
+   * attendee table is the one place on these screens where a fallback is
+   * right, and this pins that it is the fallback rather than a blank.
    *
-   * ── RE-POINTED TWICE NOW, AND THE NUMBER IS THE COLUMN SET ───────────────
+   * ── RE-POINTED THREE TIMES NOW ────────────────────────────────────────────
    * Round 4's table had separate อีเมล and เบอร์โทร columns → two dashes. The
    * measured set merged them into one ข้อมูลติดต่อ cell → one dash. Round 8
-   * SPLITS THEM AGAIN, with the phone as its own column → two.
+   * SPLIT THEM AGAIN, with the phone as its own column → two dashes. Nutto
+   * ticket 5 made attendee email/phone genuinely optional and swapped the
+   * dash for NOT_SPECIFIED_LABEL ("ไม่ได้ระบุ") — still two, still a real
+   * fallback string, just a different one; see src/lib/orNotSpecified.js.
    *
    * The claim has never changed: each cell falls back rather than emptying. The
    * count follows the columns, which is why it is asserted exactly rather than
-   * as a floor — a floor would have survived both changes without noticing
-   * either, and the number is the only thing that tells this table's shape from
-   * the previous one.
+   * as a floor — a floor would have survived every one of these changes without
+   * noticing any of them, and the number is the only thing that tells this
+   * table's shape from the previous one.
    *
-   * The empty-element guard over the whole page is what proves the fallback is a
-   * dash rather than a blank element.
+   * The empty-element guard over the whole page is what proves the fallback is
+   * real text rather than a blank element.
    */
   const table = PUB_SPARSE.slice(PUB_SPARSE.indexOf('<table'), PUB_SPARSE.indexOf('</table>'));
   const body = table.slice(table.indexOf('<tbody'), table.indexOf('</tbody>'));
   assert.ok(body.includes('ปรีชา ตั้งใจ'), 'the attendee name did not render');
-  assert.equal((body.match(/>—</g) ?? []).length, 2,
-    'the missing email and phone did not render exactly one dash each');
+  assert.ok(!body.includes('>—<'), 'the old em-dash fallback is still here — it should have been replaced');
+  const placeholderTag = new RegExp(`>${NOT_SPECIFIED_LABEL}<`, 'g');
+  assert.equal((body.match(placeholderTag) ?? []).length, 2,
+    'the missing email and phone did not render exactly one placeholder each');
 });
 
 test('the coordinator marker is a suffix inside the name cell, not a line of its own', () => {

@@ -9,6 +9,7 @@
 
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { formatInvoiceBranchLabel } from "@/lib/registration/branchLabel";
+import { orNotSpecified } from "@/lib/orNotSpecified";
 
 export function ReadOnlyRow({ label, value }) {
   return (
@@ -52,8 +53,13 @@ export function AttendeeListView({ data }) {
             ท่านที่ {coord.isAttending ? i + 2 : i + 1} · {a.firstName}{" "}
             {a.lastName}
           </div>
+          {/* Attendee email/phone are optional — orNotSpecified so a blank one
+              reads as "ไม่ได้ระบุ" here instead of leaving a bare " · " with
+              nothing on one side. Coordinator's own row above (line 43) is
+              untouched: coordinator email/phone stay required and can never
+              be blank. */}
           <div className="text-xs text-[var(--text-secondary)]">
-            {a.email} · {a.phone}
+            {orNotSpecified(a.email)} · {orNotSpecified(a.phone)}
           </div>
         </li>
       ))}
