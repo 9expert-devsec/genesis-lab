@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * The canvas's iframe: its document, its styles, and its theme.
@@ -130,15 +130,49 @@ export function injectReset(frameDoc) {
   frameDoc.head.appendChild(style);
 }
 
+/**
+ * ── WHY THE FRAME IS TRACKED IN STATE AND NOT IN A REF ────────────────────
+ * This was `useRef` + `useEffect(…, [])`, and that pairing had a defect with a
+ * very narrow trigger and a total effect.
+ *
+ * CanvasPanel does not always render the frame. A page with NO sections returns
+ * the “หน้านี้ยังว่างอยู่” message instead, and no iframe with it. On such a page
+ * the mount effect ran once, found `frameRef.current === null`, and — having no
+ * dependencies — never ran again. The author then added their first section: the
+ * iframe mounted, nothing was listening for it, `frameDoc` stayed null, and
+ * `createPortal` was never reached. The canvas stayed BLANK for the rest of the
+ * session, through the add, through every keystroke, through autosave — and came
+ * back only on a reload, where the page now has a section on its first render.
+ * That is the whole of the reported “nothing shows until I save and reopen”.
+ *
+ * A callback ref is what removes it: the element's ARRIVAL is the event, so the
+ * effect keys off the element rather than off the mount. It costs one state
+ * update on a render that was already happening, and it fixes the symmetric case
+ * too — delete every section and add one again and the frame is re-attached
+ * rather than lost.
+ *
+ * `setFrameEl` is a useState setter, so its identity is stable across renders
+ * and React does not detach/reattach the ref on every render — the failure that
+ * an inline arrow as a callback ref would have introduced.
+ *
+ * Nothing else moved. The load listener, both observers, the stylesheet clone
+ * and the documentElement class mirror are the same code doing the same work;
+ * only what wakes them changed.
+ */
 export function useCanvasFrame() {
-  const frameRef = useRef(null);
+  // The element itself, as state: see the note above for why a ref cannot see
+  // an iframe that mounts LATER than this hook does.
+  const [frameEl, setFrameEl] = useState(null);
   // State, not a ref: the portal must re-render when the document appears, and
   // a ref mutation would not schedule that.
   const [frameDoc, setFrameDoc] = useState(null);
 
   useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return undefined;
+    const frame = frameEl;
+    // The frame went away (the last section was deleted). Drop the document with
+    // it: a portal into a detached body renders into nothing and would keep the
+    // canvas looking alive while it was not.
+    if (!frame) { setFrameDoc(null); return undefined; }
 
     let cancelled = false;
 
@@ -202,7 +236,7 @@ export function useCanvasFrame() {
       headObserver.disconnect();
       rootObserver.disconnect();
     };
-  }, []);
+  }, [frameEl]);
 
-  return { frameRef, frameDoc };
+  return { frameRef: setFrameEl, frameDoc };
 }

@@ -21,6 +21,16 @@ import {
 import {
   backgroundClassFor, backgroundStyleFor, isDarkBackgroundFor, accentVarsFor,
 } from '@/lib/pageBuilder/presets';
+/**
+ * Round 45, ADDED beside the statements above.
+ *
+ * The SAME two functions the structure tree uses for its “ว่าง” badge — not a
+ * second emptiness rule written for the canvas. A canvas that decided
+ * “empty” differently from the tree would put a marker on one panel and not
+ * the other for the same section, which is worse than neither: the author
+ * would have to work out which panel is lying.
+ */
+import { sectionRendersEmpty, labelOf } from '@/lib/pageBuilder/sectionLabels';
 
 import { HeadingSection } from './sections/heading';
 import { RichTextSection } from './sections/rich_text';
@@ -159,6 +169,46 @@ function UnknownBlock({ type }) {
   );
 }
 
+/**
+ * ── AN EMPTY SECTION, IN THE EDITOR ONLY ──────────────────────────────────
+ * A just-added heading has no text, and heading.jsx returns null for that. So
+ * does price_card with no title, price or feature, and eight more besides. The
+ * section IS in the tree, IS selected, and draws a zero-height box the author
+ * cannot see or click — which is indistinguishable from the canvas being
+ * broken, and was reported as exactly that.
+ *
+ * THE PUBLIC PAGE MUST KEEP RENDERING NOTHING. That is correct behaviour, not
+ * a bug to fix: a half-filled section should not publish a stub. So this is
+ * gated on `path`, the SAME fact that produces `inEditor` below — one flag,
+ * not a second one — and `path` is null for every public and preview caller.
+ *
+ * IT IS CHROME, NOT CONTENT, and the distinction is deliberate. No sample
+ * heading, no grey bars, nothing an author could mistake for something they
+ * wrote or something that will publish: a dashed outline, the word the
+ * structure tree already uses, and the section's own type name so the author
+ * can tell WHICH empty section they are looking at when two sit together.
+ *
+ * Rendered BESIDE the component's own output rather than instead of it.
+ * `sectionRendersEmpty` is a second reader of each component's null guard and
+ * its own header says so; if the two ever disagree, this shows a marker next
+ * to real content — visibly wrong and fixable — rather than replacing content
+ * with a marker, which would hide the author's work.
+ */
+function EmptyInEditor({ type }) {
+  return (
+    <div
+      data-pb-empty=""
+      className="rounded-9e-sm border border-dashed border-[var(--surface-border)] px-3 py-2 text-xs text-9e-slate-dp-50"
+    >
+      <span className="rounded-full border border-[var(--surface-border)] px-1.5 py-0.5 text-[10px]">ว่าง</span>
+      {' '}
+      {/* The tree's sentence, verbatim, with the type in front of it — so the two
+          panels say the same thing about the same section rather than two things. */}
+      {`${labelOf(type)} — section นี้ยังว่าง จึงไม่แสดงผลบนหน้าเว็บ`}
+    </div>
+  );
+}
+
 export function SectionRenderer({ section, depth = 0, path = null, resolvedData = null }) {
   if (!section || typeof section !== 'object') return null;
   if (section.enabled === false) return null;
@@ -288,6 +338,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
       {scopedCss && <style dangerouslySetInnerHTML={{ __html: scopedCss }} />}
       <div className={cn('mx-auto px-4', containerWidthClass(settings.containerWidth))}>
         {inner}
+        {path != null && sectionRendersEmpty(section) && <EmptyInEditor type={section.type} />}
         {cleanHtml && (
           <div className="pb-custom-html mt-6" dangerouslySetInnerHTML={{ __html: cleanHtml }} />
         )}
