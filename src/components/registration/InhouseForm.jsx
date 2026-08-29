@@ -24,6 +24,7 @@ import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
 import { phoneInputProps } from '@/lib/registration/phoneInputProps';
+import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
 const STORAGE_KEY  = 'registration-inhouse-v1';
@@ -364,7 +365,7 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
 
   const {
     register, handleSubmit, watch, setValue,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm({
     resolver: zodResolver(inhouseRegistrationSchema),
     mode: 'onChange',
@@ -375,6 +376,9 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
       initialCourseId,
     }),
   });
+
+  const contactPhoneProps = phoneInputProps(register('contactPhone'));
+  const contactPhoneReveal = useRevealFieldError(isSubmitted);
 
   const watched = watch();
 
@@ -619,8 +623,14 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
           <FieldGroup label="อีเมล" required error={errors.contactEmail?.message}>
             <Input type="email" {...register('contactEmail')} placeholder="name@company.com" aria-invalid={!!errors.contactEmail} />
           </FieldGroup>
-          <FieldGroup label="เบอร์โทรศัพท์" required error={errors.contactPhone?.message}>
-            <Input type="tel" {...phoneInputProps(register('contactPhone'))} placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234" aria-invalid={!!errors.contactPhone} />
+          <FieldGroup label="เบอร์โทรศัพท์" required error={contactPhoneReveal.shouldShow ? errors.contactPhone?.message : undefined}>
+            <Input
+              type="tel"
+              {...contactPhoneProps}
+              onBlur={(e) => { contactPhoneProps.onBlur(e); contactPhoneReveal.reveal(); }}
+              placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234"
+              aria-invalid={contactPhoneReveal.shouldShow && !!errors.contactPhone}
+            />
           </FieldGroup>
         </div>
       </FormSection>

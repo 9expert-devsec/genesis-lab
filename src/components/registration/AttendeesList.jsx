@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { phoneInputProps } from '@/lib/registration/phoneInputProps';
+import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 // MAX_ATTENDEES controls the upper limit of the attendee count <select>.
 // The matching schema constraint is in src/lib/schemas/register-public.js
@@ -35,8 +36,11 @@ const EMPTY_ATTENDEE = { firstName: '', lastName: '', email: '', phone: '' };
  * - watch:        RHF watch
  * - setValue:     RHF setValue (for the inverted skip-list checkbox)
  * - errors:       RHF errors
+ * - isSubmitted:  RHF formState.isSubmitted — see CoordinatorFields' note on
+ *                 useRevealFieldError; threaded down to each AttendeeBlock's
+ *                 phone field.
  */
-export function AttendeesList({ control, register, watch, setValue, errors }) {
+export function AttendeesList({ control, register, watch, setValue, errors, isSubmitted }) {
   const { fields, append, remove } = useFieldArray({
     control,
     name: 'attendees',
@@ -161,6 +165,7 @@ export function AttendeesList({ control, register, watch, setValue, errors }) {
               displayIndex={coordinatorIsAttending ? i + 2 : i + 1}
               register={register}
               error={errors?.attendees?.[i]}
+              isSubmitted={isSubmitted}
             />
           ))}
         </div>
@@ -203,9 +208,11 @@ function CoordinatorMirrorCard({ watch }) {
   );
 }
 
-function AttendeeBlock({ index, displayIndex, register, error }) {
+function AttendeeBlock({ index, displayIndex, register, error, isSubmitted }) {
   const [open, setOpen] = useState(true);
   const err = error ?? {};
+  const phoneProps = phoneInputProps(register(`attendees.${index}.phone`));
+  const phoneReveal = useRevealFieldError(isSubmitted);
 
   return (
     <div className="rounded-9e-md border border-[var(--surface-border)]">
@@ -246,11 +253,12 @@ function AttendeeBlock({ index, displayIndex, register, error }) {
               aria-invalid={!!err.email}
             />
           </FieldGroup>
-          <FieldGroup label="เบอร์โทร" error={err.phone?.message} required>
+          <FieldGroup label="เบอร์โทร" error={phoneReveal.shouldShow ? err.phone?.message : undefined} required>
             <Input
               placeholder="0812345678"
-              {...phoneInputProps(register(`attendees.${index}.phone`))}
-              aria-invalid={!!err.phone}
+              {...phoneProps}
+              onBlur={(e) => { phoneProps.onBlur(e); phoneReveal.reveal(); }}
+              aria-invalid={phoneReveal.shouldShow && !!err.phone}
             />
           </FieldGroup>
         </div>

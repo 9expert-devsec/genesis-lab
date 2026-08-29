@@ -600,7 +600,7 @@ export function StepForm({
     watch,
     setValue,
     control,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm({
     resolver: zodResolver(publicRegistrationSchema),
     mode: "onChange",
@@ -827,7 +827,7 @@ export function StepForm({
           )}
 
           <div ref={coordinatorRef}>
-            <CoordinatorFields register={register} errors={errors} />
+            <CoordinatorFields register={register} errors={errors} isSubmitted={isSubmitted} />
           </div>
 
           <AttendeesList
@@ -836,6 +836,7 @@ export function StepForm({
             watch={watch}
             setValue={setValue}
             errors={errors}
+            isSubmitted={isSubmitted}
           />
 
           <InvoiceFields

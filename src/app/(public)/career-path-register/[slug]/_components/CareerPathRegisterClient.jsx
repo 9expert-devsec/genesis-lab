@@ -33,6 +33,7 @@ import {
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { createCareerPathRegistration } from '@/lib/actions/career-path-registrations';
 import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
+import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
 
 // ── Constants ───────────────────────────────────────────────────
@@ -1012,7 +1013,7 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isSubmitted },
   } = useForm({
     resolver: zodResolver(baseSchema),
     mode: 'onChange',
@@ -1029,6 +1030,9 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
       note:             '',
     },
   });
+
+  const contactPhoneProps = register('contactPhone');
+  const contactPhoneReveal = useRevealFieldError(isSubmitted);
 
   const attendeeCount  = Number(watch('attendeeCount')) || 1;
   const isCoordinator  = watch('isCoordinator');
@@ -1053,8 +1057,14 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
           <Field label="Email" required error={errors.contactEmail?.message}>
             <input type="email" {...register('contactEmail')} className={inputClass} />
           </Field>
-          <Field label="เบอร์ติดต่อ" required error={errors.contactPhone?.message}>
-            <input type="tel" {...register('contactPhone')} className={inputClass} placeholder="0xxxxxxxxx" />
+          <Field label="เบอร์ติดต่อ" required error={contactPhoneReveal.shouldShow ? errors.contactPhone?.message : undefined}>
+            <input
+              type="tel"
+              {...contactPhoneProps}
+              onBlur={(e) => { contactPhoneProps.onBlur(e); contactPhoneReveal.reveal(); }}
+              className={inputClass}
+              placeholder="0xxxxxxxxx"
+            />
           </Field>
         </div>
 
