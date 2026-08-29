@@ -208,8 +208,13 @@ test('the WIZARD’s zod is UNCHANGED and still demands all four', () => {
   }
   assert.match(attendeeSchema, /email:\s*z\.string\(\)\.email\(/,
     'the wizard stopped requiring a well-formed email');
-  assert.match(attendeeSchema, /phone:[\s\S]*?thaiPhoneRegex/,
-    'the wizard stopped requiring a phone');
+  // Was a local `thaiPhoneRegex` constant; now the shared validator/formatter
+  // from src/lib/registration/thaiPhone.js (see that ticket's commits) — the
+  // marker changed because the underlying implementation genuinely did, not
+  // because the requirement weakened. `thaiPhone(` still means "a phone is
+  // required and validated", which is what this test is actually pinning.
+  assert.match(attendeeSchema, /phone:\s*thaiPhone\(/,
+    'the wizard stopped requiring a validated phone');
   // Nothing optional crept in.
   assert.equal(/\.optional\(\)/.test(attendeeSchema), false,
     'a wizard attendee field became optional — that changes what a CUSTOMER may submit');
@@ -328,7 +333,14 @@ test('CONTROL: the two parsers really are reading two different files', () => {
   assert.ok(MODEL.code.includes('AttendeeSchema'), 'the model parser is on the wrong file');
   assert.ok(SCHEMA.code.includes('attendeeSchema'), 'the schema parser is on the wrong file');
   // And they genuinely disagree, which is the whole subject of this section.
-  assert.ok(SCHEMA.code.includes('thaiPhoneRegex') && !MODEL.code.includes('thaiPhoneRegex'),
+  // Marker changed from the old local `thaiPhoneRegex` constant to
+  // `thaiPhone(` (the shared validator call) — `.code` strips imports, so the
+  // OLD marker would not appear in SCHEMA.code at all now that the regex
+  // moved into src/lib/registration/thaiPhone.js and is imported, not
+  // declared locally. `thaiPhone(` is still exactly the phone-validation
+  // marker this test needs: present in the zod schema, absent from the
+  // Mongoose model, which has no validation regex of any kind for phone.
+  assert.ok(SCHEMA.code.includes('thaiPhone(') && !MODEL.code.includes('thaiPhone('),
     'the two files are not the two layers this test thinks they are');
 });
 

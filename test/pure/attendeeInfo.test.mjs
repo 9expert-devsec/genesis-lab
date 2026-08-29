@@ -53,7 +53,7 @@ const EMPTY = { firstName: '', lastName: '', email: '', phone: '' };
  *   · presence-not-validation — the admin path checks presence only and the
  *     customer form's zod remains the only thing entitled to an opinion about
  *     the SHAPE of an email. Pinned in fs/rosterSeatLock's asymmetry tests,
- *     which assert the wizard still carries `.email(` and `thaiPhoneRegex`.
+ *     which assert the wizard still carries `.email(` and `thaiPhone(`.
  *
  * Nothing was retained under a new name and nothing is being quietly kept alive.
  */
