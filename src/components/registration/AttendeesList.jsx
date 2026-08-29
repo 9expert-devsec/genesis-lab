@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { phoneInputProps } from '@/lib/registration/phoneInputProps';
 
 // MAX_ATTENDEES controls the upper limit of the attendee count <select>.
 // The matching schema constraint is in src/lib/schemas/register-public.js
@@ -247,9 +248,8 @@ function AttendeeBlock({ index, displayIndex, register, error }) {
           </FieldGroup>
           <FieldGroup label="เบอร์โทร" error={err.phone?.message} required>
             <Input
-              inputMode="tel"
               placeholder="0812345678"
-              {...register(`attendees.${index}.phone`)}
+              {...phoneInputProps(register(`attendees.${index}.phone`))}
               aria-invalid={!!err.phone}
             />
           </FieldGroup>

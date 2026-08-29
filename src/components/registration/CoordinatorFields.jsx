@@ -3,6 +3,7 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { phoneInputProps } from '@/lib/registration/phoneInputProps';
 
 /**
  * Coordinator section — the person filling out the form.
@@ -47,9 +48,8 @@ export function CoordinatorFields({ register, errors }) {
         </FieldGroup>
         <FieldGroup label="เบอร์โทร" error={err.phone?.message} required>
           <Input
-            inputMode="tel"
-            placeholder="เช่น 0812345678 หรือ 021234567123"
-            {...register('coordinator.phone')}
+            placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234"
+            {...phoneInputProps(register('coordinator.phone'))}
             aria-invalid={!!err.phone}
           />
         </FieldGroup>

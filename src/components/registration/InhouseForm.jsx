@@ -23,6 +23,7 @@ import { formatBranchLabel } from '@/lib/registration/branchLabel';
 import { formatBillingAddress } from '@/lib/address/formatBillingAddress';
 import { formatThaiAddress } from '@/lib/address/formatThaiAddress';
 import { cn } from '@/lib/utils';
+import { phoneInputProps } from '@/lib/registration/phoneInputProps';
 
 // ── Storage keys (mirror the Public wizard pattern) ────────────────
 const STORAGE_KEY  = 'registration-inhouse-v1';
@@ -619,7 +620,7 @@ export function InhouseStepForm({ courses = [], preselectedCourse = null, initia
             <Input type="email" {...register('contactEmail')} placeholder="name@company.com" aria-invalid={!!errors.contactEmail} />
           </FieldGroup>
           <FieldGroup label="เบอร์โทรศัพท์" required error={errors.contactPhone?.message}>
-            <Input type="tel" {...register('contactPhone')} placeholder="เช่น 0812345678" aria-invalid={!!errors.contactPhone} />
+            <Input type="tel" {...phoneInputProps(register('contactPhone'))} placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234" aria-invalid={!!errors.contactPhone} />
           </FieldGroup>
         </div>
       </FormSection>

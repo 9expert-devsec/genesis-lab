@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
+import { thaiPhone } from '@/lib/registration/thaiPhone';
 
 /**
  * Validation schema for /registration/public form submissions.
@@ -7,7 +8,11 @@ import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOn
  * API route that writes to Mongo. Single source of truth.
  */
 
-const thaiPhoneRegex = /^(0\d{9}|\+\d{10,15})$/;
+// The message text is UNCHANGED by this round on purpose — see the phone
+// ticket's report for why it is arguably no longer fully accurate now that
+// the rules below cover a 9-digit landline + extension too, and why that is
+// flagged rather than silently reworded (customer-facing copy).
+const PHONE_MESSAGE = 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)';
 
 // ── Address schemas ────────────────────────────────────────────────
 
@@ -44,7 +49,7 @@ export const coordinatorSchema = z.object({
   firstName:   z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
   lastName:    z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
   email:       z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:       z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+  phone:       thaiPhone(z.string().trim(), PHONE_MESSAGE),
   isAttending: z.boolean().default(false),
 });
 
@@ -52,7 +57,7 @@ export const attendeeSchema = z.object({
   firstName: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
   lastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
   email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:     z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+  phone:     thaiPhone(z.string().trim(), PHONE_MESSAGE),
 });
 
 // ── Invoice schema ─────────────────────────────────────────────────
