@@ -1142,10 +1142,24 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
           <ReadOnlyRow label="อีเมล" value={coord.email} />
           <ReadOnlyRow label="เบอร์โทร" value={coord.phone} />
           {coord.lineId && <ReadOnlyRow label="LINE ID" value={coord.lineId} />}
-          <ReadOnlyRow
-            label="ผู้ประสานงานเข้าอบรม"
-            value={coord.isAttending ? "ใช่" : "ไม่"}
-          />
+          {/*
+            ── ผู้ประสานงานเข้าอบรม IS REMOVED FROM THIS PREVIEW ONLY ─────────
+            DISPLAY ONLY, this surface only (StepPreview — the toggle-OFF
+            step-2 screen). `coordinator.isAttending` stays on the zod schema
+            and the Mongoose model exactly as before, is still submitted and
+            stored, and still drives everything it drove already — the
+            attendee-count math in AttendeesList.jsx, buildAttendees's
+            coordinator-as-attendee-#1 copy, and the three email models.
+            src/lib/email/** is untouched by this change.
+
+            Matches the admin detail screen's own read view, which removed
+            this exact row for the exact same reason in an earlier round —
+            see the comment at RegistrationDetailClient.jsx's coordinator
+            card. That round is the admin side; this one is the customer's
+            two step-2 preview surfaces (StepPreview here, and
+            ReviewAndPayStep.jsx, left untouched this round — see that
+            file's own history for why).
+          */}
         </Section>
 
         <Section title={`ข้อมูลผู้เข้าอบรม (${data.attendeesCount} ท่าน)`}>
