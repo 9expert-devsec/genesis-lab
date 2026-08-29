@@ -451,6 +451,10 @@ export function StepForm({
   const handleSelectSchedule = useCallback(
     (id) => {
       setSelectedScheduleId(id);
+      // A pick always collapses the round-picker box — see `showPickerBox`
+      // below — whether it got here as the very first pick or by way of
+      // "เปลี่ยนรอบ" re-opening it.
+      setPickerForcedOpen(false);
       const params = new URLSearchParams(searchParams.toString());
       params.set("class", id);
       router.replace(`?${params.toString()}`, { scroll: false });
@@ -526,6 +530,26 @@ export function StepForm({
   const [formRevealed, setFormRevealed] = useState(
     roundSelectable(initialClassId) || roundSelectable(initialValues?.classId),
   );
+
+  /**
+   * ── THE ROUND-PICKER BOX — SHOWN ONLY WHILE NO ROUND IS CHOSEN ──────────────
+   * `pickerForcedOpen` is the ONLY way to see the box once a selectable round
+   * is chosen: a user-initiated "เปลี่ยนรอบ" click, and nothing else. It is pure
+   * local UI state — no URL, no navigation, no remount — precisely so
+   * "เปลี่ยนรอบ" can re-open the box in place without disturbing a single field
+   * of the form the user may already have filled in below.
+   *
+   * `roundChosen` reuses `roundSelectable`, not mere presence of
+   * `selectedScheduleId` — a FULL or STARTED round must still show the box
+   * (and the carousel it contains), because the messages below it explicitly
+   * point at "รายการด้านบน" (the list above): collapsing the box on an
+   * unselectable round would make those sentences point at nothing.
+   */
+  const roundChosen = roundSelectable(selectedScheduleId);
+  const [pickerForcedOpen, setPickerForcedOpen] = useState(false);
+  const showPickerBox = !roundChosen || pickerForcedOpen;
+  const handleChangeRound = () => setPickerForcedOpen(true);
+
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't
   // overwrite a restored attendanceMode (e.g. after clicking "แก้ไข" back
@@ -733,23 +757,30 @@ export function StepForm({
       noValidate
     >
       <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-        <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
-          เลือกรอบการอบรม
-        </h2>
-        {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
-          {course.course_name}
-        </p> */}
+        {showPickerBox && (
+          <>
+            <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
+              เลือกรอบการอบรม
+            </h2>
+            {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
+              {course.course_name}
+            </p> */}
 
-        <ScheduleCarousel
-          schedules={schedules}
-          selectedId={selectedScheduleId}
-          onSelect={handleSelectSchedule}
-          earlyBirdScheduleId={earlyBirdScheduleId}
-          currentYear={currentYear}
-        />
+            <ScheduleCarousel
+              schedules={schedules}
+              selectedId={selectedScheduleId}
+              onSelect={handleSelectSchedule}
+              earlyBirdScheduleId={earlyBirdScheduleId}
+              currentYear={currentYear}
+            />
+          </>
+        )}
 
         {activeSchedule && (
-          <div className="mt-4 flex items-center justify-between rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+          <div className={cn(
+            "flex items-center justify-between rounded-9e-md bg-9e-brand/5 p-3 text-sm",
+            showPickerBox && "mt-4"
+          )}>
             <div>
               <div className="font-semibold text-[var(--text-primary)]">
                 {activeDateLabel}
@@ -759,6 +790,15 @@ export function StepForm({
                   ? "Hybrid (Classroom + MS Teams)"
                   : "Classroom"}
               </div>
+              {!showPickerBox && (
+                <button
+                  type="button"
+                  onClick={handleChangeRound}
+                  className="mt-1 text-xs font-medium text-9e-action underline-offset-2 hover:underline"
+                >
+                  เปลี่ยนรอบ
+                </button>
+              )}
             </div>
             {!formRevealed && !activeRoundIsFull && (
               <Button
