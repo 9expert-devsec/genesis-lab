@@ -23,6 +23,7 @@ import { normalizeScheduleStatus } from "@/lib/scheduleStatus";
 // The round's four coupled fields, shared with the admin detail screen. See the
 // note where formatClassDates used to live.
 import { formatClassDates } from "@/lib/registrations/roundSelection";
+import { trainingTypeLabel } from "@/lib/schedule/trainingTypeLabel";
 import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
@@ -786,9 +787,7 @@ export function StepForm({
                 {activeDateLabel}
               </div>
               <div className="text-xs text-[var(--text-secondary)]">
-                {activeSchedule.type === "hybrid"
-                  ? "Hybrid — เลือกอบรมได้ 1 รูปแบบ ระหว่าง Classroom หรือ MS Teams"
-                  : "Classroom"}
+                {trainingTypeLabel(activeSchedule.type)}
               </div>
               {!showPickerBox && (
                 <button

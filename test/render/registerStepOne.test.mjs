@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { TRAINING_TYPE_LABEL } from '@/lib/schedule/trainingTypeLabel';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StepForm } from '@/components/registration/RegisterWizard';
 
@@ -659,15 +660,14 @@ test('CONTROL: that probe would notice if one of them changed', () => {
   assert.notEqual(href, '/training-course');
 });
 
-// ── Hybrid label on the summary strip ────────────────────────────────────
+// ── Type label on the summary strip — Commit C ──────────────────────────────
 //
-// The type line's HYBRID branch changed to a longer, explicit sentence.
-// Classroom (and anything else — see the online case) is unchanged: this is
-// a label change only, verified not to touch scheduleType, attendanceMode,
-// or what gets submitted.
-
-const OLD_HYBRID_LABEL = 'Hybrid (Classroom + MS Teams)';
-const NEW_HYBRID_LABEL = 'Hybrid — เลือกอบรมได้ 1 รูปแบบ ระหว่าง Classroom หรือ MS Teams';
+// The two-branch (hybrid ? ... : "Classroom") ternary is replaced by the
+// shared three-way map in src/lib/schedule/trainingTypeLabel.js. The map's
+// own exact-string and fallback behaviour is pinned in
+// test/pure/trainingTypeLabel.test.mjs; what belongs HERE is proof that the
+// STRIP actually calls it (not a second, drifted copy) — verified not to
+// touch scheduleType, attendanceMode, or what gets submitted.
 
 const renderWithType = (type) => {
   const round = { _id: `sch-${type}`, dates: ['2026-12-01', '2026-12-02'], status: 'open', type };
@@ -683,32 +683,38 @@ const renderWithType = (type) => {
   );
 };
 
-test('a Hybrid round shows the exact new label, em dash included', () => {
-  const html = renderWithType('hybrid');
-  assert.ok(html.includes(NEW_HYBRID_LABEL), 'the exact new label is rendered');
-  assert.ok(!html.includes(OLD_HYBRID_LABEL), 'the old label is gone');
-});
+for (const [type, expected] of Object.entries(TRAINING_TYPE_LABEL)) {
+  test(`a ${type} round's strip shows the exact shared label`, () => {
+    const html = renderWithType(type);
+    assert.ok(html.includes(expected), `"${expected}" not found for type "${type}"`);
+  });
+}
 
-test('a Classroom round keeps its existing label, unchanged', () => {
-  const html = renderWithType('classroom');
-  assert.ok(html.includes('>Classroom<'), 'still exactly "Classroom", as an element\'s sole text');
-  assert.ok(!html.includes(NEW_HYBRID_LABEL) && !html.includes(OLD_HYBRID_LABEL), 'neither hybrid label leaked in');
-});
-
-test('an Online round keeps rendering the SAME (pre-existing) label as Classroom — untouched, not newly correct', () => {
-  // The type ternary was, and remains, binary: hybrid vs everything else. An
-  // "online" round already fell into the "else" branch before this commit and
-  // still does — fixing that mislabel is explicitly out of this commit's
-  // scope (Commit B only changes the hybrid branch).
+test('an Online round no longer renders the Classroom label — the latent defect this commit fixes', () => {
+  // Before Commit C the ternary was binary (hybrid vs everything else), so an
+  // "online" round silently fell into the "else" branch and rendered
+  // "Classroom". That is exactly what must no longer happen.
   const html = renderWithType('online');
-  assert.ok(html.includes('>Classroom<'), 'online rounds still render "Classroom" — unchanged pre-existing behaviour');
+  assert.ok(!html.includes(TRAINING_TYPE_LABEL.classroom), 'the Classroom label must not leak into an online round\'s strip');
+  assert.ok(html.includes(TRAINING_TYPE_LABEL.online), 'and the correct online label is there instead');
 });
 
-test('CONTROL: the Hybrid label change does not alter scheduleType, attendanceMode, or the classId field', () => {
-  // Label-only, per the ticket: nothing about what gets submitted for a
-  // Hybrid round may change. classId/scheduleType are set via a mount effect
-  // renderToStaticMarkup never runs, so this reads the SOURCE for the effect
-  // that sets them, proving the hybrid branch is untouched.
+test('an unrecognised type does not fall back to Classroom on the strip', () => {
+  const html = renderWithType('webinar');
+  assert.ok(!html.includes(TRAINING_TYPE_LABEL.classroom), 'must not silently relabel an unknown type as Classroom');
+  assert.ok(html.includes('webinar'), 'the raw type value is shown instead');
+});
+
+test('CONTROL: the strip imports trainingTypeLabel — not a second, local copy of the map', () => {
+  const src = readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8');
+  assert.match(src, /import \{ trainingTypeLabel \} from "@\/lib\/schedule\/trainingTypeLabel";/);
+  assert.match(src, /\{trainingTypeLabel\(activeSchedule\.type\)\}/, 'the strip calls the shared function directly');
+});
+
+test('CONTROL: the type-label change does not alter scheduleType, attendanceMode, or the classId field', () => {
+  // Label-only, per the ticket: nothing about what gets submitted may change.
+  // classId/scheduleType are set via a mount effect renderToStaticMarkup
+  // never runs, so this reads the SOURCE for the effect that sets them.
   const src = readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8');
   assert.match(src, /setValue\("scheduleType", sch\?\.type \|\| undefined\);/, 'scheduleType still comes straight from the round');
   assert.match(src, /setValue\("attendanceMode", undefined\);/, 'hybrid still leaves attendanceMode for the user to choose');
