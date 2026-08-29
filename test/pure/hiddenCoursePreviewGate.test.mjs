@@ -35,6 +35,13 @@ function resolverDeps(ext) {
     fetchExtension: async (code) => (code === ext.courseId ? ext : null),
     fetchCourse: async (code) =>
       String(code).toUpperCase() === 'COPILOT-STU' ? COURSE : null,
+    // No fixture here renames a course, so the former-code fallback finds
+    // nothing — which is what the real lookup would report too. Supplied
+    // ANYWAY, because unsupplied it is not "unused", it is a live
+    // getCourseExtensionByFormerCode: the branch at resolveCourse.js:165 is
+    // one unmatched extension away, and the day a fixture reaches it this file
+    // would start querying Mongo without a single assertion changing.
+    fetchExtensionByFormerCode: async () => null,
   };
 }
 

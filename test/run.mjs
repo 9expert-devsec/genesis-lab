@@ -192,91 +192,38 @@ const undiscovered = onDisk.filter((f) => !enumerated.has(f));
 if (process.env.CANARY) files.push(path.join(TEST_DIR, 'canary.case.mjs'));
 
 const stream = run({ files, isolation: 'none', concurrency: true });
-stream.on('test:pass', (e) => { pass += 1; bump(e); });
-stream.on('test:fail', (e) => { fail += 1; bump(e); });
-stream.compose(spec).pipe(process.stdout);
 
-stream.on('close', () => {
-  const total = pass + fail;
-  const problems = [];
-
-  // A FLOOR, not an exact count — and the comment says so now, because it used
-  // to argue the opposite while the code did this, which is worse than either
-  // choice on its own.
-  //
-  // WHAT THE FLOOR STILL CATCHES: wholesale disappearance. A tier that stops
-  // being enumerated, a file that throws on import, a manifest that silently
-  // walks nothing — all of those drop the total and are caught here, which is the
-  // failure that actually shipped a green suite before this check existed.
-  //
-  // WHAT IT GIVES UP, stated plainly because it was measured: an exact count also
-  // catches tests added and then LOST inside the same window, because the number
-  // that would catch them is the one a human has to write down. That is not
-  // hypothetical — 26 tests once landed against a floor of 565 and the suite sat
-  // green, so all 26 could have vanished the next day in silence. A floor cannot
-  // see that. The two sibling meta-controls below are what remain against it:
-  // FILE DISCOVERY (a *.test.mjs on disk the manifest never ran) and PER-FILE
-  // COUNTS (an enumerated file contributing zero), and between them they catch
-  // the disappearance of a whole file even when the total still clears the floor.
-  //
-  // Raising the floor is optional under these semantics. Lowering it, or watching
-  // it drift far below the real total, gives the check less and less to do.
-  //
-  // ── THE RE-BASE, AND WHAT THE UNIT ACTUALLY IS ──────────────────────────────
-  // FLOOR counts EXACTLY what the summary line below prints: one per `test:pass`
-  // or `test:fail` event across the *.test.mjs files in pure/fs/render. Same
-  // unit, same number. That is worth stating because 1608 against a 5000-test
-  // suite reads like two different units, and it was not -- it was one unit and
-  // a stale value. Cross-checked: 4722 top-level `test(` calls are authored
-  // across the three tiers, and the runner reports ~5030 events, the difference
-  // being tests defined inside loops and helpers. Not a different quantity.
-  //
-  // The ledger in the FLOOR comment above is hand-maintained, and it stopped
-  // matching the executed total a long time ago: at 9aee841 it read 1608 while
-  // the suite ran 4983. So the "N after <slice>" numbers are a record of tests
-  // deliberately added, not a running total, and reading them as a total is how
-  // the drift went unnoticed for so long.
-  //
-  // Re-based to 5000 against a measured 5031. THE SLACK IS 31 AND IT IS
-  // DELIBERATE. What that buys: the check now fires when more than 0.6% of the
-  // suite disappears, where before it needed 68% to vanish first. What it still
-  // cannot see, stated rather than implied: the median test file holds 11 tests
-  // (largest 79), so DELETING one small file stays under the slack and is caught
-  // by neither this nor the two guards below -- discovery only sees a file on
-  // disk that nothing ran, and per-file counts only see an enumerated file that
-  // contributed zero. A deleted file is enumerated by nothing and on disk
-  // nowhere. Closing that would mean an exact count, which this check has
-  // already decided against on purpose, one paragraph up.
-  //
-  // The browser tier (test/browser) is NOT in this number and must never be:
-  // it needs a running dev server and a real Chrome, and `npm test` has to pass
-  // without either. It is enumerated only by test/browser/run.mjs, and nothing
-  // in it is named *.test.mjs, so neither the manifest nor the discovery guard
-  // picks it up.
-  if (total < FLOOR) {
-    problems.push(
-      `expected AT LEAST ${FLOOR} tests, ran ${total}. `
-      + 'Tests VANISHED — that is what this check is for.'
-    );
-  }
-  if (undiscovered.length) {
-    problems.push(
-      'these *.test.mjs files exist on disk but the manifest never ran them:\n' +
-      undiscovered.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
-    );
-  }
-  const empty = [...perFile].filter(([, n]) => n === 0).map(([f]) => f);
-  if (empty.length) {
-    problems.push(
-      'these files were enumerated but contributed ZERO tests:\n' +
-      empty.map((f) => `    ${path.relative(TEST_DIR, f)}`).join('\n')
-    );
-  }
-
-  console.log(
-    `\n[suite] ${pass} passed, ${fail} failed, ${total} total across ${files.length} files `
-    + `(floor ${FLOOR})`
-  );
-  for (const p of problems) console.log(`[meta-control] FAIL: ${p}`);
-  process.exit(fail > 0 || problems.length ? 1 : 0);
+// The tail — drain the reporter, summarise, decide the exit code — lives in
+// test/reportSuite.mjs, so a control can drive it over a ONE-CASE manifest
+// (test/fs/runnerFlush.test.mjs) instead of only as the tail of this suite.
+// Read that file for why it had to move: this used to be a stream.on('close')
+// handler ending in a process.exit() call, 'close' fires before the composed
+// reporter has finished writing, and the exit tore stdout down mid-flush — so
+// a RED run printed the bare "✖ <name>" line and NOT ONE BYTE of the
+// assertion detail. Measured: zero token hits in 442 KB of captured output.
+//
+// process.exitCode, not process.exit(): the process ends when the event loop
+// drains, by which point every queued byte of stdout has gone out. This is
+// the only place the exit code is decided, and there is deliberately no exit
+// call left anywhere in the runner.
+//
+// ── RESTORED IN ROUND 45, AND WHAT THE REGRESSION LOOKED LIKE ──────────────
+// fc1275d re-pasted the PRE-round-0 close handler over this call while raising
+// FLOOR. The paste referenced `pass`, `fail`, `bump` and `perFile`, which had
+// moved into reportSuite and no longer existed here, so the first `test:pass`
+// event threw `ReferenceError: pass is not defined` inside a stream listener.
+// That surfaces as an UNHANDLED REJECTION, which node reports by exiting 1 —
+// and because nothing had been written yet, `npm test` printed NOT ONE LINE
+// and returned 1 in 23 seconds. A suite that runs zero tests and a suite with
+// one failing test are the same exit code, so nothing distinguished them.
+// runnerFlush's `no process.exit( in the runner` assertion WOULD have named
+// this, and could not: the runner died before the reporter emitted anything.
+process.exitCode = await reportSuite({
+  stream,
+  reporter: spec,
+  out: process.stdout,
+  files,
+  floor: FLOOR,
+  undiscovered,
+  testDir: TEST_DIR,
 });

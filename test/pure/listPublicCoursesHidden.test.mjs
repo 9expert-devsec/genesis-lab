@@ -43,6 +43,21 @@ function harness({ hidden = [], upstream = UPSTREAM } = {}) {
         calls.hiddenReads += 1;
         return new Set(hidden);
       },
+      // `null` is "do not order" — see courseOrderStore's note on why that is
+      // the safe direction. It leaves the array exactly as the fetchUpstream
+      // stub above returned it, which is what every expectation below reads.
+      //
+      // NOT OPTIONAL, AND NOT COSMETIC. Omitted, `loadOrder` falls through to
+      // the real loadCourseOrder, which connects and queries ProgramOrder for
+      // real. Measured before this line existed: nine of the twelve tests here
+      // each sat on mongoose's 10-second buffering timeout, so a file that runs
+      // in 30ms took 10.5 SECONDS and printed nine `[courseOrder] could not read
+      // the stored order` lines — and it stayed GREEN throughout, because the
+      // store catches its own failure and returns the same null this returns.
+      // On a machine where that read is reachable-but-slow, or where nothing
+      // stubs @/lib/db/connect, the same omission hangs the suite instead.
+      // test/fs/injectedDepCoverage.test.mjs is what now names it.
+      loadOrder: async () => null,
     },
   };
 }
