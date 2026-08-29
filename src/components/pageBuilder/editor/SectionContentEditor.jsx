@@ -9,6 +9,10 @@ import { isValidSectionId } from '@/lib/pageBuilder/scopeCss';
 import { isKnownIconName } from '@/lib/pageBuilder/lucideIcon';
 import { embedSrc } from '@/lib/pageBuilder/embedSrc';
 import { moveInArray } from './pagePath';
+// Round 47, ADDED beside the line above rather than folded into it. Editor-side
+// and plain JS on purpose — see duplicateCodes.js for why it is not in
+// lib/pageBuilder/sectionLabels.js with the other content predicate.
+import { duplicateCourseCodes } from './duplicateCodes';
 import { IconPicker } from './IconPicker';
 import { Field, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { RichTextEditor } from './richText/RichTextEditor';
@@ -398,15 +402,63 @@ function CourseIdsField({ value, onChange, hint }) {
   );
 }
 
+/**
+ * TWO WARNINGS, AND ONLY ONE OF THEM WAITS FOR THE FETCH.
+ *
+ * ── WHY THE `resolved === undefined` GUARD MOVED ───────────────────────────
+ * It used to be an early `return null` covering the whole component. That was
+ * right when there was one warning and it was about resolution. It is wrong the
+ * moment a second warning is about the LOCAL ARRAY: a duplicate is knowable
+ * synchronously, with no fetch, so gating it on `resolved` would blank it for
+ * the 350ms debounce after every keystroke — the flashing this block's own
+ * header calls out, arrived at from the other direction. The guard now narrows
+ * `missing` instead of short-circuiting the render.
+ *
+ * ── THE TWO COUNTS ARE INDEPENDENT, WHICH IS WHY BOTH CAN SHOW ─────────────
+ * `missing` is `wanted.length - resolved.length`, and the fetch DE-DUPES
+ * (`collectRefs` builds a Set) — so it would be reasonable to fear that a
+ * duplicate inflates the missing count and the two warnings contradict each
+ * other. It does not: `assembleResolved` maps POSITIONALLY
+ * (`ids.map((id) => courseMap.get(id)).filter(Boolean)`), so four authored
+ * resolvable codes give four resolved entries even when two of them are the
+ * same code. Measured live, driven through the real resolver:
+ * docs/course-picker-proposal.md §D.4.
+ *
+ * So a list can be simultaneously "has a repeat" and "has a code that resolves
+ * to nothing", and both lines are true at once and say different things.
+ *
+ * ── WARN, NEVER EDIT ───────────────────────────────────────────────────────
+ * Nothing here de-duplicates, reorders or rejects, and nothing downstream does
+ * either — `publishBlockers` checks title, slug and section count and nothing
+ * else. Duplicates RENDER, deliberately: the same course twice in a list is a
+ * layout an author can want. Silently rewriting a stored array to mean
+ * something the author did not write is a larger defect than the one being
+ * reported (§F.4).
+ */
 function CourseIdsWarnings({ ids, resolved }) {
   const wanted = (Array.isArray(ids) ? ids : []).filter(Boolean);
   if (!wanted.length) return <Warn>ยังไม่ได้เลือกคอร์ส — section นี้จะไม่แสดงผลบนหน้าเว็บ</Warn>;
-  // `undefined` = not resolved yet (loading); only warn about missing once fetched.
-  if (resolved === undefined) return null;
-  const missing = wanted.length - (Array.isArray(resolved) ? resolved.length : 0);
-  return missing > 0 ? (
-    <Warn tone="red">มี {missing} รหัสที่ไม่พบคอร์ส — จะไม่แสดงในรายการ</Warn>
-  ) : null;
+
+  // Synchronous — no fetch, so no tri-state. Amber, not red: a repeat renders
+  // exactly what it says it will, so this reports a SURPRISE, not a breakage.
+  const repeated = duplicateCourseCodes(ids);
+
+  // `undefined` = not resolved yet (loading); only warn about missing once
+  // fetched. Zero rather than an early return, so the line above still shows.
+  const missing = resolved === undefined
+    ? 0
+    : wanted.length - (Array.isArray(resolved) ? resolved.length : 0);
+
+  return (
+    <>
+      {repeated.length > 0 && (
+        <Warn>รหัสซ้ำ: {repeated.join(', ')} — คอร์สเดิมจะแสดงซ้ำตามจำนวนที่ใส่ไว้</Warn>
+      )}
+      {missing > 0 && (
+        <Warn tone="red">มี {missing} รหัสที่ไม่พบคอร์ส — จะไม่แสดงในรายการ</Warn>
+      )}
+    </>
+  );
 }
 
 function CourseCardEditor({ content, patch, resolved }) {

@@ -199,6 +199,73 @@ test('the draft/publish action layer', async (t) => {
     assert.ok(!JSON.stringify(entry).includes('Drafted Title'), 'the audit row carries the draft body');
   });
 
+  /**
+   * ── ROUND 47: WARN, NEVER EDIT — THE SAVE HALF ──────────────────────────
+   * The editor now warns when an authored course list repeats a code
+   * (docs/course-picker-proposal.md §G step 1). It is a WARNING and nothing
+   * more: the save path must still store both entries, in order, unchanged.
+   *
+   * Here rather than in a file of its own because this is the ONE
+   * fakeDb-owning parent — the note above getPageVersionSnapshot explains why
+   * a second one reddens this file's fixtures mid-flight.
+   *
+   * WHAT WOULD BREAK IT, and would otherwise ship green: a `[...new Set(ids)]`
+   * added anywhere between the control and the document — in CourseIdsField's
+   * onChange, in a reducer case, in shapePayload, in the zod schema. Every
+   * rendered assertion in test/render/courseIdsDuplicateWarning would stay
+   * green through all four, because they all read the array BEFORE the save.
+   */
+  await scenario('a save with a REPEATED course code stores both entries, in order', async () => {
+    const before = copy(seedPage());
+    const authored = ['CLAUDE-AI', 'MSE-AI', 'CLAUDE-AI', 'POWER-BI'];
+    const selector = {
+      ...section('s-sel', 'course_selector'),
+      content: { heading: '', courseIds: [...authored] },
+    };
+    const res = await saveDraftContent(
+      PAGE_ID, draftContent({ sections: [selector] }), token(before)
+    );
+    assert.equal(res.ok, true, res.error);
+
+    const stored = row().draft.sections[0].content.courseIds;
+    assert.deepEqual(stored, authored, 'the save rewrote a list that merely repeats a code');
+    assert.equal(stored.filter((c) => c === 'CLAUDE-AI').length, 2, 'a duplicate was collapsed');
+  });
+
+  await scenario('CONTROL: the same save DOES store a list it was given', async () => {
+    // Without this, the case above passes against a save that stored nothing at
+    // all and left `courseIds` undefined on both sides of a deepEqual against
+    // an array it never wrote.
+    const before = copy(seedPage());
+    const selector = {
+      ...section('s-sel', 'course_selector'),
+      content: { heading: '', courseIds: ['ONLY-ONE'] },
+    };
+    await saveDraftContent(PAGE_ID, draftContent({ sections: [selector] }), token(before));
+    assert.deepEqual(row().draft.sections[0].content.courseIds, ['ONLY-ONE']);
+  });
+
+  await scenario('a save keeps an UNRESOLVABLE code too — nothing validates on the way in', async () => {
+    // The other half of "warn, never edit", and the one that loses data if it
+    // ever changes: a code the catalogue has never heard of must survive the
+    // round trip, because that is the only thing that makes the damage
+    // recoverable when upstream restores the course (§D.1, §F.3).
+    const before = copy(seedPage());
+    const selector = {
+      ...section('s-sel', 'course_selector'),
+      content: { heading: '', courseIds: ['CLAUDE-AI', 'ZZ-NO-SUCH-COURSE'] },
+    };
+    const res = await saveDraftContent(
+      PAGE_ID, draftContent({ sections: [selector] }), token(before)
+    );
+    assert.equal(res.ok, true, res.error);
+    assert.deepEqual(
+      row().draft.sections[0].content.courseIds,
+      ['CLAUDE-AI', 'ZZ-NO-SUCH-COURSE'],
+      'the save dropped a code it could not resolve'
+    );
+  });
+
   await scenario('saveDraftContent rejects a stale expectedUpdatedAt', async () => {
     const before = copy(seedPage());
     const stale = new Date(new Date(before.updatedAt).getTime() - 5000).toISOString();
