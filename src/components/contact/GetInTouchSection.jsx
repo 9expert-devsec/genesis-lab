@@ -46,7 +46,7 @@ function InfoRow({ label, value, href }) {
         {label}
       </div>
       {href ? (
-        <a href={href} className={`${valueClasses} break-all`}>
+        <a href={href} className={`${valueClasses} break-words`}>
           {value}
         </a>
       ) : (
@@ -189,7 +189,7 @@ export default function GetInTouchSection() {
   return (
     <section className="relative bg-white py-20 dark:bg-[#060e1a] md:py-12">
       <div className="mx-auto max-w-[1200px] px-4 lg:px-6">
-        <div className="flex flex-row">
+        <div className="flex flex-col gap-8 lg:flex-row lg:gap-0">
           {/* LEFT — narrative + CTAs */}
           <div className="lg:w-2/5">
             <motion.div
@@ -291,7 +291,7 @@ export default function GetInTouchSection() {
           </div>
 
           {/* RIGHT — stacked contact cards */}
-          <div className="lg:w-3/5 pl-3">
+          <div className="lg:w-3/5 lg:pl-3">
             <motion.div
               variants={container}
               initial="hidden"
@@ -309,7 +309,7 @@ export default function GetInTouchSection() {
                 onMouseLeave={() => setHoveredCard(null)}
                 isHovered={hoveredCard === "phone"}
               >
-                <ul className="flex flex-row">
+                <ul className="flex flex-col sm:flex-row">
                   <InfoRow
                     label="ฝ่ายแนะนำหลักสูตร"
                     value="02-219-4304"
@@ -334,7 +334,7 @@ export default function GetInTouchSection() {
                 onMouseLeave={() => setHoveredCard(null)}
                 isHovered={hoveredCard === "email"}
               >
-                <ul className="flex flex-row">
+                <ul className="flex flex-col sm:flex-row">
                   <InfoRow
                     label="ติดต่อหลักสูตร"
                     value="training@9expert.co.th"
