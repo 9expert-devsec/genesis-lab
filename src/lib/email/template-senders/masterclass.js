@@ -70,13 +70,13 @@ export async function sendMasterclassPaidReceipt(doc) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url license_options equipment_required system_requirements_html")
+    .select("cover_image_url license_options")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
   const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
   const batchDoc = await MasterclassBatch.findById(doc.batch_id)
-    .select("dates")
+    .select("dates preparation_html")
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
@@ -86,7 +86,7 @@ export async function sendMasterclassPaidReceipt(doc) {
 
   const billingAddressP = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
-  const prepModel = buildPrepModel(courseDoc);
+  const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
     coordinator_name:
@@ -213,13 +213,13 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url license_options equipment_required system_requirements_html")
+    .select("cover_image_url license_options")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
   const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
   const batchDoc = await MasterclassBatch.findById(doc.batch_id)
-    .select("dates")
+    .select("dates preparation_html")
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
@@ -227,7 +227,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
 
   const billingAddressQ = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
-  const prepModel = buildPrepModel(courseDoc);
+  const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
     coordinator_name:
