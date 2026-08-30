@@ -104,11 +104,16 @@ export default function ConsultingSection() {
                     }`}
                     onClick={() => setActiveIdx(i)}
                   >
+                    {/* text-2xl font-black is WCAG "large text" (≥24px), so 3:1 is the
+                        applicable AA floor here, not 4.5:1 — 9e-slate-dp-100 (4.40:1 on
+                        white) clears it while staying strictly dimmer than the active
+                        row's 5.47:1. Do NOT "fix" this to a higher-contrast token; that
+                        re-flattens the row back into competing with the active one. */}
                     <span
                       className={`min-w-[64px] font-en font-black leading-none transition-colors duration-300 ${
                         isActive
                           ? "text-9e-slate-dp-50 dark:text-9e-air text-3xl"
-                          : "text-[var(--surface-border)] dark:text-9e-slate-dp-200 text-2xl"
+                          : "text-9e-slate-dp-100 dark:text-9e-slate-dp-200 text-2xl"
                       }`}
                     >
                       {item.timeline}
