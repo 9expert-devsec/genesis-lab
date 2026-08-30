@@ -415,11 +415,6 @@ export function MasterclassDetailClient({
                         *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
                       </span>
                     )}
-                    {batch.is_early_bird && batch.early_bird_deadline && (
-                      <span className="text-xs md:text-sm text-9e-slate-lt-50">
-                        ตั้งแต่วันนี้ – {formatEarlyBirdDeadline(batch.early_bird_deadline)}
-                      </span>
-                    )}
                   </div>
                 </div>
 
@@ -435,21 +430,28 @@ export function MasterclassDetailClient({
                       tileClassName="bg-9e-navy dark:bg-white/10"
                     />
                   )}
-                  {batch.status === "open" ? (
-                    <Link
-                      href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
-                      className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
-                    >
-                      ลงทะเบียน
-                    </Link>
-                  ) : (
-                    <button
-                      disabled
-                      className="cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 min-w-48 text-center text-base font-bold text-gray-400 dark:bg-gray-700"
-                    >
-                      {batch.status === "full" ? "เต็มแล้ว" : "ปิดรับสมัครแล้ว"}
-                    </button>
-                  )}
+                  <div className="flex flex-col items-center gap-1.5">
+                    {batch.is_early_bird && batch.early_bird_deadline && (
+                      <span className="text-xs md:text-sm text-9e-slate-lt-50">
+                        ตั้งแต่วันนี้ – {formatEarlyBirdDeadline(batch.early_bird_deadline)}
+                      </span>
+                    )}
+                    {batch.status === "open" ? (
+                      <Link
+                        href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
+                        className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
+                      >
+                        ลงทะเบียน
+                      </Link>
+                    ) : (
+                      <button
+                        disabled
+                        className="cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 min-w-48 text-center text-base font-bold text-gray-400 dark:bg-gray-700"
+                      >
+                        {batch.status === "full" ? "เต็มแล้ว" : "ปิดรับสมัครแล้ว"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
