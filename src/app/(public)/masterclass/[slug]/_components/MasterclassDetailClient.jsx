@@ -42,6 +42,31 @@ function formatBatchDate(dateStr) {
   .replace("Sept", "Sep") // fix "Sept" to "Sep";
 }
 
+/**
+ * Format an Early Bird deadline to English: "21 Aug 2026".
+ *
+ * en-GB with a Gregorian year so it matches formatBatchDate on the same card —
+ * never th-TH / Buddhist era, or the card would show both 2026 and 2569.
+ * No weekday: unlike the training date, a deadline's weekday carries no meaning.
+ * timeZone is pinned because this component server-renders under UTC in
+ * production while the browser runs in Bangkok; deadlines stored at 23:59 +07
+ * happen to survive that, but 00:00 shifts a day and the server/client
+ * divergence is a hydration mismatch either way.
+ */
+function formatEarlyBirdDeadline(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", // "21"
+    month: "short", // "Aug"
+    year: "numeric", // "2026"
+    timeZone: "Asia/Bangkok",
+  })
+    .format(d)
+    .replace("Sept", "Sep"); // fix "Sept" to "Sep";
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export function MasterclassDetailClient({
   course,
@@ -388,6 +413,11 @@ export function MasterclassDetailClient({
                     ) : (
                       <span className="text-xs md:text-[14px] text-9e-slate-dp-50 dark:text-9e-slate-lt-50">
                         *ราคาดังกล่าวยังไม่รวมภาษีมูลค่าเพิ่ม
+                      </span>
+                    )}
+                    {batch.is_early_bird && batch.early_bird_deadline && (
+                      <span className="text-xs md:text-sm text-9e-slate-lt-50">
+                        ตั้งแต่วันนี้ – {formatEarlyBirdDeadline(batch.early_bird_deadline)}
                       </span>
                     )}
                   </div>
