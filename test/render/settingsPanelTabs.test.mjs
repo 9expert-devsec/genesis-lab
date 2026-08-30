@@ -97,7 +97,7 @@ test('the เนื้อหา tab renders exactly the per-type content fields 
   // heading: the type whose content editor has fields AND whose SectionTypeFields
   // contributes nothing, so a leak from the other tab would be unmistakable.
   const doc = contentTab('heading');
-  assert.deepEqual(fieldsIn(doc), ['ข้อความ', 'ระดับหัวข้อ', 'จัดวาง']);
+  assert.deepEqual(fieldsIn(doc), ['ข้อความนำ (eyebrow)', 'ข้อความ', 'ระดับหัวข้อ', 'จัดวาง']);
   for (const f of [...ENVELOPE_FIELDS, ...ADVANCED_FIELDS]) {
     assert.equal(fieldsIn(doc).includes(f), false, `"${f}" leaked into the content tab`);
   }
@@ -144,7 +144,9 @@ test('the union across all three tabs equals the exact set the panel rendered be
    * field sat in no tab at all, which is precisely this round's failure mode.
    */
   const EXPECTED = {
-    heading: ['ข้อความ', 'ระดับหัวข้อ', 'จัดวาง', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
+    // Round 57 step 3 added the eyebrow, in render order above ข้อความ —
+    // the same forced amendment as price_card's and cta's below.
+    heading: ['ข้อความนำ (eyebrow)', 'ข้อความ', 'ระดับหัวข้อ', 'จัดวาง', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     two_column: ['สัดส่วนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     card_grid: ['จำนวนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     // Round 57 step 2 added the second button pair, in render order after the
@@ -569,7 +571,7 @@ test('the content tab no longer repeats the tab label as a legend', () => {
   }));
   assert.deepEqual(groupsIn(doc), [], 'the content tab still renders a legend');
   // …and its fields survived the unwrapping.
-  assert.deepEqual(fieldsIn(doc), ['ข้อความ', 'ระดับหัวข้อ', 'จัดวาง']);
+  assert.deepEqual(fieldsIn(doc), ['ข้อความนำ (eyebrow)', 'ข้อความ', 'ระดับหัวข้อ', 'จัดวาง']);
 
   // The style tab KEEPS its legends — this is a targeted removal, not a sweep.
   assert.deepEqual(groupsIn(styleTab('two_column')), ['เลย์เอาต์', ...ENVELOPE_GROUPS]);

@@ -53,6 +53,14 @@ function HeadingEditor({ content, patch }) {
   const empty = !String(content?.text ?? '').trim();
   return (
     <>
+      {/**
+        * Round 57 — the eyebrow sits ABOVE the heading on screen, so its control
+        * sits above the heading's here. Blank by default and blank renders
+        * nothing, so a heading that ignores it is the heading it always was.
+        */}
+      <Field label="ข้อความนำ (eyebrow)" hint={'บรรทัดเล็กเหนือหัวข้อ เช่น "PROMOTION DETAILS" — ไม่บังคับ'}>
+        <TextInput value={content?.eyebrow} onChange={(v) => patch({ eyebrow: v })} />
+      </Field>
       <Field label="ข้อความ">
         <TextInput value={content?.text} onChange={(v) => patch({ text: v })} invalid={empty} />
       </Field>
@@ -943,10 +951,19 @@ const CONTENT_EDITORS = {
   course_list: CourseListEditor,
   course_schedule: CourseScheduleEditor,
   checklist: ({ content, patch }) => (
-    <ItemList
-      items={content?.items} set={(items) => patch({ items })} fields={CHECKLIST_FIELDS}
-      addLabel="เพิ่มรายการ" emptyWarn="ยังไม่มีรายการ — section นี้จะว่างเปล่า"
-    />
+    <>
+      {/**
+        * Round 57 — a title for the list (เงื่อนไขโปรโมชัน / หมายเหตุ). The box
+        * TINT is the section background preset's job, not this field's.
+        */}
+      <Field label="หัวข้อรายการ" hint={'ชื่อกล่อง เช่น "เงื่อนไขโปรโมชัน" — ไม่บังคับ'}>
+        <TextInput value={content?.heading} onChange={(v) => patch({ heading: v })} />
+      </Field>
+      <ItemList
+        items={content?.items} set={(items) => patch({ items })} fields={CHECKLIST_FIELDS}
+        addLabel="เพิ่มรายการ" emptyWarn="ยังไม่มีรายการ — section นี้จะว่างเปล่า"
+      />
+    </>
   ),
   timeline: ({ content, patch }) => (
     <ItemList items={content?.items} set={(items) => patch({ items })} fields={ITEM_FIELDS}

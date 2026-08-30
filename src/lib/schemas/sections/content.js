@@ -9,7 +9,13 @@ import { defineSection } from './base';
 
 export const CONTENT_TYPES = ['heading', 'rich_text', 'image', 'cta', 'checklist', 'notice'];
 
+/**
+ * Round 57 — `eyebrow` is the small line above the heading (page B's
+ * "PROMOTION DETAILS", §B #25). Defaults to '' and absent renders nothing (§H):
+ * it ADDS something no page has shown, unlike round 50's `showPrice`.
+ */
 const headingContent = z.object({
+  eyebrow: z.string().default(''),
   text:  z.string().default(''),
   level: z.enum(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']).default('h2'),
   align: z.enum(['left', 'center', 'right']).default('left'),
@@ -54,7 +60,13 @@ const ctaContent = z.object({
   secondaryButtonHref:  z.string().default(''),
 }).passthrough();
 
+/**
+ * Round 57 — `heading` titles the list (เงื่อนไขโปรโมชัน / หมายเหตุ, §B #17).
+ * The box TINT is the section background preset's job, not this field's.
+ * Defaults to '' and absent renders nothing (§H).
+ */
 const checklistContent = z.object({
+  heading: z.string().default(''),
   items: z.array(z.object({
     text:    z.string().default(''),
     checked: z.boolean().default(true),
