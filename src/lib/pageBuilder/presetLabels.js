@@ -69,8 +69,12 @@ export const BUTTON_STYLE_LABELS = {
 
 // Used by the per-type card style control (item 5b) — the Card components
 // (price_card / stat_card / icon_card) are the readers of style.cardStyle.
+// `promo` (round 59) is the one COMPOSITE value — edge + surface + lift at once,
+// which no other single value can express. Its label says what it is FOR rather
+// than which three treatments it applies, because the author picks an intent.
 export const CARD_STYLE_LABELS = {
   plain: 'เรียบ', border: 'เส้นขอบ', shadow: 'เงา', filled: 'พื้นทึบ', gradient: 'ไล่สี',
+  promo: 'โปรโมชัน',
 };
 
 export const COLUMNS_LABELS = {

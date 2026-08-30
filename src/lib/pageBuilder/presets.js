@@ -133,6 +133,75 @@ const CARD_STYLE_CLASS = {
   shadow:   'shadow-9e-md',
   filled:   'bg-9e-ice',
   gradient: 'bg-9e-gradient-subtle',
+  /**
+   * ── ROUND 59: THE PROMOTION SURFACE ─────────────────────────────────────
+   * docs/promo-card-style.md §A1: the five values above are MUTUALLY EXCLUSIVE,
+   * one enum to one class, and a promotion card needs an edge AND a surface AND
+   * a lift at once. `promo` is that combination and NOTHING ELSE — three
+   * treatments this map already offers, composed. No new token is introduced.
+   *
+   * ── WHY --surface AND NOT bg-9e-gradient-subtle ─────────────────────────
+   * Round 58 §I step 2 proposed the gradient. Building the target page showed
+   * why that is wrong, and it is the defect §A2 predicted: `bg-9e-ice` and
+   * `bg-9e-gradient-subtle` are literal LIGHT-mode hexes with no `.dark`
+   * counterpart, and `border`/`shadow` paint no surface at all — so no existing
+   * value gives a theme-aware OPAQUE card. On a section with a custom gradient
+   * background the parent's colour showed straight through the card.
+   *
+   * `--surface` is the house's opaque card surface, defined in BOTH themes
+   * (light #FFFFFF, dark #132638) and already read by 300-odd class strings
+   * across src/. Pairing it with `--surface-border` is the same pairing
+   * PreviewGate and the policy pages already use. So this needs no palette
+   * decision — round 39's rule is respected by REUSING a semantic token, not by
+   * naming a new colour.
+   *
+   * WHAT THIS IS NOT: the original page's PEACH gradient. That colour has no
+   * 9Expert token (docs/promo-card-style.md §B) and inventing one is a palette
+   * decision, not this commit's. `promo` is the opaque promotion card; it is
+   * blue-neutral, and deliberately so.
+   *
+   * `shadow-9e-lg` rather than `-md`: the lift has to read against a section
+   * background the author has coloured, and both resolve through
+   * `--shadow-color`, which globals.css redefines under `.dark`.
+   *
+   * ── IT SETS ITS OWN TEXT COLOUR, AND THAT IS THE LOAD-BEARING PART ──────
+   * There are TWO independent theme switches and they can disagree:
+   *
+   *   SITE  `.dark` on the root (next-themes). `--surface` answers to this.
+   *   PAGE  `page.theme` → THEME[t].pageClass, which is what sets the text
+   *         colour every card INHERITS. `corporate_navy` paints
+   *         `bg-9e-navy text-9e-ice` whatever `.dark` says.
+   *
+   * A card that paints its own surface off the SITE axis while inheriting text
+   * chosen for the PAGE axis is unreadable wherever the two disagree. Measured
+   * (scripts/_probe-round59-theme-axes.mjs), contrast of the title on the card:
+   *
+   *   page.theme        site .dark   surface-only   with --text-primary
+   *   default           false            17.39            17.39
+   *   default           TRUE              1.13            14.75
+   *   corporate_navy    FALSE             1.05            17.39
+   *   corporate_navy    true             14.75            14.75
+   *
+   * The two capitalised rows are the ones that were unreadable, and both are
+   * reachable: a viewer toggling the site to dark on a `default` page, and a
+   * `corporate_navy` page viewed in site-light.
+   *
+   * So `--text-primary` is not decoration: it is the half that makes the pair
+   * answer ONE axis. This is the same rule `--pb-accent-on` already follows —
+   * text placed on a surface the theme does not own is chosen by whoever owns
+   * the surface. Children that set their own colour (the accent price, the
+   * muted footnote) still win; this only replaces the inherited default.
+   *
+   * ── A PRE-EXISTING DEFECT THIS MAKES VISIBLE, AND DOES NOT FIX ──────────
+   * `filled` scores 1.00 on `corporate_navy` in BOTH site modes — ice text on
+   * an ice card, invisible — and `gradient` has the same shape. They are
+   * literal light hexes answering NEITHER axis. No stored section uses either
+   * (all seven carry `cardStyle` absent), so nothing is broken today, but
+   * changing what those two values mean is a separate decision from adding a
+   * sixth. Reported, not folded in. See docs/promo-card-style.md §A2.
+   */
+  promo:    'border border-[var(--surface-border)] bg-[var(--surface)] '
+            + 'text-[var(--text-primary)] shadow-9e-lg',
 };
 
 // ── style.buttonStyle → button treatment (accent via --pb-accent-*) ──

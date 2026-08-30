@@ -30,7 +30,20 @@ export const RATIOS            = ['50-50', '40-60', '60-40', '30-70', '70-30'];
 export const MOBILE_BEHAVIORS  = ['stack', 'reverse_stack', 'hide', 'carousel'];
 export const VISIBILITY        = ['all', 'desktop_only', 'mobile_only', 'hidden'];
 export const ACCENTS           = ['brand_blue', 'navy', 'cyan', 'purple', 'orange', 'green'];
-export const CARD_STYLES       = ['plain', 'border', 'shadow', 'filled', 'gradient'];
+/**
+ * ── ROUND 59: `promo`, THE SIXTH VALUE ────────────────────────────────────
+ * docs/promo-card-style.md §A1 and §I step 2. The other five are MUTUALLY
+ * EXCLUSIVE — one enum, one class — and a promotion card needs a border AND a
+ * surface AND a shadow at once, which no single value can express. `promo`
+ * composes treatments the map already offers rather than introducing a new one;
+ * see CARD_STYLE_CLASS for what it resolves to and why.
+ *
+ * ADDITIVE BY CONSTRUCTION. `resolve()` is a hasOwnProperty lookup with a fixed
+ * fallback, so a new key cannot change what another key returns and cannot
+ * change the fallback. Every stored section carries `cardStyle` ABSENT, which
+ * took the fallback before and takes it after.
+ */
+export const CARD_STYLES       = ['plain', 'border', 'shadow', 'filled', 'gradient', 'promo'];
 export const BUTTON_STYLES     = ['primary', 'secondary', 'outline', 'ghost'];
 
 /**
