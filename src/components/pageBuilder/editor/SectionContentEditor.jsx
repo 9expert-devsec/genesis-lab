@@ -177,6 +177,11 @@ function CtaEditor({ content, patch }) {
   // The component renders the button only with BOTH a label and a safe href —
   // otherwise it silently renders no button at all.
   const noButton = (label === '') !== (href === '');
+  // Round 57 — the second button, read the same way for the same reason.
+  const href2 = String(content?.secondaryButtonHref ?? '').trim();
+  const label2 = String(content?.secondaryButtonLabel ?? '').trim();
+  const href2Unsafe = href2 !== '' && !safeUrl(href2);
+  const noSecondButton = (label2 === '') !== (href2 === '');
 
   return (
     <>
@@ -201,6 +206,38 @@ function CtaEditor({ content, patch }) {
         <Warn>
           ปุ่มจะแสดงก็ต่อเมื่อมีทั้งข้อความบนปุ่มและลิงก์ — ตอนนี้ยังขาด
           {label === '' ? ' ข้อความบนปุ่ม' : ' ลิงก์'}
+        </Warn>
+      )}
+      {/**
+        * ── ROUND 57: THE SECOND BUTTON ─────────────────────────────────────
+        * Placed directly after the first pair, because it is the same control
+        * twice and an author reads them as a group. Blank by default, and blank
+        * renders nothing — a cta that ignores this pair is the cta it has
+        * always been.
+        *
+        * It gets the SAME pair warning as the first, for the same reason: the
+        * renderer draws a button only with both halves, so a half-filled pair
+        * is silently invisible and the author would have no way to learn why.
+        */}
+      <Field label="ข้อความบนปุ่มที่สอง" hint="ไม่บังคับ — เว้นว่างถ้าต้องการปุ่มเดียว">
+        <TextInput value={content?.secondaryButtonLabel} onChange={(v) => patch({ secondaryButtonLabel: v })} />
+      </Field>
+      <Field label="ลิงก์ปุ่มที่สอง" hint="http, https, mailto, tel, /path หรือ #anchor">
+        <TextInput
+          value={content?.secondaryButtonHref}
+          onChange={(v) => patch({ secondaryButtonHref: v })}
+          invalid={href2Unsafe}
+        />
+      </Field>
+      {href2Unsafe && (
+        <Warn tone="red">
+          ลิงก์ปุ่มที่สองใช้ไม่ได้ — ปุ่มที่สองจะไม่แสดงผลเลย (รองรับ http, https, mailto, tel, /path และ #anchor)
+        </Warn>
+      )}
+      {!href2Unsafe && noSecondButton && (
+        <Warn>
+          ปุ่มที่สองจะแสดงก็ต่อเมื่อมีทั้งข้อความและลิงก์ — ตอนนี้ยังขาด
+          {label2 === '' ? ' ข้อความบนปุ่มที่สอง' : ' ลิงก์ปุ่มที่สอง'}
         </Warn>
       )}
     </>

@@ -147,7 +147,14 @@ test('the union across all three tabs equals the exact set the panel rendered be
     heading: ['ข้อความ', 'ระดับหัวข้อ', 'จัดวาง', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     two_column: ['สัดส่วนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     card_grid: ['จำนวนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
-    cta: ['หัวข้อ', 'คำอธิบาย', 'ข้อความบนปุ่ม', 'ลิงก์ปุ่ม', 'สไตล์ปุ่ม', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
+    // Round 57 step 2 added the second button pair, in render order after the
+    // first — the same kind of amendment as price_card's below, and forced by
+    // the same exact-set shape.
+    cta: [
+      'หัวข้อ', 'คำอธิบาย', 'ข้อความบนปุ่ม', 'ลิงก์ปุ่ม',
+      'ข้อความบนปุ่มที่สอง', 'ลิงก์ปุ่มที่สอง',
+      'สไตล์ปุ่ม', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS,
+    ],
     /**
      * ── ROUND 57 ADDED FOUR ENTRIES HERE, AND ONLY ENTRIES ────────────────
      * The CLAIM is unchanged and is still the one this test was written for:

@@ -34,11 +34,24 @@ const imageContent = z.object({
   caption:  z.string().default(''),
 }).passthrough();
 
+/**
+ * ── ROUND 57: A SECOND BUTTON (docs/promotion-page-coverage.md §G step 2) ──
+ * Both live promotion pages close with two actions and page B's hero opens with
+ * two; this type offered one pair, so §B counted the gap twice.
+ *
+ * Both new fields default to '' and ABSENT RENDERS NOTHING (§H) — they ADD
+ * something no page has shown. That is the opposite of round 50's `showPrice`,
+ * which defaults ON and reads `!== false` because it REMOVES something every
+ * stored card shows. The renderer applies the SAME pair-guard the first button
+ * has always used: a label without a safe href draws nothing, and vice versa.
+ */
 const ctaContent = z.object({
-  heading:     z.string().default(''),
-  description: z.string().default(''),
-  buttonLabel: z.string().default(''),
-  buttonHref:  z.string().default(''),
+  heading:              z.string().default(''),
+  description:          z.string().default(''),
+  buttonLabel:          z.string().default(''),
+  buttonHref:           z.string().default(''),
+  secondaryButtonLabel: z.string().default(''),
+  secondaryButtonHref:  z.string().default(''),
 }).passthrough();
 
 const checklistContent = z.object({
