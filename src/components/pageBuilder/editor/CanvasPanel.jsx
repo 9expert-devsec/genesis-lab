@@ -146,13 +146,25 @@ export function CanvasPanel() {
   // that "what the canvas is" and "where it is mounted" stay separable: the
   // handlers, the theme wrapper and the injected rules are the same objects
   // either side of the frame boundary.
+  /**
+   * ── ROUND 61: THE SAME WRAP DECLARATION THE PUBLISHED PAGE CARRIES ───────
+   * The canvas must not disagree with the page about how text wraps, which is
+   * this panel's whole reason for rendering through SectionRenderer. Since
+   * `overflow-wrap` is inherited, one class on this wrapper reaches every
+   * section in the frame — see PageBuilderView.jsx for the measurement, and for
+   * why it is `anywhere` rather than `break-word`.
+   *
+   * The canvas is portalled into an iframe that CLONES the parent's stylesheets
+   * (round 20), so the RULE is available inside the frame; what it needs is an
+   * element carrying the class, and this is that element.
+   */
   const canvas = (
     <div
       data-pb-canvas=""
       onClickCapture={onClickCapture}
       onMouseOver={onMouseOver}
       onMouseLeave={() => setHoverKey(null)}
-      className={cn(pageClass, 'min-h-full')}
+      className={cn(pageClass, 'min-h-full', '[overflow-wrap:anywhere]')}
       style={themeStyle(page?.theme)}
       data-pb-theme={page?.theme || 'default'}
     >

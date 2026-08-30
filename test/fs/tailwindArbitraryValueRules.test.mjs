@@ -357,6 +357,39 @@ const CASES = [
     className: '[&_li>p]:my-0',
     property: 'margin-top',
   },
+  /**
+   * ── ROUND 61: THE PAGE-WIDE WRAP, AN ARBITRARY *PROPERTY* ────────────────
+   *
+   * A third shape for this file: not an arbitrary value, not an arbitrary
+   * variant, but a whole declaration Tailwind has no utility for.
+   * `overflow-wrap: anywhere` is the only value that reduces a box's
+   * min-content width (CSS Text 3 §5.5 — the fact globals.css already records
+   * in its article-table note), which is why `break-words` fixed the plain
+   * blocks and left every flex/grid section at a min-content floor.
+   *
+   * It is registered because it carries this file's failure mode exactly: one
+   * class, on one element, whose entire job is inherited by everything below
+   * it. If it compiled to nothing the markup would still be perfect, every
+   * render test would still pass, and twelve section types would quietly go
+   * back to pushing themselves out of the page. Nothing else in the tree would
+   * say so.
+   *
+   * Registered for BOTH files: the published page and the editor canvas carry
+   * it separately and are separately droppable, and the point of the pair is
+   * that the canvas agrees with the page.
+   */
+  {
+    what: "the published page's wrap-anywhere",
+    file: 'src/components/pageBuilder/PageBuilderView.jsx',
+    className: '[overflow-wrap:anywhere]',
+    property: 'overflow-wrap',
+  },
+  {
+    what: "the editor canvas's wrap-anywhere",
+    file: 'src/components/pageBuilder/editor/CanvasPanel.jsx',
+    className: '[overflow-wrap:anywhere]',
+    property: 'overflow-wrap',
+  },
 ];
 
 /*
