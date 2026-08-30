@@ -7,22 +7,22 @@ import { siteConfig, footerNav, policyNav } from "@/config/site";
 
 const SOCIALS = [
   {
-    href: "https://www.instagram.com/9experttraining",
+    href: "https://www.instagram.com/9expert_training",
     label: "Instagram",
     Icon: FaInstagram,
   },
   {
-    href: "https://www.tiktok.com/@9experttraining",
+    href: "https://www.tiktok.com/@9expert",
     label: "TikTok",
     Icon: FaTiktok,
   },
   {
-    href: "https://www.linkedin.com/company/9expert",
+    href: "https://th.linkedin.com/company/9expert",
     label: "LinkedIn",
     Icon: FaLinkedin,
   },
   {
-    href: "https://www.youtube.com/@9experttraining",
+    href: "https://www.youtube.com/@9expert",
     label: "YouTube",
     Icon: FaYoutube,
   },

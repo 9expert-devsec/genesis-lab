@@ -38,12 +38,12 @@ const SOCIALS = [
   { label: "TikTok", href: "https://tiktok.com/@9expert", icon: FaTiktok },
   {
     label: "Instagram",
-    href: "https://instagram.com/9experttraining",
+    href: "https://instagram.com/9expert_training",
     icon: FaInstagram,
   },
   {
     label: "LinkedIn",
-    href: "https://linkedin.com/company/9expert",
+    href: "https://th.linkedin.com/company/9expert",
     icon: FaLinkedin,
   },
 ];
