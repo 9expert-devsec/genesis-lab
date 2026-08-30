@@ -2,6 +2,7 @@ import { sendEmail, sendTemplateEmail } from "@/lib/email/postmark";
 import { formatTHB } from "@/lib/pricing";
 import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
+import { buildPrepModel } from "@/lib/email/buildPrepModel";
 
 // ── Helpers (copied inline from src/lib/masterclass/send-receipt.js) ──────────
 
@@ -67,7 +68,7 @@ export async function sendMasterclassPaidReceipt(doc) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url license_options")
+    .select("cover_image_url license_options equipment_required system_requirements_html")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
@@ -83,6 +84,7 @@ export async function sendMasterclassPaidReceipt(doc) {
 
   const billingAddressP = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
+  const prepModel = buildPrepModel(courseDoc);
 
   const templateModel = {
     coordinator_name:
@@ -148,6 +150,7 @@ export async function sendMasterclassPaidReceipt(doc) {
       : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
     ...licenseModel,
+    ...prepModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
@@ -208,7 +211,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
   const MasterclassCourse = (await import("@/models/MasterclassCourse"))
     .default;
   const courseDoc = await MasterclassCourse.findById(doc.course_id)
-    .select("cover_image_url license_options")
+    .select("cover_image_url license_options equipment_required system_requirements_html")
     .lean();
   const courseImage = courseDoc?.cover_image_url || "";
 
@@ -222,6 +225,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
 
   const billingAddressQ = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
+  const prepModel = buildPrepModel(courseDoc);
 
   const templateModel = {
     coordinator_name:
@@ -279,6 +283,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
         : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
     ...licenseModel,
+    ...prepModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
