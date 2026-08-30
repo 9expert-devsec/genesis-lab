@@ -5,7 +5,7 @@
  * Sources the box from the course itself instead of hard-coding it in the
  * Postmark template:
  *   - `equipment_required: string[]`     → `items[]` (plain text, one row each)
- *   - `system_requirements_html: string` → `prep_html` (admin-authored rich text)
+ *   - `system_requirements_html: string` → `prep_html.html` (admin-authored rich text)
  *
  * FALLBACK rule:
  *   - a course with NEITHER field populated must not render an empty amber box →
@@ -21,7 +21,15 @@
  *     cleared field as `<p></p>` — markup with no text is treated as unset so it
  *     cannot keep an otherwise-empty box alive.
  *
- * `prep_html` is raw rich-text HTML → render with triple-mustache.
+ * SHAPE rule:
+ *   - `prep_html` is an object-or-`false`, never a bare string: a Mustache
+ *     section entered on a STRING makes that string the current context, so an
+ *     inner `{{{prep_html}}}` would only resolve by parent-context fallback.
+ *     Every other gated text block here is a named-key object (`billing_notes`
+ *     is `{ text } | false`) → the template reads `{{{html}}}` inside the
+ *     `{{#prep_html}}` gate, matching `license_conditions[].html`.
+ *
+ * `prep_html.html` is raw rich-text HTML → render with triple-mustache.
  * `items[].text` is plain text → render with regular mustache.
  *
  * @param {object} courseDoc  MasterclassCourse doc (equipment_required, system_requirements_html)
@@ -53,7 +61,7 @@ export function buildPrepModel(courseDoc) {
         .map((s) => s.trim())
     : [];
   const html = courseDoc?.system_requirements_html;
-  const prep_html = hasRichText(html) ? html : false;
+  const prep_html = hasRichText(html) ? { html } : false;
 
   if (!equipment.length && !prep_html) {
     console.log(
@@ -73,7 +81,7 @@ export function buildPrepModel(courseDoc) {
   return {
     prep_checklist: {
       items: equipment.map((text, i) => ({ index: i + 1, text })),
-      prep_html, // string | false (raw HTML → triple-mustache)
+      prep_html, // { html } | false (raw HTML → triple-mustache as {{{html}}})
     },
   };
 }
