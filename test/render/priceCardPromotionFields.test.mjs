@@ -126,12 +126,26 @@ test('E — footnote is a SEPARATE surface from features, with no check glyph', 
 test('D — an empty ribbon changes no LAYOUT, not merely no text', () => {
   /**
    * A corner element that reserved space when empty would fail the
-   * byte-identity claim even with no visible text. The positioning context is
-   * therefore conditional too: without a ribbon the card must not gain
-   * `relative`, or every stored card's class attribute changes.
+   * byte-identity claim even with no visible text. The conditional class is
+   * therefore part of the claim: without a ribbon the card's class attribute
+   * must not move at all.
+   *
+   * ── AMENDED IN ROUND 59, AND THE CLAIM GOT STRONGER ──────────────────────
+   * This used to assert the card gains `relative` when a ribbon is set. That
+   * token is gone because the ribbon is no longer absolutely positioned (see
+   * price_card.jsx and docs/promo-card-style.md §B), so the assertion was
+   * describing an implementation that no longer exists.
+   *
+   * It is replaced by the thing it was a proxy for: the WHOLE class attribute
+   * of a ribbon-less card, compared against a card that never had the key. A
+   * named token could go stale again; a full-attribute comparison cannot, and
+   * it also catches a class added for some unrelated reason.
    */
-  const without = doc(draw(STORED)).querySelector('div');
-  assert.ok(!/\brelative\b/.test(without.getAttribute('class') ?? ''),
+  const clsOf = (content) => doc(draw(content)).querySelector('div').getAttribute('class') ?? '';
+  const { ribbon: _drop, ...noRibbonKey } = STORED;
+  assert.equal(clsOf(STORED), clsOf(noRibbonKey),
+    'an empty ribbon changed the card class — a stored card without the key would move');
+  assert.ok(!/\brelative\b/.test(clsOf(STORED)),
     'the card gained a positioning context with no ribbon — every stored card just changed');
   assert.equal(doc(draw(STORED)).querySelector('[data-pb-ribbon]'), null,
     'an empty ribbon still emitted an element');
@@ -140,8 +154,8 @@ test('D — an empty ribbon changes no LAYOUT, not merely no text', () => {
   const rib = with_.querySelector('[data-pb-ribbon]');
   assert.ok(rib, 'the ribbon is not rendered when set');
   assert.equal(rib.textContent, 'Early Bird ลด 20%');
-  assert.match(with_.querySelector('div').getAttribute('class') ?? '', /\brelative\b/,
-    'the ribbon has no positioning context to sit in');
+  assert.match(with_.querySelector('div').getAttribute('class') ?? '', /\boverflow-hidden\b/,
+    'a ribbon longer than the card is wide has nothing clipping it to the rounded edge');
 });
 
 test('the fail-closed rule is unchanged — new fields alone do not make a card render', () => {

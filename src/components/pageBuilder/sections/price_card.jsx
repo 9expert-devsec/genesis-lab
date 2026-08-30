@@ -61,26 +61,50 @@ export function PriceCardSection({ content, style }) {
         // emphasis that needs no layout preset (columns live on the parent grid).
         highlighted && 'ring-2 ring-[color:var(--pb-accent-fill)]',
         /**
-         * THE POSITIONING CONTEXT IS CONDITIONAL, and that is load-bearing
-         * rather than tidy. The ribbon is absolutely positioned, so it needs a
-         * relative ancestor — but adding `relative overflow-hidden`
+         * STILL CONDITIONAL, for the same byte-identity reason: adding a class
          * unconditionally would change the class attribute of EVERY stored
-         * card, which is exactly the byte-identity §H requires this commit to
-         * keep. So the context appears only when there is a ribbon to place.
+         * card. `relative` is gone because nothing is absolutely positioned any
+         * more (see the ribbon below); `overflow-hidden` stays as the guard for
+         * a ribbon longer than the card is wide, so it is clipped at the card's
+         * rounded edge rather than painting outside it.
          */
-        ribbon && 'relative overflow-hidden'
+        ribbon && 'overflow-hidden'
       )}
     >
       {/**
-        * Corner text. Rendered only when non-empty, so an empty ribbon reserves
-        * no space and contributes no element — not merely no text.
+        * ── ROUND 59: THE CORNER RECTANGLE, IN FLOW ─────────────────────────
+        * docs/promo-card-style.md §B measured the original as a FLUSH corner
+        * rectangle; round 57 shipped a rotated 45° band. The band is replaced,
+        * and the reason is the author's text rather than fidelity to the page.
+        *
+        * MEASURED (scripts/_probe-round59-ribbon-window.mjs): the rotated
+        * band's box is 144px wide but only ~85px of it can ever sit inside the
+        * corner, so both ends were clipped by `overflow-hidden` — and the
+        * characters lost were IDENTICAL at card widths 320/445/640. The loss
+        * was not "the card is too small", it was a fixed-width box laid across
+        * a fixed-length corner chord, and it silently ate any ribbon past ~16
+        * characters on every card. `ribbon` is a free author string with no
+        * length cap, so that is a control quietly discarding what the author
+        * typed — round 18's defect in a different costume.
+        *
+        * IN FLOW, NOT ABSOLUTE, and that is the load-bearing part. As a normal
+        * flex child the ribbon OCCUPIES layout, so the title is pushed below it
+        * by the box model instead of by a reserved padding number someone has
+        * to keep right. The negative margins cancel the card's own `p-6` so the
+        * box sits flush against the top and right edges, and `rounded-tr-9e-lg`
+        * is the card's own radius, so the two corners coincide exactly.
+        *
+        * `self-end` keeps it shrink-to-fit and right-aligned; without it a flex
+        * column stretches the item to full width and the corner ornament
+        * becomes a banner.
         */}
       {ribbon && (
         <span
           data-pb-ribbon=""
           className={cn(
-            'pointer-events-none absolute -right-10 top-4 w-36 rotate-45 py-1 text-center',
-            'text-[11px] font-bold text-[var(--pb-accent-on)]',
+            'pointer-events-none -mr-6 -mt-6 mb-4 self-end',
+            'rounded-bl-9e-lg rounded-tr-9e-lg px-4 py-2',
+            'text-sm font-bold leading-tight text-[var(--pb-accent-on)]',
             'bg-[color:var(--pb-accent-fill)]'
           )}
         >
