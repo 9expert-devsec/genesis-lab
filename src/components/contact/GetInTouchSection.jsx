@@ -41,7 +41,10 @@ function InfoRow({ label, value, href }) {
   const valueClasses =
     "block text-sm font-medium text-[#0D1B2A] transition-colors hover:text-[#005CFF] dark:text-white dark:hover:text-[#48B0FF]";
   return (
-    <li className="border-r border-[#E2E8F0] px-4 first:pl-0 last:border-r-0  dark:border-[#1e2939]">
+    // Stacked below sm (full-width rows, divider on the bottom edge); the
+    // original side-by-side-with-right-border layout returns unchanged at
+    // sm and up, where the parent <ul> is back to flex-row.
+    <li className="border-b border-[#E2E8F0] pb-3 pt-3 first:pt-0 last:border-b-0 last:pb-0 sm:border-b-0 sm:border-r sm:px-4 sm:py-0 sm:first:pl-0 sm:last:border-r-0 dark:border-[#1e2939]">
       <div className="mb-1 text-base font-medium text-[#465469] dark:text-[#94a3b8]">
         {label}
       </div>

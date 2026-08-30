@@ -72,6 +72,24 @@ test('InfoRow: the phone and email card lists stack on mobile and keep their sm:
   }
 });
 
+/** The InfoRow divider claim: bottom border on mobile, turned off and replaced by the original right border at sm:. */
+function assertResponsiveDivider(className) {
+  assert.match(className, /(?:^|\s)border-b(?:\s|$)/, 'missing the mobile bottom divider');
+  assert.match(className, /(?:^|\s)sm:border-b-0(?:\s|$)/, 'the mobile bottom divider must turn off at sm:');
+  assert.match(className, /(?:^|\s)sm:border-r(?:\s|$)/, 'missing the sm: right divider (the original treatment)');
+}
+
+test('InfoRow: the divider moves from a right border (row) to a bottom border (stack), never both at once', () => {
+  const infoRowLi = GET_IN_TOUCH.code.match(/<li className="([^"]*)">\s*<div className="mb-1/);
+  assert.ok(infoRowLi, 'could not find the InfoRow <li>');
+  assertResponsiveDivider(infoRowLi[1]);
+});
+
+test('control: a divider left as border-r at every width (the pre-fix shape) fails the responsive-divider check', () => {
+  const flattened = 'border-r border-[#E2E8F0] px-4 first:pl-0 last:border-r-0';
+  assert.throws(() => assertResponsiveDivider(flattened));
+});
+
 test('the phone/email anchor no longer forces character-level breaks', () => {
   assert.doesNotMatch(GET_IN_TOUCH.code, /\bbreak-all\b/);
   // the href branch specifically must still carry SOME wrap rule, not none
