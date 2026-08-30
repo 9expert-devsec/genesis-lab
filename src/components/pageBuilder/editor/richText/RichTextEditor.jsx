@@ -80,7 +80,27 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none dark:prose-invert min-h-[8rem]',
+        /**
+         * ── ROUND 60: THE SAME SPACING SET AS THE RENDERER ────────────────
+         * The input keeps `prose-sm` — a compact editing box is deliberate and
+         * this round is spacing, not size — but it must not disagree with the
+         * published page about how far apart paragraphs and bullets sit, or the
+         * author is composing against the wrong rhythm.
+         *
+         * Measured before the change, the input had the same list defect for the
+         * same reason as the renderer: Tiptap wraps each item's text in a `<p>`
+         * that is both :first-child and :last-child, so typography's
+         * `> ul > li > p:first-child` and `:last-child` rules both fired and
+         * every bullet sat a full paragraph apart (16px at prose-sm, matching
+         * the paragraph gap exactly). See sections/rich_text.jsx for the full
+         * cascade and scripts/_probe-round60-prose-spacing.mjs for the numbers.
+         *
+         * The utilities are identical to the renderer's, so the two surfaces are
+         * changed by one decision rather than two that have to be kept in step.
+         */
+        class: 'prose prose-sm max-w-none focus:outline-none dark:prose-invert min-h-[8rem] '
+          + 'prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_li>p]:my-0 '
+          + '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
       },
     },
     onUpdate: ({ editor: ed }) => onChange(ed.getJSON()),

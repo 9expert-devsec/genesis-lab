@@ -311,6 +311,52 @@ const CASES = [
     property: 'color',
     referencesVar: '--pb-accent-fill',
   },
+  /**
+   * ── ROUND 60: THE RICH-TEXT SPACING, WHICH IS ARBITRARY *VARIANTS* ───────
+   *
+   * A different shape from everything above — no arbitrary VALUE and no runtime
+   * variable. The value is stock (`my-0`, `mt-0`, `mb-0`); the arbitrary part is
+   * the SELECTOR (`[&_li>p]`, `[&>*:first-child]`). Same failure mode though,
+   * which is why they belong in this file: an arbitrary variant that Tailwind
+   * declines to parse emits NOTHING, the markup still reads perfectly, and every
+   * string-matching test stays green while the spacing silently reverts.
+   *
+   * That is not hypothetical here. While measuring this fix a liveness probe
+   * reported all three as dead twice — first because the probe element had no
+   * descendants for them to act on, then because Tailwind's preflight had
+   * already zeroed the margins they remove. Both were flaws in the probe, and
+   * both looked exactly like "the class does not compile". Only compiling the
+   * real file distinguishes the two, and that is what this test does.
+   *
+   * `[&_li>p]:my-0` is registered for BOTH files. The renderer and the editor
+   * input carry the same spacing set on purpose (so the author composes against
+   * the published rhythm), and they are separately droppable — deleting it from
+   * one would leave the other green.
+   */
+  {
+    what: "rich_text's list-item paragraph reset",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: '[&_li>p]:my-0',
+    property: 'margin-top',
+  },
+  {
+    what: "rich_text's leading outer-margin reset",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: '[&>*:first-child]:mt-0',
+    property: 'margin-top',
+  },
+  {
+    what: "rich_text's trailing outer-margin reset",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: '[&>*:last-child]:mb-0',
+    property: 'margin-bottom',
+  },
+  {
+    what: "the rich-text editor input's list-item paragraph reset",
+    file: 'src/components/pageBuilder/editor/richText/RichTextEditor.jsx',
+    className: '[&_li>p]:my-0',
+    property: 'margin-top',
+  },
 ];
 
 /*
@@ -620,6 +666,27 @@ test('CONTROL: a class NOT present in the scanned source produces nothing', asyn
   const css = await compile([{ raw, extension: 'js' }]);
   assert.equal(declarationsFor(css, 'hover:bg-[var(--round-hover-bg)]').length, 0);
   assert.ok(css.includes('.text-sm'), 'but the class that IS there compiled');
+});
+
+test('CONTROL (round 60): the WIDENED escape table still reports a dead class dead', async () => {
+  /**
+   * escapeClass stopped enumerating characters and now escapes everything
+   * outside `[A-Za-z0-9_-]`, because the old list had no `&`, `>` or `*` and so
+   * reported three live arbitrary-variant classes as producing NO RULE.
+   *
+   * Widening a matcher is exactly how a guard stops guarding — if it now found
+   * something for every input, all four registrations above would be vacuous.
+   * So: an arbitrary VARIANT that is genuinely absent must still come back
+   * empty, in the same compile where a present one comes back full.
+   */
+  const raw = 'const x = "[&_li>p]:my-0";';
+  const css = await compile([{ raw, extension: 'js' }]);
+  assert.ok(declarationsFor(css, '[&_li>p]:my-0').length > 0,
+    'the class that IS there did not compile — the escaping is wrong in the other direction');
+  for (const absent of ['[&_li>p]:my-4', '[&>*:first-child]:mt-0', '[&_td>span]:my-0']) {
+    assert.equal(declarationsFor(css, absent).length, 0,
+      `"${absent}" is not in the source but the matcher found declarations for it`);
+  }
 });
 
 test('the config under test is the real one, with its content globs intact', () => {

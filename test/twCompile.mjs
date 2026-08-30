@@ -97,11 +97,41 @@ globalThis.__twRequire = createRequire(import.meta.url);
  * should have been red — the defect was latent, and it was an INVESTIGATION
  * that it broke, not an assertion.
  */
+/**
+ * ── ROUND 60: THE TABLE STOPPED BEING ENUMERATED, FOR THE EIGHTH TIME ──────
+ *
+ * It listed `: [ ] ( ) . / % #`. That is not the set Tailwind escapes, it is the
+ * set the classes registered SO FAR happened to contain — the same mistake the
+ * tail check made before it was bounded rather than enumerated, and with the
+ * same symptom: a working utility reported as producing NO RULE.
+ *
+ * Measured, not reasoned. Round 60 registered `[&_li>p]:my-0` and
+ * `[&>*:first-child]:mt-0`, which Tailwind emits as
+ *
+ *     .\[\&_li\>p\]\:my-0 li > p            { margin-top: 0px; … }
+ *     .\[\&\>\*\:first-child\]\:mt-0 > :first-child { margin-top: 0px }
+ *
+ * — `&`, `>` and `*` all backslash-escaped. The old table escaped none of the
+ * three, so `indexOf` looked for a selector that is not in the file and reported
+ * three live classes as dead. Chrome's CSS.getMatchedStylesForNode had already
+ * shown those exact rules winning the cascade on the served page, which is the
+ * only reason the disagreement was caught rather than believed.
+ *
+ * So the rule is now GENERAL: a CSS identifier may carry `[A-Za-z0-9_-]`
+ * unescaped, and Tailwind backslash-escapes everything else. Enumerating which
+ * characters "matter" is what has to stop — the next arbitrary variant will use
+ * `+` or `~` or `!` and nobody will remember this comment.
+ *
+ * The comma keeps its own pass because it is genuinely different: Tailwind
+ * writes it as the unicode escape `\2c ` — with a significant trailing space —
+ * not as `\,`. See the note above for the wrong diagnosis that cost.
+ */
 export function escapeClass(className) {
   return className
-    .replace(/[:[\]()./%#]/g, (c) => `\\${c}`)
+    .replace(/[^A-Za-z0-9_,-]/g, (c) => `\\${c}`)
     // Must run AFTER the backslash pass above, or that pass would escape the
-    // backslash this one introduces.
+    // backslash this one introduces. The comma is excluded from that pass so it
+    // arrives here bare.
     .replace(/,/g, '\\2c ');
 }
 
