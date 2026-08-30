@@ -31,14 +31,38 @@ const courseCardContent = z.object({
   showPrice: z.boolean().default(true),
 }).passthrough();
 
+/**
+ * ── ROUND 57: THE PROMOTION FIELDS, AND WHY THEY ALL DEFAULT TO '' ────────
+ * docs/promotion-page-coverage.md §B measured both live promotion pages using
+ * this card as a PROMOTION PRICE PANEL rather than the pricing tier it was
+ * built as. Seven of that survey's fourteen field gaps are on this one type: a
+ * BEFORE price, a SAVING, FINE PRINT and a corner RIBBON.
+ *
+ * ── THE DEFAULT RULE HERE IS INVERTED FROM ROUND 50's ─────────────────────
+ * Round 50's `showPrice` above defaults to TRUE and is read `!== false`,
+ * because it can REMOVE something every stored card already shows — absent had
+ * to mean ON or every published card would have lost its price.
+ *
+ * These four are the other kind. They ADD something no page has ever shown, so
+ * absent must render NOTHING, and `''` is what does that: the renderer already
+ * guards every optional surface with `.trim()`, so an absent key and an empty
+ * string produce the same markup as a card that predates the field. Reading any
+ * of these `!== ''` — or copying round 50's `!== false` shape — would put a
+ * stray element on every card in production.
+ */
 const priceCardContent = z.object({
-  title:       z.string().default(''),
-  price:       z.string().default(''), // string: may carry "฿12,900" / "สอบถาม"
-  period:      z.string().default(''),
-  features:    z.array(z.string()).default([]),
-  buttonLabel: z.string().default(''),
-  buttonHref:  z.string().default(''),
-  highlighted: z.boolean().default(false),
+  title:         z.string().default(''),
+  price:         z.string().default(''), // string: may carry "฿12,900" / "สอบถาม"
+  period:        z.string().default(''),
+  features:      z.array(z.string()).default([]),
+  buttonLabel:   z.string().default(''),
+  buttonHref:    z.string().default(''),
+  highlighted:   z.boolean().default(false),
+  // Round 57 — all four ADD, so all four are absent-renders-nothing (§H).
+  originalPrice: z.string().default(''), // struck through, above the price
+  discountBadge: z.string().default(''), // the "ลด 20%" chip
+  footnote:      z.string().default(''), // the VAT line — NOT a feature (§B #10)
+  ribbon:        z.string().default(''), // corner text, e.g. "Early Bird ลด 20%"
 }).passthrough();
 
 const statCardContent = z.object({

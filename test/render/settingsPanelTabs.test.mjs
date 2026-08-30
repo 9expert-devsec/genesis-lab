@@ -148,8 +148,24 @@ test('the union across all three tabs equals the exact set the panel rendered be
     two_column: ['สัดส่วนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     card_grid: ['จำนวนคอลัมน์', 'บนมือถือ', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
     cta: ['หัวข้อ', 'คำอธิบาย', 'ข้อความบนปุ่ม', 'ลิงก์ปุ่ม', 'สไตล์ปุ่ม', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS],
+    /**
+     * ── ROUND 57 ADDED FOUR ENTRIES HERE, AND ONLY ENTRIES ────────────────
+     * The CLAIM is unchanged and is still the one this test was written for:
+     * every field the panel can edit is reachable from some tab, and none sits
+     * in no tab at all. What grew is the SET, because step 1 of
+     * docs/promotion-page-coverage.md §G adds four real controls to
+     * price_card's เนื้อหา tab (ราคาก่อนลด / ป้ายส่วนลด / หมายเหตุใต้ราคา /
+     * ป้ายมุมการ์ด).
+     *
+     * This is the amendment the exact-set shape is DESIGNED to force: a new
+     * field cannot be added without a human writing it down here, which is
+     * exactly what stops one landing in no tab. The four are inserted in render
+     * order, immediately after ต่อรอบ, because the list is ordered.
+     */
     price_card: [
-      'หัวข้อ', 'ราคา', 'ต่อรอบ', 'รายการ (บรรทัดละ 1 รายการ)', 'ข้อความบนปุ่ม', 'ลิงก์ปุ่ม',
+      'หัวข้อ', 'ราคา', 'ต่อรอบ',
+      'ราคาก่อนลด', 'ป้ายส่วนลด', 'หมายเหตุใต้ราคา', 'ป้ายมุมการ์ด',
+      'รายการ (บรรทัดละ 1 รายการ)', 'ข้อความบนปุ่ม', 'ลิงก์ปุ่ม',
       'สไตล์การ์ด', 'สไตล์ปุ่ม', ...ENVELOPE_FIELDS, ...ADVANCED_FIELDS,
     ],
   };

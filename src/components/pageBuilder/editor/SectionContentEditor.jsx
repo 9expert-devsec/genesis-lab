@@ -247,6 +247,32 @@ function PriceCardEditor({ content, patch }) {
       <Field label="ต่อรอบ" hint={'เช่น "/ คน" หรือ "/ เดือน"'}>
         <TextInput value={content?.period} onChange={(v) => patch({ period: v })} />
       </Field>
+      {/**
+        * ── ROUND 57: THE PROMOTION FIELDS ────────────────────────────────
+        * Placed straight after ราคา because that is what they qualify — the
+        * before-price and the saving read as one group with it, and the
+        * footnote is the small print under it.
+        *
+        * Each is ONE control in its own `Field`, which is a `<label>` — correct
+        * here and only here: round 55's defect was a `<label>` wrapping a
+        * composite with fourteen buttons, so a click anywhere activated the
+        * first. One input per label is exactly what a label is for.
+        *
+        * Every one is blank by default and renders nothing when blank (§H), so
+        * an author who ignores this group sees the card they have always seen.
+        */}
+      <Field label="ราคาก่อนลด" hint={'ขีดฆ่าไว้เหนือราคา เช่น "40,800 บาท" — เว้นว่างถ้าไม่มี'}>
+        <TextInput value={content?.originalPrice} onChange={(v) => patch({ originalPrice: v })} />
+      </Field>
+      <Field label="ป้ายส่วนลด" hint={'ป้ายเล็กข้างราคาก่อนลด เช่น "ลด 20%"'}>
+        <TextInput value={content?.discountBadge} onChange={(v) => patch({ discountBadge: v })} />
+      </Field>
+      <Field label="หมายเหตุใต้ราคา" hint={'ตัวเล็กใต้ราคา เช่น "* ราคานี้ยังไม่รวม VAT 7%" — คนละส่วนกับรายการด้านล่าง'}>
+        <TextInput value={content?.footnote} onChange={(v) => patch({ footnote: v })} />
+      </Field>
+      <Field label="ป้ายมุมการ์ด" hint={'ข้อความแถบเฉียงมุมบนขวา เช่น "Early Bird ลด 20%"'}>
+        <TextInput value={content?.ribbon} onChange={(v) => patch({ ribbon: v })} />
+      </Field>
       <Field label="รายการ (บรรทัดละ 1 รายการ)">
         <TextArea value={features.join('\n')} onChange={(v) => patch({ features: v.split('\n') })} rows={4} />
       </Field>
