@@ -107,7 +107,7 @@ export default function ConsultingSection() {
                     <span
                       className={`min-w-[64px] font-en font-black leading-none transition-colors duration-300 ${
                         isActive
-                          ? "text-9e-slate-dp-50 text-3xl"
+                          ? "text-9e-slate-dp-50 dark:text-9e-air text-3xl"
                           : "text-[var(--surface-border)] dark:text-9e-slate-dp-200 text-2xl"
                       }`}
                     >
