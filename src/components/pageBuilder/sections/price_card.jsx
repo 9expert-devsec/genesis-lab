@@ -142,7 +142,37 @@ export function PriceCardSection({ content, style }) {
         <p className="mt-2 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">{footnote}</p>
       )}
       {features.length > 0 && (
-        <ul className="mt-4 space-y-2 text-sm">
+        <ul
+          className={cn(
+            'mt-4 space-y-2 text-sm',
+            /**
+             * ── ROUND 59: THE SEPARATION, NOT JUST THE SEPARATE FIELD ───────
+             * Round 57 gave the footnote its own element for the reason in the
+             * comment above, and that half held: it is a `<p>`, outside the
+             * `<ul>`, with no glyph. But a small muted line sitting directly
+             * above a list of small lines still READS as an unglyphed first
+             * row — the schema separated them and the page did not.
+             *
+             * A BOUNDARY, gated on the PAIR. The rule appears only when a
+             * footnote is actually above a list, because that is the only
+             * arrangement that is ambiguous. A card with features and no
+             * footnote keeps the exact class attribute it has always had, so
+             * the 4 stored cards in that shape stay byte-identical — the
+             * conditional is the byte-identity, not decoration.
+             *
+             * `--surface-border` is the token `cardStyle: 'border'` already
+             * resolves to, so the line matches the card's own edge and is
+             * defined in both themes (light rgba(13,27,42,.12), dark #1A2D42).
+             * A hand-picked hex here would be a source colour, which round 30
+             * put out of bounds.
+             *
+             * NOT the original's `.price-divider`, and not its two-column
+             * label/value grid: that is round 58's STRUCTURE item and is out of
+             * scope. This is the boundary alone.
+             */
+            footnote && 'border-t border-[var(--surface-border)] pt-4'
+          )}
+        >
           {features.map((f, i) => (
             <li key={i} className="flex items-start gap-2">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-[var(--pb-accent-fill)]" strokeWidth={2.5} aria-hidden />

@@ -34,7 +34,7 @@
  * Plus the third control: a TYPE HISTOGRAM, so "no card carries a ribbon" is
  * distinguishable from "the walk never resolved a section".
  *
- * READ-ONLY apart from one temp file under src/, removed in a finally.
+ * READ-ONLY apart from one temp file at src/ root, removed in a finally.
  *
  * Run:
  *   FIELD=ribbon node --env-file=.env.local --import ./scripts/_probe-panel-register.mjs \
@@ -51,7 +51,25 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const ROOT = process.cwd();
 const TARGET = 'src/components/pageBuilder/sections/price_card.jsx';
 const BASE_REF = process.env.BASE_REF ?? 'HEAD';
-const BASELINE = path.join(ROOT, 'src/components/pageBuilder/sections/_baseline_price_card.jsx');
+/**
+ * ── THE BASELINE SITS AT src/ ROOT, AND THAT IS NOT TIDINESS ──────────────
+ * It must be under src/ for the loader to transpile .jsx at all. It must NOT be
+ * under src/app, src/components or src/lib, because those are exactly
+ * tailwind.config.js's three content globs: a watching dev server scans the
+ * temp file in, and deleting it in the finally leaves the JIT holding a path
+ * that no longer exists.
+ *
+ * Measured, not theorised. Rounds 45/50/57 put it beside its original, and the
+ * first run of this script left `next dev` serving 500 on EVERY route with
+ *
+ *   Module build failed (postcss-loader) … ENOENT … _baseline_price_card.jsx
+ *
+ * until a scanned file was touched. src/ root is covered by no glob, so the
+ * watcher never sees it. (test/pure/tailwindContentCoverage.test.mjs guards
+ * new top-level DIRECTORIES under src/, not a transient file, and this one is
+ * removed in the finally regardless.)
+ */
+const BASELINE = path.join(ROOT, 'src/_baseline_price_card.generated.jsx');
 /** The content key this commit is allowed to change the look of. */
 const FIELD = process.env.FIELD ?? 'none';
 
@@ -105,9 +123,18 @@ const CONTROL = {
     'short ribbon': { title: 'x', price: '1', ribbon: '20%' },
     'long ribbon':  { title: 'x', price: '1', ribbon: 'Early Bird ลด 20% วันนี้เท่านั้น' },
   },
+  /**
+   * BOTH shapes carry a footnote AND features, because the boundary is gated on
+   * the PAIR. `{ footnote, no features }` was in this set on the first run and
+   * reported as a control failure — wrongly: a footnote with nothing below it
+   * MUST NOT gain a rule, so that shape belongs in the unit tests as a design
+   * case (`a footnote with NO features draws no dangling boundary`), not here
+   * as a fixture required to differ. A control that demands a change the design
+   * forbids reports a defect in itself.
+   */
   footnote: {
-    'footnote alone':          { title: 'x', price: '1', footnote: '* ยังไม่รวม VAT 7%' },
-    'footnote above features': { title: 'x', price: '1', footnote: '* ยังไม่รวม VAT 7%', features: ['ก', 'ข'] },
+    'footnote above one feature':  { title: 'x', price: '1', footnote: '* ยังไม่รวม VAT 7%', features: ['ก'] },
+    'footnote above two features': { title: 'x', price: '1', footnote: '* ยังไม่รวม VAT 7%', features: ['ก', 'ข'] },
   },
   none: {
     'cardStyle promo': { content: { title: 'x', price: '1' }, style: { cardStyle: 'promo' } },
@@ -120,7 +147,7 @@ writeFileSync(BASELINE, execFileSync('git', ['show', `${BASE_REF}:${TARGET}`], {
 const report = { baseRef: BASE_REF, fieldUnderTest: FIELD };
 try {
   const { PriceCardSection: Now } = await import('@/components/pageBuilder/sections/price_card');
-  const { PriceCardSection: Then } = await import('@/components/pageBuilder/sections/_baseline_price_card');
+  const { PriceCardSection: Then } = await import('@/_baseline_price_card.generated.jsx');
   const draw = (C, content, style) => renderToStaticMarkup(C({ content, style }));
 
   report['── THE WALK, AND ITS THREE CONTROLS ──'] = '';
