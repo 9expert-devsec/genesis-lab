@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
-import { ArticleCard } from '@/components/articles/ArticleCard';
+import { BlogCard } from '@/app/_components/home/BlogSection';
+import { toBlogCardModel } from '@/lib/articleCardModel';
 
 /**
  * Articles written about one program, at the foot of the program page.
@@ -12,30 +13,23 @@ import { ArticleCard } from '@/components/articles/ArticleCard';
  * Fetched server-side by the route and handed down as a prop, the same flow
  * `faqs` and `onlineCourses` use.
  *
- * ── THE CARD IS THE /articles CARD, NOT A LOOKALIKE ────────────────────────
+ * ── THE CARD IS THE LANDING PAGE'S CARD, AND SO IS THE GRID ───────────────
  *
- * `ArticleCard` was extracted from ArticlesPageClient for this section (the
- * commit before this one) and moved byte-for-byte, so a reader arriving here
- * from /articles sees the same card rather than something that resembles it.
- * The alternative measured at audit time — BlogCard plus a mapper — differs in
- * ways that are not cosmetic: BlogCard is a single `<a>` wrapping everything
- * where this is an `<article>` with three separate links, it has no `h-full`
- * so cards in a grid do not share a height, it carries no pin badge and no
- * "อ่านเพิ่มเติม" affordance, and it has no no-cover fallback at all.
+ * This rendered `ArticleCard` (the /articles card) in a 3-column grid, which
+ * made its cards visibly larger than the landing page's: same 1200px
+ * container, but (1200 - 48) / 3 = 384px per card against the landing's
+ * (1200 - 48) / 4 = 288px. A third wider, and taller in proportion.
  *
- * ── WHY THREE COLUMNS AND NOT THE FOUR THE SECTION ABOVE USES ─────────────
+ * Both halves of that gap are closed by reusing what the landing section
+ * already does rather than by tuning classes to look close: `BlogCard`, in
+ * `BlogCard`'s grid literal. Matching only the grid would have been worse than
+ * not matching — `ArticleCard` passes `cap={3}` to SkillChips, measured for
+ * 384px, and the landing card drops to `cap={2}` precisely because a third
+ * chip wraps at 288px. Same card, same cap, no second measurement to keep.
  *
- * This is the one place this section deliberately departs from the online-
- * courses section, and it is the card's measurement that decides it, not
- * taste. `ArticleCard` passes `cap={3}` to SkillChips, and the note at that
- * call site records why: 3 columns at gap-6 inside max-w-[1200px] gives
- * (1200 - 48) / 3 = 384px per card, "which is the width three chips need". The
- * landing card drops to `cap={2}` precisely because its 4-column grid is 288px
- * — 25% narrower — and a third chip wraps.
- *
- * So rendering this card four-up would reproduce the defect that measurement
- * was taken to avoid. Three columns keeps the card at the width it was tuned
- * for, and 6 items is exactly two full rows.
+ * BlogCard takes a mapped shape rather than an Article, so the mapping lives in
+ * lib/articleCardModel — see that module for why BlogSection's own inline copy
+ * was left alone.
  *
  * ── EMPTY MEANS INVISIBLE ─────────────────────────────────────────────────
  *
@@ -103,15 +97,23 @@ export function ProgramArticlesSection({
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 items-start">
-        {articles.map((a) => (
-          <ArticleCard
-            key={a._id ?? a.slug}
-            article={a}
-            programNames={programNames}
-            skillNames={skillNames}
-          />
-        ))}
+      {/*
+        THE GRID LITERAL IS THE LANDING SECTION'S, copied deliberately rather
+        than approximated: BlogSection.jsx:84. Same container width above, same
+        columns, same gap — so a card here is the same 288px it is there.
+      */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {articles.map((a) => {
+          const blog = toBlogCardModel(a);
+          return (
+            <BlogCard
+              key={blog.id}
+              blog={blog}
+              programNames={programNames}
+              skillNames={skillNames}
+            />
+          );
+        })}
       </div>
     </section>
   );

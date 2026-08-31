@@ -10,6 +10,7 @@ import {
   PROGRAM_ARTICLE_LIMIT,
   toFieldList,
 } from '@/lib/articleListFields';
+import { ARTICLE_COVER_FALLBACK } from '@/lib/articleCardModel';
 
 /**
  * The program page's related-articles section.
@@ -181,52 +182,55 @@ const roundTrip = (doc) => JSON.parse(JSON.stringify(doc));
 const project = (doc, fields) =>
   Object.fromEntries(Object.entries(doc).filter(([k]) => fields.includes(k)));
 
-const PINNED = article(1, { isPinnedOnArticlePage: true, showPinBadge: true });
-const hasBadge = (html) => dom(html).querySelectorAll('svg.lucide-pin, .absolute.right-3.top-3').length > 0;
+const ROW = article(1);
 
-test('the pin badge renders under the FULL projection', () => {
-  const row = roundTrip(project(PINNED, toFieldList(PROGRAM_ARTICLE_CARD_FIELDS)));
-  assert.ok(hasBadge(render({ articles: [row] })), 'badge present with the shipped select');
+/**
+ * The first CARD's cover.
+ *
+ * Scoped to the grid, not `doc.querySelector('img')`: the heading row carries
+ * the program icon, so an unscoped query returns that instead and the
+ * assertions compare the icon against the cover — which is exactly what
+ * happened on the first run of these two tests.
+ */
+const coverOf = (doc) =>
+  doc.querySelector('section > div:nth-of-type(2) img')?.getAttribute('src') ?? '';
+
+test('the cover renders from coverUrl under the FULL projection', () => {
+  const row = roundTrip(project(ROW, toFieldList(PROGRAM_ARTICLE_CARD_FIELDS)));
+  assert.equal(coverOf(dom(render({ articles: [row] }))), ROW.coverUrl);
 });
 
-test('CONTROL: dropping isPinnedOnArticlePage from the select DELETES the badge — silently', () => {
-  const fields = toFieldList(PROGRAM_ARTICLE_CARD_FIELDS).filter(
-    (f) => f !== 'isPinnedOnArticlePage'
-  );
-  const row = roundTrip(project(PINNED, fields));
-  assert.equal(
-    'isPinnedOnArticlePage' in row, false,
-    'the round trip drops the key entirely — it does not arrive as undefined'
-  );
-  const html = render({ articles: [row] });
-  assert.equal(hasBadge(html), false, 'the badge is gone');
-  assert.match(html, />บทความที่ 1</, 'and nothing else broke — which is why it is silent');
+test('CONTROL: dropping coverUrl from the select silently swaps EVERY cover for the stand-in', () => {
+  /*
+   * The projection failure mode, and it is silent: the read path .lean()s then
+   * JSON-round-trips, so an omitted field does not arrive as undefined — it
+   * does not arrive at all. `toBlogCardModel` then substitutes the fallback
+   * for every row and the section renders a wall of identical placeholder art,
+   * with nothing thrown and nothing logged.
+   */
+  const fields = toFieldList(PROGRAM_ARTICLE_CARD_FIELDS).filter((f) => f !== 'coverUrl');
+  const row = roundTrip(project(ROW, fields));
+  assert.equal('coverUrl' in row, false, 'the round trip drops the key entirely');
+  const src = coverOf(dom(render({ articles: [row] })));
+  assert.equal(src, ARTICLE_COVER_FALLBACK, 'the stand-in, not the real cover');
+  assert.notEqual(src, ROW.coverUrl);
 });
 
-test('CONTROL: dropping showPinBadge does NOT delete the badge — the two fields differ, and the select must carry both anyway', () => {
-  // shouldShowPinBadge treats an ABSENT showPinBadge as ON, so this field only
-  // matters for the row that switches the glyph OFF. Asserted so the pair is
-  // understood rather than assumed symmetric.
-  const fields = toFieldList(PROGRAM_ARTICLE_CARD_FIELDS).filter((f) => f !== 'showPinBadge');
-  const kept = roundTrip(project(PINNED, fields));
-  assert.ok(hasBadge(render({ articles: [kept] })), 'absent showPinBadge still shows the badge');
-
-  const suppressed = article(2, { isPinnedOnArticlePage: true, showPinBadge: false });
-  const withField = roundTrip(project(suppressed, toFieldList(PROGRAM_ARTICLE_CARD_FIELDS)));
-  assert.equal(hasBadge(render({ articles: [withField] })), false, 'false suppresses it');
-  const withoutField = roundTrip(project(suppressed, fields));
-  assert.ok(
-    hasBadge(render({ articles: [withoutField] })),
-    'dropped from the select, a suppressed badge comes BACK — the field is load-bearing'
-  );
+test('the projection carries no field the card cannot read', () => {
+  // The two pin fields left with ArticleCard: BlogCard draws no pin badge, so
+  // carrying them would be cargo the next reader has to disprove.
+  const fields = toFieldList(PROGRAM_ARTICLE_CARD_FIELDS);
+  for (const dead of ['isPinnedOnArticlePage', 'showPinBadge']) {
+    assert.equal(fields.includes(dead), false, `${dead} is no longer read by this section`);
+  }
 });
 
 test('every field the card reads survives the projection', () => {
-  const row = roundTrip(project(PINNED, toFieldList(PROGRAM_ARTICLE_CARD_FIELDS)));
+  const row = roundTrip(project(ROW, toFieldList(PROGRAM_ARTICLE_CARD_FIELDS)));
   const doc = dom(render({ articles: [row] }));
   assert.match(doc.body.innerHTML, />บทความที่ 1</, 'title');
   assert.ok(doc.body.textContent.includes('เนื้อหาย่อ 1'), 'excerpt');
-  assert.ok(doc.querySelector(`img[src="${PINNED.coverUrl}"]`), 'coverUrl');
+  assert.ok(doc.querySelector(`img[src="${ROW.coverUrl}"]`), 'coverUrl');
   assert.ok(doc.body.textContent.includes('Power BI'), 'programs resolved through the name map');
   assert.ok(doc.body.textContent.includes('Business'), 'skills resolved through the name map');
   assert.ok(
@@ -237,23 +241,44 @@ test('every field the card reads survives the projection', () => {
 
 // ── it is the /articles card, and the grid it was measured for ─────────────
 
-test('it renders the extracted ArticleCard, not a lookalike', () => {
+test('it renders the LANDING PAGE card, not the /articles one and not a fork', () => {
   assert.match(
     scrubbed(),
-    /import \{ ArticleCard \} from '@\/components\/articles\/ArticleCard'/
+    /import \{ BlogCard \} from '@\/app\/_components\/home\/BlogSection'/,
+    'the same export the landing section renders'
   );
-  assert.ok(!/BlogCard/.test(scrubbed()), 'not the landing card');
-  assert.ok(dom(render()).querySelector('article'), 'the card renders its <article>');
+  assert.ok(!/ArticleCard/.test(scrubbed()), 'the /articles card is no longer used here');
+  const doc = dom(render());
+  // BlogCard's root is a <Link>; ArticleCard's was an <article> with three
+  // links inside it. Asserting the ROOT distinguishes them without matching
+  // classes that either card could carry.
+  assert.equal(doc.querySelector('section > div:nth-of-type(2) > *').tagName, 'A');
+  assert.equal(doc.querySelectorAll('article').length, 0, 'no <article> root');
 });
 
-test('THREE columns, because the card passes cap={3} to SkillChips and that was measured at 384px', () => {
+test('FOUR columns at xl, the landing grid literal — so a card is the same 288px', () => {
+  /*
+   * This was three columns, which is what made the cards visibly bigger: same
+   * 1200px container, (1200-48)/3 = 384px against the landing's
+   * (1200-48)/4 = 288px.
+   *
+   * The literal is compared against BlogSection's OWN grid rather than spelled
+   * out twice — a hardcoded copy here would pass while the two drifted.
+   */
   const grid = dom(render()).querySelector('section > div:nth-of-type(2)');
   const cls = grid.getAttribute('class');
-  assert.match(cls, /lg:grid-cols-3/);
-  assert.ok(!/grid-cols-4/.test(cls), `four-up would wrap the third chip: ${cls}`);
-  // And the premise: the card really does pass 3.
-  const card = readFileSync('src/components/articles/ArticleCard.jsx', 'utf8');
-  assert.match(card, /<SkillChips ids=\{article\.skills\} names=\{skillNames\} cap=\{3\} \/>/);
+  const landing = readFileSync('src/app/_components/home/BlogSection.jsx', 'utf8');
+  const landingGrid = landing.match(/className="(grid grid-cols-1[^"]*)"/)[1];
+  assert.equal(cls, landingGrid, 'the program grid IS the landing grid');
+  assert.match(cls, /xl:grid-cols-4/);
+  assert.match(cls, /gap-4/);
+});
+
+test('CONTROL: the landing grid really is four-up at xl — so the match above is not to an empty string', () => {
+  const landing = readFileSync('src/app/_components/home/BlogSection.jsx', 'utf8');
+  const m = landing.match(/className="(grid grid-cols-1[^"]*)"/);
+  assert.ok(m, 'the landing grid literal was found');
+  assert.match(m[1], /xl:grid-cols-4/);
 });
 
 test('the heading follows the course grid, not the FAQ', () => {

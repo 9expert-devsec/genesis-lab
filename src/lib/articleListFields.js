@@ -123,52 +123,39 @@ export function toFieldList(spec) {
 /**
  * The projection for the PROGRAM PAGE's related-articles section.
  *
- * ── DERIVED FROM WHAT THE CARD READS, NOT FROM WHAT AN `article.X` SCAN SEES ─
+ * ── DERIVED FROM WHAT THE CARD READS, AND THE CARD CHANGED ─────────────────
  *
- * The section renders `components/articles/ArticleCard`, so this set is that
- * component's field reads and nothing else. Six of the eight are visible as
- * literal `article.<field>` expressions in its markup:
+ * The section renders `BlogCard` — the landing page's card — through
+ * `lib/articleCardModel`, so this set is what that mapping reads and nothing
+ * else:
  *
- *   slug excerpt title coverUrl programs skills
+ *   _id slug title excerpt coverUrl programs skills
  *
- * THE OTHER TWO ARE THE WHOLE REASON THIS CONSTANT EXISTS. The card does not
- * read them directly — it calls `shouldShowPinBadge(article)`, and the helper
- * reads them:
+ * IT USED TO CARRY TWO MORE. When the section rendered /articles' `ArticleCard`
+ * it also needed `isPinnedOnArticlePage` and `showPinBadge`, because that card
+ * calls `shouldShowPinBadge(article)` and the HELPER reads them — invisible to
+ * a projection built by grepping the card for `article.`. `BlogCard` draws no
+ * pin badge at all (neither does the landing page), so both fields are now
+ * dead here and are removed rather than left as cargo. The reasoning is kept
+ * because it still applies to PUBLIC_LIST_FIELDS above, which has the same gap
+ * and the same warning.
  *
- *   isPinnedOnArticlePage   showPinBadge
+ * ── THE FIELD THAT IS NOW THE LOAD-BEARING ONE ────────────────────────────
  *
- * A projection built by grepping the card for `article.` therefore misses both,
- * and the failure is silent in a specific way: `getArticles` runs `.lean()` and
- * then a JSON round-trip that DROPS undefined keys, so the omitted field does
- * not arrive as `undefined` — it does not arrive at all. `shouldShowPinBadge`
- * then evaluates `article?.isPinnedOnArticlePage === true` as false for every
- * row and the pin badge disappears from the section with nothing thrown and
- * nothing logged. That is the same gap PUBLIC_LIST_FIELDS is documented as
- * having above, and it is why this constant is a second one rather than a
- * reuse of it — the note there says to add those two fields BEFORE pointing a
- * public list at it, and this list is what that would have produced.
+ * `coverUrl`. `getArticles` runs `.lean()` and then a JSON round-trip that
+ * DROPS undefined keys, so an omitted field does not arrive empty — it does not
+ * arrive. `toBlogCardModel` would then substitute the stand-in cover for every
+ * row, and the section would render a wall of identical placeholder art with
+ * nothing thrown and nothing logged. Pinned by a test that drops it.
  *
  * `_id` is listed rather than assumed: Mongo returns it by default, but the
- * section uses it as the React key, so it is a field this surface depends on
+ * mapping uses it as the React key, so it is a field this surface depends on
  * and a reader should not have to know Mongo's default to see that.
  *
  * NOT LISTED, deliberately: `pinOrder` and `sortKey`. They order the result and
  * the sort runs in the database, so nothing renders them.
  */
 export const PROGRAM_ARTICLE_CARD_FIELDS =
-  '_id slug title excerpt coverUrl programs skills isPinnedOnArticlePage showPinBadge';
+  '_id slug title excerpt coverUrl programs skills';
 
-/**
- * How many related articles the program page shows.
- *
- * ONE CONSTANT, because ProgramPageClient has TWO route mounts and a cap that
- * disagreed between them would be invisible: both pages would render, just with
- * different numbers of cards, and only someone comparing the two would notice.
- * The same reasoning the class guard in test/fs/programSectionPropsThreading
- * applies to the props applies to their values.
- *
- * SIX is two full rows at the section's `lg:grid-cols-3`, which is itself set
- * by the card's measured chip cap rather than chosen — see the note in
- * components/program/ProgramArticlesSection.
- */
 export const PROGRAM_ARTICLE_LIMIT = 6;
