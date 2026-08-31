@@ -1,6 +1,8 @@
 'use client';
 
+import { useRef, useState } from 'react';
 import Image from 'next/image';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
@@ -43,11 +45,35 @@ export function ProgramPageClient({
   programNames = {},
   skillNames = {},
 }) {
-  const roadmapUrl =
-    program?.program_roadmap_url ??
-    program?.programroadmapurl ??
-    program?.roadmap_url ??
-    null;
+  /**
+   * ONE FIELD, NOT THREE.
+   *
+   * This used to fall through `programroadmapurl` and `roadmap_url` as well,
+   * under a comment saying the roadmap "isn't part of the verified /programs
+   * shape" — a guess, written before anyone looked. Measured 2026-08-31 across
+   * all 27 programs: `program_roadmap_url` is present on 27/27 and populated on
+   * 14; the other two spellings are present on ZERO rows and have never fired.
+   *
+   * They are removed rather than left as insurance, because that is what they
+   * actually were: a false assurance about the upstream shape. A reader seeing
+   * three candidates reasonably concludes the API is inconsistent about this
+   * field. It is not.
+   */
+  const roadmapUrl = program?.program_roadmap_url ?? null;
+
+  /**
+   * The lightbox is opened by state and closed by the shared component.
+   *
+   * `roadmapButtonRef` is handed to ImageLightbox as `image.trigger` so focus
+   * returns to the button rather than the top of the document — the same
+   * contract ArticleDetailClient uses, where it passes the clicked <img>.
+   *
+   * THE LIGHTBOX SHOWS THE SAME URL AS THE THUMBNAIL. No Cloudinary transform
+   * is derived for it: the source is already 5266px wide, and a derived URL
+   * would be a second spelling of the asset that nothing guards.
+   */
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const roadmapButtonRef = useRef(null);
 
   const description =
     config?.metaDescription?.trim() ||
@@ -102,17 +128,47 @@ export function ProgramPageClient({
             )}
           </div>
 
+          {/*
+            THE FRAME FOLLOWS THE IMAGE — no fixed ratio, and never a crop.
+
+            This was `relative aspect-video` with a `fill` <Image>. Measured
+            2026-08-31: all 14 roadmaps are 5266x3724 (ISO-216 landscape,
+            ratio 1.414), so inside a 16:9 box `object-contain` left EXACTLY
+            20% of the white plate as empty letterbox bars — on every one of
+            them, min 20%, median 20%, max 20%.
+
+            `object-cover` would fill that space and is not an option here: a
+            roadmap carries text at its edges, so cropping loses content
+            rather than framing. The fix is to drop the fixed ratio instead,
+            which is the same move CourseRoadmap.jsx already made for the same
+            reason ("the container no longer forces a 16:9 box — roadmaps are
+            wide"), using the repo's standard `h-auto w-full` sizing.
+
+            The hero grid is `items-center`, so the column has no height to
+            satisfy and simply reflows to whatever the image is.
+          */}
           {roadmapUrl && (
-            <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-white shadow-9e-md">
+            <button
+              ref={roadmapButtonRef}
+              type="button"
+              onClick={() => setLightboxOpen(true)}
+              aria-label={`ดูผังการเรียนรู้ ${program?.program_name ?? ''} แบบเต็มจอ`}
+              className="group block w-full cursor-zoom-in overflow-hidden rounded-2xl bg-white shadow-9e-md transition-shadow duration-9e-micro ease-9e hover:shadow-9e-lg"
+            >
               <Image
                 src={roadmapUrl}
                 alt={`${program?.program_name ?? ''} Roadmap`}
-                fill
+                // Seeds an aspect ratio so the space is reserved before load;
+                // the browser uses the image's true intrinsic ratio once it
+                // arrives. Do NOT "correct" these to match a differently sized
+                // roadmap — they are a placeholder, not a constraint.
+                width={5266}
+                height={3724}
                 sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-contain"
+                className="h-auto w-full object-contain"
                 unoptimized
               />
-            </div>
+            </button>
           )}
         </div>
       </section>
@@ -175,6 +231,29 @@ export function ProgramPageClient({
         program={program}
         programNames={programNames}
         skillNames={skillNames}
+      />
+
+      {/*
+        THE LIGHTBOX, mounted unconditionally and gated on its own `image`.
+
+        It returns null when `image` is falsy, which is also how it decides not
+        to lock body scroll — so a program with no roadmap mounts a component
+        that renders nothing and touches nothing. `plate` is ON because a
+        roadmap is a light-background diagram, often a transparent PNG, which
+        would otherwise bleed into the dark backdrop.
+      */}
+      <ImageLightbox
+        image={
+          lightboxOpen && roadmapUrl
+            ? {
+                src: roadmapUrl,
+                alt: `${program?.program_name ?? ''} Roadmap`,
+                trigger: roadmapButtonRef.current,
+              }
+            : null
+        }
+        onClose={() => setLightboxOpen(false)}
+        plate
       />
     </main>
   );
