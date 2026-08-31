@@ -139,9 +139,9 @@ export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
           through the merge.
         */}
         <div className="mb-2 flex flex-wrap gap-1">
-          <span className="rounded-full border border-9e-action/30 bg-9e-action/5 px-2 py-0.5 text-xs font-medium text-9e-action dark:border-9e-air/30 dark:bg-9e-air/10 dark:text-9e-air">
+          {/* <span className="rounded-full border border-9e-action/30 bg-9e-action/5 px-2 py-0.5 text-xs font-medium text-9e-action dark:border-9e-air/30 dark:bg-9e-air/10 dark:text-9e-air">
             e-Learning
-          </span>
+          </span> */}
           {skillLinks.map(({ skill: s, href }) =>
             href ? (
               <Link
