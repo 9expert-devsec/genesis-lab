@@ -25,6 +25,32 @@ times.
 
 ---
 
+> ## STATUS — round 73 superseded the numbers below
+>
+> Round 73 halved the shell inset on mobile (`px-4` → `px-2 md:px-4`), so §B's
+> table is the BEFORE column of that change and no longer describes what ships.
+> Re-measured at 390px: top level 374px, one level of any container 358px, the
+> author's case 273px, depth 4 257px. Desktop is unchanged at every nesting.
+>
+> Two corrections this document should carry, both found while building it:
+>
+> * **§F's reference number was already met at top level.** The builder's inset
+>   was `px-4` = **16px a side**, which is exactly what the hand-built pages use.
+>   The excess was never the top-level number; it was always the compounding.
+>   Round 73 therefore goes BELOW the reference at top level (8px a side) as the
+>   price of a uniform per-level rule.
+> * **Step 2 as written cannot be built.** It proposed moving the inset to the
+>   page shell so it applies once. `editor/CanvasPanel` renders `SectionRenderer`
+>   DIRECTLY and never through `PageBuilderView`, so an inset living on the shell
+>   would vanish in the canvas and the two would disagree — which §E measured as
+>   agreeing and called more important than the padding itself. Applying the
+>   inset once therefore needs a depth-aware mechanism, and §I already refused
+>   that as a layout an author cannot predict. **Step 2 is closed as
+>   unbuildable in the form proposed**; round 73's per-level halving is what
+>   shipped instead.
+
+---
+
 ## A. The inventory
 
 Read off the DOM at 390px rather than off the source, so nothing that is

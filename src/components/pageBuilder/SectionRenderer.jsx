@@ -363,6 +363,36 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
   const outerStyle = { ...accentVarsFor(style), ...backgroundStyleFor(settings) };
   const hasOuterStyle = Object.keys(outerStyle).length > 0;
 
+  /**
+   * ── ROUND 73: THE MOBILE SIDE INSET IS HALVED, AND NOTHING ELSE MOVES ────
+   * `px-4` (16px a side) became `px-2 md:px-4` (8px below 768px, 16px from it).
+   * docs/mobile-padding.md §D named this class as the SINGLE source of the
+   * per-level compounding: every section renders through this div, nested ones
+   * included, so the inset is paid once per level. Measured at 390px, the
+   * author's three-level case spent 128 of its 181 lost pixels here.
+   *
+   * ── md: BECAUSE IT IS THE AUTHOR'S OWN TABLET BUTTON ────────────────────
+   * 768px is `VIEWPORT_WIDTH.tablet` in editor/CanvasPanel, so the two sizes
+   * land on two of the three buttons the author already has and no third
+   * behaviour is invented. At the tablet button they see the desktop inset;
+   * at the mobile button, the reduced one.
+   *
+   * ── WHAT THIS IS NOT ────────────────────────────────────────────────────
+   * It is NOT the doc's step 2. That step proposed moving the inset to the page
+   * shell so it applies ONCE, and it cannot be done that way: editor/CanvasPanel
+   * renders SectionRenderer DIRECTLY and never through PageBuilderView, so an
+   * inset that lived on the shell would vanish in the canvas and the two would
+   * disagree — which round 72 §E measured as agreeing and called more important
+   * than the padding itself. A per-level halving keeps them identical because it
+   * is the same component in both.
+   *
+   * The cost, stated: at TOP level this is now 8px a side, where round 72 §F
+   * measured the hand-built reference pages at 16px. Top level was already at
+   * the reference; the excess was always compounding, and a uniform per-level
+   * rule cannot reduce the deep case without also reducing the shallow one.
+   * The alternative — varying the inset by depth — is what §I refused as a
+   * layout an author cannot predict from the panel.
+   */
   return (
     <section
       id={domId}
@@ -371,7 +401,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
       style={hasOuterStyle ? outerStyle : undefined}
     >
       {scopedCss && <style dangerouslySetInnerHTML={{ __html: scopedCss }} />}
-      <div className={cn('mx-auto px-4', containerWidthClass(settings.containerWidth), fillHeight && 'h-full')}>
+      <div className={cn('mx-auto px-2 md:px-4', containerWidthClass(settings.containerWidth), fillHeight && 'h-full')}>
         {inner}
         {path != null && sectionRendersEmpty(section) && <EmptyInEditor type={section.type} />}
         {cleanHtml && (

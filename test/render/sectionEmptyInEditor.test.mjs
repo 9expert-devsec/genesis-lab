@@ -46,8 +46,17 @@ const EMPTY_PRICE = {
  * satisfy “contains the wrapper”, and this is the one assertion that cannot.
  *
  * Measured against the pre-change renderer and byte-identical to it.
+ *
+ * ── AMENDED BY ROUND 73, AND WHAT THAT DID NOT CHANGE ────────────────────
+ * `px-4` became `px-2 md:px-4`: the section wrapper's side inset is halved
+ * below 768px and unchanged from it (docs/mobile-padding.md, round 73). The
+ * RULE these two assertions exist for is untouched — no editor marker may
+ * reach the public path — and it is still asserted on the EXACT bytes, which
+ * is the part with teeth. Only the wrapper's class moved, and it moved for a
+ * reason recorded elsewhere; that is why this is an amendment and not a
+ * pinned expectation edited to agree with whatever the code now does.
  */
-const BARE = '<section class="pt-8 pb-8"><div class="mx-auto px-4 max-w-[1200px]"></div></section>';
+const BARE = '<section class="pt-8 pb-8"><div class="mx-auto px-2 md:px-4 max-w-[1200px]"></div></section>';
 
 const draw = (section, path) => renderToStaticMarkup(
   createElement(SectionRenderer, { section, depth: 0, path })
