@@ -145,7 +145,7 @@ function BlogSlider({ blogs, programNames, skillNames }) {
         </button>
       )}
 
-      <div className="overflow-hidden pb-4">
+      <div className="overflow-hidden p-1">
         {/* The STEP still comes from JS because it is multiplied by `index`,
             which is state. Safe: index is 0 on the server AND on the client's
             first render, and translateX(0) is the same string whatever perPage
@@ -260,7 +260,7 @@ export function BlogCard({ blog, programNames = {}, skillNames = {} }) {
   return (
     <Link
       href={blog.slug}
-      className="group block overflow-hidden rounded-2xl bg-white shadow-sm transition-shadow hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
+      className="group block overflow-hidden rounded-2xl bg-9e-ice shadow-sm transition-shadow ring-1 ring-9e-slate-lt-300 hover:shadow-md dark:bg-9e-card dark:ring-1 dark:ring-[#1e3a5f]"
     >
       <div className="relative aspect-video w-full overflow-hidden bg-9e-ice dark:bg-9e-navy">
         <Image

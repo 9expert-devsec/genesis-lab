@@ -324,7 +324,7 @@ function ReviewCard({ review, elevated = false }) {
         'flex flex-col rounded-2xl p-5 transition-all duration-9e-micro ease-9e',
         elevated
           ? 'scale-[1.02] bg-white shadow-9e-md dark:bg-9e-navy dark:ring-1 dark:ring-[#1e3a5f]'
-          : 'bg-gray-50 opacity-90 dark:bg-9e-navy dark:ring-1 dark:ring-[#1e3a5f]/60'
+          : 'bg-white opacity-90 dark:bg-9e-navy dark:ring-1 dark:ring-[#1e3a5f]/60'
       )}
     >
       <div className="flex items-center gap-3">
