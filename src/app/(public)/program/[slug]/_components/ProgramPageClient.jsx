@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
+import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
 
 /**
  * Public program detail page.
@@ -24,6 +25,14 @@ export function ProgramPageClient({
   faqs = [],
   currentYear,
   skillSlugs = {},
+  /**
+   * Online courses for this program, fetched server-side by the route — the
+   * same flow `faqs` uses. Defaults to `[]` so a route that has not been
+   * updated renders the page without the section rather than throwing; the
+   * class guard in test/fs/programSectionPropsThreading is what makes sure no
+   * route stays in that state.
+   */
+  onlineCourses = [],
 }) {
   const roadmapUrl =
     program?.program_roadmap_url ??
@@ -140,6 +149,13 @@ export function ProgramPageClient({
           </div>
         )}
       </section>
+
+      {/* ── Online courses ────────────────────────────────────────── */}
+      <ProgramOnlineCoursesSection
+        courses={onlineCourses}
+        program={program}
+        skillSlugs={skillSlugs}
+      />
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />

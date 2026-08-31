@@ -49,6 +49,7 @@ import {
 } from '@/lib/resolvePageSlug';
 import { chipHref, programHref, skillHref } from '@/lib/utils';
 import { listSkills } from '@/lib/api/skills';
+import { getOnlineCourses } from '@/lib/api/online-courses';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
@@ -183,7 +184,24 @@ async function loadProgram(slug) {
   );
   const courses = await enrichCoursesWithDetails(programCourses);
   const faqs = await getLocalFaqsForCourse('program', programRefId(program)).catch(() => []);
-  return { program, config, courses, earlyBirdMap, faqs, skillSlugs: linkability.skillSlugs };
+  /**
+   * THE SHORT CODE, not `program._id`, and that is a decision rather than a
+   * copy of the line above. The course filter three lines up matches on
+   * `String(program._id)`; ProgramPageConfig.programId and Article.programs
+   * both store `program_id`, so the two new sections speak the short code and
+   * the existing filter is left exactly as it is. Upstream accepts either
+   * spelling (audit 7a98eb3 §2.2), so this is about agreeing with the stores
+   * that have no choice, not about what the API needs.
+   */
+  const programCode = programRefId(program);
+  const onlineCourses = await getOnlineCourses({ program: programCode })
+    .then((r) => r.items ?? [])
+    .catch(() => []);
+  return {
+    program, config, courses, earlyBirdMap, faqs,
+    skillSlugs: linkability.skillSlugs,
+    onlineCourses,
+  };
 }
 
 function courseInSkill(course, skillId) {
@@ -469,6 +487,7 @@ export default async function CatchAllPage({ params, searchParams }) {
           faqs={programData.faqs}
           currentYear={siteCurrentYear()}
           skillSlugs={programData.skillSlugs}
+          onlineCourses={programData.onlineCourses}
         />
       );
     }

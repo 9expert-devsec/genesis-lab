@@ -5,6 +5,7 @@ import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
+import { getOnlineCourses } from '@/lib/api/online-courses';
 import { ProgramPageClient } from './_components/ProgramPageClient';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 
@@ -44,13 +45,25 @@ export default async function ProgramPage({ params }) {
 
   // No custom slug — render inline under /program/<slug>.
   const { program, config } = resolved;
-  const [coursesRes, earlyBirdMap, faqs, linkability] = await Promise.all([
+  const [coursesRes, earlyBirdMap, faqs, linkability, onlineRes] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getLocalFaqsForCourse('program', programRefId(program)).catch(() => []),
     // Server-side, once per render, for the cards' skill capsules. Fails
     // closed to empty maps — a capsule then renders unlinked, never dead.
     getPageLinkability(),
+    /**
+     * Online courses for the section between the course grid and the FAQ.
+     * Filtered upstream by the program SHORT CODE — the same `programRefId`
+     * the FAQ ref uses, and deliberately not the `String(program._id)` the
+     * course filter below uses. See the note in [...slug]/page.jsx's
+     * loadProgram; the divergence is pre-existing and out of scope here.
+     *
+     * Fails closed to `{ items: [] }` for the reason listPublicCourses does:
+     * upstream is a separate service, and a program page that 500s because an
+     * optional section could not load is worse than one without the section.
+     */
+    getOnlineCourses({ program: programRefId(program) }).catch(() => ({ items: [] })),
   ]);
   const programKey = String(program._id);
   const programCourses = (coursesRes.items ?? []).filter(
@@ -67,6 +80,7 @@ export default async function ProgramPage({ params }) {
       faqs={faqs}
       currentYear={siteCurrentYear()}
       skillSlugs={linkability.skillSlugs}
+      onlineCourses={onlineRes.items ?? []}
     />
   );
 }
