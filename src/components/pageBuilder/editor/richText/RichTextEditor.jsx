@@ -1,6 +1,7 @@
 'use client';
 
 import { useEditor as useTiptap, EditorContent } from '@tiptap/react';
+import { toPlainJson } from '@/lib/plainValue';
 import { useCallback, useEffect, useMemo } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code,
@@ -130,7 +131,34 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
           + '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
       },
     },
-    onUpdate: ({ editor: ed }) => onChange(ed.getJSON()),
+    /**
+     * ── ROUND 68: getJSON() IS NOT PLAIN JSON, DESPITE THE NAME ──────────
+     *
+     * ProseMirror builds every node's attributes with `Object.create(null)`,
+     * and `Node.toJSON()` hands that same object straight out — so a document
+     * from `getJSON()` carries NULL-PROTOTYPE `attrs` objects. React's client
+     * encoder refuses one: measured, a null-prototype object encodes as `"$T"`
+     * (a temporary reference) where a plain `{}` encodes normally. The server
+     * then decodes `"$T"` into a Proxy that throws on almost any property, and
+     * the first thing to read it is Mongoose's `isBsonType` — which is why
+     * three rounds chased the word `_bsontype` for a problem that has nothing
+     * to do with MongoDB.
+     *
+     * Only three nodes in this schema declare attributes — heading, image and
+     * orderedList — and a node with none omits the key entirely. That is why
+     * documents of paragraphs and bullet lists saved for months and the first
+     * heading broke it. Measured: 10 stored rich_text documents, ZERO nodes
+     * carrying an `attrs` key.
+     *
+     * `toPlainJson` rewrites the prototype and NOTHING else — no key added or
+     * removed, no value changed, `undefined` preserved (which a JSON round trip
+     * would drop). It is deliberately not in the extension declarations: the
+     * whole generated schema has ZERO non-plain attribute defaults, so no
+     * declaration is wrong — the prototype comes from ProseMirror core, below
+     * every extension. And it is not a content sanitiser; richTextContract.js
+     * owns what a document may contain, and this changes none of it.
+     */
+    onUpdate: ({ editor: ed }) => onChange(toPlainJson(ed.getJSON())),
   });
 
   // The section tree is the source of truth: selecting a different rich_text

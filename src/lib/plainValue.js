@@ -225,3 +225,62 @@ export function unserialisableMessage(hits) {
   return `บันทึกไม่สำเร็จ: ${where} มีค่าที่ส่งข้ามไปยังเซิร์ฟเวอร์ไม่ได้ `
     + `(${first?.kind ?? 'unknown'})${more} — โปรดแจ้งผู้ดูแลระบบพร้อมข้อความนี้`;
 }
+
+/**
+ * ── ROUND 68: THE OTHER HALF — MAKING A VALUE PLAIN ───────────────────────
+ *
+ * Everything above DETECTS. This one FIXES, and it exists because of a defect
+ * whose whole substance is a prototype.
+ *
+ * ProseMirror builds a node's attributes with `Object.create(null)`, and
+ * `Node.toJSON()` passes that same object straight through — so
+ * `editor.getJSON()` returns a document whose `attrs` objects have a NULL
+ * PROTOTYPE. React's client encoder refuses one: measured, a null-prototype
+ * object encodes as `"$T"` where a plain `{}` encodes normally. That `"$T"` is
+ * the temporary reference round 67 chased, and `_bsontype` is merely the first
+ * property Mongoose read on the proxy it decodes into.
+ *
+ * Only three nodes in this editor's schema declare attributes at all — heading
+ * (`level`), image (`src`/`alt`/`title`) and orderedList (`start`/`type`) — and
+ * a node with none omits the key entirely. That is why a document of paragraphs
+ * saved fine for months and the first heading broke it.
+ *
+ * ── WHY HERE AND NOT IN THE EXTENSION DECLARATION ────────────────────────
+ * Because no declaration is wrong. Measured across the whole generated schema:
+ * ZERO attributes have a non-plain default. The null prototype comes from
+ * ProseMirror's own `computeAttrs`, below every extension, so there is nothing
+ * in tiptapExtensions.js or richTextContract.js that could state it away.
+ *
+ * ── AND WHY THIS IS NOT A SECOND AUTHORITY OVER CONTENT ──────────────────
+ * A sanitiser that decided which nodes or attributes a document may contain
+ * WOULD be one, and `richTextContract.js` already holds that job. This decides
+ * nothing: it adds no key, removes no key, changes no value, and preserves
+ * `undefined` (which `JSON.parse(JSON.stringify(x))` would silently drop). It
+ * rewrites one thing — the prototype — so that data ProseMirror produced can
+ * cross a boundary React guards. An object with a prototype it does NOT own is
+ * returned untouched, so it cannot quietly flatten a Date or a class instance
+ * into an object either.
+ *
+ * @param {unknown} value
+ * @param {number} [depth] internal; bounded so a cycle degrades to a
+ *   returned-as-is value instead of a stack overflow. Tiptap JSON has no
+ *   cycles, and a guard that only holds for well-formed input is not a guard.
+ * @returns {unknown} the same data, with plain prototypes throughout.
+ */
+export function toPlainJson(value, depth = 0) {
+  if (value === null || typeof value !== 'object') return value;
+  if (depth > 100) return value;
+  if (Array.isArray(value)) return value.map((item) => toPlainJson(item, depth + 1));
+
+  const proto = Object.getPrototypeOf(value);
+  // Not a plain-shaped object (a Date, a Map, a class instance). Not this
+  // function's business, and rewriting it would be the sanitising this is not.
+  if (proto !== Object.prototype && proto !== null) return value;
+
+  const out = {};
+  // Object.keys, so `undefined` values survive as keys — JSON round-tripping
+  // drops them, and a document that loses a key on save is the failure this is
+  // meant to prevent, not cause.
+  for (const key of Object.keys(value)) out[key] = toPlainJson(value[key], depth + 1);
+  return out;
+}

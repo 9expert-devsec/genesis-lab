@@ -63,39 +63,17 @@ console.log('\n=== §D  React\'s REAL encodeReply — does anything become "$T"?
  * MODULE reference, which a data payload does not contain; if one did, the stub
  * throws by name rather than silently returning something plausible.
  */
-globalThis.__webpack_require__ = Object.assign(
-  function (id) { throw new Error('client module reference in a data payload: ' + id); },
-  { u: () => '', e: () => Promise.resolve(), m: {} },
-);
-globalThis.__webpack_chunk_load__ = () => Promise.resolve();
-
-let encodeReply, createTemporaryReferenceSet;
-{
-  const { createRequire } = await import('node:module');
-  const req = createRequire(import.meta.url);
-  try {
-    ({ encodeReply, createTemporaryReferenceSet } = req(
-      '../node_modules/next/dist/compiled/react-server-dom-webpack/cjs/'
-      + 'react-server-dom-webpack-client.browser.development.js'));
-    console.log('  loaded React own encodeReply out of next');
-  } catch (e) {
-    console.log('  could not load the client encoder: ' + e.message);
-  }
-}
+/**
+ * ROUND 68 extracted this wiring to test/encodeReply.mjs, because a TEST needed
+ * the same encoder and a second copy of it is exactly the drift the repo keeps
+ * being bitten by. Same function, one definition; this script now imports it.
+ */
+const { encodedReply, encodeControlSubjects } = await import('../test/encodeReply.mjs');
 async function encodeAndReport(label, value) {
-  if (!encodeReply) { console.log(`  ${label}: SKIPPED (no encoder)`); return; }
-  const temporaryReferences = createTemporaryReferenceSet();
   try {
-    const body = await encodeReply([value], { temporaryReferences });
-    const text = typeof body === 'string' ? body : await new Response(body).text();
-    const tCount = (text.match(/"\$T"/g) ?? []).length;
+    const { text, temporaryReferences } = encodedReply(value);
     console.log(`  ${label}`);
-    console.log(`     bytes=${text.length}  "$T" temporary references=${tCount}  set size=${temporaryReferences.size}`);
-    if (temporaryReferences.size) {
-      for (const [k, v] of temporaryReferences) {
-        console.log(`       ${k}  ->  ${typeof v} ${v?.name ?? String(v)}`);
-      }
-    }
+    console.log(`     bytes=${text.length}  temporary references=${temporaryReferences}`);
   } catch (err) {
     console.log(`  ${label}: encodeReply THREW: ${err.message}`);
   }
@@ -106,7 +84,14 @@ for (const d of docs) {
   await encodeAndReport(String(d.slug), patch);
 }
 
-console.log('\n=== CONTROL: a planted client function and a symbol DO become "$T" ===');
-await encodeAndReport('planted function', { title: 't', sections: [], cb: () => {} });
-await encodeAndReport('planted symbol', { title: 't', sections: [], s: Symbol('x') });
-await encodeAndReport('plain payload', { title: 't', sections: [{ id: 'a', type: 'rich_text', content: {} }] });
+/**
+ * ROUND 68 moved the controls INTO the child. A function and a symbol cannot
+ * cross a JSON transport — JSON.stringify drops both — so controls sent from
+ * here measured a clean payload and reported 0, which is a dead control wearing
+ * a green tick. They are planted in the encoding process instead, and the list
+ * now includes the null-prototype object round 68 found: ProseMirror's `attrs`.
+ */
+console.log('=== CONTROL: values that cannot serialise DO become "$T" ===');
+for (const [kind, r] of Object.entries(encodeControlSubjects())) {
+  console.log(`  ${kind.padEnd(16)} temporary references=${r.temporaryReferences}  ${r.text}`);
+}

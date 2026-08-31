@@ -109,6 +109,21 @@ try {
   patch.title = 'r67 drive';
   patch.sections = SECTIONS;
 
+  /**
+   * ROUND 68 — the shape that actually failed: a rich_text whose document comes
+   * straight out of `editor.getJSON()` with a HEADING first, so its `attrs` is
+   * the null-prototype object React refuses. Built from the real schema rather
+   * than hand-written, so it carries the real prototype and not a lookalike.
+   */
+  const { getSchema } = await import('@tiptap/core');
+  const { richTextExtensions } = await import('@/components/pageBuilder/editor/richText/tiptapExtensions');
+  const { toPlainJson } = await import('@/lib/plainValue');
+  const schema = getSchema(richTextExtensions());
+  const headingJson = schema.nodes.heading.createAndFill().toJSON();
+  const rawDoc = { type: 'doc', content: [headingJson] };
+  console.log(`   heading attrs prototype from getJSON: ${
+    Object.getPrototypeOf(rawDoc.content[0].attrs) === null ? 'NULL (the bug)' : 'Object.prototype'}`);
+
   console.log('\n§J  drive 1 — an EMPTY-SHAPED page (highlight_grid > rich_text)');
   const r1 = await drive(String(created), patch, before.updatedAt.toISOString());
   console.log('   response body: ' + JSON.stringify(r1));
@@ -117,22 +132,31 @@ try {
   console.log(`\n§K AFTER   draft.savedAt = ${mid.draft?.savedAt?.toISOString?.() ?? mid.draft?.savedAt ?? '(no draft)'}`);
   console.log(`   sections written: ${mid.draft?.sections?.length ?? 0}`);
 
-  console.log('\n§J  drive 2 — the SAME payload with a poisoned value planted');
-  const TAG = Symbol.for('react.temporary.reference');
-  const fake = new Proxy({ $$typeof: TAG }, {
-    get: (t, n) => { if (n === '$$typeof') return t.$$typeof;
-      throw new Error('Cannot access ' + String(n) + ' on the server. You cannot dot into a '
-        + 'temporary client reference from a server component.'); },
-  });
-  const poisonedPatch = JSON.parse(JSON.stringify(patch));
-  poisonedPatch.sections[0].content.children[0].content.doc = fake;
-  const r2 = await drive(String(created), poisonedPatch, mid.updatedAt.toISOString());
+  /**
+   * ── THIS DRIVE CANNOT REPRODUCE THE FAILURE, AND THAT IS THE POINT ──
+   * A null-prototype object is perfectly acceptable to Mongo and to every
+   * step of the action; the defect is created by REACT'S ENCODER, which runs
+   * only in the browser. So drive 2 returns ok:true here and fails in the
+   * real editor, and any harness that claimed otherwise would be lying.
+   * The reproduction lives in test/encodeReply.mjs — React's own function —
+   * and is asserted in test/pure/richTextPlainJson. What THIS drive proves is
+   * the other half: the fixed document stores, and stores its attrs intact.
+   */
+  console.log('\n§J  drive 2 — a rich_text whose doc comes RAW from getJSON (heading first)');
+  const rawPatch = { ...patch, sections: [{ ...SECTIONS[0], content: { children: [
+    { ...SECTIONS[0].content.children[0], content: { doc: rawDoc } }] } }] };
+  const r2 = await drive(String(created), rawPatch, mid.updatedAt.toISOString());
   console.log('   response body: ' + JSON.stringify(r2));
 
+  console.log('\n§J  drive 3 — the SAME document through toPlainJson (the fix)');
+  const fixedPatch = { ...patch, sections: [{ ...SECTIONS[0], content: { children: [
+    { ...SECTIONS[0].content.children[0], content: { doc: toPlainJson(rawDoc) } }] } }] };
+  const mid2 = await pages.findOne({ _id: created });
+  const r3 = await drive(String(created), fixedPatch, mid2.updatedAt.toISOString());
+  console.log('   response body: ' + JSON.stringify(r3));
+
   const after = await pages.findOne({ _id: created });
-  console.log(`\n§K  after the REFUSED save, draft.savedAt is unchanged: `
-    + `${String(after.draft?.savedAt?.toISOString?.() === mid.draft?.savedAt?.toISOString?.())}`);
-  console.log(`   (the refusal did not half-write: sections still ${after.draft?.sections?.length ?? 0})`);
+  console.log(`\n§J/§K  draft.savedAt after the fixed save = ${after.draft?.savedAt?.toISOString?.()}`);
 } finally {
   if (created) {
     await pages.deleteOne({ _id: created });

@@ -20,4 +20,5 @@ export {
   isTemporaryReference,
   unserialisableArguments,
   unserialisableMessage,
+  toPlainJson,
 } from '@/lib/plainValue';
