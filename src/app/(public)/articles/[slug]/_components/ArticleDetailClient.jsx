@@ -6,7 +6,7 @@ import { ArrowRight, ChevronLeft, Clock, User } from 'lucide-react';
 import { ArrowSlider } from '@/components/ui/ArrowSlider';
 import { READING_PROGRESS_ANCHOR_ID } from '@/lib/readingProgress';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
-import { ArticleImageLightbox } from './ArticleImageLightbox';
+import { ImageLightbox } from '@/components/ui/ImageLightbox';
 
 /**
  * Article detail page — client component, owns most of the rendering
@@ -354,7 +354,7 @@ export function ArticleDetailClient({
     <>
       {/* Portalled to <body> from inside the component, so it escapes every
           stacking context on the way down — see the component's docstring. */}
-      <ArticleImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
+      <ImageLightbox image={lightboxImage} onClose={() => setLightboxImage(null)} />
 
       {/* Top thin gradient progress bar — content-relative, hidden
           until the reader has actually started reading the body. */}

@@ -6,12 +6,25 @@ import { X } from 'lucide-react';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
 /**
- * Full-size viewer for an image inside an article body.
+ * Full-size viewer for one image. Shared.
  *
  * WHY IT EXISTS. `.article-content td img` / `th img` are pinned to a 3rem box
  * with `object-fit: contain` so a table of logos has one vertical rhythm
  * (f987a84). That is right for the table and useless for reading the image, so
  * a click opens it at full size.
+ *
+ * ── IT MOVED HERE FROM articles/[slug]/_components, UNCHANGED ───────────────
+ * The program page's roadmap needs the same viewer, and importing across a
+ * route's `_components` folder is the awkwardness already recorded against
+ * OnlineCourseCard. The move was byte-identical — see the commit — and the
+ * `plate` prop below is the only behavioural addition, opt-in so /articles
+ * renders exactly as it did.
+ *
+ * TWO CALLERS NOW, and their needs differ in exactly one way, which is why
+ * `plate` is a prop rather than a new default: an article image is usually a
+ * photo or a screenshot that reads fine on the dark backdrop, while a program
+ * roadmap is a light-background diagram, frequently a transparent PNG, whose
+ * text disappears into `bg-black/80` without something opaque behind it.
  *
  * ── PORTALLED TO <body>, AND IT HAS TO BE ───────────────────────────────────
  * Same reason ChatPanel and the header drawer are, quoting ChatPanel's
@@ -48,8 +61,20 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
  * Motion: a plain CSS transition, so the global
  * `@media (prefers-reduced-motion: reduce)` clamp in globals.css already covers
  * it. Nothing extra is needed and nothing here animates in JS.
+ *
+ * NOT A FOCUS TRAP. Focus is moved in on open and restored on close, which is
+ * what the two callers need; Tab can still walk out of the overlay into the
+ * page behind it. Stated plainly rather than implied, because "focus moves to
+ * the close button" reads like a trap and is not one. Adding a real trap means
+ * a dependency or a hand-rolled ring, and neither was in scope when this moved.
+ *
+ * @param {{src: string, alt?: string, trigger?: HTMLElement}} image
+ * @param {() => void} onClose
+ * @param {boolean} [plate=false] render the image on an opaque white plate.
+ *   OFF by default so the article surface this component grew up on is
+ *   unaffected. On for light-background diagrams — see the note above.
  */
-export function ArticleImageLightbox({ image, onClose }) {
+export function ImageLightbox({ image, onClose, plate = false }) {
   const closeButtonRef = useRef(null);
   const dialogRef = useRef(null);
   // Captured on open so focus can go back to the exact <img> that was clicked,
@@ -115,13 +140,48 @@ export function ArticleImageLightbox({ image, onClose }) {
         <X className="h-6 w-6" />
       </button>
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={image.src}
-        alt={image.alt || ''}
-        onClick={(e) => e.stopPropagation()}
-        className="max-h-full max-w-full cursor-default rounded-lg object-contain shadow-2xl"
-      />
+      {/*
+        THE PLATE IS A WRAPPER ELEMENT, AND IT IS ONLY EMITTED WHEN ASKED FOR.
+
+        `bg-white` on the <img> itself would paint only the image's own box —
+        under `object-contain` that box IS the picture — so a transparent PNG
+        would still show black through its own transparent pixels. The wrapper
+        takes the layout box and the artwork sits on top of it.
+
+        `bg-white` with NO dark: variant, deliberately: the plate exists
+        because the artwork assumes a light background, and that assumption
+        does not change with the viewer's theme. The BACKDROP stays dark in
+        both themes; only what is behind the artwork is forced.
+
+        ── WHY TWO BRANCHES RATHER THAN ONE WRAPPER WITH `contents` ──────────
+        The first draft always emitted the wrapper and gave it `display:
+        contents` when `plate` was false. That renders identically to the eye
+        and is NOT identical in the DOM — it is an extra node on a surface this
+        move promised to leave untouched, and the identity test caught it. So
+        the false branch emits exactly the element that shipped before this
+        prop existed, character for character.
+      */}
+      {plate ? (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg bg-white p-2 shadow-2xl sm:p-4"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={image.src}
+            alt={image.alt || ''}
+            className="max-h-full max-w-full cursor-default object-contain"
+          />
+        </div>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={image.src}
+          alt={image.alt || ''}
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-full max-w-full cursor-default rounded-lg object-contain shadow-2xl"
+        />
+      )}
     </div>,
     document.body
   );
