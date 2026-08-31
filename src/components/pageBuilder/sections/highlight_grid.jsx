@@ -20,6 +20,24 @@ import { columnsClass } from '@/lib/pageBuilder/presets';
  * cannot add — it receives `{child}` already rendered by SectionRenderer.
  * A stretched section then gives SectionRenderer's own `h-full` container a
  * definite height to resolve against, and the card surface fills.
+ *
+ * ── ROUND 73: THE BOX IS TIGHTER ON A PHONE, AND ONLY ON A PHONE ─────────
+ * `p-6` became `p-4 md:p-6` — 16px a side below 768px, 24px from it.
+ * docs/mobile-padding.md §D measured this box as the ONE layer that compounds
+ * beyond the shell inset: every other container costs 32px a level at 390px
+ * and this one cost 80px, because its per-child surface adds 24px a side on
+ * top. It is a CARD SURFACE and not a page margin, which is why it is reduced
+ * rather than removed.
+ *
+ * 768px is VIEWPORT_WIDTH.tablet in editor/CanvasPanel (round 65's rule), the
+ * same breakpoint the shell inset uses, so the two changes switch together
+ * and an author checking the tablet button sees one consistent desktop
+ * layout.
+ *
+ * THE ACCENT RULE IS UNTOUCHED. Round 24 gave this box its left border and
+ * the treatment reads off the border, not the padding: measured at 390px with
+ * one, two and four children, the rule stays 4px and only the gap between it
+ * and the text tightens. Desktop is unchanged.
  */
 export function HighlightGridSection({ layout, children }) {
   const kids = Children.toArray(children);
@@ -29,7 +47,7 @@ export function HighlightGridSection({ layout, children }) {
       {kids.map((child, i) => (
         <div
           key={i}
-          className="grid rounded-9e-lg border border-[var(--surface-border)] border-l-4 border-l-[color:var(--pb-accent-fill)] bg-9e-ice/50 p-6 dark:bg-[#0D1B2A]/40"
+          className="grid rounded-9e-lg border border-[var(--surface-border)] border-l-4 border-l-[color:var(--pb-accent-fill)] bg-9e-ice/50 p-4 md:p-6 dark:bg-[#0D1B2A]/40"
         >
           {child}
         </div>

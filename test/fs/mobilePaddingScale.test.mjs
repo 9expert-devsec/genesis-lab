@@ -33,8 +33,9 @@ import { readSource } from '../sourceScan.mjs';
  */
 
 const RENDERER = 'src/components/pageBuilder/SectionRenderer.jsx';
+const HIGHLIGHT = 'src/components/pageBuilder/sections/highlight_grid.jsx';
 
-const CSS = await compile([{ raw: 'px-2 md:px-4 px-4', extension: 'html' }]);
+const CSS = await compile([{ raw: 'px-2 md:px-4 px-4 p-4 md:p-6 p-6', extension: 'html' }]);
 
 // ── 1. THE SHELL'S INSET ───────────────────────────────────────────────────
 
@@ -85,6 +86,45 @@ test('CONTROL: md: is the author\'s own tablet button, not an invented breakpoin
     + 'author uses to check this — pick the breakpoint that does, or say why not');
   assert.match(CSS, /@media\s*\(min-width:\s*768px\)/,
     'md: does not compile to a 768px min-width in this config');
+});
+
+// ── 2. highlight_grid's BOX ────────────────────────────────────────────────
+
+test('the highlight_grid box carries the mobile padding and the desktop one', () => {
+  const { code } = readSource(HIGHLIGHT);
+  const box = /className="([^"]*border-l-4[^"]*)"/.exec(code);
+  assert.ok(box, 'the per-child box is gone from highlight_grid');
+
+  const pads = box[1].split(/\s+/).filter((c) => /^(?:md:)?p-\d+$/.test(c));
+  assert.deepEqual(pads, ['p-4', 'md:p-6'],
+    'highlight_grid\'s box padding moved. docs/mobile-padding.md §D measured it as the ONLY '
+    + 'layer that compounds beyond the shell inset, at 24px a side before this round.');
+});
+
+test('those compile to 16px on mobile and 24px from md up', () => {
+  assert.deepEqual(declarationsFor(CSS, 'p-4'), ['padding: 1rem']);
+  assert.deepEqual(declarationsFor(CSS, 'md:p-6'), ['padding: 1.5rem']);
+});
+
+test('CONTROL: highlight_grid\'s desktop padding is UNCHANGED from before round 73', () => {
+  assert.deepEqual(declarationsFor(CSS, 'md:p-6'), declarationsFor(CSS, 'p-6'),
+    'the desktop box padding is no longer the 1.5rem that shipped before round 73');
+  assert.notDeepEqual(declarationsFor(CSS, 'p-4'), declarationsFor(CSS, 'p-6'),
+    'mobile and desktop compile to the same padding, so this round changed nothing');
+});
+
+test('the accent rule survives the tighter padding', () => {
+  // §E. The box is `border` + `border-l-4` + an accent colour; reducing the
+  // padding must not have taken any of those with it, or the treatment round 24
+  // added reads as an ordinary card at mobile.
+  const { code } = readSource(HIGHLIGHT);
+  const box = /className="([^"]*border-l-4[^"]*)"/.exec(code)[1];
+  for (const cls of ['border', 'border-l-4', 'border-l-[color:var(--pb-accent-fill)]', 'rounded-9e-lg']) {
+    assert.ok(box.split(/\s+/).includes(cls), `the box lost ${cls}`);
+  }
+  // …and it must still stretch its child, which is round 70's half of this box.
+  assert.ok(box.split(/\s+/).includes('grid'),
+    'the box stopped being a single-cell grid — round 70 made it one so its child fills the row');
 });
 
 // ── 3. WHAT THIS ROUND DID NOT TOUCH (§F) ──────────────────────────────────
