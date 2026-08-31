@@ -812,11 +812,39 @@ export function CourseForm({
 
         <Field
           label="คำอธิบายสั้น"
-          hint="สูงสุด 200 ตัวอักษร — ใช้สำหรับ card / SEO"
+          hint="สูงสุด 800 ตัวอักษร — ใช้สำหรับ card / SEO และเป็นเนื้อหาบนหน้าคอร์ส"
         >
+          {/*
+            800, RAISED FROM 200, AND THE OLD NUMBER WAS THE ODD ONE OUT.
+
+            The cap was genesis-side only: MSDB stores this field with no such
+            limit, and measured 2026-08-31 across all 80 courses the stored
+            values run 131 to 686 characters with a median of 336 — SEVENTY of
+            the 80 already exceed 200. So the input was refusing copy that the
+            data it edits is full of, and `maxLength` truncates a paste
+            SILENTLY (the defect lib/articles/excerptStatus records): an admin
+            pasting a 400-character teaser back into this box lost half of it
+            with no message.
+
+            800 is above the measured maximum with room, rather than unbounded —
+            the field still feeds a card and an SEO snippet, so it should not
+            become a body field by accident.
+
+            NOT CHANGED, deliberately: the two DISPLAY clamps downstream. The
+            meta description takes slice(0, 160) ([...slug]/page.jsx) and the
+            JSON-LD description takes slice(0, 300) (buildCourseJsonLd). Those
+            are about what those surfaces can show, not about what may be
+            stored, and they already clamp the 70 courses that exceed 200
+            today. A cap on input and a clamp on display are different
+            concerns.
+
+            There is no zod schema and no server-side validator for this field —
+            checked, not assumed — so this attribute was the only limit and
+            there is no second place to move.
+          */}
           <textarea
             rows={2}
-            maxLength={200}
+            maxLength={800}
             name="course_teaser"
             defaultValue={initial?.course_teaser ?? ''}
             className={inputCls}
