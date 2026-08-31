@@ -13,6 +13,10 @@ import {
   CONTAINER_WIDTH_LABELS, SPACING_LABELS, BACKGROUND_LABELS,
   VISIBILITY_LABELS, ACCENT_LABELS, labelFor,
 } from '@/lib/pageBuilder/presetLabels';
+// Round 71, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory. The ONE source for which types honour
+// settings.spacingBetween, so a control cannot be offered where nothing reads it.
+import { SPACING_BETWEEN_TYPES } from '@/lib/pageBuilder/presets';
 import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 // Round 39, ADDED beside the statements above rather than folded into any —
 // the standing rule in this directory.
@@ -42,6 +46,15 @@ import { useEditor } from './EditorProvider';
  *   settings.containerWidth / spacingTop / spacingBottom / background /
  *   visibility, style.accentColor (cascades to descendants via CSS vars),
  *   and the advanced.* block.
+ *
+ * ── ROUND 71 ADDED THE FIRST FIELD THAT IS NOT UNIVERSAL ─────────────────
+ * `settings.spacingBetween` is read by TWO types (presets.SPACING_BETWEEN_TYPES
+ * — `container` and `full_width`), so the sentence above is no longer true as
+ * written. The RULE it comes from is intact and is what makes the field
+ * conditional: a control for a value the render path ignores is a lie the
+ * author cannot detect, so it is offered exactly where it is honoured and
+ * nowhere else. Universality was one way to satisfy that rule; it was never
+ * the rule. See the note at the field itself for the cost of the split.
  *
  * ── THAT CLAIM WAS MEASURED, AND IT IS EXACT FOR THREE OF THE FIVE ─────────
  * docs/section-control-audit.md rendered all 27 types against every value of
@@ -425,6 +438,40 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
             onChange={(v) => patchKey('settings', { spacingBottom: v })}
           />
         </Field>
+        {/*
+          ── ROUND 71: THE FIRST PER-TYPE FIELD IN THIS GROUP ──────────────
+          The header above says this panel ships only fields whose effect is
+          UNIVERSAL. This one is not, and the rule it comes from is the reason
+          it is conditional rather than the reason it is excluded: a control
+          for a value the render path ignores is a lie the author cannot
+          detect. Only `container` and `full_width` read spacingBetween, so
+          only they are offered it.
+
+          THE COST, NAMED: an author who selects a container sees a fourth
+          control here and, selecting a card_grid or a two_column, does not.
+          That inconsistency is real. It is preferred to the alternative,
+          which is the same word meaning a different distance on each type —
+          a grid GUTTER on the grids, and on two_column one of its TWO gaps
+          with no way to say which. The group already varies by type in a
+          smaller way (ความกว้าง carries a different hint for the fixed-width
+          cards), so this is that pattern going one step further, not a new
+          one.
+
+          DERIVED, NOT RESTATED: the list is presets.SPACING_BETWEEN_TYPES,
+          the same constant the components are checked against, so offering
+          the control and honouring it cannot drift.
+        */}
+        {SPACING_BETWEEN_TYPES.includes(type) && (
+          <Field
+            label="ระยะห่างระหว่างเนื้อหาข้างใน"
+            hint="ระยะห่างระหว่างแต่ละ section ที่อยู่ข้างในกล่องนี้ — ไม่ใช่ระยะห่างด้านบน/ล่างของตัวกล่องเอง (ค่าเริ่มต้น: ปานกลาง)"
+          >
+            <Select
+              value={settings.spacingBetween ?? 'medium'} options={SPACING} labels={SPACING_LABELS}
+              onChange={(v) => patchKey('settings', { spacingBetween: v })}
+            />
+          </Field>
+        )}
       </Group>
 
       {/*

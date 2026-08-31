@@ -295,6 +295,14 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
   //              same scope the renderer applies to advanced.customCss below.
   //   inEditor — debug_json renders only in the editor canvas (path is non-null
   //              there, null for public/preview callers), never on a live page.
+  //   settings — ROUND 71. The envelope, for the two container types that draw
+  //              a gap BETWEEN their children (settings.spacingBetween). This
+  //              prop did not exist before, and sections/container.jsx said so
+  //              in as many words: "SectionRenderer hands components content,
+  //              style, layout, domId, inEditor and data, never settings, so
+  //              there is no value here to defer to". It does now, and that
+  //              note is updated rather than left to rot. Ignored by the other
+  //              25 types exactly as domId and data are.
   //   data     — the 2C.2a data-backed components render from this, NOT from a
   //              fetch of their own: the fetch is hoisted above the renderer
   //              (resolveSectionData → resolvedData, keyed by the unique section
@@ -307,6 +315,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
       layout={section.layout ?? {}}
       domId={domId}
       inEditor={path != null}
+      settings={settings}
       data={resolvedData ? resolvedData[section.id] : undefined}
       {...childProps}
     />

@@ -62,6 +62,38 @@ const SPACING_BOTTOM_CLASS = {
   none: 'pb-0', small: 'pb-4', medium: 'pb-8', large: 'pb-16', xl: 'pb-24',
 };
 
+// ── settings.spacingBetween → gap BETWEEN a container's children ─────
+/**
+ * ROUND 71. The SAME five values as the two maps above, at the SAME five
+ * distances (0/16/32/64/96px) — `gap-*` rather than `pt-*`/`pb-*` because it
+ * is the space between children, not around the section. Reusing the
+ * vocabulary is the point: an author who has learned what "ปานกลาง" means
+ * from ระยะห่างด้านบน gets the same number here.
+ *
+ * `medium` is `gap-8` = 32px = EXACTLY what container and full_width
+ * hardcoded, which is what lets the accessor below answer an absent value
+ * with it and leave every stored container byte-identical.
+ */
+const SPACING_BETWEEN_CLASS = {
+  none: 'gap-0', small: 'gap-4', medium: 'gap-8', large: 'gap-16', xl: 'gap-24',
+};
+
+/**
+ * The types that HONOUR `settings.spacingBetween` — the single source the
+ * settings panel derives its control from, so offering the control and
+ * reading the value cannot drift (the 2C.3 rule, applied to a settings.* key
+ * rather than a style.* one, which is why it is not folded into
+ * SECTION_STYLE_CAPS).
+ *
+ * Exactly the two vertical stacks. NOT the grids: their gap is a grid
+ * GUTTER, horizontal and vertical at once. NOT `two_column`: it has TWO
+ * distinct gaps (between the columns, and between the items inside each),
+ * and one control for two gaps is a control whose effect an author cannot
+ * predict. Both exclusions are arguments a later round can overturn; neither
+ * is an oversight.
+ */
+export const SPACING_BETWEEN_TYPES = ['container', 'full_width'];
+
 // ── settings.background → surface ────────────────────────────────────
 // `soft_gray` aliases the existing slate-lt scale (no new token). `image`
 // has no source field in the schema yet, so it renders as no surface for now.
@@ -237,6 +269,7 @@ function assertComplete(name, map, values) {
 assertComplete('containerWidth', CONTAINER_WIDTH_CLASS, CONTAINER_WIDTHS);
 assertComplete('spacingTop', SPACING_TOP_CLASS, SPACING);
 assertComplete('spacingBottom', SPACING_BOTTOM_CLASS, SPACING);
+assertComplete('spacingBetween', SPACING_BETWEEN_CLASS, SPACING);
 assertComplete('background', BACKGROUND_CLASS, BACKGROUNDS);
 assertComplete('columns', COLUMNS_CLASS, COLUMNS);
 assertComplete('ratio', RATIO_CLASS, RATIOS);
@@ -266,6 +299,9 @@ function resolve(map, value, fallback, name) {
 export const containerWidthClass = (v) => resolve(CONTAINER_WIDTH_CLASS, v, CONTAINER_WIDTH_CLASS.large, 'containerWidth');
 export const spacingTopClass     = (v) => resolve(SPACING_TOP_CLASS, v, SPACING_TOP_CLASS.medium, 'spacingTop');
 export const spacingBottomClass  = (v) => resolve(SPACING_BOTTOM_CLASS, v, SPACING_BOTTOM_CLASS.medium, 'spacingBottom');
+// ROUND 71 — the fallback is the INCUMBENT 32px, and `resolve` returns it
+// silently for an absent value (it only warns for a value it does not know).
+export const spacingBetweenClass = (v) => resolve(SPACING_BETWEEN_CLASS, v, SPACING_BETWEEN_CLASS.medium, 'spacingBetween');
 export const backgroundClass     = (v) => resolve(BACKGROUND_CLASS, v, BACKGROUND_CLASS.default, 'background');
 export const isDarkBackground    = (v) => DARK_BACKGROUNDS.has(String(v));
 export const columnsClass        = (v) => resolve(COLUMNS_CLASS, v, COLUMNS_CLASS[1], 'columns');

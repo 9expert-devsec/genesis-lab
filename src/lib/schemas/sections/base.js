@@ -115,6 +115,35 @@ export const settingsSchema = z
      * identical until somebody chooses otherwise. `background` above keeps its
      * default and its meaning unchanged and is what `preset` mode resolves.
      */
+    /**
+     * ── ROUND 71: THE GAP BETWEEN A CONTAINER'S CHILDREN ─────────────────
+     * `spacingTop`/`spacingBottom` above are the space OUTSIDE a section.
+     * Nothing controlled the space BETWEEN a container's children, which was
+     * `gap-8` written into the component — so stacking three containers
+     * stacked three fixed 32px gaps and no author could reach any of them.
+     *
+     * ── OPTIONAL, WITH NO DEFAULT, AND THAT IS THE WHOLE SAFETY ──────────
+     * Round 56 §H: a field that changes something every stored section
+     * ALREADY SHOWS must read ABSENT as the incumbent. `.lean()` applies no
+     * Mongoose defaults and JSON serialisation drops undefined keys, so every
+     * container stored before this commit reads the key back ABSENT — and
+     * `spacingBetweenClass` answers absent with `gap-8`, the 32px that is
+     * already there. Not the scale's midpoint BECAUSE it is the midpoint: it
+     * is the incumbent, and `medium` happening to be the same 32px is a
+     * convenience, not the reason.
+     *
+     * `.optional()` with NO default is the round-39 shape (`backgroundMode`
+     * directly above), and it is load-bearing rather than stylistic: a
+     * `.default()` here would WRITE the key into every section that merely
+     * passes through a parse, which test/pure/customColor's "a stored section
+     * gains NOTHING when it is re-validated" exists to catch.
+     *
+     * The VOCABULARY is `SPACING`, reused whole — same five values, same
+     * labels, same numbers (0/16/32/64/96px). Round 17: this repo mints no
+     * spacing scale of its own, and a second one here would mean an author
+     * learning that "ปานกลาง" means two different distances.
+     */
+    spacingBetween: z.enum(SPACING).optional(),
     backgroundMode:   z.enum(COLOR_MODES).optional(),
     backgroundCustom: backgroundCustomSchema,
   })
