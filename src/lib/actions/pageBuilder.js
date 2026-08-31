@@ -30,6 +30,7 @@ import { publishBlockers } from '@/lib/pageBuilder/publishReadiness';
 import { reidSection, stripImageOwnership } from '@/lib/pageBuilder/reidSection';
 import { resolveSectionData } from '@/lib/pageBuilder/resolveSectionData';
 import { recordAudit, snapshotVersion } from '@/lib/pages/pageAudit';
+import { unserialisableArguments, unserialisableMessage, describeNonPlain } from '@/lib/plainValue';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { backupDraftVersion } from '@/lib/pages/pageAudit';
@@ -111,6 +112,48 @@ function firstZodMessage(error) {
   if (!issue) return 'รูปแบบข้อมูลไม่ถูกต้อง';
   const path = issue.path?.join('.') || 'field';
   return `${path}: ${issue.message}`;
+}
+
+/**
+ * ── ROUND 67: REFUSE A PAYLOAD THE CLIENT COULD NOT SERIALISE ────────────
+ *
+ * A Server Action argument the browser cannot serialise does NOT arrive as an
+ * error. React substitutes a temporary reference, and the server receives a
+ * Proxy that throws on almost every property read. Nothing notices until the
+ * payload reaches Mongoose, whose `isBsonType` helper is literally
+ * `obj._bsontype === typename` — so the first thing to touch the proxy is a
+ * BSON duck-type, and the failure surfaces as
+ *
+ *     Cannot access _bsontype on the server. You cannot dot into a temporary
+ *     client reference from a server component.
+ *
+ * returned through this file's own `{ok:false, error: err.message}` catch.
+ * True, unactionable, and pointing at MongoDB for a problem that has nothing
+ * to do with MongoDB. Rounds 62 and 66 each spent themselves auditing return
+ * values for stray ObjectIds — correctly finding none — because the message
+ * named the reader instead of the value.
+ *
+ * This checks the ARGUMENT instead, at the door, and names the PATH. It refuses
+ * exactly three kinds — a temporary reference, a function, a symbol — none of
+ * which can survive the trip under any circumstance, so a payload that works
+ * today is unaffected. Dates, Maps and ObjectIds are deliberately NOT refused:
+ * they round-trip, and rejecting them here would break working saves.
+ *
+ * It REFUSES rather than strips. A poisoned value is never storable content, so
+ * dropping it would lose nothing — but nothing here knows WHICH field it sat in,
+ * and silently discarding an author's section to make a save succeed is the
+ * trade this codebase does not make. The author gets the path and can act.
+ *
+ * @returns {{ok: false, error: string}|null} null when the payload is fine.
+ */
+function refuseUnserialisable(label, payload) {
+  const hits = unserialisableArguments(payload);
+  if (!hits.length) return null;
+  // Server-side too: the author sees one path, the terminal sees all of them,
+  // which is what makes the next occurrence diagnosable in one click.
+  console.error(`[pageBuilder] ${label}: unserialisable client payload
+${describeNonPlain(hits)}`);
+  return { ok: false, error: unserialisableMessage(hits) };
 }
 
 async function currentUserStamp(session) {
@@ -402,6 +445,8 @@ export async function getPageBuilderPagesByPromotionIds(ids) {
  */
 export async function createPageBuilderPage(input) {
   const session = await requireAdmin('pages');
+  const poisoned = refuseUnserialisable('createPageBuilderPage', input);
+  if (poisoned) return poisoned;
   await dbConnect();
 
   const parsed = pageBuilderSchema.safeParse(input);
@@ -770,6 +815,10 @@ export async function saveDraftContent(id, patch, expectedUpdatedAt) {
   const session = await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  // Before dbConnect and before Zod: a temporary reference throws on the first
+  // property ANYTHING reads, and Zod reads plenty.
+  const poisoned = refuseUnserialisable('saveDraftContent', { id, patch, expectedUpdatedAt });
+  if (poisoned) return poisoned;
   await dbConnect();
 
   const existing = await PageBuilder.findById(id).lean();
@@ -1109,6 +1158,8 @@ export async function updatePageIdentity(id, patch, expectedUpdatedAt) {
   const session = await requireAdmin('pages');
   if (!id) return { ok: false, error: 'Missing page id' };
   if (!expectedUpdatedAt) return { ok: false, error: 'Missing expectedUpdatedAt' };
+  const poisoned = refuseUnserialisable('updatePageIdentity', { id, patch, expectedUpdatedAt });
+  if (poisoned) return poisoned;
   await dbConnect();
 
   const existing = await PageBuilder.findById(id).lean();

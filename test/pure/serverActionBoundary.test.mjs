@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ObjectId } from 'mongodb';
-import { nonPlainValues, isBoundarySafe, describeNonPlain } from '../plainValue.mjs';
+import {
+  nonPlainValues, isBoundarySafe, describeNonPlain,
+  isTemporaryReference, unserialisableArguments, unserialisableMessage,
+} from '../plainValue.mjs';
 import { assembleResolved } from '@/lib/pageBuilder/resolveSectionRefs';
 import { chooseRounds } from '@/lib/pageBuilder/chosenRounds';
 import { sectionSchema, draftContentSchema } from '@/lib/schemas/pageBuilder';
@@ -231,4 +234,136 @@ test('saveDraftContent\'s pipeline keeps the payload plain, and its return is pl
   // ...and the shape it must NOT become, so the assertion above can fail.
   assert.equal(nonPlainValues({ ok: true, updatedAt: new Date() }).length, 1,
     'returning the raw Date would not be caught — check the walk');
+});
+
+/**
+ * ── ROUND 67: THE OTHER DIRECTION ─────────────────────────────────────────
+ *
+ * Everything above asks whether a RETURN value is safe. That was the wrong
+ * boundary, and the response body captured from DevTools is what proved it:
+ *
+ *   1:{"ok":false,"error":"Cannot access _bsontype on the server. ..."}
+ *
+ * The message is inside the action's OWN `{ok:false, error}` return, so the
+ * action ran and its catch caught a real exception. The exception is thrown
+ * INSIDE the action, on an ARGUMENT, while Mongoose casts it. Rounds 62 and 66
+ * both audited returns and both correctly found them clean.
+ *
+ * These point the same walk at the argument side.
+ */
+
+/** The real thing's shape: React's tag, and a trap that throws for the rest. */
+function temporaryReferenceProxy() {
+  const TAG = Symbol.for('react.temporary.reference');
+  return new Proxy({ $$typeof: TAG }, {
+    get(target, name) {
+      if (name === '$$typeof') return target.$$typeof;
+      throw new Error('Cannot access ' + String(name) + ' on the server. You cannot dot into a '
+        + 'temporary client reference from a server component.');
+    },
+  });
+}
+
+test('CONTROL — dotting into the fake proxy really does throw `_bsontype`', () => {
+  /**
+   * The fixture has to reproduce the reported failure, or every test below is
+   * asserting about something that is not the bug. This is the exact read
+   * `mongoose/lib/helpers/isBsonType` performs: `obj._bsontype === typename`.
+   */
+  assert.throws(() => temporaryReferenceProxy()._bsontype,
+    /Cannot access _bsontype on the server/);
+});
+
+test('a temporary client reference is detected WITHOUT tripping it', () => {
+  /**
+   * React's proxy throws on nearly every property, so a detector that dots into
+   * it becomes the very error it is meant to report. The `get` trap allows
+   * `$$typeof` through and answers with the target's tag — which is React's own
+   * test, used by its encoder when it refuses to re-serialise an opaque
+   * reference — so that is what `isTemporaryReference` reads.
+   */
+  const fake = temporaryReferenceProxy();
+  assert.equal(isTemporaryReference(fake), true, 'the proxy went undetected');
+  assert.equal(isTemporaryReference({}), false);
+  assert.equal(isTemporaryReference(null), false);
+  assert.equal(isTemporaryReference('x'), false);
+
+  // And the walk survives one — it must classify, not explode.
+  const hits = nonPlainValues({ sections: [{ content: { doc: fake } }] });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].kind, 'temporary-client-reference');
+  assert.equal(hits[0].path, 'sections[0].content.doc',
+    'the report must name the path — that is the whole point of the fix');
+});
+
+test('the narrow check refuses ONLY what cannot round-trip', () => {
+  /**
+   * The blast radius, asserted. A Date, a Map, a Buffer and an ObjectId all
+   * survive the client -> Server Action trip today, so refusing them at an
+   * action's door would break saves that currently work. The narrow check must
+   * SEE them (the broad walk reports them) and NOT refuse them.
+   */
+  const roundTrips = { when: new Date(), m: new Map(), id: oid(), buf: Buffer.from('x') };
+  assert.ok(nonPlainValues(roundTrips).length >= 4, 'the broad walk stopped reporting these');
+  assert.deepEqual(unserialisableArguments(roundTrips), [],
+    'the narrow check refused a value that round-trips — that would break working saves');
+
+  for (const [label, bad] of [
+    ['function', { a: () => {} }],
+    ['symbol', { a: Symbol('s') }],
+    ['temporary reference', { a: temporaryReferenceProxy() }],
+  ]) {
+    assert.equal(unserialisableArguments(bad).length, 1, `${label} was not refused`);
+  }
+});
+
+test('the refusal message names the path, not the reader', () => {
+  /**
+   * The message being replaced said `_bsontype` — the name of the helper that
+   * happened to read the proxy first — and cost three rounds. This one carries
+   * the location an author can act on.
+   */
+  const msg = unserialisableMessage([
+    { path: 'patch.sections[3].content.doc', kind: 'temporary-client-reference', detail: 'x' },
+    { path: 'patch.title', kind: 'function', detail: 'onChange' },
+  ]);
+  assert.ok(msg.includes('patch.sections[3].content.doc'), 'the message lost the path');
+  assert.ok(msg.includes('temporary-client-reference'), 'the message lost the kind');
+  assert.ok(msg.includes('อีก 1 จุด'), 'the message did not say there were more');
+  assert.ok(!msg.includes('_bsontype'),
+    'the replacement still names the reader instead of the value');
+});
+
+test('the payload the editor really sends is ACCEPTED', () => {
+  /**
+   * `runSave` sends `pick(page, DRAFT_CONTENT_KEYS)`. Measured over every page
+   * stored on this clone (scripts/_diagnose-round67-payload.mjs), that payload is
+   * clean — and React's own `encodeReply` emits ZERO temporary references for it,
+   * against a control where a planted function and a planted symbol each emit
+   * one. This pins the shape so the guard cannot start refusing a real save.
+   */
+  const patch = {
+    title: 'Early Bird Claude Code',
+    sections: [
+      { id: 'a', type: 'highlight_grid', sortOrder: 0, enabled: true, name: '',
+        settings: { containerWidth: 'large', spacingTop: 'medium', spacingBottom: 'medium',
+          background: 'default', visibility: 'all' },
+        layout: {}, style: {},
+        advanced: { sectionId: '', customClass: '', customCss: '', customHtml: '' },
+        content: { children: [
+          { id: 'b', type: 'rich_text', sortOrder: 0, enabled: true, name: '',
+            settings: {}, layout: {}, style: {}, advanced: {},
+            content: { doc: { type: 'doc', content: [
+              { type: 'paragraph', content: [{ type: 'text', text: 'ก' }] }] } } },
+        ] } },
+    ],
+    theme: 'default', showHeader: true, showFooter: true, showStickyCta: false,
+    seo: {}, jsonLd: '', promotionCover: {},
+  };
+  assert.deepEqual(unserialisableArguments(patch), [],
+    'the guard would refuse a payload the editor really sends');
+  assert.deepEqual(
+    unserialisableArguments({ id: 'x', patch, expectedUpdatedAt: '2026-08-31T04:24:40.972Z' }), [],
+    'the guard would refuse the full argument tuple saveDraftContent receives',
+  );
 });
