@@ -20,8 +20,12 @@ const courseSelectorContent = z.object({
 //               so the canvas renders the REAL courses (2C.2a).
 //   'skill'   — DERIVED: every public course under the skill id in `filter`.
 //   'program' — DERIVED: every public course under the program id in `filter`.
-// The derived sources are evaluated at REQUEST time (listPublicCourses({skill|
-// program})), so the published set is a function of when the page is viewed — the
+// The derived sources are evaluated on the SERVER, at render time
+// (listPublicCourses({skill|program})), so the published set is a function of
+// when the page was last RENDERED — not of when it is viewed. Both public
+// surfaces are ISR at `revalidate = 3600`, so that is up to an hour behind and
+// is the same render for every visitor inside the window (round 63 §A.2; the
+// editor's own label used to overstate this and was corrected with it). The
 // canvas can only show an edit-time SAMPLE the published page won't match. That
 // is the labelled exception argued in docs/page-builder-status.md §2C.2b (the
 // Browser-pass-#2 precedent): the sample is honest ONLY because the editor labels
@@ -40,7 +44,8 @@ const courseListContent = z.object({
 // Schedule table for a single course (2C.2b). `courseId` is the SHORT course code
 // (e.g. MSE-AI), same author-facing convention as course_card — the resolver
 // turns it into the MSDB ObjectId /schedules needs (§4.7 quirk at the edge).
-// Its rows are request-time-derived (upcoming, open/nearly_full), so it is
+// Its rows are derived at RENDER time (upcoming, open/nearly_full), bounded by
+// the page's own 1-hour ISR window rather than by the visitor's clock, so it is
 // canvas-FAKE like the derived course_list: the editor labels the sample. `limit`
 // caps the number of upcoming sessions shown (0 = adapter default), honoured in
 // resolveSectionData.

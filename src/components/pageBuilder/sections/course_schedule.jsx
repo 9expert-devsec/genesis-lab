@@ -10,10 +10,14 @@ import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
  * ONE SectionRenderer serves both the public page and the client canvas.
  *
  * canvas-FAKE (see docs/page-builder-status.md §2C.2b): the row set is a function
- * of REQUEST time — upstream returns only upcoming, open/nearly_full sessions, so
- * what publishes depends on when the page is viewed. The canvas can only show an
- * edit-time SAMPLE; the editor LABELS it as such. This component just draws what
- * it is handed.
+ * of RENDER time — upstream returns only upcoming, open/nearly_full sessions, so
+ * what publishes depends on when the page was last rendered. NOT on when it is
+ * viewed: both public surfaces are `revalidate = 3600`, so the rows can be an
+ * hour old and every visitor inside that window is served the same ones (round
+ * 63 §A.2). The editor's sample label said "when the visitor opens the page" and
+ * was corrected in the same pass that corrected this comment. The canvas can only
+ * show an edit-time SAMPLE; the editor LABELS it as such. This component just
+ * draws what it is handed.
  *
  * No new client module on the public route: this is server-rendered with CI
  * tokens (§7) — deliberately NOT the `'use client'` ScheduleCard, which would add

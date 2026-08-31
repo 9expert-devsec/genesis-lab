@@ -690,10 +690,45 @@ function BundleCoursesEditor({ content, patch, resolved, courses }) {
 // not found". Both CAN show at once: a filter can resolve to a sample now (info)
 // whose contents will still vary at publish (also info), or resolve to nothing
 // (red) — the two say different things.
+/**
+ * ── THIS LABEL USED TO PROMISE MORE THAN THE SITE DELIVERS ──────────────────
+ *
+ * It said the published page fetches fresh data "ตามเวลาที่ผู้เข้าชมเปิดหน้า" —
+ * at the moment a visitor opens it. It does not, and never did. Measured, round
+ * 63 §A.2:
+ *
+ *   /[...slug]            export const revalidate = 3600   (ISR, 1 hour)
+ *   /promotions/[slug]    export const revalidate = 3600
+ *   listSchedules()       revalidate: 1800, tags: ['schedules']
+ *
+ * `revalidateTag('schedules')` (actions/schedules.js, webhooks/handlers.js) can
+ * cut the 30-minute FETCH window, but nothing revalidates the two page routes on
+ * a schedule change — so a published page's rows can be a full hour behind, and
+ * two visitors seconds apart are served the SAME cached render.
+ *
+ * That is round 18's dead-control class wearing a hint's clothes: a promise
+ * nothing honours, which the author has no way to detect because the number they
+ * see in the canvas is plausible either way. It was wrong before the
+ * chosen-rounds work and is corrected here on its own account, not as a
+ * side-effect of it.
+ *
+ * The opening clause is unchanged deliberately — `test/render/courseSelectPicker`
+ * pins 'ตัวอย่าง ณ เวลาแก้ไข' as the marker that this label rendered at all, and
+ * the sample-vs-broken tone distinction (info, never amber/red) is what
+ * docs/page-builder-status.md §2C.2b argued for.
+ *
+ * SHARED WITH course_list's derived sources, on purpose while both types make
+ * the same promise. Round 63 §D#1 flagged the sharing as the trap it is: the two
+ * diverge the moment `course_schedule` grows a mode whose row SET is authored
+ * rather than derived, and at that point this becomes two labels or takes a
+ * prop. It is not that yet — `source='manual'` is unreachable from the editor
+ * (steps 4-5) — so splitting now would ship two identical strings and an
+ * argument nobody can read.
+ */
 function SampleLabel() {
   return (
     <Warn tone="info">
-      ตัวอย่าง ณ เวลาแก้ไข — หน้าที่เผยแพร่จริงจะดึงข้อมูลใหม่ตามเวลาที่ผู้เข้าชมเปิดหน้า จำนวนและรายการที่แสดงจริงอาจต่างจากนี้
+      ตัวอย่าง ณ เวลาแก้ไข — หน้าที่เผยแพร่จริงจะดึงข้อมูลใหม่เป็นระยะ (อย่างช้าชั่วโมงละครั้ง) ไม่ใช่ทุกครั้งที่มีผู้เข้าชม จำนวนและรายการที่แสดงจริงอาจต่างจากนี้
     </Warn>
   );
 }

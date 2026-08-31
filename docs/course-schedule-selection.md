@@ -209,10 +209,36 @@ asked.** Three options, and the brief recommends the third:
 | b | drop a chosen round once it elapses | matches today's behaviour; the author's "still show it" is not honoured, but nothing lies |
 | c | **distinguish the two orphan causes** — drop on *elapsed*, show-un-clickable on *vanished-while-still-future* | honours the ask for the case the ask is actually about, and does not build a past-dates machine |
 
-**(c) is recommended.** It is also cheap: the snapshot already stores `dates`, so
-"has this elapsed?" is answerable locally from the snapshot with the same
-`siteTodayKey()` boundary `excludeStartedRounds` already uses — no fetch, one
-existing helper.
+**(c) was recommended. The author ruled otherwise — see the amendment below,
+which supersedes this paragraph.** It remains true that the test is cheap: the
+snapshot stores `dates`, so "has this elapsed?" is answerable locally with the
+same `siteTodayKey()` boundary `excludeStartedRounds` already uses — no fetch,
+one existing helper. What changed is what the answer is FOR.
+
+> ### AMENDMENT (round 64) — the split is by SIDE, not by cause
+>
+> The author's ruling, recorded here rather than left to contradict the build:
+>
+> | | rule |
+> |---|---|
+> | **in the EDITOR** | only still-valid rounds are offered. An elapsed round is not in the picker |
+> | **on the PAGE** | a chosen round is **never silently dropped**. It renders, and it may be un-clickable |
+>
+> **Why this is right and (b)/(c) were not.** Both of those drop a chosen round
+> from the page, and a page that silently shrinks is the failure rounds 46 §D.1
+> and 48 §A already ruled against for stale course codes: *what an author chose
+> must not vanish without them knowing.* An author who can see the elapsed round
+> can remove it; an author whose page quietly got shorter cannot. §A.5's 51-day
+> median is an argument for making the decay **visible**, which is what §C.1 got
+> backwards — it read the same number as an argument for automating the decay
+> away.
+>
+> **§C.1's own distinction survives and is the reason the amendment is
+> implementable at all**: elapsed and vanished are still told apart, and now
+> both draw. They differ in the chip, not in whether the row exists —
+> `จบไปแล้ว` for a round whose dates have passed, `ไม่พบรอบนี้` for one MSDB no
+> longer has. §C.2's honesty table is unchanged and is what forbids either of
+> them carrying a status or a link.
 
 ### C.2 What a snapshot can honestly say, and what it cannot
 
@@ -275,6 +301,64 @@ displaying and keep accepting a number nobody reads.
 any of this gets built** — the published page does not read fresh per visit
 today; it reads at most hourly (§A.2). That correction is independent of
 everything else in this brief and is step 1 of §K.
+
+### D.1 What round 64 actually did with each of the eight — and what it deferred
+
+The eight are not all wrong at the same moment. Three are wrong **today**, on the
+shipped site, and were fixed on their own account. Four become wrong only when a
+`source='manual'` section can exist, and were fixed in the commit that creates
+that possibility. One turned out to need nothing.
+
+| # | landed in | what changed |
+|---|---|---|
+| 1 `SampleLabel` | **commit 1** | the per-visit promise removed: *"…จะดึงข้อมูลใหม่เป็นระยะ (อย่างช้าชั่วโมงละครั้ง) ไม่ใช่ทุกครั้งที่มีผู้เข้าชม…"*. Wrong before this work; fixed as its own defect. Still shared with `course_list` — see below |
+| 2 count field label | **deferred to step 4**, deliberately | it is not a dead control in this round. Hiding it requires the mode to be settable, which is the editor control (step 4). Recorded as an obligation ON step 4, not left to be rediscovered |
+| 3 `CourseSelectPicker` hint | **deferred to step 4** | true as written while `manual` is unreachable from the editor |
+| 4 red empty warn | **deferred to step 4** | same. It stays true through commit 3 because no stored section can be `manual` |
+| 5 `dynamic.js` comment | **commit 1** (freshness) + **commit 2** (mode) | "REQUEST time" → render time, ISR-bounded; then the two modes |
+| 6 `course_schedule.jsx` header | **commit 1** (freshness) + **commit 3** (mode) | same split |
+| 7 `page-builder-status.md` §2C.2b | **commit 1** | same freshness correction |
+| 8 `courseSelectPicker.test.mjs:224` | **no change needed** | it pins only the opening clause `'ตัวอย่าง ณ เวลาแก้ไข'`, which is unchanged on purpose — that clause is the marker that the label rendered at all, and the tone distinction §2C.2b argued for. Verified green, not assumed |
+
+**Sites 2–4 are the load-bearing deferral.** Each is honest *because* step 4 has
+not shipped. The moment the editor can set `source='manual'`, all three become
+false in the same keystroke — so they are listed here as step 4's entry
+conditions rather than as leftovers.
+
+### D.2 A drift found while auditing the copy, NOT fixed here
+
+`sections/course_schedule.jsx` has its own local `scheduleHref`, and it returns a
+registration link **for every status, including `full`**:
+
+```js
+function scheduleHref(schedule, code) {
+  if (schedule?._id && code) return `/registration/public?course=…&class=${schedule._id}`;
+  return schedule?.signup_url || null;
+}
+```
+
+The shared helper `lib/schedule/scheduleRegistrationHref` opens with
+`if (normalizeScheduleStatus(schedule?.status) === 'full') return null;` and is
+used by **four** public surfaces — `/schedule` (twice), `/search`, and
+`training-course/CourseCard`. `lib/scheduleStatus.js` states the rule in its own
+header: *"`scheduleRegistrationHref` returns null for a full round … so the card
+is not a link at all. A badge reading 'ลงทะเบียน' on an unclickable sold-out
+round would be the worst wording on the page."*
+
+So the page-builder section is a **fifth surface carrying a drifted copy** — the
+exact shape `scheduleStatus.js` was created to end, one layer up from the
+vocabulary it unified. A `full` round in a `course_schedule` today renders the
+red `เต็ม` chip **inside a working registration link**.
+
+**Deliberately not fixed in round 64.** It is a behaviour change on the
+*existing* `upcoming` path that this round's ask did not request, and folding it
+into commit 3 would put a real render change inside a byte-identical proof that
+cannot see it: all 3 stored sections resolve to `open` rounds today (§E), so the
+proof would come back green while the behaviour moved. That is proof by luck.
+
+**It should be its own commit**, one line, swapping the local helper for the
+shared one — with its own before/after over a `full` round, which is the evidence
+this round could not honestly produce.
 
 ---
 
