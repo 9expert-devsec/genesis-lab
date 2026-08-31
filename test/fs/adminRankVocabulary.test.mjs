@@ -45,7 +45,7 @@ import { scrubSource } from '../sourceScan.mjs';
  *
  *   the WORD หมุด   → the CONTROL, in ArticleForm.jsx (a labelled checkbox)
  *   the PIN GLYPH   → the BADGE ITSELF, on the public card in
- *                     ArticlesPageClient.jsx — which is the thing the control
+ *                     src/components/articles/ArticleCard.jsx — the thing the control
  *                     switches on, and the only place a pin is ever drawn
  *
  * Deleting either half is still the wrong fix for b-004 and still has to
@@ -57,7 +57,10 @@ import { scrubSource } from '../sourceScan.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CLIENT_REL = 'src/app/admin/articles/_components/ArticlesAdminClient.jsx';
 const FORM_REL = 'src/app/admin/articles/_components/ArticleForm.jsx';
-const PUBLIC_CARD_REL = 'src/app/(public)/articles/_components/ArticlesPageClient.jsx';
+// The public card was extracted from ArticlesPageClient into its own module so
+// the program page could reuse it. The glyph went with the markup; this guard
+// follows it rather than asserting against the file it used to live in.
+const PUBLIC_CARD_REL = 'src/components/articles/ArticleCard.jsx';
 const src = readFileSync(path.join(ROOT, CLIENT_REL), 'utf8');
 const formSrc = readFileSync(path.join(ROOT, FORM_REL), 'utf8');
 const publicSrc = readFileSync(path.join(ROOT, PUBLIC_CARD_REL), 'utf8');
