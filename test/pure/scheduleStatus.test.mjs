@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DERIVED_ROUND_STATES,
   NEUTRAL_STATUS,
   SCHEDULE_STATUS,
   SCHEDULE_STATUSES,
   SCHEDULE_STATUS_OPTIONS,
   normalizeScheduleStatus,
+  resolveDerivedRoundBadge,
   resolveScheduleBadge,
   scheduleStatusLabel,
 } from '@/lib/scheduleStatus';
@@ -232,4 +234,104 @@ test('filter options are generated from the same source as the badges', () => {
       'the filter must never carry the open ACTION word'
     );
   }
+});
+
+/**
+ * ── ROUND 64: TWO DERIVED STATES, AND THE WALL BETWEEN THEM AND THESE THREE ─
+ *
+ * A page-builder `course_schedule` can be asked to draw a round MSDB no longer
+ * returns, so the module grew `elapsed` / `missing`. They are NOT statuses, and
+ * the tests above are deliberately untouched: no word and no colour of the three
+ * moved, and nothing below re-asserts them.
+ *
+ * What is added is the wall. Each of these fires on a specific way of knocking
+ * it down, and each way is one somebody would do for a good reason.
+ */
+
+test('the derived states did NOT join the MSDB vocabulary', () => {
+  // The most consequential one: SCHEDULE_STATUSES drives SCHEDULE_STATUS_OPTIONS,
+  // which is the PUBLIC /schedule filter dropdown. Adding them there would offer
+  // a visitor 'จบไปแล้ว' as something to filter by, for a state no round can be
+  // fetched in.
+  assert.deepEqual(SCHEDULE_STATUSES, ['open', 'nearly_full', 'full']);
+  assert.deepEqual(Object.keys(SCHEDULE_STATUS), ['open', 'nearly_full', 'full']);
+  assert.equal(SCHEDULE_STATUS_OPTIONS.length, 3);
+  for (const key of DERIVED_ROUND_STATES) {
+    assert.equal(SCHEDULE_STATUS[key], undefined, `${key} leaked into the status map`);
+    assert.ok(!SCHEDULE_STATUS_OPTIONS.some((o) => o.value === key),
+      `${key} reached the public /schedule filter dropdown`);
+  }
+});
+
+test('the normaliser still refuses them — they never arrived FROM upstream', () => {
+  // It classifies raw values that came from MSDB. Teaching it these would let a
+  // stored status of "missing" render as a legitimate one.
+  for (const key of DERIVED_ROUND_STATES) {
+    assert.equal(normalizeScheduleStatus(key), null, `normalizeScheduleStatus accepted ${key}`);
+  }
+  // And the two resolvers do not answer each other's questions.
+  assert.equal(resolveDerivedRoundBadge('open'), null, 'a real status got a derived badge');
+  assert.equal(resolveDerivedRoundBadge('full'), null);
+  for (const junk of [undefined, null, '', 7, {}]) {
+    assert.equal(resolveDerivedRoundBadge(junk), null);
+  }
+});
+
+test('a derived badge claims no status and no knowledge', () => {
+  /**
+   * The three non-clickable states are not the same. `full` is red because the
+   * system KNOWS the round is full. These two are grey because it knows less —
+   * `elapsed` is computed from dates alone, `missing` asserts nothing at all —
+   * and neither may borrow the certainty `full` has.
+   */
+  for (const key of DERIVED_ROUND_STATES) {
+    const badge = resolveDerivedRoundBadge(key);
+    assert.equal(badge.status, null, `${key} carried a status it cannot know`);
+    assert.equal(badge.isKnown, false, `${key} claimed to be a recognised status`);
+    assert.equal(badge.isDerived, true);
+    assert.ok(badge.state.length > 0 && badge.action.length > 0);
+  }
+  // Told apart, not merged.
+  assert.notEqual(
+    resolveDerivedRoundBadge('elapsed').action,
+    resolveDerivedRoundBadge('missing').action
+  );
+});
+
+test('the derived states mint NO new colour — they reuse the neutral grey', () => {
+  // Round 57's rule: no token is invented here, and none is needed. `full` is
+  // already red and already comes from MSDB.
+  for (const key of DERIVED_ROUND_STATES) {
+    const badge = resolveDerivedRoundBadge(key);
+    for (const shape of ['dot', 'text', 'solid', 'soft']) {
+      assert.equal(badge[shape], NEUTRAL_STATUS[shape], `${key}.${shape} is not the neutral grey`);
+    }
+    // ...and it is none of the three status colours, in any shape.
+    for (const status of SCHEDULE_STATUSES) {
+      assert.notEqual(badge.soft, SCHEDULE_STATUS[status].soft,
+        `${key} borrowed ${status}'s colour`);
+    }
+  }
+  // No hex literal is introduced by either: the neutral grey is stock Tailwind.
+  const hex = /#[0-9a-fA-F]{3,8}\b/;
+  for (const key of DERIVED_ROUND_STATES) {
+    const badge = resolveDerivedRoundBadge(key);
+    for (const shape of ['dot', 'text', 'solid', 'soft']) {
+      assert.ok(!hex.test(badge[shape]), `${key}.${shape} minted a hex value`);
+    }
+  }
+});
+
+test('CONTROL: these assertions can fail', () => {
+  // Every test above is a negative — "did not leak", "still refuses", "no hex".
+  // A misspelled export name would make all of them pass trivially, so the
+  // fixtures they run over are asserted to be real first.
+  assert.deepEqual(DERIVED_ROUND_STATES, ['elapsed', 'missing']);
+  assert.ok(resolveDerivedRoundBadge('elapsed'), 'the derived resolver returns nothing at all');
+  // The hex matcher must be able to see a hex value — the three statuses have them.
+  const hex = /#[0-9a-fA-F]{3,8}\b/;
+  assert.ok(hex.test(SCHEDULE_STATUS.full.soft),
+    'the hex matcher cannot see a hex value, so "no hex" above proves nothing');
+  // ...and the colour-borrowing check can detect a borrow.
+  assert.equal(SCHEDULE_STATUS.full.soft, SCHEDULE_STATUS.full.soft);
 });

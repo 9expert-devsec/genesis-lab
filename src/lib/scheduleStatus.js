@@ -157,6 +157,81 @@ export const NEUTRAL_STATUS = {
 };
 
 /**
+ * ── TWO STATES THAT ARE NOT SCHEDULE STATUSES (round 64) ───────────────────
+ *
+ * A page-builder `course_schedule` in chosen-rounds mode can be asked to draw a
+ * round MSDB no longer returns — the author named it, and the author's rule is
+ * that a chosen round is never silently dropped from the page. Such a row has no
+ * status, because there is no round upstream to have one.
+ *
+ *   elapsed  จบไปแล้ว     the round's stored dates say it has begun.
+ *                        `excludeStartedRounds` removes a round from every
+ *                        public feed the moment its FIRST training day arrives,
+ *                        so this is the ordinary end of a chosen round's life.
+ *   missing  ไม่พบรอบนี้   it is not in the feed and nothing says it elapsed —
+ *                        withdrawn upstream while still future, or never
+ *                        resolvable. The site knows the dates it last saw and
+ *                        NOTHING else.
+ *
+ * ── WHY HERE AND NOT A SIXTH LOCAL MAP ─────────────────────────────────────
+ * This module's own header states the rule: "Adding a sixth shape here is
+ * preferable to a sixth local map." The wording and the grey are exactly what
+ * drifted across five surfaces before this file existed, and a new vocabulary
+ * defined next to the renderer that draws it is how the sixth copy starts.
+ *
+ * ── DELIBERATELY OUTSIDE `SCHEDULE_STATUSES`, `ALIASES` AND THE NORMALISER ─
+ * `SCHEDULE_STATUSES` is the vocabulary MSDB EMITS, and it drives
+ * `SCHEDULE_STATUS_OPTIONS` — the /schedule filter dropdown. Adding these two
+ * there would put 'จบไปแล้ว' in a public filter for a state no round can be
+ * fetched in. And `normalizeScheduleStatus` must keep answering `null` for
+ * them: it classifies raw values that arrived FROM upstream, and teaching it
+ * these would let a stored status of "missing" render as a legitimate one.
+ *
+ * ── THE THREE NON-CLICKABLE STATES ARE NOT THE SAME, AND MUST NOT COLLAPSE ─
+ * `full` is red because the system KNOWS the round is full — the value came
+ * from MSDB, and `scheduleRegistrationHref` refuses a link on that knowledge.
+ * These two are grey because the system knows LESS: `elapsed` is computed from
+ * dates alone, and `missing` asserts nothing whatever. One grey word for both
+ * would claim for `missing` the certainty only `full` has.
+ *
+ * Which is why `status` is null and `isKnown` is false on both. A `missing`
+ * round must never claim a status it cannot know — and there is nowhere for it
+ * to get one: the snapshot schema STRIPS `status` and `signup_url`
+ * (schemas/sections/dynamic.js), so the seats-left signal is not merely
+ * un-rendered, it is absent from storage. `isDerived` is what lets a call site
+ * tell "grey because we computed it" from "grey because we did not recognise
+ * the value", which is what the neutral fallback below means.
+ *
+ * NO NEW COLOUR IS MINTED. Both reuse NEUTRAL_STATUS verbatim — the grey this
+ * module already defines for a value it cannot classify, which is precisely
+ * what these are.
+ */
+export const DERIVED_ROUND_STATES = ['elapsed', 'missing'];
+
+export const DERIVED_ROUND_STATE = {
+  elapsed: { state: 'จบไปแล้ว', action: 'จบไปแล้ว', ...NEUTRAL_STATUS },
+  missing: { state: 'ไม่พบรอบนี้', action: 'ไม่พบรอบนี้', ...NEUTRAL_STATUS },
+};
+
+/**
+ * The badge for a round the site is drawing without upstream data.
+ *
+ * Separate from `resolveScheduleBadge` rather than folded into it, because that
+ * one takes a value that CAME FROM upstream and this one takes a conclusion this
+ * codebase reached. A single function accepting both would be a function that
+ * can be handed a stored status and asked to treat it as a derived state.
+ *
+ * @param {string} state one of DERIVED_ROUND_STATES
+ * @returns {object|null} null for anything else — a call site must not get a
+ *   badge by accident.
+ */
+export function resolveDerivedRoundBadge(state) {
+  const entry = typeof state === 'string' ? DERIVED_ROUND_STATE[state] : null;
+  if (!entry) return null;
+  return { ...entry, status: null, isKnown: false, isDerived: true };
+}
+
+/**
  * THE ONE FALLBACK POLICY. Every surface renders its badge from this.
  *
  *   known status      -> the canonical entry (green / amber / red)

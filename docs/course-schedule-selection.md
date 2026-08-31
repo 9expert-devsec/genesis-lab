@@ -662,6 +662,22 @@ Nothing else about `course_card` needs to move.
 Public-render-path work is **isolated to steps 3 and 5**. The riskiest step is
 **5**, and it is last.
 
+> **Status — round 64 shipped steps 1, 2 and 3.** Each as its own commit, each
+> with the suite unchanged on the five inherited failures. Steps 4 and 5 remain,
+> and ship as a PAIR (see the coupling note below).
+>
+> The mode is therefore **live in the renderer and unreachable from the editor**:
+> no control writes `source`, so no stored section can be `manual` and nothing an
+> author can do reaches the new branch. That is round 47's shape deliberately —
+> a mechanism whose control has not shipped is inert, not half-built. Measured:
+> `scripts/_measure-round64-byte-identical.mjs` renders all nine stored content
+> shapes through the pre-change files out of git and reports **0 differing,
+> 25,247 bytes on both sides**, with a control in which 5 of 5 shapes that have
+> rounds DO differ.
+>
+> Step 4 inherits three copy obligations it must discharge in the same commit —
+> §D.1 sites 2, 3 and 4 are each honest only while `manual` is unreachable.
+
 | # | Step | Touches | Risk | Independently shippable? |
 |---|---|---|---|---|
 | **1** | **Fix the freshness copy for what is true *today*.** `SampleLabel` promises a per-visit read; §A.2 measures ISR at 1 h. Split the shared label so `course_schedule` and `course_list` can diverge later. Update `courseSelectPicker.test.mjs:224` with the reason in the diff | editor copy + one test | none — no render path | **YES.** Worth shipping alone even if nothing else is built |

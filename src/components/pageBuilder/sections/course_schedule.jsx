@@ -1,7 +1,9 @@
 import { CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+import { resolveDerivedRoundBadge, resolveScheduleBadge } from '@/lib/scheduleStatus';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { chooseRounds } from '@/lib/pageBuilder/chosenRounds';
+import { siteTodayKey } from '@/lib/articlePublishTime';
 
 /**
  * course_schedule — upcoming sessions for one course (2C.2b). Server component;
@@ -60,19 +62,61 @@ function scheduleHref(schedule, code) {
   return schedule?.signup_url || null;
 }
 
+/**
+ * ── ROUND 64 — TWO MODES, AND WHY THE CHOICE IS MADE HERE ──────────────────
+ *
+ * `chooseRounds` decides which rows go on the page: every fetched round under
+ * the unchanged `upcoming` mode, or exactly the ones the author named, in the
+ * order they named them, under `manual`. Its header argues why the filter is in
+ * a renderer rather than in `assembleResolved` where `limit` lives — the
+ * editor's picker reads the same resolved map and would be blinded by a
+ * narrowing applied upstream of it.
+ *
+ * `source` is absent on every stored section, so every stored section takes the
+ * `upcoming` branch and draws exactly what it drew before. Measured, not
+ * asserted: scripts/_measure-round64-byte-identical.mjs renders each stored
+ * shape through the pre-change component out of git and reports zero differing,
+ * with a control that makes the same comparison report a difference.
+ *
+ * ── A CHOSEN ROUND IS NEVER SILENTLY DROPPED ───────────────────────────────
+ * A round the author picked that upstream no longer returns still gets a row.
+ * The alternative — quietly shortening the page — is the failure rounds 46 §D.1
+ * and 48 §A ruled against for stale course codes: an author who can SEE the dead
+ * row can remove it; one whose page got shorter cannot.
+ *
+ * Such a row is drawn from what the site last saw, and it may say only what that
+ * honestly supports: the dates and the delivery type. NOT the status, which is
+ * the seats-left signal and cannot be true about a round nobody can fetch, and
+ * NOT a link, because `/registration/public?class=<id>` for an id upstream does
+ * not have renders a blank step 1 — the defect lib/api/schedules.js documents at
+ * length. The two greys are told apart rather than merged (`จบไปแล้ว` vs
+ * `ไม่พบรอบนี้`) because they are different claims; lib/scheduleStatus.js carries
+ * that argument beside the words.
+ *
+ * The section is UNREACHABLE in `manual` mode from the editor today — the mode
+ * switch and the round picker are the next step. Inert is the correct state for
+ * a mechanism whose control has not shipped.
+ */
 export function CourseScheduleSection({ content, data }) {
-  const schedules = Array.isArray(data) ? data : [];
-  if (!schedules.length) return null;
+  const rows = chooseRounds(data, content, siteTodayKey());
+  if (!rows.length) return null;
   const code = String(content?.courseId ?? '');
 
   return (
     <div className="overflow-hidden rounded-9e-md border border-[var(--surface-border)]">
       <ul className="divide-y divide-[var(--surface-border)]">
-        {schedules.map((s, i) => {
-          const range = formatRange(s?.dates);
-          const status = resolveScheduleBadge(s?.status);
-          const typeLabel = TYPE_TH[s?.type] ?? null;
-          const href = scheduleHref(s, code);
+        {rows.map((entry, i) => {
+          const s = entry.live;
+          const isLive = entry.state === 'live';
+          const range = formatRange(entry.dates);
+          // A derived state has no upstream status to resolve, and must not be
+          // handed one: `resolveScheduleBadge` is for values that CAME FROM
+          // MSDB. The two functions are separate for exactly this call site.
+          const status = isLive
+            ? resolveScheduleBadge(s?.status)
+            : resolveDerivedRoundBadge(entry.state);
+          const typeLabel = TYPE_TH[entry.type] ?? null;
+          const href = isLive ? scheduleHref(s, code) : null;
 
           const row = (
             <div className="flex items-center gap-3 px-4 py-3">
@@ -116,7 +160,12 @@ export function CourseScheduleSection({ content, data }) {
           );
 
           return (
-            <li key={s?._id ?? i}>
+            // The index rides along because an author may name the same round
+            // twice — deliberately not de-duplicated, since a repeat is a
+            // mistake the EDITOR should say out loud rather than one the page
+            // absorbs silently. Two rows with one key is a React warning, and
+            // this is the row list where that can now happen.
+            <li key={`${entry.id || 'row'}-${i}`}>
               {/*
                 The hover tint is DELIBERATELY not accented, and it is the one
                 judgement call here. It is a pale tint off the signature scale,
