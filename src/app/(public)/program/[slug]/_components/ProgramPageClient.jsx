@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { CourseCard } from '@/app/(public)/training-course/_components/CourseCard';
 import { FaqAccordionSection } from '@/components/faq/FaqAccordionSection';
 import { ProgramOnlineCoursesSection } from '@/components/program/ProgramOnlineCoursesSection';
+import { ProgramArticlesSection } from '@/components/program/ProgramArticlesSection';
 
 /**
  * Public program detail page.
@@ -33,6 +34,14 @@ export function ProgramPageClient({
    * route stays in that state.
    */
   onlineCourses = [],
+  /**
+   * Related articles for this program, capped and ordered by the route. Same
+   * default-and-guard arrangement as `onlineCourses` above, and covered by the
+   * same class guard — REQUIRED_PROPS carries both names.
+   */
+  articles = [],
+  programNames = {},
+  skillNames = {},
 }) {
   const roadmapUrl =
     program?.program_roadmap_url ??
@@ -159,6 +168,14 @@ export function ProgramPageClient({
 
       {/* ── FAQ ───────────────────────────────────────────────────── */}
       <FaqAccordionSection faqs={faqs} />
+
+      {/* ── Related articles ──────────────────────────────────────── */}
+      <ProgramArticlesSection
+        articles={articles}
+        program={program}
+        programNames={programNames}
+        skillNames={skillNames}
+      />
     </main>
   );
 }

@@ -119,3 +119,56 @@ export function toFieldList(spec) {
   const s = toSelectString(spec);
   return s ? s.split(' ') : [];
 }
+
+/**
+ * The projection for the PROGRAM PAGE's related-articles section.
+ *
+ * ── DERIVED FROM WHAT THE CARD READS, NOT FROM WHAT AN `article.X` SCAN SEES ─
+ *
+ * The section renders `components/articles/ArticleCard`, so this set is that
+ * component's field reads and nothing else. Six of the eight are visible as
+ * literal `article.<field>` expressions in its markup:
+ *
+ *   slug excerpt title coverUrl programs skills
+ *
+ * THE OTHER TWO ARE THE WHOLE REASON THIS CONSTANT EXISTS. The card does not
+ * read them directly — it calls `shouldShowPinBadge(article)`, and the helper
+ * reads them:
+ *
+ *   isPinnedOnArticlePage   showPinBadge
+ *
+ * A projection built by grepping the card for `article.` therefore misses both,
+ * and the failure is silent in a specific way: `getArticles` runs `.lean()` and
+ * then a JSON round-trip that DROPS undefined keys, so the omitted field does
+ * not arrive as `undefined` — it does not arrive at all. `shouldShowPinBadge`
+ * then evaluates `article?.isPinnedOnArticlePage === true` as false for every
+ * row and the pin badge disappears from the section with nothing thrown and
+ * nothing logged. That is the same gap PUBLIC_LIST_FIELDS is documented as
+ * having above, and it is why this constant is a second one rather than a
+ * reuse of it — the note there says to add those two fields BEFORE pointing a
+ * public list at it, and this list is what that would have produced.
+ *
+ * `_id` is listed rather than assumed: Mongo returns it by default, but the
+ * section uses it as the React key, so it is a field this surface depends on
+ * and a reader should not have to know Mongo's default to see that.
+ *
+ * NOT LISTED, deliberately: `pinOrder` and `sortKey`. They order the result and
+ * the sort runs in the database, so nothing renders them.
+ */
+export const PROGRAM_ARTICLE_CARD_FIELDS =
+  '_id slug title excerpt coverUrl programs skills isPinnedOnArticlePage showPinBadge';
+
+/**
+ * How many related articles the program page shows.
+ *
+ * ONE CONSTANT, because ProgramPageClient has TWO route mounts and a cap that
+ * disagreed between them would be invisible: both pages would render, just with
+ * different numbers of cards, and only someone comparing the two would notice.
+ * The same reasoning the class guard in test/fs/programSectionPropsThreading
+ * applies to the props applies to their values.
+ *
+ * SIX is two full rows at the section's `lg:grid-cols-3`, which is itself set
+ * by the card's measured chip cap rather than chosen — see the note in
+ * components/program/ProgramArticlesSection.
+ */
+export const PROGRAM_ARTICLE_LIMIT = 6;

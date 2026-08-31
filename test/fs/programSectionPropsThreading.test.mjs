@@ -43,7 +43,7 @@ const COMPONENT = 'ProgramPageClient';
  * the guard red for the whole repo, and a section shipped without adding its
  * name here is exactly the hole this file is for.
  */
-const REQUIRED_PROPS = ['onlineCourses'];
+const REQUIRED_PROPS = ['onlineCourses', 'articles', 'programNames', 'skillNames'];
 
 /**
  * Line-preserving comment blanking — this guard reports `file:line`, and the
@@ -197,8 +197,11 @@ test('CONTROL: the matcher rejects a mount that omits a prop, and names THAT sit
     );
   }
   // And the inverse: a complete mount satisfies it, so the check is not
-  // vacuously failing on everything.
-  const complete = '<ProgramPageClient onlineCourses={x} articles={y} />';
+  // vacuously failing on everything. Built FROM `REQUIRED_PROPS` rather than
+  // written out, so adding a section's prop to that list cannot leave this
+  // control asserting against a stale fixture — which is exactly what happened
+  // when the articles section added three names to it.
+  const complete = `<ProgramPageClient ${REQUIRED_PROPS.map((p) => `${p}={x}`).join(' ')} />`;
   for (const prop of REQUIRED_PROPS) {
     assert.ok(new RegExp(`\\b${prop}=\\{`).test(complete), `false negative on \`${prop}\``);
   }

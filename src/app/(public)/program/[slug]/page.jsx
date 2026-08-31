@@ -6,6 +6,10 @@ import { getAllActiveEarlyBirdMap } from '@/lib/actions/course-promos';
 import { resolveProgramBySlug, getPageLinkability } from '@/lib/resolvePageSlug';
 import { getLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
 import { getOnlineCourses } from '@/lib/api/online-courses';
+import { listSkills } from '@/lib/api/skills';
+import { getArticles } from '@/lib/actions/articles';
+import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
+import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { ProgramPageClient } from './_components/ProgramPageClient';
 import { siteCurrentYear } from '@/lib/articlePublishTime';
 
@@ -45,7 +49,7 @@ export default async function ProgramPage({ params }) {
 
   // No custom slug — render inline under /program/<slug>.
   const { program, config } = resolved;
-  const [coursesRes, earlyBirdMap, faqs, linkability, onlineRes] = await Promise.all([
+  const [coursesRes, earlyBirdMap, faqs, linkability, onlineRes, articlesRes, skillsRes] = await Promise.all([
     listPublicCourses().catch(() => ({ items: [] })),
     getAllActiveEarlyBirdMap().catch(() => ({})),
     getLocalFaqsForCourse('program', programRefId(program)).catch(() => []),
@@ -64,6 +68,26 @@ export default async function ProgramPage({ params }) {
      * optional section could not load is worse than one without the section.
      */
     getOnlineCourses({ program: programRefId(program) }).catch(() => ({ items: [] })),
+    /**
+     * Related articles, for the section after the FAQ. Same three decisions as
+     * the catch-all route's loadProgram, and for the same reasons:
+     *   · filtered by the program SHORT CODE, which is what Article.programs
+     *     stores;
+     *   · NO ordering here — getArticles applies the shipped ARTICLE_SORT, and
+     *     a second sort at a call site would be a second owner of it;
+     *   · an EXPLICIT select from one named constant, because the read path
+     *     .lean()s then JSON-round-trips, so an omitted field vanishes rather
+     *     than arriving empty and the pin badge disappears silently.
+     */
+    getArticles({
+      program: programRefId(program),
+      active: true,
+      limit: PROGRAM_ARTICLE_LIMIT,
+      select: PROGRAM_ARTICLE_CARD_FIELDS,
+    }).catch(() => ({ items: [] })),
+    // For the article cards' skill chips. Same fail-closed shape as
+    // listPrograms above — an empty map renders no chips, never a raw id.
+    listSkills().catch(() => ({ items: [] })),
   ]);
   const programKey = String(program._id);
   const programCourses = (coursesRes.items ?? []).filter(
@@ -81,6 +105,9 @@ export default async function ProgramPage({ params }) {
       currentYear={siteCurrentYear()}
       skillSlugs={linkability.skillSlugs}
       onlineCourses={onlineRes.items ?? []}
+      articles={articlesRes.items ?? []}
+      programNames={buildProgramNames(programs)}
+      skillNames={buildSkillNames(skillsRes.items ?? [])}
     />
   );
 }

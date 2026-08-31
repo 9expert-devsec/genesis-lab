@@ -50,6 +50,9 @@ import {
 import { chipHref, programHref, skillHref } from '@/lib/utils';
 import { listSkills } from '@/lib/api/skills';
 import { getOnlineCourses } from '@/lib/api/online-courses';
+import { getArticles } from '@/lib/actions/articles';
+import { PROGRAM_ARTICLE_CARD_FIELDS, PROGRAM_ARTICLE_LIMIT } from '@/lib/articleListFields';
+import { buildProgramNames, buildSkillNames } from '@/lib/articleTaxonomy';
 import { enrichCoursesWithDetails } from '@/lib/api/enrich-courses';
 import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
@@ -194,13 +197,43 @@ async function loadProgram(slug) {
    * that have no choice, not about what the API needs.
    */
   const programCode = programRefId(program);
-  const onlineCourses = await getOnlineCourses({ program: programCode })
-    .then((r) => r.items ?? [])
-    .catch(() => []);
+  /**
+   * Both new sections and their name maps, in one Promise.all — they are
+   * independent of each other and of everything above, so serialising them
+   * would add three round trips to the page for nothing.
+   *
+   * ORDER IS NOT SET HERE. `getArticles` applies the shipped comparator
+   * (ARTICLE_SORT: pinned first, then pinOrder, then sortKey desc), which is
+   * the same order /articles uses. A second `.sort()` at this call site would
+   * be a second owner of that decision — the exact arrangement lib/articleRank
+   * exists to prevent.
+   *
+   * The SELECT is explicit and comes from one named constant, because the read
+   * path `.lean()`s and then JSON-round-trips: a field left out does not arrive
+   * empty, it does not arrive at all, and the pin badge silently vanishes. See
+   * PROGRAM_ARTICLE_CARD_FIELDS for which two fields that catches.
+   */
+  const [onlineCourses, articles, skillsRes] = await Promise.all([
+    getOnlineCourses({ program: programCode })
+      .then((r) => r.items ?? [])
+      .catch(() => []),
+    getArticles({
+      program: programCode,
+      active: true,
+      limit: PROGRAM_ARTICLE_LIMIT,
+      select: PROGRAM_ARTICLE_CARD_FIELDS,
+    })
+      .then((r) => r.items ?? [])
+      .catch(() => []),
+    listSkills().catch(() => ({ items: [] })),
+  ]);
   return {
     program, config, courses, earlyBirdMap, faqs,
     skillSlugs: linkability.skillSlugs,
     onlineCourses,
+    articles,
+    programNames: buildProgramNames(programsRes.items ?? []),
+    skillNames: buildSkillNames(skillsRes.items ?? []),
   };
 }
 
@@ -488,6 +521,9 @@ export default async function CatchAllPage({ params, searchParams }) {
           currentYear={siteCurrentYear()}
           skillSlugs={programData.skillSlugs}
           onlineCourses={programData.onlineCourses}
+          articles={programData.articles}
+          programNames={programData.programNames}
+          skillNames={programData.skillNames}
         />
       );
     }
