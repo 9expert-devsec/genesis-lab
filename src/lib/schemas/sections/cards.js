@@ -71,10 +71,34 @@ const statCardContent = z.object({
   icon:  z.string().default(''), // Lucide icon name
 }).passthrough();
 
+/**
+ * ── ROUND 69: `icon_card` GAINS AN IMAGE SOURCE (§G step 4, §H) ──────────
+ * docs/promotion-page-coverage.md §C read both live promotion pages' “สิ่งที่
+ * ได้รับ” strip: four cards, each a 512×512 raster ILLUSTRATION above a label.
+ * `icon` is a Lucide NAME, so an uploaded picture had no way in, and §C
+ * measured and rejected the alternative (`image` inside `card_grid` renders at
+ * width 1600 with `h-auto w-full`, turning the illustration into a full-cell
+ * tile with a figcaption and no card surface).
+ *
+ * ── IT IS THE *ADDS* KIND OF FIELD, SO IT DEFAULTS OFF (§H) ──────────────
+ * Round 50's `showPrice` above is the other kind — it can REMOVE something
+ * every stored card already shows, so it defaults TRUE and is read
+ * `!== false`. This one ADDS something no page has ever drawn, so absent must
+ * render exactly what a card that predates the field renders. `''` is what
+ * does that, and the renderer branches on `imageSrc.trim()`: empty or absent
+ * FALLS THROUGH to the unchanged Lucide branch. Copying the `!== false` shape
+ * here would put a broken <img> on every icon_card in production.
+ *
+ * The value is a URL, uploaded through the same `/api/admin/upload` endpoint
+ * every other image surface in this editor uses. No `publicId` is stored
+ * beside it — the same choice `promotionCover` makes, and the reason its
+ * folder is a sibling of `page-builder/` rather than inside it.
+ */
 const iconCardContent = z.object({
   icon:        z.string().default(''), // Lucide icon name
   title:       z.string().default(''),
   description: z.string().default(''),
+  imageSrc:    z.string().default(''), // round 69 — set: the illustration; empty/absent: the icon
 }).passthrough();
 
 const instructorCardContent = z.object({

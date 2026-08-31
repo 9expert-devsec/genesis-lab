@@ -368,25 +368,111 @@ function StatCardEditor({ content, patch }) {
 }
 
 // ── icon_card ──────────────────────────────────────────────────────────
+/**
+ * Round 69 — the illustration uploader.
+ *
+ * ── REUSES THE UPLOAD MECHANISM, DOES NOT INVENT A SECOND ────────────────
+ * Two image surfaces already exist in this editor and both POST a
+ * multipart body to `/api/admin/upload`: `ImageEditor` above (folder
+ * `page-builder`, stores `{src, publicId}`) and `PromoCoverField` in
+ * PageSettingsDialog (folder `promotion-covers`, stores the URL ONLY).
+ *
+ * This follows PROMOCOVERFIELD, because it stores the URL only: `icon_card`
+ * gains ONE key, so there is no `publicId` beside it, and the note on
+ * `promotion-covers` in the upload route says what that implies — a URL with
+ * no ownership token must not live inside `<base>/page-builder/`, which is the
+ * scope the item-5 Cloudinary GC will sweep, or the GC will read it as an
+ * orphan. Hence `page-builder-icons`, a sibling, allowlisted next to it.
+ *
+ * ── THE PICKER IS UNTOUCHED AND STAYS REACHABLE ──────────────────────────
+ * The icon field below is exactly the control round 14 built, still enumerating
+ * from `isKnownIconName` through `ICON_NAMES`. It is not hidden, disabled or
+ * conditioned on the image: an author can set both and clear the image to get
+ * the icon back. Only the RENDERER prefers the image, which is why the hint
+ * says so rather than the control pretending the icon is gone.
+ */
 function IconCardEditor({ content, patch }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
   const title = String(content?.title ?? '').trim();
   const description = String(content?.description ?? '').trim();
   const icon = String(content?.icon ?? '').trim();
-  const empty = !title && !description && !icon; // mirrors IconCardSection's raw-content guard
+  const imageSrc = String(content?.imageSrc ?? '').trim();
+  // Mirrors IconCardSection's raw-content guard, which round 69 widened by the
+  // image: a card carrying only a picture still renders.
+  const empty = !title && !description && !icon && !imageSrc;
   const iconBad = icon !== '' && !isKnownIconName(icon);
+
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('folder', 'page-builder-icons');
+      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? 'อัปโหลดไม่สำเร็จ');
+      // URL ONLY — json.publicId is intentionally ignored, see the note above.
+      patch({ imageSrc: json.url });
+    } catch (e) {
+      setErr(e?.message ?? 'อัปโหลดไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
+      {/* FieldBlock, not Field: this is a COMPOSITE control (an upload label and
+          a remove button), and Field is a <label> that forwards a stray click on
+          its own padding to the first labelable control inside it — the round
+          47/48 defect FieldBlock exists for. */}
+      <FieldBlock
+        label="รูปภาพแทนไอคอน (ไม่บังคับ)"
+        hint="ถ้าใส่รูป จะแสดงรูปนี้แทนไอคอน — ขนาดที่แสดงคือ 44×44 px เท่ากับกรอบไอคอน รูปจะย่อให้พอดีกรอบโดยไม่บิดสัดส่วน"
+      >
+        {imageSrc && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageSrc} alt="" className="mb-1.5 h-11 w-11 rounded-9e-md object-contain" />
+        )}
+        <label className={cn(
+          'flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed',
+          'border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50',
+          'hover:border-9e-action/40 hover:text-9e-action',
+          busy && 'pointer-events-none opacity-50'
+        )}>
+          {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+          {busy ? 'กำลังอัปโหลด…' : imageSrc ? 'เปลี่ยนรูป' : 'อัปโหลดรูป'}
+          <input
+            type="file" accept="image/*" className="sr-only" disabled={busy}
+            onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }}
+          />
+        </label>
+        {imageSrc && (
+          <button
+            type="button"
+            className="mt-1.5 text-xs text-9e-slate-dp-50 underline hover:text-9e-action"
+            onClick={() => patch({ imageSrc: '' })}
+          >
+            เอารูปออก (กลับไปใช้ไอคอน)
+          </button>
+        )}
+      </FieldBlock>
+      {err && <Warn tone="red">{err}</Warn>}
+
       <Field label="ไอคอน" hint={ICON_HINT}>
         <IconPicker value={content?.icon} onChange={(v) => patch({ icon: v })} invalid={iconBad} />
       </Field>
-      {iconBad && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
+      {iconBad && !imageSrc && <Warn>ไม่รู้จักไอคอนชื่อนี้ — การ์ดจะแสดงโดยไม่มีไอคอน</Warn>}
+      {imageSrc && icon !== '' && <Warn>การ์ดนี้มีทั้งรูปและไอคอน — จะแสดงรูป เอารูปออกเพื่อกลับไปใช้ไอคอน</Warn>}
       <Field label="หัวข้อ">
         <TextInput value={content?.title} onChange={(v) => patch({ title: v })} />
       </Field>
       <Field label="คำอธิบาย">
         <TextArea value={content?.description} onChange={(v) => patch({ description: v })} />
       </Field>
-      {empty && <Warn>ยังไม่มีไอคอน หัวข้อ หรือคำอธิบาย — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
+      {empty && <Warn>ยังไม่มีรูป ไอคอน หัวข้อ หรือคำอธิบาย — การ์ดนี้จะไม่แสดงผลบนหน้าเว็บ</Warn>}
     </>
   );
 }
