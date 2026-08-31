@@ -56,6 +56,18 @@ function normaliseDefault(v) {
  * component is shared with the career-path and masterclass forms, which pass no
  * marker and render exactly as before.
  */
+/**
+ * `readOnly` / `note` — OPT-IN, and both default to off so every other consumer
+ * of this shared component (the career-path and masterclass forms) is
+ * byte-identical.
+ *
+ * They exist for a field genesis can DISPLAY but cannot SAVE. `readOnly` is
+ * deliberately not `disabled`: a disabled control is dropped from the form
+ * entirely and greys its text past readability, while a read-only one stays
+ * selectable and copyable — which is the whole remaining value of the field.
+ * That it still submits its value is harmless here and checked rather than
+ * assumed: the payload omits the key, so nothing reads what it posts.
+ */
 export function BulletTextarea({
   name,
   defaultValue = '',
@@ -66,6 +78,8 @@ export function BulletTextarea({
   urls = false,
   onChange = null,
   marker = null,
+  readOnly = false,
+  note = null,
 }) {
   const seed = normaliseDefault(defaultValue);
   const [value, setValueState] = useState(seed);
@@ -114,6 +128,7 @@ export function BulletTextarea({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         rows={rows}
+        readOnly={readOnly}
         placeholder={
           placeholder ||
           (urls
@@ -122,10 +137,16 @@ export function BulletTextarea({
         }
         spellCheck={!urls}
         className={
-          'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white ' +
+          'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-sm focus:outline-none ' +
+          (readOnly
+            ? 'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-muted)] '
+            : 'bg-white text-9e-navy focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white ') +
           (urls ? 'font-mono text-xs' : '')
         }
       />
+      {note && (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{note}</p>
+      )}
       {showPreview && (
         <div
           aria-hidden="true"

@@ -851,6 +851,21 @@ export function CourseForm({
           />
         </Field>
 
+        {/*
+          READ-ONLY, because it was never writable — it only looked writable.
+
+          `title` is returned by no MSDB read route (0 of 80 courses, list and
+          detail alike), so `initial?.title` is permanently undefined and this
+          box always rendered blank. It used to post its value on save, which
+          overwrote whatever MSDB held; 346911f removed it from the payload, and
+          this makes the control say so instead of silently accepting typing.
+
+          readOnly, NOT disabled: a disabled control is dropped from the form and
+          greyed past reading, while a read-only one stays selectable and
+          copyable. It does still submit its value — harmless, because the
+          payload omits the key, and a test pins that it stays omitted so this
+          does not quietly become a write path again.
+        */}
         <Field
           label="เนื้อหา"
           hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ใน MSDB ชื่อ field คือ &quot;title&quot; แม้จะเก็บ body"
@@ -858,9 +873,17 @@ export function CourseForm({
           <textarea
             rows={8}
             name="title"
+            readOnly
             defaultValue={initial?.title ?? ''}
-            className={inputCls + ' font-mono text-xs'}
+            className={
+              'w-full rounded-9e-md border border-[var(--surface-border)] px-3 py-2 ' +
+              'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-muted)] ' +
+              'font-mono text-xs focus:outline-none'
+            }
           />
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            {READ_BLIND_NOTE}
+          </p>
         </Field>
       </Section>
 
@@ -1161,11 +1184,14 @@ export function CourseForm({
           defaultValue={initial?.course_system_requirements}
           marker="check"
         />
+        {/* Same read-blind state as เนื้อหา above, same reasoning, same note. */}
         <BulletTextarea
           name="bullets"
           label="ไฮไลต์"
           hint="คำโปรย bullet ที่แสดงในหน้า course"
           defaultValue={initial?.bullets}
+          readOnly
+          note={READ_BLIND_NOTE}
         />
       </Section>
 
@@ -1549,6 +1575,20 @@ export function CourseForm({
 }
 
 // ── shared bits ─────────────────────────────────────────────────────
+
+/**
+ * The note under the two fields genesis can show but cannot save.
+ *
+ * ONE CONSTANT, because there are two of them and a second copy would let the
+ * wording drift between two controls that are broken for exactly the same
+ * reason. See the read-blind note in lib/actions/courses.js: `title` and
+ * `bullets` are returned by no MSDB read route, so genesis cannot preserve them
+ * and therefore must not write them — which leaves these inputs able to accept
+ * typing that goes nowhere. Saying so is the whole fix; the alternative was an
+ * admin discovering it by losing work.
+ */
+const READ_BLIND_NOTE =
+  'MSDB ไม่ส่งค่านี้กลับมา จึงแก้ที่นี่ไม่ได้ — แก้ที่ MSDB โดยตรง';
 
 const inputCls =
   'w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:border-9e-action focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
