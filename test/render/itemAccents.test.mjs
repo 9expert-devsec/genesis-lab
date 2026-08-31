@@ -213,7 +213,7 @@ test('instructor_card: the name, role and bio are NOT accented — the first neg
   const classes = classesIn(html);
 
   assert.deepEqual(classes, [
-    'mx-auto flex max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center',
+    'mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center',
     'mt-3 font-heading text-lg font-bold',
     'mt-0.5 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]',
     'mt-2 whitespace-pre-line text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]',
@@ -232,6 +232,18 @@ test('instructor_card: the name, role and bio are NOT accented — the first neg
 
 test('instructor_card: the fixed card width is untouched by this round', () => {
   /**
+   * ── AMENDED BY ROUND 70, AND WHAT THAT DID NOT CHANGE ────────────────
+   * `h-full` was added to this card so it can fill a `card_grid` row (the
+   * fix lives in SectionRenderer; this class is the card's half of it, and
+   * it is inert outside a grid — measured, a top-level instructor_card is
+   * 142/184/204/184px before and after).
+   *
+   * The RULES both of these assertions exist for are untouched, which is why
+   * this is an amendment and not the tripwire being edited to agree with the
+   * code: no element took the accent, and `max-w-sm` is still there. The
+   * fixed-width finding is still OPEN.
+   */
+  /**
    * A separate open finding with its own tripwire (ความกว้าง cannot change this
    * card). Colour-only means it must be exactly as it was, and a colour change
    * that quietly took the clamp with it would look like a fix to a finding
@@ -239,7 +251,7 @@ test('instructor_card: the fixed card width is untouched by this round', () => {
    */
   const outer = classesIn(R(InstructorCardSection, { data: INSTRUCTOR }))[0];
   assert.equal(outer,
-    'mx-auto flex max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center');
+    'mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center');
 });
 
 test('CONTROL: the chip reader would SEE an unaccented chip', () => {

@@ -10,7 +10,8 @@
  * reads `getBoundingClientRect()` out of headless Chrome.
  *
  * ── WHAT IT MEASURES ──────────────────────────────────────────────────────
- *   1. the box, in px, and the ICON card's box beside it — the swap must not
+ *   1. the box, in px (44 in round 69, 80 from round 70), and the ICON card's
+ *      box beside it — both branches share it, so the swap must not
  *      move the card's height, or it is a layout change wearing a content
  *      change's clothes
  *   2. portrait / landscape / square / very-wide, each one's rendered picture
@@ -20,7 +21,7 @@
  *   4. four cards, four ratios, ONE height
  *
  * ── THE CONTROL ───────────────────────────────────────────────────────────
- * A second grid rendered from the same components with `h-11 w-11` STRIPPED
+ * A second grid rendered from the same components with the box size STRIPPED
  * off the wrapper — the size constraint removed and nothing else. Its four
  * heights must DIVERGE. Four equal heights in both grids would mean the
  * measurement cannot see the constraint at all, and every number above would be
@@ -40,7 +41,7 @@
  *   node --import ./scripts/_probe-panel-register.mjs \
  *     scripts/_measure-round69-icon-card-box.mjs
  */
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+
 import { deflateSync } from 'node:zlib';
 import path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -49,8 +50,8 @@ import { compile } from '../test/twCompile.mjs';
 import { launch, openPage } from '../test/browser/cdp.mjs';
 
 const ROOT = process.cwd();
-const OUT = path.join(ROOT, 'public/_round69');
-const URL_BASE = '/_round69';
+/** picture name -> data: URI, filled in below. Nothing touches the filesystem. */
+const PIC_URL = {};
 
 // ── a minimal PNG writer: signature + IHDR + IDAT + IEND ───────────────────
 // Real raster files, because `object-contain` is decided by the DECODED
@@ -100,133 +101,133 @@ const PICTURES = {
 const TINTS = [[219, 68, 55], [15, 157, 88], [66, 133, 244], [244, 180, 0], [155, 89, 182]];
 
 const report = {};
+// No try/finally: with the page injected into about:blank and every picture a
+// data: URI, this harness creates no file and has nothing to clean up.
+Object.entries(PICTURES).forEach(([name, [w, h]], i) => {
+  PIC_URL[name] = 'data:image/png;base64,' + png(w, h, TINTS[i % TINTS.length]).toString('base64');
+});
+
+// ── the markup: the real component, four ratios, plus an icon card ───────
+const card = (content) => renderToStaticMarkup(IconCardSection({ content, style: {} }));
+const cards = [
+  card({ imageSrc: PIC_URL['portrait'], title: 'เอกสารประกอบการอบรม', description: 'ตัวอย่างคำอธิบาย' }),
+  card({ imageSrc: PIC_URL['landscape'], title: 'ใบประกาศนียบัตร', description: 'ตัวอย่างคำอธิบาย' }),
+  card({ imageSrc: PIC_URL['square'], title: 'อาหารว่างและเครื่องดื่ม', description: 'ตัวอย่างคำอธิบาย' }),
+  card({ imageSrc: PIC_URL['verywide'], title: 'ที่ปรึกษาหลังการอบรม', description: 'ตัวอย่างคำอธิบาย' }),
+];
+const iconCard = card({ icon: 'FileText', title: 'เอกสารประกอบการอบรม', description: 'ตัวอย่างคำอธิบาย' });
+const hugeCard = card({ imageSrc: PIC_URL['huge'], title: 'อัปโหลดใหญ่มาก' });
+
+// THE CONTROL: the same markup with the size constraint stripped off the
+// wrapper, and nothing else changed.
+const stripped = cards.map((m) => m.replace('mb-3 inline-flex h-20 w-20 items-center', 'mb-3 inline-flex items-center'));
+
+const grid = (id, items) =>
+  `<div id="${id}" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start">`
+  + items.map((m, i) => `<div data-cell="${id}-${i}">${m}</div>`).join('') + '</div>';
+
+const body = [
+  grid('real', cards),
+  `<div id="icononly" style="width:280px">${iconCard}</div>`,
+  `<div id="huge" style="width:280px">${hugeCard}</div>`,
+  grid('control', stripped),
+].join('\n');
+
+const css = await compile([{ raw: body, extension: 'html' }]);
+const page_html = [
+  '<!doctype html><html><head><meta charset="utf-8">',
+  '<style>*{box-sizing:border-box}body{margin:0;padding:24px;width:1280px;font-family:sans-serif}</style>',
+  `<style>${css}</style>`,
+  '</head><body>', body, '</body></html>',
+].join('\n');
+
+// ── measure ─────────────────────────────────────────────────────────────
+const { browser, close } = await launch();
+const page = await openPage(browser, { width: 1440, height: 1200 });
 try {
-  mkdirSync(OUT, { recursive: true });
-  Object.entries(PICTURES).forEach(([name, [w, h]], i) => {
-    writeFileSync(path.join(OUT, name + '.png'), png(w, h, TINTS[i % TINTS.length]));
-  });
+  await page.eval((html) => { document.open(); document.write(html); document.close(); }, page_html);
+  // Every picture must be DECODED before anything is measured, or an
+  // object-contain box reports the placeholder size instead of the fit.
+  await page.eval(() => Promise.all([...document.images].map((i) => (i.complete ? null : i.decode().catch(() => null)))));
 
-  // ── the markup: the real component, four ratios, plus an icon card ───────
-  const card = (content) => renderToStaticMarkup(IconCardSection({ content, style: {} }));
-  const cards = [
-    card({ imageSrc: `${URL_BASE}/portrait.png`, title: 'เอกสารประกอบการอบรม', description: 'ตัวอย่างคำอธิบาย' }),
-    card({ imageSrc: `${URL_BASE}/landscape.png`, title: 'ใบประกาศนียบัตร', description: 'ตัวอย่างคำอธิบาย' }),
-    card({ imageSrc: `${URL_BASE}/square.png`, title: 'อาหารว่างและเครื่องดื่ม', description: 'ตัวอย่างคำอธิบาย' }),
-    card({ imageSrc: `${URL_BASE}/verywide.png`, title: 'ที่ปรึกษาหลังการอบรม', description: 'ตัวอย่างคำอธิบาย' }),
-  ];
-  const iconCard = card({ icon: 'FileText', title: 'เอกสารประกอบการอบรม', description: 'ตัวอย่างคำอธิบาย' });
-  const hugeCard = card({ imageSrc: `${URL_BASE}/huge.png`, title: 'อัปโหลดใหญ่มาก' });
-
-  // THE CONTROL: the same markup with the size constraint stripped off the
-  // wrapper, and nothing else changed.
-  const stripped = cards.map((m) => m.replace('mb-3 inline-flex h-11 w-11 items-center', 'mb-3 inline-flex items-center'));
-
-  const grid = (id, items) =>
-    `<div id="${id}" style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start">`
-    + items.map((m, i) => `<div data-cell="${id}-${i}">${m}</div>`).join('') + '</div>';
-
-  const body = [
-    grid('real', cards),
-    `<div id="icononly" style="width:280px">${iconCard}</div>`,
-    `<div id="huge" style="width:280px">${hugeCard}</div>`,
-    grid('control', stripped),
-  ].join('\n');
-
-  const css = await compile([{ raw: body, extension: 'html' }]);
-  writeFileSync(path.join(OUT, 'index.html'), [
-    '<!doctype html><html><head><meta charset="utf-8">',
-    '<style>*{box-sizing:border-box}body{margin:0;padding:24px;width:1280px;font-family:sans-serif}</style>',
-    `<style>${css}</style>`,
-    '</head><body>', body, '</body></html>',
-  ].join('\n'), 'utf8');
-
-  // ── measure ─────────────────────────────────────────────────────────────
-  const { browser, close } = await launch();
-  const page = await openPage(browser, { width: 1440, height: 1200 });
-  try {
-    await page.goto(`${URL_BASE}/index.html`, { waitMs: 2500 });
-
-    const measured = await page.eval(() => {
-      const box = (el) => { const r = el.getBoundingClientRect(); return { w: +r.width.toFixed(2), h: +r.height.toFixed(2) }; };
-      const cellsOf = (id) => [...document.querySelectorAll(`[data-cell^="${id}-"]`)].map((cell) => {
-        const img = cell.querySelector('img');
-        const wrap = img ? img.parentElement : cell.querySelector('div > div');
-        // The DRAWN picture inside an object-fit box, not the element box.
-        let drawn = null;
-        if (img && img.naturalWidth) {
-          const b = img.getBoundingClientRect();
-          const scale = Math.min(b.width / img.naturalWidth, b.height / img.naturalHeight);
-          drawn = { w: +(img.naturalWidth * scale).toFixed(2), h: +(img.naturalHeight * scale).toFixed(2) };
-        }
-        return {
-          src: img ? img.getAttribute('src') : null,
-          natural: img ? { w: img.naturalWidth, h: img.naturalHeight } : null,
-          wrapper: wrap ? box(wrap) : null,
-          imgBox: img ? box(img) : null,
-          objectFit: img ? getComputedStyle(img).objectFit : null,
-          drawn,
-          cardH: +cell.firstElementChild.getBoundingClientRect().height.toFixed(2),
-        };
-      });
-      const iconChip = document.querySelector('#icononly div > div');
-      const hugeImg = document.querySelector('#huge img');
+  const measured = await page.eval(() => {
+    const box = (el) => { const r = el.getBoundingClientRect(); return { w: +r.width.toFixed(2), h: +r.height.toFixed(2) }; };
+    const cellsOf = (id) => [...document.querySelectorAll(`[data-cell^="${id}-"]`)].map((cell) => {
+      const img = cell.querySelector('img');
+      const wrap = img ? img.parentElement : cell.querySelector('div > div');
+      // The DRAWN picture inside an object-fit box, not the element box.
+      let drawn = null;
+      if (img && img.naturalWidth) {
+        const b = img.getBoundingClientRect();
+        const scale = Math.min(b.width / img.naturalWidth, b.height / img.naturalHeight);
+        drawn = { w: +(img.naturalWidth * scale).toFixed(2), h: +(img.naturalHeight * scale).toFixed(2) };
+      }
       return {
-        real: cellsOf('real'),
-        control: cellsOf('control'),
-        iconChip: box(iconChip),
-        iconCardH: +document.querySelector('#icononly > div').getBoundingClientRect().height.toFixed(2),
-        huge: {
-          natural: { w: hugeImg.naturalWidth, h: hugeImg.naturalHeight },
-          box: box(hugeImg),
-          cardH: +document.querySelector('#huge > div').getBoundingClientRect().height.toFixed(2),
-        },
+        src: img ? img.getAttribute('src') : null,
+        natural: img ? { w: img.naturalWidth, h: img.naturalHeight } : null,
+        wrapper: wrap ? box(wrap) : null,
+        imgBox: img ? box(img) : null,
+        objectFit: img ? getComputedStyle(img).objectFit : null,
+        drawn,
+        cardH: +cell.firstElementChild.getBoundingClientRect().height.toFixed(2),
       };
     });
+    const iconChip = document.querySelector('#icononly div > div');
+    const hugeImg = document.querySelector('#huge img');
+    return {
+      real: cellsOf('real'),
+      control: cellsOf('control'),
+      iconChip: box(iconChip),
+      iconCardH: +document.querySelector('#icononly > div').getBoundingClientRect().height.toFixed(2),
+      huge: {
+        natural: { w: hugeImg.naturalWidth, h: hugeImg.naturalHeight },
+        box: box(hugeImg),
+        cardH: +document.querySelector('#huge > div').getBoundingClientRect().height.toFixed(2),
+      },
+    };
+  });
 
-    const ratio = (o) => (o ? +(o.w / o.h).toFixed(3) : null);
-    const uniq = (xs) => [...new Set(xs)];
+  const ratio = (o) => (o ? +(o.w / o.h).toFixed(3) : null);
+  const uniq = (xs) => [...new Set(xs)];
 
-    report['-- 1. THE BOX --'] = '';
-    report.iconChipBox = measured.iconChip;
-    report.imageWrapperBoxes = measured.real.map((c) => c.wrapper);
-    report.boxesAllEqualToIconChip = measured.real.every(
-      (c) => c.wrapper.w === measured.iconChip.w && c.wrapper.h === measured.iconChip.h);
-    report.cardHeight_iconBranch = measured.iconCardH;
-    report.cardHeight_imageBranch = uniq(measured.real.map((c) => c.cardH));
-    report.swapMovesCardHeight = !measured.real.every((c) => c.cardH === measured.iconCardH);
+  report['-- 1. THE BOX --'] = '';
+  report.iconChipBox = measured.iconChip;
+  report.imageWrapperBoxes = measured.real.map((c) => c.wrapper);
+  report.boxesAllEqualToIconChip = measured.real.every(
+    (c) => c.wrapper.w === measured.iconChip.w && c.wrapper.h === measured.iconChip.h);
+  report.cardHeight_iconBranch = measured.iconCardH;
+  report.cardHeight_imageBranch = uniq(measured.real.map((c) => c.cardH));
+  report.swapMovesCardHeight = !measured.real.every((c) => c.cardH === measured.iconCardH);
 
-    report['-- 2. ASPECT RATIO, THREE (FOUR) SHAPES --'] = '';
-    report.perPicture = measured.real.map((c) => ({
-      src: c.src,
-      naturalRatio: ratio(c.natural),
-      objectFit: c.objectFit,
-      elementBox: c.imgBox,
-      drawnPicture: c.drawn,
-      drawnRatio: ratio(c.drawn),
-      distorted: Math.abs(ratio(c.natural) - ratio(c.drawn)) > 0.01,
-      fitsInsideBox: c.drawn.w <= c.imgBox.w + 0.5 && c.drawn.h <= c.imgBox.h + 0.5,
-    }));
-    report.anyDistorted = report.perPicture.some((p) => p.distorted);
+  report['-- 2. ASPECT RATIO, THREE (FOUR) SHAPES --'] = '';
+  report.perPicture = measured.real.map((c) => ({
+    src: c.src,
+    naturalRatio: ratio(c.natural),
+    objectFit: c.objectFit,
+    elementBox: c.imgBox,
+    drawnPicture: c.drawn,
+    drawnRatio: ratio(c.drawn),
+    distorted: Math.abs(ratio(c.natural) - ratio(c.drawn)) > 0.01,
+    fitsInsideBox: c.drawn.w <= c.imgBox.w + 0.5 && c.drawn.h <= c.imgBox.h + 0.5,
+  }));
+  report.anyDistorted = report.perPicture.some((p) => p.distorted);
 
-    report['-- 3. A VERY LARGE UPLOAD --'] = '';
-    report.huge = measured.huge;
-    report.hugeDownscaleFactor = +(measured.huge.natural.w / measured.huge.box.w).toFixed(1);
+  report['-- 3. A VERY LARGE UPLOAD --'] = '';
+  report.huge = measured.huge;
+  report.hugeDownscaleFactor = +(measured.huge.natural.w / measured.huge.box.w).toFixed(1);
 
-    report['-- 4. FOUR RATIOS, ONE HEIGHT --'] = '';
-    report.fourCardHeights = measured.real.map((c) => c.cardH);
-    report.distinctHeights = uniq(measured.real.map((c) => c.cardH)).length;
-    report.FOUR_CARDS_ONE_HEIGHT = uniq(measured.real.map((c) => c.cardH)).length === 1;
+  report['-- 4. FOUR RATIOS, ONE HEIGHT --'] = '';
+  report.fourCardHeights = measured.real.map((c) => c.cardH);
+  report.distinctHeights = uniq(measured.real.map((c) => c.cardH)).length;
+  report.FOUR_CARDS_ONE_HEIGHT = uniq(measured.real.map((c) => c.cardH)).length === 1;
 
-    report['-- CONTROL: strip h-11 w-11 and the heights must diverge --'] = '';
-    report.controlCardHeights = measured.control.map((c) => c.cardH);
-    report.controlDistinctHeights = uniq(measured.control.map((c) => c.cardH)).length;
-    report.controlDiscriminates = uniq(measured.control.map((c) => c.cardH)).length > 1;
-  } finally {
-    await page.close().catch(() => {});
-    await close().catch(() => {});
-  }
+  report['-- CONTROL: strip h-11 w-11 and the heights must diverge --'] = '';
+  report.controlCardHeights = measured.control.map((c) => c.cardH);
+  report.controlDistinctHeights = uniq(measured.control.map((c) => c.cardH)).length;
+  report.controlDiscriminates = uniq(measured.control.map((c) => c.cardH)).length > 1;
 } finally {
-  rmSync(OUT, { recursive: true, force: true });
+  await page.close().catch(() => {});
+  await close().catch(() => {});
 }
 
 console.log(JSON.stringify(report, null, 2));

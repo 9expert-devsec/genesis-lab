@@ -89,6 +89,31 @@ import { CourseScheduleSection } from './sections/course_schedule';
  * in the renderer, and it exists precisely so there is no second renderer.
  */
 
+/**
+ * ── ROUND 70: THE TWO LAYOUTS WHOSE CHILDREN SHARE A TRACK ───────────────
+ * A grid ROW is one height; the cards drawn in it were four. Measured, in a
+ * four-column `card_grid` with four label lengths: the grid ITEM (this
+ * component's own <section>) is the full 272px of its row, and the FIRST
+ * element inside it — the container <div> below — stops at 168/204/272/204,
+ * tracking label length. Everything under that div inherits the short height,
+ * which is why `price_card` already carrying `flex h-full flex-col` still did
+ * not fill: `height:100%` against an auto-height parent computes to `auto`.
+ *
+ * So the container div is told to fill, and ONLY for a child of these two. Not
+ * unconditionally: a top-level section, a `two_column` slot, a `container`, a
+ * `tabs` panel — none of them puts its children in a shared track, and a
+ * blanket fill there would be height nobody asked for on every page. A section
+ * outside this set renders byte-for-byte what it rendered before.
+ *
+ * NOT applied to the <section> itself, and that is not an oversight. In
+ * `card_grid` the section IS the grid item and already stretches; a percentage
+ * height on a grid item resolves against the whole GRID, so on a two-row grid
+ * it would make every card as tall as both rows together. `highlight_grid`
+ * needs its child stretched instead, and that is done where its box is
+ * composed (sections/highlight_grid.jsx) rather than here.
+ */
+const FILLS_ITS_TRACK = new Set(['card_grid', 'highlight_grid']);
+
 // type → component
 const REGISTRY = {
   heading: HeadingSection,
@@ -209,7 +234,7 @@ function EmptyInEditor({ type }) {
   );
 }
 
-export function SectionRenderer({ section, depth = 0, path = null, resolvedData = null }) {
+export function SectionRenderer({ section, depth = 0, path = null, resolvedData = null, fillHeight = false }) {
   if (!section || typeof section !== 'object') return null;
   if (section.enabled === false) return null;
 
@@ -257,6 +282,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
           depth={depth + 1}
           path={path ? [...path, 'content', slot, i] : null}
           resolvedData={resolvedData}
+          fillHeight={FILLS_ITS_TRACK.has(section.type)}
         />
       ));
     }
@@ -336,7 +362,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
       style={hasOuterStyle ? outerStyle : undefined}
     >
       {scopedCss && <style dangerouslySetInnerHTML={{ __html: scopedCss }} />}
-      <div className={cn('mx-auto px-4', containerWidthClass(settings.containerWidth))}>
+      <div className={cn('mx-auto px-4', containerWidthClass(settings.containerWidth), fillHeight && 'h-full')}>
         {inner}
         {path != null && sectionRendersEmpty(section) && <EmptyInEditor type={section.type} />}
         {cleanHtml && (

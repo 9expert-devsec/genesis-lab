@@ -53,8 +53,8 @@ const elideSvg = (m) => m.replace(/<svg\b[\s\S]*?<\/svg>/g, '<svg/>');
  * existed. Pinned so that "absent falls through unchanged" is a byte comparison
  * rather than a claim.
  */
-const ICON_BRANCH = '<div class="rounded-9e-lg p-6">'
-  + '<div class="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-9e-md '
+const ICON_BRANCH = '<div class="h-full rounded-9e-lg p-6 text-center">'
+  + '<div class="mb-3 inline-flex h-20 w-20 items-center justify-center rounded-9e-md '
   + 'bg-[color:var(--pb-accent-fill)]/10 text-[var(--pb-accent-fill)]"><svg/></div>'
   + '<h3 class="font-heading text-lg font-bold">ก</h3>'
   + '<p class="mt-1.5 whitespace-pre-line text-9e-slate-dp-50 dark:text-[#94a3b8]">ข</p>'
@@ -114,11 +114,11 @@ test('the image branch keeps the icon chip’s box: same size classes, same marg
   const withImage = render({ imageSrc: IMG, title: 'ก' });
   const withIcon = render({ icon: 'Rocket', title: 'ก' });
   const boxOf = (m) => (/class="(mb-3 inline-flex[^"]*)"/.exec(m) ?? [])[1] ?? '';
-  const sizeOf = (m) => boxOf(m).split(/\s+/).filter((c) => /^(mb-3|h-11|w-11|inline-flex|rounded-9e-md)$/.test(c)).sort();
+  const sizeOf = (m) => boxOf(m).split(/\s+/).filter((c) => /^(mb-3|h-20|w-20|inline-flex|rounded-9e-md)$/.test(c)).sort();
 
   assert.deepEqual(sizeOf(withImage), sizeOf(withIcon),
     'the swap moved the box — a layout change wearing a content change’s clothes');
-  assert.deepEqual(sizeOf(withImage), ['h-11', 'inline-flex', 'mb-3', 'rounded-9e-md', 'w-11']);
+  assert.deepEqual(sizeOf(withImage), ['h-20', 'inline-flex', 'mb-3', 'rounded-9e-md', 'w-20']);
 });
 
 test('an unknown icon NAME does not stop the image rendering', () => {
@@ -170,8 +170,8 @@ test('four images of four different shapes produce ONE identical box', () => {
   for (const [i, s] of shapes.entries()) {
     assert.equal(JSON.stringify(s), first, `image ${i} (${RATIOS[i]}) came out with a different box`);
   }
-  assert.match(shapes[0].box, /\bh-11\b/, 'the box lost its fixed height');
-  assert.match(shapes[0].box, /\bw-11\b/, 'the box lost its fixed width');
+  assert.match(shapes[0].box, /\bh-20\b/, 'the box lost its fixed height');
+  assert.match(shapes[0].box, /\bw-20\b/, 'the box lost its fixed width');
   assert.match(shapes[0].img, /\bobject-contain\b/,
     'the picture is no longer fitted inside the box — a wide upload will be stretched or cropped');
 });
@@ -183,14 +183,14 @@ test('CONTROL: remove the size constraint and the same check reports the diverge
    * reintroduce §C's failure (a picture sized by its own intrinsic ratio) — and
    * the predicate above must reject it.
    */
-  const strip = (m) => m.replace(' h-11 w-11', '');
+  const strip = (m) => m.replace(' h-20 w-20', '');
   const shapes = RATIOS.map((imageSrc, i) => {
     const m = render({ imageSrc, title: 'ก', description: 'ข' });
     return geometryOf(i === 2 ? strip(m) : m);
   });
   const distinct = new Set(shapes.map((s) => JSON.stringify(s)));
   assert.equal(distinct.size, 2, 'the stripped card was NOT distinguishable — the check above is inert');
-  assert.equal(/\bh-11\b/.test(shapes[2].box), false, 'the strip did not actually remove the constraint');
+  assert.equal(/\bh-20\b/.test(shapes[2].box), false, 'the strip did not actually remove the constraint');
 });
 
 // ── 5. THE DEFAULT, AND WHAT CHANGING IT WOULD DO ──────────────────────────
