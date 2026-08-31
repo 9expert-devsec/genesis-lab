@@ -105,9 +105,16 @@ const picture = (doc) => doc.querySelector(`img[src="${IMG.src}"]`);
 const click = (el) =>
   el.dispatchEvent(new el.ownerDocument.defaultView.MouseEvent('click', { bubbles: true }));
 
-/** The plate wrapper, matched on its own element — NOT on a bare `bg-white`. */
+/**
+ * The plate wrapper, matched on its own element — NOT on a bare `bg-white`.
+ *
+ * Searched at ANY depth under the dialog rather than as a direct child: the
+ * close control now has its own row and the picture sits in a centring stage,
+ * so the plate is a grandchild. Anchoring on depth would have made this
+ * selector a second thing to keep in step with the layout.
+ */
 const plateEl = (doc) =>
-  [...doc.querySelectorAll('[role="dialog"] > div')].find((d) =>
+  [...doc.querySelectorAll('[role="dialog"] div')].find((d) =>
     /(^|\s)bg-white(\s|$)/.test(d.getAttribute('class') ?? '')
   );
 
@@ -292,14 +299,66 @@ test('the plate does NOT vary by theme, while the backdrop stays dark in both', 
 });
 
 test('the image is fit to the viewport and never cropped, in both plate modes', () => {
+  /*
+   * THE BOUND IS IN VIEWPORT UNITS, AND THAT IS THE FIX, NOT A STYLE CHOICE.
+   *
+   * `max-h-full` is `max-height: 100%`, which resolves against the containing
+   * block's HEIGHT. The plate wrapper's height is `auto`, so the percentage
+   * computed to `none` and the image was bounded on width only — it grew to
+   * 1376x973 in an 800px-tall window. A bare <img> straight inside the
+   * backdrop was fine, which is why /articles never showed it.
+   *
+   * Viewport units are definite whatever the ancestors do, so this holds in
+   * both branches and cannot be broken by a future wrapper.
+   */
   for (const plate of [false, true]) {
     withDom((m) => {
       m.render({ plate });
       const cls = picture(m.doc).getAttribute('class');
       assert.match(cls, /object-contain/, `plate=${plate}`);
       assert.ok(!/object-cover/.test(cls), `plate=${plate} must never crop`);
-      assert.match(cls, /max-h-full/);
-      assert.match(cls, /max-w-full/);
+      assert.match(cls, /max-h-\[calc\(100vh-9rem\)\]/, `plate=${plate} height bound`);
+      assert.match(cls, /max-w-\[calc\(100vw-6rem\)\]/, `plate=${plate} width bound`);
+      assert.ok(
+        !/max-h-full/.test(cls),
+        `plate=${plate}: max-h-full resolves to none inside the plate — that was the bug`
+      );
     });
   }
+});
+
+test('CONTROL: the fit assertion depends on the sizing classes, not on the element existing', () => {
+  // Both halves against the real rendered class string: the bound that must be
+  // there is there, and the bound that must NOT be there is absent. If the
+  // matcher were inert, one of these two would not hold.
+  withDom((m) => {
+    m.render({ plate: true });
+    const cls = picture(m.doc).getAttribute('class');
+    assert.ok(/max-h-\[calc\(100vh-9rem\)\]/.test(cls), 'the viewport bound is present');
+    assert.ok(!/max-h-full/.test(cls), 'and the percentage bound it replaced is gone');
+    assert.ok(!/max-h-\[calc\(100vh-99rem\)\]/.test(cls), 'a wrong bound would not match');
+  });
+});
+
+test('the close control cannot overlap the artwork: it has its own row above the stage', () => {
+  /*
+   * Measured in headless Chrome against the real compiled Tailwind, 5266x3724:
+   *   before, 1440x800 -> picture 1376x973, overlapping the absolute ✕
+   *   after,  1440x800 -> picture  928x656, no overlap, no scrollbars
+   * and the same at 1920x600, 800x1200, 700x700 and 390x844.
+   *
+   * jsdom does no layout, so THIS tier cannot re-measure geometry. What it can
+   * pin is the structure that makes the overlap impossible — the button is no
+   * longer positioned over the backdrop, and it is a sibling BEFORE the stage.
+   */
+  withDom((m) => {
+    m.render({ plate: true });
+    const btn = closeButton(m.doc);
+    assert.ok(!/absolute/.test(btn.getAttribute('class')), 'the button is not positioned over the picture');
+    const row = btn.parentElement;
+    const stage = row.nextElementSibling;
+    assert.ok(stage, 'the stage follows the close row');
+    assert.ok(stage.contains(picture(m.doc)), 'and the picture lives in the stage, not the close row');
+    assert.match(stage.getAttribute('class'), /min-h-0/, 'the stage may shrink below its content');
+  });
 });

@@ -128,17 +128,33 @@ export function ImageLightbox({ image, onClose, plate = false }) {
       // Clicking the backdrop closes. The <img> below stops propagation, so a
       // click on the picture itself does not.
       onClick={close}
-      className="fixed inset-0 z-[9600] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[9600] flex flex-col bg-black/80 p-4 backdrop-blur-sm"
     >
-      <button
-        ref={closeButtonRef}
-        type="button"
-        onClick={close}
-        aria-label="ปิด"
-        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-      >
-        <X className="h-6 w-6" />
-      </button>
+      {/*
+        THE CLOSE CONTROL HAS ITS OWN ROW, so it cannot overlap the artwork.
+
+        It used to be `absolute right-4 top-4` over the backdrop, and it sat on
+        top of the picture — measured in headless Chrome at 1440x800, where the
+        roadmap overflowed to 1376x973 and the ✕ landed on it.
+
+        Bounding the image alone would have been enough at the viewports that
+        were tried, and NOT enough in general: with an absolute ✕ at 16px
+        inset and ~40px square, avoiding it is an arithmetic argument about
+        every viewport and every image ratio at once, and it comes out to a
+        few pixels of margin. A row of its own makes the answer structural —
+        no image, no ratio and no window size can put them in the same place.
+      */}
+      <div className="flex shrink-0 justify-end pb-3">
+        <button
+          ref={closeButtonRef}
+          type="button"
+          onClick={close}
+          aria-label="ปิด"
+          className="rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        >
+          <X className="h-6 w-6" />
+        </button>
+      </div>
 
       {/*
         THE PLATE IS A WRAPPER ELEMENT, AND IT IS ONLY EMITTED WHEN ASKED FOR.
@@ -161,27 +177,56 @@ export function ImageLightbox({ image, onClose, plate = false }) {
         the false branch emits exactly the element that shipped before this
         prop existed, character for character.
       */}
-      {plate ? (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg bg-white p-2 shadow-2xl sm:p-4"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/*
+        ── WHY THE IMAGE IS BOUNDED IN VIEWPORT UNITS AND NOT `max-h-full` ────
+
+        `max-h-full` is `max-height: 100%`, and a percentage max-height resolves
+        against the CONTAINING BLOCK'S HEIGHT. The backdrop has a definite
+        height, so a bare <img> directly inside it was correctly bounded — which
+        is why /articles never showed this — but the plate wrapper's own height
+        is `auto`, content-derived. A percentage against an indefinite height
+        computes to `none`, so inside the plate the image was bounded on width
+        ONLY and grew as tall as its 1.414 ratio demanded.
+
+        Measured in headless Chrome against the real compiled CSS, 5266x3724 at
+        1440x800:
+
+          plate, max-h-full      1376 x 973   taller than the window, ✕ over it
+          plate, viewport units   928 x 656   fits, no overlap, no scrollbars
+
+        Viewport units are definite regardless of any ancestor, so the bound
+        holds in both branches and cannot be broken by a future wrapper. The
+        subtracted amounts are the chrome around the picture: 9rem of height
+        covers the backdrop's `p-4`, the close row and the plate's padding;
+        6rem of width covers `p-4` plus the plate's padding.
+
+        `min-h-0` on the stage is what lets it shrink below its content in a
+        column flex container — without it the row refuses to go under
+        min-content and the centring is off.
+      */}
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        {plate ? (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-lg bg-white p-2 shadow-2xl sm:p-4"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={image.src}
+              alt={image.alt || ''}
+              className="max-h-[calc(100vh-9rem)] max-w-[calc(100vw-6rem)] cursor-default object-contain"
+            />
+          </div>
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={image.src}
             alt={image.alt || ''}
-            className="max-h-full max-w-full cursor-default object-contain"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[calc(100vh-9rem)] max-w-[calc(100vw-6rem)] cursor-default rounded-lg object-contain shadow-2xl"
           />
-        </div>
-      ) : (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={image.src}
-          alt={image.alt || ''}
-          onClick={(e) => e.stopPropagation()}
-          className="max-h-full max-w-full cursor-default rounded-lg object-contain shadow-2xl"
-        />
-      )}
+        )}
+      </div>
     </div>,
     document.body
   );
