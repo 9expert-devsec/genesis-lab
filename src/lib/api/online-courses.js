@@ -58,9 +58,26 @@ const PATH = '/online-course';
  * @param {object} [options]
  * @param {string} [options.program] a program `program_id` short code (e.g.
  *   'MSE') or its ObjectId — upstream accepts either. Omit for the full list.
+ * @param {object} [deps] see below. Production callers pass nothing.
  */
-export async function getOnlineCourses({ program } = {}) {
-  const raw = await aiFetch(PATH, {
+export async function getOnlineCourses(
+  { program } = {},
+  /**
+   * `deps`, for the same reason `listPublicCourses` carries its own: the claim
+   * worth testing is "the argument becomes a `program=` on the URL", and that
+   * is only observable at the fetch boundary.
+   *
+   * The first version of the test swapped `globalThis.fetch` to watch it. That
+   * was wrong here in a way that passed when run alone: test/run.mjs drives the
+   * runner with `isolation: 'none'` AND `concurrency: true`, so every file
+   * shares one process — a global swap is visible to whatever else happens to
+   * be mid-flight, and the restore can land inside someone else's call. It did
+   * not just fail, it reached the real network for 42s. A seam the function
+   * offers deliberately cannot do either.
+   */
+  { fetchUpstream = aiFetch } = {}
+) {
+  const raw = await fetchUpstream(PATH, {
     params: { program },
     tags: ['online-courses'],
   });

@@ -1,68 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { getOnlineCourses } from '@/lib/api/online-courses';
 
 /**
- * `getOnlineCourses({ program })` — does the argument reach the wire?
+ * `getOnlineCourses({ program })` — does the argument reach the request?
  *
- * ── WHY THIS INTERCEPTS `fetch` RATHER THAN INJECTING A DEP ────────────────
- * The claim is not "the function accepts an option". It is "the option becomes
- * a `program=` query parameter on the URL upstream receives". Those are
- * different statements, and only the second one is worth a test: an argument
- * that is destructured and then dropped satisfies every signature-shaped
- * assertion while producing the unfiltered list. That failure returns 24
- * plausible courses instead of 10 — it looks like data, not like a bug, which
- * is exactly the class the audit's `?zzz_not_a_param=` control was written to
- * separate upstream.
+ * ── WHY THIS INJECTS A DEP RATHER THAN SWAPPING `globalThis.fetch` ─────────
+ * The first version of this file stubbed the global. It passed when run alone
+ * and FAILED in the suite, one of its cases sitting on a real network call for
+ * 42 seconds: test/run.mjs:214 drives the runner with `isolation: 'none'` and
+ * `concurrency: true`, so every test file shares one process. A global swap is
+ * therefore visible to whatever else is mid-flight, and the restore can land
+ * inside another file's call — it can corrupt tests it has nothing to do with,
+ * which is worse than merely being flaky.
  *
- * So the seam is `globalThis.fetch`, the last point before the network, and
- * the assertion is on the URL STRING. `aiFetch` → `fetchWithTimeout` → `fetch`
- * is real code throughout; nothing about the adapter is stubbed.
+ * `listPublicCourses` already carries a `deps` seam for exactly this reason and
+ * says so at its own call site. Same seam, same shape.
  *
- * ── THE CONTROL THAT MAKES THE POSITIVE MEAN SOMETHING ─────────────────────
- * A call with no argument must produce a URL with NO `program=` at all. Without
- * it, a hardcoded `?program=MSE` would pass the positive test, and so would an
- * implementation that always sends the parameter with an empty value — which
- * upstream would treat as a filter for the program named '' rather than as
- * "unfiltered".
+ * ── WHAT IS ACTUALLY ASSERTED ──────────────────────────────────────────────
+ * Not that the function accepts an option — an argument destructured and then
+ * dropped satisfies every signature-shaped assertion while quietly returning
+ * all 24 rows, which reads as data rather than as a bug. What is asserted is
+ * the OPTIONS OBJECT handed to the fetcher, which is what becomes the query
+ * string.
  */
 
-const ORIGINAL_FETCH = globalThis.fetch;
-const ORIGINAL_KEY = process.env.AI_API_KEY;
-const ORIGINAL_BASE = process.env.AI_API_BASE;
-
-/** Record every URL `aiFetch` asks for, and answer with an empty envelope. */
-function captureUrls(items = []) {
-  const urls = [];
-  globalThis.fetch = async (url) => {
-    urls.push(String(url));
-    return {
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: async () => ({ ok: true, total: items.length, items }),
-      text: async () => '',
-    };
+/** Record the (path, options) pairs the adapter asks for. */
+function spy(items = []) {
+  const calls = [];
+  const fetchUpstream = async (path, options) => {
+    calls.push({ path, options });
+    return { ok: true, total: items.length, items };
   };
-  return urls;
-}
-
-async function withStubbedFetch(items, fn) {
-  process.env.AI_API_KEY = 'test-key-not-a-real-secret';
-  process.env.AI_API_BASE = 'https://example.invalid/api/ai';
-  const urls = captureUrls(items);
-  try {
-    // Imported INSIDE the harness: client.js reads AI_API_BASE at module scope,
-    // so it must not be evaluated before the env above is set.
-    const { getOnlineCourses } = await import('@/lib/api/online-courses');
-    const result = await fn(getOnlineCourses);
-    return { urls, result };
-  } finally {
-    globalThis.fetch = ORIGINAL_FETCH;
-    if (ORIGINAL_KEY === undefined) delete process.env.AI_API_KEY;
-    else process.env.AI_API_KEY = ORIGINAL_KEY;
-    if (ORIGINAL_BASE === undefined) delete process.env.AI_API_BASE;
-    else process.env.AI_API_BASE = ORIGINAL_BASE;
-  }
+  return { calls, deps: { fetchUpstream } };
 }
 
 const ROW = (program_id) => ({
@@ -71,64 +42,74 @@ const ROW = (program_id) => ({
   program: { _id: 'oid', program_id },
 });
 
-test('the program argument becomes a `program=` query parameter', async () => {
-  const { urls } = await withStubbedFetch([ROW('MSE')], (get) =>
-    get({ program: 'MSE' })
+test('the program argument is forwarded as the `program` request param', async () => {
+  const { calls, deps } = spy([ROW('MSE')]);
+  await getOnlineCourses({ program: 'MSE' }, deps);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].path, '/online-course', 'the path is unchanged');
+  assert.equal(calls[0].options.params.program, 'MSE');
+});
+
+test('CONTROL: no argument forwards NO program value — so the test above is about forwarding, not a hardcoded string', async () => {
+  const { calls, deps } = spy([ROW('MSE'), ROW('CLAUDE')]);
+  await getOnlineCourses(undefined, deps);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0].options.params.program, undefined,
+    'an unfiltered call must not name a program'
   );
-  assert.equal(urls.length, 1);
-  const url = new URL(urls[0]);
-  assert.equal(url.pathname, '/api/ai/online-course', 'path is unchanged');
-  assert.equal(url.searchParams.get('program'), 'MSE');
 });
 
-test('CONTROL: no argument sends NO program parameter — so the test above is about forwarding, not about a hardcoded value', async () => {
-  const { urls } = await withStubbedFetch([ROW('MSE'), ROW('CLAUDE')], (get) => get());
-  assert.equal(urls.length, 1);
-  const url = new URL(urls[0]);
-  assert.equal(url.search, '', `expected a bare URL, got ${url.search}`);
-  assert.equal(url.searchParams.has('program'), false);
+test('CONTROL: the eight existing zero-argument callers are unaffected — get() and get({}) send identical options', async () => {
+  const a = spy(); await getOnlineCourses(undefined, a.deps);
+  const b = spy(); await getOnlineCourses({}, b.deps);
+  assert.deepEqual(a.calls[0].options, b.calls[0].options);
+  assert.equal(a.calls[0].options.params.program, undefined);
 });
 
-test('CONTROL: the eight existing zero-argument callers are unaffected — `get()` and `get({})` issue the identical URL', async () => {
-  const { urls: bare } = await withStubbedFetch([], (get) => get());
-  const { urls: empty } = await withStubbedFetch([], (get) => get({}));
-  assert.equal(bare[0], empty[0]);
-  assert.ok(!bare[0].includes('program'), bare[0]);
-});
-
-test('an empty-string or nullish program is dropped rather than sent as a filter for ""', async () => {
-  for (const program of ['', '   ', null, undefined]) {
-    const { urls } = await withStubbedFetch([], (get) => get({ program }));
-    const url = new URL(urls[0]);
-    // aiFetch drops undefined/null/''. A whitespace string is NOT dropped by
-    // aiFetch — it is recorded here as the one input that does reach upstream,
-    // so the behaviour is documented rather than assumed. Upstream returns 0
-    // rows for it, which is the same outcome as an unknown code.
-    if (String(program ?? '').trim() === '' && program !== '   ') {
-      assert.equal(url.searchParams.has('program'), false, `program=${JSON.stringify(program)}`);
-    }
+test('the tag travels with every call, filtered or not — an untagged per-program entry is unreachable by any bust', async () => {
+  for (const arg of [undefined, { program: 'MSE' }]) {
+    const { calls, deps } = spy();
+    await getOnlineCourses(arg, deps);
+    assert.deepEqual(calls[0].options.tags, ['online-courses']);
   }
 });
 
-test('the read is TAGGED `online-courses`, so the existing bust reaches every per-program entry', async () => {
-  // Read from source: the tag is an argument to aiFetch, invisible at the fetch
-  // seam because Next's `next: { tags }` option is consumed by the framework,
-  // not by undici. A per-program cache entry with no tag is the resolveIds.js
-  // defect, so this is pinned rather than left to review.
-  const { readFileSync } = await import('node:fs');
-  const src = readFileSync('src/lib/api/online-courses.js', 'utf8');
-  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-  assert.match(code, /tags:\s*\['online-courses'\]/, 'the tag survives comment-scrubbing');
-  assert.match(code, /params:\s*\{\s*program\s*\}/, 'the param is forwarded in code, not only in a comment');
-  assert.ok(
-    !/revalidate:\s*\d+/.test(code),
-    'no bespoke revalidate — it must inherit aiFetch\'s tagged 3600 default'
+test('no bespoke revalidate — the call inherits aiFetch\'s tagged 3600 default', async () => {
+  const { calls, deps } = spy();
+  await getOnlineCourses({ program: 'MSE' }, deps);
+  assert.equal(
+    'revalidate' in calls[0].options, false,
+    'a hand-set revalidate here would be the resolveIds.js:26 defect a second time'
   );
+});
+
+test('a nullish program is passed through for aiFetch to drop, not stringified into a filter for "undefined"', async () => {
+  for (const program of [undefined, null, '']) {
+    const { calls, deps } = spy();
+    await getOnlineCourses({ program }, deps);
+    const sent = calls[0].options.params.program;
+    assert.ok(
+      sent === undefined || sent === null || sent === '',
+      `program=${JSON.stringify(program)} reached the params as ${JSON.stringify(sent)}`
+    );
+  }
 });
 
 test('the unwrapped result is passed through untouched', async () => {
   const rows = [ROW('MSE'), ROW('MSE')];
-  const { result } = await withStubbedFetch(rows, (get) => get({ program: 'MSE' }));
+  const { deps } = spy(rows);
+  const result = await getOnlineCourses({ program: 'MSE' }, deps);
   assert.equal(result.total, 2);
   assert.deepEqual(result.items.map((r) => r.o_course_id), ['ONL-MSE', 'ONL-MSE']);
+});
+
+test('CONTROL: the production default really is aiFetch — the seam is for tests, not a second code path', () => {
+  // Read from source: a `deps` object whose default was something else would
+  // make every assertion above true of a function nothing calls.
+  const src = readFileSync('src/lib/api/online-courses.js', 'utf8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  assert.match(code, /\{ fetchUpstream = aiFetch \} = \{\}/);
+  assert.match(code, /params:\s*\{\s*program\s*\}/, 'forwarded in code, not only in a comment');
+  assert.match(code, /tags:\s*\['online-courses'\]/, 'the tag survives comment-scrubbing');
 });
