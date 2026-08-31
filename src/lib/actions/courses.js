@@ -237,11 +237,50 @@ function shapePayload(formData) {
     inhouseField: get('course_type_inhouse'),
   });
 
+  /**
+   * ── TWO KEYS ARE WRITTEN NOWHERE BECAUSE THEY CAN BE READ NOWHERE ────────
+   *
+   * `title` (MSDB's name for the long rich-text body) and `bullets` are NOT
+   * in the payload below. Not sent empty — ABSENT, which is the difference
+   * that matters: `PUT /public-course/<id>` MERGES, established by controlled
+   * experiment in a98df7a (35 fields absent from a one-key body survived it
+   * untouched), so an omitted key leaves the stored value alone while an empty
+   * one overwrites it.
+   *
+   * ── WHAT THEY WERE DOING ────────────────────────────────────────────────
+   * Neither key is returned by ANY read route. Measured 2026-08-31 across all
+   * 80 courses: `title` and `bullets` appear on 0 of them, in the list and in
+   * the `?course_id=` detail query alike; the path-style detail routes 405.
+   * They are the only two of the payload's 28 keys in that state — every other
+   * key round-trips.
+   *
+   * So the admin form's inputs were populated from `initial?.title` /
+   * `initial?.bullets`, which are permanently `undefined`, and the textarea
+   * therefore always rendered blank. Every save then posted `title: ''` and
+   * `bullets: []` over whatever MSDB actually held. Opening a course in genesis
+   * admin and pressing save destroyed its rich body — no warning, no way to see
+   * it had happened from this side, because this side cannot read the field.
+   *
+   * ── WHY OMISSION IS THE FIX, NOT A DIFFERENT EMPTY VALUE ────────────────
+   * If genesis cannot read a field, it cannot preserve it, so it must not
+   * write it. Any value at all — '', [], null — is genesis asserting something
+   * about a field it has never seen.
+   *
+   * ── WHAT THIS COSTS, STATED PLAINLY ─────────────────────────────────────
+   * The two inputs in the form are now INERT: an admin can type in them and
+   * saving will do nothing. That is deliberately worse-looking and strictly
+   * better than the alternative, which is that typing in them worked once and
+   * then the next save of that course wiped it. The inputs are left in place
+   * here on purpose — removing them is a form change, not a payload change.
+   * The real repair is MSDB returning the two fields on read; then both keys
+   * come back to this payload and the inputs work for the first time.
+   */
   return {
     course_name:               toStr(get('course_name') || get('title')),
     course_id:                 toStr(get('course_id')),
     course_teaser:             toStr(get('course_teaser') || get('short_desc')),
-    title:                     toStr(get('title') || get('description')),
+    /* `title` IS NOT EMITTED — the key is absent, not empty. See the
+     * read-blind-write note above the return. */
     course_trainingdays:       toNum(get('course_trainingdays') || get('duration_days')),
     course_traininghours:      toNum(get('course_traininghours')),
     course_levels:             toStr(get('course_levels')) || '1',
@@ -277,7 +316,7 @@ function shapePayload(formData) {
     course_target_audience:      linesOf(formData, 'course_target_audience'),
     course_prerequisites:        linesOf(formData, 'course_prerequisites'),
     course_system_requirements:  linesOf(formData, 'course_system_requirements'),
-    bullets:                     linesOf(formData, 'bullets'),
+    /* `bullets` IS NOT EMITTED either, and for the same reason — see below. */
     /* course_doc_paths, course_lab_paths, course_case_study_paths and
      * exam_links are NOT EMITTED — the keys are absent, not empty.
      *

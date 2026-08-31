@@ -157,7 +157,13 @@ test('CONTROL: the section-7 arrays are untouched and still sent', () => {
   // THE control for this file. A shapePayload that returned {} — or an "omit
   // everything" edit — would satisfy every doesNotMatch above. These are the
   // fields that must still travel, from a section this change never went near.
-  for (const key of ['course_objectives', 'bullets', 'training_topics']) {
+  //
+  // `bullets` USED TO BE IN THIS LIST and was removed from it, not from the
+  // control's job: it turned out to be one of the two keys upstream never
+  // returns, so it joined the read-blind pair below and can no longer stand for
+  // "still sent". `course_target_audience` takes its place — same section, same
+  // `linesOf` shape, and it does round-trip (measured 79 of 80 populated).
+  for (const key of ['course_objectives', 'course_target_audience', 'training_topics']) {
     assert.match(
       SRC.code,
       new RegExp(`\\n\\s*${key}:\\s*\\S`),
@@ -174,6 +180,85 @@ test('CONTROL: the control above can distinguish the two channels', () => {
       SRC.code,
       new RegExp(`${key}:[^,\\n]*\\|\\|\\s*undefined`),
       `${key} is in the leave-alone channel — it can never be unchecked`
+    );
+  }
+});
+
+/**
+ * ── THE READ-BLIND PAIR: `title` and `bullets` ─────────────────────────────
+ *
+ * A THIRD reason to omit a key, and the worst of the three, because the other
+ * two are choices and this one is a defect being contained.
+ *
+ * Measured 2026-08-31 across all 80 upstream courses: `title` (MSDB's name for
+ * the long rich-text body) and `bullets` are returned by NO read route — absent
+ * from the list, absent from the `?course_id=` detail query, and the path-style
+ * detail routes answer 405. They are the only two of the payload's 28 keys in
+ * that state; the other 26 all round-trip.
+ *
+ * So the form's inputs were seeded from `initial?.title` / `initial?.bullets`,
+ * permanently `undefined`, and every save posted `title: ''` and `bullets: []`
+ * over whatever MSDB held. Opening a course and pressing save destroyed its
+ * rich body, invisibly from this side — this side cannot read the field.
+ *
+ * ── WHY THESE TWO ARE NOT IN THE `OMITTED` ROSTER ABOVE ───────────────────
+ * That roster's last test asserts the form has no input for its members. These
+ * two still DO have inputs, deliberately: removing them is a form change and
+ * this was a payload change. So they get their own guard, and the difference is
+ * asserted rather than left as a gap — see the last test in this block.
+ */
+const READ_BLIND = ['title', 'bullets'];
+
+test('the read-blind pair is not emitted — the KEY is absent, not empty', () => {
+  for (const key of READ_BLIND) {
+    // Anchored to a payload line (four-space indent inside the literal), so a
+    // mention in a comment or a `get('title')` fallback elsewhere does not
+    // satisfy it. `course_name: toStr(get('course_name') || get('title'))` is a
+    // legitimate READ of the form value and must not count as an emission.
+    assert.doesNotMatch(
+      SRC.code,
+      new RegExp(`\n {4}${key}:\s*`),
+      `${key} is emitted again — genesis cannot read this field, so any value ` +
+        `it sends is an assertion about something it has never seen, and '' or ` +
+        `[] overwrites real upstream content`
+    );
+  }
+});
+
+test('CONTROL: the same matcher DOES see the keys that are still emitted', () => {
+  // Without this, a matcher that found nothing anywhere would satisfy the test
+  // above for every key in the payload.
+  for (const key of ['course_teaser', 'course_objectives', 'course_outline_th']) {
+    assert.match(
+      SRC.code,
+      new RegExp(`\n {4}${key}:\s*`),
+      `${key} should still be emitted — if this fails the matcher is inert`
+    );
+  }
+});
+
+test('CONTROL: `title` is still READ from the form as a course_name fallback', () => {
+  // The distinction the anchored matcher above exists to preserve: reading
+  // `get('title')` is fine, emitting `title:` is not.
+  assert.match(
+    SRC.code,
+    /course_name:\s*toStr\(get\('course_name'\)\s*\|\|\s*get\('title'\)\)/,
+    'the legacy course_name fallback was removed along with the emission'
+  );
+});
+
+test('the read-blind pair KEEPS its form inputs, unlike the section-8 roster', () => {
+  // Stated as a claim rather than left as an inconsistency. The inputs are now
+  // inert — typing in them saves nothing — which is strictly better than the
+  // alternative it replaces, where typing in them worked once and the next save
+  // of that course wiped it. Removing them is a separate, form-shaped change.
+  const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
+  for (const key of READ_BLIND) {
+    assert.match(
+      FORM.code,
+      new RegExp(`name="${key}"`),
+      `${key}'s input was removed; if that was deliberate, move it into the ` +
+        `OMITTED roster above and delete this test`
     );
   }
 });
