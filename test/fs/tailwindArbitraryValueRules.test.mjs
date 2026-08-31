@@ -358,6 +358,39 @@ const CASES = [
     property: 'margin-top',
   },
   /**
+   * ── ROUND 65: THE THREE RESPONSIVE SPACING CLASSES ──────────────────────
+   *
+   * The body scale became `prose-sm md:prose-base`, so the paragraph/list gap
+   * had to become responsive too — `my-3` below 768px, `my-4` above. These are
+   * NOT arbitrary values, but they are a stacked variant (`md:` on top of the
+   * plugin's `prose-p:` modifier), which is the same failure shape this file
+   * exists for: if the stack ever stops being emitted, the markup stays
+   * perfect and the gap silently reverts to whatever the unprefixed class set.
+   *
+   * The unprefixed `prose-p:my-3` is deliberately NOT registered separately:
+   * it is the same modifier this file already covers through `[&_li>p]:my-0`'s
+   * neighbours, and its failure is visible in the same measurement. What is
+   * new, and therefore registered, is the `md:` stack.
+   */
+  {
+    what: "rich_text's desktop paragraph gap",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: 'md:prose-p:my-4',
+    property: 'margin-top',
+  },
+  {
+    what: "rich_text's desktop bullet-list gap",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: 'md:prose-ul:my-4',
+    property: 'margin-top',
+  },
+  {
+    what: "rich_text's desktop numbered-list gap",
+    file: 'src/components/pageBuilder/sections/rich_text.jsx',
+    className: 'md:prose-ol:my-4',
+    property: 'margin-top',
+  },
+  /**
    * ── ROUND 61: THE PAGE-WIDE WRAP, AN ARBITRARY *PROPERTY* ────────────────
    *
    * A third shape for this file: not an arbitrary value, not an arbitrary

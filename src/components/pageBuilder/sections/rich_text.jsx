@@ -76,10 +76,82 @@ import { renderTiptap } from '../richText/tiptapToReact';
  * DIRECT children only, which is what typography scoped it to; a descendant
  * form would also zero the first bullet inside the list.
  */
+/**
+ * ── ROUND 65: THE BODY SCALE — 16px DESKTOP, 14px MOBILE ──────────────────
+ *
+ * `prose-lg` was this component's size from its first commit and was never
+ * chosen: round 60 measured it at 18px/32px at EVERY viewport and left the
+ * scale alone on purpose, because that round was spacing. The author has now
+ * asked for 16 and 14, so `prose-sm md:prose-base` replaces it.
+ *
+ * Stock modifiers, no minted scale (round 17), no arbitrary value: `sm`, `base`
+ * and `lg` are three of the five sizes @tailwindcss/typography registers, and
+ * this only stops using the largest.
+ *
+ * ── WHY `md:` (768px) AND NOT `sm:` OR `lg:` ──────────────────────────────
+ * Not a taste call — the repo already defines its three viewports, in the
+ * editor's own device preview:
+ *
+ *   CanvasPanel.VIEWPORT_WIDTH = { desktop: null, tablet: 768, mobile: 390 }
+ *
+ * `md` is `768px` in tailwind.config.js, which is EXACTLY the tablet width, and
+ * a min-width query matches at its own boundary. So the author's two sizes land
+ * on the author's own three buttons with no third behaviour invented: mobile
+ * (390) is 14px, tablet (768) and desktop are 16px. `lg:` would have made the
+ * tablet button show the mobile size, which is a decision nobody asked for.
+ *
+ * The canvas is an iframe (round 20), so the media query resolves against the
+ * FRAME's width, not the browser's — which is what makes the device-preview
+ * buttons genuinely preview the type scale rather than merely the layout.
+ * Measured, in Chrome: scripts/_measure-round65-type-scale.mjs.
+ *
+ * ── WHAT ELSE THE MODIFIER CARRIES, AND WHY NOTHING INVERTS ───────────────
+ * The size modifier scales every element off the root, so this is not only the
+ * body. Measured at both viewports (the same probe):
+ *
+ *              was (prose-lg)    desktop (base)    mobile (sm)
+ *   p / li     18 / 32           16 / 28           14 / 24
+ *   h2         30 / 40           24 / 32           20 / 28
+ *   h3         24 / 36           20 / 32           18 / 28
+ *   blockquote 18 / 32           16 / 28           14 / 24
+ *   code       16                14                12
+ *
+ * The hierarchy holds at both: h2 > h3 > body everywhere, so no heading lands
+ * under its own siblings — the defect a body-only fix arrives at by this exact
+ * route. The smallest thing on the page is 12px inline `code` on mobile; that
+ * is the plugin's own 0.857em ratio, not a value invented here, and it is one
+ * step under the 14px body rather than a break in the scale.
+ *
+ * ── THE SPACING IS RE-DECIDED, NOT INHERITED ──────────────────────────────
+ * Round 60's numbers are ABSOLUTE px chosen against an 18px/32px body: `my-4`
+ * was "half the 32px line", and also the 1rem `.article-content p` already
+ * uses. Half of a line is not 16px any more.
+ *
+ *   desktop  line 28px   my-4 = 16px   57% of the line
+ *   mobile   line 24px   my-4 = 16px   67% of the line   <-- backwards
+ *
+ * Keeping one number would give MOBILE more relative air than desktop, which is
+ * the opposite of what a narrow screen wants. So the paragraph/list gap keeps
+ * `my-4` at `md:` and up — where round 60's second reason, matching the article
+ * body's 1rem, still holds exactly — and drops to `my-3` (12px) below it, which
+ * is round 60's own "half the line" rule applied to the 24px mobile line.
+ *
+ * `prose-li:my-1` (4px) is deliberately NOT scaled. It is already the tightest
+ * useful step, a list is one unit at any size, and 2px would be a gap a reader
+ * cannot see. Same value at both viewports, on purpose.
+ *
+ * `[&_li>p]:my-0` and the two `[&>*:…]` edge resets are unchanged and still
+ * load-bearing for the reasons above — they are scale-independent.
+ *
+ * Every one of these compiles or the spacing silently reverts to the plugin
+ * default, which is exactly the failure test/fs/tailwindArbitraryValueRules
+ * exists for; the three `md:`-prefixed ones are registered there too.
+ */
 const PROSE =
-  'prose prose-lg max-w-none prose-headings:font-heading '
+  'prose prose-sm md:prose-base max-w-none prose-headings:font-heading '
   + 'prose-a:text-[var(--pb-accent-text)] prose-img:rounded-9e-md dark:prose-invert '
-  + 'prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_li>p]:my-0 '
+  + 'prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1 [&_li>p]:my-0 '
+  + 'md:prose-p:my-4 md:prose-ul:my-4 md:prose-ol:my-4 '
   + '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0';
 
 export function RichTextSection({ content }) {

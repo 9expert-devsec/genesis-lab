@@ -116,18 +116,39 @@ test('the fix is INHERITED — no section markup carries it, so nothing else mov
 
 test('K — round 60 spacing is untouched by this round', () => {
   /**
-   * Asserted as CLASSES, for the same reason as above: the computed 16px / 4px /
-   * 0px are re-measured in the browser probe (before and after: p->p 16,
-   * li->li 4, first margin-top 0, last margin-bottom 0, identical).
+   * Asserted as CLASSES, for the same reason as above: the computed values are
+   * re-measured in the browser probe.
+   *
+   * ── ROUND 65 MOVED THE VALUES, NOT THE CLAIM ──────────────────────────
+   * This still asserts exactly what it always did: that round 60's spacing
+   * DECISION survives a round that touched the same component. What changed is
+   * the numbers, because the body scale did — `my-4` was half of an 18px body's
+   * 32px line, and the body is now 16px (28px line) at `md:` and up and 14px
+   * (24px line) below, so one absolute value cannot be half of both.
+   *
+   * Re-measured in Chrome (scripts/_measure-round65-type-scale.mjs):
+   *   p->p     16px at both viewports  ->  16px desktop / 12px mobile
+   *   li->li    4px                    ->   4px, unchanged at both, on purpose
+   *   outer     0px / 0px              ->   0px / 0px, still
+   *
+   * The two edge resets and the list-paragraph reset are scale-independent and
+   * are asserted here unchanged — they are the ones a size change could have
+   * quietly broken, so they are the reason this test is still worth its lines.
    */
   const html = renderToStaticMarkup(RichTextSection({
     content: { doc: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ก' }] }] } },
   }));
   const cls = new Set((doc(html).querySelector('div').getAttribute('class') ?? '').split(/\s+/).filter(Boolean));
-  for (const c of ['prose-p:my-4', 'prose-ul:my-4', 'prose-ol:my-4', 'prose-li:my-1',
+  for (const c of ['prose-p:my-3', 'prose-ul:my-3', 'prose-ol:my-3', 'prose-li:my-1',
+                   'md:prose-p:my-4', 'md:prose-ul:my-4', 'md:prose-ol:my-4',
                    '[&_li>p]:my-0', '[&>*:first-child]:mt-0', '[&>*:last-child]:mb-0']) {
-    assert.ok(cls.has(c), `round 60's "${c}" was dropped`);
+    assert.ok(cls.has(c), `round 60's spacing decision lost "${c}"`);
   }
+
+  // ...and the value it replaced must not still be there beside its successor:
+  // both compile, and an unprefixed my-4 would win under 768px on source order.
+  assert.ok(!cls.has('prose-p:my-4'),
+    'the unprefixed prose-p:my-4 is back beside prose-p:my-3 — mobile would read 16px');
 });
 
 test('the wrap is not word-break — the rejected candidate must not creep in', () => {

@@ -98,8 +98,35 @@ export function RichTextEditor({ doc, onChange, placeholder }) {
          * The utilities are identical to the renderer's, so the two surfaces are
          * changed by one decision rather than two that have to be kept in step.
          */
+        /**
+         * ── ROUND 65: THE INPUT KEEPS prose-sm, AND NOW IT MEANS SOMETHING ─
+         * The renderer moved to `prose-sm md:prose-base` — 14px below 768px,
+         * 16px above. This input does NOT follow it up, and the reason is a
+         * measurement rather than a preference:
+         *
+         *   EditorShell  lg:grid-cols-[276px_1fr_330px]
+         *
+         * The settings panel is a FIXED 330px column. Its width does not track
+         * the viewport, so a `md:` query — which reads the BROWSER's width —
+         * would put 16px body text in a 330px box on every desktop, and would
+         * drop it back to 14px if the author narrowed the window even though
+         * the panel had not moved at all. It would be responsive to the wrong
+         * thing. The canvas can carry the query honestly because it is an
+         * iframe whose own width IS the previewed viewport; a side panel is not
+         * a viewport.
+         *
+         * What this round DOES fix is the thing round 60 could only note: the
+         * input was 14px against an 18px canvas, and now it is 14px against a
+         * canvas whose narrow half is also 14px. The compact box is no longer a
+         * compromise — it is exactly the mobile rendering.
+         *
+         * So the spacing follows the MOBILE half of the renderer's set: `my-3`,
+         * with no `md:` overrides, because this surface has no wide mode to
+         * override into. The two lists are checked against each other in
+         * test/render/richTextSpacing.
+         */
         class: 'prose prose-sm max-w-none focus:outline-none dark:prose-invert min-h-[8rem] '
-          + 'prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1 [&_li>p]:my-0 '
+          + 'prose-p:my-3 prose-ul:my-3 prose-ol:my-3 prose-li:my-1 [&_li>p]:my-0 '
           + '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
       },
     },
