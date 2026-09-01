@@ -150,7 +150,9 @@ test('highlight_grid stretches its child through its own box, not through the se
   // pass the height on. `grid` on a single-child box does that with no class on
   // the child, which this component cannot add.
   const { code } = readSource('src/components/pageBuilder/sections/highlight_grid.jsx');
-  const box = /className="([^"]*rounded-9e-lg[^"]*border-l-4[^"]*)"/.exec(code);
+  // Keyed on `rounded-9e-lg` since round 78 removed the accent bar this used
+  // to match on. The radius is the box's oldest surviving marker.
+  const box = /className="([^"]*rounded-9e-lg[^"]*)"/.exec(code);
   assert.ok(box, 'the per-child box is gone from highlight_grid');
   assert.match(box[1], /(^|\s)grid(\s|$)/,
     'the box no longer stretches its child, so the chain below it is auto-height again');

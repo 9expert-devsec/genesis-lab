@@ -167,12 +167,12 @@ const CONTENT_FOR = {
 };
 
 const EXPECTED_ACCENT_TYPES = [
-  'accordion', 'checklist', 'course_schedule', 'cta', 'highlight_grid', 'icon_card',
+  'accordion', 'checklist', 'course_schedule', 'cta', 'icon_card',
   'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
 ];
 
 /**
- * Which of the twelve actually PAINT from the fixture above — measured, not
+ * Which of the eleven actually PAINT from the fixture above — measured, not
  * predicted. Some need state a static render never reaches (the accordion's
  * open item) or upstream data the fixture has none of, and those are the render
  * tier's known limits rather than gaps in the feature. Named so the sweep's
@@ -183,38 +183,36 @@ const PAINTS_FROM_FIXTURE = [
 ];
 
 /**
- * The other five, and why each is out of reach HERE rather than broken:
+ * The other four, and why each is out of reach HERE rather than broken:
  *   accordion, tabs        — paint the OPEN/ACTIVE item, which is useState. A
  *                            static render only ever produces the closed branch,
  *                            and mounting a React root is forbidden in this tier
  *                            (isolation:'none' — one leaked root once cost 28
  *                            unrelated failures). Same limit itemAccents states.
- *   highlight_grid         — a container: it paints per CHILD, and a fixture
- *                            with children is the cascade case two tests down.
  *   instructor_card,
  *   course_schedule        — draw from the upstream data prop the renderer is
  *                            handed, which this fixture has none of.
- * All five are measured in Chrome for round 39's browser pass, where the accent
+ * All four are measured in Chrome for round 39's browser pass, where the accent
  * is a resolved colour rather than a class string.
  */
 
-test('the accent-consuming set is the twelve the audit names, unchanged', () => {
+test('the accent-consuming set is the eleven the audit names, unchanged', () => {
   assert.deepEqual(accentPaintingTypes(), EXPECTED_ACCENT_TYPES,
     'the set of types that paint with the accent moved. Round 39 changed the VALUE the '
     + 'variables carry and nothing about which components read them — so this moving means '
     + 'something else did. See docs/section-control-audit.md finding 2.');
-  assert.equal(EXPECTED_ACCENT_TYPES.length, 12);
+  assert.equal(EXPECTED_ACCENT_TYPES.length, 11);
 });
 
 test('CONTROL: the consumer scan names a type when one is added', () => {
   // Without this, the exact set above could be a scan that returns a constant.
   const withExtra = [...accentPaintingTypes(), 'heading'].sort();
   assert.throws(() => assert.deepEqual(withExtra, EXPECTED_ACCENT_TYPES),
-    'the comparison cannot see a thirteenth consumer');
+    'the comparison cannot see a twelfth consumer');
   assert.equal(withExtra.includes('heading'), true);
 });
 
-test('a CUSTOM accent reaches every one of those twelve — and only by the same route', () => {
+test('a CUSTOM accent reaches every one of those eleven — and only by the same route', () => {
   /**
    * PER SURFACE, and this is the whole of D. The claim is not "a custom accent
    * works"; it is "a custom accent reaches EXACTLY the surfaces a preset

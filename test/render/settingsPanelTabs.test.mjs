@@ -837,7 +837,7 @@ test('C: the panel comment corrects the two fields this round made true, and sto
     .map((f) => f.replace(/\.jsx$/, '')).sort();
 
   assert.deepEqual(painting, [
-    'accordion', 'checklist', 'course_schedule', 'highlight_grid', 'icon_card',
+    'accordion', 'checklist', 'course_schedule', 'icon_card',
     'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
   ], 'the components painting with the accent changed — the comment above claims the gap is '
   + 'closed, so any change here makes that sentence a lie until it is rewritten');

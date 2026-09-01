@@ -92,7 +92,7 @@ test('CONTROL: md: is the author\'s own tablet button, not an invented breakpoin
 
 test('the highlight_grid box carries the mobile padding and the desktop one', () => {
   const { code } = readSource(HIGHLIGHT);
-  const box = /className="([^"]*border-l-4[^"]*)"/.exec(code);
+  const box = /className="([^"]*rounded-9e-lg[^"]*)"/.exec(code);
   assert.ok(box, 'the per-child box is gone from highlight_grid');
 
   const pads = box[1].split(/\s+/).filter((c) => /^(?:md:)?p-\d+$/.test(c));
@@ -113,18 +113,54 @@ test('CONTROL: highlight_grid\'s desktop padding is UNCHANGED from before round 
     'mobile and desktop compile to the same padding, so this round changed nothing');
 });
 
-test('the accent rule survives the tighter padding', () => {
-  // §E. The box is `border` + `border-l-4` + an accent colour; reducing the
-  // padding must not have taken any of those with it, or the treatment round 24
-  // added reads as an ordinary card at mobile.
+/**
+ * ROUND 78 REPLACED THIS TEST'S SUBJECT, AND THE REPLACEMENT IS THE POINT.
+ *
+ * It used to assert that `border-l-4` and `border-l-[color:var(--pb-accent-fill)]`
+ * SURVIVED — round 73 added it so a later spacing change could not remove the
+ * accent bar as a side effect. Round 78 removed the bar deliberately, by name,
+ * which is exactly the case that guard was written to distinguish from an
+ * accident. So the assertion is INVERTED rather than deleted: the bar must now
+ * be ABSENT, and everything round 24/70/73 built around it must still be here.
+ *
+ * Deleting it instead would leave nothing watching this box, and the next
+ * spacing change could quietly restore or re-remove any of these.
+ */
+test('the accent bar is GONE, and nothing else about the box moved', () => {
   const { code } = readSource(HIGHLIGHT);
-  const box = /className="([^"]*border-l-4[^"]*)"/.exec(code)[1];
-  for (const cls of ['border', 'border-l-4', 'border-l-[color:var(--pb-accent-fill)]', 'rounded-9e-lg']) {
-    assert.ok(box.split(/\s+/).includes(cls), `the box lost ${cls}`);
+  const box = /className="([^"]*rounded-9e-lg[^"]*)"/.exec(code)[1];
+  const classes = box.split(/\s+/);
+
+  for (const gone of ['border-l-4', 'border-l-[color:var(--pb-accent-fill)]']) {
+    assert.equal(classes.includes(gone), false,
+      `round 78 removed the accent bar, but the box still carries ${gone}`);
+  }
+  // The whole class attribute, not just the split list — a variant spelling
+  // (`md:border-l-4`, `border-l-[…]`) would slip past the list check.
+  assert.equal(/border-l/.test(box), false,
+    `the box still carries a left-border class: ${box}`);
+
+  // What round 24/70/73 built around it, all of which stays.
+  for (const cls of ['border', 'border-[var(--surface-border)]', 'rounded-9e-lg', 'p-4', 'md:p-6']) {
+    assert.ok(classes.includes(cls), `the box lost ${cls}`);
   }
   // …and it must still stretch its child, which is round 70's half of this box.
-  assert.ok(box.split(/\s+/).includes('grid'),
+  assert.ok(classes.includes('grid'),
     'the box stopped being a single-cell grid — round 70 made it one so its child fills the row');
+});
+
+test('CONTROL: the assertion above names the bar, so restoring it fails', () => {
+  /**
+   * A test that only checks for ABSENCE passes trivially against an empty
+   * string, a renamed component, or a regex that stopped matching. This feeds
+   * the pre-round-78 class attribute through the same checks and requires them
+   * to fail — so a green above means the bar is gone, not that the test is.
+   */
+  const restored = 'grid rounded-9e-lg border border-[var(--surface-border)] '
+    + 'border-l-4 border-l-[color:var(--pb-accent-fill)] bg-9e-ice/50 p-4 md:p-6 dark:bg-[#0D1B2A]/40';
+  assert.ok(/border-l/.test(restored),
+    'the control string no longer contains a left border — it has stopped being a control');
+  assert.ok(restored.split(/\s+/).includes('border-l-4'));
 });
 
 // ── 3. WHAT THIS ROUND DID NOT TOUCH (§F) ──────────────────────────────────

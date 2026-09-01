@@ -116,7 +116,7 @@ function buttonHelperConsumers() {
     .sort();
 }
 
-test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with the accent', () => {
+test('AUDIT TRIPWIRE (finding 2): exactly eleven section components paint with the accent', () => {
   /**
    * Eleven name the variable themselves; `cta` reaches it through the shared
    * button helper (price_card does both). Twelve types in total, plus the four
@@ -154,7 +154,7 @@ test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with t
    * is exactly the argument that should not be settled silently.
    */
   assert.deepEqual(directAccentConsumers(), [
-    'accordion', 'checklist', 'course_schedule', 'highlight_grid', 'icon_card',
+    'accordion', 'checklist', 'course_schedule', 'icon_card',
     'instructor_card', 'price_card', 'rich_text', 'stat_card', 'tabs', 'timeline',
   ],
   'FINDING 2\'S SET MOVED. It is no longer a gap closing — it closed in round 24. An ADDITION '
@@ -169,7 +169,7 @@ test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with t
   // The union is the twelve the audit reports. Written as a union rather than
   // as a thirteenth literal list, so the two routes above stay the only source.
   const painting = [...new Set([...directAccentConsumers(), ...buttonHelperConsumers()])].sort();
-  assert.equal(painting.length, 12);
+  assert.equal(painting.length, 11);
 
   /**
    * The eleven with no accent surface, named. This is the half that was only
@@ -179,7 +179,7 @@ test('AUDIT TRIPWIRE (finding 2): exactly twelve section components paint with t
   assert.deepEqual(ALL_SECTION_TYPES.filter((t) => !painting.includes(t)).sort(), [
     'bundle_courses', 'card_grid', 'container', 'course_card', 'course_list',
     'course_selector', 'custom_css', 'custom_html', 'debug_json', 'embed',
-    'full_width', 'heading', 'image', 'notice', 'two_column',
+    'full_width', 'heading', 'highlight_grid', 'image', 'notice', 'two_column',
   ].sort(),
   'the set of types that do NOT paint with the accent changed. Four of these are containers '
   + 'that FORWARD it (card_grid, container, full_width, two_column) and eleven have no accent '

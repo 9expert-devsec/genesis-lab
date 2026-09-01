@@ -799,9 +799,17 @@ keeps the ordinary heading colour, exactly as an inactive tab does.
 | `instructor_card` | the role and bio | body copy is never accented |
 
 **Judgements**, flagged in-code as candidates rather than settled here: both
-components' own borders and dividers stay neutral. `highlight_grid` shows the
-pattern *permits* an accented border, but that is a decorative left-hand rule on
-a cell, not a component's structural outline — which no consumer accents.
+components' own borders and dividers stay neutral. `highlight_grid` used to show
+that the pattern *permits* an accented border — a decorative left-hand rule on a
+cell rather than a component's structural outline, which no consumer accents.
+
+**ROUND 78 REMOVED THAT RULE**, at the author's request, so the illustration is
+now historical: no component accents a border of any kind. `highlight_grid`
+moved from the direct-consumer set to the no-accent-surface set, taking the
+direct count from eleven to ten and the painting count from twelve to eleven.
+Its per-child box keeps its 1px `--surface-border` on all four sides, its 16px
+radius and its 16/24px padding; only the 4px accent rule went. The type still
+FORWARDS the accent to its children, like the other containers.
 
 Also untouched: `instructor_card`'s fixed card width. Separate finding, its own
 tripwire, and nothing about a colour belongs in that argument.
@@ -846,18 +854,23 @@ and the reason is a flaw in how the condition was worded.**
 
 It says to delete "once the offered set and the reader set agree". The offered
 set is all 27 types — สีเน้น is in the universal envelope and always has been.
-The reader set is 16 (12 painting + 4 containers forwarding). The remaining
-eleven are not a backlog: they are the types with no accent surface at all,
+The reader set is 15 (11 painting + 4 containers forwarding). The remaining
+twelve are not a backlog: they are the types with no accent surface at all,
 which §10 recorded as correct restraint. **The condition describes a state the
 design will never reach**, because it was written when "14 of 27 ignore it" still
 looked like one uniform gap.
 
 So the tripwire changes character instead of retiring: from *watch this set grow
 toward agreement* to *this set is closed — nothing joins or leaves without a
-decision*. A twelfth direct consumer is now a claim that a type has an accent
+decision*. An eleventh direct consumer is now a claim that a type has an accent
 surface after all, which is an argument that should not be settled silently. Its
-complement — the eleven, plus the four forwarding containers — is asserted as an
-exact set for the first time, so the "no accent surface" half stops being prose.
+complement — the twelve, plus the four forwarding containers — is asserted as an
+exact set, so the "no accent surface" half stops being prose.
+
+It has since fired a third time, in the LEAVING direction round 78 predicted:
+`highlight_grid` left the set when its accent bar was removed. That is the
+decision being made deliberately rather than silently, which is what the
+tripwire is for.
 
 ### Tripwires: two fired, both as designed
 
