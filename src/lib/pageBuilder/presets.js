@@ -40,6 +40,11 @@ import { PAGE_THEMES } from '@/lib/schemas/pageBuilder';
 // ADDED beside the statements above rather than folded into either — the
 // standing rule in this repo. Round 39: the author-colour half.
 import { customBackgroundStyle, hasCustomBackground, hexOrNull } from '@/lib/pageBuilder/customColor';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule here. Round 79: the renderer needs the author's colour as VARIABLES a
+// stylesheet can derive a dark counterpart from, plus which kind of background
+// it is and whether the author pinned it.
+import { customBackgroundVars, customBackgroundKind, isBackgroundPinned } from '@/lib/pageBuilder/customColor';
 // ADDED beside the statement above rather than folded into it. `accentContrastOk`
 // picks --pb-accent-on: a custom accent dark enough to read light text on gets
 // the light token, and a pale one gets the dark token. Same question the
@@ -180,7 +185,32 @@ const CARD_STYLE_CLASS = {
   plain:    '',
   border:   'border border-[var(--surface-border)]',
   shadow:   'shadow-9e-md',
-  filled:   'bg-9e-ice',
+  /**
+    * ── ROUND 79: `filled` FOLLOWS THE THEME ────────────────────────────────
+    * It was `bg-9e-ice` — #F8FAFD, a literal with no `.dark` form. Round 59
+    * measured it at 1.00 on `corporate_navy` and round 78 left it alone
+    * deliberately, because nothing on a `default` page could reach it.
+    *
+    * Round 79 made that reachable. Once a section's custom background DERIVES
+    * to a dark surface, the section's text becomes the theme's light text, and
+    * a `filled` card sitting on it painted #F8FAFD under #F8FAFD text.
+    * MEASURED on the live page mid-round: the author's price card computed
+    * 1.00:1 in dark mode, having been 16.64 before.
+    *
+    * `--pb-bg-light` is round 78's own variable: #F8FAFD in light — BYTE-
+    * IDENTICAL to `bg-9e-ice`, so nothing moves in light mode — and #132638 in
+    * dark. No colour is minted and no second mechanism is introduced; this is
+    * the same conversion round 78 applied to the section-background table,
+    * reaching the one card style that a change in this round made visible.
+    *
+    * `gradient` is NOT converted, and that is a decision. It is
+    * `bg-9e-gradient-subtle` — a two-stop gradient, so a dark form means TWO
+    * new colours, which is the reason round 78 left `brand_gradient` alone.
+    * ZERO stored sections use it (the corpus histogram is `filled` 5,
+    * `shadow` 20), so nothing renders it today and inventing two colours to
+    * fix nothing is the wrong trade. Reported, not folded in.
+    */
+  filled:   'bg-[var(--pb-bg-light)]',
   gradient: 'bg-9e-gradient-subtle',
   /**
    * ── ROUND 59: THE PROMOTION SURFACE ─────────────────────────────────────
@@ -475,8 +505,40 @@ export function backgroundClassFor(settings) {
  * `undefined` rather than `{}` so the renderer can spread it without emitting a
  * `style` attribute on every section that has no custom colour.
  */
+/**
+ * ── ROUND 79: VARIABLES, NOT A FINISHED DECLARATION ─────────────────────
+ * This used to return `customBackgroundStyle(...)` — a finished
+ * `background-color` or `linear-gradient(...)`. A finished inline declaration
+ * has no selector and therefore can never have a `.dark` counterpart, which is
+ * why an author's colour could not follow the theme.
+ *
+ * It now returns the author's values as CUSTOM PROPERTIES, and globals.css
+ * turns them into the declaration — once for light (byte-identical to what
+ * this used to emit) and once for dark (the `oklch-anchored` derivation).
+ * `customBackgroundStyle` is kept and still exported: it is what the contrast
+ * warning and the editor preview reason about, and it remains the definition
+ * of what the author asked for.
+ */
 export function backgroundStyleFor(settings) {
-  return hasCustomBackground(settings) ? customBackgroundStyle(settings.backgroundCustom) : undefined;
+  return hasCustomBackground(settings) ? customBackgroundVars(settings.backgroundCustom) : undefined;
+}
+
+/**
+ * The `data-pb-custom-bg` value for a section — `flat`, `gradient`, or
+ * undefined. The stylesheet keys on this rather than on the presence of a
+ * variable, so "one stop" and "two stops" stay the different statements
+ * customColor.js says they are.
+ */
+export function backgroundKindFor(settings) {
+  return hasCustomBackground(settings) ? customBackgroundKind(settings.backgroundCustom) : undefined;
+}
+
+/**
+ * `true` when the author asked for their colour verbatim in both themes.
+ * Emitted as a bare `data-pb-bg-pin` attribute, which the dark rules exclude.
+ */
+export function backgroundPinFor(settings) {
+  return hasCustomBackground(settings) && isBackgroundPinned(settings) ? '' : undefined;
 }
 
 /**

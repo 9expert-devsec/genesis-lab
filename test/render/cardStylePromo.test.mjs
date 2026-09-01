@@ -128,11 +128,27 @@ test('ADDITIVE — every pre-existing input resolves exactly as before', () => {
    * one edit: the five original values, and the three absent-ish shapes, still
    * resolve to what they always did.
    */
+  /**
+   * ── ROUND 79 CHANGED ONE ENTRY, AND THE CLAIM BEHIND IT ────────────────
+   * `filled` was `bg-9e-ice` — #F8FAFD, a literal with no `.dark` form. Round
+   * 79 made a section's custom background derive to a DARK surface in dark
+   * mode, which made the section's text light, and a `filled` card on it then
+   * painted #F8FAFD under #F8FAFD text. Measured on the live page mid-round:
+   * the author's price card went 16.64 to 1.00.
+   *
+   * It now reads `--pb-bg-light`, round 78's own variable, whose `:root` value
+   * is #F8FAFD — BYTE-IDENTICAL to `bg-9e-ice`. So what round 59 was pinning
+   * here — that adding `promo` did not change what the other five PAINT — is
+   * still true in light mode, and is asserted as such by
+   * test/fs/presetBackgroundThemeAware.test.mjs against the stylesheet.
+   * What moved is the class STRING, and only because the colour now has two
+   * values instead of one.
+   */
   const EXPECTED = {
     plain: '',
     border: 'border border-[var(--surface-border)]',
     shadow: 'shadow-9e-md',
-    filled: 'bg-9e-ice',
+    filled: 'bg-[var(--pb-bg-light)]',
     gradient: 'bg-9e-gradient-subtle',
   };
   for (const [value, cls] of Object.entries(EXPECTED)) {

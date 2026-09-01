@@ -430,6 +430,71 @@
   --9e-green-950: #09171B;
 }
 
+/* ──────────────────────────────────────────────────────────────
+   AUTHOR-CHOSEN SECTION BACKGROUNDS, AND THEIR DARK COUNTERPART
+   Round 79. docs/custom-colour-dark-mode.md is the spec.
+
+   An author's colour arrives at render time as a custom property, never as a
+   literal in source — round 30's ban is on a colour DECIDED in code, and a
+   value read from the database is not one. The renderer emits
+   `--pb-cbg-from` (+ `--pb-cbg-to` / `--pb-cbg-dir` for a gradient) and a
+   `data-pb-custom-bg` attribute saying which kind it is.
+
+   ── THE LIGHT RULES REPRODUCE THE OLD INLINE STYLE EXACTLY ───────────────
+   `customBackgroundStyle` used to emit `background-color: <from>` or
+   `linear-gradient(<dir>, <from>, <to>)` inline. These two rules are that,
+   moved into the stylesheet so a `.dark` counterpart can exist at all — an
+   inline declaration has no selector and can never have a second form.
+
+   ── THE DARK RULE, AND WHY IT IS SHAPED LIKE THIS ────────────────────────
+   `L' = 1 − L × 0.782314` is the `oklch-anchored` formula the doc measured,
+   with the constant folded: 0.782314 = 1 − L(#0D1B2A), the OKLab lightness of
+   the dark page ground. It keeps the colour's DISTANCE FROM THE PAGE rather
+   than its absolute lightness, so a barely-off-white panel becomes a
+   barely-off-dark one instead of collapsing to black. Chroma and hue are
+   passed through untouched, so the author's hue survives — measured drift
+   1.2–1.4° on the real stored colours.
+
+   Verified in Chrome (scripts/_probe-round79-oklch-support.mjs): the browser
+   agrees with the OKLab arithmetic to a delta of 0 on all four stored
+   colours, and the doc's measured table therefore describes what ships.
+
+   ── @supports IS LOad-BEARING, NOT DECORATION ────────────────────────────
+   `background-color: oklch(from var(--x) …)` is parsed lazily because of the
+   `var()`. Where relative colour syntax is unsupported, substitution yields
+   something unparseable and the declaration is INVALID AT COMPUTED-VALUE
+   TIME — which sets the property to `unset`, i.e. TRANSPARENT. It does not
+   fall back to the earlier declaration. Measured: the unguarded form computes
+   `rgba(0, 0, 0, 0)`.
+
+   `@supports` is evaluated at parse time against a literal with no `var()` in
+   it, so an unsupporting browser skips this block entirely and the light rules
+   above survive untouched — the author's own colour, in both themes, which is
+   exactly the pre-round-79 behaviour rather than something worse.
+
+   ── PINNED SECTIONS OPT OUT ──────────────────────────────────────────────
+   `data-pb-bg-pin` is emitted when the author asked for their colour verbatim
+   in both themes. The dark rules exclude it, so a pinned section keeps round
+   39's original promise.
+   ────────────────────────────────────────────────────────────── */
+[data-pb-custom-bg="flat"]     { background-color: var(--pb-cbg-from); }
+[data-pb-custom-bg="gradient"] {
+  background-image: linear-gradient(var(--pb-cbg-dir), var(--pb-cbg-from), var(--pb-cbg-to));
+}
+
+@supports (background-color: oklch(from white calc(l) c h)) {
+  .dark [data-pb-custom-bg="flat"]:not([data-pb-bg-pin]) {
+    background-color: oklch(from var(--pb-cbg-from) calc(1 - l * 0.782314) c h);
+  }
+  .dark [data-pb-custom-bg="gradient"]:not([data-pb-bg-pin]) {
+    background-image: linear-gradient(
+      var(--pb-cbg-dir),
+      oklch(from var(--pb-cbg-from) calc(1 - l * 0.782314) c h),
+      oklch(from var(--pb-cbg-to)   calc(1 - l * 0.782314) c h)
+    );
+  }
+}
+
 /* Native form controls and scrollbars follow the active theme */
 html        { color-scheme: light; }
 html.dark   { color-scheme: dark; }

@@ -21,6 +21,10 @@ import { Field, Group, Select, TextInput, TextArea, Warn, INPUT_CLASS } from './
 // Round 39, ADDED beside the statements above rather than folded into any —
 // the standing rule in this directory.
 import { ColorInput } from './fields';
+// Round 79, ADDED beside the statements above rather than folded into any —
+// the standing rule in this directory. The pin control is a switch, and this is
+// the switch every other panel in the builder already uses.
+import { Toggle } from './fields';
 import {
   CUSTOM_COLOR_OPTION, CUSTOM_COLOR_LABEL, GRADIENT_DIRECTION_LABELS,
 } from '@/lib/pageBuilder/presetLabels';
@@ -306,8 +310,30 @@ const ACCENT_HINT = 'ใช้กับไอคอน เส้นเน้น 
  * the sentence that was measured to vary: a section with no accent inherits the
  * page theme's accent (#005CFF on default, #9124FF on ai_purple).
  */
+/**
+ * ── ROUND 79 REPLACED THE SECOND HALF OF THIS PROMISE ────────────────────
+ * It used to end 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด' — the system adjusts this
+ * colour for neither the theme nor dark mode. The first clause is still true
+ * and still says the thing round 22 measured: a custom colour does not follow
+ * the PAGE THEME, which is what custom mode gives up.
+ *
+ * The dark-mode clause is now FALSE, and round 18's rule cuts both ways: a
+ * promise of stability the system no longer keeps is as much a lie as a claimed
+ * effect that never happens. So it says what the system now does, and names the
+ * escape hatch in the same breath, because an author reading this at the moment
+ * of choosing is the only one who can act on it.
+ *
+ * It STILL makes no comparison with preset mode. Round 39 measured that nothing
+ * followed dark mode then, so a contrast would have been unverifiable; rounds
+ * 78 and 79 changed both halves and a comparison would now be merely
+ * uninteresting. Either way the caveat's job is to describe custom mode.
+ */
 const CUSTOM_COLOR_CAVEAT = 'สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — '
-  + 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด';
+  + 'และจะถูกปรับให้เข้ากับโหมดมืดโดยอัตโนมัติ เว้นแต่จะเลือก "ตรึงสีไว้"';
+
+/** The pin control's own label and hint. */
+const PIN_LABEL = 'ตรึงสีไว้ (ไม่ปรับตามโหมดมืด)';
+const PIN_HINT = 'ใช้สีนี้ตามที่ระบุทั้งในโหมดสว่างและโหมดมืด — สำหรับสีแบรนด์ที่ต้องคงเดิม';
 
 /** The hex box's placeholder. Not a colour — six letters standing for digits. */
 const HEX_PLACEHOLDER = '#RRGGBB';
@@ -541,6 +567,20 @@ export function StyleTab({ type, layout, style, settings, patchKey }) {
                 />
               </Field>
             )}
+
+            {/* ROUND 79 — the opt-out. Offered only in custom mode, because a
+                preset colour already follows the theme and pinning one would be
+                a control that cannot change anything. Absent stores nothing:
+                `patchKey` is called with `undefined` when switched back off, so a
+                section an author never pinned keeps the byte-shape it had. */}
+            <Field label={PIN_LABEL} hint={PIN_HINT}>
+              <Toggle
+                checked={settings.backgroundPin === true}
+                onChange={(next) => patchKey('settings', { backgroundPin: next ? true : undefined })}
+                onLabel="ตรึง"
+                offLabel="ปรับอัตโนมัติ"
+              />
+            </Field>
           </>
         )}
 

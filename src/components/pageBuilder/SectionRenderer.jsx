@@ -20,6 +20,7 @@ import {
  */
 import {
   backgroundClassFor, backgroundStyleFor, isDarkBackgroundFor, accentVarsFor,
+  backgroundKindFor, backgroundPinFor,
 } from '@/lib/pageBuilder/presets';
 /**
  * ADDED beside the statement above rather than folded into it — the standing
@@ -29,7 +30,7 @@ import {
  * uses to suppress the preset class, so the class and the text colour cannot
  * disagree about who owns the background.
  */
-import { hasCustomBackground } from '@/lib/pageBuilder/customColor';
+import { hasCustomBackground, isBackgroundPinned } from '@/lib/pageBuilder/customColor';
 /**
  * Round 45, ADDED beside the statements above.
  *
@@ -381,7 +382,14 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
     spacingTopClass(settings.spacingTop),
     spacingBottomClass(settings.spacingBottom),
     isDarkBackgroundFor(settings) && 'text-9e-ice',
-    hasCustomBackground(settings) && 'text-9e-navy',
+    // ROUND 79 narrowed this to PINNED sections only. Round 78 added it
+    // because a custom surface stayed light while `--text-primary` flipped —
+    // but a DERIVED surface now goes dark with the theme, so pinning navy text
+    // on it would put dark ink on a dark panel. Measured: the hero derives to
+    // L 0.267 and needs the theme's light text, exactly as any other dark
+    // surface does. A PINNED section still does not move, so it still needs
+    // the literal.
+    hasCustomBackground(settings) && isBackgroundPinned(settings) && 'text-9e-navy',
     visibilityClass(settings.visibility),
     advanced.customClass || null,
   );
@@ -434,6 +442,15 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
     <section
       id={domId}
       data-pb-path={path ? path.join('.') : undefined}
+      /**
+       * ROUND 79. The author's colour arrives as custom properties in `style`;
+       * these two attributes tell globals.css which declaration to build from
+       * them, and whether the author pinned it out of the dark derivation.
+       * Both are `undefined` for every section without a custom background, so
+       * nothing is emitted and the published HTML is unchanged for them.
+       */
+      data-pb-custom-bg={backgroundKindFor(settings)}
+      data-pb-bg-pin={backgroundPinFor(settings)}
       className={outerClass || undefined}
       style={hasOuterStyle ? outerStyle : undefined}
     >

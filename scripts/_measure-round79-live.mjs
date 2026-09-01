@@ -48,7 +48,28 @@ const READER = () => {
     return { r, g, b, a: a === undefined ? 1 : a };
   };
   const f = (c) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
-  const lum = (c) => (c.r === null ? null : 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b));
+  /**
+   * OKLab -> linear sRGB, so a colour Chrome serialises as `oklch(...)` still
+   * yields a WCAG luminance. Without this every derived surface reported
+   * contrast `null` — the measurement would have gone quiet on exactly the
+   * surfaces this round changed.
+   */
+  const oklchToLin = (str) => {
+    const [L, C, H] = str.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const a = C * Math.cos(H * Math.PI / 180); const b2 = C * Math.sin(H * Math.PI / 180);
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b2) ** 3;
+    const m = (L - 0.1055613458 * a - 0.0638541728 * b2) ** 3;
+    const s2 = (L - 0.0894841775 * a - 1.2914855480 * b2) ** 3;
+    return [
+      +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s2,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s2,
+      -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s2,
+    ].map((c) => Math.min(1, Math.max(0, c)));
+  };
+  const lum = (c) => {
+    if (c.oklch) { const [r, g, b] = oklchToLin(c.oklch); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+  };
   const ratio = (a, b) => {
     const la = lum(a); const lb = lum(b);
     if (la === null || lb === null) return null;
@@ -156,7 +177,14 @@ const READER = () => {
       surface('hero (first section)', sections[0]),
       surface('closing CTA (last section)', sections[sections.length - 1]),
       surface('price card (cardStyle:filled in hero)',
-        sections[0] ? sections[0].querySelector('[class*="bg-9e-ice"], [data-pb-custom-card]') : null),
+        /**
+         * The cardStyle:filled box. Keyed on the RING that price_card draws
+         * around it rather than on its background class — the background class
+         * is what round 79 changed, and a selector naming it silently stopped
+         * matching mid-round and reported `undefined` for the one surface the
+         * change was about.
+         */
+        sections[0] ? sections[0].querySelector('[class*="ring-2"][class*="rounded-9e-lg"]') : null),
     ],
   };
 };

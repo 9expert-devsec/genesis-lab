@@ -82,26 +82,55 @@ test('a section with NO colour choice emits no style attribute at all', () => {
 const customBg = (backgroundCustom) =>
   sec({ settings: { background: 'dark', backgroundMode: 'custom', backgroundCustom } });
 
-test('ONE stop renders a flat background-color, not a gradient', () => {
+/**
+ * ── ROUND 79 MOVED WHERE THE DECLARATION IS BUILT ────────────────────────
+ * These three tests asserted a FINISHED declaration in the style attribute:
+ * `background-color: #123456`, `background-image: linear-gradient(...)`. An
+ * inline declaration has no selector, so it can never have a `.dark`
+ * counterpart — which is exactly why an author's colour could not follow the
+ * theme, and exactly what round 79 fixed.
+ *
+ * The renderer now emits the author's values as CUSTOM PROPERTIES plus a
+ * `data-pb-custom-bg` attribute, and globals.css builds the declaration from
+ * them once per theme. The light rule is byte-identical to what these tests
+ * used to assert, and that equivalence is checked directly against the
+ * stylesheet in test/render/customColorDarkDerivation.test.mjs.
+ *
+ * SO THE CLAIM HERE NARROWS RATHER THAN WEAKENS: the author's exact hexes, the
+ * chosen direction, and the one-stop/two-stop distinction all still reach the
+ * page on the section wrapper, and the no-colour case still emits nothing.
+ * What is no longer asserted here is the CSS property name, because this file
+ * is no longer where it is decided.
+ */
+test('ONE stop reaches the page as a flat custom background', () => {
   const el = wrapperOf(customBg({ from: '#123456' }));
-  // The attribute is parsed as TEXT, so the author's value appears verbatim —
-  // JSDOM does not normalise a style attribute it was handed as a string.
-  assert.deepEqual(styleMap(el), { 'background-color': '#123456' });
+  assert.deepEqual(styleMap(el), { '--pb-cbg-from': '#123456' });
+  assert.equal(el.getAttribute('data-pb-custom-bg'), 'flat',
+    'a one-stop background is not marked flat, so the gradient rule would paint it');
   assert.equal(el.getAttribute('style').includes('linear-gradient'), false,
     'a one-stop background emitted a gradient');
 });
 
-test('TWO stops render a linear-gradient in the stated direction', () => {
+test('TWO stops reach the page with the stated direction', () => {
   const down = wrapperOf(customBg({ from: '#123456', to: '#abcdef', direction: 'to_bottom' }));
   const right = wrapperOf(customBg({ from: '#123456', to: '#abcdef', direction: 'to_right' }));
-  assert.equal(styleMap(down)['background-image'],
-    'linear-gradient(to bottom, #123456, #abcdef)');
-  assert.equal(styleMap(right)['background-image'],
-    'linear-gradient(to right, #123456, #abcdef)');
-  assert.notEqual(styleMap(down)['background-image'], styleMap(right)['background-image'],
+  for (const [el, dir] of [[down, 'to bottom'], [right, 'to right']]) {
+    assert.equal(el.getAttribute('data-pb-custom-bg'), 'gradient');
+    assert.deepEqual(styleMap(el), {
+      '--pb-cbg-from': '#123456', '--pb-cbg-to': '#abcdef', '--pb-cbg-dir': dir,
+    });
+  }
+  // The direction must actually DIFFER between the two, or it reached the DOM
+  // and changed nothing. Round 79 moved it from inside the gradient function
+  // into `--pb-cbg-dir`, so that is what is compared; comparing
+  // `background-image` here now compares undefined to undefined and passes on
+  // a build where the direction was dropped entirely.
+  assert.notEqual(styleMap(down)['--pb-cbg-dir'], styleMap(right)['--pb-cbg-dir'],
     'the direction reached the DOM but changed nothing');
-  // No flat colour underneath it — one property owns the surface.
+  // No flat colour underneath it — one property owns the surface, and the
+  // stylesheet selects on the KIND rather than on which variables are set.
   assert.equal('background-color' in styleMap(down), false);
+  assert.equal('--pb-cbg-to' in styleMap(down), true);
 });
 
 test('the preset background CLASS is gone when a custom colour takes over', () => {
@@ -270,7 +299,9 @@ test('a custom accent and a custom background share ONE style attribute', () => 
     style: { accentMode: 'custom', accentCustom: '#abcdef' },
   }));
   const map = styleMap(el);
-  assert.equal(map['background-color'], '#123456');
+  // ROUND 79: the background half is a custom property now (see the note above).
+  // The point of this test is unchanged — ONE style attribute carries both.
+  assert.equal(map['--pb-cbg-from'], '#123456');
   assert.equal(map['--pb-accent-fill'], '#abcdef');
   assert.equal(docOf(html(sec())).querySelectorAll('section[style]').length, 0,
     'the no-colour case gained a style attribute');

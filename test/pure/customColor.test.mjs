@@ -294,7 +294,27 @@ test('the preset class is SUPPRESSED when a custom background takes over', () =>
   // Two things painting one surface is what the mode exists to prevent.
   const settings = { background: 'dark', backgroundMode: 'custom', backgroundCustom: { from: '#ffffff' } };
   assert.equal(backgroundClassFor(settings), '');
-  assert.deepEqual(backgroundStyleFor(settings), { backgroundColor: '#ffffff' });
+  /**
+   * ── ROUND 79 CHANGED THE CLAIM HERE, NOT JUST THE EXPECTATION ───────────
+   * This used to read `{ backgroundColor: '#ffffff' }` — a FINISHED
+   * declaration, emitted inline. A finished inline declaration has no selector
+   * and therefore can never have a `.dark` counterpart, which is precisely why
+   * an author's colour could not follow the theme.
+   *
+   * `backgroundStyleFor` now emits the author's value as a CUSTOM PROPERTY and
+   * globals.css builds the declaration from it, once per theme. The invariant
+   * this test protects is unchanged and is the one still asserted above: the
+   * preset class is suppressed, so two things never paint one surface. What the
+   * author's colour travels AS is what moved.
+   *
+   * `customBackgroundStyle` still returns the finished form and is still
+   * exported — it is what the contrast warning and the editor preview reason
+   * about — so the old shape is asserted directly, one line down.
+   */
+  assert.deepEqual(backgroundStyleFor(settings), { '--pb-cbg-from': '#ffffff' });
+  assert.deepEqual(customBackgroundStyle(settings.backgroundCustom), { backgroundColor: '#ffffff' },
+    'the finished-declaration form is gone, so the contrast warning and the editor preview '
+    + 'no longer share a definition of what the author asked for');
   // …and choosing custom without a valid colour leaves the preset in place,
   // rather than a section with no background at all.
   const half = { background: 'dark', backgroundMode: 'custom', backgroundCustom: {} };

@@ -93,9 +93,13 @@ test('the accent select keeps its ตามธีม sentinel and gains กำ�
 });
 
 test('choosing กำหนดเอง reveals the colour fields, and only then', () => {
+  // ROUND 79 added the pin toggle to the BACKGROUND custom block only. The
+  // accent list below is unchanged, and that asymmetry is the point: only a
+  // background is derived, so only a background has anything to pin.
   assert.deepEqual(fieldsIn(tab({ settings: CUSTOM_BG })), [
     'ความกว้าง', 'ระยะห่างด้านบน', 'ระยะห่างด้านล่าง',
-    'พื้นหลัง', 'สีเริ่มต้น', 'สีที่สอง', 'สีองค์ประกอบ', 'แสดงบน',
+    'พื้นหลัง', 'สีเริ่มต้น', 'สีที่สอง', 'ตรึงสีไว้ (ไม่ปรับตามโหมดมืด)',
+    'สีองค์ประกอบ', 'แสดงบน',
   ]);
   assert.deepEqual(fieldsIn(tab({ style: CUSTOM_ACCENT })), [
     'ความกว้าง', 'ระยะห่างด้านบน', 'ระยะห่างด้านล่าง',
@@ -133,8 +137,19 @@ test('an INVALID second stop does not offer the direction either', () => {
 
 // ── H. the two strings ─────────────────────────────────────────────────────
 
+/**
+ * ── ROUND 79 CHANGED WHAT THIS SENTENCE CLAIMS ──────────────────────────
+ * It used to end 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด'. Round 79 derives a dark
+ * counterpart for an author's colour, so that clause became FALSE, and round
+ * 18's rule cuts both ways: a promise of stability the system no longer keeps
+ * is as much a lie as a claimed effect that never happens.
+ *
+ * The FIRST clause is untouched and still says what round 22 measured — a
+ * custom colour does not follow the PAGE THEME. Only the dark-mode half moved,
+ * and it now names the opt-out in the same breath.
+ */
 const CUSTOM_COLOR_CAVEAT = 'สีที่กำหนดเองจะถูกใช้ตามที่ระบุในทุกธีมของหน้า — '
-  + 'ระบบจะไม่ปรับสีนี้ตามธีมหรือโหมดมืด';
+  + 'และจะถูกปรับให้เข้ากับโหมดมืดโดยอัตโนมัติ เว้นแต่จะเลือก "ตรึงสีไว้"';
 
 const BACKGROUND_CONTRAST_WARNING =
   'สีนี้อาจทำให้ตัวอักษรบนพื้นหลังอ่านยาก — ค่าความต่างของสีต่ำกว่า 4.5:1 ตามเกณฑ์ WCAG';
@@ -164,9 +179,17 @@ test('the caveat claims nothing about what a PRESET would have done', () => {
       `the caveat draws a comparison ("${word}") with preset mode. Measured: presets do not `
       + 'follow dark mode either, so the comparison would be a claim nothing can verify.');
   }
-  // It does say the two things that ARE true of a custom colour.
+  // It does say the two things that ARE true of a custom colour. The first is
+  // unchanged since round 22. The second INVERTED in round 79 — the sentence
+  // used to promise /ไม่ปรับ/ and now promises the adjustment plus the way out
+  // of it, so both halves of the new claim are pinned rather than neither.
   assert.match(CUSTOM_COLOR_CAVEAT, /ทุกธีมของหน้า/);
-  assert.match(CUSTOM_COLOR_CAVEAT, /ไม่ปรับ/);
+  assert.match(CUSTOM_COLOR_CAVEAT, /จะถูกปรับ/,
+    'the caveat no longer says the colour IS adjusted for dark mode, which is what it now does');
+  assert.match(CUSTOM_COLOR_CAVEAT, /ตรึงสีไว้/,
+    'the caveat no longer names the pin, so an author reading it cannot find the way out');
+  assert.equal(/ไม่ปรับสีนี้ตามธีมหรือโหมดมืด/.test(CUSTOM_COLOR_CAVEAT), false,
+    'the pre-round-79 promise of stability is back, and it is no longer true');
 });
 
 test('the contrast warnings fire on a bad colour and stay quiet on a good one', () => {

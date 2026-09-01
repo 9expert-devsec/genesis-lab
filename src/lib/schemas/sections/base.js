@@ -146,6 +146,27 @@ export const settingsSchema = z
     spacingBetween: z.enum(SPACING).optional(),
     backgroundMode:   z.enum(COLOR_MODES).optional(),
     backgroundCustom: backgroundCustomSchema,
+    /**
+     * ROUND 79 — the third mode, as a flag rather than a third COLOR_MODES value.
+     *
+     * `true` means "use my colour verbatim in BOTH themes", which is round 39's
+     * original promise kept as an opt-in for a brand colour that must not shift.
+     * ABSENT means the colour is DERIVED in dark mode, which is the new default.
+     *
+     * A FLAG AND NOT A THIRD ENUM VALUE, deliberately. `COLOR_MODES` answers
+     * "who chose this colour — the theme or the author", and that is still a
+     * two-way question; whether an author's colour is allowed to shift is a
+     * separate one. Folding them into one enum would make `preset` + pinned
+     * expressible and meaningless, and would put three values in a control that
+     * round 39 argued hard for keeping at two.
+     *
+     * `.optional()` with NO default is the round-39 shape above and is
+     * load-bearing for the same reason: a `.default(false)` would WRITE the key
+     * into every section that merely passes through a parse, which
+     * test/pure/customColor's "a stored section gains NOTHING when it is
+     * re-validated" exists to catch.
+     */
+    backgroundPin:    z.boolean().optional(),
   })
   .default({});
 
