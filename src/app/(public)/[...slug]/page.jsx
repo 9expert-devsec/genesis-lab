@@ -933,10 +933,10 @@ function CourseDetail({
               />
             )}
             <CourseDescription course={course} extension={extension} />
-            <CourseObjectives course={course} />
-            <CourseTarget course={course} />
-            <CoursePrerequisites course={course} />
-            <CourseRequirements course={course} />
+            <CourseObjectives course={course} extension={extension} />
+            <CourseTarget course={course} extension={extension} />
+            <CoursePrerequisites course={course} extension={extension} />
+            <CourseRequirements course={course} extension={extension} />
             {/* Rich section-7 bullets are resolved and SANITISED SERVER-SIDE.
                 CourseOutline is a client component; importing the sanitiser
                 there would ship parse5 + sanitize-html to the browser to
