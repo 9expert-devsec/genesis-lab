@@ -6,6 +6,7 @@ import { X, Lock, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
+  RETIRED_SECTION_TYPES,
 } from '@/lib/schemas/pageBuilder';
 import { isContainer } from '@/lib/pageBuilder/containerSlots';
 import { isAdvancedType } from '@/lib/pages/tierSanitize';
@@ -62,7 +63,37 @@ import { useEditor } from './EditorProvider';
 // and a clickable type with no component throws in newSection() or publishes an
 // empty section. The branch is unreachable because the codebase is currently in
 // a good state, not because the state it guards cannot happen.
-function typeState(type, canUseAdvanced) {
+/**
+ * EXPORTED FOR ITS CONTROL, and for nothing else.
+ *
+ * Round 80 added the 'retired' branch, which `visibleGroups` makes unreachable
+ * from the picker — the same position the 'soon' branch has been in since 2C.2b.
+ * An unreachable fail-closed branch that no test can call is a branch nobody
+ * knows still works, so this is exported and driven directly rather than left
+ * to be inferred from the rendered grid. It has ONE call site in this file and
+ * must keep only that one: the gate deciding what is clickable has to stay in
+ * the picker, not spread to callers who could disagree with it.
+ */
+export function typeState(type, canUseAdvanced) {
+  /**
+   * ── ROUND 80: 'retired' — FIRST, AND FAIL-CLOSED ─────────────────────
+   * A retired type is filtered out of `visibleGroups` below, so this branch is
+   * UNREACHABLE from the picker today — exactly the position the 'soon' branch
+   * above is in, and it is kept for the same stated reason: currently
+   * unreachable is not unreachable. Two things could reach it, and both are
+   * ordinary edits rather than exotic ones — a later round rendering a group's
+   * `types` without going through `visibleGroups`, or a caller passing a type
+   * straight to `typeState`.
+   *
+   * It is checked BEFORE `renderable`, because a retired type IS renderable —
+   * that is the whole point of a retirement — so the renderable check would
+   * return 'add' and make it clickable.
+   *
+   * A control proves it fires: test/render/sectionPickerRetired asserts
+   * `typeState('highlight_grid', true) === 'retired'` and that no other layout
+   * type answers 'retired'.
+   */
+  if (RETIRED_SECTION_TYPES.includes(type)) return 'retired';
   const renderable = RENDERABLE_SECTION_TYPES.includes(type);
   if (isAdvancedType(type)) {
     // ── The developer-tier gate ──────────────────────────────────────────
@@ -185,7 +216,28 @@ function matchesQuery(type, query) {
 export function visibleGroups(query, activeGroup) {
   return GROUPS
     .filter((g) => activeGroup === ALL_GROUP || activeGroup === g.key)
-    .map((g) => ({ ...g, types: g.types.filter((t) => matchesQuery(t, query)) }))
+    /**
+     * ── ROUND 80: RETIRED TYPES ARE SUBTRACTED HERE ────────────────────
+     * ONE place, and it is the exported derivation the tests already drive, so
+     * a retirement cannot be visible through one code path and hidden through
+     * another.
+     *
+     * SUBTRACTED RATHER THAN SHOWN-AND-DISABLED, which is the opposite of what
+     * this picker does for 'soon' and 'locked' — and the difference is the
+     * point. Those two say "this exists and you cannot have it YET", which is
+     * information an author can act on. A retirement says "this existed and you
+     * cannot have it AGAIN", which is not: drawing a permanently dead button
+     * advertises a capability with no path to it. The type keeps its label and
+     * icon for the sections that already exist; it just stops being on offer.
+     *
+     * `GROUPS` itself is untouched and still holds the imported constants BY
+     * REFERENCE — round 9's derivation, and the test that pins it, both still
+     * hold. The subtraction is a view over that list, not an edit to it.
+     */
+    .map((g) => ({
+      ...g,
+      types: g.types.filter((t) => !RETIRED_SECTION_TYPES.includes(t) && matchesQuery(t, query)),
+    }))
     .filter((g) => g.types.length > 0);
 }
 

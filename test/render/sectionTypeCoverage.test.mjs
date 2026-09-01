@@ -7,6 +7,7 @@ import { RENDERABLE_SECTION_TYPES } from '@/components/pageBuilder/SectionRender
 import {
   ALL_SECTION_TYPES,
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
+  RETIRED_SECTION_TYPES,
 } from '@/lib/schemas/pageBuilder';
 import { isAdvancedType } from '@/lib/pages/tierSanitize';
 import { SectionPickerBody } from '@/components/pageBuilder/editor/SectionPicker';
@@ -196,17 +197,29 @@ const clickable = (doc) =>
     .sort();
 
 /**
- * What `typeState` decides, restated from its two inputs — the renderer
- * registry and the tier — WITHOUT importing it (it is module-private, and
- * exporting it to be tested would be a change to the thing under test).
+ * What `typeState` decides, restated from its inputs — the retirement list, the
+ * renderer registry and the tier — WITHOUT importing it.
  *
- * This is a second reader of one rule and says so. It is not a copy of the
- * implementation's SHAPE, though: it is the rule in its plainest form, and the
- * assertions below compare it to the rendered DOM. If the two ever disagree,
- * one of them is wrong and that is the finding.
+ * ROUND 80 NOTE ON THAT PARENTHESIS. This used to read "it is module-private,
+ * and exporting it to be tested would be a change to the thing under test".
+ * Round 80 DID export it, for a different job: its new 'retired' branch is
+ * unreachable from the picker by construction, and an unreachable fail-closed
+ * branch no test can call is a branch nobody knows still works
+ * (test/render/sectionPickerRetired drives it directly).
+ *
+ * This restatement stays independent anyway, and that is the point of it: the
+ * assertions below compare THE RULE to the rendered DOM, so importing the
+ * implementation would make them compare the implementation to itself. If the
+ * two ever disagree, one of them is wrong and that is the finding.
+ *
+ * The retirement is FIRST here for the same reason it is first in `typeState`:
+ * a retired type is renderable, so a registry check alone would call it
+ * clickable.
  */
 const shouldBeClickable = (type, canUseAdvanced) =>
-  RENDERABLE_SECTION_TYPES.includes(type) && (!isAdvancedType(type) || canUseAdvanced);
+  !RETIRED_SECTION_TYPES.includes(type)
+  && RENDERABLE_SECTION_TYPES.includes(type)
+  && (!isAdvancedType(type) || canUseAdvanced);
 
 test('a developer’s picker leaves clickable EXACTLY the types typeState computes as "add"', () => {
   const doc = pickerDoc(true);

@@ -10,8 +10,24 @@ import {
 import {
   LAYOUT_TYPES, CONTENT_TYPES, CARD_TYPES, DYNAMIC_TYPES, ADVANCED_TYPES,
 } from '@/lib/schemas/pageBuilder';
+import { RETIRED_SECTION_TYPES } from '@/lib/schemas/pageBuilder';
 import { labelOf } from '@/lib/pageBuilder/sectionLabels';
 import { isContainer } from '@/lib/pageBuilder/containerSlots';
+
+/**
+ * ── ROUND 80: WHAT THE PICKER DRAWS IS THE EXPORT MINUS THE RETIRED LIST ──
+ * Every assertion below that compares the DRAWN set to a `*_TYPES` export goes
+ * through this. The claim they were making has not weakened — the picker still
+ * shows exactly its exported list, derived rather than hardcoded — it has one
+ * more term in it, and the term is itself an export rather than a literal, so
+ * retiring a second type moves these expectations with no edit here.
+ *
+ * The IDENTITY assertion further down (`byKey.layout === LAYOUT_TYPES`) is
+ * deliberately NOT routed through this: `GROUPS` must still hold the constants
+ * by reference, and it does. That is what makes the retirement a view over the
+ * list rather than an edit to it, and it is the round-9 control that proves it.
+ */
+const offered = (types) => [...types].filter((t) => !RETIRED_SECTION_TYPES.includes(t));
 
 /**
  * The add-section picker's SEARCH + GROUP-PILL layer, rendered.
@@ -84,7 +100,7 @@ test('CONTROL: an unfiltered render draws all five groups and all 27 types', () 
   assert.deepEqual(groupKeysIn(doc), ['content', 'layout', 'card', 'dynamic', 'advanced']);
   assert.deepEqual(
     typesIn(doc),
-    [...CONTENT_TYPES, ...LAYOUT_TYPES, ...CARD_TYPES, ...DYNAMIC_TYPES, ...ADVANCED_TYPES].sort(),
+    offered([...CONTENT_TYPES, ...LAYOUT_TYPES, ...CARD_TYPES, ...DYNAMIC_TYPES, ...ADVANCED_TYPES]).sort(),
   );
   assert.equal(doc.querySelector('[data-testid="picker-empty"]'), null,
     'the empty-state row rendered alongside a full catalogue');
@@ -170,7 +186,7 @@ test('each pill narrows to exactly its own exported list', () => {
   for (const group of GROUPS) {
     const doc = bodyDoc({ activeGroup: group.key });
     assert.deepEqual(groupKeysIn(doc), [group.key], `the ${group.key} pill drew another group too`);
-    assert.deepEqual(typesIn(doc), [...expected[group.key]].sort(),
+    assert.deepEqual(typesIn(doc), offered(expected[group.key]).sort(),
       `the ${group.key} pill does not show exactly its own exported list`);
   }
 });
@@ -257,7 +273,7 @@ test('a NON-developer sees one locked summary row and NOT ONE advanced button', 
   // …and everything else still did render, so this is a collapse, not a wipe.
   assert.deepEqual(
     typesIn(doc),
-    [...CONTENT_TYPES, ...LAYOUT_TYPES, ...CARD_TYPES, ...DYNAMIC_TYPES].sort(),
+    offered([...CONTENT_TYPES, ...LAYOUT_TYPES, ...CARD_TYPES, ...DYNAMIC_TYPES]).sort(),
   );
   // The group header itself stays — the author must still learn the tier exists.
   assert.deepEqual(groupKeysIn(doc), ['content', 'layout', 'card', 'dynamic', 'advanced']);
@@ -339,7 +355,7 @@ test('CONTROL: the hint is on containers ONLY — it is not on every card', () =
   const withHint = [...doc.querySelectorAll('[data-testid="picker-type"]')]
     .filter((b) => b.textContent.includes('ใส่ section ซ้อนข้างในได้'))
     .map((b) => b.getAttribute('data-type')).sort();
-  assert.deepEqual(withHint, LAYOUT_TYPES.filter(isContainer).sort());
+  assert.deepEqual(withHint, offered(LAYOUT_TYPES).filter(isContainer).sort());
 });
 
 // ── 7. the pills are DERIVED from GROUPS ────────────────────────────────────
