@@ -127,16 +127,38 @@ export default async function PromotionDetailPage({ params }) {
     // max-width. The MSDB html_content branch keeps its contained chrome. The
     // MSDB header (title/date/tags) is NOT reused — a builder promotion composes
     // its own headings via sections.
+    /**
+     * ── ROUND 79: NO BACK LINK ON THE BUILDER BRANCH ────────────────────
+     * It used to sit in a contained strip above PageBuilderView. Measured on
+     * the live page before removal: an 80px band with 56px of padding-top,
+     * transparent, whose ONLY child was the link. Full-bleed sections then
+     * begin under it, so once the first section carries a light custom
+     * background the strip reads as a detached band of route colour between
+     * the navbar and the page.
+     *
+     * The band goes with the link because it existed only to hold it —
+     * measured, not assumed: `onlyChildIsTheLink` was true.
+     *
+     * TWO ALTERNATIVES WERE WEIGHED AND REJECTED. Moving it into the first
+     * section makes every page's first section responsible for something that
+     * is not its content, and has no defined position when that section is
+     * `custom_html` — the system cannot know where an author's markup has
+     * room. Making the band inherit the first section's background reads
+     * better but keeps a route-level element depending on a section-level
+     * value, which is the same coupling wearing different clothes.
+     *
+     * WHAT AN AUTHOR LOSES: nothing that is not already there twice. Measured
+     * on the same page, three other links to /promotions remain in the site
+     * chrome, and the browser has back.
+     *
+     * THE MSDB BRANCH BELOW KEEPS ITS OWN BACK LINK, deliberately. That one
+     * sits inside a contained <article> above a title/date/tags header, not
+     * over a full-bleed authored hero, so the defect described here does not
+     * arise there. Removing it would be a separate change to a different
+     * layout.
+     */
     return (
       <div className="bg-[#F8FAFD] dark:bg-[#0D1B2A]">
-        <div className="mx-auto max-w-[1200px] px-4 pt-10 lg:pt-14">
-          <Link
-            href="/promotions"
-            className="inline-flex items-center gap-1 text-sm text-[#005CFF] hover:underline dark:text-[#48B0FF]"
-          >
-            <span aria-hidden="true">←</span> กลับไปหน้าโปรโมชัน
-          </Link>
-        </div>
         <PageBuilderView page={builderPage} />
       </div>
     );
