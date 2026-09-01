@@ -23,6 +23,7 @@ import CourseExtension from '@/models/CourseExtension';
 import CareerPath from '@/models/CareerPath';
 import MasterclassCourse from '@/models/MasterclassCourse';
 import { requireAdmin } from '@/lib/actions/auth';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 /**
  * Same serialisation the READ path uses (getLocalFaqs.js): lean/plain object
@@ -118,7 +119,7 @@ async function revalidateForFaq(course_type, ref_id) {
 function pickEditableFields(data = {}) {
   const out = {};
   if (typeof data.question_th === 'string') out.question_th = data.question_th.trim();
-  if (typeof data.answer_html === 'string') out.answer_html = data.answer_html;
+  if (typeof data.answer_html === 'string') out.answer_html = sanitizeRichHtml(data.answer_html);
   if (typeof data.is_active === 'boolean') out.is_active = data.is_active;
   if (data.display_order != null) out.display_order = Number(data.display_order) || 0;
   return out;
@@ -148,7 +149,7 @@ export async function createLocalFaq({
     course_type,
     ref_id: ref_id.trim(),
     question_th: question_th.trim(),
-    answer_html: answer_html ?? '',
+    answer_html: sanitizeRichHtml(answer_html ?? ''),
     display_order: Number(display_order) || 0,
   });
 

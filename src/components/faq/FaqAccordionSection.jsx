@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 
 /**
  * Shared FAQ accordion — the single source of truth for the per-course FAQ
@@ -104,7 +105,10 @@ export function FaqAccordionItem({ faq }) {
         <div className="min-h-0 overflow-hidden">
           <div
             className="prose prose-base dark:prose-invert px-4 pb-4 text-gray-600 dark:text-gray-300"
-            dangerouslySetInnerHTML={{ __html: faq.answer_html }}
+            // ONE fix point for all five callers named above — LocalFaq is
+            // genesis-authored (SimpleRichTextEditor, no sanitiser of its
+            // own; see docs/audit/unsanitized-html-render-sites.md #3).
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(faq.answer_html) }}
           />
         </div>
       </div>

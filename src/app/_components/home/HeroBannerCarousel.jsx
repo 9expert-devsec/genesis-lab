@@ -8,6 +8,7 @@ import * as LucideIcons from "lucide-react";
 import { useSwipe } from "@/hooks/useSwipe";
 import { LEGACY_TYPES } from "@/lib/banners/bannerTypes";
 import { resolveBannerLink, warnBlockedBannerLink } from "@/lib/bannerLinkUrl";
+import { sanitizeBasicHtml } from "@/lib/sanitizeRichHtml";
 
 /**
  * Public hero banner carousel.
@@ -612,7 +613,14 @@ function YouTubeHeroSlide({ banner, isDragging = false }) {
               {banner.slide_text && (
                 <div
                   className="text-9e-slate-dp-50 dark:text-[#94a3b8] text-sm leading-relaxed line-clamp-4 text-center lg:text-left h-[91px]"
-                  dangerouslySetInnerHTML={{ __html: banner.slide_text }}
+                  // Legacy field — the current Banner form no longer writes
+                  // it (bannerFormPayload.js), but 6 stored banners still
+                  // carry it as a `description ?? slide_text` fallback.
+                  // `basic` profile: it has measured as plain text with no
+                  // tags at all (docs/audit/unsanitized-html-render-sites.md
+                  // §1.2), but nothing guarantees a future record stays that
+                  // way.
+                  dangerouslySetInnerHTML={{ __html: sanitizeBasicHtml(banner.slide_text) }}
                 />
               )}
 
