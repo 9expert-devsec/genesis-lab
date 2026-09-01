@@ -88,16 +88,26 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
  *               the last field in it. Being publicly read is what made the
  *               editor worth keeping, not what makes the payload send it: both
  *               readers work off the STORED value, which omitting preserves.
- *   now (3)     `bullets` JOINS IT, moved here FROM the read-blind pair below.
- *               It used to keep an inert input (typing saved nothing) for the
- *               same reason `title` still does; the user confirmed ไฮไลต์
- *               unused and its input was deleted outright, so it now belongs
- *               with the fields that have no input at all, not with the one
- *               still shown-but-broken.
+ *   now (3)     `bullets` JOINS IT, moved here FROM the read-blind pair that
+ *               used to follow this roster. It used to keep an inert input
+ *               (typing saved nothing) for the same reason `title` did; the
+ *               user confirmed ไฮไลต์ unused and its input was deleted
+ *               outright, so it belonged with the fields that have no input
+ *               at all, not with the one still shown-but-broken.
+ *   now (4)     `title` JOINS IT too, for the same reason bullets did one
+ *               round earlier: the shown-but-broken state it used to occupy
+ *               is gone. `title`'s textarea (label เนื้อหา) was removed from
+ *               the course form entirely — MSDB never returns this field on
+ *               any read route (measured 2026-08-31, all 80 courses), so
+ *               genesis can only ever show it blank, and the rich-text
+ *               editor built this round replaces it as the field admins
+ *               actually use. There is no longer a control to keep inert, so
+ *               it moves here rather than keeping its own "still has an
+ *               input" guard.
  *
- * So the roster is program plus all five of the old section 8, plus bullets.
- * The section-7 arrays are the control: they must still be sent, or "omit
- * everything" would satisfy every assertion here.
+ * So the roster is program plus all five of the old section 8, plus bullets,
+ * plus title. The section-7 arrays are the control: they must still be
+ * sent, or "omit everything" would satisfy every assertion here.
  */
 const OMITTED = [
   'program',
@@ -107,6 +117,7 @@ const OMITTED = [
   'exam_links',
   'website_urls',
   'bullets',
+  'title',
 ];
 
 test('CONTROL: program is still OMITTED when empty', () => {
@@ -121,19 +132,22 @@ test('CONTROL: program is still OMITTED when empty', () => {
   );
 });
 
-test('the six removed fields (five section-8, plus bullets) are not emitted at all', () => {
+test('the seven removed fields (five section-8, bullets, title) are not emitted at all', () => {
   // Absent, not empty. A `key: linesOf(...)` line puts the field back in the
-  // value channel with `[]` as its value, which is a wipe, not a no-op.
+  // value channel with `[]` as its value, which is a wipe, not a no-op. For
+  // `title` specifically this is the ORIGINAL, more serious defect this
+  // roster started from: not a wipe of a value genesis wrote, but genesis
+  // asserting '' over a value it has never once been able to read.
   for (const key of OMITTED.slice(1)) {
     assert.doesNotMatch(
       SRC.code,
       new RegExp(`\\n\\s*${key}:\\s*`),
-      `${key} is emitted again — an empty array here overwrites real upstream data`
+      `${key} is emitted again — an empty value here overwrites real upstream data`
     );
   }
 });
 
-test('the six removed fields have no input left in the form', () => {
+test('the seven removed fields have no input left in the form', () => {
   // The other half: an input still posting the value while the payload ignores
   // it would look like a working editor that silently saves nothing.
   const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
@@ -191,52 +205,9 @@ test('CONTROL: the control above can distinguish the two channels', () => {
   }
 });
 
-/**
- * ── THE READ-BLIND FIELD: `title` ───────────────────────────────────────────
- *
- * A THIRD reason to omit a key, and the worst of the three, because the other
- * two are choices and this one is a defect being contained.
- *
- * Measured 2026-08-31 across all 80 upstream courses: `title` (MSDB's name for
- * the long rich-text body) is returned by NO read route — absent from the
- * list, absent from the `?course_id=` detail query, and the path-style detail
- * routes answer 405. It was one of two payload keys in that state; `bullets`
- * was the other, and it has since moved into the `OMITTED` roster above — the
- * user confirmed ไฮไลต์ unused and its input was deleted outright rather than
- * left inert, so it no longer needs its own guard here.
- *
- * So `title`'s input was seeded from `initial?.title`, permanently `undefined`,
- * and every save posted `title: ''` over whatever MSDB held. Opening a course
- * and pressing save destroyed its rich body, invisibly from this side — this
- * side cannot read the field.
- *
- * ── WHY IT IS NOT IN THE `OMITTED` ROSTER ABOVE ───────────────────────────
- * That roster's last test asserts the form has no input for its members.
- * `title` still DOES have one, deliberately: removing it is a form change and
- * this was a payload change. So it gets its own guard, and the difference is
- * asserted rather than left as a gap — see the last test in this block.
- */
-const READ_BLIND = ['title'];
-
-test('the read-blind field is not emitted — the KEY is absent, not empty', () => {
-  for (const key of READ_BLIND) {
-    // Anchored to a payload line (four-space indent inside the literal), so a
-    // mention in a comment or a `get('title')` fallback elsewhere does not
-    // satisfy it. `course_name: toStr(get('course_name') || get('title'))` is a
-    // legitimate READ of the form value and must not count as an emission.
-    assert.doesNotMatch(
-      SRC.code,
-      new RegExp(`\n {4}${key}:\s*`),
-      `${key} is emitted again — genesis cannot read this field, so any value ` +
-        `it sends is an assertion about something it has never seen, and '' or ` +
-        `[] overwrites real upstream content`
-    );
-  }
-});
-
-test('CONTROL: the same matcher DOES see the keys that are still emitted', () => {
-  // Without this, a matcher that found nothing anywhere would satisfy the test
-  // above for every key in the payload.
+test('CONTROL: the seven-field matcher DOES see the keys that are still emitted', () => {
+  // Without this, a matcher that found nothing anywhere would satisfy every
+  // doesNotMatch above for every key in the payload.
   for (const key of ['course_teaser', 'course_objectives', 'course_outline_th']) {
     assert.match(
       SRC.code,
@@ -246,28 +217,20 @@ test('CONTROL: the same matcher DOES see the keys that are still emitted', () =>
   }
 });
 
-test('CONTROL: `title` is still READ from the form as a course_name fallback', () => {
-  // The distinction the anchored matcher above exists to preserve: reading
-  // `get('title')` is fine, emitting `title:` is not.
+/**
+ * `title` is gone from the FORM (no input, no name attribute — see the
+ * "seven removed fields" tests above), but `shapePayload`'s own
+ * `course_name: toStr(get('course_name') || get('title'))` fallback in
+ * lib/actions/courses.js was left exactly as it was. `get('title')` on a
+ * FormData with no `title` field simply returns null, so the fallback is
+ * now permanently unreachable — dead, but harmless, and out of scope for
+ * this round, which changed the form, not that action file. Pinned here so
+ * a future cleanup of it is a deliberate choice, not a surprise.
+ */
+test('CONTROL: the now-unreachable course_name/title fallback in courses.js is untouched', () => {
   assert.match(
     SRC.code,
     /course_name:\s*toStr\(get\('course_name'\)\s*\|\|\s*get\('title'\)\)/,
-    'the legacy course_name fallback was removed along with the emission'
+    'the fallback expression changed — if title was cleaned out of courses.js too, update this note'
   );
-});
-
-test('the read-blind field KEEPS its form input, unlike the section-8 roster', () => {
-  // Stated as a claim rather than left as an inconsistency. The input is now
-  // inert — typing in it saves nothing — which is strictly better than the
-  // alternative it replaces, where typing in it worked once and the next save
-  // of that course wiped it. Removing it is a separate, form-shaped change.
-  const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
-  for (const key of READ_BLIND) {
-    assert.match(
-      FORM.code,
-      new RegExp(`name="${key}"`),
-      `${key}'s input was removed; if that was deliberate, move it into the ` +
-        `OMITTED roster above and delete this test`
-    );
-  }
 });

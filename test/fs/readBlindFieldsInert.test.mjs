@@ -3,61 +3,61 @@ import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
 
 /**
- * `title` is a read-blind course field: it says so, and still writes nothing.
+ * Two course fields the admin form used to render controls for and no
+ * longer does: `bullets` (ไฮไลต์) and, as of this round, `title` (เนื้อหา).
  *
- * `title` is returned by NO MSDB read route — measured across all 80 courses,
- * list and detail alike. So genesis cannot preserve it and 346911f removed it
- * from the payload. That left a control that accepted typing and saved
- * nothing, which is the state this guard is about: the input now declares it.
+ * `bullets`: the user confirmed it unused, so it was deleted outright rather
+ * than left inert — field, label, hint, note and counter all gone.
  *
- * `bullets` (ไฮไลต์) used to be the second field in this state, sharing the
- * same note. The user confirmed it unused, so instead of being left inert it
- * was deleted outright — field, label, hint, note and counter all gone. Its
- * payload omission is now asserted in coursePayloadOmissions's `OMITTED`
- * roster rather than here, since there is no longer a rendered control to
- * pair it with.
+ * `title`: MSDB returns this field on NO read route (measured 2026-08-31,
+ * all 80 courses), so genesis could only ever show it blank. It used to stay
+ * rendered anyway — read-only, with a note explaining why typing into it
+ * saved nothing — because removing the only rich-text field on the form
+ * would have left admins with no way to author long-form copy at all. This
+ * round built one (`CourseBodyEditor`, `CourseExtension.descriptionRich`),
+ * which replaces it as the field admins actually use, so the read-blind
+ * textarea, its hint, and its note all follow bullets out entirely rather
+ * than staying as a second inert control next to a working one.
  *
- * ── THE HALF THAT MATTERS MOST IS THE PAYLOAD HALF ────────────────────────
- * Making an input read-only is cosmetic and fails loudly if it regresses — the
- * box becomes editable again and someone notices. The payload omission does
- * NOT fail loudly: re-adding the key silently resumes overwriting real
- * upstream content, and this side cannot read the field to see the damage. So
- * the omission is asserted here as well as in coursePayloadOmissions, and the
- * two are deliberately not the same file: one is about the write, this one is
- * about the claim staying consistent with the control that makes it.
+ * ── THE HALF THAT MATTERS MOST IS STILL THE PAYLOAD HALF ──────────────────
+ * A control disappearing is cosmetic and fails loudly if it regresses —
+ * someone notices a text box that used to be there. The payload omission
+ * does NOT fail loudly: re-adding the key silently resumes overwriting real
+ * upstream content, and this side cannot read the field to see the damage.
+ * That half is asserted in test/fs/coursePayloadOmissions.test.mjs (title is
+ * now in its `OMITTED` roster, same as bullets) and is not repeated here —
+ * this file is about the rendered form only.
  */
 
 const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
 const BULLETS = readSource('src/components/admin/BulletTextarea.jsx');
-const ACTIONS = readSource('src/lib/actions/courses.js');
-
-test('the note is ONE constant, not an inline copy', () => {
-  assert.match(FORM.code, /const READ_BLIND_NOTE\s*=/);
-  const uses = FORM.code.match(/READ_BLIND_NOTE/g) ?? [];
-  assert.ok(uses.length >= 2, `expected the declaration plus at least one use, found ${uses.length}`);
-});
-
-test('the note says what it needs to say, in Thai', () => {
-  assert.match(
-    FORM.code,
-    /MSDB ไม่ส่งค่านี้กลับมา จึงแก้ที่นี่ไม่ได้ — แก้ที่ MSDB โดยตรง/,
-    'the note text changed; if that was deliberate, update this assertion with it'
-  );
-});
-
-test('the เนื้อหา (title) textarea is readOnly', () => {
-  // Matched as an ATTRIBUTE. A bare `readOnly` word search would hit the prop
-  // name, the docstring and the BulletTextarea import alike.
-  const block = FORM.code.slice(
-    FORM.code.indexOf('name="title"') - 200,
-    FORM.code.indexOf('name="title"') + 400
-  );
-  assert.match(block, /\n\s*readOnly\n/, 'the title textarea is editable again');
-});
 
 test('the bullets field (ไฮไลต์) is gone — no control, no label, no note', () => {
   assert.doesNotMatch(FORM.code, /name="bullets"/, 'the bullets field input is still rendered');
   assert.doesNotMatch(FORM.code, /ไฮไลต์/, 'the bullets label text is still present');
+});
+
+test('the title field (เนื้อหา) is gone — no control, no label, no note', () => {
+  assert.doesNotMatch(FORM.code, /name="title"/, 'the title field input is still rendered');
+  assert.doesNotMatch(
+    FORM.code, /MSDB ไม่ส่งค่านี้กลับมา/,
+    'the read-blind note text is still present — its subject (the title textarea) is gone'
+  );
+});
+
+test('CONTROL: เนื้อหา as a bare substring still exists elsewhere on the form, unrelated', () => {
+  // Guards against a doesNotMatch above being satisfied by accident because
+  // the whole word "เนื้อหา" happens to be scrubbed from the file somehow.
+  // The left-column tab is still labelled เนื้อหาหลักสูตร — a different
+  // string, and it must still be there. Source text, not rendered markup —
+  // the tab's JSX puts the label on its own line, so this is a plain
+  // substring match, not a `>label<` boundary (that convention is for
+  // renderToStaticMarkup output, which this file's FORM.code is not).
+  assert.match(FORM.code, /เนื้อหาหลักสูตร/, 'the section tab lost its label — matcher scope is wrong');
+});
+
+test('the READ_BLIND_NOTE constant is gone — nothing references it anymore', () => {
+  assert.doesNotMatch(FORM.code, /READ_BLIND_NOTE/, 'the note constant (or a reference to it) survives removal');
 });
 
 test('BulletTextarea forwards readOnly to the real control, not just to a class', () => {
@@ -77,32 +77,4 @@ test('CONTROL: readOnly is OFF by default, so the shared consumers are unaffecte
     /readOnly/,
     'the career-path form now mentions readOnly — check it did not inherit the muted state'
   );
-});
-
-test('the payload STILL omits both keys — neither the inert input nor the deleted one is a write path', () => {
-  for (const key of ['title', 'bullets']) {
-    assert.doesNotMatch(
-      ACTIONS.code,
-      new RegExp(`\\n {4}${key}:\\s*`),
-      `${key} is emitted again — the field's state (inert input / removed input) does not ` +
-        `make writing it safe, and '' or [] still overwrites real upstream content`
-    );
-  }
-});
-
-test('CONTROL: the omission matcher still sees the keys that ARE emitted', () => {
-  // Without this, an inert matcher would satisfy the test above for every key.
-  for (const key of ['course_teaser', 'course_objectives']) {
-    assert.match(ACTIONS.code, new RegExp(`\\n {4}${key}:\\s*`), `${key} should still be emitted`);
-  }
-});
-
-test('title was not deleted or hidden — it still renders', () => {
-  // The instruction for `title` was to make it honest, not to remove it. A
-  // hidden field would lose the only thing it is still good for: showing an
-  // admin that the data exists somewhere and where to go for it. `bullets`
-  // got the opposite instruction — see the test above — because the user
-  // confirmed it unused rather than merely unreadable.
-  assert.match(FORM.code, /name="title"/, 'the title field was removed');
-  assert.doesNotMatch(FORM.code, /type="hidden"[^>]*name="title"/, 'title was hidden');
 });
