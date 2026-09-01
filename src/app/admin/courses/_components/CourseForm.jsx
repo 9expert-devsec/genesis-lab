@@ -876,7 +876,18 @@ export function CourseForm({
           label="เนื้อหาแบบ Rich text"
           hint="แสดงแทนคำอธิบายสั้นด้านบนบนหน้าคอร์ส เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้คำอธิบายสั้นตามเดิม"
         >
+          {/*
+            KEYED ON THE COURSE, NOT RE-SEEDED BY PROP COMPARISON. This
+            editor owns a live document a value-vs-value check cannot safely
+            reconcile against (see CourseBodyEditor.jsx's own header for the
+            data-loss bug that shape caused). A genuine external change — a
+            different course's rich body loading — is handled by React
+            fully remounting the editor, the same guarantee every other
+            rail field already assumes by seeding once from `extension` on
+            mount.
+          */}
           <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
             value={descriptionRich}
             onChange={markTouched(setDescriptionRich)}
           />

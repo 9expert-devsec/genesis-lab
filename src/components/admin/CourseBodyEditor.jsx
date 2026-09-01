@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { NodeSelection } from '@tiptap/pm/state';
 import {
@@ -14,17 +14,70 @@ import {
 import { imageModalAttrs } from '@/lib/editor/resizableImage';
 import { courseBodyEditorExtensions } from './courseBodyEditorExtensions';
 
+/** Static — `editorProps.attributes.class` never varies with props/state. */
+const EDITOR_CONTENT_CLASS =
+  'course-body-editor article-content prose prose-sm dark:prose-invert max-w-none min-h-[300px] focus:outline-none px-4 py-3';
+
 /**
  * The course rich body editor — a controlled Tiptap editor for
  * `CourseExtension.descriptionRich`.
  *
- * ══ THE CONTROLLED-ON-OUTPUT CONTRACT ═══════════════════════════════════════
- * Same shape as `TopicBulletsEditor`: `value` in, `onChange(html)` out, and a
- * re-seed effect that only fires when the value changed EXTERNALLY and the
- * editor is not focused — copied from that component along with its reason,
- * which is copied from `SimpleRichTextEditor` before it: the editor owns its
- * own document, and re-seeding on every render would delete whatever the
- * admin is mid-typing.
+ * ══ ONE-WAY DATA FLOW: `value` SEEDS, IT NEVER RE-SEEDS ════════════════════
+ * `value` in, `onChange(html)` out — but `value` is only ever READ ONCE, at
+ * editor creation (`content: value ?? ''`, below). This editor never
+ * compares a later `value` against its own live document and never calls
+ * `setContent` after mount.
+ *
+ * That used to be different: a `useEffect` re-seeded the document whenever
+ * `value` changed and the editor was not focused. REPORTED BUG: type several
+ * lines, click the empty area below the text, and the typed content
+ * reverted — as if undone, every time.
+ *
+ * `editor.isFocused` was standing in for a claim it cannot actually prove —
+ * "this incoming value is not what I myself just produced". A React prop
+ * update from `setState` is not synchronous with the DOM transaction that
+ * triggered it (React schedules the re-render; the transaction — and this
+ * editor's own `onUpdate` — happens synchronously, in the same tick as the
+ * keystroke). So `value` can legitimately still be reporting the PREVIOUS
+ * line for the brief window before React commits. If focus is lost anywhere
+ * in that window, the old guard read the still-catching-up prop as
+ * "genuinely different" and overwrote the live document with it — discarding
+ * whatever was typed after that prop's snapshot. `test/pure/
+ * courseBodyEditorRevertBug.test.mjs` reproduces this exact input
+ * combination against an independent transcription of the removed code and
+ * shows it reverts; a value-vs-"what did I last emit" comparison was tried
+ * first and is proven, in that same test file, to still revert in this
+ * exact case — a stale prop does not equal EITHER the live document or the
+ * last thing this editor emitted, so no value comparison closes the gap.
+ *
+ * The actual fix is not a smarter comparison, it is not needing one: the
+ * document is seeded once, and a genuine external change (a different
+ * course's rich body loading) is handled by giving `<CourseBodyEditor>` a
+ * `key` in CourseForm.jsx — `key={initial?.course_id ?? 'create'}` — so
+ * React fully remounts (a fresh editor, fresh document) rather than trying
+ * to reconcile a live one. Every other CourseExtension rail field
+ * (`urlAlias`, `metaTitle`, `gallery`, …) already assumes exactly this: each
+ * is seeded once via `useState(extension?.field ?? …)`, relying on
+ * CourseForm getting a fresh mount per course. This gives the rich body
+ * editor the same guarantee explicitly, since it — unlike a plain
+ * `<input>` — owns a live document a naive prop comparison cannot safely
+ * reconcile against.
+ *
+ * `extensions`, `editorProps` and the image-edit callback are memoised
+ * (`useMemo`/`useCallback`) rather than rebuilt inline on every render. Not
+ * cosmetic, and not what fixes the revert, but a real, independently-worth-
+ * fixing defect found while diagnosing it: Tiptap's `useEditor` re-checks
+ * `compareOptions()` on every render regardless of its `deps` array, does a
+ * per-element identity compare specifically for `extensions`, and calls
+ * `editor.setOptions()` — which reapplies `editorProps` to the live DOM via
+ * `view.setProps()` — whenever anything compares unequal. A fresh array/
+ * object every render made that true on every keystroke: reapplying
+ * attributes to a focused contenteditable on every render (verified against
+ * the installed `@tiptap/react` source, `EditorInstanceManager.
+ * compareOptions`/`onRender`) is unnecessary churn and a plausible
+ * contributor to the reported focus loss in the first place, even though it
+ * is not, on its own, what turns a focus loss into data loss — the removed
+ * re-seed effect was.
  *
  * ══ THE TOOLBAR AND IMAGE MODAL ARE NEW JSX, NOT AN IMPORT — STATED WHY ═════
  * `docs/audit/course-rich-body.md`'s brief asked to reuse the article
@@ -219,56 +272,56 @@ export function CourseBodyEditor({ value = '', onChange, placeholder }) {
   const [imgAlt, setImgAlt] = useState('');
   const [imgWidth, setImgWidth] = useState('');
 
-  const editor = useEditor({
-    extensions: courseBodyEditorExtensions({
-      placeholder,
-      // Same contract as ArticleForm's onEditImage: opens the existing image's
-      // properties. The node view selects the image itself before calling
-      // this, so the modal's updateAttributes on confirm lands on it.
-      onEditImage: (attrs) => {
-        setImgAlt(attrs.alt ?? '');
-        setImgWidth(attrs.width ?? '');
-        setImgModal({ url: attrs.src, mode: 'edit' });
-      },
+  // Stable across renders — only ever touches useState setters, which are
+  // themselves stable. Memoised so `courseBodyEditorExtensions()` below does
+  // not have to rebuild the whole extensions array (and every extension
+  // instance in it) on every render — see the module header.
+  const onEditImage = useCallback((attrs) => {
+    setImgAlt(attrs.alt ?? '');
+    setImgWidth(attrs.width ?? '');
+    setImgModal({ url: attrs.src, mode: 'edit' });
+  }, []);
+
+  const extensions = useMemo(
+    () => courseBodyEditorExtensions({ placeholder, onEditImage }),
+    [placeholder, onEditImage]
+  );
+
+  // Double-click reopens the properties modal for an already-inserted image —
+  // the only way back into it besides the toolbar's own upload. Copied from
+  // ArticleForm.jsx, same reasoning: a BubbleMenu would add a second
+  // floating-position/z-index system for one control.
+  const handleDoubleClickOn = useCallback((view, pos, node, nodePos) => {
+    if (node.type.name !== 'image') return false;
+    view.dispatch(
+      view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)),
+    );
+    setImgAlt(node.attrs.alt ?? '');
+    setImgWidth(node.attrs.width ?? '');
+    setImgModal({ url: node.attrs.src, mode: 'edit' });
+    return true;
+  }, []);
+
+  const editorProps = useMemo(
+    () => ({
+      attributes: { class: EDITOR_CONTENT_CLASS },
+      handleDoubleClickOn,
     }),
+    [handleDoubleClickOn]
+  );
+
+  const editor = useEditor({
+    extensions,
+    // Seeds the document ONCE, at creation — see the module header for why
+    // this editor no longer tries to reconcile a live document against this
+    // prop on every render. `value` is read again only by the caller, via
+    // `onChange`; this editor never reads it back a second time.
     content: value ?? '',
-    editorProps: {
-      attributes: {
-        class: 'course-body-editor article-content prose prose-sm dark:prose-invert max-w-none min-h-[300px] focus:outline-none px-4 py-3',
-      },
-      // Double-click reopens the properties modal for an already-inserted
-      // image — the only way back into it besides the toolbar's own upload.
-      // Copied from ArticleForm.jsx, same reasoning: a BubbleMenu would add a
-      // second floating-position/z-index system for one control.
-      handleDoubleClickOn: (view, pos, node, nodePos) => {
-        if (node.type.name !== 'image') return false;
-        view.dispatch(
-          view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)),
-        );
-        setImgAlt(node.attrs.alt ?? '');
-        setImgWidth(node.attrs.width ?? '');
-        setImgModal({ url: node.attrs.src, mode: 'edit' });
-        return true;
-      },
-    },
+    editorProps,
     onUpdate: ({ editor: ed }) => onChange?.(ed.getHTML()),
     // Required: this sits inside a form Next renders on the server first.
     immediatelyRender: false,
   });
-
-  /**
-   * Re-seed only when the value changed EXTERNALLY and the editor is not
-   * focused — see the module header. `setContent(…, false)` suppresses the
-   * update event so seeding does not fire `onChange` and false-dirty the
-   * unsaved-changes guard on mount.
-   */
-  useEffect(() => {
-    if (!editor) return;
-    if (editor.isFocused) return;
-    const current = editor.getHTML();
-    if ((value ?? '') !== current) editor.commands.setContent(value ?? '', false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, editor]);
 
   function confirmImageModal() {
     if (!editor || !imgModal) return;
