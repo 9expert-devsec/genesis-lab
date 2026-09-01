@@ -932,7 +932,7 @@ function CourseDetail({
                 currentYear={siteCurrentYear()}
               />
             )}
-            <CourseDescription course={course} />
+            <CourseDescription course={course} extension={extension} />
             <CourseObjectives course={course} />
             <CourseTarget course={course} />
             <CoursePrerequisites course={course} />
