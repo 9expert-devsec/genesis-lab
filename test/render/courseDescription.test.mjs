@@ -116,3 +116,45 @@ test('a table authored in the editor survives to the rendered page, wrapped for 
   // reused rather than left unfixed for a second field.
   assert.ok(html.includes('article-table-scroll'), 'the table is not wrapped for horizontal scroll');
 });
+
+// ── list markers: a screenshot showed correct indentation, no markers ──────
+//
+// The CSS RULE is asserted at the file level in test/fs/courseListMarkers.
+// test.mjs — JSDOM does not compute a stylesheet cascade, so nothing here
+// can confirm a marker actually PAINTS. What this level CAN prove is the
+// other half of the diagnosis: the MARKUP itself survives intact — real
+// nested <ul>/<ol>/<li>, at three depths, sanitiser untouched — and that
+// the wrapper carries the class the CSS rule targets.
+
+test('a nested bullet list survives to the page at depths 1, 2 and 3', () => {
+  const nested =
+    '<ul><li><p>Depth 1</p>'
+    + '<ul><li><p>Depth 2</p>'
+    + '<ul><li><p>Depth 3</p></li></ul>'
+    + '</li></ul>'
+    + '</li></ul>';
+  const html = render({ descriptionRich: nested });
+  assert.match(html, /<ul><li><p>Depth 1<\/p><ul><li><p>Depth 2<\/p><ul><li><p>Depth 3<\/p><\/li><\/ul><\/li><\/ul><\/li><\/ul>/,
+    'the nested <ul> structure did not survive to the rendered page intact');
+});
+
+test('an ordered list survives to the page — the markup a "renders numbers" claim depends on', () => {
+  const html = render({
+    descriptionRich: '<ol><li><p>First</p></li><li><p>Second</p></li></ol>',
+  });
+  assert.match(html, /<ol><li><p>First<\/p><\/li><li><p>Second<\/p><\/li><\/ol>/,
+    'the <ol> did not survive — a CSS fix alone cannot render numbers over lost markup');
+});
+
+test('the rendered wrapper carries both marker-CSS classes', () => {
+  const html = render({ descriptionRich: '<p>x</p>' });
+  assert.match(
+    html, /class="article-content rich-body-nested-lists"/,
+    'the wrapper lost the class the depth-varied marker CSS in globals.css targets',
+  );
+});
+
+test('CONTROL: a plain, non-list body does not accidentally gain list markup', () => {
+  const html = render({ descriptionRich: '<p>No lists here.</p>' });
+  assert.doesNotMatch(html, /<ul>|<ol>/, 'list tags appeared in a body that never had any');
+});

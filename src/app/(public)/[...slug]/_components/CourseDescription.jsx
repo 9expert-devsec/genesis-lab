@@ -34,6 +34,17 @@ import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
  * is hardcoded `#005CFF`, the article page's blue, not this page's own
  * accent — a colour mismatch, not a functional defect, and easy to override
  * with a scoped rule later if it reads wrong once rendered.
+ *
+ * ══ `.rich-body-nested-lists` — DEPTH-DISTINGUISHABLE MARKERS, SCOPED ═══════
+ * `.article-content` alone restores list markers Tailwind's preflight
+ * strips (disc/decimal, matching what Tailwind Typography's `prose` class
+ * already does for Article.content), but not depth variation — that lives
+ * in this second class instead of in `.article-content` itself, precisely
+ * so a nested list under an ARTICLE (styled by `prose`, which is flat-disc
+ * at every depth) is not changed by a rule meant for this page. See
+ * globals.css's own comment on `.rich-body-nested-lists` for the full
+ * reasoning and the verification against the installed `@tailwindcss/
+ * typography` package.
  */
 export function CourseDescription({ course, extension }) {
   const teaser = course?.course_teaser;
@@ -46,7 +57,7 @@ export function CourseDescription({ course, extension }) {
     <ContentSection id="description" title={course.course_name}>
       {hasRichBody ? (
         <div
-          className="article-content"
+          className="article-content rich-body-nested-lists"
           dangerouslySetInnerHTML={{ __html: wrapArticleTables(richBody) }}
         />
       ) : (
