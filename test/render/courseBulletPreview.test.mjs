@@ -129,33 +129,55 @@ test('the preview is hidden from assistive tech — it duplicates the textarea',
 });
 
 /**
- * The wiring, read as code so a mention in a comment cannot satisfy it: the
- * four fields must ask for the marker their public counterpart draws.
+ * The wiring, read as code so a mention in a comment cannot satisfy it.
+ *
+ * ── THIS TEST USED TO PIN THE OPPOSITE ─────────────────────────────────────
+ * Section 6's four fields used to ask for `marker="number"`/`marker="check"`
+ * so BulletTextarea would draw its own hand-drawn preview underneath the
+ * textarea. Each of the four now carries a real `CourseBodyEditor` alongside
+ * it instead — a WYSIWYG editor, not an illustration of one — so `marker` (and
+ * the preview box it drew) is gone, and the unconditional "รวม N รายการ"
+ * counter is suppressed per field via `showCount={false}` rather than by
+ * changing BulletTextarea's default for every OTHER consumer (career-path,
+ * masterclass), which still want it. See CourseForm.jsx's own Section 6
+ * comment and BulletTextarea.jsx's `showCount` note.
  */
-test('CourseForm asks for the markers the public page actually uses', () => {
+test('CourseForm no longer asks for a marker on any of the four section-6 fields', () => {
   const { code } = readSource('src/app/admin/courses/_components/CourseForm.jsx');
   const flat = code.replace(/\s+/g, ' ');
 
-  assert.match(
-    flat,
-    /name="course_objectives"[^>]*marker="number"/,
-    'course_objectives must preview as a NUMBERED list (CourseObjectives.jsx:12)',
-  );
   for (const field of [
+    'course_objectives',
     'course_target_audience',
     'course_prerequisites',
     'course_system_requirements',
   ]) {
+    assert.ok(
+      !new RegExp(`name="${field}"[^>]*marker=`).test(flat),
+      `${field} still asks for a marker — the preview box it drew should be gone`,
+    );
     assert.match(
       flat,
-      new RegExp(`name="${field}"[^>]*marker="check"`),
-      `${field} must preview as a CHECK list, like its public renderer`,
+      new RegExp(`name="${field}"[^>]*showCount=\\{false\\}`),
+      `${field} must suppress BulletTextarea's own "รวม N รายการ" counter`,
     );
   }
 
-  // And `bullets` deliberately gets none — it has no public list of its own.
+  // `bullets` (this file's synthetic fixture name) never had a marker or a
+  // matching public list, and this test must not start requiring one.
   assert.ok(
     !/name="bullets"[^>]*marker=/.test(flat),
     'bullets gained a marker; it has no matching public list',
+  );
+});
+
+test('CONTROL: showCount stays true (unset) for a form that still wants the counter', () => {
+  // career-path and masterclass forms are untouched by this round and must
+  // keep BulletTextarea's default counter. Anchored on a literal snippet
+  // from CareerPathForm.jsx's own bullet fields, not on CourseForm.
+  const { code } = readSource('src/app/admin/career-paths/_components/CareerPathForm.jsx');
+  assert.ok(
+    !code.includes('showCount'),
+    'CareerPathForm now passes showCount — it should keep the default (visible) counter untouched',
   );
 });

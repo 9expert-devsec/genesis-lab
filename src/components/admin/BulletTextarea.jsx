@@ -61,6 +61,16 @@ function normaliseDefault(v) {
  * of this shared component (the career-path and masterclass forms) is
  * byte-identical.
  *
+ * `showCount` — OPT-OUT, defaulting to `true` so every other consumer keeps
+ * its "รวม N รายการ" row unchanged. CourseForm's Section 6 passes `false` on
+ * all four of its calls: once those fields also carry a `CourseBodyEditor`
+ * sibling (the field's own richer preview — reusing `descriptionRich`'s
+ * pattern of "rich replaces plain when non-empty"), a hand-drawn count of the
+ * plain list's lines stopped describing what would actually render. This does
+ * not touch `marker`/the preview list itself: those four calls simply stop
+ * passing `marker`, so `showPreview` is already false on its own — see
+ * CourseForm.jsx's Section 6 comment.
+ *
  * They exist for a field genesis can DISPLAY but cannot SAVE. `readOnly` is
  * deliberately not `disabled`: a disabled control is dropped from the form
  * entirely and greys its text past readability, while a read-only one stays
@@ -80,6 +90,7 @@ export function BulletTextarea({
   marker = null,
   readOnly = false,
   note = null,
+  showCount = true,
 }) {
   const seed = normaliseDefault(defaultValue);
   const [value, setValueState] = useState(seed);
@@ -184,14 +195,16 @@ export function BulletTextarea({
           )}
         </div>
       )}
-      <div className="mt-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
-        <span>รวม {lines.length} รายการ</span>
-        {urls && invalidUrlCount > 0 && (
-          <span className="text-amber-600">
-            {invalidUrlCount} บรรทัดไม่ใช่ URL ที่ถูกต้อง
-          </span>
-        )}
-      </div>
+      {showCount && (
+        <div className="mt-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          <span>รวม {lines.length} รายการ</span>
+          {urls && invalidUrlCount > 0 && (
+            <span className="text-amber-600">
+              {invalidUrlCount} บรรทัดไม่ใช่ URL ที่ถูกต้อง
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

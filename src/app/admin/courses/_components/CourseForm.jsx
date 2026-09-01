@@ -146,6 +146,23 @@ export function CourseForm({
    */
   const [descriptionRich, setDescriptionRich] = useState(extension?.descriptionRich ?? '');
 
+  /**
+   * Section 6's four rich bodies — the exact same pattern as `descriptionRich`
+   * just above, one state pair per field: lifted out of a `CourseBodyEditor`
+   * with no `name` attribute, so each never enters FormData and must be
+   * carried, seeded and compared explicitly. Independent of each other and of
+   * their own plain-textarea sibling — see Section 6's own comment for why
+   * both controls coexist.
+   */
+  const [objectivesRich, setObjectivesRich] =
+    useState(extension?.objectivesRich ?? '');
+  const [targetAudienceRich, setTargetAudienceRich] =
+    useState(extension?.targetAudienceRich ?? '');
+  const [prerequisitesRich, setPrerequisitesRich] =
+    useState(extension?.prerequisitesRich ?? '');
+  const [systemRequirementsRich, setSystemRequirementsRich] =
+    useState(extension?.systemRequirementsRich ?? '');
+
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
   /**
@@ -325,10 +342,12 @@ export function CourseForm({
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
           trainingTopicsRich, descriptionRich,
+          objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich,
         },
       }),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-      trainingTopicsRich, descriptionRich]
+      trainingTopicsRich, descriptionRich,
+      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich]
   );
 
   /**
@@ -491,10 +510,19 @@ export function CourseForm({
         // leaving a stale copy the presence gate would otherwise protect
         // forever.
         descriptionRich,
+        // Section 6's four rich bodies — identical reasoning to descriptionRich
+        // just above, one key per field. This form owns all four, so every one
+        // is named on every save, including '', independently of the other
+        // three and of its own plain-textarea sibling.
+        objectivesRich,
+        targetAudienceRich,
+        prerequisitesRich,
+        systemRequirementsRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
-      omisePaymentEnabled, trainingTopicsRich, descriptionRich]
+      omisePaymentEnabled, trainingTopicsRich, descriptionRich,
+      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich]
   );
 
   /**
@@ -1157,41 +1185,112 @@ export function CourseForm({
           Section 6 — รายละเอียดคอร์ส
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
-        {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
-            วัตถุประสงค์ is numbered there (CourseObjectives.jsx:12 prints
-            `{i + 1}.` from the index) and the other three carry a CheckCircle
-            (CourseTarget / CoursePrerequisites / CourseRequirements). Every
-            marker is drawn by the renderer on both sides — measured, none of
-            the 1118 stored items carries one — so the preview is a preview and
-            the payload is still exactly the lines typed. */}
+        {/*
+          EACH FIELD BELOW IS NOW TWO CONTROLS, NOT ONE — THE PLAIN LIST STAYS
+          FIRST-CLASS, THE RICH EDITOR SITS ALONGSIDE IT.
+
+          The textarea keeps editing the real MSDB string[] field exactly as
+          before — same `name`, same `linesOf` split on submit, no migration,
+          no backfill. `marker` and the preview box it drew are GONE (see
+          BulletTextarea.jsx's own `showCount` note): a WYSIWYG editor sitting
+          right below a hand-drawn preview of the SAME content was two views
+          of one thing, and the real preview is the public page.
+
+          The `CourseBodyEditor` beside it is a second, genesis-owned field —
+          `objectivesRich` / `targetAudienceRich` / `prerequisitesRich` /
+          `systemRequirementsRich` on CourseExtension, the exact
+          `descriptionRich` pattern (seed once, controlled state, named on
+          every save so clearing it actually clears the stored value). When it
+          holds real content the public page renders it INSTEAD OF the plain
+          list; when empty, the plain list is what renders — see
+          CourseObjectives.jsx (and its three siblings) for the swap. The two
+          controls are independent: leaving one field's rich body empty does
+          not affect the other three, and does not touch this field's own
+          plain list.
+
+          `plain` on every one of these four `Field`s is NOT optional — see
+          the `Field` component's own header and test/fs/
+          fieldLabelForwardGuard.test.mjs. `CourseBodyEditor`'s toolbar
+          renders real `<button>`s ahead of its contenteditable region; an
+          implicit `<label>` here would forward a plain click on editor TEXT
+          to the first one (Undo) exactly the way it did for the section-1
+          rich body before that was fixed.
+        */}
         <BulletTextarea
           name="course_objectives"
           label={COURSE_SECTION_LABELS.objective}
           hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
-          marker="number"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.objective} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={objectivesRich}
+            onChange={markTouched(setObjectivesRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_target_audience"
           label={COURSE_SECTION_LABELS.target}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
-          marker="check"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.target} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={targetAudienceRich}
+            onChange={markTouched(setTargetAudienceRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_prerequisites"
           label={COURSE_SECTION_LABELS.prerequisite}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
-          marker="check"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.prerequisite} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={prerequisitesRich}
+            onChange={markTouched(setPrerequisitesRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_system_requirements"
           label={COURSE_SECTION_LABELS.requirement}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
-          marker="check"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.requirement} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={systemRequirementsRich}
+            onChange={markTouched(setSystemRequirementsRich)}
+          />
+        </Field>
       </Section>
 
       {/* ───────────────────────────────────────────────────────────

@@ -85,6 +85,13 @@ export function courseEditorSignature({ formEntries = [], extension = {} } = {})
       // enters FormData and must be compared here explicitly or a
       // formatting-only edit reads as clean.
       descriptionRich: str(extension.descriptionRich),
+      // Section 6's four rich bodies — identical reasoning, one entry per
+      // field, each independent of the other three and of its own
+      // plain-textarea sibling (which IS in FormData and needs no entry here).
+      objectivesRich: str(extension.objectivesRich),
+      targetAudienceRich: str(extension.targetAudienceRich),
+      prerequisitesRich: str(extension.prerequisitesRich),
+      systemRequirementsRich: str(extension.systemRequirementsRich),
     },
   });
 }
