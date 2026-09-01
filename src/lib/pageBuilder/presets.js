@@ -95,16 +95,33 @@ const SPACING_BETWEEN_CLASS = {
 export const SPACING_BETWEEN_TYPES = ['container', 'full_width'];
 
 // ── settings.background → surface ────────────────────────────────────
-// `soft_gray` aliases the existing slate-lt scale (no new token). `image`
-// has no source field in the schema yet, so it renders as no surface for now.
+/**
+ * ── ROUND 78: THESE FOLLOW THE THEME NOW ─────────────────────────────────
+ * Four of these were literal Tailwind colours — `bg-white`, `bg-9e-ice`,
+ * `bg-9e-slate-lt-800`, `bg-9e-navy` — and every one resolves to a raw brand
+ * hex that globals.css declares ONCE, with no `.dark` form. A section carrying
+ * any of them painted the same colour in both themes, which is why a published
+ * page rendered as an opaque light slab on a dark canvas.
+ *
+ * They now read `--pb-bg-*`, declared in globals.css in BOTH blocks. THE LIGHT
+ * VALUES ARE THE OLD LITERALS BYTE FOR BYTE (#FFFFFF, #F8FAFD, #F1F3F6,
+ * #0D1B2A), so light mode renders exactly as it did; a test compiles the
+ * stylesheet and asserts each one, and a second test asserts each resolves
+ * DIFFERENTLY under `.dark` — the assertion whose absence let this ship.
+ *
+ * `brand_gradient` is UNCHANGED and that is a decision, not an omission: it
+ * paints two of the thirteen raw brand hexes, which are theme-invariant on
+ * purpose. A brand gradient is not a theme surface. `default` and `image`
+ * paint nothing, so there is nothing to convert.
+ */
 const BACKGROUND_CLASS = {
-  default:        '',                       // inherit theme surface
-  white:          'bg-white',
-  light:          'bg-9e-ice',
-  soft_gray:      'bg-9e-slate-lt-800',     // alias → slate-lt
-  dark:           'bg-9e-navy',
-  brand_gradient: 'bg-9e-gradient-hero',
-  image:          '',                       // TODO: needs a bg-image source field
+  default:        '',                            // inherit theme surface
+  white:          'bg-[var(--pb-bg-white)]',
+  light:          'bg-[var(--pb-bg-light)]',
+  soft_gray:      'bg-[var(--pb-bg-soft-gray)]',
+  dark:           'bg-[var(--pb-bg-dark)]',
+  brand_gradient: 'bg-9e-gradient-hero',         // brand colour, theme-invariant
+  image:          '',                            // TODO: needs a bg-image source field
 };
 // Backgrounds that require light text on top.
 const DARK_BACKGROUNDS = new Set(['dark', 'brand_gradient']);
@@ -248,14 +265,42 @@ const BUTTON_STYLE_CLASS = {
 // Each theme sets --pb-accent-* from a default accent (see themeStyle()).
 // `dark_premium` has no defined treatment yet — it aliases `default`.
 // TODO(design): define dark_premium's own surface/accent when specced.
+/**
+ * ── ROUND 78: THE PAGE SHELL FOLLOWS THE THEME TOO, AND IT HAD TO ────────
+ * This table was NOT in the round's brief, which named only BACKGROUND_CLASS
+ * above. Converting that table alone would have fixed NOTHING on the page the
+ * author reported, and the measurement says so exactly. On
+ * /promotions/early-bird-claude-code, in dark mode, before this change:
+ *
+ *   section [0]  own background-color rgba(0,0,0,0)   effective #f8e7d5 (custom)
+ *   section [1]  own background-color rgba(0,0,0,0)   effective #ffffff
+ *   section [2]  own background-color rgba(0,0,0,0)   effective #ffffff
+ *   section [3]  own background-color rgba(0,0,0,0)   effective #f8e7d5 (custom)
+ *   page shell   class "bg-white text-9e-navy"        computed  #ffffff
+ *
+ * Every section paints NOTHING — all 63 live sections in the corpus carry
+ * `background: default`, whose class is `''`. The white slab is this table,
+ * inherited. So the shell is converted here on the same terms as the surfaces
+ * above: the light rendering is byte-identical and only the dark one is new.
+ *
+ *   bg-white     #FFFFFF -> --pb-bg-white     #FFFFFF light / #0D1B2A dark
+ *   bg-9e-ice    #F8FAFD -> --pb-bg-light     #F8FAFD light / #132638 dark
+ *   bg-9e-navy   #0D1B2A -> --pb-bg-dark      #0D1B2A light / #080E16 dark
+ *   text-9e-navy #0D1B2A -> --text-primary    #0D1B2A light / #F8FAFD dark
+ *
+ * `corporate_navy` KEEPS `text-9e-ice` as a literal, deliberately. It is a
+ * dark band in BOTH themes, so its text must be light in both; pointing it at
+ * `--text-primary` would paint navy on navy in light mode. The one place the
+ * old literal is still correct is the one place it is kept.
+ */
 const THEME = {
-  default:           { pageClass: 'bg-white text-9e-navy',   accent: 'brand_blue', dark: false },
-  promotion_blue:    { pageClass: 'bg-9e-ice text-9e-navy',  accent: 'brand_blue', dark: false },
-  early_bird_orange: { pageClass: 'bg-white text-9e-navy',   accent: 'orange',     dark: false },
-  ai_purple:         { pageClass: 'bg-white text-9e-navy',   accent: 'purple',     dark: false },
-  corporate_navy:    { pageClass: 'bg-9e-navy text-9e-ice',  accent: 'brand_blue', dark: true  },
-  light_minimal:     { pageClass: 'bg-white text-9e-navy',   accent: 'brand_blue', dark: false },
-  dark_premium:      { pageClass: 'bg-white text-9e-navy',   accent: 'brand_blue', dark: false }, // = default (TODO)
+  default:           { pageClass: 'bg-[var(--pb-bg-white)] text-[var(--text-primary)]', accent: 'brand_blue', dark: false },
+  promotion_blue:    { pageClass: 'bg-[var(--pb-bg-light)] text-[var(--text-primary)]', accent: 'brand_blue', dark: false },
+  early_bird_orange: { pageClass: 'bg-[var(--pb-bg-white)] text-[var(--text-primary)]', accent: 'orange',     dark: false },
+  ai_purple:         { pageClass: 'bg-[var(--pb-bg-white)] text-[var(--text-primary)]', accent: 'purple',     dark: false },
+  corporate_navy:    { pageClass: 'bg-[var(--pb-bg-dark)] text-9e-ice',                 accent: 'brand_blue', dark: true  },
+  light_minimal:     { pageClass: 'bg-[var(--pb-bg-white)] text-[var(--text-primary)]', accent: 'brand_blue', dark: false },
+  dark_premium:      { pageClass: 'bg-[var(--pb-bg-white)] text-[var(--text-primary)]', accent: 'brand_blue', dark: false }, // = default (TODO)
 };
 
 // ── completeness assertion (fail loudly at module load) ──────────────

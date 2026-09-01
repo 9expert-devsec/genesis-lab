@@ -22,6 +22,15 @@ import {
   backgroundClassFor, backgroundStyleFor, isDarkBackgroundFor, accentVarsFor,
 } from '@/lib/pageBuilder/presets';
 /**
+ * ADDED beside the statement above rather than folded into it — the standing
+ * rule in this repo. Round 78: the renderer needs to know whether the author's
+ * own colour owns this surface, because a surface that does not follow the
+ * theme cannot inherit text that does. It is the same predicate presets.js
+ * uses to suppress the preset class, so the class and the text colour cannot
+ * disagree about who owns the background.
+ */
+import { hasCustomBackground } from '@/lib/pageBuilder/customColor';
+/**
  * Round 45, ADDED beside the statements above.
  *
  * The SAME two functions the structure tree uses for its “ว่าง” badge — not a
@@ -340,11 +349,39 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
    * runtime string. That is also why the preset class has to be SUPPRESSED
    * rather than merely overridden — see backgroundClassFor.
    */
+  /**
+   * ── ROUND 78: A CUSTOM BACKGROUND PINS THE TEXT THAT SITS ON IT ──────────
+   * Round 78 made the page shell theme-aware, so `--text-primary` now flips to
+   * near-white under `.dark`. A section with a CUSTOM background does not flip
+   * — round 39 promised the author's colour verbatim in both themes — so
+   * without this the theme's dark text landed on the author's light surface.
+   * MEASURED on /promotions/early-bird-claude-code before this line existed:
+   * the hero went 14.4 -> 1.16 and the second custom section 5.88 -> 2.83.
+   *
+   * `text-9e-navy` is the literal the page shell carried before round 78, so
+   * this reproduces EXACTLY the behaviour a custom-background section already
+   * had, rather than introducing a new rule. It is the same promise applied
+   * consistently: if the surface is verbatim in both themes, the text on it
+   * has to be too, or the pair answers two different axes — the defect round
+   * 59 named and round 75 measured four more instances of.
+   *
+   * This is NOT deriving a dark counterpart for an author's colour. Nothing
+   * here reads or transforms the author's hex; it pins the theme half of the
+   * pair to the value it had, which is what keeps the contract coherent.
+   * Deriving the surface itself remains a separate, unbuilt proposal
+   * (docs/custom-colour-dark-mode.md).
+   *
+   * ORDER MATTERS: it sits after `isDarkBackgroundFor`, and the two are
+   * mutually exclusive by construction — `isDarkBackgroundFor` returns false
+   * for every custom background (presets.js says why), so a section can never
+   * receive both classes.
+   */
   const outerClass = cn(
     backgroundClassFor(settings),
     spacingTopClass(settings.spacingTop),
     spacingBottomClass(settings.spacingBottom),
     isDarkBackgroundFor(settings) && 'text-9e-ice',
+    hasCustomBackground(settings) && 'text-9e-navy',
     visibilityClass(settings.visibility),
     advanced.customClass || null,
   );
