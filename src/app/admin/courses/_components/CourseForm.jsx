@@ -875,6 +875,7 @@ export function CourseForm({
         <Field
           label="คำอธิบายหลักสูตร"
           hint="แสดงแทนคำอธิบายสั้นด้านบนบนหน้าคอร์ส เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้คำอธิบายสั้นตามเดิม"
+          plain
         >
           {/*
             KEYED ON THE COURSE, NOT RE-SEEDED BY PROP COMPARISON. This
@@ -1593,9 +1594,35 @@ function Section({ title, hint, children }) {
   );
 }
 
-function Field({ label, hint, children }) {
+/**
+ * `plain` renders a `<div>` instead of an implicit `<label>`.
+ *
+ * THE DEFAULT `<label>` IS ONLY SAFE AROUND A SINGLE FORM CONTROL. An
+ * implicit label (no `for`) forwards a click ANYWHERE inside it — including
+ * on a click target that is not itself interactive — to the label's
+ * "labeled control": per the HTML label-activation algorithm, the FIRST
+ * labelable descendant in tree order (button, input, select, textarea,
+ * etc). That is exactly what made the course rich-body editor "revert on
+ * click": CourseBodyEditor's toolbar renders real `<button>`s (Undo first)
+ * ahead of its contenteditable region, and a contenteditable `<div>` is not
+ * itself labelable — so a plain click on editor TEXT was forwarded to the
+ * Undo button, which ran `editor.chain().focus().undo().run()`. Confirmed
+ * in a real headless-Chrome click (`test/browser/labelForwardRepro.mjs`,
+ * reproducing this exact toolbar-button + contenteditable shape): the click
+ * landed focus and a synthetic activation on the first button, not on the
+ * editor. ProseMirror's undo then selects the reverted range, which is the
+ * "line highlighted after a plain click" the report described.
+ *
+ * A `Field` wrapping a single `<input>`/`<textarea>`/`<select>` has no such
+ * hazard — those ARE the first (and only) labelable descendant, so a click
+ * anywhere in the label already lands on them; that behaviour (click the
+ * label text, focus the field) stays the default. `plain` opts a Field out
+ * only where its children own further interactive controls of their own.
+ */
+function Field({ label, hint, children, plain = false }) {
+  const Tag = plain ? 'div' : 'label';
   return (
-    <label className="block">
+    <Tag className="block">
       <span className="block text-sm font-medium text-9e-navy dark:text-white">
         {label}
       </span>
@@ -1605,7 +1632,7 @@ function Field({ label, hint, children }) {
         </span>
       )}
       <div className="mt-1">{children}</div>
-    </label>
+    </Tag>
   );
 }
 

@@ -55,7 +55,7 @@ export function ProgramOnlineCoursesSection({
   courses = [],
   program,
   skillSlugs = {},
-  title = 'คอร์สออนไลน์ในโปรแกรม',
+  title = 'หลักสูตรออนไลน์ในโปรแกรม',
   id = 'online-courses',
 }) {
   if (!courses?.length) return null;
