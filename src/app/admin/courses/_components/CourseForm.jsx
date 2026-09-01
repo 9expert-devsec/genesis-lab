@@ -15,6 +15,7 @@ import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
+import { CourseBodyEditor } from '@/components/admin/CourseBodyEditor';
 import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
@@ -137,6 +138,13 @@ export function CourseForm({
    * The toggle itself stays on /admin/courses/[courseId] under การชำระเงิน.
    */
   const [omisePaymentEnabled] = useState(extension?.omisePaymentEnabled === true);
+
+  /**
+   * The course rich body — controlled state, same reason trainingTopicsRich is:
+   * lifted out of a Tiptap editor with no `name` attribute, so it never enters
+   * FormData and must be carried, seeded and compared explicitly.
+   */
+  const [descriptionRich, setDescriptionRich] = useState(extension?.descriptionRich ?? '');
 
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
@@ -316,11 +324,11 @@ export function CourseForm({
         formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-          trainingTopicsRich,
+          trainingTopicsRich, descriptionRich,
         },
       }),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-      trainingTopicsRich]
+      trainingTopicsRich, descriptionRich]
   );
 
   /**
@@ -477,10 +485,16 @@ export function CourseForm({
          * copy cleared rather than kept forever as a stale one.
          */
         trainingTopicsRich,
+        // Same reasoning as trainingTopicsRich just above: this form owns the
+        // field, so it is named on every save, including '' — how a course
+        // whose rich body the admin cleared actually clears it, rather than
+        // leaving a stale copy the presence gate would otherwise protect
+        // forever.
+        descriptionRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
-      omisePaymentEnabled, trainingTopicsRich]
+      omisePaymentEnabled, trainingTopicsRich, descriptionRich]
   );
 
   /**
@@ -848,6 +862,23 @@ export function CourseForm({
             name="course_teaser"
             defaultValue={initial?.course_teaser ?? ''}
             className={inputCls}
+          />
+        </Field>
+
+        {/*
+          THE COURSE RICH BODY. Renders on the public page IN PLACE OF the
+          plain teaser paragraph above when it is non-empty — not a second
+          block, and not additive to "คำอธิบายสั้น". Controlled React state
+          (markTouched'd like the gallery/topics), not a form input: the
+          editor has no `name` attribute and never enters FormData.
+        */}
+        <Field
+          label="เนื้อหาแบบ Rich text"
+          hint="แสดงแทนคำอธิบายสั้นด้านบนบนหน้าคอร์ส เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้คำอธิบายสั้นตามเดิม"
+        >
+          <CourseBodyEditor
+            value={descriptionRich}
+            onChange={markTouched(setDescriptionRich)}
           />
         </Field>
 

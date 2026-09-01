@@ -231,6 +231,31 @@ test('P2: descriptionRich is sanitised through sanitizeRichHtml when present', (
     'a present value must be sanitised on the way into the update, not stored raw');
 });
 
+test('P2: descriptionRich — an image, a table and a YouTube embed all survive the save path', () => {
+  /**
+   * The course body editor's stated capabilities (images, tables, YouTube,
+   * headings, lists, links, marks — docs/audit/course-rich-body.md §4) are
+   * only real if what the editor can author actually reaches storage. This
+   * is the save-side half of that proof; CourseDescription's render-side
+   * sanitising is proven separately at the render tier.
+   */
+  const authored =
+    '<h2>Overview</h2>'
+    + '<p>Some <strong>bold</strong> text with a <a href="https://x.test">link</a>.</p>'
+    + '<img src="https://res.cloudinary.com/x/body.png" alt="diagram" width="400">'
+    + '<table><tbody><tr><th>Col</th><td>Val</td></tr></tbody></table>'
+    + '<iframe src="https://www.youtube-nocookie.com/embed/abc123"></iframe>';
+
+  const update = buildExtensionUpdate({
+    courseId: 'C', data: { descriptionRich: authored }, cleanAlias: '',
+  });
+
+  assert.match(update.descriptionRich, /<h2>Overview<\/h2>/);
+  assert.match(update.descriptionRich, /<img[^>]*src="https:\/\/res\.cloudinary\.com\/x\/body\.png"/);
+  assert.match(update.descriptionRich, /<table>/);
+  assert.match(update.descriptionRich, /<iframe[^>]*src="https:\/\/www\.youtube-nocookie\.com\/embed\/abc123"/);
+});
+
 test('P2: descriptionRich present-but-empty still writes the empty string', () => {
   const update = buildExtensionUpdate({
     courseId: 'C', data: { descriptionRich: '' }, cleanAlias: '',
