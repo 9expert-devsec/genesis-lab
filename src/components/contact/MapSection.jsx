@@ -59,7 +59,7 @@ export default function MapSection() {
   const current = TABS.find((t) => t.id === active);
 
   return (
-    <section className="relative overflow-hidden bg-white py-20">
+    <section className="relative overflow-hidden bg-white pt-20 pb-10">
       {/* <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -182,7 +182,7 @@ export default function MapSection() {
               </p>
             </div>
 
-            <div className=" mx-auto mt-auto max-w-2xl text-center ">
+            <div className=" mx-auto mt-auto max-w-2xl text-center pt-8 ">
               <button
                 onClick={() => setIsModalOpen(true)}
                 className={

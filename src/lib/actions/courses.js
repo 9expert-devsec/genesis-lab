@@ -267,13 +267,19 @@ function shapePayload(formData) {
    * about a field it has never seen.
    *
    * ── WHAT THIS COSTS, STATED PLAINLY ─────────────────────────────────────
-   * The two inputs in the form are now INERT: an admin can type in them and
+   * `title`'s input is left in the form and INERT: an admin can type in it and
    * saving will do nothing. That is deliberately worse-looking and strictly
-   * better than the alternative, which is that typing in them worked once and
-   * then the next save of that course wiped it. The inputs are left in place
-   * here on purpose — removing them is a form change, not a payload change.
-   * The real repair is MSDB returning the two fields on read; then both keys
-   * come back to this payload and the inputs work for the first time.
+   * better than the alternative, which is that typing in it worked once and
+   * then the next save of that course wiped it. Leaving it in place is a form
+   * choice, not a payload one — the real repair is MSDB returning `title` on
+   * read; then the key comes back to this payload and the input works for the
+   * first time.
+   *
+   * `bullets`' input was different: the user confirmed it unused and it was
+   * removed from the form outright rather than left inert. The key stays
+   * omitted here regardless — this is the guard against MSDB one day
+   * returning it and a stray write path reappearing, not a statement about
+   * whether the form still shows it.
    */
   return {
     course_name:               toStr(get('course_name') || get('title')),

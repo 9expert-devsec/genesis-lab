@@ -80,6 +80,11 @@ export function courseEditorSignature({ formEntries = [], extension = {} } = {})
       isPublished: extension.isPublished !== false,
       gallery,
       trainingTopicsRich,
+      // Same reasoning as trainingTopicsRich just above: React state with no
+      // `name` attribute, lifted out of the course body editor, so it never
+      // enters FormData and must be compared here explicitly or a
+      // formatting-only edit reads as clean.
+      descriptionRich: str(extension.descriptionRich),
     },
   });
 }

@@ -20,6 +20,7 @@ import { LandingConversion } from "./LandingConversion";
 import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
 import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
 import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -381,7 +382,7 @@ export function MasterclassDetailClient({
         <section className="max-w-[1200px] mx-auto px-4 py-6">
           <div
             className="prose prose-base dark:prose-invert max-w-none [&_p]:indent-8"
-            dangerouslySetInnerHTML={{ __html: course.description_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(course.description_html) }}
           />
         </section>
       )}
@@ -714,7 +715,7 @@ export function MasterclassDetailClient({
             className="mt-4 prose prose-base dark:prose-invert max-w-none
                        prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
             dangerouslySetInnerHTML={{
-              __html: course.system_requirements_html,
+              __html: sanitizeRichHtml(course.system_requirements_html),
             }}
           />
         </section>
@@ -828,7 +829,7 @@ export function MasterclassDetailClient({
                                 <div
                                   className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
                                   dangerouslySetInnerHTML={{
-                                    __html: mod.topics_html,
+                                    __html: sanitizeRichHtml(mod.topics_html),
                                   }}
                                 />
                               ) : (
@@ -866,7 +867,7 @@ export function MasterclassDetailClient({
                             <div
                               className="mt-3 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
                               dangerouslySetInnerHTML={{
-                                __html: mod.content_html,
+                                __html: sanitizeRichHtml(mod.content_html),
                               }}
                             />
                           )}

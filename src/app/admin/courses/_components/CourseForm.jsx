@@ -15,6 +15,7 @@ import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
+import { CourseBodyEditor } from '@/components/admin/CourseBodyEditor';
 import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
@@ -137,6 +138,13 @@ export function CourseForm({
    * The toggle itself stays on /admin/courses/[courseId] under การชำระเงิน.
    */
   const [omisePaymentEnabled] = useState(extension?.omisePaymentEnabled === true);
+
+  /**
+   * The course rich body — controlled state, same reason trainingTopicsRich is:
+   * lifted out of a Tiptap editor with no `name` attribute, so it never enters
+   * FormData and must be carried, seeded and compared explicitly.
+   */
+  const [descriptionRich, setDescriptionRich] = useState(extension?.descriptionRich ?? '');
 
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
@@ -316,11 +324,11 @@ export function CourseForm({
         formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-          trainingTopicsRich,
+          trainingTopicsRich, descriptionRich,
         },
       }),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-      trainingTopicsRich]
+      trainingTopicsRich, descriptionRich]
   );
 
   /**
@@ -477,10 +485,16 @@ export function CourseForm({
          * copy cleared rather than kept forever as a stale one.
          */
         trainingTopicsRich,
+        // Same reasoning as trainingTopicsRich just above: this form owns the
+        // field, so it is named on every save, including '' — how a course
+        // whose rich body the admin cleared actually clears it, rather than
+        // leaving a stale copy the presence gate would otherwise protect
+        // forever.
+        descriptionRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
-      omisePaymentEnabled, trainingTopicsRich]
+      omisePaymentEnabled, trainingTopicsRich, descriptionRich]
   );
 
   /**
@@ -852,38 +866,32 @@ export function CourseForm({
         </Field>
 
         {/*
-          READ-ONLY, because it was never writable — it only looked writable.
-
-          `title` is returned by no MSDB read route (0 of 80 courses, list and
-          detail alike), so `initial?.title` is permanently undefined and this
-          box always rendered blank. It used to post its value on save, which
-          overwrote whatever MSDB held; 346911f removed it from the payload, and
-          this makes the control say so instead of silently accepting typing.
-
-          readOnly, NOT disabled: a disabled control is dropped from the form and
-          greyed past reading, while a read-only one stays selectable and
-          copyable. It does still submit its value — harmless, because the
-          payload omits the key, and a test pins that it stays omitted so this
-          does not quietly become a write path again.
+          THE COURSE RICH BODY. Renders on the public page IN PLACE OF the
+          plain teaser paragraph above when it is non-empty — not a second
+          block, and not additive to "คำอธิบายสั้น". Controlled React state
+          (markTouched'd like the gallery/topics), not a form input: the
+          editor has no `name` attribute and never enters FormData.
         */}
         <Field
-          label="เนื้อหา"
-          hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ใน MSDB ชื่อ field คือ &quot;title&quot; แม้จะเก็บ body"
+          label="คำอธิบายหลักสูตร"
+          hint="แสดงแทนคำอธิบายสั้นด้านบนบนหน้าคอร์ส เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้คำอธิบายสั้นตามเดิม"
+          plain
         >
-          <textarea
-            rows={8}
-            name="title"
-            readOnly
-            defaultValue={initial?.title ?? ''}
-            className={
-              'w-full rounded-9e-md border border-[var(--surface-border)] px-3 py-2 ' +
-              'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-muted)] ' +
-              'font-mono text-xs focus:outline-none'
-            }
+          {/*
+            KEYED ON THE COURSE, NOT RE-SEEDED BY PROP COMPARISON. This
+            editor owns a live document a value-vs-value check cannot safely
+            reconcile against (see CourseBodyEditor.jsx's own header for the
+            data-loss bug that shape caused). A genuine external change — a
+            different course's rich body loading — is handled by React
+            fully remounting the editor, the same guarantee every other
+            rail field already assumes by seeding once from `extension` on
+            mount.
+          */}
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={descriptionRich}
+            onChange={markTouched(setDescriptionRich)}
           />
-          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-            {READ_BLIND_NOTE}
-          </p>
         </Field>
       </Section>
 
@@ -1146,7 +1154,7 @@ export function CourseForm({
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
-          Section 6 — รายละเอียดคอร์ส (bullets)
+          Section 6 — รายละเอียดคอร์ส
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
         {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
@@ -1183,15 +1191,6 @@ export function CourseForm({
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
           marker="check"
-        />
-        {/* Same read-blind state as เนื้อหา above, same reasoning, same note. */}
-        <BulletTextarea
-          name="bullets"
-          label="ไฮไลต์"
-          hint="คำโปรย bullet ที่แสดงในหน้า course"
-          defaultValue={initial?.bullets}
-          readOnly
-          note={READ_BLIND_NOTE}
         />
       </Section>
 
@@ -1576,20 +1575,6 @@ export function CourseForm({
 
 // ── shared bits ─────────────────────────────────────────────────────
 
-/**
- * The note under the two fields genesis can show but cannot save.
- *
- * ONE CONSTANT, because there are two of them and a second copy would let the
- * wording drift between two controls that are broken for exactly the same
- * reason. See the read-blind note in lib/actions/courses.js: `title` and
- * `bullets` are returned by no MSDB read route, so genesis cannot preserve them
- * and therefore must not write them — which leaves these inputs able to accept
- * typing that goes nowhere. Saying so is the whole fix; the alternative was an
- * admin discovering it by losing work.
- */
-const READ_BLIND_NOTE =
-  'MSDB ไม่ส่งค่านี้กลับมา จึงแก้ที่นี่ไม่ได้ — แก้ที่ MSDB โดยตรง';
-
 const inputCls =
   'w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:border-9e-action focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
 
@@ -1609,9 +1594,35 @@ function Section({ title, hint, children }) {
   );
 }
 
-function Field({ label, hint, children }) {
+/**
+ * `plain` renders a `<div>` instead of an implicit `<label>`.
+ *
+ * THE DEFAULT `<label>` IS ONLY SAFE AROUND A SINGLE FORM CONTROL. An
+ * implicit label (no `for`) forwards a click ANYWHERE inside it — including
+ * on a click target that is not itself interactive — to the label's
+ * "labeled control": per the HTML label-activation algorithm, the FIRST
+ * labelable descendant in tree order (button, input, select, textarea,
+ * etc). That is exactly what made the course rich-body editor "revert on
+ * click": CourseBodyEditor's toolbar renders real `<button>`s (Undo first)
+ * ahead of its contenteditable region, and a contenteditable `<div>` is not
+ * itself labelable — so a plain click on editor TEXT was forwarded to the
+ * Undo button, which ran `editor.chain().focus().undo().run()`. Confirmed
+ * in a real headless-Chrome click (`test/browser/labelForwardRepro.mjs`,
+ * reproducing this exact toolbar-button + contenteditable shape): the click
+ * landed focus and a synthetic activation on the first button, not on the
+ * editor. ProseMirror's undo then selects the reverted range, which is the
+ * "line highlighted after a plain click" the report described.
+ *
+ * A `Field` wrapping a single `<input>`/`<textarea>`/`<select>` has no such
+ * hazard — those ARE the first (and only) labelable descendant, so a click
+ * anywhere in the label already lands on them; that behaviour (click the
+ * label text, focus the field) stays the default. `plain` opts a Field out
+ * only where its children own further interactive controls of their own.
+ */
+function Field({ label, hint, children, plain = false }) {
+  const Tag = plain ? 'div' : 'label';
   return (
-    <label className="block">
+    <Tag className="block">
       <span className="block text-sm font-medium text-9e-navy dark:text-white">
         {label}
       </span>
@@ -1621,7 +1632,7 @@ function Field({ label, hint, children }) {
         </span>
       )}
       <div className="mt-1">{children}</div>
-    </label>
+    </Tag>
   );
 }
 
