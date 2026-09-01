@@ -137,10 +137,10 @@ export function bulletListDepthAt($pos) {
 /**
  * May a bullet at `depth` be nested one level further?
  *
- * `depth < max`, not `<=`: sinking an item that sits at depth 3 would put it at
- * 4, so depth 3 is already the floor. THE OFF-BY-ONE IS THE WHOLE FUNCTION —
- * `<=` here would authorise exactly the fourth level this exists to refuse, and
- * would still look correct.
+ * `depth < max`, not `<=`: sinking an item that sits at depth `max` would put it
+ * at `max + 1`, so depth `max` is already the floor. THE OFF-BY-ONE IS THE WHOLE
+ * FUNCTION — `<=` here would authorise exactly the level this exists to refuse,
+ * and would still look correct.
  */
 export function canNestDeeper(depth, max = MAX_TOPIC_DEPTH) {
   return Number(depth) < max;

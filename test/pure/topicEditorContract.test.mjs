@@ -152,15 +152,23 @@ test('the editor cannot author an ordered list, a heading, or a code block', () 
   }
 });
 
-test('a list item may hold ONE paragraph and only nested BULLET lists', () => {
+test('a list item may hold one or more paragraphs and only nested BULLET lists', () => {
   /**
-   * `paragraph block*` (Tiptap's default) admits a second paragraph in one item.
-   * The sanitiser unwraps `<p>`, so `<li><p>a</p><p>b</p></li>` would sanitise to
-   * `<li>ab</li>` and two authored lines would be joined with no separator on the
-   * way to MSDB. The content spec makes the shape unauthorable instead of
-   * repairing it afterwards.
+   * `paragraph+ bulletList*` — WIDENED from a single required paragraph
+   * (`paragraph bulletList*`), on measured evidence: the single-paragraph
+   * spec broke `toggleBulletList` on any multi-paragraph selection (see
+   * topicEditorExtensions.js's TopicListItem header for the full mechanism).
+   * `block*` (Tiptap's stock default) is still narrower than what this editor
+   * needs — no headings/code blocks are registered here regardless — so
+   * `bulletList*` stays the second half: a nested list is the only OTHER
+   * child a bullet may carry.
+   *
+   * The word-glue hazard a single-paragraph spec used to block at the schema
+   * (`<li><p>a</p><p>b</p></li>` sanitising to `<li>ab</li>`) is now guarded
+   * at sanitizeTopicHtml.js's `separateAdjacentParagraphs` instead — see
+   * test/pure/sanitizeTopicHtml.test.mjs's "glue" tests for the proof.
    */
-  assert.equal(schema.nodes.listItem.spec.content, 'paragraph bulletList*');
+  assert.equal(schema.nodes.listItem.spec.content, 'paragraph+ bulletList*');
 });
 
 // ── d. THE DEPTH LOCK, against real ProseMirror documents ──────────────────
@@ -199,19 +207,20 @@ test('bulletListDepthAt counts bulletList ancestors, not structural ones', () =>
    * `listItem` and `paragraph` are ancestors too; counting them would double
    * the number and the cap would bite at level 2.
    */
-  for (let levels = 1; levels <= 4; levels += 1) {
+  for (let levels = 1; levels <= MAX_TOPIC_DEPTH + 1; levels += 1) {
     const doc = nestedDoc(levels);
     assert.equal(bulletListDepthAt(deepestPos(doc, `L${levels}`)), levels,
       `a bullet ${levels} list(s) deep did not read as depth ${levels}`);
   }
 });
 
-test('the lock refuses the FOURTH level and permits the first three', () => {
-  assert.equal(canNestDeeper(1), true);
-  assert.equal(canNestDeeper(2), true);
+test('the lock refuses the level past MAX_TOPIC_DEPTH and permits every level up to it', () => {
+  for (let depth = 1; depth < MAX_TOPIC_DEPTH; depth += 1) {
+    assert.equal(canNestDeeper(depth), true, `depth ${depth} should still be nestable`);
+  }
   assert.equal(canNestDeeper(MAX_TOPIC_DEPTH), false,
     'a bullet already at the cap may not be nested again — sinking it would '
-    + 'produce level 4');
+    + `produce level ${MAX_TOPIC_DEPTH + 1}`);
 });
 
 test('the lock reads MAX_TOPIC_DEPTH and does not carry its own number', () => {
@@ -222,7 +231,7 @@ test('the lock reads MAX_TOPIC_DEPTH and does not carry its own number', () => {
   assert.equal(canNestDeeper(2, 2), false, 'the cap is a parameter, not a constant');
 });
 
-test('CONTROL: `<=` instead of `<` would authorise exactly the 4th level', () => {
+test('CONTROL: `<=` instead of `<` would authorise exactly the level past the cap', () => {
   /**
    * The off-by-one IS the function. This reproduces the wrong comparison against
    * the same input and shows it says yes at the cap — which is the one answer

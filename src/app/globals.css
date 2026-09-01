@@ -1207,10 +1207,14 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    `<span class="text-9e-air">•</span>` inside a flex <li>; markup
    coming from the stored field has no such span and never will.
 
-   Three depth levels, three glyphs — the cap is 3 (MAX_TOPIC_DEPTH)
-   and clampDepth LIFTS anything deeper rather than dropping it, so a
-   4th level cannot reach here. #48B0FF is 9e-air, matching the plain
-   path's marker exactly so the two look identical at level 1.
+   Six depth levels, six glyphs — the cap is 6 (MAX_TOPIC_DEPTH) and
+   clampDepth LIFTS anything deeper rather than dropping it, so a 7th
+   level cannot reach here. A level past the LAST rule below would
+   render with no marker at all — the two must move together, which
+   is why raising MAX_TOPIC_DEPTH without adding the matching ::before
+   rule is exactly the failure this comment is here to prevent.
+   #48B0FF is 9e-air, matching the plain path's marker exactly so the
+   two look identical at level 1.
    ────────────────────────────────────────────────────────────── */
 
 .topic-rich ul { list-style: none; margin: 0; padding: 0; }
@@ -1249,8 +1253,11 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
   left: 0;
   color: #48B0FF;                 /* 9e-air — same glyph colour as the plain path */
 }
-.topic-rich ul ul li::before    { content: '\25E6'; }  /* ◦ hollow */
-.topic-rich ul ul ul li::before { content: '\25AA'; }  /* ▪ filled square */
+.topic-rich ul ul li::before             { content: '\25E6'; }  /* ◦ hollow circle */
+.topic-rich ul ul ul li::before          { content: '\25AA'; }  /* ▪ filled square */
+.topic-rich ul ul ul ul li::before       { content: '\25AB'; }  /* ▫ hollow square */
+.topic-rich ul ul ul ul ul li::before    { content: '\2023'; }  /* ‣ triangular bullet */
+.topic-rich ul ul ul ul ul ul li::before { content: '\2043'; }  /* ⁃ hyphen bullet */
 
 /* Inline marks the sanitiser allows. `code` needs a box; the rest inherit. */
 .topic-rich code {
@@ -1267,11 +1274,11 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    Tailwind's preflight strips list markers globally, so a Tiptap
    editor shows an unstyled run of lines unless told otherwise.
    The admin has to SEE the nesting they are authoring, or the
-   three-level cap is a rule about something invisible.
+   depth cap is a rule about something invisible.
 
    SCOPED TO `.topic-editor-body`, which is set on the ProseMirror
    element via `editorProps.attributes.class` and appears nowhere
-   else. It deliberately MIRRORS `.topic-rich` above — same three
+   else. It deliberately MIRRORS `.topic-rich` above — same six
    glyphs, same 9e-air marker, same hanging indent — so what the
    admin authors looks like what the page renders. The two rule
    blocks are separate because their selectors are: one styles
@@ -1299,8 +1306,11 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
   left: 0;
   color: #48B0FF;                 /* 9e-air — same marker as the public page */
 }
-.topic-editor-body ul ul li::before    { content: '\25E6'; }
-.topic-editor-body ul ul ul li::before { content: '\25AA'; }
+.topic-editor-body ul ul li::before             { content: '\25E6'; }
+.topic-editor-body ul ul ul li::before          { content: '\25AA'; }
+.topic-editor-body ul ul ul ul li::before       { content: '\25AB'; }
+.topic-editor-body ul ul ul ul ul li::before    { content: '\2023'; }
+.topic-editor-body ul ul ul ul ul ul li::before { content: '\2043'; }
 
 .topic-editor-body code {
   padding: 0.05em 0.3em;
