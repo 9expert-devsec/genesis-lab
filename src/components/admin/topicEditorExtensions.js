@@ -67,7 +67,7 @@ const TopicListItem = ListItem.extend({
 });
 
 /**
- * THE DEPTH LOCK — the fourth level cannot be authored.
+ * THE DEPTH LOCK — the level past MAX_TOPIC_DEPTH cannot be authored.
  *
  * `priority` is above ListItem's default (100) so this Tab binding wins:
  * ListItem binds Tab to `sinkListItem` itself, and Tiptap resolves competing

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitizeTopicHtml, ALLOWED_TOPIC_TAGS, ALLOWED_TOPIC_SCHEMES } from '@/lib/courses/sanitizeTopicHtml';
-import { htmlToProjection, MAX_TOPIC_DEPTH } from '@/lib/courses/topicHtml';
+import { htmlToProjection, MAX_TOPIC_DEPTH, DEPTH_PREFIXES } from '@/lib/courses/topicHtml';
 import { sanitizePageHtml } from '@/lib/customPages/sanitizePageHtml';
 import { readSource } from '../sourceScan.mjs';
 
@@ -198,6 +198,25 @@ test('CONTROL: leaving ol merely disallowed would MANGLE it, which is why it is 
   assert.deepEqual(proj(nested), ['a', '– b'], 'the nested numbered list lost its level');
 });
 
+// ── the new boundary: 6 survives, 7 is clamped ─────────────────────────────
+
+test('content authored at exactly the new cap (6) survives sanitising unchanged', () => {
+  const sixDeep =
+    '<ul><li>a<ul><li>b<ul><li>c<ul><li>d<ul><li>e<ul><li>f</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
+  assert.deepEqual(proj(sixDeep), ['a', '– b', '– – c', '– – – d', '– – – – e', '– – – – – f'],
+    'level 6 must survive both sanitising and the depth clamp untouched');
+});
+
+test('content authored one past the cap (7) is lifted, not dropped, at save time', () => {
+  const sevenDeep =
+    '<ul><li>a<ul><li>b<ul><li>c<ul><li>d<ul><li>e<ul><li>f<ul><li>g</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
+  assert.deepEqual(
+    proj(sevenDeep),
+    ['a', '– b', '– – c', '– – – d', '– – – – e', '– – – – – f', '– – – – – g'],
+    'g (level 7) must arrive beside f (level 6), not vanish',
+  );
+});
+
 // ── order: sanitise first, THEN clamp ──────────────────────────────────────
 
 test('SANITISATION DESTROYS NO LIST ELEMENT — the invariant the ordering rests on', () => {
@@ -227,15 +246,21 @@ test('SANITISATION DESTROYS NO LIST ELEMENT — the invariant the ordering rests
 });
 
 test('the depth cap holds on the OUTPUT, whatever sanitisation did to the tree', () => {
+  // Seven levels — one past MAX_TOPIC_DEPTH — mixed with the same div/ol
+  // wrappers the ordering tests above use, so this exercises the cap on
+  // messy, not merely well-formed, input.
   const messy =
-    '<div><ul><li>1<div><ol><li>2<ul><li>3<ul><li>4</li></ul></li></ul></li></ol></div></li></ul></div>';
+    '<div><ul><li>1<div><ol><li>2<ul><li>3<ul><li>4<ul><li>5<ul><li>6<ul><li>7'
+    + '</li></ul></li></ul></li></ul></li></ul></li></ul></li></ol></div></li></ul></div>';
   const out = sanitizeTopicHtml(messy);
-  assert.ok(!/<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>/.test(out), 'output exceeds the depth cap');
+  const sevenListsDeep = /<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>/;
+  assert.ok(!sevenListsDeep.test(out), 'output exceeds the depth cap');
   const lines = htmlToProjection(out);
-  for (const n of ['1', '2', '3', '4']) {
+  for (const n of ['1', '2', '3', '4', '5', '6', '7']) {
     assert.ok(lines.some((s) => s.endsWith(n)), `level ${n} was lost`);
   }
-  for (const line of lines) assert.ok(!line.startsWith('– – –'), `over-deep prefix: ${line}`);
+  const beyondTable = '– '.repeat(DEPTH_PREFIXES.length);
+  for (const line of lines) assert.ok(!line.startsWith(beyondTable), `over-deep prefix: ${line}`);
 });
 
 test('CONTROL: that fixture genuinely changes depth under sanitisation', () => {
@@ -243,7 +268,7 @@ test('CONTROL: that fixture genuinely changes depth under sanitisation', () => {
   // untestable and this file would be asserting a property with no teeth.
   const wrapped = '<div><ul><li>a</li></ul></div>';
   assert.ok(sanitizeTopicHtml(wrapped).startsWith('<ul>'), 'the div was not unwrapped');
-  assert.equal(MAX_TOPIC_DEPTH, 3);
+  assert.equal(MAX_TOPIC_DEPTH, 6);
 });
 
 // ── failing closed, and never losing a save ────────────────────────────────

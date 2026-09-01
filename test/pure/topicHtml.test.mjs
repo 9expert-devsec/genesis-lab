@@ -103,9 +103,9 @@ const GOO_ADK = {
   ],
 };
 
-/** A four-level paste — deeper than the cap, so clampDepth must lift it. */
-const FOUR_DEEP =
-  '<ul><li>L1<ul><li>L2<ul><li>L3<ul><li>L4</li></ul></li></ul></li></ul></li></ul>';
+/** A seven-level paste — one past MAX_TOPIC_DEPTH, so clampDepth must lift it. */
+const SEVEN_DEEP =
+  '<ul><li>L1<ul><li>L2<ul><li>L3<ul><li>L4<ul><li>L5<ul><li>L6<ul><li>L7</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
 
 /** An <li> whose entire content is a nested list: it holds no text of its own. */
 const HOLDER_ONLY = '<ul><li><ul><li>child</li></ul></li></ul>';
@@ -159,18 +159,31 @@ test('CONTROL: the bullet-less fixture rows really are bullet-less', () => {
 
 // ── the flatten direction: editor HTML → the plain array MSDB stores ────────
 
-test('flatten prefixes by level: none, en-dash, en-dash en-dash', () => {
+test('flatten prefixes by level, six deep: none, then en-dash repeated', () => {
   assert.deepEqual(
-    htmlToProjection('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>'),
-    ['a', '– b', '– – c'],
+    htmlToProjection(
+      '<ul><li>a<ul><li>b<ul><li>c<ul><li>d<ul><li>e<ul><li>f</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>',
+    ),
+    ['a', '– b', '– – c', '– – – d', '– – – – e', '– – – – – f'],
   );
 });
 
 test('the prefixes are en dashes (U+2013), not hyphen-minus', () => {
   // A leading "- " is one of the marker glyphs the public page draws itself
   // (bulletLines.js) — storing one produces "• - item" on the page.
-  assert.deepEqual(DEPTH_PREFIXES, ['', '– ', '– – ']);
+  assert.deepEqual(DEPTH_PREFIXES, ['', '– ', '– – ', '– – – ', '– – – – ', '– – – – – ']);
   assert.ok(!DEPTH_PREFIXES.join('').includes('-'), 'a hyphen-minus got into the prefix table');
+});
+
+test('DEPTH_PREFIXES has exactly MAX_TOPIC_DEPTH entries, every one distinct', () => {
+  // The two must move together — see topicHtml.js's own comment on the table.
+  // A level past the table's end silently reuses the LAST entry's text, which
+  // is exactly the "depth information lost in the comparison" resolveTopicRich
+  // depends on this table not doing within the cap.
+  assert.equal(DEPTH_PREFIXES.length, MAX_TOPIC_DEPTH,
+    'DEPTH_PREFIXES did not move with MAX_TOPIC_DEPTH');
+  assert.equal(new Set(DEPTH_PREFIXES).size, DEPTH_PREFIXES.length,
+    'two levels share one prefix — they would flatten to indistinguishable text');
 });
 
 test('inline marks are stripped to their text and entities are decoded', () => {
@@ -345,57 +358,67 @@ test('the conversion never touches a row title — EXCEL-HR-02 keeps its "1. "',
 
 // ── clampDepth: LIFT, never DROP ───────────────────────────────────────────
 
-test('a 4-level paste is LIFTED to 3 levels and every line survives', () => {
-  const clamped = clampDepth(FOUR_DEEP);
+test('a 7-level paste is LIFTED to 6 levels and every line survives', () => {
+  const clamped = clampDepth(SEVEN_DEEP);
   assert.deepEqual(
     htmlToProjection(clamped),
-    ['L1', '– L2', '– – L3', '– – L4'],
-    'L4 must arrive beside L3, not be deleted',
+    ['L1', '– L2', '– – L3', '– – – L4', '– – – – L5', '– – – – – L6', '– – – – – L7'],
+    'L7 must arrive beside L6, not be deleted',
   );
 });
 
-test('CONTROL: the fixture really is 4 deep, and 4 deep really is over the cap', () => {
+test('CONTROL: the fixture really is 7 deep, and 7 deep really is over the cap', () => {
   // Without this the test above could be clamping something that was already
   // legal, which would pass while proving nothing.
-  assert.equal(MAX_TOPIC_DEPTH, 3);
+  assert.equal(MAX_TOPIC_DEPTH, 6);
   assert.deepEqual(
-    htmlToProjection(FOUR_DEEP),
-    ['L1', '– L2', '– – L3', '– – L4'],
-    'unclamped, the 4th level is already prefix-clamped by htmlToProjection — '
+    htmlToProjection(SEVEN_DEEP),
+    ['L1', '– L2', '– – L3', '– – – L4', '– – – – L5', '– – – – – L6', '– – – – – L7'],
+    'unclamped, the 7th level is already prefix-clamped by htmlToProjection — '
     + 'so the depth difference must be observed in the HTML, below',
   );
-  assert.ok(/<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>/.test(FOUR_DEEP), 'fixture is not 4 lists deep');
+  const sevenListsDeep = /<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>/;
+  assert.ok(sevenListsDeep.test(SEVEN_DEEP), 'fixture is not 7 lists deep');
   assert.ok(
-    !/<ul>[\s\S]*<ul>[\s\S]*<ul>[\s\S]*<ul>/.test(clampDepth(FOUR_DEEP)),
-    'clampDepth left a 4th list in place',
+    !sevenListsDeep.test(clampDepth(SEVEN_DEEP)),
+    'clampDepth left a 7th list in place',
   );
 });
 
 test('no text is lost at any depth, however deep the paste', () => {
-  const six =
-    '<ul><li>1<ul><li>2<ul><li>3<ul><li>4<ul><li>5<ul><li>6</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
-  const out = htmlToProjection(clampDepth(six));
-  for (const n of ['1', '2', '3', '4', '5', '6']) {
+  // Nine levels — three past the new cap of 6 — so this still exercises real
+  // lifting rather than becoming a no-op now that 6 itself is legal.
+  const nine =
+    '<ul><li>1<ul><li>2<ul><li>3<ul><li>4<ul><li>5<ul><li>6<ul><li>7<ul><li>8<ul><li>9</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
+  const out = htmlToProjection(clampDepth(nine));
+  for (const n of ['1', '2', '3', '4', '5', '6', '7', '8', '9']) {
     assert.ok(out.some((s) => s.endsWith(n)), `level ${n} was dropped instead of lifted`);
   }
-  assert.equal(out.length, 6);
+  assert.equal(out.length, 9);
 });
 
 test('content already within the cap is returned as the SAME BYTES', () => {
-  const legal = '<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li></ul>';
+  // All six levels, not just three — proves the FULL new cap round-trips as a
+  // no-op, not merely a depth that happened to already work under the old one.
+  const legal =
+    '<ul><li>a<ul><li>b<ul><li>c<ul><li>d<ul><li>e<ul><li>f</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
   assert.equal(clampDepth(legal), legal);
 });
 
-test('clampDepth never emits a third-level prefix beyond the table', () => {
-  const out = htmlToProjection(clampDepth(FOUR_DEEP));
+test('clampDepth never emits a prefix beyond the table', () => {
+  const out = htmlToProjection(clampDepth(SEVEN_DEEP));
+  const beyondTable = '– '.repeat(DEPTH_PREFIXES.length); // one level past the last entry
   for (const line of out) {
-    assert.ok(!line.startsWith('– – –'), `a 4th-level prefix escaped: ${line}`);
+    assert.ok(!line.startsWith(beyondTable), `a prefix past the table escaped: ${line}`);
   }
 });
 
 test('a custom max is honoured, and a nonsense max falls back to the cap', () => {
-  assert.deepEqual(htmlToProjection(clampDepth(FOUR_DEEP, 1)), ['L1', 'L2', 'L3', 'L4']);
-  assert.deepEqual(htmlToProjection(clampDepth(FOUR_DEEP, 0)), htmlToProjection(clampDepth(FOUR_DEEP)));
+  assert.deepEqual(
+    htmlToProjection(clampDepth(SEVEN_DEEP, 1)),
+    ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'],
+  );
+  assert.deepEqual(htmlToProjection(clampDepth(SEVEN_DEEP, 0)), htmlToProjection(clampDepth(SEVEN_DEEP)));
 });
 
 // ── projectionEquals: whole-array, order-sensitive ─────────────────────────

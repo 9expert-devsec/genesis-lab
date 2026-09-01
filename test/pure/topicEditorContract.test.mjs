@@ -199,19 +199,20 @@ test('bulletListDepthAt counts bulletList ancestors, not structural ones', () =>
    * `listItem` and `paragraph` are ancestors too; counting them would double
    * the number and the cap would bite at level 2.
    */
-  for (let levels = 1; levels <= 4; levels += 1) {
+  for (let levels = 1; levels <= MAX_TOPIC_DEPTH + 1; levels += 1) {
     const doc = nestedDoc(levels);
     assert.equal(bulletListDepthAt(deepestPos(doc, `L${levels}`)), levels,
       `a bullet ${levels} list(s) deep did not read as depth ${levels}`);
   }
 });
 
-test('the lock refuses the FOURTH level and permits the first three', () => {
-  assert.equal(canNestDeeper(1), true);
-  assert.equal(canNestDeeper(2), true);
+test('the lock refuses the level past MAX_TOPIC_DEPTH and permits every level up to it', () => {
+  for (let depth = 1; depth < MAX_TOPIC_DEPTH; depth += 1) {
+    assert.equal(canNestDeeper(depth), true, `depth ${depth} should still be nestable`);
+  }
   assert.equal(canNestDeeper(MAX_TOPIC_DEPTH), false,
     'a bullet already at the cap may not be nested again — sinking it would '
-    + 'produce level 4');
+    + `produce level ${MAX_TOPIC_DEPTH + 1}`);
 });
 
 test('the lock reads MAX_TOPIC_DEPTH and does not carry its own number', () => {
@@ -222,7 +223,7 @@ test('the lock reads MAX_TOPIC_DEPTH and does not carry its own number', () => {
   assert.equal(canNestDeeper(2, 2), false, 'the cap is a parameter, not a constant');
 });
 
-test('CONTROL: `<=` instead of `<` would authorise exactly the 4th level', () => {
+test('CONTROL: `<=` instead of `<` would authorise exactly the level past the cap', () => {
   /**
    * The off-by-one IS the function. This reproduces the wrong comparison against
    * the same input and shows it says yes at the cap — which is the one answer

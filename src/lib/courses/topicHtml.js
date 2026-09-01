@@ -64,21 +64,41 @@ import { parseFragment, serialize, defaultTreeAdapter, html as parse5Html } from
 
 const HTML_NS = parse5Html.NS.HTML;
 
-/** The hard nesting cap. Three levels: bullet, sub, sub-sub. */
-export const MAX_TOPIC_DEPTH = 3;
+/**
+ * The hard nesting cap.
+ *
+ * RAISED FROM 3 TO 6. The old cap was a round number, not a measurement — 6 is:
+ * measured against the deepest real content on the old site (POWER-BI-XDM ran 5
+ * levels deep) plus one level of headroom, and NOT unlimited, because two other
+ * things stop scaling past a small number regardless of what this constant says:
+ * every level needs a DISTINCT glyph (`.topic-rich`/`.topic-editor-body` in
+ * globals.css) and a DISTINCT `DEPTH_PREFIXES` entry below, and an unbounded nest
+ * inside the outline's accordion is a layout problem of its own — see
+ * sanitizeTopicHtml.js's header on why a block box in one bullet already grows
+ * the whole grid track.
+ */
+export const MAX_TOPIC_DEPTH = 6;
 
 /**
  * The flatten prefix per nesting level, indexed by level-1.
  *
- * U+2013 EN DASH plus a space, repeated. NOT a hyphen-minus: `-` is one of the
- * leading glyphs the bullet-marker convention already treats as noise
- * (bulletLines.js:36-46 — the public page draws its own marker and reads none
- * from the text), and `- ` in stored text is the shape that produces "• - item"
- * on the page. An en dash is visibly a continuation marker rather than a bullet.
+ * U+2013 EN DASH plus a space, repeated N-1 times for level N. NOT a
+ * hyphen-minus: `-` is one of the leading glyphs the bullet-marker convention
+ * already treats as noise (bulletLines.js:36-46 — the public page draws its own
+ * marker and reads none from the text), and `- ` in stored text is the shape
+ * that produces "• - item" on the page. An en dash is visibly a continuation
+ * marker rather than a bullet.
+ *
+ * SIX ENTRIES, ONE PER LEVEL OF `MAX_TOPIC_DEPTH` — not fewer. A level past the
+ * end of this table falls back to the table's LAST entry (see `htmlToProjection`
+ * below), which means two different nesting depths would flatten to identical
+ * text and `resolveTopicRich`'s staleness comparison (lib/courses/
+ * topicRichState.js) would lose the ability to tell them apart. The table must
+ * move in the same commit as `MAX_TOPIC_DEPTH`, not after it.
  *
  * FROZEN so a caller cannot mutate the table that MSDB's stored bytes depend on.
  */
-export const DEPTH_PREFIXES = Object.freeze(['', '– ', '– – ']);
+export const DEPTH_PREFIXES = Object.freeze(['', '– ', '– – ', '– – – ', '– – – – ', '– – – – – ']);
 
 /** Tags that open a nesting level. `ol` is included on READ only — see sanitizeTopicHtml. */
 const LIST_TAGS = new Set(['ul', 'ol']);
