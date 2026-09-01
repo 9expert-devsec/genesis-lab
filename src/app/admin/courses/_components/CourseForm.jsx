@@ -1146,7 +1146,7 @@ export function CourseForm({
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
-          Section 6 — รายละเอียดคอร์ส (bullets)
+          Section 6 — รายละเอียดคอร์ส
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
         {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
@@ -1183,15 +1183,6 @@ export function CourseForm({
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
           marker="check"
-        />
-        {/* Same read-blind state as เนื้อหา above, same reasoning, same note. */}
-        <BulletTextarea
-          name="bullets"
-          label="ไฮไลต์"
-          hint="คำโปรย bullet ที่แสดงในหน้า course"
-          defaultValue={initial?.bullets}
-          readOnly
-          note={READ_BLIND_NOTE}
         />
       </Section>
 
@@ -1577,15 +1568,18 @@ export function CourseForm({
 // ── shared bits ─────────────────────────────────────────────────────
 
 /**
- * The note under the two fields genesis can show but cannot save.
+ * The note under เนื้อหา (`title`), the field genesis can show but cannot save.
  *
- * ONE CONSTANT, because there are two of them and a second copy would let the
- * wording drift between two controls that are broken for exactly the same
- * reason. See the read-blind note in lib/actions/courses.js: `title` and
- * `bullets` are returned by no MSDB read route, so genesis cannot preserve them
- * and therefore must not write them — which leaves these inputs able to accept
- * typing that goes nowhere. Saying so is the whole fix; the alternative was an
- * admin discovering it by losing work.
+ * A named constant rather than an inline string so a future second read-blind
+ * field reuses the exact wording instead of drifting from it. See the
+ * read-blind note in lib/actions/courses.js: `title` is returned by no MSDB
+ * read route, so genesis cannot preserve it and therefore must not write it —
+ * which leaves this input able to accept typing that goes nowhere. Saying so
+ * is the whole fix; the alternative was an admin discovering it by losing
+ * work.
+ *
+ * `bullets` (ไฮไลต์) used to be the second field in this state — the user
+ * confirmed it unused and it was deleted outright rather than left inert.
  */
 const READ_BLIND_NOTE =
   'MSDB ไม่ส่งค่านี้กลับมา จึงแก้ที่นี่ไม่ได้ — แก้ที่ MSDB โดยตรง';

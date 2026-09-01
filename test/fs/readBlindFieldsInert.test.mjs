@@ -3,34 +3,38 @@ import assert from 'node:assert/strict';
 import { readSource } from '../sourceScan.mjs';
 
 /**
- * The two read-blind course fields say so, and still write nothing.
+ * `title` is a read-blind course field: it says so, and still writes nothing.
  *
- * `title` and `bullets` are returned by NO MSDB read route — measured across
- * all 80 courses, list and detail alike. So genesis cannot preserve them and
- * 346911f removed both from the payload. That left two controls that accepted
- * typing and saved nothing, which is the state this guard is about: the inputs
- * now declare it.
+ * `title` is returned by NO MSDB read route — measured across all 80 courses,
+ * list and detail alike. So genesis cannot preserve it and 346911f removed it
+ * from the payload. That left a control that accepted typing and saved
+ * nothing, which is the state this guard is about: the input now declares it.
+ *
+ * `bullets` (ไฮไลต์) used to be the second field in this state, sharing the
+ * same note. The user confirmed it unused, so instead of being left inert it
+ * was deleted outright — field, label, hint, note and counter all gone. Its
+ * payload omission is now asserted in coursePayloadOmissions's `OMITTED`
+ * roster rather than here, since there is no longer a rendered control to
+ * pair it with.
  *
  * ── THE HALF THAT MATTERS MOST IS THE PAYLOAD HALF ────────────────────────
  * Making an input read-only is cosmetic and fails loudly if it regresses — the
  * box becomes editable again and someone notices. The payload omission does
- * NOT fail loudly: re-adding either key silently resumes overwriting real
+ * NOT fail loudly: re-adding the key silently resumes overwriting real
  * upstream content, and this side cannot read the field to see the damage. So
  * the omission is asserted here as well as in coursePayloadOmissions, and the
  * two are deliberately not the same file: one is about the write, this one is
- * about the pair of claims staying consistent.
+ * about the claim staying consistent with the control that makes it.
  */
 
 const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
 const BULLETS = readSource('src/components/admin/BulletTextarea.jsx');
 const ACTIONS = readSource('src/lib/actions/courses.js');
 
-test('the note is ONE constant, not two copies', () => {
-  // Two controls broken for the same reason must not be able to describe it
-  // differently.
+test('the note is ONE constant, not an inline copy', () => {
   assert.match(FORM.code, /const READ_BLIND_NOTE\s*=/);
   const uses = FORM.code.match(/READ_BLIND_NOTE/g) ?? [];
-  assert.ok(uses.length >= 3, `expected the declaration plus two uses, found ${uses.length}`);
+  assert.ok(uses.length >= 2, `expected the declaration plus at least one use, found ${uses.length}`);
 });
 
 test('the note says what it needs to say, in Thai', () => {
@@ -51,12 +55,9 @@ test('the เนื้อหา (title) textarea is readOnly', () => {
   assert.match(block, /\n\s*readOnly\n/, 'the title textarea is editable again');
 });
 
-test('the bullets field is passed readOnly and the note', () => {
-  const at = FORM.code.indexOf('name="bullets"');
-  assert.ok(at > 0, 'the bullets field is gone');
-  const block = FORM.code.slice(at, at + 400);
-  assert.match(block, /\n\s*readOnly\n/, 'bullets is editable again');
-  assert.match(block, /note=\{READ_BLIND_NOTE\}/, 'bullets lost its note');
+test('the bullets field (ไฮไลต์) is gone — no control, no label, no note', () => {
+  assert.doesNotMatch(FORM.code, /name="bullets"/, 'the bullets field input is still rendered');
+  assert.doesNotMatch(FORM.code, /ไฮไลต์/, 'the bullets label text is still present');
 });
 
 test('BulletTextarea forwards readOnly to the real control, not just to a class', () => {
@@ -78,13 +79,13 @@ test('CONTROL: readOnly is OFF by default, so the shared consumers are unaffecte
   );
 });
 
-test('the payload STILL omits both keys — the inert input is not a write path', () => {
+test('the payload STILL omits both keys — neither the inert input nor the deleted one is a write path', () => {
   for (const key of ['title', 'bullets']) {
     assert.doesNotMatch(
       ACTIONS.code,
       new RegExp(`\\n {4}${key}:\\s*`),
-      `${key} is emitted again — a read-only input does not make writing it safe, ` +
-        `and '' or [] still overwrites real upstream content`
+      `${key} is emitted again — the field's state (inert input / removed input) does not ` +
+        `make writing it safe, and '' or [] still overwrites real upstream content`
     );
   }
 });
@@ -96,11 +97,12 @@ test('CONTROL: the omission matcher still sees the keys that ARE emitted', () =>
   }
 });
 
-test('neither field was deleted or hidden — they still render', () => {
-  // The instruction was to make them honest, not to remove them. A hidden field
-  // would lose the only thing they are still good for: showing an admin that the
-  // data exists somewhere and where to go for it.
+test('title was not deleted or hidden — it still renders', () => {
+  // The instruction for `title` was to make it honest, not to remove it. A
+  // hidden field would lose the only thing it is still good for: showing an
+  // admin that the data exists somewhere and where to go for it. `bullets`
+  // got the opposite instruction — see the test above — because the user
+  // confirmed it unused rather than merely unreadable.
   assert.match(FORM.code, /name="title"/, 'the title field was removed');
-  assert.match(FORM.code, /name="bullets"/, 'the bullets field was removed');
   assert.doesNotMatch(FORM.code, /type="hidden"[^>]*name="title"/, 'title was hidden');
 });

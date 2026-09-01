@@ -88,10 +88,16 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
  *               the last field in it. Being publicly read is what made the
  *               editor worth keeping, not what makes the payload send it: both
  *               readers work off the STORED value, which omitting preserves.
+ *   now (3)     `bullets` JOINS IT, moved here FROM the read-blind pair below.
+ *               It used to keep an inert input (typing saved nothing) for the
+ *               same reason `title` still does; the user confirmed ไฮไลต์
+ *               unused and its input was deleted outright, so it now belongs
+ *               with the fields that have no input at all, not with the one
+ *               still shown-but-broken.
  *
- * So the roster is program plus all five of the old section 8. The section-7
- * arrays are the control: they must still be sent, or "omit everything" would
- * satisfy every assertion here.
+ * So the roster is program plus all five of the old section 8, plus bullets.
+ * The section-7 arrays are the control: they must still be sent, or "omit
+ * everything" would satisfy every assertion here.
  */
 const OMITTED = [
   'program',
@@ -100,6 +106,7 @@ const OMITTED = [
   'course_case_study_paths',
   'exam_links',
   'website_urls',
+  'bullets',
 ];
 
 test('CONTROL: program is still OMITTED when empty', () => {
@@ -114,7 +121,7 @@ test('CONTROL: program is still OMITTED when empty', () => {
   );
 });
 
-test('the five removed section-8 fields are not emitted at all', () => {
+test('the six removed fields (five section-8, plus bullets) are not emitted at all', () => {
   // Absent, not empty. A `key: linesOf(...)` line puts the field back in the
   // value channel with `[]` as its value, which is a wipe, not a no-op.
   for (const key of OMITTED.slice(1)) {
@@ -126,7 +133,7 @@ test('the five removed section-8 fields are not emitted at all', () => {
   }
 });
 
-test('the five removed fields have no input left in the form', () => {
+test('the six removed fields have no input left in the form', () => {
   // The other half: an input still posting the value while the payload ignores
   // it would look like a working editor that silently saves nothing.
   const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
@@ -185,31 +192,33 @@ test('CONTROL: the control above can distinguish the two channels', () => {
 });
 
 /**
- * ── THE READ-BLIND PAIR: `title` and `bullets` ─────────────────────────────
+ * ── THE READ-BLIND FIELD: `title` ───────────────────────────────────────────
  *
  * A THIRD reason to omit a key, and the worst of the three, because the other
  * two are choices and this one is a defect being contained.
  *
  * Measured 2026-08-31 across all 80 upstream courses: `title` (MSDB's name for
- * the long rich-text body) and `bullets` are returned by NO read route — absent
- * from the list, absent from the `?course_id=` detail query, and the path-style
- * detail routes answer 405. They are the only two of the payload's 28 keys in
- * that state; the other 26 all round-trip.
+ * the long rich-text body) is returned by NO read route — absent from the
+ * list, absent from the `?course_id=` detail query, and the path-style detail
+ * routes answer 405. It was one of two payload keys in that state; `bullets`
+ * was the other, and it has since moved into the `OMITTED` roster above — the
+ * user confirmed ไฮไลต์ unused and its input was deleted outright rather than
+ * left inert, so it no longer needs its own guard here.
  *
- * So the form's inputs were seeded from `initial?.title` / `initial?.bullets`,
- * permanently `undefined`, and every save posted `title: ''` and `bullets: []`
- * over whatever MSDB held. Opening a course and pressing save destroyed its
- * rich body, invisibly from this side — this side cannot read the field.
+ * So `title`'s input was seeded from `initial?.title`, permanently `undefined`,
+ * and every save posted `title: ''` over whatever MSDB held. Opening a course
+ * and pressing save destroyed its rich body, invisibly from this side — this
+ * side cannot read the field.
  *
- * ── WHY THESE TWO ARE NOT IN THE `OMITTED` ROSTER ABOVE ───────────────────
- * That roster's last test asserts the form has no input for its members. These
- * two still DO have inputs, deliberately: removing them is a form change and
- * this was a payload change. So they get their own guard, and the difference is
+ * ── WHY IT IS NOT IN THE `OMITTED` ROSTER ABOVE ───────────────────────────
+ * That roster's last test asserts the form has no input for its members.
+ * `title` still DOES have one, deliberately: removing it is a form change and
+ * this was a payload change. So it gets its own guard, and the difference is
  * asserted rather than left as a gap — see the last test in this block.
  */
-const READ_BLIND = ['title', 'bullets'];
+const READ_BLIND = ['title'];
 
-test('the read-blind pair is not emitted — the KEY is absent, not empty', () => {
+test('the read-blind field is not emitted — the KEY is absent, not empty', () => {
   for (const key of READ_BLIND) {
     // Anchored to a payload line (four-space indent inside the literal), so a
     // mention in a comment or a `get('title')` fallback elsewhere does not
@@ -247,11 +256,11 @@ test('CONTROL: `title` is still READ from the form as a course_name fallback', (
   );
 });
 
-test('the read-blind pair KEEPS its form inputs, unlike the section-8 roster', () => {
-  // Stated as a claim rather than left as an inconsistency. The inputs are now
-  // inert — typing in them saves nothing — which is strictly better than the
-  // alternative it replaces, where typing in them worked once and the next save
-  // of that course wiped it. Removing them is a separate, form-shaped change.
+test('the read-blind field KEEPS its form input, unlike the section-8 roster', () => {
+  // Stated as a claim rather than left as an inconsistency. The input is now
+  // inert — typing in it saves nothing — which is strictly better than the
+  // alternative it replaces, where typing in it worked once and the next save
+  // of that course wiped it. Removing it is a separate, form-shaped change.
   const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
   for (const key of READ_BLIND) {
     assert.match(
