@@ -625,7 +625,7 @@ html.dark   { color-scheme: dark; }
    test/fs/courseOutlineRichSeam.test.mjs's scoping sweep locates that
    block with a bare, comment-blind string search for its selector, and an
    earlier mention of the same text — even inside a comment — would move
-   the sweep's start point up here and fail it on these unrelated rules. */
+   the sweep's start point up here and fail it on these unrelated rules.
 
    ONE LEVEL ONLY, and that is deliberate: verified against the installed
    @tailwindcss/typography package (node_modules/@tailwindcss/typography/
