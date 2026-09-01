@@ -49,21 +49,51 @@ import { bulletListDepthAt, canNestDeeper } from '@/lib/courses/topicEditorContr
  */
 
 /**
- * `listItem` narrowed to `paragraph bulletList*`.
+ * `listItem` narrowed to `paragraph+ bulletList*` — one or more paragraphs,
+ * then nested lists only. NOT `paragraph block*` (Tiptap's default, which
+ * additionally admits headings, code blocks and the like); this editor has
+ * none of those registered anyway, but `bulletList*` still states "a nested
+ * list is the only child a bullet may carry" where the schema can enforce it,
+ * the same "bullet lists only" rule the disabled extensions above express.
  *
- * Tiptap's default is `paragraph block*`, which admits a second paragraph in
- * one item. That matters because the sanitiser UNWRAPS `<p>`: `<li><p>a</p>
- * <p>b</p></li>` would sanitise to `<li>ab</li>` and the two lines would be
- * joined into one word-boundary-free string on the way to MSDB. Narrowing the
- * content spec means the shape cannot be authored — including by paste, which
- * ProseMirror coerces to the schema — rather than being repaired afterwards.
+ * ══ WAS `paragraph` (EXACTLY ONE) — WIDENED TO `paragraph+`, ON EVIDENCE ═══
+ * A single required paragraph reads as the obviously-correct guard against
+ * `<li><p>a</p><p>b</p></li>` sanitising to `<li>ab</li>` (the sanitiser
+ * UNWRAPS `<p>` — see sanitizeTopicHtml.js). It also broke
+ * `toggleBulletList` on a MULTI-paragraph selection: selecting three lines
+ * and pressing the bullet button wrapped only the first, silently. Measured
+ * directly (not inferred) against the real extension set, in a real
+ * ProseMirror document, before this was touched — `editor.chain().focus()
+ * .toggleBulletList().run()` returned `false` and changed NOTHING for a
+ * 2-or-3-paragraph selection under the single-paragraph spec, and correctly
+ * wrapped every paragraph into its own `<li>` once relaxed to `paragraph+`,
+ * matching CourseBodyEditor's stock-`ListItem` behaviour exactly. The cause:
+ * ProseMirror's wrap-then-split algorithm for a multi-block wrap
+ * (`doWrapInList`, prosemirror-schema-list) wraps the whole selection in ONE
+ * `<li>` first, then SPLITS it back apart at each paragraph boundary — and a
+ * split only succeeds when every resulting fragment independently satisfies
+ * the content expression. A one-paragraph-only spec can never validate a
+ * remainder holding two or more, so the whole command aborted.
  *
- * `bulletList*` rather than `block*` for the second half: a nested list is the
- * only child a bullet may carry, which is the same "bullet lists only" rule the
- * disabled extensions above express, stated where the schema can enforce it.
+ * The `<li><p>a</p><p>b</p></li>`-from-paste hazard this used to block at
+ * the schema is PROVABLY not closable there without reopening the same bug:
+ * any content expression permissive enough to let the split above succeed is
+ * — being the same expression — also permissive enough to accept that shape
+ * verbatim from `setContent`/paste (measured against both `paragraph+
+ * bulletList*` and stock `paragraph block*`; both accept it unchanged).
+ * `topicHtml.js`'s `separateAdjacentParagraphs`, run inside
+ * `sanitizeTopicHtml` before the `<p>`-unwrap, is what replaces the
+ * protection now — see its header for the full reasoning and
+ * test/pure/sanitizeTopicHtml.test.mjs's "glue" tests for the proof it still
+ * cannot happen.
+ *
+ * Ordinary typing is UNCHANGED: pressing Enter inside a bullet runs
+ * `splitListItem`, a dedicated command that creates a sibling `<li>`
+ * directly rather than a second paragraph in the same one — true with or
+ * without this relaxation, and measured on both.
  */
 const TopicListItem = ListItem.extend({
-  content: 'paragraph bulletList*',
+  content: 'paragraph+ bulletList*',
 });
 
 /**

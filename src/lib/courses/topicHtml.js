@@ -275,6 +275,92 @@ export function htmlToProjection(html) {
 }
 
 /**
+ * Insert a <br> between every pair of ADJACENT sibling <p> elements.
+ *
+ * ══ THE HAZARD THIS REPLACES ═════════════════════════════════════════════
+ *
+ * `TopicListItem` (topicEditorExtensions.js) used to hold the WHOLE of this
+ * protection by narrowing `listItem`'s content to exactly one paragraph —
+ * `paragraph bulletList*`. That broke `toggleBulletList` on a multi-paragraph
+ * selection: ProseMirror's wrap-then-split algorithm (`doWrapInList` in
+ * prosemirror-schema-list) first wraps the WHOLE selected range in one
+ * `<li>`, then tries to `tr.split()` it back apart at each paragraph
+ * boundary — and a split only succeeds when EVERY resulting fragment is
+ * independently valid content. A one-paragraph-only spec can never validate
+ * a remainder holding two or more paragraphs, so every split past the first
+ * failed, and — because even the initial wrap step needs the same validity
+ * — the WHOLE command aborted, silently. Measured directly (not inferred):
+ * selecting 3 paragraphs and toggling bullets returned `false` and changed
+ * nothing; selecting 1 paragraph worked; swapping in a permissive content
+ * spec (`paragraph+`) fixed the multi-select case exactly the way stock
+ * Tiptap's `ListItem` already does.
+ *
+ * `paragraph+` is therefore the content spec now (topicEditorExtensions.js).
+ * The trade-off, ALSO measured directly: any spec permissive enough to let
+ * the split succeed is — by the same content expression — ALSO permissive
+ * enough to accept `<li><p>a</p><p>b</p></li>` verbatim from a paste or a
+ * programmatic `setContent`. That is not a gap this schema failed to close;
+ * it is provably not closable by a schema at all — `canSplit`'s "every
+ * fragment must remain valid" and "two authored paragraphs must stay two
+ * authored paragraphs" are the same content expression pulling opposite
+ * ways. So the protection moves here, to the actual save/render boundary,
+ * which is where every other authored-vs-safe distinction in this pipeline
+ * already lives.
+ *
+ * Ordinary typing is UNAFFECTED: pressing Enter inside a bullet runs
+ * `splitListItem`, a dedicated command that creates a sibling `<li>`
+ * directly — it never places two paragraphs in one item to begin with, with
+ * or without this relaxation (measured). Only paste/setContent can produce
+ * the shape this function repairs.
+ *
+ * ══ <br>, NOT A BARE SPACE, AND NOT A NEW RULE IN ownText ═══════════════════
+ * `sanitizeTopicHtml`'s tag allow-list has no `p` — every `<p>` is UNWRAPPED
+ * (sanitize-html's default behaviour for a disallowed tag: keep the
+ * children, drop the wrapper), which is what glues two sibling paragraphs'
+ * text with no boundary between them. Inserting a real `<br>` between them
+ * BEFORE that unwrap runs survives it (`<br>` is on the allow-list) and
+ * lands exactly on a mechanism `ownText`/`htmlToProjection` already has and
+ * already tests: a `<br>` becomes one space. No second "how do sibling
+ * blocks join" rule is introduced.
+ *
+ * Runs on the RAW input, before `sanitizeHtml` — the boundary only exists
+ * to find while the `<p>` tags are still there to see it between.
+ *
+ * Returns the input UNCHANGED — same bytes, not a re-serialisation — when no
+ * two `<p>`s are adjacent. Same posture as `clampDepth`: a body that needs no
+ * repair is not churned.
+ */
+export function separateAdjacentParagraphs(html) {
+  if (!html) return html ?? '';
+  const str = String(html);
+  if (!/<p\b[^>]*>[\s\S]*?<\/p>\s*<p\b/i.test(str)) return str; // cheap gate: no adjacent <p>s at all
+
+  try {
+    const fragment = parseFragment(str);
+    let inserted = 0;
+
+    (function walk(node) {
+      const kids = node.childNodes ?? [];
+      for (let i = kids.length - 1; i > 0; i -= 1) {
+        const prev = kids[i - 1];
+        const cur = kids[i];
+        if (isElement(prev) && prev.tagName === 'p' && isElement(cur) && cur.tagName === 'p') {
+          const br = defaultTreeAdapter.createElement('br', HTML_NS, []);
+          br.parentNode = node;
+          kids.splice(i, 0, br);
+          inserted += 1;
+        }
+      }
+      for (const child of kids) walk(child);
+    })(fragment);
+
+    return inserted ? serialize(fragment) : str;
+  } catch {
+    return str;
+  }
+}
+
+/**
  * Enforce the nesting cap by LIFTING over-deep items, never deleting them.
  *
  * A list at level `max + 1` has its children spliced into the grandparent list

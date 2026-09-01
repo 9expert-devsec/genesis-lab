@@ -5,6 +5,7 @@ import {
   htmlToProjection,
   clampDepth,
   projectionEquals,
+  separateAdjacentParagraphs,
   DEPTH_PREFIXES,
   MAX_TOPIC_DEPTH,
 } from '@/lib/courses/topicHtml';
@@ -419,6 +420,53 @@ test('a custom max is honoured, and a nonsense max falls back to the cap', () =>
     ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'],
   );
   assert.deepEqual(htmlToProjection(clampDepth(SEVEN_DEEP, 0)), htmlToProjection(clampDepth(SEVEN_DEEP)));
+});
+
+// ── separateAdjacentParagraphs: the glue fix, at the unit level ────────────
+
+test('a <br> is inserted between two adjacent <p> siblings', () => {
+  assert.equal(
+    separateAdjacentParagraphs('<li><p>a</p><p>b</p></li>'),
+    '<li><p>a</p><br><p>b</p></li>',
+  );
+});
+
+test('three adjacent <p>s get a <br> at EVERY boundary, not just the first', () => {
+  assert.equal(
+    separateAdjacentParagraphs('<li><p>a</p><p>b</p><p>c</p></li>'),
+    '<li><p>a</p><br><p>b</p><br><p>c</p></li>',
+  );
+});
+
+test('a single <p> is untouched — no boundary, nothing to separate', () => {
+  const input = '<li><p>solo</p></li>';
+  assert.equal(separateAdjacentParagraphs(input), input);
+});
+
+test('CONTROL: content with no <p> at all is returned as the SAME BYTES', () => {
+  // Same posture as clampDepth: a body needing no repair is not churned.
+  const input = '<ul><li>plain text, no paragraphs</li></ul>';
+  assert.equal(separateAdjacentParagraphs(input), input);
+});
+
+test('<p>s separated by a NESTED LIST are not touched — they are not adjacent', () => {
+  const input = '<li><p>a</p><ul><li><p>nested</p></li></ul><p>b</p></li>';
+  // "a" and "b" are not siblings of each other in sequence (a <ul> sits
+  // between them), so no <br> belongs between them — each remains its own
+  // list item's concern once the tree is walked, not this function's.
+  assert.equal(separateAdjacentParagraphs(input), input);
+});
+
+test('works at any nesting depth, independently per parent', () => {
+  const input = '<ul><li><p>a</p><p>b</p><ul><li><p>c</p><p>d</p></li></ul></li></ul>';
+  assert.equal(
+    separateAdjacentParagraphs(input),
+    '<ul><li><p>a</p><br><p>b</p><ul><li><p>c</p><br><p>d</p></li></ul></li></ul>',
+  );
+});
+
+test('empty input is handled without throwing', () => {
+  for (const v of ['', null, undefined]) assert.equal(separateAdjacentParagraphs(v), v ?? '');
 });
 
 // ── projectionEquals: whole-array, order-sensitive ─────────────────────────

@@ -217,6 +217,53 @@ test('content authored one past the cap (7) is lifted, not dropped, at save time
   );
 });
 
+// ── THE GLUE CASE — provably still impossible ──────────────────────────────
+//
+// TopicListItem's content spec widened from `paragraph` (exactly one) to
+// `paragraph+` (one or more), to fix toggleBulletList on a multi-paragraph
+// selection — see topicEditorExtensions.js's TopicListItem header. That
+// necessarily reopens `<li><p>a</p><p>b</p></li>` as AUTHORABLE (via paste or
+// setContent; proven in test/render/topicEditorMultiBulletWrap.test.mjs that
+// ordinary typing — Enter inside a bullet — still cannot produce it). These
+// tests prove the actual HARM — two lines glued into one word with no
+// separator — cannot reach storage or render, regardless.
+
+test('GLUE CASE: two sibling <p>s in one <li> do NOT glue into one word', () => {
+  const out = sanitizeTopicHtml('<ul><li><p>a</p><p>b</p></li></ul>');
+  // sanitize-html serialises the surviving <br> in its own self-closing
+  // style (`<br />`), so this checks for the tag rather than an exact
+  // string — the meaningful claim, "no glue", is the projection below.
+  assert.ok(out.includes('<br'), `expected a <br> between the two lines, got: ${out}`);
+  assert.deepEqual(htmlToProjection(out), ['a b'], 'the flattened text must have a space, not read as "ab"');
+});
+
+test('GLUE CASE: three sibling <p>s in one <li> — every boundary gets separated', () => {
+  const out = sanitizeTopicHtml('<ul><li><p>a</p><p>b</p><p>c</p></li></ul>');
+  assert.deepEqual(htmlToProjection(out), ['a b c']);
+  assert.ok(!out.includes('ab') && !out.includes('bc'), `a boundary glued: ${out}`);
+});
+
+test('GLUE CASE: survives real marks inside the glued paragraphs', () => {
+  const out = sanitizeTopicHtml('<ul><li><p><strong>a</strong></p><p><em>b</em></p></li></ul>');
+  assert.deepEqual(htmlToProjection(out), ['a b']);
+});
+
+test('GLUE CASE: does not fire on a SINGLE paragraph — no spurious trailing space', () => {
+  const out = sanitizeTopicHtml('<ul><li><p>solo</p></li></ul>');
+  assert.equal(out, '<ul><li>solo</li></ul>');
+  assert.deepEqual(htmlToProjection(out), ['solo']);
+});
+
+test('GLUE CASE: an already-separated pair (real <br>) is not double-spaced', () => {
+  const out = sanitizeTopicHtml('<ul><li><p>a</p><br><p>b</p></li></ul>');
+  assert.deepEqual(htmlToProjection(out), ['a b'], 'must not become "a  b" with two spaces');
+});
+
+test('GLUE CASE: nested items are each protected independently', () => {
+  const out = sanitizeTopicHtml('<ul><li><p>a</p><p>b</p><ul><li><p>c</p><p>d</p></li></ul></li></ul>');
+  assert.deepEqual(htmlToProjection(out), ['a b', '– c d']);
+});
+
 // ── order: sanitise first, THEN clamp ──────────────────────────────────────
 
 test('SANITISATION DESTROYS NO LIST ELEMENT — the invariant the ordering rests on', () => {

@@ -152,15 +152,23 @@ test('the editor cannot author an ordered list, a heading, or a code block', () 
   }
 });
 
-test('a list item may hold ONE paragraph and only nested BULLET lists', () => {
+test('a list item may hold one or more paragraphs and only nested BULLET lists', () => {
   /**
-   * `paragraph block*` (Tiptap's default) admits a second paragraph in one item.
-   * The sanitiser unwraps `<p>`, so `<li><p>a</p><p>b</p></li>` would sanitise to
-   * `<li>ab</li>` and two authored lines would be joined with no separator on the
-   * way to MSDB. The content spec makes the shape unauthorable instead of
-   * repairing it afterwards.
+   * `paragraph+ bulletList*` — WIDENED from a single required paragraph
+   * (`paragraph bulletList*`), on measured evidence: the single-paragraph
+   * spec broke `toggleBulletList` on any multi-paragraph selection (see
+   * topicEditorExtensions.js's TopicListItem header for the full mechanism).
+   * `block*` (Tiptap's stock default) is still narrower than what this editor
+   * needs — no headings/code blocks are registered here regardless — so
+   * `bulletList*` stays the second half: a nested list is the only OTHER
+   * child a bullet may carry.
+   *
+   * The word-glue hazard a single-paragraph spec used to block at the schema
+   * (`<li><p>a</p><p>b</p></li>` sanitising to `<li>ab</li>`) is now guarded
+   * at sanitizeTopicHtml.js's `separateAdjacentParagraphs` instead — see
+   * test/pure/sanitizeTopicHtml.test.mjs's "glue" tests for the proof.
    */
-  assert.equal(schema.nodes.listItem.spec.content, 'paragraph bulletList*');
+  assert.equal(schema.nodes.listItem.spec.content, 'paragraph+ bulletList*');
 });
 
 // ── d. THE DEPTH LOCK, against real ProseMirror documents ──────────────────
