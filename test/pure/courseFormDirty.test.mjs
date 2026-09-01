@@ -50,6 +50,15 @@ test('editing a rail field is dirty', () => {
   );
 });
 
+test('editing the course rich body is dirty', () => {
+  // Same class as the gallery/trainingTopicsRich checks below: React state with
+  // no `name` attribute, so a formatting-only edit must be caught explicitly.
+  assert.equal(
+    isCourseEditorDirty(BASE, sig(SEED_FORM, { ...SEED_EXT, descriptionRich: '<p>new</p>' })),
+    true
+  );
+});
+
 test('editing the gallery is dirty', () => {
   const gallery = [...SEED_EXT.gallery, { type: 'image', url: 'https://x/y.png', alt: '' }];
   assert.equal(isCourseEditorDirty(BASE, sig(SEED_FORM, { ...SEED_EXT, gallery })), true);
