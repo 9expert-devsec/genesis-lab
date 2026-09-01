@@ -264,6 +264,58 @@ test('P2: descriptionRich present-but-empty still writes the empty string', () =
   assert.equal(update.descriptionRich, '');
 });
 
+// ── P2b. SECTION 6'S FOUR — THE SAME WIPE GUARD, PER FIELD ──────────────────
+//
+// Separate tests per field rather than one loop over the four: a field whose
+// guard broke should name itself, the same discipline courseDescription.test.mjs
+// applies to its own fallback triggers.
+
+const SECTION_6_FIELDS = [
+  'objectivesRich', 'targetAudienceRich', 'prerequisitesRich', 'systemRequirementsRich',
+];
+
+for (const field of SECTION_6_FIELDS) {
+  test(`P2 WIPE GUARD: a caller that omits ${field} does not write it`, () => {
+    for (const [what, payload] of CALLERS) {
+      const update = buildExtensionUpdate({ courseId: 'C', data: payload(), cleanAlias: 'c' });
+      assert.ok(
+        !(field in update),
+        `${what} would WRITE ${field} despite never sending it — `
+        + 'that is the wipe this selection exists to prevent',
+      );
+    }
+  });
+
+  test(`P2: ${field} is sanitised through sanitizeRichHtml when present`, () => {
+    const update = buildExtensionUpdate({
+      courseId: 'C', data: { [field]: '<p>ok</p><script>alert(1)</script>' }, cleanAlias: '',
+    });
+    assert.equal(update[field], '<p>ok</p>',
+      `a present value for ${field} must be sanitised on the way into the update, not stored raw`);
+  });
+
+  test(`P2: ${field} present-but-empty still writes the empty string`, () => {
+    const update = buildExtensionUpdate({ courseId: 'C', data: { [field]: '' }, cleanAlias: '' });
+    assert.ok(field in update, `an explicit empty string for ${field} must be written, not dropped`);
+    assert.equal(update[field], '');
+  });
+}
+
+test('the four section-6 rich fields are independent of each other in one update', () => {
+  // Prove separation at the builder level: sending only ONE of the four
+  // writes only that one, exactly the property CourseDescription's render
+  // swap depends on ("one field having rich content leaves the other three
+  // on their fallback") holding true one layer earlier, at save time.
+  const update = buildExtensionUpdate({
+    courseId: 'C', data: { objectivesRich: '<p>only this one</p>' }, cleanAlias: '',
+  });
+  assert.equal(update.objectivesRich, '<p>only this one</p>');
+  assert.ok(!('targetAudienceRich' in update));
+  assert.ok(!('prerequisitesRich' in update));
+  assert.ok(!('systemRequirementsRich' in update));
+  assert.ok(!('descriptionRich' in update), 'a section-6 field must not touch the section-1 body');
+});
+
 // ── P3. C1 SEMANTICS — presence, not value ─────────────────────────────────
 
 test('P3: `{ metaTitle: undefined }` CLEARS — presence is the test, not value', () => {
@@ -326,10 +378,12 @@ test('P3 CONTROL: an inherited key does NOT count as present', () => {
 
 // ── the field list itself ──────────────────────────────────────────────────
 
-test('the writable field list is exactly the ten keys the action may set', () => {
+test('the writable field list is exactly the fourteen keys the action may set', () => {
   assert.deepEqual([...EXTENSION_FIELDS].sort(), [
     'descriptionRich', 'gallery', 'isPublished', 'metaDescription', 'metaTitle',
-    'ogImage', 'omisePaymentEnabled', 'tags', 'trainingTopicsRich', 'urlAlias',
+    'objectivesRich', 'ogImage', 'omisePaymentEnabled', 'prerequisitesRich',
+    'systemRequirementsRich', 'tags', 'targetAudienceRich', 'trainingTopicsRich',
+    'urlAlias',
   ]);
   // `upstreamId` and `formerCodes` are NOT here on purpose. The anchor is
   // decided against what is stored (resolveAnchorWrite) and added to the update
