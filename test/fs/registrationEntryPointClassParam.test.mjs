@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,7 +26,6 @@ const ROUND_SPECIFIC = [
   // /schedule's table + round row AND /search's schedule section, which used to
   // hold two byte-identical copies of this template, now share one builder.
   ['src/lib/schedule/scheduleRegistrationHref.js', 'the shared round-registration builder'],
-  ['src/components/pageBuilder/sections/course_schedule.jsx', 'page-builder schedule section'],
 ];
 
 /**
@@ -43,10 +42,26 @@ const ROUND_SPECIFIC = [
  * round would have been a live link into the wizard. The shared builder returns
  * null for `full`, so routing through it is what closes that.
  *
+ * ── course_schedule MOVED HERE FROM `ROUND_SPECIFIC` TOO (round 81) ─────────
+ * Same move, same reason, one round later. The page-builder section held the
+ * fifth copy of the template and it had drifted exactly the way CourseCard's
+ * had: no status check, so a `full` round rendered the red เต็ม chip inside a
+ * working registration link. It was left in `ROUND_SPECIFIC` while it held a
+ * template of its own; it delegates now, so it is guarded here instead.
+ *
  * The call EXPRESSION is per-file because the argument names are local: the
  * /schedule and /search rows call `(schedule, courseId)`, the catalog card calls
- * `(s, id)`. Asserting the call rather than a bare import is what distinguishes
- * "imports the builder" from "uses it".
+ * `(s, id)`, the builder section calls `(s, code)`. Asserting the call rather
+ * than a bare import is what distinguishes "imports the builder" from "uses it".
+ *
+ * This list is also the ENTRY-POINT COUNT. One implementation
+ * (src/lib/schedule/scheduleRegistrationHref.js, the sole member of
+ * ROUND_SPECIFIC that is a round-list builder) and four call sites across these
+ * three files plus the section — /schedule's table cell and mobile card both
+ * read the ScheduleClient entry. A fifth surface may be added freely; a fifth
+ * IMPLEMENTATION cannot, because the no-template assertion below is applied to
+ * every file in this list and `no second implementation of the round-link rule`
+ * sweeps the rest of src/.
  */
 const DELEGATES = [
   ['src/app/(public)/schedule/_components/ScheduleClient.jsx', '/schedule rows',
@@ -55,6 +70,8 @@ const DELEGATES = [
     'scheduleRegistrationHref(schedule, courseId)'],
   ['src/app/(public)/training-course/_components/CourseCard.jsx', 'catalog card rounds',
     'scheduleRegistrationHref(s, id)'],
+  ['src/components/pageBuilder/sections/course_schedule.jsx', 'page-builder schedule section',
+    'scheduleRegistrationHref(s, code)'],
 ];
 
 const GENERIC = [
@@ -98,9 +115,17 @@ test('CONTROL: the delegation probes DO fire on a file that still inlines it', (
    * Two of the three assertions above are absences, and the third is an import
    * line — which on its own is satisfied by a file that imports the builder and
    * then ignores it. Run the matchers against a file that really does inline the
-   * template (the page-builder section, which is not part of this refactor).
+   * template.
+   *
+   * The subject was the page-builder section until round 81 folded it into
+   * DELEGATES. It is now the detail page's "ลงทะเบียนรอบที่เลือก" CTA, which
+   * still builds its own URL and legitimately so: it is a single chosen round
+   * inside a component that already resolved the round itself, not a LIST of
+   * rounds, so it is in ROUND_SPECIFIC rather than being a fifth caller of the
+   * list builder. Repointing the control at another list surface would have
+   * meant leaving a copy of the template in place to keep a test honest.
    */
-  const inliner = read('src/components/pageBuilder/sections/course_schedule.jsx');
+  const inliner = read('src/app/(public)/[...slug]/_components/ScheduleSection.jsx');
   assert.ok([...inliner.matchAll(LINKS)].length > 0, 'the probe sees an inlined template');
   assert.equal(
     /import \{ scheduleRegistrationHref \}/.test(inliner), false,
@@ -193,3 +218,98 @@ test('CONTROL: its live sibling survived the deletion', () => {
 // The `publicRegistrationHref is still unused` guard that used to live here is
 // gone with the function it guarded — see src/lib/courseRegistrationHref.js. The
 // per-file &class= assertions above pin the live invariant and stay.
+
+// ── ONE IMPLEMENTATION, HOWEVER MANY ENTRY POINTS (round 81) ────────────────
+
+/**
+ * The per-file assertions above are an ALLOWLIST, and an allowlist only guards
+ * the files someone remembered to list. That is exactly how the defect round 81
+ * fixed survived: `course_schedule.jsx` was listed — in ROUND_SPECIFIC, as a
+ * legitimate holder of a template — so every test in this file passed while it
+ * quietly linked sold-out rounds. Nothing asked whether a SIXTH file had grown
+ * a copy, and nothing would have.
+ *
+ * So the two lists are closed against the whole of src/. Any file that builds a
+ * `?course=…&class=…` wizard URL and is not one of the four named holders is a
+ * second implementation of the round-link rule, and the rule it will not have is
+ * the `full` refusal — a template is four lines and copies cleanly; the status
+ * check is a judgement and does not.
+ *
+ * Deliberately NOT a count. A count goes stale in the direction that hides the
+ * problem: someone adds a surface, the number goes up, they bump the number.
+ * Naming the holders means a new one has to be argued for in this file.
+ */
+const TEMPLATE_HOLDERS = new Set([...ROUND_SPECIFIC, ...GENERIC].map(([f]) => f));
+
+/** Every .js/.jsx under src/, comments stripped — the standing rule here. */
+function sourceFiles(dir, out = []) {
+  for (const entry of readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) sourceFiles(rel, out);
+    else if (/\.jsx?$/.test(entry.name)) out.push(rel);
+  }
+  return out;
+}
+
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+
+/** The files that BUILD the wizard URL, as opposed to calling something that does. */
+const templateHolders = (files, readFile) =>
+  // `matchAll`, not `LINKS.test` — LINKS carries the /g flag, so `.test` would
+  // advance `lastIndex` and every second call would resume mid-file. That is a
+  // sweep which silently skips half its subjects and reports a clean src/.
+  files.filter((f) => [...stripComments(readFile(f)).matchAll(LINKS)].length > 0);
+
+test('no second implementation of the round-link rule exists anywhere in src/', () => {
+  const found = templateHolders(sourceFiles('src'), read);
+  const unlisted = found.filter((f) => !TEMPLATE_HOLDERS.has(f));
+  assert.deepEqual(
+    unlisted, [],
+    'these files build the public wizard URL themselves and are not declared '
+    + 'above. A round LIST must call scheduleRegistrationHref, which is the only '
+    + 'thing that refuses a `full` round; a single-round CTA that legitimately '
+    + 'builds its own belongs in ROUND_SPECIFIC, argued for by name',
+  );
+  // And the allowlist has not outlived its subjects: every declared holder must
+  // still hold one, or it is guarding nothing and hiding a name.
+  for (const f of TEMPLATE_HOLDERS) {
+    assert.ok(found.includes(f), `${f} is declared as a template holder but holds none`);
+  }
+});
+
+test('CONTROL: the sweep catches a file that grows a second implementation', () => {
+  /**
+   * The assertion above is an empty-array check, which is what a matcher that
+   * sees nothing also produces. Drive the same detector over a synthetic file
+   * set: one file that inlines the template, one that only CALLS the builder.
+   * The first must be reported and the second must not — a sweep that flagged
+   * every caller would be unusable and would be silenced rather than fixed.
+   */
+  const fake = {
+    'src/fake/CopiedIt.jsx':
+      'const href = `/registration/public?course=${String(code).toLowerCase()}&class=${s._id}`;',
+    'src/fake/DelegatesProperly.jsx':
+      "import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';\n"
+      + 'const href = scheduleRegistrationHref(s, code);',
+    'src/fake/OnlyMentionsItInAComment.jsx':
+      '// builds `/registration/public?course=${x}&class=${y}` — but only in prose\nexport const x = 1;',
+  };
+  const found = templateHolders(Object.keys(fake), (f) => fake[f]);
+  assert.deepEqual(
+    found, ['src/fake/CopiedIt.jsx'],
+    'the sweep must flag the copy, spare the caller, and not be fooled by a comment',
+  );
+  assert.ok(!TEMPLATE_HOLDERS.has('src/fake/CopiedIt.jsx'),
+    'and an undeclared copy is not on the allowlist, so the test above would fail',
+  );
+});
+
+test('CONTROL: the src/ walk actually reaches the files it claims to', () => {
+  // Without this the sweep passes because it enumerated nothing. Pin the two
+  // ends: the builder itself, and the section that stopped holding a copy.
+  const files = sourceFiles('src');
+  assert.ok(files.length > 500, `the walk found only ${files.length} files under src/`);
+  assert.ok(files.includes('src/lib/schedule/scheduleRegistrationHref.js'));
+  assert.ok(files.includes('src/components/pageBuilder/sections/course_schedule.jsx'));
+});

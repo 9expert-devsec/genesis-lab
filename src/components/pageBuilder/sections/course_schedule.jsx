@@ -2,6 +2,7 @@ import { CalendarDays } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { resolveDerivedRoundBadge, resolveScheduleBadge } from '@/lib/scheduleStatus';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
 import { chooseRounds } from '@/lib/pageBuilder/chosenRounds';
 import { siteTodayKey } from '@/lib/articlePublishTime';
 
@@ -55,12 +56,51 @@ function formatRange(dates) {
   return label === '-' ? null : label;
 }
 
-function scheduleHref(schedule, code) {
-  if (schedule?._id && code) {
-    return `/registration/public?course=${String(code).toLowerCase()}&class=${schedule._id}`;
-  }
-  return schedule?.signup_url || null;
-}
+/**
+ * ── THE LOCAL `scheduleHref` IS GONE — round 81 ─────────────────────────────
+ *
+ * This file used to build the wizard URL itself, in four lines byte-identical
+ * to `lib/schedule/scheduleRegistrationHref` except for the one line that
+ * matters: it had no `full` refusal. So a sold-out round drew the red เต็ม chip
+ * INSIDE a working registration link — the chip saying "no seats" and the row
+ * behaving as though there were. Round 64 saw it while building chosen-rounds
+ * mode and left it for its own round, because no stored section resolves to a
+ * full round and a byte-identity proof would have gone green over a real
+ * behaviour change. Re-measured for round 81
+ * (scripts/_measure-round81-stored.mjs): two PUBLISHED sections, on MSE-L1 and
+ * VIBE-CODE-L2, plus their drafts and six version snapshots — every one of them
+ * in `upcoming` mode, none naming a round. So the proof for this change had to
+ * be a constructed full round, which is why it is its own round and not a line
+ * inside round 64's commit 3.
+ *
+ * DELETED rather than patched. Copying the `full` line across would have left
+ * two implementations of one rule and made this the fifth surface that has to
+ * be remembered when the rule next changes — which is the shape that produced
+ * this defect. The builder is a pure module (its only import is
+ * `normalizeScheduleStatus`), so there was never anything to stop this server
+ * component calling it; the copy predates the builder's extraction rather than
+ * answering any constraint. Four call sites now, one implementation:
+ * /schedule's table cell and mobile card, /search's schedule row,
+ * training-course's catalog card, and this section.
+ * test/fs/registrationEntryPointClassParam pins the delegation per file and
+ * refuses a second copy of the template.
+ *
+ * WHY IT WAS NEVER SEEN IN PRODUCTION, AND WHY THAT IS NOT A REASON TO WAIT.
+ * `resolveSectionData` calls `listSchedulesByCourse` with no `status`, so
+ * upstream auto-filters to the registerable statuses and a `full` round does not
+ * currently reach this renderer at all. Every sibling surface has ALREADY
+ * widened its own fetch to PUBLIC_SCHEDULE_STATUSES so a sold-out round can be
+ * shown; the day this one follows, the defect ships with it and looks like a
+ * one-line fetch change. The builder makes that day safe in advance.
+ *
+ * The chip vocabulary is untouched: `lib/scheduleStatus` remains the single
+ * source for wording and colour, and `full.action` is still 'เต็ม'. What
+ * changed is only whether the row is a link. Measured over all five row states,
+ * pre-change out of a worktree and post-change from the working tree, by
+ * scripts/_measure-round81-five-states.mjs: `full` went anchored→not, and
+ * `open` / `nearly_full` / `elapsed` / `missing` came back byte-identical,
+ * chips included.
+ */
 
 /**
  * ── ROUND 64 — TWO MODES, AND WHY THE CHOICE IS MADE HERE ──────────────────
@@ -116,7 +156,11 @@ export function CourseScheduleSection({ content, data }) {
             ? resolveScheduleBadge(s?.status)
             : resolveDerivedRoundBadge(entry.state);
           const typeLabel = TYPE_TH[entry.type] ?? null;
-          const href = isLive ? scheduleHref(s, code) : null;
+          // `isLive &&` still guards the two DERIVED states — they have no
+          // upstream row to hand the builder, and the builder is about a round
+          // that EXISTS. The builder decides the remaining question, which is
+          // whether a round that exists is registerable; see the note above it.
+          const href = isLive ? scheduleRegistrationHref(s, code) : null;
 
           const row = (
             <div className="flex items-center gap-3 px-4 py-3">
