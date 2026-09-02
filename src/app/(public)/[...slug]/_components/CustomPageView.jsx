@@ -9,7 +9,17 @@ import { sanitizePageHtml } from '@/lib/customPages/sanitizePageHtml';
  * here.
  */
 export function CustomPageView({ page }) {
-  const cleanHtml = sanitizePageHtml(page?.body);
+  /**
+   * `allowStyle` — THE ONE CALLER THAT OPTS IN, and the reasoning lives in the
+   * sanitizer beside the flag rather than here.
+   *
+   * In short: an Advanced HTML page is an admin-only escape hatch whose body is
+   * the entire document, so a `<style>` block has no neighbouring content to
+   * leak into and no preview banner to hide. The page-builder sections that
+   * share this sanitizer keep `<style>` stripped, because their preview route
+   * relies on exactly that.
+   */
+  const cleanHtml = sanitizePageHtml(page?.body, { allowStyle: true });
 
   return (
     <article className="mx-auto max-w-[1200px] px-4 py-8">

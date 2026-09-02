@@ -93,10 +93,71 @@ const SANITIZE_CONFIG = {
   exclusiveFilter: (frame) => frame.tag === 'iframe' && !frame.attribs.src,
 };
 
-export function sanitizePageHtml(html) {
+/**
+ * ── THE `<style>` EXEMPTION, AND WHY IT IS OPT-IN RATHER THAN THE DEFAULT ────
+ *
+ * `style` is NOT in `allowedTags` above, and for every caller but one it stays
+ * out. This config is shared by four surfaces:
+ *
+ *   · CustomPageView                     — the Advanced HTML PAGE type
+ *   · pageBuilder/SectionRenderer        — the advanced section's customHtml
+ *   · pageBuilder/sections/custom_html
+ *   · pageBuilder/sections/embed
+ *
+ * Only the FIRST opts in, and the other three must not, because a documented
+ * security property already rests on them not doing so. The page-builder
+ * preview route renders its "PREVIEW" banner and its published-by strip OUTSIDE
+ * PageBuilderView specifically so that a section's authored CSS cannot reach
+ * them — and its comment states the second half of that argument in as many
+ * words: "customHtml cannot inject a <style> to hide it (the shared sanitizer
+ * drops <style> entirely)". Turning `style` on globally would silently retire
+ * that sentence and hand any section author a way to blank the banner that says
+ * they are looking at unpublished content. See src/app/(public)/preview/[slug].
+ *
+ * ── WHAT MAKES IT ACCEPTABLE ON THE PAGE TYPE ───────────────────────────────
+ * An Advanced HTML page is a deliberate escape hatch whose entire purpose is to
+ * serve hand-written markup. It is authored behind `requireAdmin('pages')`, it
+ * has no draft/preview banner to subvert, and its body is the whole document
+ * rather than one section sharing a page with others' content — so authored CSS
+ * has nothing to escape INTO. Withholding `<style>` there does not make the
+ * page safer; it makes the feature not work, which is what was reported.
+ *
+ * ── WHAT THIS DOES NOT BUY, STATED PLAINLY ──────────────────────────────────
+ * Measured against sanitize-html 2.17.5 with `style` allowed:
+ *   · a `</style>`-then-`<script>` break-out IS still stripped, and so is a
+ *     trailing `<img onerror=…>` — the parser closes the element correctly;
+ *   · `<script>` written INSIDE the block survives as text, and is inert: the
+ *     browser treats `<style>` as a raw-text element, so it is invalid CSS and
+ *     never a script;
+ *   · the CSS body is NOT inspected. `@import url(//host/x.css)`, remote
+ *     `url()` fetches and `expression()` all pass through unread.
+ * So this is a CSS-injection surface for whoever can author the page — that is
+ * inherent to the escape hatch, is bounded by the `pages` permission, and is
+ * the trade the page type exists to make. It is NOT a script-execution surface.
+ *
+ * `allowVulnerableTags` silences sanitize-html's own warning for exactly this
+ * config. It is set only on the opted-in branch, so the default config still
+ * carries the library's protection unweakened.
+ */
+const SANITIZE_CONFIG_WITH_STYLE = {
+  ...SANITIZE_CONFIG,
+  allowedTags: [...SANITIZE_CONFIG.allowedTags, 'style'],
+  allowVulnerableTags: true,
+};
+
+/**
+ * @param {string} html
+ * @param {{ allowStyle?: boolean }} [options] `allowStyle` keeps `<style>`
+ *   blocks. Admin-authored Advanced HTML pages only — see the note above
+ *   before adding a second caller.
+ */
+export function sanitizePageHtml(html, { allowStyle = false } = {}) {
   if (!html) return '';
   try {
-    return sanitizeHtml(String(html), SANITIZE_CONFIG);
+    return sanitizeHtml(
+      String(html),
+      allowStyle ? SANITIZE_CONFIG_WITH_STYLE : SANITIZE_CONFIG
+    );
   } catch {
     // Never emit unsanitized HTML — render nothing on any failure.
     return '';
