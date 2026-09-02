@@ -1,6 +1,13 @@
 'use client';
 
-import { Fragment, useCallback, useMemo, useState, useTransition } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronDown,
@@ -13,6 +20,7 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  getRoundRegistrationSummary,
 } from '@/lib/actions/schedules';
 import {
   adminScheduleMonthCols,
@@ -43,6 +51,7 @@ import {
   resolveDerivedRoundBadge,
   resolveScheduleBadge,
 } from '@/lib/scheduleStatus';
+import { RegistrationSummaryPanel } from './RegistrationSummaryPanel';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -167,6 +176,14 @@ export function SchedulesAdminClient({
 
   const [collapsed, setCollapsed] = useState({});
   const [modal, setModal]         = useState(null);
+  /**
+   * The round whose details panel is open, or null. A SEPARATE piece of state
+   * from `modal` rather than a third `mode` on it: the editor modal is a form
+   * that writes, this is a read-only panel that writes nothing, and folding a
+   * read into the writer's state machine is how a "details" mode ends up one
+   * refactor away from submitting one.
+   */
+  const [details, setDetails]     = useState(null);
 
   /**
    * The next URL, serialised FROM THE PROPS — the one and only writer.
@@ -544,6 +561,7 @@ export function SchedulesAdminClient({
               onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
               onEdit={openEdit}
               onDelete={handleDelete}
+              onDetails={setDetails}
             />
           ))}
         </div>
@@ -594,6 +612,14 @@ export function SchedulesAdminClient({
           }}
         />
       )}
+
+      {details && (
+        <RoundDetailsModal
+          schedule={details}
+          local={localBySchedId.get(String(details._id))}
+          onClose={() => setDetails(null)}
+        />
+      )}
     </>
   );
 }
@@ -614,6 +640,7 @@ function ProgramGroup({
   onAdd,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   const Icon = collapsed ? ChevronRight : ChevronDown;
   // What `laneLayout` and `roundSpanIndices` speak: contiguous ascending
@@ -727,6 +754,7 @@ function ProgramGroup({
                           todayKey,
                           onEdit,
                           onDelete,
+                          onDetails,
                         })}
                       </tr>
                     ))}
@@ -856,6 +884,7 @@ function laneCells({
   todayKey,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   const out = [];
   let col = 0;
@@ -891,6 +920,7 @@ function laneCells({
               todayKey={todayKey}
               onEdit={() => onEdit(s)}
               onDelete={() => onDelete(s._id)}
+              onDetails={() => onDetails(s)}
             />
           ))}
           <ContinuationNote cell={cell} />
@@ -941,6 +971,7 @@ function ScheduleCell({
   todayKey,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   /**
    * ── THE LABEL COMES FROM THE SHARED FORMATTER. IT USED TO BE A SIXTH ONE ───
@@ -1122,10 +1153,22 @@ function ScheduleCell({
         job is to schedule the future.
 
         A disabled-looking button invites the reader to hunt for the state
-        that would re-enable it. There is none, so there is no button. What
-        replaces them is the details view added in the next commit.
+        that would re-enable it. There is none, so there is no button.
+
+        ดูรายละเอียด takes their place rather than leaving the card blank: the
+        round still has something worth asking about — who signed up and where
+        they got to — and it is the only question a finished round can still
+        answer. It is a READ, and the panel it opens writes nothing.
       */}
-      {!ended && (
+      {ended ? (
+        <button
+          type="button"
+          onClick={onDetails}
+          className="cursor-pointer text-[10px] text-9e-action hover:underline"
+        >
+          ดูรายละเอียด
+        </button>
+      ) : (
         <div className="flex items-center justify-center gap-1.5">
           <button
             type="button"
@@ -1840,3 +1883,162 @@ function ButtonGroup({ options, value, onChange }) {
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
+
+// ── RoundDetailsModal ─────────────────────────────────────────────
+
+/**
+ * What ดูรายละเอียด opens on a finished round: its PUBLIC registrations,
+ * counted by status, and nothing else.
+ *
+ * ── READ-ONLY BY CONSTRUCTION, NOT BY RESTRAINT ────────────────────────────
+ * There is no form, no action call but the one that reads, and no state that
+ * outlives the panel. That is deliberate on a screen whose other modal writes
+ * through to MSDB: this panel exists precisely BECAUSE a finished round must
+ * not be written to, so the thing that replaces the write controls must not
+ * quietly become one.
+ *
+ * ── IN-HOUSE IS ABSENT, AND THE HEADING SAYS SO ────────────────────────────
+ * `getRoundRegistrationSummary` reads `register_public` only — in-house
+ * engagements are customer-defined and are not rounds on this grid. The heading
+ * names the population rather than saying a bare "ผู้ลงทะเบียน" and letting a
+ * reader assume the number covers every enquiry the round attracted: an admin
+ * checking this against a sales figure has to be able to see which set it is.
+ *
+ * ── FOUR STATES, DRAWN AS FOUR ─────────────────────────────────────────────
+ * Loading, failed, loaded-with-people, and loaded-with-NOBODY. The last is not
+ * the third with zeros in it. A round nobody booked and a join that silently
+ * matched nothing produce the same four zeros, and only a sentence tells them
+ * apart.
+ */
+function RoundDetailsModal({ schedule, local, onClose }) {
+  const [state, setState] = useState({ phase: 'loading', summary: null, error: null });
+
+  const scheduleId = String(schedule?._id ?? '');
+
+  useEffect(() => {
+    /*
+     * `alive` guards the setState after an unmount — an admin who opens a round
+     * and closes it before the round-trip lands would otherwise write into a
+     * component that is gone. It is keyed on the id, so opening a second round
+     * while the first is still in flight cannot have the first one's answer
+     * arrive last and overwrite it.
+     */
+    let alive = true;
+    setState({ phase: 'loading', summary: null, error: null });
+    getRoundRegistrationSummary(scheduleId)
+      .then((res) => {
+        if (!alive) return;
+        if (res?.ok) {
+          setState({ phase: 'ready', summary: res.summary, error: null });
+        } else {
+          setState({ phase: 'error', summary: null, error: res?.error ?? 'อ่านข้อมูลไม่สำเร็จ' });
+        }
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setState({ phase: 'error', summary: null, error: err?.message ?? 'อ่านข้อมูลไม่สำเร็จ' });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [scheduleId]);
+
+  // MSDB hands `course` back populated or as a bare ObjectId string — the same
+  // two shapes the grid's own lookup already allows for.
+  const course =
+    typeof schedule?.course === 'object' && schedule.course !== null
+      ? schedule.course
+      : null;
+
+  const summary = state.summary;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-9e-lg bg-white shadow-xl dark:bg-[#111d2c]">
+        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-5 py-4">
+          <h2 className="text-lg font-bold text-9e-navy dark:text-white">
+            รายละเอียดรอบอบรม
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="ปิด"
+            className="text-9e-slate-dp-50 hover:text-9e-navy"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/*
+            Which round this is. `showMonth`/`showYear` are ON here, unlike the
+            grid cell that calls the same formatter with neither: there is no
+            column header above this to carry the month, so the dates have to
+            name themselves.
+          */}
+          <div className="rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 px-3 py-2 dark:bg-[#0D1B2A]/60">
+            {course && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[11px] text-9e-action">
+                  {course.course_id}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-9e-navy dark:text-white">
+                  {course.course_name_th || course.course_name}
+                </span>
+              </div>
+            )}
+            <div className="mt-1 text-xs text-9e-slate-dp-50">
+              {formatRoundDays(schedule?.dates, { showMonth: true, showYear: true })}
+              <span className="mx-1.5">·</span>
+              {TYPE_LABEL[schedule?.type] ?? TYPE_LABEL.classroom}
+              {local?.max_seats != null && (
+                <>
+                  <span className="mx-1.5">·</span>
+                  {local.max_seats} ที่นั่ง
+                </>
+              )}
+            </div>
+          </div>
+
+          <h3 className="text-sm font-medium text-9e-navy dark:text-white">
+            ผู้ลงทะเบียน (รอบสาธารณะ)
+          </h3>
+
+          {state.phase === 'loading' && (
+            <div className="py-6 text-center text-xs text-9e-slate-dp-50">
+              กำลังโหลด…
+            </div>
+          )}
+
+          {state.phase === 'error' && (
+            <div className="rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {state.error}
+            </div>
+          )}
+
+          {/*
+            Both loaded states — the breakdown and the nobody-registered
+            sentence — live in RegistrationSummaryPanel. See that file's header
+            for why they are not branches here: a fetch-owning modal's `ready`
+            markup is unreachable from renderToStaticMarkup, so the two states
+            that carry the actual answer would have been the two nothing could
+            test.
+          */}
+          {state.phase === 'ready' && (
+            <RegistrationSummaryPanel summary={summary} />
+          )}
+        </div>
+
+        <div className="border-t border-[var(--surface-border)] px-5 py-3 text-right">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            ปิด
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

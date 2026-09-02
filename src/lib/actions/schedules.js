@@ -22,6 +22,8 @@ import { dbConnect } from '@/lib/db/connect';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { resolveCourseObjectId } from '@/lib/api/resolveIds';
 import ScheduleLocal from '@/models/ScheduleLocal';
+import RegisterPublic from '@/models/RegisterPublic';
+import { summariseRegistrationsByStatus } from '@/lib/registrations/summariseByStatus';
 // `toNullableNum` is deliberately NOT imported: every numeric sidecar field is
 // coerced inside `sidecarSetFields` now, and importing it here would invite the
 // next edit to read a sidecar key directly off the FormData again — which is
@@ -369,6 +371,58 @@ export async function deleteSchedule(id) {
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err?.message ?? 'ลบตารางไม่สำเร็จ' };
+  }
+}
+
+/**
+ * The PUBLIC registrations attached to one round, tallied by status.
+ *
+ * Read-only, and the only thing an admin can now do to a finished round: the
+ * grid withholds แก้ไข and ลบ once a round's last day has passed, and this is
+ * what ดูรายละเอียด opens instead.
+ *
+ * ── PUBLIC ONLY, AND THE COLLECTION MAKES THAT STRUCTURAL ──────────────────
+ * In-house is excluded by decision — those engagements are customer-defined and
+ * are not rounds on this grid at all. Nothing here has to enforce that: this
+ * reads `register_public`, and `register_inhouse` carries no `classId` field on
+ * any of its 8 documents (audited 2026-09-02), so an in-house enquiry has no
+ * way to name a round even if one were looked for. The exclusion is a fact
+ * about the schema, not a filter that could be dropped by a later edit.
+ *
+ * ── THE JOIN IS `classId`, EXACT, WITH NO NORMALISING ──────────────────────
+ * Measured 2026-09-02 against the live data: all 16 distinct `classId` values
+ * in `register_public` are 24-character lowercase hex strings, and all 16 match
+ * a fetched `Schedule._id` exactly — no trimming, no case folding, no ObjectId
+ * coercion, and zero left unmatched. `String(scheduleId)` is the whole join.
+ *
+ * That last figure is new. Before MSDB began returning past rounds, 6 of the 16
+ * matched nothing and looked like registrations orphaned by a delete; they were
+ * simply pointing at rounds the endpoint would not hand back. All 6 resolve now.
+ *
+ * ── ONLY `status` IS PROJECTED ─────────────────────────────────────────────
+ * The view shows a total and a breakdown, so a name, an email and a phone
+ * number are not needed to draw it. Not fetching them means this action cannot
+ * become the accidental route by which attendee PII reaches a screen that never
+ * asked for it — /admin/registrations is where a person is looked up, behind
+ * its own guard.
+ *
+ * @param {string} scheduleId the MSDB `Schedule._id`
+ * @returns {Promise<{ok: true, summary: object} | {ok: false, error: string}>}
+ */
+export async function getRoundRegistrationSummary(scheduleId) {
+  await requireAdmin('schedules');
+
+  const id = toStr(scheduleId);
+  if (!id) return { ok: false, error: 'Missing schedule id' };
+
+  try {
+    await dbConnect();
+    const rows = await RegisterPublic.find({ classId: id })
+      .select('status')
+      .lean();
+    return { ok: true, summary: summariseRegistrationsByStatus(rows) };
+  } catch (err) {
+    return { ok: false, error: err?.message ?? 'อ่านข้อมูลผู้ลงทะเบียนไม่สำเร็จ' };
   }
 }
 
