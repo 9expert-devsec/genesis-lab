@@ -21,6 +21,7 @@ import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import CharacterCount from '@tiptap/extension-character-count';
 import { IframeNode } from './extensions/IframeNode';
+import { StyleNode } from './extensions/StyleNode';
 import {
   Bold as BoldIcon, Italic as ItalicIcon, Strikethrough,
   Underline as UnderlineIcon, Subscript as SubIcon,
@@ -160,6 +161,11 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
       TableCell,
       Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
       IframeNode,
+      // Keeps a pasted <style> through BOTH the initial `content:` parse below
+      // and setContent() on the way back from Source HTML mode. Without it
+      // ProseMirror drops the element on load, so simply opening an Advanced
+      // HTML page and saving it destroyed the stylesheet. See StyleNode.js.
+      StyleNode,
       CharacterCount,
     ],
     content: page?.body ?? '',
