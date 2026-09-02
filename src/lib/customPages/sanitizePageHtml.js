@@ -59,7 +59,13 @@ const SANITIZE_CONFIG = {
   allowedAttributes: {
     ...sanitizeHtml.defaults.allowedAttributes,
     // Tiptap emits inline styles + classes on many element types.
-    '*': ['style', 'class'],
+    // `data-raw-html` is the marker RawHtmlNode's parseHTML matches
+    // (div[data-raw-html]) — valueless and inert, kept so the rendered public
+    // page and the stored body stay the same artifact. Without it, copying
+    // rendered HTML back into Source HTML mode pastes an unwrapped payload,
+    // silently reintroducing the schema-loss defect this attribute exists to
+    // prevent. See RawHtmlNode.js and lib/customPages/wrapIfLossy.js.
+    '*': ['style', 'class', 'data-raw-html'],
     a: ['href', 'name', 'target', 'rel'],
     img: ['src', 'alt', 'width', 'height', 'loading'],
     iframe: [
