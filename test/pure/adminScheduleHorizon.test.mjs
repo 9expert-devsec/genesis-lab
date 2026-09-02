@@ -270,7 +270,33 @@ test('the `to` bound is the last day of the last rendered column', () => {
 
     assert.equal(cols.length, ADMIN_SCHEDULE_MONTHS, `column count for ${iso(now)}`);
     assert.equal(cols[0].key, iso(now).slice(0, 7), `first column is now's month (${iso(now)})`);
-    assert.equal(from, iso(now), `from is today (${iso(now)})`);
+    /*
+     * ── `from` IS THE FIRST DAY OF THE FIRST COLUMN, NOT TODAY ─────────────
+     * This asserted `from === iso(now)` until MSDB began honouring a past
+     * `from`. The old bound skipped the part of the current month that had
+     * already happened, on the reasoning that those sessions were past and
+     * could not be fetched anyway — both halves of which have stopped being
+     * true. The grid now DRAWS finished rounds (จบไปแล้ว), so a round that ran
+     * on the 3rd is a row the current-month column is expecting.
+     *
+     * The defect the old bound now causes is invisible on the 1st and grows all
+     * month: on the 20th, every round that ran on the 1st–19th is missing from
+     * a column that looks complete. So `from` is now the mirror of `to` —
+     * first day of the first column, last day of the last — and the assertion
+     * is written against the COLUMN rather than against the clock, which is the
+     * property that actually matters and the one this file exists to defend.
+     */
+    assert.equal(
+      from,
+      iso(new Date(cols[0].year, cols[0].month, 1)),
+      `from (${from}) must be the FIRST DAY of the first rendered column ` +
+      `(${cols[0].key}) for today ${iso(now)} — a round dated earlier in this ` +
+      `month has a cell waiting for it and must not be excluded by our own bound.`,
+    );
+    assert.equal(
+      from.slice(0, 7), cols[0].key,
+      `from (${from}) must fall in the FIRST rendered column (${cols[0].key})`,
+    );
 
     // the assertion the whole file exists for
     assert.equal(

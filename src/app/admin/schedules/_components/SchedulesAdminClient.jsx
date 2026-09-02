@@ -38,7 +38,11 @@ import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { laneLayout } from '@/lib/schedule/monthLanes';
 import { monthLabel } from '@/lib/schedule/monthWindow';
 import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
-import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+import { roundHasEnded } from '@/lib/schedule/roundHasStarted';
+import {
+  resolveDerivedRoundBadge,
+  resolveScheduleBadge,
+} from '@/lib/scheduleStatus';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -141,6 +145,19 @@ export function SchedulesAdminClient({
   filterStatus = '',
   monthFrom,
   monthTo,
+  /**
+   * Today in Asia/Bangkok, `'YYYY-MM-DD'`, from page.jsx. See the note at that
+   * prop's call site for why this screen is TOLD the date instead of reading a
+   * clock: a client component reads it twice, once per render pass, and the
+   * rounds this feature is about are the ones sitting on that boundary.
+   *
+   * Defaulted to `''` rather than to `siteTodayKey()`. `roundHasEnded` answers
+   * `false` for an empty key, so a caller that supplies nothing gets every
+   * round in its live treatment — the pre-existing behaviour, unchanged. The
+   * alternative default would have this component quietly reintroduce the
+   * hydration split the prop exists to remove, and would do it invisibly.
+   */
+  todayKey = '',
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -522,6 +539,7 @@ export function SchedulesAdminClient({
               instructorById={instructorById}
               collapsed={Boolean(collapsed[group.id])}
               busyId={busyId}
+              todayKey={todayKey}
               onToggle={() => toggleCollapse(group.id)}
               onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
               onEdit={openEdit}
@@ -591,6 +609,7 @@ function ProgramGroup({
   instructorById,
   collapsed,
   busyId,
+  todayKey,
   onToggle,
   onAdd,
   onEdit,
@@ -705,6 +724,7 @@ function ProgramGroup({
                           localBySchedId,
                           instructorById,
                           busyId,
+                          todayKey,
                           onEdit,
                           onDelete,
                         })}
@@ -833,6 +853,7 @@ function laneCells({
   localBySchedId,
   instructorById,
   busyId,
+  todayKey,
   onEdit,
   onDelete,
 }) {
@@ -867,6 +888,7 @@ function laneCells({
               local={localBySchedId.get(String(s._id))}
               instructorById={instructorById}
               busy={busyId === s._id}
+              todayKey={todayKey}
               onEdit={() => onEdit(s)}
               onDelete={() => onDelete(s._id)}
             />
@@ -916,6 +938,7 @@ function ScheduleCell({
   local,
   instructorById,
   busy,
+  todayKey,
   onEdit,
   onDelete,
 }) {
@@ -968,7 +991,42 @@ function ScheduleCell({
    * `state` gives 'เปิดรับ' / 'ใกล้เต็ม' / 'เต็ม', which is the fact an admin
    * is reading. The colours are the shared ones either way.
    */
-  const statusStyle = resolveScheduleBadge(schedule.status);
+  /**
+   * ── AN ENDED ROUND IS A DIFFERENT KIND OF ROW, AND THE DATES DECIDE IT ─────
+   *
+   * MSDB now returns rounds whose last training day has passed, so this grid
+   * draws history as well as the future. A finished round is not a round with a
+   * stale colour on it — it is a record, and it gets one word, จบไปแล้ว, in
+   * place of a status it can no longer be in.
+   *
+   * DERIVED FROM `dates`, NEVER FROM `status`. A finished round's stored status
+   * is whatever it was on its last selling day, and nothing updates it when the
+   * round runs out: measured 2026-09-02, 40 of the 172 fully-past rounds
+   * upstream still say `open` and 2 say `nearly_full`. Rendering those would
+   * advertise a course that finished last month as taking registrations —
+   * exactly the class of lie lib/scheduleStatus's own header was written to
+   * stop. `roundHasEnded` reads the dates, takes the LAST one by `max` (the
+   * array is not guaranteed sorted), and is strict: a round whose final day is
+   * TODAY is still running and is untouched by any of this.
+   *
+   * `resolveDerivedRoundBadge('elapsed')` is REUSED, not re-declared. It
+   * already exists for the page-builder's chosen-rounds mode, is already the
+   * shared NEUTRAL grey, and lives deliberately outside SCHEDULE_STATUSES so
+   * that adding it here cannot leak จบไปแล้ว into the public status filter. See
+   * that module's "DELIBERATELY OUTSIDE" note — a sixth status map is the thing
+   * it exists to prevent, and this is a sixth surface asking for one.
+   */
+  const ended = roundHasEnded(schedule.dates, todayKey);
+
+  /**
+   * ONE badge, never two. An ended round shows จบไปแล้ว ALONE — not its old
+   * status beside it, and not its old status underneath. Two words would make
+   * the reader reconcile them, and the stale one has no claim on the reader's
+   * attention.
+   */
+  const statusStyle = ended
+    ? resolveDerivedRoundBadge('elapsed')
+    : resolveScheduleBadge(schedule.status);
 
   /**
    * A full round is not registerable, and the public ruling is that its
@@ -991,10 +1049,24 @@ function ScheduleCell({
   return (
     <div
       className={
-        'flex flex-col items-center gap-0.5 rounded-9e-md border bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]' +
+        'flex flex-col items-center gap-0.5 rounded-9e-md border px-2 py-1 text-xs shadow-sm' +
+        (ended
+          ? // Greyed, as the ruling says. The card recedes but stays fully
+            // legible — this is a record an admin reads, not a disabled
+            // control, so no opacity that would also fade the text.
+            ' border-dashed bg-9e-ice/60 dark:bg-[#0D1B2A]/50'
+          : ' bg-white dark:bg-[#0D1B2A]') +
         (isFull ? ' cursor-not-allowed' : '')
       }
-      style={{ borderColor: color }}
+      /*
+       * The border carries the DELIVERY TYPE on a live round. An ended round
+       * drops it for the neutral surface border: the colour is the legend for
+       * "you can still book this in classroom/hybrid/online", and a finished
+       * round is not bookable in any of them. The type is not lost — the dot
+       * below keeps it, with its `title`, which is where the fact belongs once
+       * it is history rather than an offer.
+       */
+      style={ended ? undefined : { borderColor: color }}
     >
       <div className="flex items-center justify-center gap-1.5">
         <span
@@ -1031,24 +1103,48 @@ function ScheduleCell({
           {teacherNames.length > 1 ? ` +${teacherNames.length - 1}` : ''}
         </div>
       )}
-      <div className="flex items-center justify-center gap-1.5">
-        <button
-          type="button"
-          onClick={onEdit}
-          className="cursor-pointer text-[10px] text-9e-action hover:underline"
-        >
-          แก้ไข
-        </button>
-        <span className="text-9e-slate-dp-50">·</span>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={busy}
-          className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? '…' : 'ลบ'}
-        </button>
-      </div>
+      {/*
+        ── AN ENDED ROUND CARRIES NEITHER แก้ไข NOR ลบ ───────────────────────
+        Not disabled — ABSENT. The two controls are withheld for one reason
+        each, and neither is a styling preference:
+
+        ลบ is a HARD delete. `deleteSchedule` issues a real DELETE to MSDB
+        (lib/actions/schedules.js → msdbDelete) behind a bare window.confirm,
+        with no check for anything pointing at the round. 26 public
+        registrations in this database already reference rounds removed that
+        way and can no longer resolve what their holder attended. Every round
+        on this side of the line is finished, so the only thing deleting one
+        can now destroy is the record of something that actually happened.
+
+        แก้ไข writes the whole round back to MSDB — dates, status, type — and
+        there is nothing left to correct forward on a round that is over;
+        an edit here can only rewrite history, silently, from a screen whose
+        job is to schedule the future.
+
+        A disabled-looking button invites the reader to hunt for the state
+        that would re-enable it. There is none, so there is no button. What
+        replaces them is the details view added in the next commit.
+      */}
+      {!ended && (
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="cursor-pointer text-[10px] text-9e-action hover:underline"
+          >
+            แก้ไข
+          </button>
+          <span className="text-9e-slate-dp-50">·</span>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={busy}
+            className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? '…' : 'ลบ'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

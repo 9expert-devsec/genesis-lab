@@ -158,3 +158,81 @@ export function startedRounds(items, todayKey) {
   if (!Array.isArray(items)) return [];
   return items.filter((item) => roundHasStarted(item?.dates, todayKey));
 }
+
+/**
+ * ── THE OTHER BOUNDARY: HAS THE ROUND FINISHED? ─────────────────────────────
+ *
+ * Added for /admin/schedules, which since MSDB began returning fully-past rounds
+ * must draw them as จบไปแล้ว rather than as live rounds taking bookings.
+ *
+ * ── WHY IT LIVES IN THIS MODULE AND NOT A NEW ONE ───────────────────────────
+ * `dayKey` above. A round's two boundaries MUST read its dates through one
+ * parser: if "started" and "ended" each had their own, a timezone or an
+ * epoch-trap fix applied to one would leave the other answering about a
+ * different calendar, and a round could report itself simultaneously not-started
+ * and ended. `dayKey` is deliberately module-private — the only way to share it
+ * is to sit beside it. The file is named for the first predicate written into
+ * it; its subject has always been where a round's dates begin and end.
+ *
+ * ── DERIVED FROM THE DATES, NEVER FROM `status` ─────────────────────────────
+ * A finished round's stored `status` is whatever it was on its last selling day
+ * and nothing ever updates it: measured 2026-09-02, of 172 fully-past rounds
+ * upstream, 40 still say `open` and 2 say `nearly_full`. Reading `status` to
+ * decide whether a round is over would therefore mark a quarter of history as
+ * still taking registrations. The dates are the only field that tells the truth
+ * about time.
+ */
+
+/**
+ * The round's LATEST day, as `'YYYY-MM-DD'`, or `null` when it has none.
+ *
+ * By `max` over every usable date, for the same reason `roundFirstDayKey` takes
+ * a `min`: `dates` is not guaranteed sorted, so `dates[dates.length - 1]` is not
+ * the last day — it is merely the last element. A round whose array happens to
+ * end with its FIRST day would read as finishing early and would be greyed out
+ * while it was still running.
+ *
+ * @param {Array<string|Date>} dates the round's dates, in any order
+ * @returns {string|null}
+ */
+export function roundLastDayKey(dates) {
+  const list = Array.isArray(dates) ? dates : [];
+  let latest = null;
+  for (const value of list) {
+    const key = dayKey(value);
+    if (key === null) continue;
+    if (latest === null || key > latest) latest = key;
+  }
+  return latest;
+}
+
+/**
+ * Has the round finished, as of `todayKey`?
+ *
+ * @param {Array<string|Date>} dates the round's dates, in any order
+ * @param {string} todayKey today in Asia/Bangkok, `'YYYY-MM-DD'` — from
+ *   `siteTodayKey()` in lib/articlePublishTime, which owns this site's zone.
+ * @returns {boolean} `true` when the round's LAST day is strictly before today.
+ *
+ * ── `<`, NOT `<=`, AND THAT ASYMMETRY WITH `roundHasStarted` IS THE POINT ───
+ * A round whose last day IS today is STILL RUNNING — trainees are in the room.
+ * It must keep its real status and its แก้ไข/ลบ controls, because today is
+ * exactly when an admin still needs to correct it. `roundHasStarted` uses `<=`
+ * because a round that begins today has begun; this uses `<` because a round
+ * that ends today has not yet ended. The two predicates are not complements and
+ * must not be refactored into one: between a round's first and last day BOTH
+ * are false-then-true in different ways, and a round running today is started
+ * AND not ended, which is precisely the state the grid needs to name.
+ *
+ * ── THE DEGENERATE CASES RETURN `false`, MATCHING `roundHasStarted` ─────────
+ * A round with no usable date, or a caller that cannot say what day it is, is
+ * NOT ended. On this screen `false` is the conservative answer: the round keeps
+ * its normal treatment and stays editable, rather than a data fault silently
+ * locking a live round into a read-only historical state an admin cannot undo.
+ */
+export function roundHasEnded(dates, todayKey) {
+  if (typeof todayKey !== 'string' || todayKey === '') return false;
+  const last = roundLastDayKey(dates);
+  if (last === null) return false;
+  return last < todayKey;
+}
