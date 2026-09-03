@@ -751,7 +751,21 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // registered (redirects, redirect_rule) pair, so only the COUNT pins moved and
 // no coverage case did. createRuleFromHit deliberately writes NO second row:
 // it delegates to saveRedirectRule, which already recorded the create.
-const MUTATING_EXPORT_COUNT = 181;
+//
+// AVATAR ROUND: 181 → 182, +1 — setOwnAvatar in the NEW module
+// src/lib/actions/admin-avatar.js. It writes Mongo directly in its own body
+// (`admin.save()`), so depth 0 sees it, BOTH pins move together, and
+// REACHED_THROUGH_IMPORT is unchanged so the delta stays 8.
+//
+// NO COVERAGE CASE MOVED, and that is a ruling rather than an omission. The
+// file is not in SWEPT_FILES, deliberately: its sibling `updateOwnProfile` in
+// admin-accounts.js records nothing, and that whole file contains no audit call
+// at all — a self-service NAME change and a self-service PASSWORD change both
+// go unrecorded today. Instrumenting the profile PHOTO alone would make the
+// avatar the most closely watched thing on that screen, which is not a coherent
+// policy. If self-service profile edits should be audited, that is one round
+// covering all three, not a rider on the least sensitive of them.
+const MUTATING_EXPORT_COUNT = 182;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -973,7 +987,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 173,
+    zero, 174,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -1014,7 +1028,12 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'commitCourseVersion (course-versions.js, a NEW module) writes only through ' +
     'the imported recordCourseContentVersion, so depth 0 cannot see it and the ' +
     'DELTA moved instead, 7 -> 8. Its sibling captureCoursePreImage is in ' +
-    'neither figure because it only reads.'
+    'neither figure because it only reads. ' +
+    'AVATAR ROUND: 173 -> 174, +1 — setOwnAvatar (admin-avatar.js, a NEW module) ' +
+    'calls admin.save() in its own body, so depth 0 sees it and both pins move ' +
+    'together; REACHED_THROUGH_IMPORT is untouched and the delta stays 8. Its ' +
+    'deleteFromCloudinary call is not a Mongo write and does not enter either ' +
+    'figure.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

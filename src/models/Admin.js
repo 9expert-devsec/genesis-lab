@@ -12,6 +12,21 @@ const AdminSchema = new mongoose.Schema(
     active:   { type: Boolean, default: true },
     lastLoginAt: { type: Date },
 
+    // ── Profile avatar — a Cloudinary public_id, NOT a URL ────────────
+    // DELIBERATELY DIFFERENT FROM EVERY OTHER IMAGE FIELD IN THIS REPO.
+    // Banners, instructors and course covers all store `secure_url`, and a
+    // later reader will be tempted to "fix" this into consistency with them.
+    // Do not: one avatar is rendered at several sizes — 36px in the sidebar
+    // footer, 128px on the profile page — and a stored URL is a finished
+    // delivery URL that cannot be transformed at read time. The public_id can,
+    // so the size lives at the render site instead of in the database.
+    //
+    // ONE FIELD, not a publicId + a url. Two columns describing one image drift
+    // the first time a write updates one and not the other, and the URL is
+    // derivable from this — see src/lib/avatar/avatarUrl.js, which is the only
+    // place that derivation happens.
+    imagePublicId: { type: String, default: null, trim: true },
+
     // ── TOTP (2FA) — Google Authenticator compatible ──────────────
     // `totpSecret` is the base32 secret returned by otplib; null until
     // the admin completes the setup flow. We do NOT encrypt at rest —

@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
 import { canAccess } from '@/lib/rbac/access';
 import { activeNavHref } from '@/lib/admin/activeNavItem';
+import { avatarUrl } from '@/lib/avatar/avatarUrl';
 import {
   parseGroupCollapse,
   isGroupExpanded,
@@ -65,6 +66,11 @@ const COLLAPSE_KEY = 'admin-sidebar-collapsed';
 // The parsing (and every way the stored value can be malformed) lives in
 // src/lib/admin/navGroupCollapse.js so it can be tested without a browser.
 const GROUPS_KEY = 'admin-sidebar-groups';
+
+// The one size the rail renders an avatar at, in both states. An allowlisted
+// value of avatarUrl (36/72/128/256) — passing anything else throws, which is
+// the point of the allowlist.
+const AVATAR_PX = 36;
 
 // Icon name → component map. Group config below references icons by
 // string so the data shape stays serializable / easy to scan.
@@ -259,6 +265,172 @@ function ProfileIdentity({ userName, userEmail, badgeLabel, badgeStyle }) {
   );
 }
 
+/**
+ * The signed-in admin's avatar, at the one size the rail uses.
+ *
+ * PLAIN <img>, NOT next/image, and the reasoning lives in
+ * src/lib/avatar/avatarUrl.js: that function already returns an asset at
+ * exactly the requested pixel size with f_auto/q_auto, so next/image would run
+ * a second optimiser pass over an already-optimised URL and its srcset would
+ * have nothing to choose between across four allowlisted sizes. It also keeps
+ * the `Image` identifier out of this file — which imports lucide icons, and
+ * where `new Map(...)` already cost the whole admin layout once.
+ *
+ * `aria-hidden` because in both rail states this sits inside a control that
+ * already has an accessible name ("โปรไฟล์ของฉัน"), or beside text that says
+ * the same thing. An alt of "profile photo" would make a screen reader
+ * announce the person twice.
+ *
+ * NOT lazy: it is above the fold in every admin page load, in a fixed-size box
+ * that is on screen the moment the rail paints. `loading="lazy"` is for the
+ * things below it.
+ */
+function SidebarAvatar({ publicId }) {
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={avatarUrl(publicId, AVATAR_PX)}
+      alt=""
+      width={AVATAR_PX}
+      height={AVATAR_PX}
+      aria-hidden="true"
+      className="shrink-0 rounded-full object-cover"
+      style={{ width: AVATAR_PX, height: AVATAR_PX }}
+    />
+  );
+}
+
+/**
+ * The footer: avatar + identity + role badge, the theme toggle, and logout.
+ *
+ * ── WHY THIS IS ITS OWN EXPORTED COMPONENT ──────────────────────────────────
+ * `collapsed` lives in AdminSidebar as post-mount state read from localStorage,
+ * so it is ALWAYS false in a server render and the collapsed rail could not be
+ * rendered by a test at all. Round A could only assert the collapsed branch by
+ * reading the source, and said so in the test that did it.
+ *
+ * Taking `collapsed` as a PROP here costs nothing at runtime — AdminSidebar
+ * passes exactly the state it already had — and turns that source-read into a
+ * real render assertion. See test/render/adminSidebarAvatar.
+ */
+export function AdminSidebarFooter({
+  collapsed = false,
+  canReachProfile = false,
+  userName = null,
+  userEmail = null,
+  userImagePublicId = null,
+  badgeLabel = null,
+  badgeStyle = undefined,
+  onLogout,
+}) {
+  // Collapsed → the identity text (all truncate-prone) is hidden so nothing
+  // overflows the narrow rail; theme + logout degrade to centred icon-only
+  // with tooltips.
+  return (
+    <div className="border-t border-[var(--surface-border)] p-3">
+      {!collapsed && (userName || userEmail) && (
+        canReachProfile ? (
+          // The identity card IS the link to /admin/profile — โปรไฟล์ gave up
+          // its nav row for this. Because it is a control and not a label, it
+          // needs the things a control needs: it is an <a>, so it is in the tab
+          // order; `focus-visible:ring` gives keyboard users a ring the mouse
+          // never shows; hover tints the whole card so it reads as clickable
+          // before it is clicked.
+          //
+          // ONE RING AROUND THE WHOLE CONTROL. The avatar is inside this <a>
+          // and is not a link of its own — a second tab stop landing on the
+          // same destination is a control that looks broken to anyone using a
+          // keyboard, and two rings on one row look like two controls.
+          <Link
+            href="/admin/profile"
+            aria-label="โปรไฟล์ของฉัน"
+            className={cn(
+              'mb-2 flex items-center gap-2 rounded-9e-md px-3 py-2 text-xs transition-colors',
+              'hover:bg-9e-ice dark:hover:bg-[#111d2c]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
+            )}
+          >
+            <SidebarAvatar publicId={userImagePublicId} />
+            <ProfileIdentity
+              userName={userName}
+              userEmail={userEmail}
+              badgeLabel={badgeLabel}
+              badgeStyle={badgeStyle}
+            />
+          </Link>
+        ) : (
+          // No `profile` permission → inert text. Not a disabled-looking link
+          // and not a link to a 403: a control that visibly exists and refuses
+          // is worse than one that was never offered.
+          //
+          // THE AVATAR STILL RENDERS. It is not a control — it is part of
+          // saying who is signed in, which is this block's other job and is not
+          // permission-gated. Dropping it here would make the rail look
+          // different for a role rather than offer less.
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 text-xs">
+            <SidebarAvatar publicId={userImagePublicId} />
+            <ProfileIdentity
+              userName={userName}
+              userEmail={userEmail}
+              badgeLabel={badgeLabel}
+              badgeStyle={badgeStyle}
+            />
+          </div>
+        )
+      )}
+
+      {/* ── THE COLLAPSED AFFORDANCE ──────────────────────────────────────────
+          Collapsed, the identity text is hidden — so the card above is hidden
+          with it, and /admin/profile would have NO route from the menu at all
+          now that its nav row is gone. So collapsed gets its own row: the same
+          36px avatar, centred, with the label as a native tooltip and the same
+          focus ring.
+          THE AVATAR IS THE AFFORDANCE, not a User glyph beside it — at this
+          width there is room for exactly one thing, and a photo of the person
+          says "your account" faster than an outline of a generic head. When no
+          photo is set, avatarUrl returns the bundled default, so the box is
+          never empty.
+          Same permission gate as above: no link when the page is unreachable —
+          but the avatar still renders, as inert markup, for the same reason it
+          does in the expanded case. */}
+      {collapsed && (
+        canReachProfile ? (
+          <Link
+            href="/admin/profile"
+            title="โปรไฟล์"
+            aria-label="โปรไฟล์ของฉัน"
+            className={cn(
+              'mb-1 flex w-full items-center justify-center rounded-9e-md px-0 py-2 transition-colors',
+              'hover:bg-[var(--surface-muted)]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
+            )}
+          >
+            <SidebarAvatar publicId={userImagePublicId} />
+          </Link>
+        ) : (
+          <div className="mb-1 flex w-full items-center justify-center px-0 py-2">
+            <SidebarAvatar publicId={userImagePublicId} />
+          </div>
+        )
+      )}
+
+      <AdminThemeToggle collapsed={collapsed} />
+      <button
+        type="button"
+        onClick={onLogout}
+        title={collapsed ? 'ออกจากระบบ' : undefined}
+        className={cn(
+          'flex w-full items-center rounded-9e-md py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
+          collapsed ? 'justify-center px-0' : 'gap-3 px-3'
+        )}
+      >
+        <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+        {!collapsed && 'ออกจากระบบ'}
+      </button>
+    </div>
+  );
+}
+
 function LogoutModal({ open, onClose }) {
   if (!open) return null;
   return (
@@ -428,6 +600,10 @@ export function AdminSidebar({
   roleColor = null,
   userName = null,
   userEmail = null,
+  // Read from Mongo by AdminLayout, NOT from the session — see the comment
+  // there. Defaulting to null means an omitted prop renders the bundled
+  // default rather than throwing.
+  userImagePublicId = null,
 }) {
   const pathname = usePathname();
   const [logoutOpen, setLogoutOpen] = useState(false);
@@ -574,87 +750,16 @@ export function AdminSidebar({
         })}
       </nav>
 
-      {/* Footer: signed-in identity + role badge + logout. Collapsed → the
-          identity text (all truncate-prone) is hidden so nothing overflows the
-          narrow rail; theme + logout degrade to centred icon-only with tooltips. */}
-      <div className="border-t border-[var(--surface-border)] p-3">
-        {!collapsed && (userName || userEmail) && (
-          canReachProfile ? (
-            // The identity card IS the link to /admin/profile — โปรไฟล์ gave up
-            // its nav row for this. Because it is now a control and not a label,
-            // it needs the things a control needs: it is an <a>, so it is in the
-            // tab order; `focus-visible:ring` gives keyboard users a ring the
-            // mouse never shows; hover tints the whole card so it reads as
-            // clickable before it is clicked.
-            <Link
-              href="/admin/profile"
-              aria-label="โปรไฟล์ของฉัน"
-              className={cn(
-                'mb-2 flex items-center gap-2 rounded-9e-md px-3 py-2 text-xs transition-colors',
-                'hover:bg-9e-ice dark:hover:bg-[#111d2c]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
-              )}
-            >
-              <ProfileIdentity
-                userName={userName}
-                userEmail={userEmail}
-                badgeLabel={badgeLabel}
-                badgeStyle={badgeStyle}
-              />
-            </Link>
-          ) : (
-            // No `profile` permission → the SAME markup as before, as inert
-            // text. Not a disabled-looking link and not a link to a 403: a
-            // control that visibly exists and refuses is worse than one that
-            // was never offered, and this block's job is to say who is signed
-            // in, which it still does.
-            <div className="mb-2 flex items-center gap-2 px-3 py-2 text-xs">
-              <ProfileIdentity
-                userName={userName}
-                userEmail={userEmail}
-                badgeLabel={badgeLabel}
-                badgeStyle={badgeStyle}
-              />
-            </div>
-          )
-        )}
-        {/* ── THE COLLAPSED AFFORDANCE ────────────────────────────────────────
-            Collapsed, the identity text is hidden — so the link above is hidden
-            with it, and /admin/profile would have NO route from the menu at all
-            now that its nav row is gone. (Before this round it kept its own row,
-            which survived collapse as an icon.) So collapsed gets an icon-only
-            row in the footer, same treatment as the theme and logout buttons
-            beside it: centred User glyph, label as a native tooltip, same focus
-            ring. Same permission gate — when the user cannot reach the page,
-            nothing renders here rather than a dead icon. */}
-        {collapsed && canReachProfile && (
-          <Link
-            href="/admin/profile"
-            title="โปรไฟล์"
-            aria-label="โปรไฟล์ของฉัน"
-            className={cn(
-              'mb-1 flex w-full items-center justify-center rounded-9e-md px-0 py-2 text-sm text-[var(--text-secondary)] transition-colors',
-              'hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
-            )}
-          >
-            <User className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          </Link>
-        )}
-        <AdminThemeToggle collapsed={collapsed} />
-        <button
-          type="button"
-          onClick={() => setLogoutOpen(true)}
-          title={collapsed ? 'ออกจากระบบ' : undefined}
-          className={cn(
-            'flex w-full items-center rounded-9e-md py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
-            collapsed ? 'justify-center px-0' : 'gap-3 px-3'
-          )}
-        >
-          <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          {!collapsed && 'ออกจากระบบ'}
-        </button>
-      </div>
+      <AdminSidebarFooter
+        collapsed={collapsed}
+        canReachProfile={canReachProfile}
+        userName={userName}
+        userEmail={userEmail}
+        userImagePublicId={userImagePublicId}
+        badgeLabel={badgeLabel}
+        badgeStyle={badgeStyle}
+        onLogout={() => setLogoutOpen(true)}
+      />
       <LogoutModal open={logoutOpen} onClose={() => setLogoutOpen(false)} />
     </aside>
   );

@@ -95,27 +95,21 @@ test('profile link: it is keyboard-reachable and visibly focusable', () => {
     'the accessible name would otherwise be the concatenated name, email and role badge');
 });
 
-test('profile link: the collapsed rail still has a route to the page', () => {
-  // Collapsed, the identity text is hidden, so the card above is hidden with it
-  // — and profile no longer has a nav row to fall back on. Without a footer
-  // icon the page would be reachable only by typing the URL, which is the exact
-  // defect test/fs/rbacNavParity was written for.
-  //
-  // `collapsed` is read from localStorage AFTER mount, so it is false in every
-  // server render and cannot be driven from a prop: the collapsed rail CANNOT
-  // be rendered from here. This reads the source instead and says so plainly —
-  // it asserts the branch EXISTS and is gated the same way, which is weaker
-  // than rendering it, and the appearance of the collapsed rail is named as
-  // browser-only in the round report rather than quietly claimed here.
-  //
-  // Shape-bound, so: if you restructure this footer, come back and check this
-  // still binds (test/sourceScan.mjs, defect 7).
-  const { code } = readSource('src/components/layout/AdminSidebar.jsx');
-  const links = [...code.matchAll(/href="\/admin\/profile"/g)].length;
-  assert.equal(links, 2,
-    'expected two links to /admin/profile in the footer — the expanded identity '
-    + 'card and the collapsed icon-only row. One of them is gone, or the href moved '
-    + 'into a variable this matcher cannot see');
-  assert.match(code, /\{collapsed && canReachProfile && \(/,
-    'the collapsed footer link must carry the SAME canAccess gate as the expanded one');
-});
+// ── THE COLLAPSED RAIL USED TO BE ASSERTED HERE, BY READING THE SOURCE ──────
+//
+// Round A could not render it: `collapsed` is post-mount state read from
+// localStorage, so it is false in every server render. This file carried a
+// source-scanning stand-in that counted two `href="/admin/profile"` literals
+// and checked the `{collapsed && canReachProfile && (` guard — weaker than a
+// render, and it said so.
+//
+// Round B extracted the footer into `AdminSidebarFooter`, which takes
+// `collapsed` as a prop, so the collapsed rail is now REALLY RENDERED in
+// test/render/adminSidebarAvatar ("collapsed: the avatar is inside the
+// /admin/profile link, which keeps its label", and the permission-gate case
+// that covers both rail states).
+//
+// The stand-in is DELETED rather than kept alongside: two guards on one claim
+// means the weaker one is the one people read, and this one would also now be
+// wrong — the literal count changed when the collapsed branch gained its
+// unlinked variant.

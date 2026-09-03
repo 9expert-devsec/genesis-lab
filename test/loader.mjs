@@ -176,6 +176,7 @@ export const STUBS = {
   // a hang rather than a kill.
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
+  "@/models/Admin": path.join(ROOT, "test", "stub-model-admin.mjs"),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",
