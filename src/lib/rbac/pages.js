@@ -19,8 +19,23 @@
  * guard system is untouched in phase 0.
  */
 
-// Grouped exactly like the sidebar (ภาพรวม / จัดการหลักสูตร /
-// จัดการคอนเทนต์ / ระบบ). `roles` is the NEW phase-5 role-management page.
+// Grouped exactly like the sidebar: six groups, same labels, same order, same
+// order of rows within each group — ภาพรวม / การลงทะเบียน / หลักสูตร & ตาราง /
+// จัดวางหน้าเว็บ / เนื้อหา / ระบบ.
+//
+// ── WHY THE MIRRORING IS THE POINT, NOT TIDINESS ────────────────────────────
+// This grouping is what /admin/roles renders its permission checkboxes from
+// (PAGE_KEYS_BY_GROUP, below, is keyed on `group`). If the two lists drift, the
+// roles screen starts describing a menu that no longer exists: an admin ticks
+// "จัดการคอนเทนต์ → รีวิวแนะนำ" looking for a group the sidebar has not had for
+// months. The grouping is free to change — it is presentation — but it has to
+// change in BOTH files at once, so test/fs/adminNavShape asserts the group
+// labels and their order match NAV_GROUPS.
+//
+// The `key` strings are NOT free to change: they are stored on Role.pages
+// documents in Mongo, they are the AdminAuditLog `menu` enum, and historical
+// rows would fail their own schema if one were renamed. Rows move between
+// groups; nothing on a row is edited.
 export const ADMIN_PAGES = [
   {
     group: 'ภาพรวม',
@@ -29,39 +44,56 @@ export const ADMIN_PAGES = [
     ],
   },
   {
-    group: 'จัดการหลักสูตร',
+    group: 'การลงทะเบียน',
     pages: [
-      { key: 'featured_courses',            label: 'หลักสูตรแนะนำ',     href: '/admin/featured-courses',            match: 'prefix' },
-      { key: 'featured_online_courses',     label: 'คอร์สออนไลน์แนะนำ', href: '/admin/featured-online-courses',     match: 'prefix' },
-      { key: 'nav_featured_online_courses', label: 'คอร์สออนไลน์ (Navbar)', href: '/admin/nav-featured-online-courses', match: 'prefix' },
-      { key: 'courses',        label: 'หลักสูตร',         href: '/admin/courses',      match: 'prefix' },
-      { key: 'schedules',      label: 'ตารางอบรม',        href: '/admin/schedules',    match: 'prefix' },
-      { key: 'instructors',    label: 'วิทยากร',          href: '/admin/instructors',  match: 'prefix' },
-      { key: 'programs',       label: 'โปรแกรม & Skills', href: '/admin/programs',     match: 'prefix' },
-      { key: 'career_paths',   label: 'Career Path',      href: '/admin/career-paths', match: 'prefix' },
-      { key: 'masterclass',    label: 'Masterclass',      href: '/admin/masterclass',  match: 'prefix' },
+      { key: 'registrations',             label: 'การลงทะเบียน',              href: '/admin/registrations',             match: 'prefix' },
       // More specific than 'masterclass' — longest-match wins in
-      // resolvePageKey so this is not swallowed by the parent.
-      { key: 'mc_registrations', label: 'MC — ผู้ลงทะเบียน', href: '/admin/masterclass/registrations', match: 'prefix' },
-      { key: 'tnhs_courses',   label: 'TNHS Courses',      href: '/admin/tnhs-courses', match: 'prefix' },
-      { key: 'page_configs',   label: 'Program/Skill URL', href: '/admin/page-configs', match: 'prefix' },
+      // resolvePageKey so this is not swallowed by the parent, which now lives
+      // in a different group entirely.
+      { key: 'mc_registrations',          label: 'MC — ผู้ลงทะเบียน',         href: '/admin/masterclass/registrations', match: 'prefix' },
+      { key: 'career_path_registrations', label: 'Career Path Registrations', href: '/admin/career-path-registrations', match: 'prefix' },
     ],
   },
   {
-    group: 'จัดการคอนเทนต์',
+    group: 'หลักสูตร & ตาราง',
     pages: [
-      { key: 'banners',    label: 'แบนเนอร์',   href: '/admin/banners',    match: 'prefix' },
-      { key: 'promotions', label: 'โปรโมชั่น',  href: '/admin/promotions', match: 'prefix' },
+      { key: 'courses',      label: 'หลักสูตร',         href: '/admin/courses',      match: 'prefix' },
+      { key: 'schedules',    label: 'ตารางอบรม',        href: '/admin/schedules',    match: 'prefix' },
+      { key: 'schedule_pdf', label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf', match: 'prefix' },
+      { key: 'instructors',  label: 'วิทยากร',          href: '/admin/instructors',  match: 'prefix' },
+      { key: 'programs',     label: 'โปรแกรม & Skills', href: '/admin/programs',     match: 'prefix' },
+      { key: 'career_paths', label: 'Career Path',      href: '/admin/career-paths', match: 'prefix' },
+      { key: 'masterclass',  label: 'Masterclass',      href: '/admin/masterclass',  match: 'prefix' },
+      { key: 'tnhs_courses', label: 'TNHS Courses',     href: '/admin/tnhs-courses', match: 'prefix' },
+    ],
+  },
+  {
+    group: 'จัดวางหน้าเว็บ',
+    pages: [
+      { key: 'banners',                     label: 'แบนเนอร์',              href: '/admin/banners',                     match: 'prefix' },
+      { key: 'featured_courses',            label: 'หลักสูตรแนะนำ',         href: '/admin/featured-courses',            match: 'prefix' },
+      { key: 'featured_online_courses',     label: 'คอร์สออนไลน์แนะนำ',     href: '/admin/featured-online-courses',     match: 'prefix' },
+      { key: 'nav_featured_online_courses', label: 'คอร์สออนไลน์ (Navbar)', href: '/admin/nav-featured-online-courses', match: 'prefix' },
+      { key: 'featured_reviews',            label: 'รีวิวแนะนำ',            href: '/admin/featured-reviews',            match: 'prefix' },
       // More specific than 'promotions' — longest-match wins.
-      { key: 'promotions_banner', label: 'แบนเนอร์โปรโมชั่น', href: '/admin/promotions/banner', match: 'prefix' },
-      { key: 'notifications', label: 'Notifications', href: '/admin/notifications', match: 'prefix' },
-      { key: 'about',      label: 'เกี่ยวกับเรา',     href: '/admin/about',         match: 'prefix' },
-      { key: 'contact',    label: 'ติดต่อเรา',        href: '/admin/contact',       match: 'prefix' },
-      { key: 'portfolio',  label: 'ผลงานของเรา',      href: '/admin/portfolio',     match: 'prefix' },
+      { key: 'promotions_banner',           label: 'แบนเนอร์โปรโมชั่น',     href: '/admin/promotions/banner',           match: 'prefix' },
+      { key: 'notifications',               label: 'Notifications',         href: '/admin/notifications',               match: 'prefix' },
+      { key: 'page_configs',                label: 'Program/Skill URL',     href: '/admin/page-configs',                match: 'prefix' },
+    ],
+  },
+  {
+    group: 'เนื้อหา',
+    pages: [
+      { key: 'articles',      label: 'บทความ',           href: '/admin/articles',      match: 'prefix' },
+      { key: 'promotions',    label: 'โปรโมชั่น',        href: '/admin/promotions',    match: 'prefix' },
+      { key: 'pages',         label: 'จัดการหน้าเพจ',    href: '/admin/pages',         match: 'prefix' },
+      { key: 'about',         label: 'เกี่ยวกับเรา',     href: '/admin/about',         match: 'prefix' },
+      { key: 'contact',       label: 'ติดต่อเรา',        href: '/admin/contact',       match: 'prefix' },
+      { key: 'portfolio',     label: 'ผลงานของเรา',      href: '/admin/portfolio',     match: 'prefix' },
       { key: 'nearby_places', label: 'โรงแรม/ร้านอาหาร', href: '/admin/nearby-places', match: 'prefix' },
-      { key: 'featured_reviews', label: 'รีวิวแนะนำ', href: '/admin/featured-reviews', match: 'prefix' },
-      { key: 'articles',   label: 'บทความ',           href: '/admin/articles',      match: 'prefix' },
-      { key: 'pages',      label: 'จัดการหน้าเพจ',    href: '/admin/pages',         match: 'prefix' },
+      { key: 'faqs',          label: 'FAQ',              href: '/admin/faqs',          match: 'prefix' },
+      { key: 'local_faqs',    label: 'FAQ (Local)',      href: '/admin/local-faqs',    match: 'prefix' },
+      { key: 'recruits',      label: 'ประกาศงาน',        href: '/admin/recruits',      match: 'prefix' },
       // The file manager that replaces FileZilla. Registering it HERE is what
       // earns it two things and only two: a place in MENU_ENUM, so its own
       // actions are auditable, and a checkbox in the roles UI, so granting a
@@ -76,17 +108,11 @@ export const ADMIN_PAGES = [
       // added here needs a matching NAV_GROUPS entry, and the two lists are
       // held in step by an automated parity check — see test/fs/.
       { key: 'media', label: 'จัดการไฟล์', href: '/admin/media', match: 'prefix' },
-      { key: 'faqs',       label: 'FAQ',              href: '/admin/faqs',          match: 'prefix' },
-      { key: 'local_faqs', label: 'FAQ (Local)',      href: '/admin/local-faqs',    match: 'prefix' },
-      { key: 'schedule_pdf', label: 'ตารางฝึกอบรม PDF', href: '/admin/schedule-pdf', match: 'prefix' },
     ],
   },
   {
     group: 'ระบบ',
     pages: [
-      { key: 'registrations',             label: 'การลงทะเบียน',                href: '/admin/registrations',             match: 'prefix' },
-      { key: 'career_path_registrations', label: 'Career Path Registrations',   href: '/admin/career-path-registrations', match: 'prefix' },
-      { key: 'recruits',      label: 'ประกาศงาน',     href: '/admin/recruits',      match: 'prefix' },
       // THE KEY IS DELIBERATELY STILL `landing_cache` while the page is now the
       // whole cache console at /admin/cache. `Role.pages` stores these strings
       // in Mongo, so renaming the key would revoke the screen from every role
@@ -103,11 +129,6 @@ export const ADMIN_PAGES = [
       // test/fs/rbacNavParity for the two pages that were once registered here
       // and reachable only by typing the URL.
       { key: 'redirects',     label: 'Redirect & 404', href: '/admin/redirects',    match: 'prefix' },
-      { key: 'security',      label: 'ความปลอดภัย',   href: '/admin/security',      match: 'prefix' },
-      { key: 'profile',       label: 'โปรไฟล์',       href: '/admin/profile',       match: 'prefix' },
-      { key: 'accounts',      label: 'บัญชีผู้ดูแล',  href: '/admin/accounts',      match: 'prefix' },
-      // NEW in phase 5 — the role-management page itself.
-      { key: 'roles',         label: 'บทบาทและสิทธิ์', href: '/admin/roles',        match: 'prefix' },
       // Phase 3a — the admin action history. Adding it here has two INTENDED
       // consequences, neither of them a side effect: it enters MENU_ENUM
       // automatically (MENU_ENUM = [...ALL_PAGE_KEYS, UNKNOWN_MENU]), so the
@@ -120,6 +141,24 @@ export const ADMIN_PAGES = [
       // for exactly that reason; the two lists are now held in step by an
       // automated parity check.
       { key: 'audit_log',     label: 'ประวัติการดำเนินการ', href: '/admin/audit-log', match: 'prefix' },
+      { key: 'accounts',      label: 'บัญชีผู้ดูแล',  href: '/admin/accounts',      match: 'prefix' },
+      // NEW in phase 5 — the role-management page itself.
+      { key: 'roles',         label: 'บทบาทและสิทธิ์', href: '/admin/roles',        match: 'prefix' },
+      { key: 'security',      label: 'ความปลอดภัย',   href: '/admin/security',      match: 'prefix' },
+      // ── THE ONE ROW WITH NO SIDEBAR LINK, AND WHY IT STAYS HERE ───────────
+      // `profile` left NAV_GROUPS: it is reached from the signed-in identity
+      // card in the sidebar footer instead of taking its own row. It must NOT
+      // leave this registry — it is still permission-gated (the page calls
+      // requirePage), it is still a MENU_ENUM member so profile edits are
+      // auditable, and /admin/roles still needs its checkbox. Deleting it here
+      // would revoke the page from every non-superadmin role and break the
+      // schema enum for every historical row filed under it.
+      //
+      // The absence from the nav is allow-listed BY NAME in
+      // test/fs/adminNavShape.test.mjs (NO_NAV_ITEM), so this is the only key
+      // that may be registered-but-unlinked, and any other key going quiet
+      // fails the suite.
+      { key: 'profile',       label: 'โปรไฟล์',       href: '/admin/profile',       match: 'prefix' },
     ],
   },
 ];

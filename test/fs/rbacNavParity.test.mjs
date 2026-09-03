@@ -57,14 +57,21 @@ const SIDEBAR = readSource(SIDEBAR_REL);
 /**
  * Registered pages that deliberately have NO sidebar link.
  *
- * Empty today, and that is a fact worth stating rather than an oversight: every
- * one of the 38 registered pages is currently reachable from the menu. The set
- * exists so that a deliberate omission is written down WITH ITS REASON instead
- * of being indistinguishable from the bug above.
+ * The set exists so that a deliberate omission is written down WITH ITS REASON
+ * instead of being indistinguishable from the bug above.
  *
  *   ['some_key', 'why it has no link — e.g. reached only from a parent row'],
+ *
+ * Exactly one entry, and the same one named in NO_NAV_ITEM in
+ * test/fs/adminNavShape.test.mjs — the two guards approach the same fact from
+ * opposite directions (this one asks "is every registered page linked?", that
+ * one asserts set equality both ways) and both have to be told about it.
  */
-const NO_SIDEBAR_LINK = new Map([]);
+const NO_SIDEBAR_LINK = new Map([
+  ['profile', 'reached from the signed-in identity card in the sidebar footer '
+    + '(AdminSidebar.jsx), not from a nav row — it is still registered here for '
+    + 'the permission key, MENU_ENUM membership and the /admin/roles checkbox'],
+]);
 
 /** Every `{ … href: '…' … pageKey: '…' … }` object literal in the source. */
 function extractNavEntries(code) {

@@ -4,15 +4,15 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 /**
- * "Sync now" for landing_cache — PORTED UNCHANGED from
- * admin/landing-cache/_components/LandingCacheClient.jsx:24-44.
+ * "Sync now" for landing_cache — PORTED UNCHANGED from the old
+ * admin/landing-cache/_components/LandingCacheClient.jsx, which has since been
+ * DELETED. Nothing imported it after the port; /admin/landing-cache is a
+ * redirect to this console and the component it used to render was dead code
+ * kept around only for this comment to point at.
  *
- * Same endpoint, same method, same router.refresh() afterwards. This round is
- * read-only apart from this one control, which already existed and already
- * shipped; it is moved, not introduced. The original component is deliberately
- * NOT deleted this round — /admin/landing-cache becomes a redirect and the file
- * stays until round 3 can remove it alongside the write actions it belongs
- * with.
+ * Same endpoint, same method, same router.refresh() afterwards as the original:
+ * this control already existed and already shipped, and was moved rather than
+ * introduced.
  *
  * The status card that used to wrap this lives in SnapshotPanel now, so this is
  * only the button and its two outcomes.
