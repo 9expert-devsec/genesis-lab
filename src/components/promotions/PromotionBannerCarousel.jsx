@@ -63,7 +63,7 @@ export function PromotionBannerCarousel({ banners }) {
     >
       <div
         ref={trackRef}
-        className="overflow-hidden rounded-2xl"
+        className="overflow-hidden rounded-none lg:rounded-2xl"
         style={{ touchAction: 'pan-y' }}
       >
         <div
@@ -113,7 +113,7 @@ export function PromotionBannerCarousel({ banners }) {
               type="button"
               aria-label={`ไปยังสไลด์ ${i + 1}`}
               onClick={() => setCurrent(i)}
-              className="relative flex h-11 w-11 items-center justify-center"
+              className="relative flex h-4 w-4 lg:h-7 lg:w-7 items-center justify-center"
             >
               <span
                 aria-hidden
@@ -151,7 +151,7 @@ function BannerSlide({ banner, priority = false }) {
       taller ratio and chosen here — a CMS problem, not a ratio problem. Do not
       solve it by reinstating a mobile ratio the artwork does not have.
     */
-    <div className="relative aspect-[16/5] w-full overflow-hidden rounded-2xl bg-9e-ice dark:bg-[#0D1B2A]">
+    <div className="relative aspect-[16/5] w-full overflow-hidden rounded-none lg:rounded-2xl bg-9e-ice dark:bg-[#0D1B2A]">
       <Image
         src={banner.image_url}
         alt={banner.alt_text || 'โปรโมชั่น'}
