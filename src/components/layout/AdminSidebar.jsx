@@ -72,6 +72,30 @@ const GROUPS_KEY = 'admin-sidebar-groups';
 // the point of the allowlist.
 const AVATAR_PX = 36;
 
+/**
+ * The focus ring every interactive element in the rail wears.
+ *
+ * ONE CONSTANT, because A2 and B5 both depend on this ring existing and there
+ * are now five controls carrying it (collapse toggle, group headers, nav items,
+ * the profile card, theme + logout). Five copies of a class string is five
+ * chances for one of them to be missed on the day the colour changes.
+ *
+ * THE COLOUR IS --admin-rail-focus (#48B0FF), NOT --9e-action, which is the
+ * ring colour used everywhere else in the admin. Action is tuned for a white
+ * background; on this rail it scores 3.29:1 and all but disappears. Air scores
+ * 7.40:1. The offset colour is the rail itself, so the ring reads as a ring
+ * rather than as a halo — measured in test/fs/adminRailContrast.
+ *
+ * Focus is deliberately a RING and hover is a FILL, so the three states stay
+ * three: hover lifts the ground, focus draws an outline, active is a solid
+ * blue pill. Two of them sharing a treatment would collapse into one.
+ */
+const RAIL_FOCUS = cn(
+  'focus-visible:outline-none focus-visible:ring-2',
+  'focus-visible:ring-[var(--admin-rail-focus)]',
+  'focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--admin-rail-surface)]'
+);
+
 // Icon name → component map. Group config below references icons by
 // string so the data shape stays serializable / easy to scan.
 const ICONS = {
@@ -245,17 +269,36 @@ const GROUP_ID_BY_HREF = Object.fromEntries(
 function ProfileIdentity({ userName, userEmail, badgeLabel, badgeStyle }) {
   return (
     <>
+      {/* The card is a LIGHT surface on a dark rail, so these two are the only
+          text in the sidebar that is dark-on-light. They read --admin-rail-card-*
+          rather than --text-primary/--text-muted: the latter flip with the theme
+          and would turn near-white on a card that stays light. */}
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-[var(--text-primary)]">
+        <p className="truncate text-[13px] font-medium text-[var(--admin-rail-card-fg)]">
           {userName || userEmail}
         </p>
         {userEmail && userName && (
-          <p className="truncate text-[var(--text-muted)]">{userEmail}</p>
+          <p className="truncate text-[11px] text-[var(--admin-rail-card-muted)]">{userEmail}</p>
         )}
       </div>
+      {/* ── THE BADGE COLOUR IS DATA, NOT A TOKEN ───────────────────────────
+          `badgeStyle` is an inline style computed from the role's free-hex
+          colour in Mongo, so no token can govern it and this round does not
+          try. What DID change is which variant: `solid` instead of `soft`.
+          `soft` paints the role hex as text on a 14% tint of itself, which on
+          this card measures 2.46–4.18:1 across the five shipped default roles —
+          every one of them below AA. `solid` fills with the hex and lets
+          readableInk pick the better of two inks, which lifts the same five to
+          4.44–5.14:1. That is a colour choice between two variants the helper
+          already offers for exactly this purpose, not a change to shared logic.
+          It is NOT a guarantee: a custom role colour can still land under 4.5,
+          and closing that properly means teaching readableInk to guarantee a
+          ratio — shared with /admin/roles and /admin/accounts, and out of scope
+          here. Reported rather than papered over.
+          radius 6 = rounded-md, per the mockup. */}
       {badgeLabel && (
         <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+          className="shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
           style={badgeStyle}
         >
           {badgeLabel}
@@ -327,7 +370,10 @@ export function AdminSidebarFooter({
   // overflows the narrow rail; theme + logout degrade to centred icon-only
   // with tooltips.
   return (
-    <div className="border-t border-[var(--surface-border)] p-3">
+    // 16px horizontal to match the nav above it; the rule across the top is the
+    // rail's own divider, not --surface-border, which flips with the theme and
+    // is a near-invisible 12%-alpha navy on this surface in light mode.
+    <div className="border-t border-[var(--admin-rail-divider)] px-4 py-3">
       {!collapsed && (userName || userEmail) && (
         canReachProfile ? (
           // The identity card IS the link to /admin/profile — โปรไฟล์ gave up
@@ -344,10 +390,14 @@ export function AdminSidebarFooter({
           <Link
             href="/admin/profile"
             aria-label="โปรไฟล์ของฉัน"
+            // A light card ON the dark rail: radius 12 and 12px padding, per the
+            // mockup. The hover lift is --admin-rail-card-hover (white) rather
+            // than the rail's own hover fill — inverting a light card to a dark
+            // one on hover would take the user's name from 16.6:1 to unreadable.
             className={cn(
-              'mb-2 flex items-center gap-2 rounded-9e-md px-3 py-2 text-xs transition-colors',
-              'hover:bg-9e-ice dark:hover:bg-[#111d2c]',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
+              'mb-2 flex items-center gap-2 rounded-9e-md bg-[var(--admin-rail-card)] p-3 transition-colors',
+              'hover:bg-[var(--admin-rail-card-hover)]',
+              RAIL_FOCUS
             )}
           >
             <SidebarAvatar publicId={userImagePublicId} />
@@ -367,7 +417,9 @@ export function AdminSidebarFooter({
           // saying who is signed in, which is this block's other job and is not
           // permission-gated. Dropping it here would make the rail look
           // different for a role rather than offer less.
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 text-xs">
+          // Same card, no interaction: identical surface, radius and padding so
+          // the rail does not look different for a role — it just offers less.
+          <div className="mb-2 flex items-center gap-2 rounded-9e-md bg-[var(--admin-rail-card)] p-3">
             <SidebarAvatar publicId={userImagePublicId} />
             <ProfileIdentity
               userName={userName}
@@ -399,10 +451,12 @@ export function AdminSidebarFooter({
             href="/admin/profile"
             title="โปรไฟล์"
             aria-label="โปรไฟล์ของฉัน"
+            // Collapsed there is no card — the avatar sits directly on the
+            // rail, so this row takes the RAIL's hover fill, not the card's.
             className={cn(
-              'mb-1 flex w-full items-center justify-center rounded-9e-md px-0 py-2 transition-colors',
-              'hover:bg-[var(--surface-muted)]',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
+              'mb-1 flex w-full items-center justify-center rounded-9e-sm px-0 py-2 transition-colors',
+              'hover:bg-[var(--admin-rail-hover)]',
+              RAIL_FOCUS
             )}
           >
             <SidebarAvatar publicId={userImagePublicId} />
@@ -420,7 +474,10 @@ export function AdminSidebarFooter({
         onClick={onLogout}
         title={collapsed ? 'ออกจากระบบ' : undefined}
         className={cn(
-          'flex w-full items-center rounded-9e-md py-2 text-sm text-[var(--text-secondary)] hover:bg-[var(--surface-muted)] hover:text-[var(--text-primary)]',
+          'flex w-full items-center rounded-9e-sm py-2 text-[13px] transition-colors',
+          'text-[var(--admin-rail-item)]',
+          'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
+          RAIL_FOCUS,
           collapsed ? 'justify-center px-0' : 'gap-3 px-3'
         )}
       >
@@ -441,7 +498,15 @@ function LogoutModal({ open, onClose }) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
     >
       <div className="absolute inset-0 bg-black/50" onClick={onClose} aria-hidden="true" />
-      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-[var(--surface-border)] bg-white p-6 shadow-xl dark:bg-[#111d2c]">
+      {/* THE ONE THING IN THIS FILE THAT IS STILL THEME-AWARE, deliberately:
+          this is a dialog over the main column, not rail chrome, so it follows
+          the theme like every other admin dialog.
+          `bg-white dark:bg-[#111d2c]` became `bg-[var(--surface)]`, which IS
+          white in light and #132638 in dark — the same intent, expressed with
+          the token instead of a stray literal that matched no palette entry.
+          That literal was the last raw hex in this file, and the no-raw-hex
+          guard would otherwise have needed an exclusion carved around it. */}
+      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-xl">
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30">
           <LogOut className="h-5 w-5 text-red-600 dark:text-red-400" strokeWidth={1.75} />
         </div>
@@ -492,12 +557,18 @@ function AdminThemeToggle({ collapsed = false }) {
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       aria-label={isDark ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
       title={collapsed ? (mounted ? label : 'Theme') : undefined}
+      // The control that switches the REST of the admin, styled like every
+      // other rail row — and it does not switch the rail itself, which is the
+      // point of C2's ruling. Icon inherits currentColor.
       className={cn(
-        'flex w-full items-center gap-3 rounded-9e-md px-3 py-2.5 text-sm text-9e-slate-dp-50 transition-colors hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#111d2c] dark:hover:text-white',
+        'flex w-full items-center gap-3 rounded-9e-sm px-3 py-2 text-[13px] transition-colors',
+        'text-[var(--admin-rail-item)]',
+        'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
+        RAIL_FOCUS,
         collapsed && 'justify-center'
       )}
     >
-      <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
       {/* During SSR / pre-mount, render a stable placeholder so the
           initial markup doesn't depend on theme. Hidden when collapsed. */}
       {!collapsed && (mounted ? label : 'Theme')}
@@ -529,7 +600,7 @@ function GroupHeader({ label, collapsed, expanded, forcedOpen, listId, onToggle 
   // would leave no way to unfold it (see the nav loop, which ignores per-group
   // state entirely while the rail is collapsed).
   if (collapsed) {
-    return <div className="mx-3 mt-4 mb-1 border-t border-[var(--surface-border)]" aria-hidden />;
+    return <div className="mx-2 mt-6 mb-2 border-t border-[var(--admin-rail-divider)]" aria-hidden />;
   }
   return (
     <button
@@ -538,18 +609,34 @@ function GroupHeader({ label, collapsed, expanded, forcedOpen, listId, onToggle 
       aria-expanded={expanded}
       aria-controls={listId}
       title={forcedOpen ? 'กลุ่มนี้เปิดอยู่เพราะคุณอยู่ในหน้านี้' : undefined}
+      // ── NO HOVER FILL ON THIS ROW, AND THAT IS MEASURED ──────────────────
+      // Every other row in the rail lifts to --admin-rail-hover on hover. This
+      // one does not: --admin-rail-group on that fill measures 3.90:1, below
+      // AA, so a header that lifted would become unreadable at exactly the
+      // moment the pointer was on it. It brightens its TEXT to the wordmark
+      // colour instead and leaves the ground alone — 16.64:1. The failing pair
+      // is asserted to still fail in test/fs/adminRailContrast, so if the
+      // palette ever makes it safe, that test says so rather than this comment
+      // quietly going stale.
       className={cn(
-        'flex w-full items-center justify-between gap-2 rounded-9e-md px-3 pt-4 pb-1 text-left transition-colors',
-        'hover:text-9e-navy dark:hover:text-white',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-9e-action focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--surface)]'
+        'group/hdr flex w-full items-center justify-between gap-2 rounded-9e-sm px-3 pb-2 pt-1 text-left transition-colors',
+        'text-[var(--admin-rail-group)] hover:text-[var(--admin-rail-brand)]',
+        RAIL_FOCUS
       )}
     >
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-9e-slate-lt-400/60 dark:text-9e-slate-dp-400/60">
+      {/* 11px, uppercase, semibold, wide tracking. THE HIERARCHY LIVES HERE,
+          not in the colour: the header is only one step dimmer than an item
+          label (5.90:1 vs 7.08:1) because the alternative — reaching the
+          contrast floor by going faint — is what the mockup did, and it lands
+          at 3.66:1. */}
+      <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">
         {label}
       </span>
+      {/* currentColor: the chevron inherits the button's text colour, so it
+          brightens with the label on hover and needs no colour of its own. */}
       <ChevronDown
         className={cn(
-          'h-3.5 w-3.5 shrink-0 text-9e-slate-lt-400/60 transition-transform duration-200 dark:text-9e-slate-dp-400/60',
+          'h-3.5 w-3.5 shrink-0 transition-transform duration-200',
           !expanded && '-rotate-90'
         )}
         strokeWidth={2}
@@ -577,15 +664,40 @@ function SidebarItem({ item, isActive, collapsed }) {
         // the accessibility tree as well — and gives the guard in
         // test/render/adminSidebarActiveItem a hook that survives a restyle.
         aria-current={isActive ? 'page' : undefined}
+        // Three states, three treatments, none of them shared:
+        //   active  a SOLID --admin-rail-active-bg pill, radius 8
+        //   hover   a --admin-rail-hover fill, label brightened to the wordmark
+        //   focus   the RAIL_FOCUS ring
+        // The old left-border-plus-10%-tint active marker is gone: a 10% tint of
+        // --9e-action on a navy rail is nearly invisible, and it was carrying the
+        // "you are here" signal that aria-current only states.
+        //
+        // The mockup's geometry gives the active row more vertical padding and a
+        // larger icon than an inactive one — it is the only row that is meant to
+        // have weight. Collapsed, both go to the same box: with no label there is
+        // nothing for the extra height to balance.
         className={cn(
-          'flex items-center rounded-9e-md text-sm transition-colors',
-          collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',
+          'flex items-center rounded-9e-sm text-[13px] transition-colors',
+          RAIL_FOCUS,
+          collapsed
+            ? 'justify-center px-0 py-2.5'
+            : cn('gap-3 px-3', isActive ? 'py-2.5' : 'py-1.5'),
           isActive
-            ? cn('bg-9e-action/10 text-9e-action font-medium', !collapsed && 'border-l-2 border-9e-action')
-            : 'text-9e-slate-dp-50 hover:bg-9e-ice dark:hover:bg-[#111d2c] hover:text-9e-navy dark:hover:text-white'
+            ? 'bg-[var(--admin-rail-active-bg)] font-medium text-[var(--admin-rail-active-fg)]'
+            : cn(
+              'text-[var(--admin-rail-item)]',
+              'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]'
+            )
         )}
       >
-        {Icon ? <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} /> : null}
+        {/* currentColor — the icon takes the row's label colour, so it is white
+            on the active pill and slate otherwise with nothing to keep in sync. */}
+        {Icon ? (
+          <Icon
+            className={cn('shrink-0', isActive || collapsed ? 'h-[18px] w-[18px]' : 'h-4 w-4')}
+            strokeWidth={1.75}
+          />
+        ) : null}
         {!collapsed && item.label}
       </Link>
     </li>
@@ -656,7 +768,11 @@ export function AdminSidebar({
   // Role doc (via the session). Inline style + readable ink keep any custom
   // color legible — Tailwind can't compile dynamic hex.
   const badgeLabel = roleName ?? roleKey;
-  const badgeStyle = roleBadgeStyle(roleColor).soft;
+  // `solid`, not `soft` — see the note on the badge in ProfileIdentity. The
+  // helper's own docstring says callers choose per context; the light user card
+  // on a dark rail is a different context from the white pages `soft` was
+  // picked for, and `soft` measures below AA there for every shipped role.
+  const badgeStyle = roleBadgeStyle(roleColor).solid;
 
   // ONE winner for the whole rail. Computed over the FULL list rather than the
   // canAccess-filtered one on purpose: a user who cannot see the child row
@@ -678,22 +794,49 @@ export function AdminSidebar({
   const activeGroupId = activeHref ? GROUP_ID_BY_HREF[activeHref] ?? null : null;
 
   return (
+    // ── THE RAIL IS THEME-INVARIANT ────────────────────────────────────────
+    // Every colour inside this <aside> comes from --admin-rail-*, which
+    // globals.css declares on :root and NEVER under .dark. That is where the
+    // exemption lives — not in a specificity race — and no element inside the
+    // rail carries a `dark:` variant. test/fs/adminRailTheme keeps it that way.
+    //
+    // The theme toggle still switches the REST of the admin: main, the content
+    // header and every table read --surface and --text-* exactly as before.
+    // Only what is inside this element opts out.
+    //
+    // LogoutModal is the one thing rendered from this file that is NOT the
+    // rail: it is `fixed inset-0`, a dialog over the main column, and it stays
+    // theme-aware like every other admin dialog. The guard names it as an
+    // exclusion by element rather than by file, so the exemption cannot quietly
+    // widen to cover the rail again.
+    //
+    // The right edge keeps a border, and it is load-bearing rather than
+    // decorative: in DARK mode --page-bg is #0D1B2A, the same colour as the
+    // rail, so without this line the rail and the main column merge into one
+    // surface. The mockup's light hairline is not used — on a dark rail it
+    // reads as a white stripe, which is a leftover from a light-mode draft.
     <aside
       className={cn(
-        'hidden h-screen md:flex md:flex-col md:border-r md:border-[var(--surface-border)] md:bg-[var(--surface)]',
+        'hidden h-screen md:flex md:flex-col md:border-r',
+        'md:border-[var(--admin-rail-divider)] md:bg-[var(--admin-rail-surface)]',
         'transition-[width] duration-200 ease-9e',
-        collapsed ? 'md:w-16' : 'md:w-64'
+        // 240px expanded, per the mockup's geometry (was 256).
+        collapsed ? 'md:w-16' : 'md:w-60'
       )}
     >
       {/* Header: ADMIN PANEL title + collapse toggle. Collapsed → just the
           toggle, centred (the title text would overflow the rail). */}
-      <div className={cn('flex items-start gap-2', collapsed ? 'justify-center p-3' : 'justify-between p-6')}>
+      {/* 16 horizontal / 24 vertical, and mb-8 = the mockup's 32px gap down to
+          the first group. The wordmark stays TEXT — the mockup draws a brand
+          lockup, but swapping a <p> for an <img> is structure, not colour, and
+          this round changes neither. */}
+      <div className={cn('flex items-start gap-2', collapsed ? 'justify-center p-3' : 'justify-between px-4 py-6 mb-8')}>
         {!collapsed && (
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--admin-rail-group)]">
               Admin Panel
             </p>
-            <p className="mt-1 text-base font-bold text-[var(--text-primary)]">9Expert</p>
+            <p className="mt-1 text-base font-bold text-[var(--admin-rail-brand)]">9Expert</p>
           </div>
         )}
         <button
@@ -702,7 +845,11 @@ export function AdminSidebar({
           aria-label={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
           aria-expanded={!collapsed}
           title={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
-          className="shrink-0 rounded-9e-md p-1.5 text-9e-slate-dp-50 transition-colors hover:bg-9e-ice hover:text-9e-navy dark:hover:bg-[#111d2c] dark:hover:text-white"
+          className={cn(
+            'shrink-0 rounded-9e-sm p-1.5 text-[var(--admin-rail-item)] transition-colors',
+            'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
+            RAIL_FOCUS
+          )}
         >
           {collapsed
             ? <PanelLeftOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -710,7 +857,7 @@ export function AdminSidebar({
         </button>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto px-3 pb-4 " aria-label="Admin">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-4 pb-4" aria-label="Admin">
         {NAV_GROUPS.map((group) => {
           const visibleItems = group.items.filter((item) => canAccess(user, item.pageKey));
           if (visibleItems.length === 0) return null;
@@ -723,7 +870,10 @@ export function AdminSidebar({
           const expanded = collapsed || isGroupExpanded(group.id, groupCollapse, activeGroupId);
 
           return (
-            <div key={group.id}>
+            // 24px between groups, per the mockup. `first:mt-0` because the
+            // brand block above already owns the 32px gap down to the first
+            // group, and stacking the two would make that gap 56px.
+            <div key={group.id} className="mt-6 first:mt-0">
               <GroupHeader
                 label={group.label}
                 collapsed={collapsed}
@@ -735,7 +885,8 @@ export function AdminSidebar({
               {/* Hidden rather than unmounted: `aria-controls` above names this
                   element, and pointing it at something that is not in the DOM
                   describes nothing. */}
-              <ul id={listId} hidden={!expanded} className="space-y-1">
+              {/* 8px between rows inside a group, per the mockup. */}
+              <ul id={listId} hidden={!expanded} className="space-y-2">
                 {visibleItems.map((item) => (
                   <SidebarItem
                     key={item.href}

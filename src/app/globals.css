@@ -67,6 +67,80 @@
   --surface-divider: #F3F4F6;
   --shadow-color:    13 27 42;
 
+  /* ── Admin rail (the /admin sidebar) — DELIBERATELY THEME-INVARIANT ────
+   *
+   * ══ THESE HAVE NO `.dark` COUNTERPART, AND THAT IS THE WHOLE POINT ══════
+   * Every other semantic token in this file is declared twice: a light value
+   * here and a dark override below. These are declared ONCE. The admin sidebar
+   * renders the same dark CI surface in light mode and in dark mode, so the
+   * exemption is a property of the DECLARATION — there is no dark value to
+   * resolve — rather than an accident of which utility class someone picked or
+   * of a specificity race in a component.
+   *
+   * WHY THAT IS SAFER THAN THE OBVIOUS ALTERNATIVE: the rail could have been
+   * built from theme-invariant Tailwind classes (`bg-9e-navy`, `text-9e-ice`),
+   * which are literal hex in tailwind.config.js and so do not flip either. But
+   * nothing would then STATE the rule, and the next person adding a row to the
+   * footer would reach for `--surface` or `text-[var(--text-primary)]` like
+   * every other admin surface uses — and get a card that flips while the rail
+   * behind it does not. Half-theming is the failure mode here, so the rule is
+   * written down as a token set with its own prefix.
+   *
+   * IF YOU ARE ADDING A `.dark` BLOCK FOR THESE: don't. Read C2 of the round
+   * that introduced them, and note that test/fs/adminRailTokens asserts no
+   * `--admin-rail-*` is ever declared under `.dark`.
+   *
+   * ── NOTHING HERE MINTS A COLOUR ────────────────────────────────────────
+   * Same discipline as the Page Builder block below: every value is a hex this
+   * file already declares elsewhere, re-bound under a name that says what it is
+   * for. The source of each is named so a palette change can find it.
+   *
+   * Contrast is a REQUIREMENT of this set, not a hope — test/fs/adminRailContrast
+   * computes every text/background pair below from these declarations and
+   * asserts >= 4.5:1. Measured ratios are in the comments. */
+  --admin-rail-surface:    #0D1B2A;  /* = --9e-navy  : the rail itself */
+  --admin-rail-divider:    #1A2D42;  /* = --9e-border: right edge + collapsed group rules.
+                                      * NOT a light hairline. On a dark rail that reads as
+                                      * a white stripe; and in DARK mode --page-bg is also
+                                      * #0D1B2A, so without this line the rail and the main
+                                      * column would merge into one surface. 14.0:1 against
+                                      * a white main column, 1.24:1 against a dark one —
+                                      * quiet where it can afford to be, present where it
+                                      * is load-bearing. */
+  --admin-rail-hover:      #1E3A5F;  /* = .dark --surface-raised. A LIFT, not a tint: the
+                                      * three states must stay distinguishable — hover is
+                                      * this fill, focus is the ring below, active is the
+                                      * solid blue pill. */
+  --admin-rail-brand:      #F8FAFD;  /* = --9e-ice   : wordmark.            16.64:1 */
+  --admin-rail-item:       #9EA6B2;  /* = --9e-slate-dp-400: inactive label. 7.08:1 */
+  --admin-rail-group:      #8E97A5;  /* = --9e-slate-dp-300: group header.   5.90:1
+                                      * DIMMER than the item label (5.90 vs 7.08) so the
+                                      * hierarchy still reads, but nowhere near the
+                                      * mockup's grey, which measures 3.66:1 and fails AA
+                                      * outright at 11px. The rest of the "header, not an
+                                      * item" signal is carried by size, weight, uppercase
+                                      * and letter-spacing — never by faintness. */
+  --admin-rail-active-bg:  #005CFF;  /* = --9e-action: the active pill */
+  --admin-rail-active-fg:  #F8FAFD;  /* = --9e-ice   : label on the pill.    5.05:1 */
+  --admin-rail-focus:      #48B0FF;  /* = --9e-air   : focus ring.           7.40:1
+                                      * NOT --9e-action, which is the ring colour used
+                                      * everywhere else in the admin: tuned for a white
+                                      * background, it scores 3.29:1 on this rail and all
+                                      * but vanishes. */
+  --admin-rail-card:       #F8FAFD;  /* = --9e-ice   : the user card surface */
+  --admin-rail-card-hover: #FFFFFF;  /* = :root --surface: the card's hover lift.
+                                      * ADDED ONE COMMIT LATER THAN THE REST, and named
+                                      * here rather than quietly folded in: it was found
+                                      * while styling the card, and the rail's hover fill
+                                      * (#1E3A5F) cannot serve — inverting a light card to
+                                      * a dark one on hover would take the user name from
+                                      * 16.6:1 to unreadable. History rewriting is
+                                      * forbidden on this branch, so it lands with the
+                                      * component that needs it. Both card pairs still
+                                      * clear AA on it: name 17.39:1, email 5.47:1. */
+  --admin-rail-card-fg:    #0D1B2A;  /* = --9e-navy  : user name on it.     16.64:1 */
+  --admin-rail-card-muted: #5E6A7E;  /* = --9e-slate-dp-50: user email.      5.23:1 */
+
   /* ── Page Builder section surfaces (settings.background) ──────────────
    * ROUND 78. BACKGROUND_CLASS in src/lib/pageBuilder/presets.js used to
    * resolve to literal Tailwind colours — bg-white, bg-9e-ice,
