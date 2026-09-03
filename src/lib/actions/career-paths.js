@@ -21,6 +21,7 @@ import { syncCareerPaths } from '@/lib/career-paths/syncCareerPaths';
 import { msdbCreate, msdbUpdate, msdbDelete } from '@/lib/api/msdb-write';
 import { getCourseByCode } from '@/lib/api/public-courses';
 import { listSchedulesByCourse } from '@/lib/api/schedules';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
@@ -219,7 +220,16 @@ function shapePayload(formData, courses) {
     detail: {
       tagline:       String(formData.get('detail_tagline')     ?? ''),
       intro:         String(formData.get('detail_intro')       ?? ''),
-      contentHtml:   String(formData.get('detail_contentHtml') ?? ''),
+      // Sanitised HERE, once, upstream of BOTH writes this payload feeds:
+      // msdbCreate/msdbUpdate below send it to MSDB, and
+      // mongoSetFromMsdbItem mirrors whatever MSDB echoes back into local
+      // Mongo — so MSDB itself starts storing the clean value from the
+      // next save of a career path through this form, not only the local
+      // copy. The admin form has no editor at all (a bare <textarea>, see
+      // docs/audit/unsanitized-html-render-sites.md), so this is the only
+      // point in the whole path — client or server — where the bytes are
+      // ever checked.
+      contentHtml:   sanitizeRichHtml(String(formData.get('detail_contentHtml') ?? '')),
       objectives:    parseLines(formData, 'detail_objectives'),
       suitableFor:   parseLines(formData, 'detail_suitableFor'),
       prerequisites: parseLines(formData, 'detail_prerequisites'),

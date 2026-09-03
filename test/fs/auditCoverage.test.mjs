@@ -717,10 +717,39 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // label, 'draft.backup' — a backup is a distinct event from 'draft.save' and
 // filing it under that one would make the trail unable to tell an autosave from
 // the moment a draft was preserved before being overwritten.
-const MUTATING_EXPORT_COUNT = 176;
+//
+// COURSE VERSION HISTORY: 176 -> 177, +1 — `commitCourseVersion` added in the
+// NEW module src/lib/actions/course-versions.js. Like backupDraftBeforeRestore
+// before it, it writes NOTHING in its own body: its domain write is
+// CourseVersion.create inside the imported recordCourseContentVersion. So depth
+// 0 is UNCHANGED at 169 and the DELTA moved instead, 7 -> 8, via a new
+// REACHED_THROUGH_IMPORT entry. The second time the two pins moved apart.
+//
+// Its sibling export `captureCoursePreImage` is deliberately NOT in this figure
+// and that is a result, not an omission: it only READS (one indexed findOne, one
+// MSDB GET) and the classifier is right to say so. If it ever appears here,
+// something on the pre-image path started writing and the pin is how anyone
+// finds out.
+//
+// The file is NOT in SWEPT_FILES and records no audit row, by ruling: the course
+// version history is a separate collection with its own writer, and the audit
+// log's rows, schema and writers were not to be touched. So the count moved and
+// no coverage case did.
+const MUTATING_EXPORT_COUNT = 177;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
+  /**
+   * COURSE VERSION HISTORY. `commitCourseVersion` writes nothing in its own
+   * body — its domain write is CourseVersion.create inside the imported
+   * recordCourseContentVersion — so it is invisible at depth 0 and belongs
+   * here rather than in that figure. Same shape as backupDraftBeforeRestore
+   * below, and only the second export to have it.
+   *
+   * Its sibling `captureCoursePreImage` is absent on purpose: it reads and does
+   * not write, so it is not a mutating export at any depth.
+   */
+  'src/lib/actions/course-versions.js': { commitCourseVersion: 'src/lib/courses/courseVersionWriter.js#recordCourseContentVersion' },
   'src/lib/actions/career-paths.js': { syncCareerPathsAction: 'src/lib/career-paths/syncCareerPaths.js#syncCareerPaths' },
   'src/lib/actions/faqs.js': { syncFaqsAction: 'src/lib/faqs/syncFaqs.js#syncFaqs' },
   'src/lib/actions/promotions.js': { syncPromotionsAction: 'src/lib/promotions/syncPromotions.js#syncPromotions' },
@@ -964,7 +993,12 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'was added to pageBuilder.js but writes ONLY through the imported ' +
     'backupDraftVersion, so depth 0 cannot see it. The DELTA moved instead, ' +
     '6 -> 7, via a new REACHED_THROUGH_IMPORT entry. First time these two pins ' +
-    'moved apart rather than together, which is exactly what the sum below is for.'
+    'moved apart rather than together, which is exactly what the sum below is for. ' +
+    'COURSE VERSION HISTORY: UNCHANGED at 169 again, for the same reason — ' +
+    'commitCourseVersion (course-versions.js, a NEW module) writes only through ' +
+    'the imported recordCourseContentVersion, so depth 0 cannot see it and the ' +
+    'DELTA moved instead, 7 -> 8. Its sibling captureCoursePreImage is in ' +
+    'neither figure because it only reads.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

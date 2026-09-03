@@ -20,6 +20,7 @@ import { computePricing, formatTHB } from "@/lib/pricing";
 import { isQuoteEnabled } from "@/lib/masterclass/quoteAccess";
 import { CountdownTimer } from "../../../_components/CountdownTimer";
 import { cn } from "@/lib/utils";
+import { sanitizeRichHtml, sanitizeBasicHtml } from "@/lib/sanitizeRichHtml";
 import {
   SummaryLine,
   MethodRadio,
@@ -225,7 +226,9 @@ function LicenseInfoPopup({ choice, onConfirm, onCancel }) {
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div
             className="prose prose-sm max-w-none dark:prose-invert"
-            dangerouslySetInnerHTML={{ __html: choice.info_popup.html_content }}
+            // `basic` profile — no image/table/iframe/div, matching the
+            // approved allow-list for this field.
+            dangerouslySetInnerHTML={{ __html: sanitizeBasicHtml(choice.info_popup.html_content) }}
           />
         </div>
 
@@ -2100,7 +2103,7 @@ export function MasterclassRegisterClient({ course, batch }) {
                     prose-headings:text-amber-900 dark:prose-headings:text-amber-300
                     prose-strong:text-amber-900 dark:prose-strong:text-amber-200
                     prose-li:marker:text-amber-500"
-                    dangerouslySetInnerHTML={{ __html: batch.preparation_html }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(batch.preparation_html) }}
                   />
                 </section>
               )}
@@ -2215,23 +2218,19 @@ export function MasterclassRegisterClient({ course, batch }) {
                           title="ชำระทันที"
                           subtitle="ชำระผ่าน PromptPay QR หรือบัตรเครดิต/เดบิต"
                         />
-                        <MethodRadio
-                          selected={method === "quote"}
-                          disabled={!quoteEnabled}
-                          onClick={() => {
-                            if (!quoteEnabled) return;
-                            setMethod("quote");
-                            setChannel(null);
-                            setWantsDoc(null);
-                            setQuoteNeedsInvoice(true);
-                          }}
-                          title="ขอใบเสนอราคา"
-                          subtitle={
-                            quoteEnabled
-                              ? "เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
-                              : "รุ่นนี้ไม่เปิดรับการขอใบเสนอราคา กรุณาเลือกชำระทันที"
-                          }
-                        />
+                        {quoteEnabled && (
+                          <MethodRadio
+                            selected={method === "quote"}
+                            onClick={() => {
+                              setMethod("quote");
+                              setChannel(null);
+                              setWantsDoc(null);
+                              setQuoteNeedsInvoice(true);
+                            }}
+                            title="ขอใบเสนอราคา"
+                            subtitle="เหมาะสำหรับบริษัทที่ต้องใช้เอกสารก่อนชำระเงิน"
+                          />
+                        )}
                       </div>
                     </div>
 

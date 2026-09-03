@@ -81,6 +81,19 @@ function parseFormData(formData) {
   return {
     slug:            String(formData.get('slug') ?? '').trim(),
     title:           String(formData.get('title') ?? '').trim(),
+    // NOT SANITISED — stored verbatim. `sanitizePageHtml` (render-time only)
+    // is the sole guard on the public route; CustomPageForm's own `content:`
+    // load reads this field raw, with no sanitiser in between. This used to
+    // be a smaller risk because the editor's schema accidentally dropped
+    // unrecognised markup like <script> on its own round trip; wrapIfLossy
+    // (lib/customPages/wrapIfLossy.js) now deliberately PRESERVES exactly
+    // that markup instead, verbatim, specifically so legitimate raw HTML
+    // survives — which means <script>, event-handler attributes and
+    // `javascript:` URLs typed into Source HTML mode now reach this field
+    // uncontested too. Open follow-up: a save-time sanitiser here, before
+    // `customPageSchema.parse()` below — see the proposal in the RawHtmlNode
+    // feature's own writeup for the shape (block script/on*/javascript:,
+    // allow div/span/style/class through untouched).
     body:            String(formData.get('body') ?? ''),
     status:          String(formData.get('status') ?? 'draft'),
     metaTitle:       String(formData.get('metaTitle') ?? '').trim(),

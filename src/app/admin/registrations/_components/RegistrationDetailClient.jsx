@@ -25,6 +25,7 @@ import { detailHeading, publicHeadingIdentifier } from '@/lib/registrations/deta
 import { allowedTransitions, isSystemSet, statusBadge, statusLabel } from '@/lib/registrations/statuses';
 import { rosterState, rosterHasRoom } from '@/lib/registrations/attendeeInfo';
 import { personCopyText, attendeeCopyText } from '@/lib/registrations/copyText';
+import { NOT_SPECIFIED_LABEL } from '@/lib/orNotSpecified';
 import {
   BackLink, DetailHeader, TypeBadge, StatusBar, PrimaryAction, OverflowMenu, OverflowItem,
   CopyAction, EqualSummaryRow, TabList, TabPanel, SectionCard, SystemCard,
@@ -1280,8 +1281,12 @@ export function RegistrationDetailClient({ doc, rounds = [], history = null }) {
                           */}
                           <EditField label="ชื่อ" required value={a.firstName} onChange={(v) => updateAttendee(i, 'firstName', v)} />
                           <EditField label="นามสกุล" required value={a.lastName} onChange={(v) => updateAttendee(i, 'lastName', v)} />
-                          <EditField label="อีเมล" type="email" value={a.email} onChange={(v) => updateAttendee(i, 'email', v)} />
-                          <EditField label="เบอร์โทร" type="tel" value={a.phone} onChange={(v) => updateAttendee(i, 'phone', v)} />
+                          {/* placeholder, NOT value/defaultValue — an HTML
+                              placeholder never gets saved back; a value would.
+                              See this file's own note above on why these two
+                              fields carry no `required`. */}
+                          <EditField label="อีเมล" type="email" value={a.email} placeholder={NOT_SPECIFIED_LABEL} onChange={(v) => updateAttendee(i, 'email', v)} />
+                          <EditField label="เบอร์โทร" type="tel" value={a.phone} placeholder={NOT_SPECIFIED_LABEL} onChange={(v) => updateAttendee(i, 'phone', v)} />
                         </div>
                       </div>
                     );
@@ -1606,6 +1611,17 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                 width and push the button out of the cell. Same mechanism the
                 field row's `<dd>` documents at length.
               */}
+              {/* Attendee email/phone are optional at intake (round 5) — the
+                  blank fallback here is NOT_SPECIFIED_LABEL, not the em dash
+                  the rest of this cell's own comment above explains and
+                  defends: a table cell still cannot vanish, so it still needs
+                  SOME text, it is just no longer "—". This puts two
+                  not-specified vocabularies on this one screen at once: this
+                  cell reads "ไม่ได้ระบุ", while every other blank-value row on
+                  this same detail screen (DLRow, elsewhere in this file) either
+                  omits the row entirely or shows its own bespoke emptyHint
+                  sentence — neither of which is this constant. Deliberately not
+                  converted in this round; see the ticket this landed under. */}
               <td className="align-middle" style={pad(2)}>
                 {a.email ? (
                   <div className="flex min-w-0 items-center gap-[8px]">
@@ -1615,7 +1631,7 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                     <CopyAction text={a.email} label={`อีเมลผู้เข้าอบรมท่านที่ ${i + 1}`} />
                   </div>
                 ) : (
-                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>—</span>
+                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>{NOT_SPECIFIED_LABEL}</span>
                 )}
               </td>
 
@@ -1625,7 +1641,7 @@ function AttendeeTable({ attendees, coordinatorAttending, onEditRow, openRow, on
                     {a.phone}
                   </span>
                 ) : (
-                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>—</span>
+                  <span className={cn('text-[var(--text-muted)]', DETAIL_FIELD_VALUE)}>{NOT_SPECIFIED_LABEL}</span>
                 )}
               </td>
 

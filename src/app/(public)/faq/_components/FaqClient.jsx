@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Search, ChevronDown, HelpCircle } from 'lucide-react';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 const ALL = '__ALL__';
 
@@ -32,7 +33,10 @@ function FaqItem({ item, isOpen, onToggle }) {
             {item.answer_html ? (
               <div
                 className="whitespace-pre-line"
-                dangerouslySetInnerHTML={{ __html: item.answer_html }}
+                // Faq is upstream-mirrored (syncFaqs.js) — genesis never
+                // writes it, so this is a render-only fix; see
+                // docs/audit/unsanitized-html-render-sites.md #3.
+                dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(item.answer_html) }}
               />
             ) : (
               <p className="whitespace-pre-line">{item.answer_plain || ''}</p>

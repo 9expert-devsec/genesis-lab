@@ -168,9 +168,30 @@ export function adminScheduleMonthCols(now = new Date(), { fromKey, toKey } = {}
  * `from` is the first day of that month instead — the "today" narrowing only
  * makes sense for the window that actually contains today.
  *
- * With no explicit range this is byte-for-byte the original behaviour: every
- * existing caller passes zero or one argument, and `{ fromKey, toKey }`
- * default to `undefined`, which routes through the same code path as before.
+ * ── THAT "TODAY" NARROWING IS GONE, AND ITS REASON WITH IT ──────────────────
+ * `from` is now the FIRST DAY of the first rendered column, unconditionally —
+ * the exact mirror of what `to` already does at the other end.
+ *
+ * The narrowing was justified above in the words "sessions earlier this month
+ * are already past and were never fetched". Both halves of that have stopped
+ * being true. MSDB used to clamp any `from` earlier than today up to today, so
+ * asking for them was pointless; it now honours a past `from` (verified
+ * 2026-09-02: `from=2025-09-01` returns rows dated from 2025-11-18 onward,
+ * where the same call previously reported `$gte: todayUTC` in its
+ * `summary.filterUsed` and returned none). And this grid now WANTS them: a
+ * finished round renders as จบไปแล้ว rather than being absent, so "already
+ * past" is a thing to DRAW, not a reason to skip fetching.
+ *
+ * Left as it was, the defect would be invisible on the 1st of a month and grow
+ * all month: on the 20th, the default view's own current-month column would
+ * silently omit every round that ran on the 1st through the 19th, while the
+ * eleven future columns looked complete. That is the same class of silent drop
+ * this module's header was written about, arriving from the other direction —
+ * a row excluded by our own bound rather than dropped after arriving.
+ *
+ * The `to` end is UNCHANGED. So is every column the grid renders: this widens
+ * only what is FETCHED, into a column that already exists and already has a
+ * cell waiting for it.
  *
  * @param {Date} [now]
  * @param {{fromKey?: string, toKey?: string}} [explicit]
@@ -182,10 +203,7 @@ export function adminScheduleWindow(now = new Date(), { fromKey, toKey } = {}) {
   const last = cols[cols.length - 1];
   // day 0 of the following month === last day of `last`
   const lastDay = new Date(last.year, last.month + 1, 0);
-  const from =
-    fromKey && fromKey !== monthKeyOf(now)
-      ? toIsoDate(new Date(first.year, first.month, 1))
-      : toIsoDate(now);
+  const from = toIsoDate(new Date(first.year, first.month, 1));
   return { from, to: toIsoDate(lastDay) };
 }
 

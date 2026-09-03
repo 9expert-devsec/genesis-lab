@@ -1,10 +1,13 @@
-import { CalendarDays } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { resolveDerivedRoundBadge, resolveScheduleBadge } from '@/lib/scheduleStatus';
-import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
-import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
-import { chooseRounds } from '@/lib/pageBuilder/chosenRounds';
-import { siteTodayKey } from '@/lib/articlePublishTime';
+import { CalendarDays } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  resolveDerivedRoundBadge,
+  resolveScheduleBadge,
+} from "@/lib/scheduleStatus";
+import { formatRoundDays } from "@/lib/schedule/roundDateLabel";
+import { scheduleRegistrationHref } from "@/lib/schedule/scheduleRegistrationHref";
+import { chooseRounds } from "@/lib/pageBuilder/chosenRounds";
+import { siteTodayKey } from "@/lib/articlePublishTime";
 
 /**
  * course_schedule — upcoming sessions for one course (2C.2b). Server component;
@@ -28,7 +31,11 @@ import { siteTodayKey } from '@/lib/articlePublishTime';
  * no upcoming sessions, or an unresolved code) renders nothing; the editor warns.
  */
 
-const TYPE_TH = { classroom: 'ในห้องเรียน', hybrid: 'ไฮบริด', online: 'ออนไลน์' };
+const TYPE_TH = {
+  classroom: "ในห้องเรียน",
+  hybrid: "ไฮบริด",
+  online: "ออนไลน์",
+};
 
 /**
  * A round's dates, adapted to this section's null-means-unknown contract.
@@ -53,7 +60,7 @@ const TYPE_TH = { classroom: 'ในห้องเรียน', hybrid: 'ไ�
  */
 function formatRange(dates) {
   const label = formatRoundDays(dates, { showMonth: true });
-  return label === '-' ? null : label;
+  return label === "-" ? null : label;
 }
 
 /**
@@ -140,14 +147,14 @@ function formatRange(dates) {
 export function CourseScheduleSection({ content, data }) {
   const rows = chooseRounds(data, content, siteTodayKey());
   if (!rows.length) return null;
-  const code = String(content?.courseId ?? '');
+  const code = String(content?.courseId ?? "");
 
   return (
     <div className="overflow-hidden rounded-9e-md border border-[var(--surface-border)]">
       <ul className="divide-y divide-[var(--surface-border)]">
         {rows.map((entry, i) => {
           const s = entry.live;
-          const isLive = entry.state === 'live';
+          const isLive = entry.state === "live";
           const range = formatRange(entry.dates);
           // A derived state has no upstream status to resolve, and must not be
           // handed one: `resolveScheduleBadge` is for values that CAME FROM
@@ -177,7 +184,11 @@ export function CourseScheduleSection({ content, data }) {
                 --pb-accent-fill both resolve to the same colour, measured in
                 Chrome rather than argued from the class string (round 23).
               */}
-              <CalendarDays className="h-4 w-4 shrink-0 text-[var(--pb-accent-fill)]" strokeWidth={1.75} aria-hidden />
+              <CalendarDays
+                className="h-4 w-4 shrink-0 text-[var(--pb-accent-fill)]"
+                strokeWidth={1.75}
+                aria-hidden
+              />
               <span className="min-w-0 flex-1">
                 {/*
                   The two negative rules the nine existing consumers hold to,
@@ -191,12 +202,23 @@ export function CourseScheduleSection({ content, data }) {
                   encodes open / nearly-full. Repainting it with a chosen accent
                   would make the badge lie about how full a round is.
                 */}
-                <span className="block text-sm font-bold text-[var(--text-primary)]">{range ?? 'ยังไม่ระบุวันที่'}</span>
-                {typeLabel && <span className="block text-xs text-[var(--text-secondary)]">{typeLabel}</span>}
+                <span className="block text-sm font-bold text-[var(--text-primary)]">
+                  {range ?? "ยังไม่ระบุวันที่"}
+                </span>
+                {typeLabel && (
+                  <span className="block text-xs text-[var(--text-secondary)]">
+                    {typeLabel}
+                  </span>
+                )}
               </span>
               {/* Omitted entirely when the status is missing/blank. */}
               {status && (
-                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold', status.soft)}>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold",
+                    status.soft,
+                  )}
+                >
                   {status.action}
                 </span>
               )}
@@ -209,7 +231,7 @@ export function CourseScheduleSection({ content, data }) {
             // mistake the EDITOR should say out loud rather than one the page
             // absorbs silently. Two rows with one key is a React warning, and
             // this is the row list where that can now happen.
-            <li key={`${entry.id || 'row'}-${i}`}>
+            <li key={`${entry.id || "row"}-${i}`}>
               {/*
                 The hover tint is DELIBERATELY not accented, and it is the one
                 judgement call here. It is a pale tint off the signature scale,
@@ -222,8 +244,15 @@ export function CourseScheduleSection({ content, data }) {
                 followed, so it stays for a round that argues for it on its own.
               */}
               {href ? (
-                <a href={href} className="block transition-colors hover:bg-9e-signature-900">{row}</a>
-              ) : row}
+                <a
+                  href={href}
+                  className="block transition-colors hover:bg-9e-signature-900"
+                >
+                  {row}
+                </a>
+              ) : (
+                row
+              )}
             </li>
           );
         })}

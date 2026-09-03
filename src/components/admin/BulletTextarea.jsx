@@ -56,6 +56,28 @@ function normaliseDefault(v) {
  * component is shared with the career-path and masterclass forms, which pass no
  * marker and render exactly as before.
  */
+/**
+ * `readOnly` / `note` — OPT-IN, and both default to off so every other consumer
+ * of this shared component (the career-path and masterclass forms) is
+ * byte-identical.
+ *
+ * `showCount` — OPT-OUT, defaulting to `true` so every other consumer keeps
+ * its "รวม N รายการ" row unchanged. CourseForm's Section 6 passes `false` on
+ * all four of its calls: once those fields also carry a `CourseBodyEditor`
+ * sibling (the field's own richer preview — reusing `descriptionRich`'s
+ * pattern of "rich replaces plain when non-empty"), a hand-drawn count of the
+ * plain list's lines stopped describing what would actually render. This does
+ * not touch `marker`/the preview list itself: those four calls simply stop
+ * passing `marker`, so `showPreview` is already false on its own — see
+ * CourseForm.jsx's Section 6 comment.
+ *
+ * They exist for a field genesis can DISPLAY but cannot SAVE. `readOnly` is
+ * deliberately not `disabled`: a disabled control is dropped from the form
+ * entirely and greys its text past readability, while a read-only one stays
+ * selectable and copyable — which is the whole remaining value of the field.
+ * That it still submits its value is harmless here and checked rather than
+ * assumed: the payload omits the key, so nothing reads what it posts.
+ */
 export function BulletTextarea({
   name,
   defaultValue = '',
@@ -66,6 +88,9 @@ export function BulletTextarea({
   urls = false,
   onChange = null,
   marker = null,
+  readOnly = false,
+  note = null,
+  showCount = true,
 }) {
   const seed = normaliseDefault(defaultValue);
   const [value, setValueState] = useState(seed);
@@ -114,6 +139,7 @@ export function BulletTextarea({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         rows={rows}
+        readOnly={readOnly}
         placeholder={
           placeholder ||
           (urls
@@ -122,10 +148,16 @@ export function BulletTextarea({
         }
         spellCheck={!urls}
         className={
-          'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white ' +
+          'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] px-3 py-2 text-sm focus:outline-none ' +
+          (readOnly
+            ? 'cursor-not-allowed bg-[var(--surface-muted)] text-[var(--text-muted)] '
+            : 'bg-white text-9e-navy focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white ') +
           (urls ? 'font-mono text-xs' : '')
         }
       />
+      {note && (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">{note}</p>
+      )}
       {showPreview && (
         <div
           aria-hidden="true"
@@ -163,14 +195,16 @@ export function BulletTextarea({
           )}
         </div>
       )}
-      <div className="mt-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
-        <span>รวม {lines.length} รายการ</span>
-        {urls && invalidUrlCount > 0 && (
-          <span className="text-amber-600">
-            {invalidUrlCount} บรรทัดไม่ใช่ URL ที่ถูกต้อง
-          </span>
-        )}
-      </div>
+      {showCount && (
+        <div className="mt-1 flex items-center justify-between text-[11px] text-9e-slate-dp-50 dark:text-[#94a3b8]">
+          <span>รวม {lines.length} รายการ</span>
+          {urls && invalidUrlCount > 0 && (
+            <span className="text-amber-600">
+              {invalidUrlCount} บรรทัดไม่ใช่ URL ที่ถูกต้อง
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

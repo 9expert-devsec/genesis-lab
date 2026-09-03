@@ -110,140 +110,158 @@ export function CareerPathRegistrationsClient({ registrations: initial, total })
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
-            Career Path Registrations
-          </h1>
-          <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            ทั้งหมด {total} รายการ (แสดง {rows.length})
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-9e-slate-dp-50" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="ค้นหา ชื่อ / email / career path…"
-              className="w-72 rounded-9e-md border border-[var(--surface-border)] bg-white py-2 pl-8 pr-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
-            />
+    <>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-9e-navy dark:text-white">
+              Career Path Registrations
+            </h1>
+            <p className="mt-1 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              ทั้งหมด {total} รายการ (แสดง {rows.length})
+            </p>
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
-          >
-            <option value="">ทุกสถานะ</option>
-            {STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-9e-slate-dp-50" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="ค้นหา ชื่อ / email / career path…"
+                className="w-72 rounded-9e-md border border-[var(--surface-border)] bg-white py-2 pl-8 pr-3 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white"
+            >
+              <option value="">ทุกสถานะ</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
         </div>
-      </div>
 
-      <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
-              <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
-              <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ชื่อ-นามสกุล</th>
-              <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Career Path</th>
-              <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">คอร์ส</th>
-              <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">ผู้เข้าอบรม</th>
-              <th className="w-36 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">วันที่สมัคร</th>
-              <th className="w-56 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">สถานะ</th>
-              <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={8} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                  {rows.length === 0
-                    ? 'ยังไม่มีการลงทะเบียน'
-                    : 'ไม่พบรายการที่ตรงกับการค้นหา'}
-                </td>
+        <div className="overflow-hidden rounded-9e-lg border border-[var(--surface-border)] bg-white dark:bg-[#111d2c]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--surface-border)] bg-9e-ice dark:bg-[#0D1B2A]">
+                <th className="w-8 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">#</th>
+                <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">ชื่อ-นามสกุล</th>
+                <th className="px-3 py-3 text-left font-bold text-9e-navy dark:text-white">Career Path</th>
+                <th className="w-24 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">คอร์ส</th>
+                <th className="w-20 px-3 py-3 text-center font-bold text-9e-navy dark:text-white">ผู้เข้าอบรม</th>
+                <th className="w-36 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">วันที่สมัคร</th>
+                <th className="w-56 px-3 py-3 text-left font-bold text-9e-navy dark:text-white">สถานะ</th>
+                <th className="w-28 px-3 py-3 text-right font-bold text-9e-navy dark:text-white">จัดการ</th>
               </tr>
-            )}
-            {filtered.map((r, i) => {
-              const badgeClass = STATUS_BADGE[r.status] ?? 'bg-gray-100 text-gray-600 border-gray-200';
-              return (
-                <tr
-                  key={r._id}
-                  className="border-b border-[var(--surface-border)] hover:bg-9e-ice/40 dark:hover:bg-[#0D1B2A]/40 last:border-0"
-                >
-                  <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">{i + 1}</td>
-                  <td className="px-3 py-3">
-                    <p className="font-semibold text-9e-navy dark:text-white">
-                      {r.contactFirstName} {r.contactLastName}
-                    </p>
-                    <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                      {r.contactEmail}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3">
-                    <p className="font-medium text-9e-navy dark:text-white">
-                      {r.careerName}
-                    </p>
-                    <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                      {r.careerSlug}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    {Array.isArray(r.selectedCourses) ? r.selectedCourses.length : 0}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    {r.attendeeCount ?? 1}
-                  </td>
-                  <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-                    {formatDate(r.createdAt)}
-                  </td>
-                  <td className="px-3 py-3">
-                    <select
-                      value={r.status}
-                      onChange={(e) => handleStatusChange(r, e.target.value)}
-                      disabled={busyId === r._id}
-                      className={
-                        'w-full cursor-pointer rounded-full border px-3 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-9e-action disabled:opacity-50 ' +
-                        badgeClass
-                      }
-                    >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <div className="inline-flex items-center gap-1.5">
-                      <Link
-                        href={`/admin/career-path-registrations/${r._id}`}
-                        className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
-                      >
-                        <Eye className="h-3 w-3" /> ดูรายละเอียด
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDeleteError(null);
-                          setConfirmDelete(r);
-                        }}
-                        disabled={busyId === r._id}
-                        className="inline-flex items-center gap-1 rounded-9e-sm border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3 w-3" /> ลบ
-                      </button>
-                    </div>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-10 text-center text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                    {rows.length === 0
+                      ? 'ยังไม่มีการลงทะเบียน'
+                      : 'ไม่พบรายการที่ตรงกับการค้นหา'}
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {filtered.map((r, i) => {
+                const badgeClass = STATUS_BADGE[r.status] ?? 'bg-gray-100 text-gray-600 border-gray-200';
+                return (
+                  <tr
+                    key={r._id}
+                    className="border-b border-[var(--surface-border)] hover:bg-9e-ice/40 dark:hover:bg-[#0D1B2A]/40 last:border-0"
+                  >
+                    <td className="px-3 py-3 text-9e-slate-dp-50 dark:text-[#94a3b8]">{i + 1}</td>
+                    <td className="px-3 py-3">
+                      <p className="font-semibold text-9e-navy dark:text-white">
+                        {r.contactFirstName} {r.contactLastName}
+                      </p>
+                      <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                        {r.contactEmail}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="font-medium text-9e-navy dark:text-white">
+                        {r.careerName}
+                      </p>
+                      <p className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                        {r.careerSlug}
+                      </p>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {Array.isArray(r.selectedCourses) ? r.selectedCourses.length : 0}
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      {r.attendeeCount ?? 1}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+                      {formatDate(r.createdAt)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={r.status}
+                        onChange={(e) => handleStatusChange(r, e.target.value)}
+                        disabled={busyId === r._id}
+                        className={
+                          'w-full cursor-pointer rounded-full border px-3 py-1 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-9e-action disabled:opacity-50 ' +
+                          badgeClass
+                        }
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <div className="inline-flex items-center gap-1.5">
+                        <Link
+                          href={`/admin/career-path-registrations/${r._id}`}
+                          className="inline-flex items-center gap-1 rounded-9e-sm border border-[var(--surface-border)] px-2 py-1 text-[11px] font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+                        >
+                          <Eye className="h-3 w-3" /> ดูรายละเอียด
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteError(null);
+                            setConfirmDelete(r);
+                          }}
+                          disabled={busyId === r._id}
+                          className="inline-flex items-center gap-1 rounded-9e-sm border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3 w-3" /> ลบ
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
+      {/*
+        Rendered as a SIBLING of the page wrapper, not a child of it.
+
+        `space-y-*` compiles to
+            .space-y-N > :not([hidden]) ~ :not([hidden]) { margin-top: … }
+        — a rule about CHILDREN. With the overlay inside the wrapper it
+        picked up that margin-top; its own `inset-0` sets top AND bottom to
+        0 with height auto, which is over-constrained, so the margin won and
+        the fixed layer was pushed down, leaving a band of page showing
+        across the top of the viewport. Nothing on the overlay was wrong.
+
+        Fixed at the relationship rather than with an `!mt-0` on the overlay:
+        any margin utility on any future wrapper would re-break that patch,
+        while a sibling cannot be reached by `space-y-*` at all. See
+        SchedulesAdminClient for the full note, including why not a portal.
+      */}
       {confirmDelete && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -290,6 +308,6 @@ export function CareerPathRegistrationsClient({ registrations: initial, total })
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -135,8 +135,8 @@ test('the landing FETCHES the ids, the names, and cannot be taken down by either
 test('both cards render the SHARED chips, not two copies that look alike', () => {
   // The ChatAvatar lesson: a copy that is byte-identical today drifts silently.
   const blogSection = src('src/app/_components/home/BlogSection.jsx');
-  const articlesClient = src('src/app/(public)/articles/_components/ArticlesPageClient.jsx');
-  for (const [file, code] of [['BlogSection.jsx', blogSection], ['ArticlesPageClient.jsx', articlesClient]]) {
+  const articlesClient = src('src/components/articles/ArticleCard.jsx');
+  for (const [file, code] of [['BlogSection.jsx', blogSection], ['ArticleCard.jsx', articlesClient]]) {
     assert.match(code, /<ProgramOverlay ids=/, `${file} renders the shared overlay`);
     assert.match(code, /<SkillChips ids=/, `${file} renders the shared chips`);
     assert.ok(
@@ -160,7 +160,7 @@ test('the design record no longer claims BlogSection is untouched', () => {
   // this test used the scrubbed reader and failed on a correct file — the same
   // mirror-image trap recorded in test/run.mjs's header.
   const articlesClient = readFileSync(
-    path.join(ROOT, 'src/app/(public)/articles/_components/ArticlesPageClient.jsx'),
+    path.join(ROOT, 'src/components/articles/ArticleCard.jsx'),
     'utf8',
   );
   assert.ok(
@@ -207,7 +207,7 @@ test('NEITHER shared chip component hides a default cap', () => {
   assert.match(chips, /export function SkillChips\(\{ ids, names, cap \}\)/, 'no default');
   assert.ok(!/cap = \d/.test(chips), 'neither component defaults the cap');
   // Both call sites on both pages state their own number.
-  const articlesClient = src('src/app/(public)/articles/_components/ArticlesPageClient.jsx');
+  const articlesClient = src('src/components/articles/ArticleCard.jsx');
   assert.match(articlesClient, /<ProgramOverlay ids=\{article\.programs\} names=\{programNames\} cap=\{2\} \/>/);
 });
 

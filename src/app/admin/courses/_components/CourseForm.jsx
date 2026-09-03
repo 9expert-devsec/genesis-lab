@@ -3,18 +3,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft, Eye, X } from 'lucide-react';
+import { ChevronLeft, Eye, ExternalLink, X } from 'lucide-react';
 import { createCourse, updateCourse } from '@/lib/actions/courses';
 import {
   saveCourseExtension,
   checkAliasAvailable,
 } from '@/lib/actions/course-extensions';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo (see test/fs/libImportsResolved for the two defects that
+// earned it).
+import { captureCoursePreImage, commitCourseVersion } from '@/lib/actions/course-versions';
+import { PRE_IMAGE } from '@/lib/courses/courseSnapshot';
 import { CourseSeoRail } from './CourseSeoRail';
 import { CourseSearchSelect } from './CourseSearchSelect';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
+import { CourseBodyEditor } from '@/components/admin/CourseBodyEditor';
 import { seedTopicEditorRows } from '@/lib/courses/topicEditorSeed';
 import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
@@ -138,6 +144,30 @@ export function CourseForm({
    */
   const [omisePaymentEnabled] = useState(extension?.omisePaymentEnabled === true);
 
+  /**
+   * The course rich body — controlled state, same reason trainingTopicsRich is:
+   * lifted out of a Tiptap editor with no `name` attribute, so it never enters
+   * FormData and must be carried, seeded and compared explicitly.
+   */
+  const [descriptionRich, setDescriptionRich] = useState(extension?.descriptionRich ?? '');
+
+  /**
+   * Section 6's four rich bodies — the exact same pattern as `descriptionRich`
+   * just above, one state pair per field: lifted out of a `CourseBodyEditor`
+   * with no `name` attribute, so each never enters FormData and must be
+   * carried, seeded and compared explicitly. Independent of each other and of
+   * their own plain-textarea sibling — see Section 6's own comment for why
+   * both controls coexist.
+   */
+  const [objectivesRich, setObjectivesRich] =
+    useState(extension?.objectivesRich ?? '');
+  const [targetAudienceRich, setTargetAudienceRich] =
+    useState(extension?.targetAudienceRich ?? '');
+  const [prerequisitesRich, setPrerequisitesRich] =
+    useState(extension?.prerequisitesRich ?? '');
+  const [systemRequirementsRich, setSystemRequirementsRich] =
+    useState(extension?.systemRequirementsRich ?? '');
+
   // Which half of the last save failed, so the message can name it in Thai.
   const [saveReport, setSaveReport] = useState(null);
   /**
@@ -165,6 +195,11 @@ export function CourseForm({
   // Stamp of the last fully-successful save. Shown in the header, and dropped
   // the moment the form is edited again so it can never describe stale state.
   const [savedAt, setSavedAt] = useState(null);
+  // Set only when a "บันทึกแล้วดูหน้าจริง" submit reaches courseSaveOutcome's
+  // allOk — i.e. BOTH MSDB and the extension landed. Gates the "เปิดหน้าจริง"
+  // reveal below the header; see the R1 note in handleSubmit for why this is a
+  // second click rather than an immediate window.open().
+  const [previewReady, setPreviewReady] = useState(false);
 
   // ── Section 1 ─────────────────────────────────────────────────────
   const [courseId, setCourseId] = useState(initial?.course_id ?? '');
@@ -311,11 +346,13 @@ export function CourseForm({
         formEntries: formRef.current ? [...new FormData(formRef.current)] : [],
         extension: {
           urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-          trainingTopicsRich,
+          trainingTopicsRich, descriptionRich,
+          objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich,
         },
       }),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, isPublished, gallery,
-      trainingTopicsRich]
+      trainingTopicsRich, descriptionRich,
+      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich]
   );
 
   /**
@@ -390,8 +427,13 @@ export function CourseForm({
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // open-in-new-tab
       const anchor = e.target?.closest?.('a[href]');
       if (!anchor) return;
-      // Preview is target="_blank": a new tab is not an exit, and prompting for
-      // it would be the false positive that discredits the whole guard.
+      // ดูหน้าจริง and the post-save เปิดหน้าจริง reveal are both target="_blank":
+      // a new tab is not an exit, and prompting for one here would be the false
+      // positive that discredits the whole guard. Both still warn about
+      // SAVED-ONLY content on their own — ดูหน้าจริง via its own onClick
+      // confirm() when dirty, เปิดหน้าจริง by only existing once a save
+      // actually landed — this generic same-tab-navigation guard was never the
+      // mechanism for that and still is not.
       if (anchor.target && anchor.target !== '_self') return;
       if (anchor.hasAttribute('download')) return;
       const raw = anchor.getAttribute('href');
@@ -467,10 +509,25 @@ export function CourseForm({
          * copy cleared rather than kept forever as a stale one.
          */
         trainingTopicsRich,
+        // Same reasoning as trainingTopicsRich just above: this form owns the
+        // field, so it is named on every save, including '' — how a course
+        // whose rich body the admin cleared actually clears it, rather than
+        // leaving a stale copy the presence gate would otherwise protect
+        // forever.
+        descriptionRich,
+        // Section 6's four rich bodies — identical reasoning to descriptionRich
+        // just above, one key per field. This form owns all four, so every one
+        // is named on every save, including '', independently of the other
+        // three and of its own plain-textarea sibling.
+        objectivesRich,
+        targetAudienceRich,
+        prerequisitesRich,
+        systemRequirementsRich,
         upstreamId: String(upstreamId ?? ''),
       }).catch((err) => ({ ok: false, error: err?.message ?? 'บันทึกไม่สำเร็จ' })),
     [urlAlias, metaTitle, metaDescription, ogImage, tags, gallery, isPublished,
-      omisePaymentEnabled, trainingTopicsRich]
+      omisePaymentEnabled, trainingTopicsRich, descriptionRich,
+      objectivesRich, targetAudienceRich, prerequisitesRich, systemRequirementsRich]
   );
 
   /**
@@ -532,6 +589,14 @@ export function CourseForm({
           // must anchor to the course that was actually created, never to
           // whatever the code resolves to now.
           const retryRes = await saveExtensionFor(createdCourse.code, createdCourse.id);
+          // The retry is the second half of a create landing. Same joint point,
+          // same reasoning as the edit path — and ABSENT rather than SKIPPED
+          // because this course had no earlier state to be missing.
+          await commitCourseVersion({
+            courseId: createdCourse.code,
+            upstreamId: createdCourse.id,
+            preImage: { state: PRE_IMAGE.ABSENT },
+          }).catch(() => null);
           if (retryRes?.ok === true) {
             finishCreate(createdCourse.id);
             return;
@@ -590,6 +655,22 @@ export function CourseForm({
         // `newId` is what MSDB just returned for THIS create — the anchor is
         // written from the same response the redirect is built from.
         const extRes = await saveExtensionFor(code, newId);
+
+        /**
+         * The course EXISTS from here on, whether or not the rail landed, so
+         * the version is written before the outcome is read — the same joint
+         * point the edit path uses.
+         *
+         * ABSENT, never UNAVAILABLE: there was no course a moment ago, so the
+         * baseline is legitimately empty rather than unreadable. Flagging it as
+         * missing would report a defect on every course anyone adds.
+         */
+        await commitCourseVersion({
+          courseId: code,
+          upstreamId: newId,
+          preImage: { state: PRE_IMAGE.ABSENT },
+        }).catch(() => null);
+
         if (extRes?.ok === true) {
           finishCreate(newId);
           return;
@@ -633,9 +714,39 @@ export function CourseForm({
      * admin typed still in it, so the retry costs them nothing. Reporting
      * "success" on a partial save is the one outcome that must be impossible.
      */
+    /**
+     * ── R1: "บันทึกแล้วดูหน้าจริง" reuses THIS handler, not a second one ────
+     * Both submit buttons below are `type="submit"` inside the same <form>, so
+     * either one runs handleSubmit unchanged — no forked save path to drift
+     * from the plain "บันทึก" button. `submitter` (native, off the SubmitEvent)
+     * is read HERE, synchronously, inside the real click's call stack — never
+     * after an `await` — because that is what a browser gesture is scoped to.
+     * It is only ever used to decide whether to REVEAL a plain `<a>` after
+     * success; nothing here calls window.open() itself.
+     */
+    const wantsPreviewAfterSave = e.nativeEvent?.submitter?.dataset?.intent === 'save-and-preview';
     setSaveReport(null);
     setAliasError(null);
+    setPreviewReady(false);
     startTransition(async () => {
+      /**
+       * ── THE BASELINE, READ BEFORE EITHER WRITE ────────────────────────────
+       * The state a version history compares the first save against exists only
+       * until `updateCourse` runs: the course is upstream and written over HTTP,
+       * so there is no `new: false` to recover it afterwards.
+       *
+       * It costs a round trip ONCE PER COURSE — the action checks for existing
+       * history first and returns without reading MSDB when there is any.
+       *
+       * `.catch` rather than a guard: a version history must never be able to
+       * stop a save, and an absent baseline reads as SKIPPED, which is exactly
+       * what it is.
+       */
+      const preImage = await captureCoursePreImage({
+        courseId,
+        upstreamId: initial?._id,
+      }).catch(() => ({ state: PRE_IMAGE.SKIPPED }));
+
       const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
         ok: false,
         error: err?.message ?? 'บันทึกไม่สำเร็จ',
@@ -645,6 +756,30 @@ export function CourseForm({
       // `initial._id` is the ObjectId THIS ROUTE WAS OPENED WITH, so the edit
       // save anchors a row that has none without ever consulting the code.
       const extRes = await saveExtensionFor(courseId, initial?._id);
+
+      /**
+       * ── THE VERSION, WRITTEN WHERE BOTH HAVE COMPLETED ────────────────────
+       * Not inside either action: one press is two independent writes, and a
+       * snapshot taken inside the first would describe a state that never
+       * existed on screen.
+       *
+       * UNCONDITIONAL, and deliberately not gated on the outcome. The action
+       * re-reads both stores rather than trusting either result, so it records
+       * what actually landed — including a PARTIAL save, which is a real change
+       * and deserves a version. If neither write landed, the state is unchanged
+       * and the no-op rule drops the row on its own; no special case is needed
+       * and none can produce a phantom version.
+       *
+       * Awaited only so the promise cannot outlive the transition; the action
+       * schedules its own work with after() and returns immediately, so nothing
+       * on screen waits for it. Swallowed for the same reason as everything
+       * else on this path.
+       */
+      await commitCourseVersion({
+        courseId,
+        upstreamId: initial?._id,
+        preImage,
+      }).catch(() => null);
 
       // The joint condition lives in lib/courses/courseSaveOutcome, so the
       // "never claim success on a half-landed save" rule is one testable
@@ -675,6 +810,10 @@ export function CourseForm({
         baselineRef.current = snapshot();
         setDirty(false);
         setSavedAt(Date.now());
+        // Success is the JOINT condition (outcome.allOk === both stores
+        // landed) — reached this line. A PARTIAL save falls through to the
+        // branch below instead and never sets this.
+        if (wantsPreviewAfterSave) setPreviewReady(true);
         return;
       }
 
@@ -786,26 +925,71 @@ export function CourseForm({
 
         <Field
           label="คำอธิบายสั้น"
-          hint="สูงสุด 200 ตัวอักษร — ใช้สำหรับ card / SEO"
+          hint="สูงสุด 800 ตัวอักษร — ใช้สำหรับ card / SEO และเป็นเนื้อหาบนหน้าคอร์ส"
         >
+          {/*
+            800, RAISED FROM 200, AND THE OLD NUMBER WAS THE ODD ONE OUT.
+
+            The cap was genesis-side only: MSDB stores this field with no such
+            limit, and measured 2026-08-31 across all 80 courses the stored
+            values run 131 to 686 characters with a median of 336 — SEVENTY of
+            the 80 already exceed 200. So the input was refusing copy that the
+            data it edits is full of, and `maxLength` truncates a paste
+            SILENTLY (the defect lib/articles/excerptStatus records): an admin
+            pasting a 400-character teaser back into this box lost half of it
+            with no message.
+
+            800 is above the measured maximum with room, rather than unbounded —
+            the field still feeds a card and an SEO snippet, so it should not
+            become a body field by accident.
+
+            NOT CHANGED, deliberately: the two DISPLAY clamps downstream. The
+            meta description takes slice(0, 160) ([...slug]/page.jsx) and the
+            JSON-LD description takes slice(0, 300) (buildCourseJsonLd). Those
+            are about what those surfaces can show, not about what may be
+            stored, and they already clamp the 70 courses that exceed 200
+            today. A cap on input and a clamp on display are different
+            concerns.
+
+            There is no zod schema and no server-side validator for this field —
+            checked, not assumed — so this attribute was the only limit and
+            there is no second place to move.
+          */}
           <textarea
             rows={2}
-            maxLength={200}
+            maxLength={800}
             name="course_teaser"
             defaultValue={initial?.course_teaser ?? ''}
             className={inputCls}
           />
         </Field>
 
+        {/*
+          THE COURSE RICH BODY. Renders on the public page IN PLACE OF the
+          plain teaser paragraph above when it is non-empty — not a second
+          block, and not additive to "คำอธิบายสั้น". Controlled React state
+          (markTouched'd like the gallery/topics), not a form input: the
+          editor has no `name` attribute and never enters FormData.
+        */}
         <Field
-          label="เนื้อหา"
-          hint="ฟิลด์ rich-text หลัก — รองรับ HTML. ใน MSDB ชื่อ field คือ &quot;title&quot; แม้จะเก็บ body"
+          label="คำอธิบายหลักสูตร"
+          hint="แสดงแทนคำอธิบายสั้นด้านบนบนหน้าคอร์ส เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้คำอธิบายสั้นตามเดิม"
+          plain
         >
-          <textarea
-            rows={8}
-            name="title"
-            defaultValue={initial?.title ?? ''}
-            className={inputCls + ' font-mono text-xs'}
+          {/*
+            KEYED ON THE COURSE, NOT RE-SEEDED BY PROP COMPARISON. This
+            editor owns a live document a value-vs-value check cannot safely
+            reconcile against (see CourseBodyEditor.jsx's own header for the
+            data-loss bug that shape caused). A genuine external change — a
+            different course's rich body loading — is handled by React
+            fully remounting the editor, the same guarantee every other
+            rail field already assumes by seeding once from `extension` on
+            mount.
+          */}
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={descriptionRich}
+            onChange={markTouched(setDescriptionRich)}
           />
         </Field>
       </Section>
@@ -1069,50 +1253,115 @@ export function CourseForm({
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
-          Section 6 — รายละเอียดคอร์ส (bullets)
+          Section 6 — รายละเอียดคอร์ส
       ─────────────────────────────────────────────────────────── */}
       <Section title="6. รายละเอียดคอร์ส">
-        {/* `marker` mirrors the PUBLIC page and changes nothing that is stored:
-            วัตถุประสงค์ is numbered there (CourseObjectives.jsx:12 prints
-            `{i + 1}.` from the index) and the other three carry a CheckCircle
-            (CourseTarget / CoursePrerequisites / CourseRequirements). Every
-            marker is drawn by the renderer on both sides — measured, none of
-            the 1118 stored items carries one — so the preview is a preview and
-            the payload is still exactly the lines typed. */}
+        {/*
+          EACH FIELD BELOW IS NOW TWO CONTROLS, NOT ONE — THE PLAIN LIST STAYS
+          FIRST-CLASS, THE RICH EDITOR SITS ALONGSIDE IT.
+
+          The textarea keeps editing the real MSDB string[] field exactly as
+          before — same `name`, same `linesOf` split on submit, no migration,
+          no backfill. `marker` and the preview box it drew are GONE (see
+          BulletTextarea.jsx's own `showCount` note): a WYSIWYG editor sitting
+          right below a hand-drawn preview of the SAME content was two views
+          of one thing, and the real preview is the public page.
+
+          The `CourseBodyEditor` beside it is a second, genesis-owned field —
+          `objectivesRich` / `targetAudienceRich` / `prerequisitesRich` /
+          `systemRequirementsRich` on CourseExtension, the exact
+          `descriptionRich` pattern (seed once, controlled state, named on
+          every save so clearing it actually clears the stored value). When it
+          holds real content the public page renders it INSTEAD OF the plain
+          list; when empty, the plain list is what renders — see
+          CourseObjectives.jsx (and its three siblings) for the swap. The two
+          controls are independent: leaving one field's rich body empty does
+          not affect the other three, and does not touch this field's own
+          plain list.
+
+          `plain` on every one of these four `Field`s is NOT optional — see
+          the `Field` component's own header and test/fs/
+          fieldLabelForwardGuard.test.mjs. `CourseBodyEditor`'s toolbar
+          renders real `<button>`s ahead of its contenteditable region; an
+          implicit `<label>` here would forward a plain click on editor TEXT
+          to the first one (Undo) exactly the way it did for the section-1
+          rich body before that was fixed.
+        */}
         <BulletTextarea
           name="course_objectives"
           label={COURSE_SECTION_LABELS.objective}
           hint="แต่ละบรรทัดคือหนึ่งวัตถุประสงค์ — หน้าเว็บจะใส่ลำดับให้เอง ไม่ต้องพิมพ์เลข"
           defaultValue={initial?.course_objectives}
-          marker="number"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.objective} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={objectivesRich}
+            onChange={markTouched(setObjectivesRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_target_audience"
           label={COURSE_SECTION_LABELS.target}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_target_audience}
-          marker="check"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.target} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={targetAudienceRich}
+            onChange={markTouched(setTargetAudienceRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_prerequisites"
           label={COURSE_SECTION_LABELS.prerequisite}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_prerequisites}
-          marker="check"
+          showCount={false}
         />
+        <Field
+          label={`${COURSE_SECTION_LABELS.prerequisite} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={prerequisitesRich}
+            onChange={markTouched(setPrerequisitesRich)}
+          />
+        </Field>
+
         <BulletTextarea
           name="course_system_requirements"
           label={COURSE_SECTION_LABELS.requirement}
           hint="แสดงเป็นรายการติ๊กถูกบนหน้าเว็บ — ไม่ต้องพิมพ์เครื่องหมายนำหน้า"
           defaultValue={initial?.course_system_requirements}
-          marker="check"
+          showCount={false}
         />
-        <BulletTextarea
-          name="bullets"
-          label="ไฮไลต์"
-          hint="คำโปรย bullet ที่แสดงในหน้า course"
-          defaultValue={initial?.bullets}
-        />
+        <Field
+          label={`${COURSE_SECTION_LABELS.requirement} (รูปแบบ Rich text)`}
+          hint="แสดงแทนรายการด้านบนบนหน้าเว็บ เมื่อมีการพิมพ์เนื้อหาที่นี่ — เว้นว่างไว้เพื่อใช้รายการตามเดิม"
+          plain
+        >
+          <CourseBodyEditor
+            key={initial?.course_id ?? 'create'}
+            value={systemRequirementsRich}
+            onChange={markTouched(setSystemRequirementsRich)}
+          />
+        </Field>
       </Section>
 
       {/* ───────────────────────────────────────────────────────────
@@ -1251,10 +1500,10 @@ export function CourseForm({
 
           {/* Both of the next two need a course that EXISTS UPSTREAM, so they
               are hidden while creating: the promos/FAQ page is keyed by a code
-              that has not been saved yet, and Preview would open the public URL
-              of a course that is not there. Rendering either would be a link
-              that 404s by construction. They appear on the edit page the create
-              flow redirects to. */}
+              that has not been saved yet, and ดูหน้าจริง would open the public
+              URL of a course that is not there. Rendering either would be a
+              link that 404s by construction. They appear on the edit page the
+              create flow redirects to. */}
           {!isCreate && (
           <>
           {/* The four editors that stayed on /admin/courses/[courseId]. The
@@ -1270,14 +1519,53 @@ export function CourseForm({
             โปรโมชัน / Early Bird / FAQ / ชำระเงิน
           </Link>
 
+          {/* R1: NOT "Preview" — this opens the PUBLIC page, which reads MSDB
+              fresh and therefore shows only whatever the last successful save
+              wrote, never edits still sitting in this form's uncontrolled
+              inputs. Renamed so the label stops promising something it cannot
+              do; title/tooltip repeats it for anyone who does not read the
+              button text. When the form is dirty this would silently open the
+              PRE-edit page with no indication anything is stale, so it warns
+              first instead — see "บันทึกแล้วดูหน้าจริง" below for the save-first
+              path. */}
           <a
             href={previewHref}
             target="_blank"
             rel="noopener noreferrer"
+            title="แสดงเฉพาะเนื้อหาที่บันทึกล่าสุด ไม่รวมการแก้ไขที่ยังไม่ได้บันทึก"
+            onClick={(e) => {
+              if (
+                dirty
+                && !window.confirm(
+                  'หน้านี้แสดงเฉพาะเนื้อหาที่บันทึกล่าสุด ไม่รวมการแก้ไขที่ยังไม่ได้บันทึก '
+                  + 'ต้องการเปิดดูหน้าเดิม (ก่อนแก้ไขล่าสุด) หรือไม่?'
+                )
+              ) {
+                e.preventDefault();
+              }
+            }}
             className="inline-flex items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
           >
-            <Eye className="h-4 w-4" /> Preview
+            <Eye className="h-4 w-4" /> ดูหน้าจริง
           </a>
+
+          {/* R2: revealed ONLY after a "บันทึกแล้วดูหน้าจริง" submit reaches
+              courseSaveOutcome's allOk — never on a partial save, and never
+              via a scripted window.open() (see the R1 note in handleSubmit).
+              Gated on `!dirty` too, the same way "✓ บันทึกสำเร็จ" above is: the
+              moment the admin edits again this page would be stale exactly
+              like ดูหน้าจริง, and re-deriving that from `previewReady` alone
+              would leave it claiming freshness it no longer has. */}
+          {previewReady && !dirty && (
+            <a
+              href={previewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-9e-md border border-green-300 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-800 hover:bg-green-100 dark:border-green-700 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-950/70"
+            >
+              <ExternalLink className="h-4 w-4" /> เปิดหน้าจริง
+            </a>
+          )}
           </>
           )}
 
@@ -1317,6 +1605,21 @@ export function CourseForm({
                   ? 'สร้างหลักสูตร'
                   : 'บันทึก'}
           </button>
+
+          {/* R1: "save then view" — needs a course that EXISTS UPSTREAM
+              already, same reason ดูหน้าจริง itself is hidden while creating.
+              `data-intent` is how handleSubmit tells this submit apart from
+              the plain "บันทึก" one — see its `wantsPreviewAfterSave` read. */}
+          {!isCreate && (
+            <button
+              type="submit"
+              data-intent="save-and-preview"
+              disabled={pending}
+              className="rounded-9e-md border border-9e-action px-4 py-1.5 text-sm font-bold text-9e-action hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-[#0D1B2A]"
+            >
+              {pending ? 'กำลังบันทึก…' : 'บันทึกแล้วดูหน้าจริง'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -1461,9 +1764,35 @@ function Section({ title, hint, children }) {
   );
 }
 
-function Field({ label, hint, children }) {
+/**
+ * `plain` renders a `<div>` instead of an implicit `<label>`.
+ *
+ * THE DEFAULT `<label>` IS ONLY SAFE AROUND A SINGLE FORM CONTROL. An
+ * implicit label (no `for`) forwards a click ANYWHERE inside it — including
+ * on a click target that is not itself interactive — to the label's
+ * "labeled control": per the HTML label-activation algorithm, the FIRST
+ * labelable descendant in tree order (button, input, select, textarea,
+ * etc). That is exactly what made the course rich-body editor "revert on
+ * click": CourseBodyEditor's toolbar renders real `<button>`s (Undo first)
+ * ahead of its contenteditable region, and a contenteditable `<div>` is not
+ * itself labelable — so a plain click on editor TEXT was forwarded to the
+ * Undo button, which ran `editor.chain().focus().undo().run()`. Confirmed
+ * in a real headless-Chrome click (`test/browser/labelForwardRepro.mjs`,
+ * reproducing this exact toolbar-button + contenteditable shape): the click
+ * landed focus and a synthetic activation on the first button, not on the
+ * editor. ProseMirror's undo then selects the reverted range, which is the
+ * "line highlighted after a plain click" the report described.
+ *
+ * A `Field` wrapping a single `<input>`/`<textarea>`/`<select>` has no such
+ * hazard — those ARE the first (and only) labelable descendant, so a click
+ * anywhere in the label already lands on them; that behaviour (click the
+ * label text, focus the field) stays the default. `plain` opts a Field out
+ * only where its children own further interactive controls of their own.
+ */
+function Field({ label, hint, children, plain = false }) {
+  const Tag = plain ? 'div' : 'label';
   return (
-    <label className="block">
+    <Tag className="block">
       <span className="block text-sm font-medium text-9e-navy dark:text-white">
         {label}
       </span>
@@ -1473,7 +1802,7 @@ function Field({ label, hint, children }) {
         </span>
       )}
       <div className="mt-1">{children}</div>
-    </label>
+    </Tag>
   );
 }
 

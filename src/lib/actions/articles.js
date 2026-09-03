@@ -25,6 +25,7 @@ import { ARTICLE_SORT } from '@/lib/articleRank';
 import { nextSortKeyForNew } from '@/lib/articleSortKey';
 import { recordAdminActionAfter } from '@/lib/audit/recordAdminAction';
 import { requireAdmin } from '@/lib/actions/auth';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 
 const ADMIN_PATH  = '/admin/articles';
 const PUBLIC_PATH = '/articles';
@@ -346,6 +347,12 @@ function buildModelData(data) {
   const out = {
     ...data,
     relatedArticles,
+    // Sanitised on the way IN, not just at render: a server action is a POST
+    // endpoint, and the client-side editor is not a trust boundary — see
+    // lib/sanitizeRichHtml.js. The render path (ArticleDetailClient via
+    // article/[slug]/page.jsx) sanitises again, because the store itself is
+    // not a trust boundary either: bytes here can predate this line.
+    content: sanitizeRichHtml(data.content),
   };
 
   // Empty datetime → null on the doc so the index sort behaves and

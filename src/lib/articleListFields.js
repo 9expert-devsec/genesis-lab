@@ -119,3 +119,43 @@ export function toFieldList(spec) {
   const s = toSelectString(spec);
   return s ? s.split(' ') : [];
 }
+
+/**
+ * The projection for the PROGRAM PAGE's related-articles section.
+ *
+ * ── DERIVED FROM WHAT THE CARD READS, AND THE CARD CHANGED ─────────────────
+ *
+ * The section renders `BlogCard` — the landing page's card — through
+ * `lib/articleCardModel`, so this set is what that mapping reads and nothing
+ * else:
+ *
+ *   _id slug title excerpt coverUrl programs skills
+ *
+ * IT USED TO CARRY TWO MORE. When the section rendered /articles' `ArticleCard`
+ * it also needed `isPinnedOnArticlePage` and `showPinBadge`, because that card
+ * calls `shouldShowPinBadge(article)` and the HELPER reads them — invisible to
+ * a projection built by grepping the card for `article.`. `BlogCard` draws no
+ * pin badge at all (neither does the landing page), so both fields are now
+ * dead here and are removed rather than left as cargo. The reasoning is kept
+ * because it still applies to PUBLIC_LIST_FIELDS above, which has the same gap
+ * and the same warning.
+ *
+ * ── THE FIELD THAT IS NOW THE LOAD-BEARING ONE ────────────────────────────
+ *
+ * `coverUrl`. `getArticles` runs `.lean()` and then a JSON round-trip that
+ * DROPS undefined keys, so an omitted field does not arrive empty — it does not
+ * arrive. `toBlogCardModel` would then substitute the stand-in cover for every
+ * row, and the section would render a wall of identical placeholder art with
+ * nothing thrown and nothing logged. Pinned by a test that drops it.
+ *
+ * `_id` is listed rather than assumed: Mongo returns it by default, but the
+ * mapping uses it as the React key, so it is a field this surface depends on
+ * and a reader should not have to know Mongo's default to see that.
+ *
+ * NOT LISTED, deliberately: `pinOrder` and `sortKey`. They order the result and
+ * the sort runs in the database, so nothing renders them.
+ */
+export const PROGRAM_ARTICLE_CARD_FIELDS =
+  '_id slug title excerpt coverUrl programs skills';
+
+export const PROGRAM_ARTICLE_LIMIT = 6;

@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import { useCallback, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { cn } from '@/lib/utils';
-import { themeSurface, themeStyle } from '@/lib/pageBuilder/presets';
-import { SectionRenderer } from '../SectionRenderer';
-import { useEditor } from './EditorProvider';
-import { useCanvasFrame } from './useCanvasFrame';
-import { keyToPath, pathToKey } from './pagePath';
+import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
+import { themeSurface, themeStyle } from "@/lib/pageBuilder/presets";
+import { SectionRenderer } from "../SectionRenderer";
+import { useEditor } from "./EditorProvider";
+import { useCanvasFrame } from "./useCanvasFrame";
+import { keyToPath, pathToKey } from "./pagePath";
 
 /**
  * Canvas — the page as it will publish, with click-to-select on top.
@@ -73,18 +73,18 @@ import { keyToPath, pathToKey } from './pagePath';
 // the tree. Tracking the innermost target in JS keeps the outline where the
 // author's eye is.
 function canvasCss(hoverKey, selKey) {
-  const rules = ['[data-pb-canvas] iframe { pointer-events: none; }'];
+  const rules = ["[data-pb-canvas] iframe { pointer-events: none; }"];
   if (hoverKey && hoverKey !== selKey) {
     rules.push(
-      `[data-pb-path="${hoverKey}"] { outline: 1px dashed color-mix(in srgb, var(--9e-action) 50%, transparent); outline-offset: -1px; }`
+      `[data-pb-path="${hoverKey}"] { outline: 1px dashed color-mix(in srgb, var(--9e-action) 50%, transparent); outline-offset: -1px; }`,
     );
   }
   if (selKey) {
     rules.push(
-      `[data-pb-path="${selKey}"] { outline: 2px solid var(--9e-action); outline-offset: -2px; }`
+      `[data-pb-path="${selKey}"] { outline: 2px solid var(--9e-action); outline-offset: -2px; }`,
     );
   }
-  return rules.join('\n');
+  return rules.join("\n");
 }
 
 /**
@@ -105,7 +105,8 @@ function canvasCss(hoverKey, selKey) {
 export const VIEWPORT_WIDTH = { desktop: null, tablet: 768, mobile: 390 };
 
 export function CanvasPanel() {
-  const { page, selection, dispatch, resolvedData, previewViewport } = useEditor();
+  const { page, selection, dispatch, resolvedData, previewViewport } =
+    useEditor();
   const [hoverKey, setHoverKey] = useState(null);
   const { frameRef, frameDoc } = useCanvasFrame();
 
@@ -113,18 +114,24 @@ export function CanvasPanel() {
   const selKey = selection ? pathToKey(selection) : null;
 
   // Capture phase: the section's own handlers must never see the click.
-  const onClickCapture = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const el = e.target?.closest?.('[data-pb-path]');
-    dispatch({ type: 'SELECT', path: el ? keyToPath(el.dataset.pbPath) : null });
-  }, [dispatch]);
+  const onClickCapture = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const el = e.target?.closest?.("[data-pb-path]");
+      dispatch({
+        type: "SELECT",
+        path: el ? keyToPath(el.dataset.pbPath) : null,
+      });
+    },
+    [dispatch],
+  );
 
   // mouseover (not mouseenter) bubbles, so one listener covers the whole tree;
   // closest() from the target resolves to the innermost section under the
   // cursor, which is the one the author means.
   const onMouseOver = useCallback((e) => {
-    const el = e.target?.closest?.('[data-pb-path]');
+    const el = e.target?.closest?.("[data-pb-path]");
     setHoverKey(el?.dataset.pbPath ?? null);
   }, []);
 
@@ -135,7 +142,8 @@ export function CanvasPanel() {
     return (
       <div className="flex h-full items-center justify-center p-8">
         <p className="text-center text-xs text-9e-slate-dp-50">
-          หน้านี้ยังว่างอยู่ — เพิ่ม section แรกได้ที่แผง “โครงสร้างหน้า” ทางซ้าย
+          หน้านี้ยังว่างอยู่ — เพิ่ม section แรกได้ที่แผง “โครงสร้างหน้า”
+          ทางซ้าย
         </p>
       </div>
     );
@@ -164,17 +172,19 @@ export function CanvasPanel() {
       onClickCapture={onClickCapture}
       onMouseOver={onMouseOver}
       onMouseLeave={() => setHoverKey(null)}
-      className={cn(pageClass, 'min-h-full', '[overflow-wrap:anywhere]')}
+      className={cn(pageClass, "min-h-full", "[overflow-wrap:anywhere]")}
       style={themeStyle(page?.theme)}
-      data-pb-theme={page?.theme || 'default'}
+      data-pb-theme={page?.theme || "default"}
     >
-      <style dangerouslySetInnerHTML={{ __html: canvasCss(hoverKey, selKey) }} />
+      <style
+        dangerouslySetInnerHTML={{ __html: canvasCss(hoverKey, selKey) }}
+      />
       {sections.map((section, i) => (
         <SectionRenderer
           key={section?.id ?? i}
           section={section}
           depth={0}
-          path={['sections', i]}
+          path={["sections", i]}
           resolvedData={resolvedData}
         />
       ))}
@@ -201,10 +211,10 @@ export function CanvasPanel() {
         ref={frameRef}
         title="ตัวอย่างหน้าเว็บ"
         className={cn(
-          'h-full min-h-0 border-0 bg-[var(--page-bg)]',
-          frameWidth && 'border-x border-[var(--surface-border)]'
+          "h-full min-h-0 border-0 bg-[var(--page-bg)]",
+          frameWidth && "border-x border-[var(--surface-border)]",
         )}
-        style={{ width: frameWidth ? `${frameWidth}px` : '100%' }}
+        style={{ width: frameWidth ? `${frameWidth}px` : "100%" }}
       />
       {frameDoc ? createPortal(canvas, frameDoc.body) : null}
     </div>

@@ -41,12 +41,15 @@ function InfoRow({ label, value, href }) {
   const valueClasses =
     "block text-sm font-medium text-[#0D1B2A] transition-colors hover:text-[#005CFF] dark:text-white dark:hover:text-[#48B0FF]";
   return (
-    <li className="border-r border-[#E2E8F0] px-4 first:pl-0 last:border-r-0  dark:border-[#1e2939]">
+    // Stacked below sm (full-width rows, divider on the bottom edge); the
+    // original side-by-side-with-right-border layout returns unchanged at
+    // sm and up, where the parent <ul> is back to flex-row.
+    <li className="border-b border-[#E2E8F0] pb-3 pt-3 first:pt-0 last:border-b-0 last:pb-0 sm:border-b-0 sm:border-r sm:px-4 sm:py-0 sm:first:pl-0 sm:last:border-r-0 dark:border-[#1e2939]">
       <div className="mb-1 text-base font-medium text-[#465469] dark:text-[#94a3b8]">
         {label}
       </div>
       {href ? (
-        <a href={href} className={`${valueClasses} break-all`}>
+        <a href={href} className={`${valueClasses} break-words`}>
           {value}
         </a>
       ) : (
@@ -189,7 +192,7 @@ export default function GetInTouchSection() {
   return (
     <section className="relative bg-white py-20 dark:bg-[#060e1a] md:py-12">
       <div className="mx-auto max-w-[1200px] px-4 lg:px-6">
-        <div className="flex flex-row">
+        <div className="flex flex-col gap-8 lg:flex-row lg:gap-0">
           {/* LEFT — narrative + CTAs */}
           <div className="lg:w-2/5">
             <motion.div
@@ -291,7 +294,7 @@ export default function GetInTouchSection() {
           </div>
 
           {/* RIGHT — stacked contact cards */}
-          <div className="lg:w-3/5 pl-3">
+          <div className="lg:w-3/5 lg:pl-3">
             <motion.div
               variants={container}
               initial="hidden"
@@ -309,7 +312,7 @@ export default function GetInTouchSection() {
                 onMouseLeave={() => setHoveredCard(null)}
                 isHovered={hoveredCard === "phone"}
               >
-                <ul className="flex flex-row">
+                <ul className="flex flex-col sm:flex-row">
                   <InfoRow
                     label="ฝ่ายแนะนำหลักสูตร"
                     value="02-219-4304"
@@ -334,7 +337,7 @@ export default function GetInTouchSection() {
                 onMouseLeave={() => setHoveredCard(null)}
                 isHovered={hoveredCard === "email"}
               >
-                <ul className="flex flex-row">
+                <ul className="flex flex-col sm:flex-row">
                   <InfoRow
                     label="ติดต่อหลักสูตร"
                     value="training@9expert.co.th"

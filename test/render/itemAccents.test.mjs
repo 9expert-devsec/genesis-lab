@@ -1,12 +1,12 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { AccordionSection } from '@/components/pageBuilder/sections/accordion';
-import { InstructorCardSection } from '@/components/pageBuilder/sections/instructor_card';
-import { TabsSection } from '@/components/pageBuilder/sections/tabs';
-import { IconCardSection } from '@/components/pageBuilder/sections/icon_card';
-import { readSource } from '../sourceScan.mjs';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { AccordionSection } from "@/components/pageBuilder/sections/accordion";
+import { InstructorCardSection } from "@/components/pageBuilder/sections/instructor_card";
+import { TabsSection } from "@/components/pageBuilder/sections/tabs";
+import { IconCardSection } from "@/components/pageBuilder/sections/icon_card";
+import { readSource } from "../sourceScan.mjs";
 
 /**
  * ROUND 24 — accordion and instructor_card take the section accent.
@@ -51,22 +51,25 @@ import { readSource } from '../sourceScan.mjs';
 const R = (C, props) => renderToStaticMarkup(createElement(C, props));
 
 const ITEMS = [
-  { title: 'หัวข้อแรก', body: 'เนื้อหาแรก' },
-  { title: 'หัวข้อที่สอง', body: 'เนื้อหาที่สอง' },
+  { title: "หัวข้อแรก", body: "เนื้อหาแรก" },
+  { title: "หัวข้อที่สอง", body: "เนื้อหาที่สอง" },
 ];
 const INSTRUCTOR = {
-  name: 'ผู้สอน ทดสอบ', title: 'อาจารย์ประจำ', bio: 'ประวัติโดยย่อ',
-  specialties: ['Data', 'AI'],
+  name: "ผู้สอน ทดสอบ",
+  title: "อาจารย์ประจำ",
+  bio: "ประวัติโดยย่อ",
+  specialties: ["Data", "AI"],
 };
 
-const ACCORDION_SRC = 'src/components/pageBuilder/sections/accordion.jsx';
+const ACCORDION_SRC = "src/components/pageBuilder/sections/accordion.jsx";
 
 /** Every class attribute in a markup string, in document order. */
-const classesIn = (html) => [...html.matchAll(/class="([^"]*)"/g)].map((m) => m[1]);
+const classesIn = (html) =>
+  [...html.matchAll(/class="([^"]*)"/g)].map((m) => m[1]);
 
 // ── accordion — the CLOSED branch, rendered ────────────────────────────────
 
-test('accordion: a closed item is NOT accented, in either of its two elements', () => {
+test("accordion: a closed item is NOT accented, in either of its two elements", () => {
   /**
    * The half a static render can prove, and it is worth proving: an accordion
    * with nothing open must look exactly as it did before this round. Every item
@@ -76,19 +79,26 @@ test('accordion: a closed item is NOT accented, in either of its two elements', 
   const html = R(AccordionSection, { content: { items: ITEMS } });
   const classes = classesIn(html);
 
-  assert.deepEqual(classes, [
-    'divide-y divide-[var(--surface-border)] rounded-9e-md border border-[var(--surface-border)]',
-    'flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-semibold text-9e-navy dark:text-white',
-    'lucide lucide-chevron-down h-5 w-5 shrink-0 transition-transform text-9e-slate-dp-50',
-    'flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-semibold text-9e-navy dark:text-white',
-    'lucide lucide-chevron-down h-5 w-5 shrink-0 transition-transform text-9e-slate-dp-50',
-  ], 'the closed accordion changed — a section with nothing open must render as it did before');
+  assert.deepEqual(
+    classes,
+    [
+      "divide-y divide-[var(--surface-border)] rounded-9e-md border border-[var(--surface-border)]",
+      "flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-semibold text-9e-navy dark:text-white",
+      "lucide lucide-chevron-down h-5 w-5 shrink-0 transition-transform text-9e-slate-dp-50",
+      "flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-semibold text-9e-navy dark:text-white",
+      "lucide lucide-chevron-down h-5 w-5 shrink-0 transition-transform text-9e-slate-dp-50",
+    ],
+    "the closed accordion changed — a section with nothing open must render as it did before",
+  );
 
-  assert.equal(/--pb-accent-/.test(html), false,
-    'a closed accordion is painting with the accent — only the OPEN item takes it');
+  assert.equal(
+    /--pb-accent-/.test(html),
+    false,
+    "a closed accordion is painting with the accent — only the OPEN item takes it",
+  );
 });
 
-test('accordion: no item body is ever accented — the first negative rule', () => {
+test("accordion: no item body is ever accented — the first negative rule", () => {
   /**
    * The body is prose, and prose is never accented. It is absent from a closed
    * render, so the rule is asserted where it lives instead: the source has
@@ -96,13 +106,18 @@ test('accordion: no item body is ever accented — the first negative rule', () 
    */
   const { code } = readSource(ACCORDION_SRC);
   const body = code.match(/className="(whitespace-pre-line[^"]*)"/g) ?? [];
-  assert.deepEqual(body, ['className="whitespace-pre-line px-4 pb-4 text-9e-slate-dp-50 dark:text-[#94a3b8]"'],
-    'the accordion body element changed — it must keep its muted prose colour in both themes');
+  assert.deepEqual(
+    body,
+    [
+      'className="whitespace-pre-line px-4 pb-4 text-9e-slate-dp-50 dark:text-[#94a3b8]"',
+    ],
+    "the accordion body element changed — it must keep its muted prose colour in both themes",
+  );
 });
 
 // ── accordion — the OPEN branch, as a source claim ─────────────────────────
 
-test('accordion: the OPEN item routes both elements through the accent variables', () => {
+test("accordion: the OPEN item routes both elements through the accent variables", () => {
   /**
    * A SOURCE CLAIM, for the reason in this file's header: the open branch does
    * not exist in a static render and a React root is not allowed in this tier.
@@ -113,12 +128,18 @@ test('accordion: the OPEN item routes both elements through the accent variables
    */
   const { code } = readSource(ACCORDION_SRC);
 
-  assert.match(code, /isOpen\s*\n?\s*\?\s*'text-\[var\(--pb-accent-text\)\]'\s*\n?\s*:\s*'text-9e-navy dark:text-white'/,
-    'the accordion TITLE no longer switches to --pb-accent-text when the item is open, or it no '
-    + 'longer falls back to the resting colour when closed');
+  assert.match(
+    code,
+    /isOpen\s*\n?\s*\?\s*'text-\[var\(--pb-accent-text\)\]'\s*\n?\s*:\s*'text-9e-navy dark:text-white'/,
+    "the accordion TITLE no longer switches to --pb-accent-text when the item is open, or it no " +
+      "longer falls back to the resting colour when closed",
+  );
 
-  assert.match(code, /isOpen \? 'rotate-180 text-\[var\(--pb-accent-fill\)\]' : 'text-9e-slate-dp-50'/,
-    'the accordion CHEVRON no longer switches to --pb-accent-fill when the item is open');
+  assert.match(
+    code,
+    /isOpen \? 'rotate-180 text-\[var\(--pb-accent-fill\)\]' : 'text-9e-slate-dp-50'/,
+    "the accordion CHEVRON no longer switches to --pb-accent-fill when the item is open",
+  );
 
   /**
    * The resting colour must appear EXACTLY ONCE, and the assertion above has
@@ -131,58 +152,87 @@ test('accordion: the OPEN item routes both elements through the accent variables
    * regex over the surrounding JSX and matched the healthy file.
    */
   const resting = code.match(/text-9e-navy dark:text-white/g) ?? [];
-  assert.equal(resting.length, 1,
-    `the resting title colour appears ${resting.length} times, not once — if it is back on the `
-    + 'button unconditionally, the open item never takes the accent');
+  assert.equal(
+    resting.length,
+    1,
+    `the resting title colour appears ${resting.length} times, not once — if it is back on the ` +
+      "button unconditionally, the open item never takes the accent",
+  );
 });
 
-test('accordion: it uses the SAME two roles tabs uses, and no others', () => {
+test("accordion: it uses the SAME two roles tabs uses, and no others", () => {
   /**
    * The precedent, asserted rather than described. If a later round gives the
    * accordion a role tabs does not have — or tabs loses one — the two stop
    * being the same treatment and this names it.
    */
-  const roles = (rel) => [...new Set(
-    (readSource(rel).code.match(/--pb-accent-[a-z]+/g) ?? []),
-  )].sort();
+  const roles = (rel) =>
+    [
+      ...new Set(readSource(rel).code.match(/--pb-accent-[a-z]+/g) ?? []),
+    ].sort();
 
-  assert.deepEqual(roles(ACCORDION_SRC), ['--pb-accent-fill', '--pb-accent-text']);
-  assert.deepEqual(roles('src/components/pageBuilder/sections/tabs.jsx'),
-    ['--pb-accent-fill', '--pb-accent-text'],
-    'tabs changed its roles — the accordion was built to match it exactly');
+  assert.deepEqual(roles(ACCORDION_SRC), [
+    "--pb-accent-fill",
+    "--pb-accent-text",
+  ]);
+  assert.deepEqual(
+    roles("src/components/pageBuilder/sections/tabs.jsx"),
+    ["--pb-accent-fill", "--pb-accent-text"],
+    "tabs changed its roles — the accordion was built to match it exactly",
+  );
 });
 
-test('CONTROL: tabs really does accent its active tab, and only that one', () => {
+test("CONTROL: tabs really does accent its active tab, and only that one", () => {
   /**
    * Discrimination for the precedent claim. tabs is `useState(0)`, so its
    * ACTIVE branch is present in a static render — which makes it the one place
    * this tier can see an accented active item at all, and proves the shape the
    * accordion was copied from is real rather than assumed from a note.
    */
-  const html = R(TabsSection, { content: { tabs: [{ title: 'ก', body: 'a' }, { title: 'ข', body: 'b' }] } });
-  const buttons = classesIn(html).filter((c) => c.includes('border-b-2'));
+  const html = R(TabsSection, {
+    content: {
+      tabs: [
+        { title: "ก", body: "a" },
+        { title: "ข", body: "b" },
+      ],
+    },
+  });
+  const buttons = classesIn(html).filter((c) => c.includes("border-b-2"));
   assert.equal(buttons.length, 2);
-  assert.equal(buttons[0], '-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-[color:var(--pb-accent-fill)] text-[var(--pb-accent-text)]');
-  assert.equal(buttons[1], '-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white');
+  assert.equal(
+    buttons[0],
+    "-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-[color:var(--pb-accent-fill)] text-[var(--pb-accent-text)]",
+  );
+  assert.equal(
+    buttons[1],
+    "-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors border-transparent text-9e-slate-dp-50 hover:text-9e-navy dark:hover:text-white",
+  );
 });
 
 // ── instructor_card — fully server-rendered, so fully visible here ─────────
 
-test('instructor_card: the specialty chips take the accent, and keep their surface', () => {
+test("instructor_card: the specialty chips take the accent, and keep their surface", () => {
   const html = R(InstructorCardSection, { data: INSTRUCTOR });
-  const chips = classesIn(html).filter((c) => c.startsWith('rounded-full'));
+  const chips = classesIn(html).filter((c) => c.startsWith("rounded-full"));
 
-  assert.deepEqual(chips, [
-    'rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]',
-    'rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]',
-  ], 'the specialty chips changed');
+  assert.deepEqual(
+    chips,
+    [
+      "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",
+      "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",
+    ],
+    "the specialty chips changed",
+  );
 
   // ORNAMENT, following icon_card's chip — not the key-figure role.
-  assert.equal(chips[0].includes('--pb-accent-text'), false,
-    'the chip took the key-figure role; icon_card\'s chip is --pb-accent-fill');
+  assert.equal(
+    chips[0].includes("--pb-accent-text"),
+    false,
+    "the chip took the key-figure role; icon_card's chip is --pb-accent-fill",
+  );
 });
 
-test('instructor_card: the chip keeps a real background — the precedent\'s does not', () => {
+test("instructor_card: the chip keeps a real background — the precedent's does not", () => {
   /**
    * ── THE FINDING THAT CHANGED THIS ROUND'S PLAN ───────────────────────────
    * icon_card asks for a tenth-strength accent background. Tailwind cannot
@@ -194,43 +244,64 @@ test('instructor_card: the chip keeps a real background — the precedent\'s doe
    * really have. This pins the decision from BOTH sides: the precedent still
    * carries the inert class, and this component does not.
    */
-  const chip = classesIn(R(InstructorCardSection, { data: INSTRUCTOR }))
-    .find((c) => c.startsWith('rounded-full'));
-  assert.match(chip, /bg-9e-ice/, 'the chip lost its background to the inert tinted class');
-  assert.equal(/bg-\[color:var\(--pb-accent-fill\)\]\/10/.test(chip), false,
-    'instructor_card adopted the tinted background that compiles to nothing');
+  const chip = classesIn(R(InstructorCardSection, { data: INSTRUCTOR })).find(
+    (c) => c.startsWith("rounded-full"),
+  );
+  assert.match(
+    chip,
+    /bg-9e-ice/,
+    "the chip lost its background to the inert tinted class",
+  );
+  assert.equal(
+    /bg-\[color:var\(--pb-accent-fill\)\]\/10/.test(chip),
+    false,
+    "instructor_card adopted the tinted background that compiles to nothing",
+  );
 
-  const iconChip = classesIn(R(IconCardSection, {
-    content: { title: 'ก', description: 'ข', icon: 'Star' }, style: {},
-  })).find((c) => c.includes('inline-flex'));
-  assert.match(iconChip, /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
-    'icon_card no longer carries the inert tinted class — if it was FIXED, instructor_card can '
-    + 'adopt the tint too and this test and its note should go');
+  const iconChip = classesIn(
+    R(IconCardSection, {
+      content: { title: "ก", description: "ข", icon: "Star" },
+      style: {},
+    }),
+  ).find((c) => c.includes("inline-flex"));
+  assert.match(
+    iconChip,
+    /bg-\[color:var\(--pb-accent-fill\)\]\/10/,
+    "icon_card no longer carries the inert tinted class — if it was FIXED, instructor_card can " +
+      "adopt the tint too and this test and its note should go",
+  );
 });
 
-test('instructor_card: the name, role and bio are NOT accented — the first negative rule', () => {
+test("instructor_card: the name, role and bio are NOT accented — the first negative rule", () => {
   const html = R(InstructorCardSection, { data: INSTRUCTOR });
   const classes = classesIn(html);
 
-  assert.deepEqual(classes, [
-    'mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center',
-    'mt-3 font-heading text-lg font-bold',
-    'mt-0.5 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]',
-    'mt-2 whitespace-pre-line text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]',
-    'mt-3 flex flex-wrap justify-center gap-1.5',
-    'rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]',
-    'rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]',
-  ], 'an element of the instructor card changed — check it did not take the accent');
+  assert.deepEqual(
+    classes,
+    [
+      "mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center",
+      "mt-3 font-heading text-lg font-bold",
+      "mt-0.5 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]",
+      "mt-2 whitespace-pre-line text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]",
+      "mt-3 flex flex-wrap justify-center gap-1.5",
+      "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",
+      "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-[var(--pb-accent-fill)] dark:bg-[#0D1B2A]",
+    ],
+    "an element of the instructor card changed — check it did not take the accent",
+  );
 
   // Stated separately so a failure names the RULE, not just the diff.
-  for (const c of classes.filter((x) => !x.startsWith('rounded-full'))) {
-    assert.equal(/--pb-accent-/.test(c), false,
-      `a non-chip element took the accent (${c}) — the name is a heading and the role and bio `
-      + 'are prose, and headings and body copy are never accented');
+  for (const c of classes.filter((x) => !x.startsWith("rounded-full"))) {
+    assert.equal(
+      /--pb-accent-/.test(c),
+      false,
+      `a non-chip element took the accent (${c}) — the name is a heading and the role and bio ` +
+        "are prose, and headings and body copy are never accented",
+    );
   }
 });
 
-test('instructor_card: the fixed card width is untouched by this round', () => {
+test("instructor_card: the fixed card width is untouched by this round", () => {
   /**
    * ── AMENDED BY ROUND 70, AND WHAT THAT DID NOT CHANGE ────────────────
    * `h-full` was added to this card so it can fill a `card_grid` row (the
@@ -250,19 +321,24 @@ test('instructor_card: the fixed card width is untouched by this round', () => {
    * nobody worked on.
    */
   const outer = classesIn(R(InstructorCardSection, { data: INSTRUCTOR }))[0];
-  assert.equal(outer,
-    'mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center');
+  assert.equal(
+    outer,
+    "mx-auto flex h-full max-w-sm flex-col items-center rounded-9e-lg border border-[var(--surface-border)] p-6 text-center",
+  );
 });
 
-test('CONTROL: the chip reader would SEE an unaccented chip', () => {
+test("CONTROL: the chip reader would SEE an unaccented chip", () => {
   /**
    * Without this, every "the chip is accented" above could be passing on a
    * selector that matches whatever it finds. The pre-round-24 chip string is
    * put through the same reader and must come back as the old, unaccented one.
    */
-  const before = '<span class="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white/90">x</span>';
-  const seen = classesIn(before).filter((c) => c.startsWith('rounded-full'));
-  assert.deepEqual(seen, ['rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white/90']);
+  const before =
+    '<span class="rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white/90">x</span>';
+  const seen = classesIn(before).filter((c) => c.startsWith("rounded-full"));
+  assert.deepEqual(seen, [
+    "rounded-full bg-9e-ice px-2 py-0.5 text-[11px] text-9e-navy dark:bg-[#0D1B2A] dark:text-white/90",
+  ]);
   assert.equal(/--pb-accent-/.test(seen[0]), false);
-  assert.deepEqual(classesIn('<div>no classes</div>'), []);
+  assert.deepEqual(classesIn("<div>no classes</div>"), []);
 });

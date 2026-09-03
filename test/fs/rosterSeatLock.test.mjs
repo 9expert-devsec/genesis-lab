@@ -154,7 +154,17 @@ test('the duplicate rule is imported, not re-implemented in the action', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-// 2. REQUIRED FIELDS — TWO ON THE ADMIN PATH, FOUR IN THE WIZARD
+// 2. REQUIRED FIELDS — TWO ON THE ADMIN PATH, AND NOW TWO IN THE WIZARD TOO
+//
+// UPDATED (Nutto ticket 5): the wizard-side asymmetry this section used to
+// pin — "this is what we accept FROM A CUSTOMER, and a public registration
+// with no way to contact the attendee is a different product from the one we
+// sell" — was an explicit, considered PRIOR decision, not a bug. This ticket
+// is an explicit, considered REVERSAL of it: only ชื่อ/นามสกุล are required
+// for an attendee at intake now, both on the admin path (already true) and
+// in the customer-facing wizard (new). Coordinator is untouched and still
+// demands all four — the asymmetry moved from "admin vs wizard" to
+// "coordinator vs attendee".
 // ════════════════════════════════════════════════════════════════════════════
 
 test('the ADMIN path requires only ชื่อ and นามสกุล', () => {
@@ -190,13 +200,12 @@ test('the MODEL is the floor and accepts what the admin path writes', () => {
     'the model still requires a phone — see above');
 });
 
-test('the WIZARD’s zod is UNCHANGED and still demands all four', () => {
+test('the WIZARD’s zod now requires only ชื่อ/นามสกุล — email/phone are optional', () => {
   /**
-   * ── THE OTHER DIRECTION, AND IT IS THE ONE THAT WOULD BE "TIDIED" ─────────
-   * A reader seeing the model relaxed will reach for this next, in the name of
-   * consistency. It is not an inconsistency: this is what we accept FROM A
-   * CUSTOMER, and a public registration with no way to contact the attendee is
-   * a different product from the one we sell.
+   * ── THE REVERSAL, NAMED ────────────────────────────────────────────────
+   * This test used to pin the opposite of what it pins now: "a wizard
+   * attendee field became optional" used to be the FAILURE condition. Nutto
+   * ticket 5 made it the requirement. See the section comment above.
    */
   const attendeeSchema = SCHEMA.code.slice(
     SCHEMA.code.indexOf('export const attendeeSchema'),
@@ -206,13 +215,39 @@ test('the WIZARD’s zod is UNCHANGED and still demands all four', () => {
   for (const field of ['firstName', 'lastName', 'email', 'phone']) {
     assert.ok(attendeeSchema.includes(`${field}:`), `the wizard schema lost ${field}`);
   }
+  // firstName/lastName: still `.min(1, ...)` — still genuinely required.
+  assert.match(attendeeSchema, /firstName:\s*z\.string\(\)\.trim\(\)\.min\(1,/, 'firstName stopped being required');
+  assert.match(attendeeSchema, /lastName:\s*z\.string\(\)\.trim\(\)\.min\(1,/, 'lastName stopped being required');
+  // email: still `.email(...)` when present — a malformed value still fails —
+  // but now `.optional().or(z.literal(''))`, the same idiom invoiceSchema uses.
   assert.match(attendeeSchema, /email:\s*z\.string\(\)\.email\(/,
-    'the wizard stopped requiring a well-formed email');
-  assert.match(attendeeSchema, /phone:[\s\S]*?thaiPhoneRegex/,
-    'the wizard stopped requiring a phone');
-  // Nothing optional crept in.
-  assert.equal(/\.optional\(\)/.test(attendeeSchema), false,
-    'a wizard attendee field became optional — that changes what a CUSTOMER may submit');
+    'the wizard stopped validating a present email as well-formed');
+  assert.match(attendeeSchema, /email:[^\n]*\.optional\(\)\.or\(z\.literal\(''\)\)/,
+    'email did not become optional');
+  // phone: NOT `thaiPhone(...)` directly any more — see register-public.js's
+  // own comment on why (unioning thaiPhone()'s ZodEffects with z.literal('')
+  // degrades the error message to a generic "Invalid input"). It still calls
+  // the SAME shared isValidThaiPhone/formatThaiPhone functions by hand.
+  assert.equal(/phone:\s*thaiPhone\(/.test(attendeeSchema), false,
+    'phone should no longer call thaiPhone() directly — see register-public.js\'s own comment on why');
+  assert.match(attendeeSchema, /phone:[^;]*isValidThaiPhone\(v\)/,
+    'phone stopped validating a present value with the shared validator');
+  assert.match(attendeeSchema, /phone:[^;]*formatThaiPhone\(v\)/,
+    'phone stopped formatting a present value with the shared formatter');
+});
+
+test('CONTROL: the coordinatorSchema right above it is untouched — email/phone still required, still via thaiPhone(...)', () => {
+  // The exact assertions the wizard test above no longer makes, proving
+  // deliberately that only ATTENDEE relaxed — coordinator did not.
+  const coordinatorSchema = SCHEMA.code.slice(
+    SCHEMA.code.indexOf('export const coordinatorSchema'),
+    SCHEMA.code.indexOf('});', SCHEMA.code.indexOf('export const coordinatorSchema')),
+  );
+  assert.ok(coordinatorSchema.length > 50, 'the zod coordinatorSchema did not parse');
+  assert.match(coordinatorSchema, /email:\s*z\.string\(\)\.email\('รูปแบบอีเมลไม่ถูกต้อง'\),/,
+    'coordinator email is no longer plainly required — it must not carry .optional()');
+  assert.match(coordinatorSchema, /phone:\s*thaiPhone\(z\.string\(\)\.trim\(\), THAI_PHONE_ERROR_MESSAGE\),/,
+    'coordinator phone stopped calling the shared thaiPhone() helper directly, or gained .optional()');
 });
 
 test('the EDITOR agrees with the server about which fields are required', () => {
@@ -328,7 +363,14 @@ test('CONTROL: the two parsers really are reading two different files', () => {
   assert.ok(MODEL.code.includes('AttendeeSchema'), 'the model parser is on the wrong file');
   assert.ok(SCHEMA.code.includes('attendeeSchema'), 'the schema parser is on the wrong file');
   // And they genuinely disagree, which is the whole subject of this section.
-  assert.ok(SCHEMA.code.includes('thaiPhoneRegex') && !MODEL.code.includes('thaiPhoneRegex'),
+  // Marker changed from the old local `thaiPhoneRegex` constant to
+  // `thaiPhone(` (the shared validator call) — `.code` strips imports, so the
+  // OLD marker would not appear in SCHEMA.code at all now that the regex
+  // moved into src/lib/registration/thaiPhone.js and is imported, not
+  // declared locally. `thaiPhone(` is still exactly the phone-validation
+  // marker this test needs: present in the zod schema, absent from the
+  // Mongoose model, which has no validation regex of any kind for phone.
+  assert.ok(SCHEMA.code.includes('thaiPhone(') && !MODEL.code.includes('thaiPhone('),
     'the two files are not the two layers this test thinks they are');
 });
 

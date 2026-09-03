@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Award, BarChart2, BookOpen, Clock, ExternalLink } from "lucide-react";
 import { onlineCourseHref } from "@/lib/onlineCourseHref";
+import { onlineCourseInstructors } from "@/lib/onlineCourseInstructors";
 import { cn } from "@/lib/utils";
 import { skillCapsuleHref } from "@/lib/skillCapsuleHref";
 import { logUnresolvedCapsule } from "@/lib/logUnresolvedCapsule";
@@ -55,6 +56,14 @@ export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
 
   // ONE definition, shared with the /search result card — see the module.
   const ctaHref = onlineCourseHref(course);
+
+  /**
+   * ALWAYS AN ARRAY, AND TODAY ALWAYS EMPTY. The two fields it reads
+   * (`o_course_instructor_name`, `o_course_instructor_image_url`) do not exist
+   * upstream yet — see lib/onlineCourseInstructors. Rendered as a list rather
+   * than as one object so a co-taught course costs nothing here later.
+   */
+  const instructors = onlineCourseInstructors(course);
 
   const duration = formatDuration(hours);
   const isFree = price === 0;
@@ -109,28 +118,49 @@ export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
           deliberate — the capsule means "this skill", not "this course" — so it
           carries neither `target` nor the outbound icon the other three use.
         */}
-        {skillLinks.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1">
-            {skillLinks.map(({ skill: s, href }) =>
-              href ? (
-                <Link
-                  key={s._id ?? s.skill_id ?? s.skill_name}
-                  href={href}
-                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
-                >
-                  {s.skill_name}
-                </Link>
-              ) : (
-                <span
-                  key={s._id ?? s.skill_id ?? s.skill_name}
-                  className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
-                >
-                  {s.skill_name}
-                </span>
-              )
-            )}
-          </div>
-        )}
+        {/*
+          THE ROW IS NO LONGER GATED ON `skillLinks.length`, and that is the
+          change. The `e-Learning` pill is CONSTANT — every row on the
+          `/online-course` feed is e-learning by construction, so there is no
+          field to read and no course that should be without it — which means
+          the row now always has at least one child. Gating it on the skills
+          would hide the constant pill on a course that happens to carry no
+          resolvable skill.
+
+          It is FIRST, before the skills, deliberately: it says what kind of
+          thing this card is, and the skills say what it is about. A test pins
+          the order rather than mere presence, because "both pills render" is
+          also true of the wrong arrangement.
+
+          The class literal is written out in full and NOT passed through `cn`.
+          twMerge does not know the custom `9e-*` scales, so a token handed to
+          it can lose to alphabetical emission — the standing hazard in this
+          repo. Nothing here is overridable by a caller, so nothing needs to go
+          through the merge.
+        */}
+        <div className="mb-2 flex flex-wrap gap-1">
+          {/* <span className="rounded-full border border-9e-action/30 bg-9e-action/5 px-2 py-0.5 text-xs font-medium text-9e-action dark:border-9e-air/30 dark:bg-9e-air/10 dark:text-9e-air">
+            e-Learning
+          </span> */}
+          {skillLinks.map(({ skill: s, href }) =>
+            href ? (
+              <Link
+                key={s._id ?? s.skill_id ?? s.skill_name}
+                href={href}
+                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 transition-colors duration-9e-micro ease-9e hover:border-9e-action hover:text-9e-action dark:border-[#1e3a5f] dark:text-[#94a3b8] dark:hover:border-9e-air dark:hover:text-9e-air"
+              >
+                {s.skill_name}
+              </Link>
+            ) : (
+              <span
+                key={s._id ?? s.skill_id ?? s.skill_name}
+                className="rounded-full border border-gray-100 px-2 py-0.5 text-xs text-9e-slate-dp-50 dark:border-[#1e3a5f] dark:text-[#94a3b8]"
+              >
+                {s.skill_name}
+              </span>
+            )
+          )}
+        </div>
 
         <div className="h-[52px]">
           <a href={ctaHref} target="_blank" rel="noopener noreferrer">
@@ -144,6 +174,74 @@ export function OnlineCourseCard({ course, className, skillSlugs = {} }) {
           <p className="mb-3 line-clamp-2 text-xs leading-relaxed text-9e-slate-dp-50 dark:text-[#b7c3d4]">
             {teaser}
           </p>
+        )}
+
+        {/*
+          THE INSTRUCTOR ROW, AND ITS ABSENCE IS THE COMMON CASE.
+
+          `instructors` is `[]` for every course on the feed today, so on the
+          day this ships NOTHING below renders. That is the reason the guard is
+          `length > 0` around the whole row rather than a per-field check
+          inside it: an empty row would still occupy its `mb-3`, and a reserved
+          blank strip on every card is a worse outcome than the missing data it
+          would be standing in for.
+
+          NO GAP IS LEFT BEHIND when it collapses. The parent is a plain
+          `flex flex-col` — it carries no `space-y-*` and no `gap-*`, so
+          spacing on this card comes from each child's own `mb-*`. A child that
+          renders nothing therefore contributes nothing, which is exactly what
+          a `space-y` parent would NOT do; a test pins that.
+
+          THE AVATAR IS ITS OWN CONDITION, not part of the row's. The audit
+          measured 6 of 16 instructor rows holding a photo, so "named, not
+          photographed" is ordinary. Those render the name alone — no `<img>`,
+          no grey circle standing in for one. `shrink-0` keeps the avatar
+          circular when a long Thai name wants the space.
+        */}
+        {instructors.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {instructors.map((instructor) => (
+              <span
+                key={instructor.name}
+                className="inline-flex items-center gap-1.5 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]"
+              >
+                {instructor.imageUrl && (
+                  /*
+                    RAW <img>, NOT next/image, and for the reason
+                    CareerPathResultCard gives for the same choice: next/image
+                    THROWS at runtime on a host absent from next.config.mjs
+                    `remotePatterns`, and this field's host is not yet known.
+
+                    Measured 2026-08-31: the allow-list carries
+                    res.cloudinary.com and six others, but NOT
+                    storage.googleapis.com — which is where MSDB already serves
+                    `o_course_doc_paths` from. So an instructor photo uploaded
+                    beside those documents would take the WHOLE HOME PAGE down,
+                    not just blank one avatar. A 28px thumbnail is not worth
+                    that trade before a single real URL has been seen.
+
+                    Revisit once the field is populated and its host is known:
+                    if it is Cloudinary like the covers, next/image is a
+                    straight upgrade.
+
+                    `alt=""` is deliberate — the name is printed immediately
+                    beside it, so a caption here would be read twice.
+                  */
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={instructor.imageUrl}
+                    alt=""
+                    width={28}
+                    height={28}
+                    loading="lazy"
+                    className="h-7 w-7 shrink-0 rounded-full object-cover"
+                    draggable={false}
+                  />
+                )}
+                {instructor.name}
+              </span>
+            ))}
+          </div>
         )}
 
         <div className="mb-3 mt-auto flex flex-wrap items-end justify-between gap-2 text-xs text-9e-slate-dp-50 dark:text-[#b7c3d4]">

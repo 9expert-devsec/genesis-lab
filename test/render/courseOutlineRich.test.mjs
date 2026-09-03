@@ -31,8 +31,22 @@ const COURSE = {
   ],
 };
 
-/** Three levels — the cap. clampDepth lifts anything deeper before this point. */
+/**
+ * Three levels — well within the cap (raised from 3 to 6). Kept EXACTLY as it
+ * was before the cap moved: this fixture and every test below that uses it are
+ * the regression proof that content at the old depths still renders
+ * byte-identically now that a deeper cap exists — nothing about raising
+ * MAX_TOPIC_DEPTH changes behaviour for content that was already legal.
+ */
 const NESTED = '<ul><li>หนึ่ง<ul><li>สอง<ul><li>สาม</li></ul></li></ul></li></ul>';
+
+/**
+ * Six levels — the new cap, exactly. POWER-BI-XDM is the real course measured
+ * at 5 levels deep on the old site; this fixture is one level past that, at the
+ * boundary the cap decision was actually made against.
+ */
+const SIX_DEEP =
+  '<ul><li>1<ul><li>2<ul><li>3<ul><li>4<ul><li>5<ul><li>6</li></ul></li></ul></li></ul></li></ul></li></ul></li></ul>';
 
 const render = (richHtml, course = COURSE) =>
   renderToStaticMarkup(createElement(CourseOutline, { course, richHtml }));
@@ -104,6 +118,21 @@ test('the rich path does NOT emit the plain path\'s hand-rolled bullet span', ()
   // inertness proof assert which one ran.
   const html = render([NESTED, '<ul><li>a</li></ul>']);
   assert.ok(!html.includes('text-9e-air">•<'), 'the rich path rendered the plain marker span');
+});
+
+test('all SIX nesting levels survive to the DOM at the new cap', () => {
+  const html = render([SIX_DEEP, '']);
+  assert.ok(html.includes(SIX_DEEP), 'the six-level HTML did not reach the markup verbatim');
+  const sixListsDeep = /<ul><li>[^<]*<ul><li>[^<]*<ul><li>[^<]*<ul><li>[^<]*<ul><li>[^<]*<ul><li>/;
+  assert.match(html, sixListsDeep, 'the six-level nesting was flattened');
+});
+
+test('REGRESSION: the old 3-level fixture renders BYTE-IDENTICAL markup to before the cap moved', () => {
+  // Pinned literal, not re-derived — a change to CourseOutline's wrapper markup
+  // or to how it threads richHtml through would move this string, and that is
+  // exactly what this test exists to catch for existing stored content.
+  const html = render([NESTED, '<ul><li>a</li></ul>']);
+  assert.ok(html.includes(NESTED), 'the exact 3-level HTML this repo shipped before no longer arrives verbatim');
 });
 
 test('CONTROL: the rich path is genuinely reachable and genuinely different', () => {

@@ -33,6 +33,7 @@ const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_FOLDERS = new Set([
   'courses/covers',
   'courses/galleries',
+  'courses/body',
   'promotions',
   'instructors',
   'banners',

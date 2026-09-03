@@ -78,7 +78,9 @@ test('no public article surface renders publishedAt', () => {
   // RENDERS must never be satisfiable — or falsifiable — by a comment about it.
   const SURFACES = [
     ['article detail', 'src/app/(public)/articles/[slug]/_components/ArticleDetailClient.jsx', 'บทความโดย'],
-    ['article list',   'src/app/(public)/articles/_components/ArticlesPageClient.jsx',          'อ่านเพิ่มเติม'],
+    // The card moved to its own module (extracted so the program page could
+    // reuse it); the claim is unchanged and follows the markup it is about.
+    ['article card',   'src/components/articles/ArticleCard.jsx',                              'อ่านเพิ่มเติม'],
     ['search results', 'src/app/(public)/search/_components/SearchClient.jsx',                  'article.excerpt'],
   ];
   for (const [label, file, stillThere] of SURFACES) {

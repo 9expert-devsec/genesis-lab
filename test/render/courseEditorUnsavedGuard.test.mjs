@@ -12,8 +12,12 @@ import { UnsavedChangesDialog } from '@/app/admin/courses/_components/UnsavedCha
  * simulated here. The DECISION (is this edited?) is a pure function and is
  * tested exhaustively in test/pure/courseFormDirty. What this file pins is the
  * half SSR can actually see: a freshly-rendered editor shows no dialog, the
- * dialog reads correctly in Thai when it is open, and Preview is a new tab so
- * it can never be an exit that prompts.
+ * dialog reads correctly in Thai when it is open, and "ดูหน้าจริง" (formerly
+ * labelled "Preview") is a new tab so it can never be an exit that prompts.
+ *
+ * "ดูหน้าจริง"'s own dirty-warn confirm() and the post-save "เปิดหน้าจริง"
+ * reveal are NOT covered here for the same reason — both need a real click and
+ * `dirty`/`previewReady` state, neither of which exists in a static SSR pass.
  */
 
 const COURSE = {
@@ -47,15 +51,15 @@ test('CONTROL: a freshly opened editor shows NO dialog', () => {
   assert.doesNotMatch(html, /role="dialog"/);
 });
 
-test('CONTROL: Preview opens a new tab, so it is not an exit', () => {
+test('CONTROL: ดูหน้าจริง opens a new tab, so it is not an exit', () => {
   // The click interceptor skips any anchor with a target other than _self. If
-  // Preview ever loses target="_blank" it becomes an in-page exit and this
+  // ดูหน้าจริง ever loses target="_blank" it becomes an in-page exit and this
   // assumption silently stops holding.
   const html = renderEdit();
   assert.match(
     html,
-    /<a href="[^"]*"[^>]*target="_blank"[^>]*>.*?Preview/s,
-    'Preview is no longer target="_blank" — it is now an exit the guard must handle'
+    /<a href="[^"]*"[^>]*target="_blank"[^>]*>.*?ดูหน้าจริง/s,
+    'ดูหน้าจริง is no longer target="_blank" — it is now an exit the guard must handle'
   );
 });
 

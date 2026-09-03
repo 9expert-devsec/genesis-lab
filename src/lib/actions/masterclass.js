@@ -5,6 +5,7 @@ import { dbConnect } from '@/lib/db/connect';
 import MasterclassCourse   from '@/models/MasterclassCourse';
 import MasterclassBatch    from '@/models/MasterclassBatch';
 import { requireAdmin }    from '@/lib/actions/auth';
+import { sanitizeRichHtml, sanitizeBasicHtml } from '@/lib/sanitizeRichHtml';
 
 function serialize(v) {
   return v == null ? v : JSON.parse(JSON.stringify(v));
@@ -19,12 +20,63 @@ function bustCaches(slug) {
   if (slug) revalidatePath(`${PUBLIC_LISTING}/${slug}`);
 }
 
+/**
+ * Sanitise every HTML field this collection carries, in place on a shallow
+ * clone. `createMasterclassCourse`/`updateMasterclassCourse` write whatever
+ * `data` the client sent with no schema and no field allow-list (`.create`
+ * / `{ $set: data }` directly) — see docs/audit/unsanitized-html-render-
+ * sites.md, which measured that write path rather than assuming its shape.
+ * This targets only the known HTML fields rather than adding a schema this
+ * round did not ask for; everything else in `data` passes through exactly
+ * as it did before.
+ *
+ * Nested arrays (`curriculum`, `license_options.choices`) are optional and
+ * caller-shaped, so every access is defensive — a caller that omits one
+ * must not throw, it must simply have nothing there to sanitise.
+ */
+function sanitizeMasterclassCourseHtml(data) {
+  const out = { ...(data ?? {}) };
+  if (typeof out.description_html === 'string') {
+    out.description_html = sanitizeRichHtml(out.description_html);
+  }
+  if (typeof out.system_requirements_html === 'string') {
+    out.system_requirements_html = sanitizeRichHtml(out.system_requirements_html);
+  }
+  if (Array.isArray(out.curriculum)) {
+    out.curriculum = out.curriculum.map((section) => ({
+      ...section,
+      modules: Array.isArray(section?.modules)
+        ? section.modules.map((mod) => ({
+            ...mod,
+            topics_html: typeof mod?.topics_html === 'string'
+              ? sanitizeRichHtml(mod.topics_html)
+              : mod?.topics_html,
+            content_html: typeof mod?.content_html === 'string'
+              ? sanitizeRichHtml(mod.content_html)
+              : mod?.content_html,
+          }))
+        : section?.modules,
+    }));
+  }
+  if (out.license_options && Array.isArray(out.license_options.choices)) {
+    out.license_options = {
+      ...out.license_options,
+      choices: out.license_options.choices.map((choice) => (
+        choice?.info_popup && typeof choice.info_popup.html_content === 'string'
+          ? { ...choice, info_popup: { ...choice.info_popup, html_content: sanitizeBasicHtml(choice.info_popup.html_content) } }
+          : choice
+      )),
+    };
+  }
+  return out;
+}
+
 // ── MasterclassCourse ─────────────────────────────────────────────────────────
 
 export async function createMasterclassCourse(data) {
   await requireAdmin('masterclass');
   await dbConnect();
-  const doc = await MasterclassCourse.create(data);
+  const doc = await MasterclassCourse.create(sanitizeMasterclassCourseHtml(data));
   bustCaches();
   return { ok: true, id: String(doc._id) };
 }
@@ -34,7 +86,7 @@ export async function updateMasterclassCourse(id, data) {
   await dbConnect();
   const doc = await MasterclassCourse.findByIdAndUpdate(
     id,
-    { $set: data },
+    { $set: sanitizeMasterclassCourseHtml(data) },
     { new: true }
   ).lean();
   if (!doc) return { ok: false, error: 'Not found' };
@@ -72,6 +124,9 @@ export async function createMasterclassBatch(courseId, data) {
     const courseDoc = await MasterclassCourse.findById(courseId).select('slug').lean();
     if (courseDoc?.slug) data.course_slug = courseDoc.slug;
   }
+  if (typeof data.preparation_html === 'string') {
+    data.preparation_html = sanitizeRichHtml(data.preparation_html);
+  }
   const doc = await MasterclassBatch.create({ ...data, course_id: courseId });
   revalidatePath(ADMIN_COURSE_PATH);
   return { ok: true, id: String(doc._id) };
@@ -93,6 +148,10 @@ export async function updateMasterclassBatch(batchId, data) {
     } else if (existing.status === 'full') {
       data.status = 'open';
     }
+  }
+
+  if (typeof data.preparation_html === 'string') {
+    data.preparation_html = sanitizeRichHtml(data.preparation_html);
   }
 
   await MasterclassBatch.findByIdAndUpdate(batchId, { $set: data });

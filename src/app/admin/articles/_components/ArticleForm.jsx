@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import {
   createArticle,
   updateArticle,
@@ -1400,7 +1401,12 @@ function ArticlePreviewOverlay({ previewData, onClose }) {
 
         <div
           className="prose prose-lg max-w-none prose-h2:border-l-4 prose-h2:border-blue-500 prose-h2:pl-4 prose-a:text-blue-600 prose-a:underline prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:px-4 prose-blockquote:py-2 prose-code:rounded prose-code:bg-blue-50 prose-code:px-1 prose-code:text-blue-700 prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-ol:list-decimal prose-ol:pl-6 prose-ul:list-disc prose-ul:pl-6 prose-li:my-1 prose-img:rounded-xl prose-img:shadow-md dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: previewData.content }}
+          // The admin's own unsaved draft — reachable via the raw-HTML source
+          // textarea (toggleSourceMode above), which is exactly the "put
+          // bytes the editor's own schema never approved" path
+          // topicEditorExtensions.js's header warns about. Sanitised the
+          // same as the public render, not a lesser rule for being admin-only.
+          dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(previewData.content) }}
         />
       </div>
     </div>

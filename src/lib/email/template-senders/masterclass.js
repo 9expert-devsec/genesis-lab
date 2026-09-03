@@ -4,6 +4,7 @@ import { formatBillingAddress } from "@/lib/address/formatBillingAddress";
 import { buildLicenseModel } from "@/lib/email/buildLicenseModel";
 // Aliased: this module already uses `refNo` as a local const name.
 import { refNo as makeRefNo } from "@/lib/refNo";
+import { buildPrepModel } from "@/lib/email/buildPrepModel";
 
 // ── Helpers (copied inline from src/lib/masterclass/send-receipt.js) ──────────
 
@@ -75,7 +76,7 @@ export async function sendMasterclassPaidReceipt(doc) {
 
   const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
   const batchDoc = await MasterclassBatch.findById(doc.batch_id)
-    .select("dates")
+    .select("dates preparation_html")
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
@@ -85,6 +86,7 @@ export async function sendMasterclassPaidReceipt(doc) {
 
   const billingAddressP = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
+  const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
     coordinator_name:
@@ -150,6 +152,7 @@ export async function sendMasterclassPaidReceipt(doc) {
       : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
     ...licenseModel,
+    ...prepModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;
@@ -216,7 +219,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
 
   const MasterclassBatch = (await import("@/models/MasterclassBatch")).default;
   const batchDoc = await MasterclassBatch.findById(doc.batch_id)
-    .select("dates")
+    .select("dates preparation_html")
     .lean();
   const batchDateShort = formatBatchDateShort(batchDoc?.dates?.[0]?.date);
 
@@ -224,6 +227,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
 
   const billingAddressQ = formatBillingAddress(doc.invoice);
   const licenseModel = buildLicenseModel(doc, courseDoc);
+  const prepModel = buildPrepModel(batchDoc);
 
   const templateModel = {
     coordinator_name:
@@ -281,6 +285,7 @@ export async function sendMasterclassQuoteConfirmation(doc, referenceNumber) {
         : false,
     billing_notes: doc.notes ? { text: doc.notes } : false,
     ...licenseModel,
+    ...prepModel,
   };
 
   const adminEmail = process.env.POSTMARK_ADMIN_EMAIL;

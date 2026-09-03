@@ -88,10 +88,26 @@ test('all five รูปแบบคอร์ส booleans are emitted unconditio
  *               the last field in it. Being publicly read is what made the
  *               editor worth keeping, not what makes the payload send it: both
  *               readers work off the STORED value, which omitting preserves.
+ *   now (3)     `bullets` JOINS IT, moved here FROM the read-blind pair that
+ *               used to follow this roster. It used to keep an inert input
+ *               (typing saved nothing) for the same reason `title` did; the
+ *               user confirmed ไฮไลต์ unused and its input was deleted
+ *               outright, so it belonged with the fields that have no input
+ *               at all, not with the one still shown-but-broken.
+ *   now (4)     `title` JOINS IT too, for the same reason bullets did one
+ *               round earlier: the shown-but-broken state it used to occupy
+ *               is gone. `title`'s textarea (label เนื้อหา) was removed from
+ *               the course form entirely — MSDB never returns this field on
+ *               any read route (measured 2026-08-31, all 80 courses), so
+ *               genesis can only ever show it blank, and the rich-text
+ *               editor built this round replaces it as the field admins
+ *               actually use. There is no longer a control to keep inert, so
+ *               it moves here rather than keeping its own "still has an
+ *               input" guard.
  *
- * So the roster is program plus all five of the old section 8. The section-7
- * arrays are the control: they must still be sent, or "omit everything" would
- * satisfy every assertion here.
+ * So the roster is program plus all five of the old section 8, plus bullets,
+ * plus title. The section-7 arrays are the control: they must still be
+ * sent, or "omit everything" would satisfy every assertion here.
  */
 const OMITTED = [
   'program',
@@ -100,6 +116,8 @@ const OMITTED = [
   'course_case_study_paths',
   'exam_links',
   'website_urls',
+  'bullets',
+  'title',
 ];
 
 test('CONTROL: program is still OMITTED when empty', () => {
@@ -114,19 +132,22 @@ test('CONTROL: program is still OMITTED when empty', () => {
   );
 });
 
-test('the five removed section-8 fields are not emitted at all', () => {
+test('the seven removed fields (five section-8, bullets, title) are not emitted at all', () => {
   // Absent, not empty. A `key: linesOf(...)` line puts the field back in the
-  // value channel with `[]` as its value, which is a wipe, not a no-op.
+  // value channel with `[]` as its value, which is a wipe, not a no-op. For
+  // `title` specifically this is the ORIGINAL, more serious defect this
+  // roster started from: not a wipe of a value genesis wrote, but genesis
+  // asserting '' over a value it has never once been able to read.
   for (const key of OMITTED.slice(1)) {
     assert.doesNotMatch(
       SRC.code,
       new RegExp(`\\n\\s*${key}:\\s*`),
-      `${key} is emitted again — an empty array here overwrites real upstream data`
+      `${key} is emitted again — an empty value here overwrites real upstream data`
     );
   }
 });
 
-test('the five removed fields have no input left in the form', () => {
+test('the seven removed fields have no input left in the form', () => {
   // The other half: an input still posting the value while the payload ignores
   // it would look like a working editor that silently saves nothing.
   const FORM = readSource('src/app/admin/courses/_components/CourseForm.jsx');
@@ -157,7 +178,13 @@ test('CONTROL: the section-7 arrays are untouched and still sent', () => {
   // THE control for this file. A shapePayload that returned {} — or an "omit
   // everything" edit — would satisfy every doesNotMatch above. These are the
   // fields that must still travel, from a section this change never went near.
-  for (const key of ['course_objectives', 'bullets', 'training_topics']) {
+  //
+  // `bullets` USED TO BE IN THIS LIST and was removed from it, not from the
+  // control's job: it turned out to be one of the two keys upstream never
+  // returns, so it joined the read-blind pair below and can no longer stand for
+  // "still sent". `course_target_audience` takes its place — same section, same
+  // `linesOf` shape, and it does round-trip (measured 79 of 80 populated).
+  for (const key of ['course_objectives', 'course_target_audience', 'training_topics']) {
     assert.match(
       SRC.code,
       new RegExp(`\\n\\s*${key}:\\s*\\S`),
@@ -176,4 +203,34 @@ test('CONTROL: the control above can distinguish the two channels', () => {
       `${key} is in the leave-alone channel — it can never be unchecked`
     );
   }
+});
+
+test('CONTROL: the seven-field matcher DOES see the keys that are still emitted', () => {
+  // Without this, a matcher that found nothing anywhere would satisfy every
+  // doesNotMatch above for every key in the payload.
+  for (const key of ['course_teaser', 'course_objectives', 'course_outline_th']) {
+    assert.match(
+      SRC.code,
+      new RegExp(`\n {4}${key}:\s*`),
+      `${key} should still be emitted — if this fails the matcher is inert`
+    );
+  }
+});
+
+/**
+ * `title` is gone from the FORM (no input, no name attribute — see the
+ * "seven removed fields" tests above), but `shapePayload`'s own
+ * `course_name: toStr(get('course_name') || get('title'))` fallback in
+ * lib/actions/courses.js was left exactly as it was. `get('title')` on a
+ * FormData with no `title` field simply returns null, so the fallback is
+ * now permanently unreachable — dead, but harmless, and out of scope for
+ * this round, which changed the form, not that action file. Pinned here so
+ * a future cleanup of it is a deliberate choice, not a surprise.
+ */
+test('CONTROL: the now-unreachable course_name/title fallback in courses.js is untouched', () => {
+  assert.match(
+    SRC.code,
+    /course_name:\s*toStr\(get\('course_name'\)\s*\|\|\s*get\('title'\)\)/,
+    'the fallback expression changed — if title was cleaned out of courses.js too, update this note'
+  );
 });

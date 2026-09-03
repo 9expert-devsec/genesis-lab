@@ -202,6 +202,65 @@ const CourseExtensionSchema = new mongoose.Schema(
      * caller omits it, and every existing caller must therefore leave it alone.
      */
     trainingTopicsRich: { type: [String], default: [] },
+
+    /**
+     * ── THE COURSE RICH BODY ────────────────────────────────────────────────
+     *
+     * Genesis-owned Tiptap HTML, authored in the admin course form and rendered
+     * on the public course page IN PLACE OF the plain `course_teaser` paragraph
+     * when it is present. Unlike `trainingTopicsRich`, this has no MSDB
+     * counterpart to drift from — `course_teaser` keeps being read and stored
+     * exactly as before, untouched by this field, and the fallback to it at
+     * render is a presentation choice made where the page renders, not a sync
+     * relationship this field has to track.
+     *
+     * '' is the sentinel for "no rich body written for this course" — every row
+     * today, and there is no backfill. A reader that finds it empty (which also
+     * covers Tiptap's own "nothing typed" shapes, e.g. `<p></p>`) renders the
+     * plain teaser instead; see lib/richTextEmpty.
+     *
+     * Sanitised with `sanitizeRichHtml`'s `rich` profile on save AND again on
+     * render, same defence-in-depth reasoning as every other field that module
+     * covers: stored bytes can predate a sanitiser change, and the write path is
+     * not the only thing that could ever put bytes here.
+     *
+     * NO FALLBACK ENTRY OF ITS OWN in extensionUpdate's coercion map, same as
+     * `trainingTopicsRich` above and for the same reason: there is no value an
+     * absent key could be replaced with that would not be a wipe, so every
+     * existing caller that omits this key must leave it untouched.
+     */
+    descriptionRich: { type: String, default: '' },
+
+    /**
+     * ── SECTION 6'S FOUR RICH BODIES — descriptionRich's PATTERN, FOUR TIMES ──
+     *
+     * Genesis-owned Tiptap HTML for the four "รายละเอียดคอร์ส" bullet fields —
+     * `objectivesRich` for `course_objectives`, `targetAudienceRich` for
+     * `course_target_audience`, `prerequisitesRich` for `course_prerequisites`,
+     * `systemRequirementsRich` for `course_system_requirements`. Every reason
+     * `descriptionRich` gives above applies to each of these four unchanged:
+     * '' is the sentinel for "no rich copy written", there is no backfill, the
+     * plain MSDB field keeps being read and stored exactly as before (BOTH
+     * inputs coexist in the admin form — this is additive, not a migration),
+     * and the fallback to the plain list is a presentation choice made where
+     * each renders (CourseObjectives.jsx and its three siblings), not a sync
+     * relationship these fields have to track.
+     *
+     * Sanitised with `sanitizeRichHtml`'s `rich` profile on save AND again on
+     * render, same defence-in-depth reasoning. NO FALLBACK ENTRY OF ITS OWN in
+     * extensionUpdate's coercion map, for any of the four — an absent key
+     * leaves the stored value untouched, which is what makes adding four more
+     * writable fields to a live collection safe.
+     *
+     * Four independent fields, not one blob: each field's rich body and plain
+     * list are their own pair (settled decision #4) — a rich `objectivesRich`
+     * must not affect whether `targetAudienceRich` falls back, any more than
+     * `descriptionRich` affects `course_target_audience`.
+     */
+    objectivesRich:          { type: String, default: '' },
+    targetAudienceRich:      { type: String, default: '' },
+    prerequisitesRich:       { type: String, default: '' },
+    systemRequirementsRich:  { type: String, default: '' },
   },
   { timestamps: true, collection: 'course_extensions' }
 );

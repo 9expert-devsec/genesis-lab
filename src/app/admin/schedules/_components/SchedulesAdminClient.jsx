@@ -1,6 +1,13 @@
 'use client';
 
-import { Fragment, useCallback, useMemo, useState, useTransition } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   ChevronDown,
@@ -13,6 +20,7 @@ import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  getRoundRegistrationSummary,
 } from '@/lib/actions/schedules';
 import {
   adminScheduleMonthCols,
@@ -38,7 +46,12 @@ import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
 import { laneLayout } from '@/lib/schedule/monthLanes';
 import { monthLabel } from '@/lib/schedule/monthWindow';
 import { trainingTypeColor } from '@/lib/schedule/trainingTypeColor';
-import { resolveScheduleBadge } from '@/lib/scheduleStatus';
+import { roundHasEnded } from '@/lib/schedule/roundHasStarted';
+import {
+  resolveDerivedRoundBadge,
+  resolveScheduleBadge,
+} from '@/lib/scheduleStatus';
+import { RegistrationSummaryPanel } from './RegistrationSummaryPanel';
 
 // ── constants ──────────────────────────────────────────────────────
 
@@ -141,6 +154,19 @@ export function SchedulesAdminClient({
   filterStatus = '',
   monthFrom,
   monthTo,
+  /**
+   * Today in Asia/Bangkok, `'YYYY-MM-DD'`, from page.jsx. See the note at that
+   * prop's call site for why this screen is TOLD the date instead of reading a
+   * clock: a client component reads it twice, once per render pass, and the
+   * rounds this feature is about are the ones sitting on that boundary.
+   *
+   * Defaulted to `''` rather than to `siteTodayKey()`. `roundHasEnded` answers
+   * `false` for an empty key, so a caller that supplies nothing gets every
+   * round in its live treatment — the pre-existing behaviour, unchanged. The
+   * alternative default would have this component quietly reintroduce the
+   * hydration split the prop exists to remove, and would do it invisibly.
+   */
+  todayKey = '',
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -150,6 +176,14 @@ export function SchedulesAdminClient({
 
   const [collapsed, setCollapsed] = useState({});
   const [modal, setModal]         = useState(null);
+  /**
+   * The round whose details panel is open, or null. A SEPARATE piece of state
+   * from `modal` rather than a third `mode` on it: the editor modal is a form
+   * that writes, this is a read-only panel that writes nothing, and folding a
+   * read into the writer's state machine is how a "details" mode ends up one
+   * refactor away from submitting one.
+   */
+  const [details, setDetails]     = useState(null);
 
   /**
    * The next URL, serialised FROM THE PROPS — the one and only writer.
@@ -367,168 +401,202 @@ export function SchedulesAdminClient({
   }
 
   return (
-    <div className="space-y-4 p-1">
-      {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-9e-navy dark:text-white">
-            จัดการตารางอบรม
-          </h1>
-          <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
-            {/* No longer advertises max_seats and วิทยากร as things this
-                screen edits — their inputs are gone from the modal. The values
-                are still STORED and still shown on the round boxes below. */}
-            แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — ราคาต่อรอบเก็บใน Genesis
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => openCreate()}
-          className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
-        >
-          + เพิ่มตารางอบรม
-        </button>
-      </div>
-
-      {msg && (
-        <div
-          className={
-            'rounded-9e-md px-3 py-2 text-sm ' +
-            (msg.type === 'ok'
-              ? 'border border-green-200 bg-green-50 text-green-700'
-              : 'border border-red-200 bg-red-50 text-red-700')
-          }
-        >
-          {msg.text}
-        </div>
-      )}
-
-      {/* ── Filter bar ─────────────────────────────────────────────────
-          Restyled to the public /schedule bar's visual language (rounded-xl,
-          gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
-          FilterSelect. The table itself is unchanged this round. */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[240px] flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
-            aria-hidden="true"
-          />
-          {/* Uncontrolled and re-keyed on `search`, committing on Enter or
-              blur — same pattern as CoursesAdminClient's box, so the URL
-              (not this component) is the only place the term lives. */}
-          <input
-            key={search}
-            type="text"
-            defaultValue={search}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                navigate({ search: e.currentTarget.value });
-              }
-            }}
-            onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
-            placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
-            className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          />
-        </div>
-
-        <select
-          value={filterProgram}
-          onChange={(e) => navigate({ filterProgram: e.target.value })}
-          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-        >
-          <option value="">ทุกโปรแกรม</option>
-          {programs.map((p) => {
-            const id = String(p._id ?? p.program_id ?? '');
-            const label = p.program_name ?? p.name ?? p.label ?? id;
-            return (
-              <option key={id} value={id}>{label}</option>
-            );
-          })}
-        </select>
-
-        <select
-          value={filterStatus}
-          onChange={(e) => navigate({ filterStatus: e.target.value })}
-          className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-        >
-          <option value="">ทุกสถานะ</option>
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
-          <select
-            value={monthFrom}
-            onChange={(e) => navigate({ monthFrom: e.target.value })}
-            aria-label="เดือนเริ่มต้น"
-            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          >
-            {selectableMonthKeys.map((key) => (
-              <option key={key} value={key}>
-                {TH_MONTH_FMT.format(monthKeyToDate(key))}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
-          <select
-            value={monthTo}
-            onChange={(e) => navigate({ monthTo: e.target.value })}
-            aria-label="เดือนสุดท้าย"
-            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
-          >
-            {selectableMonthKeys.map((key) => (
-              <option key={key} value={key} disabled={key < monthFrom}>
-                {TH_MONTH_FMT.format(monthKeyToDate(key))}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+    <>
+      <div className="space-y-4 p-1">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-bold text-9e-navy dark:text-white">
+              จัดการตารางอบรม
+            </h1>
+            <p className="mt-1 text-sm text-9e-slate-dp-50 dark:text-[#94a3b8]">
+              {/* Names what this screen can EDIT. วิทยากร is deliberately absent:
+                  it has no input in the modal any more, though the stored names
+                  are still shown on the round boxes below. */}
+              แสดง {ADMIN_SCHEDULE_MONTHS} เดือนข้างหน้า — max_seats และราคาต่อรอบเก็บใน Genesis
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
-            className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+            onClick={() => openCreate()}
+            className="rounded-9e-md bg-9e-action px-4 py-2 text-sm font-bold text-white hover:bg-9e-brand"
           >
-            ล้างตัวกรอง
+            + เพิ่มตารางอบรม
           </button>
+        </div>
+
+        {msg && (
+          <div
+            className={
+              'rounded-9e-md px-3 py-2 text-sm ' +
+              (msg.type === 'ok'
+                ? 'border border-green-200 bg-green-50 text-green-700'
+                : 'border border-red-200 bg-red-50 text-red-700')
+            }
+          >
+            {msg.text}
+          </div>
         )}
 
-        <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
-          {visibleCount} / {schedules.length} รอบ
-        </span>
-      </div>
+        {/* ── Filter bar ─────────────────────────────────────────────────
+            Restyled to the public /schedule bar's visual language (rounded-xl,
+            gray-200 borders, 9e-brand hover) — see ScheduleClient.jsx's
+            FilterSelect. The table itself is unchanged this round. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[240px] flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-9e-slate-dp-50"
+              aria-hidden="true"
+            />
+            {/* Uncontrolled and re-keyed on `search`, committing on Enter or
+                blur — same pattern as CoursesAdminClient's box, so the URL
+                (not this component) is the only place the term lives. */}
+            <input
+              key={search}
+              type="text"
+              defaultValue={search}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  navigate({ search: e.currentTarget.value });
+                }
+              }}
+              onBlur={(e) => e.target.value !== search && navigate({ search: e.target.value })}
+              placeholder="ค้นหาหลักสูตร... (Enter เพื่อค้นหา)"
+              className="w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            />
+          </div>
 
-      {/* ── Program groups ─────────────────────────────────────── */}
-      {programGroups.length === 0 && (
-        <div className="rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
-          ไม่พบหลักสูตรที่ตรงกับตัวกรอง
+          <select
+            value={filterProgram}
+            onChange={(e) => navigate({ filterProgram: e.target.value })}
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            <option value="">ทุกโปรแกรม</option>
+            {programs.map((p) => {
+              const id = String(p._id ?? p.program_id ?? '');
+              const label = p.program_name ?? p.name ?? p.label ?? id;
+              return (
+                <option key={id} value={id}>{label}</option>
+              );
+            })}
+          </select>
+
+          <select
+            value={filterStatus}
+            onChange={(e) => navigate({ filterStatus: e.target.value })}
+            className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+          >
+            <option value="">ทุกสถานะ</option>
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">เดือน:</span>
+            <select
+              value={monthFrom}
+              onChange={(e) => navigate({ monthFrom: e.target.value })}
+              aria-label="เดือนเริ่มต้น"
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            >
+              {selectableMonthKeys.map((key) => (
+                <option key={key} value={key}>
+                  {TH_MONTH_FMT.format(monthKeyToDate(key))}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">ถึง</span>
+            <select
+              value={monthTo}
+              onChange={(e) => navigate({ monthTo: e.target.value })}
+              aria-label="เดือนสุดท้าย"
+              className="cursor-pointer rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-9e-navy transition-colors hover:border-9e-brand focus:outline-none focus:ring-2 focus:ring-9e-action/20 dark:border-[#1e3a5f] dark:bg-[#111d2c] dark:text-white"
+            >
+              {selectableMonthKeys.map((key) => (
+                <option key={key} value={key} disabled={key < monthFrom}>
+                  {TH_MONTH_FMT.format(monthKeyToDate(key))}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(search || filterProgram || filterStatus || monthFrom !== defaultRange.from || monthTo !== defaultRange.to) && (
+            <button
+              type="button"
+              onClick={() => navigate({ search: '', filterProgram: '', filterStatus: '', monthFrom: '', monthTo: '' })}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-9e-navy transition-colors hover:border-9e-brand dark:border-[#1e3a5f] dark:text-white"
+            >
+              ล้างตัวกรอง
+            </button>
+          )}
+
+          <span className="text-xs text-9e-slate-dp-50 dark:text-[#94a3b8]">
+            {visibleCount} / {schedules.length} รอบ
+          </span>
         </div>
-      )}
 
-      <div className="space-y-3">
-        {programGroups.map((group) => (
-          <ProgramGroup
-            key={group.id}
-            group={group}
-            monthCols={monthCols}
-            scheduleMap={scheduleMap}
-            filterStatus={filterStatus}
-            localBySchedId={localBySchedId}
-            instructorById={instructorById}
-            collapsed={Boolean(collapsed[group.id])}
-            busyId={busyId}
-            onToggle={() => toggleCollapse(group.id)}
-            onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
-            onEdit={openEdit}
-            onDelete={handleDelete}
-          />
-        ))}
+        {/* ── Program groups ─────────────────────────────────────── */}
+        {programGroups.length === 0 && (
+          <div className="rounded-9e-lg border border-dashed border-[var(--surface-border)] py-10 text-center text-sm text-9e-slate-dp-50">
+            ไม่พบหลักสูตรที่ตรงกับตัวกรอง
+          </div>
+        )}
+
+        <div className="space-y-3">
+          {programGroups.map((group) => (
+            <ProgramGroup
+              key={group.id}
+              group={group}
+              monthCols={monthCols}
+              scheduleMap={scheduleMap}
+              filterStatus={filterStatus}
+              localBySchedId={localBySchedId}
+              instructorById={instructorById}
+              collapsed={Boolean(collapsed[group.id])}
+              busyId={busyId}
+              todayKey={todayKey}
+              onToggle={() => toggleCollapse(group.id)}
+              onAdd={(courseCode, mKey) => openCreate(courseCode, mKey)}
+              onEdit={openEdit}
+              onDelete={handleDelete}
+              onDetails={setDetails}
+            />
+          ))}
+        </div>
       </div>
 
+      {/*
+        ── THE MODAL IS A SIBLING OF THE PAGE, NOT A CHILD OF IT ──────────────
+        It used to sit INSIDE the `space-y-4` wrapper above, and that produced a
+        white band across the top of the viewport on every modal on this screen.
+
+        `space-y-4` compiles to
+            .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-top: 1rem }
+        — a rule about CHILDREN, which the overlay was one of. So the overlay
+        got `margin-top: 16px`. Its own `inset-0` sets top AND bottom to 0 with
+        height auto, which is over-constrained: the margin wins, the box is
+        pushed down 16px and its resolved height shrinks by the same amount.
+        DevTools reported it as 2560x1261 with margin `16px 0px 0px`, and the
+        page showed through the gap.
+
+        `inset-0` could never have caused that, and nothing on the overlay
+        itself was wrong — which is why the fix is here, at the ancestor
+        relationship, and not an `!mt-0` bolted onto the overlay. Any margin
+        utility on any future wrapper would re-break that patch; a sibling
+        cannot be reached by `space-y-*` at all.
+
+        NOT a portal, deliberately. A portal to document.body would also solve
+        it and would additionally immunise the overlay against an ancestor
+        `transform`/`filter`/`contain`, which would break `position: fixed`
+        containment outright. There is no such ancestor here — the admin layout
+        is `flex h-screen overflow-hidden` with a scrolling `<main>`, and a
+        transform would have produced something far worse than a 16px band — so
+        a portal would buy protection against a hazard that is not present, at
+        the cost of an SSR mount guard and a change to every modal on the admin.
+        If one is ever introduced, revisit; today this is the smaller true fix.
+      */}
       {modal && (
         <ScheduleModal
           mode={modal.mode}
@@ -544,7 +612,15 @@ export function SchedulesAdminClient({
           }}
         />
       )}
-    </div>
+
+      {details && (
+        <RoundDetailsModal
+          schedule={details}
+          local={localBySchedId.get(String(details._id))}
+          onClose={() => setDetails(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -559,10 +635,12 @@ function ProgramGroup({
   instructorById,
   collapsed,
   busyId,
+  todayKey,
   onToggle,
   onAdd,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   const Icon = collapsed ? ChevronRight : ChevronDown;
   // What `laneLayout` and `roundSpanIndices` speak: contiguous ascending
@@ -673,8 +751,10 @@ function ProgramGroup({
                           localBySchedId,
                           instructorById,
                           busyId,
+                          todayKey,
                           onEdit,
                           onDelete,
+                          onDetails,
                         })}
                       </tr>
                     ))}
@@ -801,8 +881,10 @@ function laneCells({
   localBySchedId,
   instructorById,
   busyId,
+  todayKey,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   const out = [];
   let col = 0;
@@ -835,8 +917,10 @@ function laneCells({
               local={localBySchedId.get(String(s._id))}
               instructorById={instructorById}
               busy={busyId === s._id}
+              todayKey={todayKey}
               onEdit={() => onEdit(s)}
               onDelete={() => onDelete(s._id)}
+              onDetails={() => onDetails(s)}
             />
           ))}
           <ContinuationNote cell={cell} />
@@ -884,8 +968,10 @@ function ScheduleCell({
   local,
   instructorById,
   busy,
+  todayKey,
   onEdit,
   onDelete,
+  onDetails,
 }) {
   /**
    * ── THE LABEL COMES FROM THE SHARED FORMATTER. IT USED TO BE A SIXTH ONE ───
@@ -936,7 +1022,42 @@ function ScheduleCell({
    * `state` gives 'เปิดรับ' / 'ใกล้เต็ม' / 'เต็ม', which is the fact an admin
    * is reading. The colours are the shared ones either way.
    */
-  const statusStyle = resolveScheduleBadge(schedule.status);
+  /**
+   * ── AN ENDED ROUND IS A DIFFERENT KIND OF ROW, AND THE DATES DECIDE IT ─────
+   *
+   * MSDB now returns rounds whose last training day has passed, so this grid
+   * draws history as well as the future. A finished round is not a round with a
+   * stale colour on it — it is a record, and it gets one word, จบไปแล้ว, in
+   * place of a status it can no longer be in.
+   *
+   * DERIVED FROM `dates`, NEVER FROM `status`. A finished round's stored status
+   * is whatever it was on its last selling day, and nothing updates it when the
+   * round runs out: measured 2026-09-02, 40 of the 172 fully-past rounds
+   * upstream still say `open` and 2 say `nearly_full`. Rendering those would
+   * advertise a course that finished last month as taking registrations —
+   * exactly the class of lie lib/scheduleStatus's own header was written to
+   * stop. `roundHasEnded` reads the dates, takes the LAST one by `max` (the
+   * array is not guaranteed sorted), and is strict: a round whose final day is
+   * TODAY is still running and is untouched by any of this.
+   *
+   * `resolveDerivedRoundBadge('elapsed')` is REUSED, not re-declared. It
+   * already exists for the page-builder's chosen-rounds mode, is already the
+   * shared NEUTRAL grey, and lives deliberately outside SCHEDULE_STATUSES so
+   * that adding it here cannot leak จบไปแล้ว into the public status filter. See
+   * that module's "DELIBERATELY OUTSIDE" note — a sixth status map is the thing
+   * it exists to prevent, and this is a sixth surface asking for one.
+   */
+  const ended = roundHasEnded(schedule.dates, todayKey);
+
+  /**
+   * ONE badge, never two. An ended round shows จบไปแล้ว ALONE — not its old
+   * status beside it, and not its old status underneath. Two words would make
+   * the reader reconcile them, and the stale one has no claim on the reader's
+   * attention.
+   */
+  const statusStyle = ended
+    ? resolveDerivedRoundBadge('elapsed')
+    : resolveScheduleBadge(schedule.status);
 
   /**
    * A full round is not registerable, and the public ruling is that its
@@ -959,10 +1080,24 @@ function ScheduleCell({
   return (
     <div
       className={
-        'flex flex-col items-center gap-0.5 rounded-9e-md border bg-white px-2 py-1 text-xs shadow-sm dark:bg-[#0D1B2A]' +
+        'flex flex-col items-center gap-0.5 rounded-9e-md border px-2 py-1 text-xs shadow-sm' +
+        (ended
+          ? // Greyed, as the ruling says. The card recedes but stays fully
+            // legible — this is a record an admin reads, not a disabled
+            // control, so no opacity that would also fade the text.
+            ' border-dashed bg-9e-ice/60 dark:bg-[#0D1B2A]/50'
+          : ' bg-white dark:bg-[#0D1B2A]') +
         (isFull ? ' cursor-not-allowed' : '')
       }
-      style={{ borderColor: color }}
+      /*
+       * The border carries the DELIVERY TYPE on a live round. An ended round
+       * drops it for the neutral surface border: the colour is the legend for
+       * "you can still book this in classroom/hybrid/online", and a finished
+       * round is not bookable in any of them. The type is not lost — the dot
+       * below keeps it, with its `title`, which is where the fact belongs once
+       * it is history rather than an offer.
+       */
+      style={ended ? undefined : { borderColor: color }}
     >
       <div className="flex items-center justify-center gap-1.5">
         <span
@@ -999,24 +1134,60 @@ function ScheduleCell({
           {teacherNames.length > 1 ? ` +${teacherNames.length - 1}` : ''}
         </div>
       )}
-      <div className="flex items-center justify-center gap-1.5">
+      {/*
+        ── AN ENDED ROUND CARRIES NEITHER แก้ไข NOR ลบ ───────────────────────
+        Not disabled — ABSENT. The two controls are withheld for one reason
+        each, and neither is a styling preference:
+
+        ลบ is a HARD delete. `deleteSchedule` issues a real DELETE to MSDB
+        (lib/actions/schedules.js → msdbDelete) behind a bare window.confirm,
+        with no check for anything pointing at the round. 26 public
+        registrations in this database already reference rounds removed that
+        way and can no longer resolve what their holder attended. Every round
+        on this side of the line is finished, so the only thing deleting one
+        can now destroy is the record of something that actually happened.
+
+        แก้ไข writes the whole round back to MSDB — dates, status, type — and
+        there is nothing left to correct forward on a round that is over;
+        an edit here can only rewrite history, silently, from a screen whose
+        job is to schedule the future.
+
+        A disabled-looking button invites the reader to hunt for the state
+        that would re-enable it. There is none, so there is no button.
+
+        ดูรายละเอียด takes their place rather than leaving the card blank: the
+        round still has something worth asking about — who signed up and where
+        they got to — and it is the only question a finished round can still
+        answer. It is a READ, and the panel it opens writes nothing.
+      */}
+      {ended ? (
         <button
           type="button"
-          onClick={onEdit}
+          onClick={onDetails}
           className="cursor-pointer text-[10px] text-9e-action hover:underline"
         >
-          แก้ไข
+          ดูรายละเอียด
         </button>
-        <span className="text-9e-slate-dp-50">·</span>
-        <button
-          type="button"
-          onClick={onDelete}
-          disabled={busy}
-          className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? '…' : 'ลบ'}
-        </button>
-      </div>
+      ) : (
+        <div className="flex items-center justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="cursor-pointer text-[10px] text-9e-action hover:underline"
+          >
+            แก้ไข
+          </button>
+          <span className="text-9e-slate-dp-50">·</span>
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={busy}
+            className="cursor-pointer text-[10px] text-red-500 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? '…' : 'ลบ'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1160,33 +1331,43 @@ function ScheduleModal({
     ? localBySchedId.get(String(schedule?._id)) ?? null
     : null;
   /*
-   * ── จำนวนที่นั่ง (max_seats) AND วิทยากร (instructor_ids) NO LONGER HAVE
-   *    INPUTS HERE. THE DATA IS DELIBERATELY KEPT. ──────────────────────────
+   * ── WHAT THE "ข้อมูลเฉพาะ Genesis" BLOCK HOLDS, AND WHAT IT DOES NOT ──────
    *
-   * Both inputs were removed from the "ข้อมูลเฉพาะ Genesis" block below because
-   * nothing in Genesis consumes either value today beyond the admin grid cell
-   * that displays it. NOTHING ELSE WAS REMOVED WITH THEM:
+   * TWO inputs: จำนวนที่นั่ง (max_seats) and ราคาต่อท่าน (price_override).
+   * วิทยากร (instructor_ids) has no input and is not sent.
    *
-   *   · the schema still declares both (models/ScheduleLocal.js) — do NOT drop
-   *     the columns;
-   *   · the stored values are untouched — 5 rows carry a `max_seats` and 4
-   *     carry an `instructor_ids` roster as of this change;
-   *   · the grid still RENDERS both, so the data stays visible even though it
-   *     is no longer editable from this modal.
+   * `max_seats` was briefly removed here and is BACK. The removal was made on
+   * the reading that "keep max_seats" meant only that the stored data survives;
+   * it meant the admin must still be able to ENTER it. It is wanted for
+   * in-house quotation requests. The 5 stored seat counts were never at risk —
+   * that is what the presence-based writer below is for — so restoring the
+   * input was re-adding an input, exactly as intended.
    *
-   * `max_seats` in particular is expected BACK: it is wanted for in-house
-   * quotation requests. This is a UI removal precisely so that restoring it is
-   * re-adding an input, not recovering data from a backup.
+   * `instructor_ids` STAYS OUT, and its data stays untouched: the schema still
+   * declares it (models/ScheduleLocal.js), the 4 stored rosters are still
+   * there, no migration was written, and the grid still renders the names. Do
+   * NOT read the absent input as "this column is dead".
    *
-   * The save path is what makes that safe. `sidecarSetFields`
-   * (lib/schedule/scheduleLocalFields) writes ONLY the keys the form sends, so
-   * an absent input leaves the stored value alone rather than nulling it — read
-   * that module before adding, removing or renaming anything in this block.
+   * ── THE WRITER IS PRESENCE-BASED, AND EVERY DECISION HERE DEPENDS ON IT ───
+   * `sidecarSetFields` (lib/schedule/scheduleLocalFields) writes ONLY the keys
+   * the form actually sends. A key present means this form is authoritative for
+   * that field, blank included; a key ABSENT means leave the stored value
+   * alone. That is what lets an input be removed without erasing anything, and
+   * it is the bug fix that must never be reverted to an unconditional `$set` —
+   * see that module's docstring for what the old one destroyed.
    *
-   * `price_override` KEEPS its input: unlike the other two it has live public
-   * readers (the registration wizard's per-round price) and it decides the
-   * amount charged through Omise (lib/registration/resolve-price.js).
+   * So both surviving inputs send their key UNCONDITIONALLY. A field an admin
+   * can SET must be one they can UNSET: clearing จำนวนที่นั่ง has to reach the
+   * database as null (= ไม่จำกัด), and clearing ราคาต่อท่าน has to fall the
+   * round back to the course's normal price.
+   *
+   * `price_override` additionally has live PUBLIC readers — the registration
+   * wizard's per-round price — and decides the amount charged through Omise
+   * (lib/registration/resolve-price.js). Do not touch it casually.
    */
+  const [maxSeats, setMaxSeats] = useState(
+    existingLocal?.max_seats != null ? String(existingLocal.max_seats) : ''
+  );
   const [priceOverride, setPriceOverride] = useState(
     existingLocal?.price_override != null ? String(existingLocal.price_override) : ''
   );
@@ -1238,20 +1419,20 @@ function ScheduleModal({
     fd.set('type',        type);
     fd.set('signup_url',  signupUrl);
     /*
-     * `max_seats` and `instructor_ids` are NOT SET AT ALL — not '', not 0, not
-     * an empty append. Their inputs are gone (see the note by `priceOverride`'s
-     * state), and the sidecar writer treats an absent key as "leave the stored
-     * value alone". Setting them to anything here, including a blank, would
-     * erase the five seat counts and four rosters currently stored.
+     * ── THE TWO ON-SCREEN SIDECAR FIELDS ARE SENT UNCONDITIONALLY ───────────
+     * Blank included, and neither may grow an `if` in front of it. The writer
+     * reads PRESENCE: sending the key says "this form owns this field", and a
+     * blank value reaches `toNullableNum` as null — which is how จำนวนที่นั่ง
+     * is cleared back to ไม่จำกัด and ราคาต่อท่าน back to the course's normal
+     * price. A guard like `if (maxSeats)` would make each field settable but
+     * never UNsettable, silently keeping the old value forever.
      *
-     * `price_override` IS set unconditionally, blank included, and that is the
-     * other half of the same rule: its input is still on screen, so the form is
-     * authoritative for it and an admin clearing the box must be able to reset
-     * the round to the course's normal price. Sending the key with '' is how
-     * that reaches `toNullableNum` as null. The old `!== ''` guard meant a
-     * cleared price silently kept the old override once the writer stopped
-     * clobbering.
+     * `instructor_ids` IS NOT SET AT ALL — not '', not 0, not an empty append.
+     * It has no input on this form, so the form has no opinion about it, and
+     * the writer must leave the 4 stored rosters exactly where they are.
+     * Sending the key with anything, including a blank, erases them.
      */
+    fd.set('max_seats', maxSeats);
     fd.set('price_override', priceOverride);
     if (isEdit) fd.set('schedule_id', schedule._id);
 
@@ -1546,19 +1727,36 @@ function ScheduleModal({
               ข้อมูลเฉพาะ Genesis (ไม่ส่งไป MSDB)
             </p>
             {/*
-              จำนวนที่นั่ง (max_seats) and วิทยากร (instructor_ids) were the
-              other two inputs in this block. They are REMOVED FROM THE UI ONLY
-              — the schema keeps both fields, the stored rows keep their values,
-              and no migration was written. `max_seats` is expected to return
-              for in-house quotation requests. The full note, including why an
-              omitted key can no longer overwrite stored data, is at the
-              `priceOverride` state declaration above.
+              TWO cells, so `md:grid-cols-2` is back — จำนวนที่นั่ง beside
+              ราคาต่อท่าน, as it was.
 
-              Now a single column: two of the three cells are gone, and
-              `md:grid-cols-2` would strand the price at half width with nothing
-              beside it.
+              วิทยากร (instructor_ids) is the one that stayed out, and its
+              removal is UI-ONLY: the schema still declares the field, the
+              stored rosters are untouched, no migration was written, and the
+              grid still renders the names. Do not read the absent input as
+              "this column is dead". The full note, including why an omitted key
+              cannot overwrite stored data and why the two inputs below send
+              theirs unconditionally, is at the `maxSeats` state declaration.
             */}
-            <div className="grid gap-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium text-9e-navy dark:text-white">
+                  จำนวนที่นั่ง (max_seats)
+                </span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={maxSeats}
+                  onChange={(e) => setMaxSeats(e.target.value)}
+                  placeholder="ไม่จำกัด"
+                  className={inputCls}
+                />
+                <span className="mt-1 block text-xs text-9e-slate-dp-50">
+                  เว้นว่าง = ไม่จำกัด
+                </span>
+              </label>
+
               <label className="block">
                 <span className="text-sm font-medium text-9e-navy dark:text-white">
                   ราคาต่อท่าน (บาท, ต่อรอบ)
@@ -1685,3 +1883,162 @@ function ButtonGroup({ options, value, onChange }) {
 
 const inputCls =
   'mt-1 w-full rounded-9e-md border border-[var(--surface-border)] bg-white px-3 py-2 text-sm text-9e-navy focus:outline-none focus:ring-1 focus:ring-9e-action dark:bg-[#0D1B2A] dark:text-white';
+
+// ── RoundDetailsModal ─────────────────────────────────────────────
+
+/**
+ * What ดูรายละเอียด opens on a finished round: its PUBLIC registrations,
+ * counted by status, and nothing else.
+ *
+ * ── READ-ONLY BY CONSTRUCTION, NOT BY RESTRAINT ────────────────────────────
+ * There is no form, no action call but the one that reads, and no state that
+ * outlives the panel. That is deliberate on a screen whose other modal writes
+ * through to MSDB: this panel exists precisely BECAUSE a finished round must
+ * not be written to, so the thing that replaces the write controls must not
+ * quietly become one.
+ *
+ * ── IN-HOUSE IS ABSENT, AND THE HEADING SAYS SO ────────────────────────────
+ * `getRoundRegistrationSummary` reads `register_public` only — in-house
+ * engagements are customer-defined and are not rounds on this grid. The heading
+ * names the population rather than saying a bare "ผู้ลงทะเบียน" and letting a
+ * reader assume the number covers every enquiry the round attracted: an admin
+ * checking this against a sales figure has to be able to see which set it is.
+ *
+ * ── FOUR STATES, DRAWN AS FOUR ─────────────────────────────────────────────
+ * Loading, failed, loaded-with-people, and loaded-with-NOBODY. The last is not
+ * the third with zeros in it. A round nobody booked and a join that silently
+ * matched nothing produce the same four zeros, and only a sentence tells them
+ * apart.
+ */
+function RoundDetailsModal({ schedule, local, onClose }) {
+  const [state, setState] = useState({ phase: 'loading', summary: null, error: null });
+
+  const scheduleId = String(schedule?._id ?? '');
+
+  useEffect(() => {
+    /*
+     * `alive` guards the setState after an unmount — an admin who opens a round
+     * and closes it before the round-trip lands would otherwise write into a
+     * component that is gone. It is keyed on the id, so opening a second round
+     * while the first is still in flight cannot have the first one's answer
+     * arrive last and overwrite it.
+     */
+    let alive = true;
+    setState({ phase: 'loading', summary: null, error: null });
+    getRoundRegistrationSummary(scheduleId)
+      .then((res) => {
+        if (!alive) return;
+        if (res?.ok) {
+          setState({ phase: 'ready', summary: res.summary, error: null });
+        } else {
+          setState({ phase: 'error', summary: null, error: res?.error ?? 'อ่านข้อมูลไม่สำเร็จ' });
+        }
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setState({ phase: 'error', summary: null, error: err?.message ?? 'อ่านข้อมูลไม่สำเร็จ' });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [scheduleId]);
+
+  // MSDB hands `course` back populated or as a bare ObjectId string — the same
+  // two shapes the grid's own lookup already allows for.
+  const course =
+    typeof schedule?.course === 'object' && schedule.course !== null
+      ? schedule.course
+      : null;
+
+  const summary = state.summary;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-9e-lg bg-white shadow-xl dark:bg-[#111d2c]">
+        <div className="flex items-center justify-between border-b border-[var(--surface-border)] px-5 py-4">
+          <h2 className="text-lg font-bold text-9e-navy dark:text-white">
+            รายละเอียดรอบอบรม
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="ปิด"
+            className="text-9e-slate-dp-50 hover:text-9e-navy"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/*
+            Which round this is. `showMonth`/`showYear` are ON here, unlike the
+            grid cell that calls the same formatter with neither: there is no
+            column header above this to carry the month, so the dates have to
+            name themselves.
+          */}
+          <div className="rounded-9e-md border border-[var(--surface-border)] bg-9e-ice/50 px-3 py-2 dark:bg-[#0D1B2A]/60">
+            {course && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[11px] text-9e-action">
+                  {course.course_id}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-9e-navy dark:text-white">
+                  {course.course_name_th || course.course_name}
+                </span>
+              </div>
+            )}
+            <div className="mt-1 text-xs text-9e-slate-dp-50">
+              {formatRoundDays(schedule?.dates, { showMonth: true, showYear: true })}
+              <span className="mx-1.5">·</span>
+              {TYPE_LABEL[schedule?.type] ?? TYPE_LABEL.classroom}
+              {local?.max_seats != null && (
+                <>
+                  <span className="mx-1.5">·</span>
+                  {local.max_seats} ที่นั่ง
+                </>
+              )}
+            </div>
+          </div>
+
+          <h3 className="text-sm font-medium text-9e-navy dark:text-white">
+            ผู้ลงทะเบียน (รอบสาธารณะ)
+          </h3>
+
+          {state.phase === 'loading' && (
+            <div className="py-6 text-center text-xs text-9e-slate-dp-50">
+              กำลังโหลด…
+            </div>
+          )}
+
+          {state.phase === 'error' && (
+            <div className="rounded-9e-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {state.error}
+            </div>
+          )}
+
+          {/*
+            Both loaded states — the breakdown and the nobody-registered
+            sentence — live in RegistrationSummaryPanel. See that file's header
+            for why they are not branches here: a fetch-owning modal's `ready`
+            markup is unreachable from renderToStaticMarkup, so the two states
+            that carry the actual answer would have been the two nothing could
+            test.
+          */}
+          {state.phase === 'ready' && (
+            <RegistrationSummaryPanel summary={summary} />
+          )}
+        </div>
+
+        <div className="border-t border-[var(--surface-border)] px-5 py-3 text-right">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-9e-md border border-[var(--surface-border)] px-4 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            ปิด
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

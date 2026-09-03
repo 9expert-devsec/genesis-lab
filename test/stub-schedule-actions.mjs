@@ -32,3 +32,17 @@ export async function deleteSchedule() {
 export async function getScheduleLocals() {
   throw new Error('stub-schedule-actions: getScheduleLocals must not be called in a render test');
 }
+/**
+ * Throws like the rest, and for the same reason, even though this one is a READ
+ * rather than a write.
+ *
+ * RoundDetailsModal calls it from an effect, and `renderToStaticMarkup` runs no
+ * effects — so a render test that reaches this has rendered something no server
+ * render can produce, which is exactly the confusion the panel was split out of
+ * the modal to avoid. test/render/adminRoundDetails exercises the loaded states
+ * by rendering RegistrationSummaryPanel directly with a real summary; nothing
+ * needs this to return.
+ */
+export async function getRoundRegistrationSummary() {
+  throw new Error('stub-schedule-actions: getRoundRegistrationSummary must not be called in a render test');
+}

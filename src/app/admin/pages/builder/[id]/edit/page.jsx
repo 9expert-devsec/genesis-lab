@@ -1,12 +1,16 @@
-import { notFound } from 'next/navigation';
-import { requirePage } from '@/lib/rbac/guard';
-import { canUseAdvanced, canPublish, canManagePreview } from '@/lib/rbac/access';
-import { getPageBuilderPageById } from '@/lib/actions/pageBuilder';
-import { catalogueOrEmpty } from '@/lib/pageBuilder/courseCatalogue';
-import { PageBuilderEditor } from '@/components/pageBuilder/editor/PageBuilderEditor';
+import { notFound } from "next/navigation";
+import { requirePage } from "@/lib/rbac/guard";
+import {
+  canUseAdvanced,
+  canPublish,
+  canManagePreview,
+} from "@/lib/rbac/access";
+import { getPageBuilderPageById } from "@/lib/actions/pageBuilder";
+import { catalogueOrEmpty } from "@/lib/pageBuilder/courseCatalogue";
+import { PageBuilderEditor } from "@/components/pageBuilder/editor/PageBuilderEditor";
 
-export const metadata = { title: 'แก้ไขหน้า Page Builder' };
-export const dynamic = 'force-dynamic';
+export const metadata = { title: "แก้ไขหน้า Page Builder" };
+export const dynamic = "force-dynamic";
 
 /**
  * Edit an existing builder page. Server component: guards, loads the doc, and
@@ -17,7 +21,7 @@ export const dynamic = 'force-dynamic';
  * client's first save (see updatePageBuilderPage).
  */
 export default async function EditBuilderPage({ params }) {
-  const session = await requirePage('pages');
+  const session = await requirePage("pages");
   const { id } = await params;
   const page = await getPageBuilderPageById(id);
   if (!page) notFound();
@@ -55,7 +59,7 @@ export default async function EditBuilderPage({ params }) {
       page={page}
       pageId={id}
       updatedAt={page.updatedAt ?? null}
-      currentUserName={user?.name ?? ''}
+      currentUserName={user?.name ?? ""}
       courses={courses}
       tier={{
         canUseAdvanced: canUseAdvanced(user),

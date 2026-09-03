@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createElement } from 'react';
 import { formatRoundDays } from '@/lib/schedule/roundDateLabel';
+import { TRAINING_TYPE_LABEL } from '@/lib/schedule/trainingTypeLabel';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StepForm } from '@/components/registration/RegisterWizard';
 
@@ -139,9 +140,13 @@ const anyStrip = (html) => STRIP_LABELS.some((l) => html.includes(l));
 // ── Bug 1: the URL wins over the draft ──────────────────────────────────────
 
 test('a URL classId beats a differing draft classId', () => {
+  // NOT isPressed: a round IS selected in this render (from the URL), so the
+  // picker box — and the cards inside it — has collapsed (see the "round
+  // picker collapses" section below). The summary strip is what survives a
+  // collapse and is the only place left to read which round is active.
   const html = render({ initialClassId: OCT._id, initialValues: DRAFT });
-  assert.equal(isPressed(html, OCT_LABEL), true, 'the URL round is selected');
-  assert.equal(isPressed(html, SEP_LABEL), false, 'the draft round is not');
+  assert.ok(html.includes('15-16 ต.ค. 2569'), 'the URL round (October) is what the summary strip shows');
+  assert.ok(!html.includes('10-11 ก.ย. 2569'), 'not the draft round (September)');
 });
 
 test('CONTROL: the OLD precedence would have selected the draft round', () => {
@@ -149,14 +154,16 @@ test('CONTROL: the OLD precedence would have selected the draft round', () => {
   // draft — the exact state the old ordering produced from the inputs above.
   // If this and the test above ever agree, the swap has been undone: the two
   // orderings would be indistinguishable and the test above would prove nothing.
+  // Strip-based, not isPressed, for the same reason as the test above — both
+  // renders here have a round selected, so both have a collapsed box.
   const oldOrdering = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(oldOrdering, SEP_LABEL), true, 'draft-only selects September');
-  assert.equal(isPressed(oldOrdering, OCT_LABEL), false);
+  assert.ok(oldOrdering.includes('10-11 ก.ย. 2569'), 'draft-only selects September');
+  assert.ok(!oldOrdering.includes('15-16 ต.ค. 2569'));
 
   const newOrdering = render({ initialClassId: OCT._id, initialValues: DRAFT });
   assert.notEqual(
-    isPressed(oldOrdering, OCT_LABEL),
-    isPressed(newOrdering, OCT_LABEL),
+    oldOrdering.includes('15-16 ต.ค. 2569'),
+    newOrdering.includes('15-16 ต.ค. 2569'),
     'the two orderings must disagree, or the precedence test is vacuous'
   );
 });
@@ -224,9 +231,11 @@ test('CONTROL: those probes track the draft, they are not step-1 boilerplate', (
 test('with NO URL classId the draft round is still restored', () => {
   // CourseHero links to /registration/public?course=<id> with no &class=, so
   // this is the live path for a returning user, not a hypothetical one.
+  // Strip-based, not isPressed — the draft round is selected, so the box
+  // (and its cards) has already collapsed.
   const html = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(html, SEP_LABEL), true, 'the draft round is selected');
-  assert.ok(html.includes('10-11 ก.ย. 2569'), 'and drives the summary strip');
+  assert.ok(html.includes('10-11 ก.ย. 2569'), 'the draft round drives the summary strip');
+  assert.ok(!html.includes('15-16 ต.ค. 2569'), 'not the other round');
 });
 
 test('with neither, nothing is selected and the summary strip is absent', () => {
@@ -265,7 +274,7 @@ test('CONTROL: the same draft with a LIVE round does show the strip', () => {
   // Proves the stale-round assertions above measure the missing round and not a
   // strip that is simply never rendered once a draft reveals the form.
   const html = render({ initialClassId: null, initialValues: DRAFT });
-  assert.equal(isPressed(html, SEP_LABEL), true);
+  assert.ok(html.includes('10-11 ก.ย. 2569'), 'the strip shows the draft round');
   assert.equal(anyStrip(html), true, 'the strip renders for a round that exists');
 });
 
@@ -321,16 +330,19 @@ test('CONTROL: the REVEALED probes flip between those two states', () => {
   }
 });
 
-test('CONTROL: both states DO render the schedule carousel', () => {
-  // Proves the unrevealed render is a real page and not an early return or a
-  // crash — which is the other way "the form body is absent" could pass.
-  for (const html of [
-    render({ initialClassId: OCT._id, initialValues: null }),
-    render({ initialClassId: null, initialValues: null }),
-  ]) {
-    assert.ok(html.includes('เลือกรอบการอบรม'), 'the schedule section heading');
-    assert.ok(html.includes(SEP_LABEL) && html.includes(OCT_LABEL), 'both round cards');
-  }
+test('CONTROL: the unrevealed render IS a real page, not an early return or a crash', () => {
+  // Proves the unrevealed render is a real page — the other way "the form body
+  // is absent" could pass. Was 'CONTROL: both states DO render the schedule
+  // carousel', asserting the carousel renders in BOTH the revealed and
+  // unrevealed states — that premise is exactly what the round-picker-collapse
+  // section below inverts: a round IS selected in the "revealed" case here
+  // (initialClassId: OCT._id), so its carousel has now collapsed. See the
+  // dedicated "round picker collapses once a round is chosen" tests for that
+  // behaviour; this control now only claims the unrevealed (no-round) case
+  // still renders a real carousel.
+  const html = render({ initialClassId: null, initialValues: null });
+  assert.ok(html.includes('เลือกรอบการอบรม'), 'the schedule section heading');
+  assert.ok(html.includes(SEP_LABEL) && html.includes(OCT_LABEL), 'both round cards');
 });
 
 test('CONTROL: the confirm button DOES appear once a round is picked without one in the URL', () => {
@@ -376,7 +388,9 @@ test('nothing auto-selects a round when none was given', () => {
 test('a draft with no URL classId still reveals — unchanged behaviour', () => {
   const html = render({ initialClassId: null, initialValues: DRAFT });
   assert.equal(isRevealed(html), true);
-  assert.equal(isPressed(html, SEP_LABEL), true, 'on the round the draft remembers');
+  // Strip-based, not isPressed — the draft round is selected, so its card is
+  // no longer on screen for a pressed-state check.
+  assert.ok(html.includes('10-11 ก.ย. 2569'), 'the strip shows the round the draft remembers');
 });
 
 test('CONTROL: the draft alone is what reveals it, not the fixture being non-empty', () => {
@@ -461,6 +475,139 @@ test('the draft is untouched — its fields restore once a live round is picked'
   }
 });
 
+// ── Round picker collapses once a round is chosen ───────────────────────────
+//
+// เลือกรอบการอบรม (the box: heading + ScheduleCarousel) now renders ONLY while
+// no SELECTABLE round is chosen. Once one is, the box collapses; the summary
+// strip stays and grows a "เปลี่ยนรอบ" link that re-opens the box IN PLACE —
+// pure local state, no navigation, no URL change, no field reset. A FULL or
+// STARTED round does NOT collapse the box — see the full-round test below —
+// because the notices for those states explicitly point at "รายการด้านบน"
+// (the list above), which must still be on screen for that to mean anything.
+
+const BOX_HEADING = 'เลือกรอบการอบรม';
+const CHANGE_ROUND_LINK = 'เปลี่ยนรอบ';
+const FULL = { _id: 'sch-full', dates: ['2026-11-05', '2026-11-06'], status: 'full', type: 'classroom' };
+
+const renderWithFull = (props) =>
+  renderToStaticMarkup(
+    createElement(StepForm, {
+      course: COURSE,
+      schedules: [...SCHEDULES, FULL],
+      initialClassId: FULL._id,
+      initialValues: null,
+      onSubmit: noop,
+      currentYear: CURRENT_YEAR,
+      ...props,
+    })
+  );
+
+test('the box is absent when a round arrives in the URL', () => {
+  // buttonsContaining, not a bare html.includes: OCT_LABEL is the CARD's own
+  // label, but the strip renders the SAME round's Thai date text too (a
+  // different formatter, same underlying date) — a bare substring check would
+  // find that and report a card that is not actually there.
+  const html = render({ initialClassId: OCT._id, initialValues: null });
+  assert.ok(!html.includes(BOX_HEADING), 'heading gone');
+  assert.equal(buttonsContaining(html, SEP_LABEL).length, 0, 'no card button for September');
+  assert.equal(buttonsContaining(html, OCT_LABEL).length, 0, 'no card button for October either');
+});
+
+test('the box is present when no round arrives in the URL', () => {
+  const html = render({ initialClassId: null, initialValues: null });
+  assert.ok(html.includes(BOX_HEADING));
+  assert.ok(html.includes(SEP_LABEL) && html.includes(OCT_LABEL));
+});
+
+test('the box collapses the moment a round is picked', () => {
+  // Simulated the way every round-pick transition in this file is: as two
+  // renders, the second with the id handleSelectSchedule's own
+  // router.replace('?class=<id>') would have put in the URL a moment later.
+  const beforePick = render({ initialClassId: null, initialValues: null });
+  assert.ok(beforePick.includes(BOX_HEADING), 'box open before any pick');
+
+  const afterPick = render({ initialClassId: OCT._id, initialValues: null });
+  assert.ok(!afterPick.includes(BOX_HEADING), 'box collapsed the moment a round is picked');
+  assert.ok(afterPick.includes('15-16 ต.ค. 2569'), 'the strip now shows the picked round');
+});
+
+test('CONTROL: a FULL round does NOT collapse the box — its notice points at the list above', () => {
+  // The carousel refuses to let a full round be SELECTED, but a stale deep
+  // link can still land on one — roundSelectable is false for it (status
+  // 'full'), so the box must stay open, matching pre-existing behaviour.
+  const html = renderWithFull({});
+  assert.ok(html.includes(BOX_HEADING), 'box stays open for an unselectable (full) round');
+  assert.ok(html.includes('รอบอบรมนี้เต็มแล้ว กรุณาเลือกรอบอื่นจากรายการด้านบน'), 'the notice referencing the list is shown');
+});
+
+test('เปลี่ยนรอบ appears only once the box has collapsed', () => {
+  const collapsed = render({ initialClassId: OCT._id, initialValues: null });
+  assert.ok(collapsed.includes(CHANGE_ROUND_LINK), 'present once a round is chosen and the box collapsed');
+
+  const open = render({ initialClassId: null, initialValues: null });
+  assert.ok(!open.includes(CHANGE_ROUND_LINK), 'absent while the box is already open — nothing to re-open');
+
+  // The no-round case above can't distinguish "the link's own gate is
+  // correct" from "the whole strip is absent anyway" — there is no
+  // activeSchedule there, so the strip (and anything inside it) never
+  // renders regardless of the link's own condition. A FULL round is the
+  // scenario that actually exercises the link's gate: the strip DOES render
+  // (activeSchedule resolves), but the box is ALSO still open (unselectable),
+  // so the link — redundant with the already-visible carousel — must not
+  // additionally appear.
+  const fullRoundOpenBox = renderWithFull({});
+  assert.ok(!fullRoundOpenBox.includes(CHANGE_ROUND_LINK), 'absent for a full round too — the box is already open');
+});
+
+test('CONTROL: "เปลี่ยนรอบ" is wired as pure local state — no navigation, no URL change', () => {
+  // The hard constraint this ticket calls out by name: เปลี่ยนรอบ must not
+  // navigate, must not change the URL in a way that remounts the form, and
+  // must not reset a filled field. Reading the handler's own line proves it
+  // touches neither router nor location — a click simulation cannot run in
+  // this harness (see itemListReorder.test.mjs's note on why), so this is
+  // the same source-wiring proof pattern this file already uses for
+  // handleReveal below.
+  const src = readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8');
+  assert.match(src, /const handleChangeRound = \(\) => setPickerForcedOpen\(true\);/, 'handleChangeRound only flips local state');
+  assert.match(src, /onClick=\{handleChangeRound\}/, 'the เปลี่ยนรอบ button is wired to it');
+  const handlerLine = src.split('\n').find((l) => l.includes('const handleChangeRound ='));
+  assert.ok(handlerLine, 'handleChangeRound found in source');
+  assert.ok(!handlerLine.includes('router.'), 'no router call on that line');
+  assert.ok(!handlerLine.includes('location'), 'no location assignment on that line');
+});
+
+test('เปลี่ยนรอบ re-opens the box in place: picking a different round keeps a filled field', () => {
+  // What "เปลี่ยนรอบ re-opens in place" ACTUALLY buys the user: fill a field,
+  // reopen the box, pick a different round — the field must still hold its
+  // value, and the strip must show the new round. Simulated as two renders,
+  // exactly like 'the draft is untouched — its fields restore once a live
+  // round is picked' above — the field-level proof a static render can give.
+  const before = render({ initialClassId: SEP._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(before.includes(probe), `${what} present before the round change`);
+  }
+  assert.ok(before.includes('10-11 ก.ย. 2569'), 'strip shows the original round');
+  assert.ok(!before.includes(BOX_HEADING), 'box already collapsed — a round is chosen');
+
+  const afterChange = render({ initialClassId: OCT._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(afterChange.includes(probe), `${what} survived the round change via เปลี่ยนรอบ`);
+  }
+  assert.ok(afterChange.includes('15-16 ต.ค. 2569'), 'strip shows the NEW round');
+  assert.ok(!afterChange.includes('10-11 ก.ย. 2569'), 'not the old one');
+});
+
+test('CONTROL: a genuinely different draft does not survive — the probes track the draft, not boilerplate', () => {
+  const other = {
+    ...DRAFT,
+    coordinator: { ...DRAFT.coordinator, firstName: 'วิชัย', lastName: 'สุขใจ', email: 'wichai@example.com', phone: '0900000000' },
+  };
+  const before = render({ initialClassId: SEP._id, initialValues: other });
+  assert.ok(!before.includes('สมชาย'), 'the OTHER draft is what rendered');
+  const afterChange = render({ initialClassId: OCT._id, initialValues: other });
+  assert.ok(afterChange.includes('วิชัย'), 'and it still is, after the round change');
+});
+
 // ── Bug 2: the back link ───────────────────────────────────────────────────
 
 // The back link lives inside the form body, which only renders once the form is
@@ -511,6 +658,221 @@ test('CONTROL: that probe would notice if one of them changed', () => {
   const mutated = '<Link href="/da-pbi-training-course">ดูคอร์สอื่นเพิ่มเติม</Link>';
   const [, href] = /<Link href="([^"]*)">ดูคอร์สอื่นเพิ่มเติม<\/Link>/.exec(mutated);
   assert.notEqual(href, '/training-course');
+});
+
+// ── Type label on the summary strip — Commit C ──────────────────────────────
+//
+// The two-branch (hybrid ? ... : "Classroom") ternary is replaced by the
+// shared three-way map in src/lib/schedule/trainingTypeLabel.js. The map's
+// own exact-string and fallback behaviour is pinned in
+// test/pure/trainingTypeLabel.test.mjs; what belongs HERE is proof that the
+// STRIP actually calls it (not a second, drifted copy) — verified not to
+// touch scheduleType, attendanceMode, or what gets submitted.
+
+const renderWithType = (type) => {
+  const round = { _id: `sch-${type}`, dates: ['2026-12-01', '2026-12-02'], status: 'open', type };
+  return renderToStaticMarkup(
+    createElement(StepForm, {
+      course: COURSE,
+      schedules: [round],
+      initialClassId: round._id,
+      initialValues: null,
+      onSubmit: noop,
+      currentYear: CURRENT_YEAR,
+    })
+  );
+};
+
+for (const [type, expected] of Object.entries(TRAINING_TYPE_LABEL)) {
+  test(`a ${type} round's strip shows the exact shared label`, () => {
+    const html = renderWithType(type);
+    assert.ok(html.includes(expected), `"${expected}" not found for type "${type}"`);
+  });
+}
+
+test('an Online round no longer renders the Classroom label — the latent defect this commit fixes', () => {
+  // Before Commit C the ternary was binary (hybrid vs everything else), so an
+  // "online" round silently fell into the "else" branch and rendered
+  // "Classroom". That is exactly what must no longer happen.
+  const html = renderWithType('online');
+  assert.ok(!html.includes(TRAINING_TYPE_LABEL.classroom), 'the Classroom label must not leak into an online round\'s strip');
+  assert.ok(html.includes(TRAINING_TYPE_LABEL.online), 'and the correct online label is there instead');
+});
+
+test('an unrecognised type does not fall back to Classroom on the strip', () => {
+  const html = renderWithType('webinar');
+  assert.ok(!html.includes(TRAINING_TYPE_LABEL.classroom), 'must not silently relabel an unknown type as Classroom');
+  assert.ok(html.includes('webinar'), 'the raw type value is shown instead');
+});
+
+test('CONTROL: the strip imports trainingTypeLabel — not a second, local copy of the map', () => {
+  const src = readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8');
+  assert.match(src, /import \{ trainingTypeLabel \} from "@\/lib\/schedule\/trainingTypeLabel";/);
+  assert.match(src, /\{trainingTypeLabel\(activeSchedule\.type\)\}/, 'the strip calls the shared function directly');
+});
+
+test('CONTROL: the type-label change does not alter scheduleType, attendanceMode, or the classId field', () => {
+  // Label-only, per the ticket: nothing about what gets submitted may change.
+  // classId/scheduleType are set via a mount effect renderToStaticMarkup
+  // never runs, so this reads the SOURCE for the effect that sets them.
+  const src = readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8');
+  assert.match(src, /setValue\("scheduleType", sch\?\.type \|\| undefined\);/, 'scheduleType still comes straight from the round');
+  assert.match(src, /setValue\("attendanceMode", undefined\);/, 'hybrid still leaves attendanceMode for the user to choose');
+  assert.ok(src.includes('data-section="attendance-mode"'), 'the attendance-mode selector section is still present, untouched');
+});
+
+// ── Confirm dialog on changing rounds — Commit D ───────────────────────────
+//
+// pendingRoundId (staging a click that needs confirming) is pure local
+// state, exactly like pickerForcedOpen before it — no prop reaches it, so a
+// static render cannot open the dialog directly. What CAN be proven by
+// rendering is the field-survival OUTCOME once a round changes (shared with
+// the เปลี่ยนรอบ test above, since confirm funnels through the exact same
+// handleSelectSchedule); what needs source-wiring proof is WHEN the dialog
+// is staged at all, since that decision lives entirely in local state.
+
+// Normalises CRLF -> LF so the multi-line regexes below (which assume \n)
+// match regardless of the checked-out line-ending convention.
+const srcText = () =>
+  readFileSync(path.join(ROOT, 'src/components/registration/RegisterWizard.jsx'), 'utf8').replace(/\r\n/g, '\n');
+
+test('CONTROL: a dialog IS staged for a different round while เปลี่ยนรอบ is open', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(!pickerForcedOpen\) \{\n\s*handleSelectSchedule\(id\);\n\s*return;\n\s*\}\n\s*if \(id === selectedScheduleId\) \{\n\s*setPickerForcedOpen\(false\);\n\s*return;\n\s*\}\n\s*setPendingRoundId\(id\);/,
+    'handleCarouselSelect only stages pendingRoundId after both earlier returns have been ruled out'
+  );
+});
+
+test('no dialog on the first pick — pickerForcedOpen is false, straight through to handleSelectSchedule', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleCarouselSelect = \(id\) => \{\n\s*if \(!pickerForcedOpen\) \{\n\s*handleSelectSchedule\(id\);\n\s*return;\n\s*\}/,
+    'the FIRST check handleCarouselSelect makes is "no round chosen yet" — and it returns immediately, before pendingRoundId is ever touched'
+  );
+});
+
+test('no dialog when re-clicking the already-chosen round — collapses instead', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(id === selectedScheduleId\) \{\n\s*setPickerForcedOpen\(false\);\n\s*return;\n\s*\}/,
+    'the same-round case returns via setPickerForcedOpen(false), never reaching setPendingRoundId'
+  );
+});
+
+test('CONTROL: the three handleCarouselSelect branches are mutually exclusive returns, not fallthrough', () => {
+  // Every branch above ends in `return` (or is the function's last statement)
+  // — the redden control for this file mutates the middle `return` away, so
+  // this is the affirmative half: the source as it stands really does have it.
+  const src = srcText();
+  const fn = src.slice(src.indexOf('const handleCarouselSelect'), src.indexOf('const handleConfirmChangeRound'));
+  assert.equal((fn.match(/return;/g) || []).length, 2, 'exactly two early returns before the final setPendingRoundId(id) statement');
+});
+
+test('cancel touches ONLY pendingRoundId — the round, the strip, and every form field are left alone', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleCancelChangeRound = \(\) => setPendingRoundId\(null\);/,
+    'handleCancelChangeRound is a single statement: clear the pending id, nothing else'
+  );
+  // Negative check: this exact line must not ALSO call handleSelectSchedule,
+  // setSelectedScheduleId, or router — the hard constraint this dialog exists
+  // under (cancel = true no-op).
+  const line = src.split('\n').find((l) => l.includes('const handleCancelChangeRound ='));
+  assert.ok(line, 'handleCancelChangeRound found in source');
+  assert.ok(!line.includes('handleSelectSchedule'), 'cancel must not select a round');
+  assert.ok(!line.includes('router'), 'cancel must not navigate');
+});
+
+test('CONTROL: Escape is wired to the SAME cancel handler as the ยกเลิก button and the backdrop', () => {
+  const src = srcText();
+  assert.match(src, /if \(e\.key === "Escape"\) handleCancelChangeRound\(\);/, 'Escape calls handleCancelChangeRound');
+  assert.match(src, /onClick=\{handleCancelChangeRound\}/, 'the backdrop overlay and/or ยกเลิก button call it too');
+  // Both the backdrop div and the ยกเลิก button share this exact prop — count
+  // confirms it is wired in more than the one place, not just Escape alone.
+  assert.ok((src.match(/onClick=\{handleCancelChangeRound\}/g) || []).length >= 2, 'wired on both the backdrop and the cancel button');
+});
+
+test('confirm funnels through the SAME handleSelectSchedule a first pick uses — no separate/duplicated round-setting path', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const handleConfirmChangeRound = \(\) => \{\n\s*if \(pendingRoundId == null\) return;\n\s*handleSelectSchedule\(pendingRoundId\);\n\s*setPendingRoundId\(null\);\n\s*\};/,
+    'handleConfirmChangeRound calls handleSelectSchedule directly, not a parallel setSelectedScheduleId'
+  );
+});
+
+test('confirm updates the round and preserves a filled field — same outcome เปลี่ยนรอบ already proved, now via the confirm path', () => {
+  // Confirm's ONLY effect on the round is calling handleSelectSchedule — the
+  // exact function a direct pick already uses — so the field-survival outcome
+  // is identical to the "เปลี่ยนรอบ re-opens..." test above and is proven the
+  // same way: two renders, the second with the id handleSelectSchedule's own
+  // router.replace('?class=<id>') would have put in the URL after confirm.
+  const before = render({ initialClassId: SEP._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(before.includes(probe), `${what} present before confirming a round change`);
+  }
+  const afterConfirm = render({ initialClassId: OCT._id, initialValues: DRAFT });
+  for (const [what, probe] of DRAFT_PROBES) {
+    assert.ok(afterConfirm.includes(probe), `${what} survived confirming a round change`);
+  }
+  assert.ok(afterConfirm.includes('15-16 ต.ค. 2569'), 'strip shows the confirmed round');
+});
+
+test('the dialog body date comes from formatClassDates — the SAME formatter the summary strip uses — never hand-formatted', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /const pendingDateLabel = pendingSchedule\n\s*\? formatClassDates\(pendingSchedule\.dates\)\n\s*: "";/,
+    'pendingDateLabel is computed by formatClassDates, not a second date formatter'
+  );
+  assert.match(
+    src,
+    /ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่ \{pendingDateLabel\} ใช่หรือไม่/,
+    'the exact body sentence, interpolating that same value'
+  );
+});
+
+test('CONTROL: the dialog copy is the exact specified strings — confirm/cancel button labels included', () => {
+  const src = srcText();
+  assert.ok(src.includes('ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่'), 'body opening');
+  assert.ok(src.includes('ใช่หรือไม่'), 'body closing');
+  assert.match(src, />\s*ยืนยัน\s*<\/Button>/, 'confirm button label');
+  assert.match(src, />\s*ยกเลิก\s*<\/Button>/, 'cancel button label — note this string also appears on the unrelated StepPreview submit-confirm dialog, so this alone does not prove THIS dialog; paired with the pendingDateLabel test above, which is unique to it');
+});
+
+// ── attendanceMode after confirming a round-type change — S5 / Commit D ────
+//
+// S5 (this round's own survey): the schedule-sync effect already resets
+// attendanceMode on every selectedScheduleId change — "classroom" for a
+// non-hybrid target, undefined (left for the user to choose) for a hybrid
+// one — regardless of what the PREVIOUS round's type was. Confirming a round
+// change updates selectedScheduleId through no path other than
+// handleSelectSchedule, so this was ALREADY correct before Commit D and nothing
+// new was added for it — this test pins that finding, not a new behaviour.
+
+test('S5: attendanceMode is already cleared on every selectedScheduleId change, hybrid or not — confirm adds no second path', () => {
+  const src = srcText();
+  assert.match(
+    src,
+    /if \(sch\?\.type !== "hybrid"\) \{\n\s*setValue\("attendanceMode", "classroom"\);\n\s*\} else \{\n\s*setValue\("attendanceMode", undefined\);\n\s*\}/,
+    'the schedule-sync effect sets attendanceMode for BOTH directions on every selectedScheduleId change'
+  );
+  // The effect's own dependency array — confirm's handleSelectSchedule updates
+  // exactly this state, so it cannot bypass the effect.
+  assert.match(src, /\}, \[selectedScheduleId, scheduleById, setValue\]\);/, 'the effect re-runs on every selectedScheduleId change, confirm-triggered ones included');
+  // And confirm's own handler, proven above, calls handleSelectSchedule — never
+  // setValue("attendanceMode", ...) directly, which would be a second,
+  // divergent path this test is here to rule out.
+  const confirmFn = src.slice(
+    src.indexOf('const handleConfirmChangeRound'),
+    src.indexOf('const handleCancelChangeRound')
+  );
+  assert.ok(!confirmFn.includes('attendanceMode'), 'confirm does not set attendanceMode itself — it defers entirely to the existing effect');
 });
 
 // ── Note for the next reader ───────────────────────────────────────────────

@@ -251,12 +251,12 @@ export function HeroSection() {
     max-w-none
 
     /* Mobile < 640px */
-    -bottom-6
+    -bottom-[16%]
     left-0
     right-0
     mx-auto
-    h-[380px]
-    w-[380px]
+    h-[440px]
+    w-[440px]
 
     /* Small 640px+ */
     sm:h-[340px]
@@ -278,18 +278,18 @@ export function HeroSection() {
     lg:w-[640px]
 
     /* Large Desktop 1280px+ */
-    xl:-bottom-[20%]
+    xl:-bottom-[60%]
     xl:-right-[15%]
-    xl:h-[500px]
+    xl:h-[800px]
     xl:w-[700px]
 
     /* Large Desktop 1280px+ */
-    min-[1537px]:-bottom-[40%]
+    min-[1537px]:-bottom-[100%]
     min-[1537px]:-right-[15%]
   "
           >
             <Image
-              src="/hero-img/nongnai.png"
+              src="/hero-img/nongnai-to-the-moon.png"
               alt=""
               fill
               sizes="

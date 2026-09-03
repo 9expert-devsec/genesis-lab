@@ -23,6 +23,7 @@ import { normalizeScheduleStatus } from "@/lib/scheduleStatus";
 // The round's four coupled fields, shared with the admin detail screen. See the
 // note where formatClassDates used to live.
 import { formatClassDates } from "@/lib/registrations/roundSelection";
+import { trainingTypeLabel } from "@/lib/schedule/trainingTypeLabel";
 import { CoordinatorFields } from "@/components/registration/CoordinatorFields";
 import { AttendeesList } from "@/components/registration/AttendeesList";
 import { InvoiceFields } from "@/components/registration/InvoiceFields";
@@ -451,6 +452,10 @@ export function StepForm({
   const handleSelectSchedule = useCallback(
     (id) => {
       setSelectedScheduleId(id);
+      // A pick always collapses the round-picker box — see `showPickerBox`
+      // below — whether it got here as the very first pick or by way of
+      // "เปลี่ยนรอบ" re-opening it.
+      setPickerForcedOpen(false);
       const params = new URLSearchParams(searchParams.toString());
       params.set("class", id);
       router.replace(`?${params.toString()}`, { scroll: false });
@@ -526,6 +531,83 @@ export function StepForm({
   const [formRevealed, setFormRevealed] = useState(
     roundSelectable(initialClassId) || roundSelectable(initialValues?.classId),
   );
+
+  /**
+   * ── THE ROUND-PICKER BOX — SHOWN ONLY WHILE NO ROUND IS CHOSEN ──────────────
+   * `pickerForcedOpen` is the ONLY way to see the box once a selectable round
+   * is chosen: a user-initiated "เปลี่ยนรอบ" click, and nothing else. It is pure
+   * local UI state — no URL, no navigation, no remount — precisely so
+   * "เปลี่ยนรอบ" can re-open the box in place without disturbing a single field
+   * of the form the user may already have filled in below.
+   *
+   * `roundChosen` reuses `roundSelectable`, not mere presence of
+   * `selectedScheduleId` — a FULL or STARTED round must still show the box
+   * (and the carousel it contains), because the messages below it explicitly
+   * point at "รายการด้านบน" (the list above): collapsing the box on an
+   * unselectable round would make those sentences point at nothing.
+   */
+  const roundChosen = roundSelectable(selectedScheduleId);
+  const [pickerForcedOpen, setPickerForcedOpen] = useState(false);
+  const showPickerBox = !roundChosen || pickerForcedOpen;
+  const handleChangeRound = () => setPickerForcedOpen(true);
+
+  /**
+   * ── CONFIRM DIALOG ON CHANGING ROUNDS ────────────────────────────────────
+   * A click in the carousel only asks for confirmation when it could
+   * actually SURPRISE the user: the box is open BECAUSE they clicked
+   * "เปลี่ยนรอบ" (pickerForcedOpen) — meaning a round was already chosen and
+   * something they may have already started filling in below assumes it —
+   * AND the click names a round OTHER than the one already chosen.
+   *
+   *   pickerForcedOpen is false  → the very first pick (no round chosen yet,
+   *                                the ขอใบเสนอราคา Public path). Nothing to
+   *                                confirm — straight through.
+   *   id === selectedScheduleId  → re-clicking the round already chosen.
+   *                                Nothing changes; just collapse the box,
+   *                                same as if they had clicked away.
+   *   otherwise                  → stage it in pendingRoundId and ask.
+   *
+   * pendingRoundId is local state — like pickerForcedOpen, no URL, no
+   * navigation — cancel is a pure no-op and confirm funnels through the
+   * EXACT SAME handleSelectSchedule a first pick uses, so it is subject to
+   * the exact same downstream effects (attendanceMode included — see the
+   * schedule-sync effect above; S5 found it already correct on every
+   * selectedScheduleId change, this path is no exception).
+   */
+  const [pendingRoundId, setPendingRoundId] = useState(null);
+
+  const handleCarouselSelect = (id) => {
+    if (!pickerForcedOpen) {
+      handleSelectSchedule(id);
+      return;
+    }
+    if (id === selectedScheduleId) {
+      setPickerForcedOpen(false);
+      return;
+    }
+    setPendingRoundId(id);
+  };
+
+  const handleConfirmChangeRound = () => {
+    if (pendingRoundId == null) return;
+    handleSelectSchedule(pendingRoundId);
+    setPendingRoundId(null);
+  };
+
+  const handleCancelChangeRound = () => setPendingRoundId(null);
+
+  // Escape cancels, same as the ยกเลิก button — the existing inline confirm
+  // dialogs in this file (StepPreview's "ยืนยันการส่งข้อมูล") have no such
+  // listener; this one adds it because the ticket requires it.
+  useEffect(() => {
+    if (pendingRoundId == null) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") handleCancelChangeRound();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pendingRoundId]);
+
   const coordinatorRef = useRef(null);
   // Tracks the very first run of the schedule-sync effect so we don't
   // overwrite a restored attendanceMode (e.g. after clicking "แก้ไข" back
@@ -600,7 +682,7 @@ export function StepForm({
     watch,
     setValue,
     control,
-    formState: { errors },
+    formState: { errors, isSubmitted },
   } = useForm({
     resolver: zodResolver(publicRegistrationSchema),
     mode: "onChange",
@@ -733,32 +815,46 @@ export function StepForm({
       noValidate
     >
       <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
-        <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
-          เลือกรอบการอบรม
-        </h2>
-        {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
-          {course.course_name}
-        </p> */}
+        {showPickerBox && (
+          <>
+            <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
+              เลือกรอบการอบรม
+            </h2>
+            {/* <p className="mb-4 text-xs text-[var(--text-secondary)]">
+              {course.course_name}
+            </p> */}
 
-        <ScheduleCarousel
-          schedules={schedules}
-          selectedId={selectedScheduleId}
-          onSelect={handleSelectSchedule}
-          earlyBirdScheduleId={earlyBirdScheduleId}
-          currentYear={currentYear}
-        />
+            <ScheduleCarousel
+              schedules={schedules}
+              selectedId={selectedScheduleId}
+              onSelect={handleCarouselSelect}
+              earlyBirdScheduleId={earlyBirdScheduleId}
+              currentYear={currentYear}
+            />
+          </>
+        )}
 
         {activeSchedule && (
-          <div className="mt-4 flex items-center justify-between rounded-9e-md bg-9e-brand/5 p-3 text-sm">
+          <div className={cn(
+            "flex items-center justify-between rounded-9e-md bg-9e-brand/5 p-3 text-sm",
+            showPickerBox && "mt-4"
+          )}>
             <div>
               <div className="font-semibold text-[var(--text-primary)]">
                 {activeDateLabel}
               </div>
               <div className="text-xs text-[var(--text-secondary)]">
-                {activeSchedule.type === "hybrid"
-                  ? "Hybrid (Classroom + MS Teams)"
-                  : "Classroom"}
+                {trainingTypeLabel(activeSchedule.type)}
               </div>
+              {!showPickerBox && (
+                <button
+                  type="button"
+                  onClick={handleChangeRound}
+                  className="mt-1 text-xs font-medium text-9e-action underline-offset-2 hover:underline"
+                >
+                  เปลี่ยนรอบ
+                </button>
+              )}
             </div>
             {!formRevealed && !activeRoundIsFull && (
               <Button
@@ -814,6 +910,39 @@ export function StepForm({
         )}
       </section>
 
+      {pendingRoundId != null && (() => {
+        const pendingSchedule = scheduleById.get(pendingRoundId);
+        // pendingRoundId only ever comes from a card the carousel itself
+        // rendered, so this always resolves — the fallback is defensive, not
+        // a reachable branch.
+        const pendingDateLabel = pendingSchedule
+          ? formatClassDates(pendingSchedule.dates)
+          : "";
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+            onClick={handleCancelChangeRound}
+          >
+            <div
+              className="w-full max-w-sm rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6 shadow-9e-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-base text-[var(--text-primary)]">
+                ยืนยันการเปลี่ยนรอบอบรมเป็นวันที่ {pendingDateLabel} ใช่หรือไม่
+              </p>
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <Button type="button" variant="outline" onClick={handleCancelChangeRound}>
+                  ยกเลิก
+                </Button>
+                <Button type="button" variant="cta" onClick={handleConfirmChangeRound}>
+                  ยืนยัน
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {formRevealed && (
         <>
           {activeSchedule?.type === "hybrid" && (
@@ -827,7 +956,7 @@ export function StepForm({
           )}
 
           <div ref={coordinatorRef}>
-            <CoordinatorFields register={register} errors={errors} />
+            <CoordinatorFields register={register} errors={errors} isSubmitted={isSubmitted} />
           </div>
 
           <AttendeesList
@@ -836,6 +965,7 @@ export function StepForm({
             watch={watch}
             setValue={setValue}
             errors={errors}
+            isSubmitted={isSubmitted}
           />
 
           <InvoiceFields
@@ -855,7 +985,7 @@ export function StepForm({
             <Textarea
               id="notes"
               rows={3}
-              placeholder="เช่น อาหาร/แพ้อาหาร คำถามเกี่ยวกับหลักสูตร ฯลฯ (ไม่เกิน 500 ตัวอักษร)"
+              placeholder="เช่น ต้องการใบแจ้งหนี้ , ระบุชื่อผู้รับ ที่อยู่สำหรับจัดส่งใบแจ้งหนี้ฉบับจริง หรือวันที่ที่ต้องการให้ออกเอกสาร (ไม่เกิน 500 ตัวอักษร)"
               maxLength={500}
               {...register("notes")}
             />
@@ -1012,10 +1142,24 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
           <ReadOnlyRow label="อีเมล" value={coord.email} />
           <ReadOnlyRow label="เบอร์โทร" value={coord.phone} />
           {coord.lineId && <ReadOnlyRow label="LINE ID" value={coord.lineId} />}
-          <ReadOnlyRow
-            label="ผู้ประสานงานเข้าอบรม"
-            value={coord.isAttending ? "ใช่" : "ไม่"}
-          />
+          {/*
+            ── ผู้ประสานงานเข้าอบรม IS REMOVED FROM THIS PREVIEW ONLY ─────────
+            DISPLAY ONLY, this surface only (StepPreview — the toggle-OFF
+            step-2 screen). `coordinator.isAttending` stays on the zod schema
+            and the Mongoose model exactly as before, is still submitted and
+            stored, and still drives everything it drove already — the
+            attendee-count math in AttendeesList.jsx, buildAttendees's
+            coordinator-as-attendee-#1 copy, and the three email models.
+            src/lib/email/** is untouched by this change.
+
+            Matches the admin detail screen's own read view, which removed
+            this exact row for the exact same reason in an earlier round —
+            see the comment at RegistrationDetailClient.jsx's coordinator
+            card. That round is the admin side; this one is the customer's
+            two step-2 preview surfaces (StepPreview here, and
+            ReviewAndPayStep.jsx, left untouched this round — see that
+            file's own history for why).
+          */}
         </Section>
 
         <Section title={`ข้อมูลผู้เข้าอบรม (${data.attendeesCount} ท่าน)`}>
@@ -1023,7 +1167,7 @@ export function StepPreview({ data, onBack, onConfirm, submitting, error }) {
         </Section>
 
         {data.invoice && (
-          <Section title="ใบเสนอราคา / ใบกำกับภาษี">
+          <Section title="ข้อมูลสำหรับออกใบเสนอราคา">
             <InvoiceView invoice={data.invoice} />
           </Section>
         )}

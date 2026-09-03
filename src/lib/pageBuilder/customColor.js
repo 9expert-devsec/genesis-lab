@@ -59,7 +59,7 @@ export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 /** True for a value this system will put in a style attribute. */
 export function isHexColor(value) {
-  return typeof value === 'string' && HEX_COLOR_RE.test(value);
+  return typeof value === "string" && HEX_COLOR_RE.test(value);
 }
 
 /**
@@ -76,7 +76,7 @@ export function hexOrNull(value) {
 }
 
 /** The two modes a colour control offers. `preset` is the absence of a choice. */
-export const COLOR_MODES = ['preset', 'custom'];
+export const COLOR_MODES = ["preset", "custom"];
 
 /**
  * Gradient directions, and the CSS each becomes.
@@ -87,19 +87,24 @@ export const COLOR_MODES = ['preset', 'custom'];
  * vocabulary an author has to think about.
  */
 export const GRADIENT_DIRECTIONS = [
-  'to_bottom', 'to_top', 'to_right', 'to_left', 'to_bottom_right', 'to_bottom_left',
+  "to_bottom",
+  "to_top",
+  "to_right",
+  "to_left",
+  "to_bottom_right",
+  "to_bottom_left",
 ];
 
 const DIRECTION_CSS = {
-  to_bottom:       'to bottom',
-  to_top:          'to top',
-  to_right:        'to right',
-  to_left:         'to left',
-  to_bottom_right: 'to bottom right',
-  to_bottom_left:  'to bottom left',
+  to_bottom: "to bottom",
+  to_top: "to top",
+  to_right: "to right",
+  to_left: "to left",
+  to_bottom_right: "to bottom right",
+  to_bottom_left: "to bottom left",
 };
 
-export const DEFAULT_GRADIENT_DIRECTION = 'to_bottom';
+export const DEFAULT_GRADIENT_DIRECTION = "to_bottom";
 
 /**
  * A custom background as an inline style object — or `null` for "no custom
@@ -127,7 +132,9 @@ export function customBackgroundStyle(custom) {
   if (!from) return null;
   const to = hexOrNull(custom?.to);
   if (!to) return { backgroundColor: from };
-  const dir = DIRECTION_CSS[custom?.direction] ?? DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
+  const dir =
+    DIRECTION_CSS[custom?.direction] ??
+    DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
   return { backgroundImage: `linear-gradient(${dir}, ${from}, ${to})` };
 }
 
@@ -156,13 +163,15 @@ export function customBackgroundVars(custom) {
   const from = hexOrNull(custom?.from);
   if (!from) return null;
   const to = hexOrNull(custom?.to);
-  const dir = DIRECTION_CSS[custom?.direction] ?? DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
+  const dir =
+    DIRECTION_CSS[custom?.direction] ??
+    DIRECTION_CSS[DEFAULT_GRADIENT_DIRECTION];
   // The FLAT case deliberately sets no `--pb-cbg-to`: one stop and two stops
   // are different statements (see above), and the CSS selects on the kind
   // rather than on whether a variable happens to be empty.
   return to
-    ? { '--pb-cbg-from': from, '--pb-cbg-to': to, '--pb-cbg-dir': dir }
-    : { '--pb-cbg-from': from };
+    ? { "--pb-cbg-from": from, "--pb-cbg-to": to, "--pb-cbg-dir": dir }
+    : { "--pb-cbg-from": from };
 }
 
 /**
@@ -173,12 +182,15 @@ export function customBackgroundVars(custom) {
 export function customBackgroundKind(custom) {
   const from = hexOrNull(custom?.from);
   if (!from) return null;
-  return hexOrNull(custom?.to) ? 'gradient' : 'flat';
+  return hexOrNull(custom?.to) ? "gradient" : "flat";
 }
 
 /** Does this settings block ask for a custom background, and can it be honoured? */
 export function hasCustomBackground(settings) {
-  return settings?.backgroundMode === 'custom' && customBackgroundStyle(settings?.backgroundCustom) !== null;
+  return (
+    settings?.backgroundMode === "custom" &&
+    customBackgroundStyle(settings?.backgroundCustom) !== null
+  );
 }
 
 /**
@@ -220,7 +232,7 @@ export function isBackgroundPinned(settings) {
  */
 export const THEME_TEXT_RGB = Object.freeze({
   navy: Object.freeze([13, 27, 42]),
-  ice:  Object.freeze([248, 250, 253]),
+  ice: Object.freeze([248, 250, 253]),
 });
 
 /** `#rrggbb` → [r, g, b]. Callers pass values isHexColor has already accepted. */
@@ -230,7 +242,7 @@ function channels(hex) {
 
 /** [r, g, b] → `#rrggbb`. The inverse, for the one caller below. */
 function toHex(rgb) {
-  return `#${rgb.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  return `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /**
@@ -299,10 +311,12 @@ export function backgroundContrastOk(custom) {
   const from = hexOrNull(custom?.from);
   if (!from) return true;
   const rgb = channels(from);
-  return Math.max(
-    contrastRatio(rgb, THEME_TEXT_RGB.navy),
-    contrastRatio(rgb, THEME_TEXT_RGB.ice),
-  ) >= CONTRAST_MIN;
+  return (
+    Math.max(
+      contrastRatio(rgb, THEME_TEXT_RGB.navy),
+      contrastRatio(rgb, THEME_TEXT_RGB.ice),
+    ) >= CONTRAST_MIN
+  );
 }
 
 /**

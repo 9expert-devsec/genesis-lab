@@ -1,12 +1,19 @@
-import { requirePage } from '@/lib/rbac/guard';
-import { canUseAdvanced, canPublish, canManagePreview } from '@/lib/rbac/access';
-import { pageBuilderSchema } from '@/lib/schemas/pageBuilder';
-import { PLACEHOLDER_SLUG, PLACEHOLDER_TITLE } from '@/lib/pageBuilder/publishReadiness';
-import { PageBuilderEditor } from '@/components/pageBuilder/editor/PageBuilderEditor';
-import { catalogueOrEmpty } from '@/lib/pageBuilder/courseCatalogue';
+import { requirePage } from "@/lib/rbac/guard";
+import {
+  canUseAdvanced,
+  canPublish,
+  canManagePreview,
+} from "@/lib/rbac/access";
+import { pageBuilderSchema } from "@/lib/schemas/pageBuilder";
+import {
+  PLACEHOLDER_SLUG,
+  PLACEHOLDER_TITLE,
+} from "@/lib/pageBuilder/publishReadiness";
+import { PageBuilderEditor } from "@/components/pageBuilder/editor/PageBuilderEditor";
+import { catalogueOrEmpty } from "@/lib/pageBuilder/courseCatalogue";
 
-export const metadata = { title: 'สร้างหน้า Page Builder' };
-export const dynamic = 'force-dynamic';
+export const metadata = { title: "สร้างหน้า Page Builder" };
+export const dynamic = "force-dynamic";
 
 /**
  * New builder page. Server component: guards, and seeds a blank working tree
@@ -18,13 +25,16 @@ export const dynamic = 'force-dynamic';
  * creates the page and the editor adopts its id in place, without navigating.
  */
 export default async function NewBuilderPage() {
-  const session = await requirePage('pages');
+  const session = await requirePage("pages");
   const user = session.user;
 
   // Defaults straight from the schema, so a blank page can never drift from it.
   // The placeholder slug/title are shared with the publish-readiness check, so
   // an untouched page can't be published (see publishReadiness.js).
-  const blank = pageBuilderSchema.parse({ slug: PLACEHOLDER_SLUG, title: PLACEHOLDER_TITLE });
+  const blank = pageBuilderSchema.parse({
+    slug: PLACEHOLDER_SLUG,
+    title: PLACEHOLDER_TITLE,
+  });
 
   /**
    * ROUND 47 — the course catalogue, handed down as a read-only prop.
@@ -57,7 +67,7 @@ export default async function NewBuilderPage() {
       page={blank}
       pageId={null}
       updatedAt={null}
-      currentUserName={user?.name ?? ''}
+      currentUserName={user?.name ?? ""}
       courses={courses}
       tier={{
         canUseAdvanced: canUseAdvanced(user),

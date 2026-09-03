@@ -1,6 +1,9 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { listPublicCourses, getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  listPublicCourses,
+  getCourseByCodeInsensitive,
+} from "@/lib/api/public-courses";
 
 /**
  * `listPublicCourses` — the ONE choke point where a hidden course leaves every
@@ -23,9 +26,9 @@ import { listPublicCourses, getCourseByCodeInsensitive } from '@/lib/api/public-
 
 const UPSTREAM = {
   items: [
-    { _id: '1', course_id: 'COPILOT-STU', course_name: 'Copilot for Students' },
-    { _id: '2', course_id: 'MSE-AI', course_name: 'Excel AI' },
-    { _id: '3', course_id: 'Power-Apps', course_name: 'Power Apps' },
+    { _id: "1", course_id: "COPILOT-STU", course_name: "Copilot for Students" },
+    { _id: "2", course_id: "MSE-AI", course_name: "Excel AI" },
+    { _id: "3", course_id: "Power-Apps", course_name: "Power Apps" },
   ],
   summary: { total: 3 },
 };
@@ -62,95 +65,114 @@ function harness({ hidden = [], upstream = UPSTREAM } = {}) {
   };
 }
 
-test('a hidden course is GONE from the default list', async () => {
-  const h = harness({ hidden: ['COPILOT-STU'] });
+test("a hidden course is GONE from the default list", async () => {
+  const h = harness({ hidden: ["COPILOT-STU"] });
   const { items } = await listPublicCourses({}, h.deps);
-  assert.deepEqual(items.map((c) => c.course_id), ['MSE-AI', 'Power-Apps']);
+  assert.deepEqual(
+    items.map((c) => c.course_id),
+    ["MSE-AI", "Power-Apps"],
+  );
 });
 
-test('CONTROL: the same call returns all three when nothing is hidden', async () => {
+test("CONTROL: the same call returns all three when nothing is hidden", async () => {
   // Without this, the assertion above would also pass against a filter that
   // dropped the head of every list. Measured 2026-08-12: 0 of 78 extension rows
   // are hidden in production, so the empty-hidden case is the one every real
   // request takes today.
   const h = harness({ hidden: [] });
   const { items } = await listPublicCourses({}, h.deps);
-  assert.deepEqual(items.map((c) => c.course_id), ['COPILOT-STU', 'MSE-AI', 'Power-Apps']);
+  assert.deepEqual(
+    items.map((c) => c.course_id),
+    ["COPILOT-STU", "MSE-AI", "Power-Apps"],
+  );
 });
 
-test('includeHidden: true gets the WHOLE list back — the admin opt-in', async () => {
-  const h = harness({ hidden: ['COPILOT-STU'] });
+test("includeHidden: true gets the WHOLE list back — the admin opt-in", async () => {
+  const h = harness({ hidden: ["COPILOT-STU"] });
   const { items } = await listPublicCourses({ includeHidden: true }, h.deps);
-  assert.deepEqual(items.map((c) => c.course_id), ['COPILOT-STU', 'MSE-AI', 'Power-Apps']);
+  assert.deepEqual(
+    items.map((c) => c.course_id),
+    ["COPILOT-STU", "MSE-AI", "Power-Apps"],
+  );
 });
 
-test('includeHidden: true does not even READ the hidden set', async () => {
+test("includeHidden: true does not even READ the hidden set", async () => {
   // The opt-in must be free. An admin table paying a Mongo round trip to
   // compute an answer it then discards is the kind of cost that gets "optimised"
   // later by deleting the flag.
-  const h = harness({ hidden: ['COPILOT-STU'] });
+  const h = harness({ hidden: ["COPILOT-STU"] });
   await listPublicCourses({ includeHidden: true }, h.deps);
   assert.equal(h.calls.hiddenReads, 0);
 });
 
-test('the filtered path reads the hidden set exactly ONCE', async () => {
+test("the filtered path reads the hidden set exactly ONCE", async () => {
   // The cost ruling: one batched read per call, never one per course.
-  const h = harness({ hidden: ['COPILOT-STU'] });
+  const h = harness({ hidden: ["COPILOT-STU"] });
   await listPublicCourses({}, h.deps);
   assert.equal(h.calls.hiddenReads, 1);
 });
 
-test('`total` is re-derived, so it matches the list actually returned', async () => {
+test("`total` is re-derived, so it matches the list actually returned", async () => {
   // Upstream's summary.total counts the UNFILTERED catalog. Carrying it through
   // gives a caller "3 courses" above a grid of 2 — the same quiet wrongness
   // this change exists to remove.
-  const h = harness({ hidden: ['COPILOT-STU'] });
+  const h = harness({ hidden: ["COPILOT-STU"] });
   const res = await listPublicCourses({}, h.deps);
   assert.equal(res.total, 2);
   assert.equal(res.total, res.items.length);
 });
 
-test('CONTROL: upstream really does report a total larger than the filtered list', () => {
+test("CONTROL: upstream really does report a total larger than the filtered list", () => {
   // Otherwise the test above could pass on a fixture where the two happened to
   // agree, and would say nothing about the re-derivation.
   assert.equal(UPSTREAM.summary.total, 3);
 });
 
-test('hiding is case-tolerant across an upstream rename', async () => {
+test("hiding is case-tolerant across an upstream rename", async () => {
   // The hidden set is uppercased; upstream renamed Power-Apps → POWER-APPS once
   // already, and the stored extension courseId is a frozen copy.
-  const h = harness({ hidden: ['POWER-APPS'] });
+  const h = harness({ hidden: ["POWER-APPS"] });
   const { items } = await listPublicCourses({}, h.deps);
-  assert.deepEqual(items.map((c) => c.course_id), ['COPILOT-STU', 'MSE-AI']);
+  assert.deepEqual(
+    items.map((c) => c.course_id),
+    ["COPILOT-STU", "MSE-AI"],
+  );
 });
 
-test('the skill/program filters still reach upstream untouched', async () => {
+test("the skill/program filters still reach upstream untouched", async () => {
   // The hidden filter must not have quietly eaten the upstream query params —
   // every mega-menu column and every page-builder course_list depends on them.
   const h = harness();
-  await listPublicCourses({ skill: 'S1', program: 'P9' }, h.deps);
+  await listPublicCourses({ skill: "S1", program: "P9" }, h.deps);
   assert.equal(h.calls.upstream.length, 1);
-  assert.deepEqual(h.calls.upstream[0].opts.params, { skill: 'S1', program: 'P9' });
-  assert.deepEqual(h.calls.upstream[0].opts.tags, ['public-courses']);
+  assert.deepEqual(h.calls.upstream[0].opts.params, {
+    skill: "S1",
+    program: "P9",
+  });
+  assert.deepEqual(h.calls.upstream[0].opts.tags, ["public-courses"]);
 });
 
-test('includeHidden is NOT forwarded to upstream as a query parameter', async () => {
+test("includeHidden is NOT forwarded to upstream as a query parameter", async () => {
   // It is ours, not MSDB's. Sent upstream it would either be ignored or, worse,
   // matched against some unrelated field.
   const h = harness();
   await listPublicCourses({ includeHidden: true }, h.deps);
-  assert.deepEqual(h.calls.upstream[0].opts.params, { skill: undefined, program: undefined });
+  assert.deepEqual(h.calls.upstream[0].opts.params, {
+    skill: undefined,
+    program: undefined,
+  });
 });
 
 // ── the case-insensitive fallback ──────────────────────────────────────────
 
-test('the case-insensitive fallback inherits includeHidden', async () => {
+test("the case-insensitive fallback inherits includeHidden", async () => {
   // Otherwise an admin previewing one of the five mixed-case courses would get
   // a 404 while the other 73 previewed fine: the direct ?course_id= fetch misses
   // on casing, and the list that would recover it has filtered the course out.
   let listArgs = null;
-  const course = await getCourseByCodeInsensitive('power-apps', {
-    fetchByCode: async (id) => (id === 'Power-Apps' ? { course_id: 'Power-Apps' } : null),
+  const course = await getCourseByCodeInsensitive("power-apps", {
+    fetchByCode: async (id) =>
+      id === "Power-Apps" ? { course_id: "Power-Apps" } : null,
     fetchList: async (opts) => {
       listArgs = opts;
       return { items: UPSTREAM.items };
@@ -159,13 +181,13 @@ test('the case-insensitive fallback inherits includeHidden', async () => {
     includeHidden: true,
   });
   assert.deepEqual(listArgs, { includeHidden: true });
-  assert.equal(course.course_id, 'Power-Apps');
+  assert.equal(course.course_id, "Power-Apps");
 });
 
-test('CONTROL: without the opt-in the fallback asks for the FILTERED list', () => {
+test("CONTROL: without the opt-in the fallback asks for the FILTERED list", () => {
   // Proves the flag is threaded rather than hard-coded on.
   let listArgs = null;
-  return getCourseByCodeInsensitive('power-apps', {
+  return getCourseByCodeInsensitive("power-apps", {
     fetchByCode: async () => null,
     fetchList: async (opts) => {
       listArgs = opts;

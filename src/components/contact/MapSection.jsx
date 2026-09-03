@@ -15,7 +15,7 @@ import {
 const MAP_EMBED =
   "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15501.899657662734!2d100.53041585085921!3d13.750209711931717!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x30e29d1d9b23ffe5%3A0xea1cd3822743c584!2s9Expert%20Training!5e0!3m2!1sen!2sus!4v1741239839027!5m2!1sen!2sus";
 
-const MAP_LINK = "https://maps.app.goo.gl/?q=9Expert+Training";
+const MAP_LINK = "https://maps.app.goo.gl/vKekFgf7kHkzaQwq9";
 
 const TABS = [
   {
@@ -59,7 +59,7 @@ export default function MapSection() {
   const current = TABS.find((t) => t.id === active);
 
   return (
-    <section className="relative overflow-hidden bg-white py-20">
+    <section className="relative overflow-hidden bg-white pt-20 pb-10">
       {/* <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
@@ -182,7 +182,7 @@ export default function MapSection() {
               </p>
             </div>
 
-            <div className=" mx-auto mt-auto max-w-2xl text-center ">
+            <div className=" mx-auto mt-auto max-w-2xl text-center pt-8 ">
               <button
                 onClick={() => setIsModalOpen(true)}
                 className={

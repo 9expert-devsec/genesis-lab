@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import { containsThai, ENGLISH_ONLY_MESSAGE } from '@/lib/registration/englishOnly';
+import {
+  thaiPhone,
+  isValidThaiPhone,
+  formatThaiPhone,
+  THAI_PHONE_ERROR_MESSAGE,
+} from '@/lib/registration/thaiPhone';
 
 /**
  * Validation schema for /registration/public form submissions.
  * Shared between the client wizard (react-hook-form resolver) and the
  * API route that writes to Mongo. Single source of truth.
  */
-
-const thaiPhoneRegex = /^(0\d{9}|\+\d{10,15})$/;
 
 // ── Address schemas ────────────────────────────────────────────────
 
@@ -44,15 +48,42 @@ export const coordinatorSchema = z.object({
   firstName:   z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
   lastName:    z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
   email:       z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:       z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+  phone:       thaiPhone(z.string().trim(), THAI_PHONE_ERROR_MESSAGE),
   isAttending: z.boolean().default(false),
 });
 
+/**
+ * Attendee email/phone are OPTIONAL — only firstName/lastName are required.
+ * Coordinator keeps all four mandatory (coordinatorSchema, above); this is a
+ * deliberate asymmetry, not an oversight — see the identical note already on
+ * src/lib/actions/registrations.js's updateAttendee path.
+ *
+ * email uses `.optional().or(z.literal(''))` — the SAME idiom invoiceSchema
+ * already uses for its own optional string fields (firstName/lastName/
+ * companyName, branchCode/branchFree/taxId, notes) — reused here rather than
+ * spelling "optional" a third way in this file. `.email()` still runs on any
+ * present value, so a malformed non-blank email is still rejected exactly as
+ * strictly as today; only the blank case is new.
+ *
+ * phone does NOT use that same idiom, and here is why: `thaiPhone(...)`
+ * returns a `.refine().transform()` composite (a ZodEffects), and unioning
+ * a ZodEffects with `z.literal('')` makes zod report a FAILED refine as the
+ * generic top-level `invalid_union` issue ("Invalid input") instead of
+ * THAI_PHONE_ERROR_MESSAGE — verified directly against this exact schema
+ * before writing it this way; email does not have this problem because
+ * `z.string().email(...)` never wraps in a ZodEffects. So phone's optional
+ * case is spelled by hand, calling the SAME shared isValidThaiPhone /
+ * formatThaiPhone functions thaiPhone() itself calls — not a new validator,
+ * not a fourth idiom for "optional", just the one workable composition for
+ * a refine+transform schema that keeps the specific error message intact.
+ */
 export const attendeeSchema = z.object({
   firstName: z.string().trim().min(1, 'กรุณากรอกชื่อ').max(100),
   lastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล').max(100),
-  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง'),
-  phone:     z.string().trim().regex(thaiPhoneRegex, 'รูปแบบเบอร์โทรไม่ถูกต้อง (10 หลัก หรือ +ประเทศ)'),
+  email:     z.string().email('รูปแบบอีเมลไม่ถูกต้อง').optional().or(z.literal('')),
+  phone:     z.string().trim()
+               .refine((v) => v === '' || isValidThaiPhone(v), THAI_PHONE_ERROR_MESSAGE)
+               .transform((v) => (v === '' ? '' : formatThaiPhone(v) ?? v)),
 });
 
 // ── Invoice schema ─────────────────────────────────────────────────

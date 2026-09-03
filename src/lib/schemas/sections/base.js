@@ -1,7 +1,11 @@
-import { z } from 'zod';
+import { z } from "zod";
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo. Round 39: the custom-colour vocabulary and its one regex.
-import { COLOR_MODES, GRADIENT_DIRECTIONS, HEX_COLOR_RE } from '@/lib/pageBuilder/customColor';
+import {
+  COLOR_MODES,
+  GRADIENT_DIRECTIONS,
+  HEX_COLOR_RE,
+} from "@/lib/pageBuilder/customColor";
 
 /**
  * Shared section foundation — the ENVELOPE every section carries, plus the
@@ -22,14 +26,29 @@ import { COLOR_MODES, GRADIENT_DIRECTIONS, HEX_COLOR_RE } from '@/lib/pageBuilde
 
 // ── §6/§7 preset vocabularies (named constants — single source) ──────
 
-export const CONTAINER_WIDTHS = ['small', 'medium', 'large', 'full'];
-export const SPACING          = ['none', 'small', 'medium', 'large', 'xl'];
-export const BACKGROUNDS       = ['default', 'white', 'light', 'soft_gray', 'dark', 'brand_gradient', 'image'];
-export const COLUMNS           = [1, 2, 3, 4, 'auto_fit']; // mixed number|string per requirement
-export const RATIOS            = ['50-50', '40-60', '60-40', '30-70', '70-30'];
-export const MOBILE_BEHAVIORS  = ['stack', 'reverse_stack', 'hide', 'carousel'];
-export const VISIBILITY        = ['all', 'desktop_only', 'mobile_only', 'hidden'];
-export const ACCENTS           = ['brand_blue', 'navy', 'cyan', 'purple', 'orange', 'green'];
+export const CONTAINER_WIDTHS = ["small", "medium", "large", "full"];
+export const SPACING = ["none", "small", "medium", "large", "xl"];
+export const BACKGROUNDS = [
+  "default",
+  "white",
+  "light",
+  "soft_gray",
+  "dark",
+  "brand_gradient",
+  "image",
+];
+export const COLUMNS = [1, 2, 3, 4, "auto_fit"]; // mixed number|string per requirement
+export const RATIOS = ["50-50", "40-60", "60-40", "30-70", "70-30"];
+export const MOBILE_BEHAVIORS = ["stack", "reverse_stack", "hide", "carousel"];
+export const VISIBILITY = ["all", "desktop_only", "mobile_only", "hidden"];
+export const ACCENTS = [
+  "brand_blue",
+  "navy",
+  "cyan",
+  "purple",
+  "orange",
+  "green",
+];
 /**
  * ── ROUND 59: `promo`, THE SIXTH VALUE ────────────────────────────────────
  * docs/promo-card-style.md §A1 and §I step 2. The other five are MUTUALLY
@@ -43,8 +62,15 @@ export const ACCENTS           = ['brand_blue', 'navy', 'cyan', 'purple', 'orang
  * change the fallback. Every stored section carries `cardStyle` ABSENT, which
  * took the fallback before and takes it after.
  */
-export const CARD_STYLES       = ['plain', 'border', 'shadow', 'filled', 'gradient', 'promo'];
-export const BUTTON_STYLES     = ['primary', 'secondary', 'outline', 'ghost'];
+export const CARD_STYLES = [
+  "plain",
+  "border",
+  "shadow",
+  "filled",
+  "gradient",
+  "promo",
+];
+export const BUTTON_STYLES = ["primary", "secondary", "outline", "ghost"];
 
 /**
  * ── ROUND 39: THE CUSTOM-COLOUR VOCABULARY ─────────────────────────────────
@@ -54,12 +80,19 @@ export const BUTTON_STYLES     = ['primary', 'secondary', 'outline', 'ghost'];
  * imported for the same reason: what counts as an author colour is decided in
  * exactly one place, and the schema is one of its two enforcement points.
  */
-export { COLOR_MODES, GRADIENT_DIRECTIONS } from '@/lib/pageBuilder/customColor';
+export {
+  COLOR_MODES,
+  GRADIENT_DIRECTIONS,
+} from "@/lib/pageBuilder/customColor";
 
 // COLUMNS is the only mixed-type preset (numbers 1-4 plus 'auto_fit'), so it
 // can't use z.enum (strings only) — build a literal union instead.
 const columnsSchema = z.union([
-  z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal('auto_fit'),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal("auto_fit"),
 ]);
 
 // ── Envelope preset blocks ───────────────────────────────────────────
@@ -75,7 +108,7 @@ const columnsSchema = z.union([
  * one of them ends up laxer than the other. See lib/pageBuilder/customColor.js
  * for what is accepted and what each rejection is for.
  */
-const hexColor = z.string().regex(HEX_COLOR_RE, 'ต้องเป็นรหัสสีแบบ #RRGGBB');
+const hexColor = z.string().regex(HEX_COLOR_RE, "ต้องเป็นรหัสสีแบบ #RRGGBB");
 
 /**
  * `settings.backgroundCustom` — the two stops and the direction.
@@ -96,19 +129,19 @@ const hexColor = z.string().regex(HEX_COLOR_RE, 'ต้องเป็นรห�
  */
 export const backgroundCustomSchema = z
   .object({
-    from:      hexColor.optional(),
-    to:        z.union([hexColor, z.literal('')]).optional(),
+    from: hexColor.optional(),
+    to: z.union([hexColor, z.literal("")]).optional(),
     direction: z.enum(GRADIENT_DIRECTIONS).optional(),
   })
   .optional();
 
 export const settingsSchema = z
   .object({
-    containerWidth: z.enum(CONTAINER_WIDTHS).default('large'),
-    spacingTop:     z.enum(SPACING).default('medium'),
-    spacingBottom:  z.enum(SPACING).default('medium'),
-    background:     z.enum(BACKGROUNDS).default('default'),
-    visibility:     z.enum(VISIBILITY).default('all'),
+    containerWidth: z.enum(CONTAINER_WIDTHS).default("large"),
+    spacingTop: z.enum(SPACING).default("medium"),
+    spacingBottom: z.enum(SPACING).default("medium"),
+    background: z.enum(BACKGROUNDS).default("default"),
+    visibility: z.enum(VISIBILITY).default("all"),
     /**
      * ROUND 39. Absent means `preset` — the mode is not defaulted, it is
      * INFERRED FROM ABSENCE, which is what keeps every stored section byte-
@@ -144,7 +177,7 @@ export const settingsSchema = z
      * learning that "ปานกลาง" means two different distances.
      */
     spacingBetween: z.enum(SPACING).optional(),
-    backgroundMode:   z.enum(COLOR_MODES).optional(),
+    backgroundMode: z.enum(COLOR_MODES).optional(),
     backgroundCustom: backgroundCustomSchema,
     /**
      * ROUND 79 — the third mode, as a flag rather than a third COLOR_MODES value.
@@ -166,7 +199,7 @@ export const settingsSchema = z
      * test/pure/customColor's "a stored section gains NOTHING when it is
      * re-validated" exists to catch.
      */
-    backgroundPin:    z.boolean().optional(),
+    backgroundPin: z.boolean().optional(),
   })
   .default({});
 
@@ -208,16 +241,16 @@ export function settingsWithContainerWidth(width) {
 // are optional (validated when present) rather than forced onto every block.
 export const layoutSchema = z
   .object({
-    ratio:          z.enum(RATIOS).optional(),
+    ratio: z.enum(RATIOS).optional(),
     mobileBehavior: z.enum(MOBILE_BEHAVIORS).optional(),
-    columns:        columnsSchema.optional(),
+    columns: columnsSchema.optional(),
   })
   .default({});
 
 export const styleSchema = z
   .object({
     accentColor: z.enum(ACCENTS).optional(),
-    cardStyle:   z.enum(CARD_STYLES).optional(),
+    cardStyle: z.enum(CARD_STYLES).optional(),
     buttonStyle: z.enum(BUTTON_STYLES).optional(),
     /**
      * ROUND 39, same shape and same reason as `backgroundMode` above: absent
@@ -229,7 +262,7 @@ export const styleSchema = z
      * sections nested inside it. Narrowing it to buttons would restyle every
      * section already using it, which is a change nobody asked for.
      */
-    accentMode:   z.enum(COLOR_MODES).optional(),
+    accentMode: z.enum(COLOR_MODES).optional(),
     accentCustom: hexColor.optional(),
   })
   .default({});
@@ -243,10 +276,10 @@ export const styleSchema = z
  */
 export const advancedSchema = z
   .object({
-    sectionId:   z.string().default(''), // developer-tier: custom DOM id
-    customClass: z.string().default(''), // developer-tier: extra classes
-    customCss:   z.string().default(''), // developer-tier: scoped CSS
-    customHtml:  z.string().default(''), // developer-tier: raw HTML
+    sectionId: z.string().default(""), // developer-tier: custom DOM id
+    customClass: z.string().default(""), // developer-tier: extra classes
+    customCss: z.string().default(""), // developer-tier: scoped CSS
+    customHtml: z.string().default(""), // developer-tier: raw HTML
   })
   .default({});
 
@@ -256,14 +289,14 @@ export const advancedSchema = z
  * member.
  */
 export const baseSectionSchema = z.object({
-  id:        z.string().min(1),
-  name:      z.string().default(''),
-  enabled:   z.boolean().default(true),
+  id: z.string().min(1),
+  name: z.string().default(""),
+  enabled: z.boolean().default(true),
   sortOrder: z.number().int().default(0),
-  settings:  settingsSchema,
-  layout:    layoutSchema,
-  style:     styleSchema,
-  advanced:  advancedSchema,
+  settings: settingsSchema,
+  layout: layoutSchema,
+  style: styleSchema,
+  advanced: advancedSchema,
 });
 
 /**
@@ -280,8 +313,8 @@ export const baseSectionSchema = z.object({
  */
 export function defineSection(type, contentSchema, { settings } = {}) {
   return baseSectionSchema.extend({
-    type:     z.literal(type),
-    content:  (contentSchema ?? z.object({}).passthrough()).default({}),
+    type: z.literal(type),
+    content: (contentSchema ?? z.object({}).passthrough()).default({}),
     ...(settings ? { settings } : {}),
   });
 }
@@ -300,9 +333,11 @@ export const childSections = z
   .array(
     z.lazy(() => {
       if (!SECTION_REF.schema) {
-        throw new Error('[pageBuilder] SECTION_REF.schema not set — import lib/schemas/pageBuilder first');
+        throw new Error(
+          "[pageBuilder] SECTION_REF.schema not set — import lib/schemas/pageBuilder first",
+        );
       }
       return SECTION_REF.schema;
-    })
+    }),
   )
   .default([]);

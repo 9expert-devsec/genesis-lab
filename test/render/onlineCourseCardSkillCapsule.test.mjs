@@ -53,9 +53,28 @@ const render = (course = COURSE, props = {}) =>
 const dom = (html) =>
   new JSDOM(`<!doctype html><body><div id="r">${html}</div></body>`).window.document;
 
+/**
+ * The SKILL capsules — the row's children EXCEPT the first.
+ *
+ * ── WHY THIS DROPS ONE CHILD, AND WHY IT IS NOT `.filter(a => a.href)` ─────
+ * The row gained a constant `e-Learning` pill in front of the skills, so its
+ * children are no longer skills alone. Every assertion in this file is about
+ * the SKILL capsules specifically — their hrefs, their internal-vs-outbound
+ * asymmetry, their span-when-unresolvable behaviour — and none of them is
+ * about the constant pill, which has its own file
+ * (test/render/onlineCourseCardPills.test.mjs) including the order claim.
+ *
+ * Dropping by POSITION rather than by tag or href is deliberate. An
+ * unresolvable capsule renders as a `<span>`, exactly like the constant pill,
+ * so a tag- or href-based filter would silently swallow the very case
+ * "an unresolvable capsule stays an inert <span>" exists to catch — the filter
+ * would remove the span and the assertion would pass against an empty list.
+ * Position is the one property the two do not share, and the pills file pins
+ * that the constant is at index 0.
+ */
 function capsules(doc) {
   const row = doc.querySelector('.mb-2.flex.flex-wrap.gap-1');
-  return row ? [...row.children] : [];
+  return row ? [...row.children].slice(1) : [];
 }
 
 test('resolvable capsules render anchors to the catalog pages', () => {

@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 /**
  * The canvas's iframe: its document, its styles, and its theme.
@@ -60,7 +60,7 @@ import { useEffect, useState } from 'react';
  * a stale sheet left behind after an HMR restamp would keep applying the old
  * rules on top of the new ones.
  */
-const CLONE_MARK = 'data-pb-cloned';
+const CLONE_MARK = "data-pb-cloned";
 
 /**
  * Both documents are named parameters rather than one of them being the
@@ -70,7 +70,9 @@ const CLONE_MARK = 'data-pb-cloned';
  * whatever `document` happens to be.
  */
 export function syncStylesheets(frameDoc, sourceDoc) {
-  const want = [...sourceDoc.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href);
+  const want = [...sourceDoc.querySelectorAll('link[rel="stylesheet"]')].map(
+    (l) => l.href,
+  );
   const wanted = new Set(want);
   const mine = [...frameDoc.head.querySelectorAll(`link[${CLONE_MARK}]`)];
 
@@ -78,14 +80,16 @@ export function syncStylesheets(frameDoc, sourceDoc) {
     if (!wanted.has(link.href)) link.remove();
   }
   const have = new Set(
-    [...frameDoc.head.querySelectorAll(`link[${CLONE_MARK}]`)].map((l) => l.href)
+    [...frameDoc.head.querySelectorAll(`link[${CLONE_MARK}]`)].map(
+      (l) => l.href,
+    ),
   );
   for (const href of want) {
     if (have.has(href)) continue;
-    const link = frameDoc.createElement('link');
-    link.rel = 'stylesheet';
+    const link = frameDoc.createElement("link");
+    link.rel = "stylesheet";
     link.href = href;
-    link.setAttribute(CLONE_MARK, '');
+    link.setAttribute(CLONE_MARK, "");
     frameDoc.head.appendChild(link);
   }
 }
@@ -119,13 +123,13 @@ export function syncRootClass(frameDoc, sourceDoc) {
  * Injected as one element rather than an inline style so it sits with the
  * cloned sheets and is as easy to find in the frame's head.
  */
-const RESET_MARK = 'data-pb-reset';
-const RESET_CSS = 'html,body{margin:0;padding:0}body{min-height:100%}';
+const RESET_MARK = "data-pb-reset";
+const RESET_CSS = "html,body{margin:0;padding:0}body{min-height:100%}";
 
 export function injectReset(frameDoc) {
   if (frameDoc.head.querySelector(`style[${RESET_MARK}]`)) return;
-  const style = frameDoc.createElement('style');
-  style.setAttribute(RESET_MARK, '');
+  const style = frameDoc.createElement("style");
+  style.setAttribute(RESET_MARK, "");
   style.textContent = RESET_CSS;
   frameDoc.head.appendChild(style);
 }
@@ -172,7 +176,10 @@ export function useCanvasFrame() {
     // The frame went away (the last section was deleted). Drop the document with
     // it: a portal into a detached body renders into nothing and would keep the
     // canvas looking alive while it was not.
-    if (!frame) { setFrameDoc(null); return undefined; }
+    if (!frame) {
+      setFrameDoc(null);
+      return undefined;
+    }
 
     let cancelled = false;
 
@@ -194,7 +201,7 @@ export function useCanvasFrame() {
     };
 
     attach();
-    frame.addEventListener('load', attach);
+    frame.addEventListener("load", attach);
 
     /**
      * ── BOTH OBSERVERS ARE ALWAYS ON, NOT GATED TO DEVELOPMENT ────────────
@@ -227,12 +234,13 @@ export function useCanvasFrame() {
       if (doc && doc.documentElement) syncRootClass(doc, document);
     });
     rootObserver.observe(document.documentElement, {
-      attributes: true, attributeFilter: ['class'],
+      attributes: true,
+      attributeFilter: ["class"],
     });
 
     return () => {
       cancelled = true;
-      frame.removeEventListener('load', attach);
+      frame.removeEventListener("load", attach);
       headObserver.disconnect();
       rootObserver.disconnect();
     };

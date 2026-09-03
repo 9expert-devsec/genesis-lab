@@ -20,6 +20,7 @@ import { LandingConversion } from "./LandingConversion";
 import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
 import { setOccupiedBox, clearOccupiedBox } from "@/lib/viewportBottomInset";
 import { stickyBarOccupancyHeight } from "@/lib/stickyBarOccupancy";
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 
 const LEVEL_MAP = {
   beginner: "Beginner",
@@ -42,6 +43,31 @@ function formatBatchDate(dateStr) {
     year: "numeric", // "2026"
   })
   .replace("Sept", "Sep") // fix "Sept" to "Sep";
+}
+
+/**
+ * Format an Early Bird deadline to English: "21 Aug 2026".
+ *
+ * en-GB with a Gregorian year so it matches formatBatchDate on the same card —
+ * never th-TH / Buddhist era, or the card would show both 2026 and 2569.
+ * No weekday: unlike the training date, a deadline's weekday carries no meaning.
+ * timeZone is pinned because this component server-renders under UTC in
+ * production while the browser runs in Bangkok; deadlines stored at 23:59 +07
+ * happen to survive that, but 00:00 shifts a day and the server/client
+ * divergence is a hydration mismatch either way.
+ */
+function formatEarlyBirdDeadline(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric", // "21"
+    month: "short", // "Aug"
+    year: "numeric", // "2026"
+    timeZone: "Asia/Bangkok",
+  })
+    .format(d)
+    .replace("Sept", "Sep"); // fix "Sept" to "Sep";
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -356,7 +382,7 @@ export function MasterclassDetailClient({
         <section className="max-w-[1200px] mx-auto px-4 py-6">
           <div
             className="prose prose-base dark:prose-invert max-w-none [&_p]:indent-8"
-            dangerouslySetInnerHTML={{ __html: course.description_html }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(course.description_html) }}
           />
         </section>
       )}
@@ -489,21 +515,28 @@ export function MasterclassDetailClient({
                       tileClassName="bg-9e-navy dark:bg-white/10"
                     />
                   )}
-                  {batch.status === "open" ? (
-                    <Link
-                      href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
-                      className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
-                    >
-                      ลงทะเบียน
-                    </Link>
-                  ) : (
-                    <button
-                      disabled
-                      className="cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 min-w-48 text-center text-base font-bold text-gray-400 dark:bg-gray-700"
-                    >
-                      {batch.status === "full" ? "เต็มแล้ว" : "ปิดรับสมัครแล้ว"}
-                    </button>
-                  )}
+                  <div className="flex flex-col items-center gap-1.5">
+                    {batch.is_early_bird && batch.early_bird_deadline && (
+                      <span className="text-xs md:text-sm text-9e-slate-lt-50">
+                        ตั้งแต่วันนี้ – {formatEarlyBirdDeadline(batch.early_bird_deadline)}
+                      </span>
+                    )}
+                    {batch.status === "open" ? (
+                      <Link
+                        href={`/masterclass/${course.slug}/register?batch=${batch._id}`}
+                        className="rounded-full min-w-48 text-center bg-9e-action px-8 py-3 text-base font-bold text-white transition-colors hover:bg-9e-brand dark:bg-9e-action dark:hover:bg-9e-brand"
+                      >
+                        ลงทะเบียน
+                      </Link>
+                    ) : (
+                      <button
+                        disabled
+                        className="cursor-not-allowed rounded-full bg-gray-200 px-8 py-3 min-w-48 text-center text-base font-bold text-gray-400 dark:bg-gray-700"
+                      >
+                        {batch.status === "full" ? "เต็มแล้ว" : "ปิดรับสมัครแล้ว"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -682,7 +715,7 @@ export function MasterclassDetailClient({
             className="mt-4 prose prose-base dark:prose-invert max-w-none
                        prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
             dangerouslySetInnerHTML={{
-              __html: course.system_requirements_html,
+              __html: sanitizeRichHtml(course.system_requirements_html),
             }}
           />
         </section>
@@ -796,7 +829,7 @@ export function MasterclassDetailClient({
                                 <div
                                   className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300 prose-li:my-0.5 prose-ul:my-1 prose-ol:my-1 prose-p:my-1"
                                   dangerouslySetInnerHTML={{
-                                    __html: mod.topics_html,
+                                    __html: sanitizeRichHtml(mod.topics_html),
                                   }}
                                 />
                               ) : (
@@ -834,7 +867,7 @@ export function MasterclassDetailClient({
                             <div
                               className="mt-3 prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-300"
                               dangerouslySetInnerHTML={{
-                                __html: mod.content_html,
+                                __html: sanitizeRichHtml(mod.content_html),
                               }}
                             />
                           )}

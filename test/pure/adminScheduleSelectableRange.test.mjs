@@ -153,14 +153,50 @@ test('adminScheduleWindow follows an explicit range starting AWAY from the curre
   assert.equal(win.to, '2026-12-31');
 });
 
-test('adminScheduleWindow keeps the "from today" narrowing when the explicit range starts at the current month', () => {
+test('adminScheduleWindow month-aligns `from` even when the range starts at the CURRENT month', () => {
+  /*
+   * ── THIS TEST ASSERTED THE OPPOSITE, AND THE REASON IT DID HAS EXPIRED ────
+   * It pinned `from === '2026-08-27'` — today — for a window starting in the
+   * current month, under the heading "keeps the from-today narrowing". That
+   * narrowing rested on two facts that no longer hold: MSDB clamped any past
+   * `from` up to today (so asking was pointless), and this grid had no way to
+   * draw a finished round (so wanting them was pointless). Upstream now honours
+   * a past `from`, and the grid now renders an ended round as จบไปแล้ว.
+   *
+   * Kept as a test rather than deleted, with its assertion inverted, because
+   * the case it covers is still the interesting one: it is the ONLY window
+   * where `from` and today can differ, and it is where a future edit would
+   * reintroduce the narrowing. On 27 ส.ค. the old bound hid every ส.ค. round
+   * from the 1st to the 26th from a column that looked complete.
+   */
   const now = new Date(2026, 7, 27); // 2026-08-27
   const win = adminScheduleWindow(now, { fromKey: '2026-08', toKey: '2026-08' });
-  assert.equal(win.from, '2026-08-27', 'from is today, not the 1st, because the window starts this month');
+  assert.equal(
+    win.from, '2026-08-01',
+    'from is the 1st, not today: rounds earlier this month have a cell in this ' +
+    'very column and must not be excluded by our own bound',
+  );
   assert.equal(win.to, '2026-08-31');
 });
 
-test('adminScheduleWindow with NO explicit range is byte-identical to the original default', () => {
+test('CONTROL: a window starting away from the current month is unchanged', () => {
+  // The other branch of the same rule, pinned alongside so the two cannot be
+  // "unified" in the wrong direction — both ends month-align now, and the test
+  // above is the one that moved.
+  const now = new Date(2026, 7, 27);
+  const win = adminScheduleWindow(now, { fromKey: '2026-10', toKey: '2026-12' });
+  assert.equal(win.from, '2026-10-01');
+  assert.equal(win.to, '2026-12-31');
+});
+
+test('adminScheduleWindow with NO explicit range spans the first to the last rendered column', () => {
+  /*
+   * Was "byte-identical to the original default", where the default's `from`
+   * was today. Only the `from` end moved — see the month-alignment note on the
+   * test above. The property this case really guards is unchanged and is now
+   * stated symmetrically: BOTH bounds are derived from the columns, so no row
+   * upstream returns can land outside a column that exists.
+   */
   const cases = [
     new Date(2026, 6, 29),
     new Date(2026, 11, 15),
@@ -168,13 +204,15 @@ test('adminScheduleWindow with NO explicit range is byte-identical to the origin
   ];
   for (const now of cases) {
     const cols = adminScheduleMonthCols(now);
+    const first = cols[0];
     const last = cols[cols.length - 1];
+    const firstDay = new Date(first.year, first.month, 1);
     const lastDay = new Date(last.year, last.month + 1, 0);
     const iso = (d) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     const win = adminScheduleWindow(now);
-    assert.equal(win.from, iso(now));
+    assert.equal(win.from, iso(firstDay));
     assert.equal(win.to, iso(lastDay));
     assert.deepEqual(adminScheduleWindow(now, {}), win, 'an empty options object must not change behaviour');
   }

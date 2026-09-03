@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Plus, Trash2, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import {
   createCareerPath,
   updateCareerPath,
@@ -496,8 +497,13 @@ export function CareerPathForm({ careerPath, courses }) {
               </label>
               <div
                 className="prose prose-sm dark:prose-invert mt-1 min-h-[18rem] max-w-none overflow-auto rounded-9e-md border border-[var(--surface-border)] bg-white p-3 text-sm dark:bg-[#0D1B2A] dark:text-white"
+                // A bare <textarea> above, no editor at all — this preview
+                // is the ONLY thing standing between an admin's raw-typed
+                // markup and dangerouslySetInnerHTML before save.
                 dangerouslySetInnerHTML={{
-                  __html: contentHtml || '<span class="text-gray-300">ยังไม่มีเนื้อหา</span>',
+                  __html: contentHtml
+                    ? sanitizeRichHtml(contentHtml)
+                    : '<span class="text-gray-300">ยังไม่มีเนื้อหา</span>',
                 }}
               />
             </div>

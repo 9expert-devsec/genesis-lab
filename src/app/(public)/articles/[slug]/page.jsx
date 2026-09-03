@@ -10,6 +10,7 @@ import { toMetaDescription } from '@/lib/seo/metaDescription';
 import { pickPinnedCourses } from '@/lib/articles/pinnedCourses';
 import { normalizeAuthoredColors } from '@/lib/articles/normalizeAuthoredColors';
 import { wrapArticleTables } from '@/lib/articles/wrapArticleTables';
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
 import { ArticleDetailClient } from './_components/ArticleDetailClient';
 
 export const revalidate = 3600;
@@ -140,7 +141,15 @@ export default async function ArticleDetailPage({ params }) {
         // version.
         article={{
           ...article,
-          content: wrapArticleTables(normalizeAuthoredColors(article.content)),
+          // Sanitised FIRST, not last: normalizeAuthoredColors adds its own
+          // `--authored-fg-*`/`--authored-bg-*` custom properties onto the
+          // style attribute, and sanitizeRichHtml's style allow-list would
+          // strip those (they are not color/background-color/text-align/
+          // font-size/width) if it ran after. Sanitising the admin-authored
+          // bytes first, then letting the two render-only passes add their
+          // own markup on top of already-clean content, is the only order
+          // that does not silently break the colour dark-mode fix.
+          content: wrapArticleTables(normalizeAuthoredColors(sanitizeRichHtml(article.content))),
         }}
         related={related}
         relatedCoursesData={relatedCoursesData}

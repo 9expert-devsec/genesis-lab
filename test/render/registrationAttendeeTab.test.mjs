@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RegistrationDetailClient } from '@/app/admin/registrations/_components/RegistrationDetailClient';
+import { NOT_SPECIFIED_LABEL } from '@/lib/orNotSpecified';
 // One source-level claim in this file — see "a copy control writes NO audit row".
 import { readSource } from '../sourceScan.mjs';
 
@@ -390,13 +391,18 @@ test('the table has five columns: #, name, email, phone, menu', () => {
   }
 });
 
-test('email and phone are separate cells, each falling back to its own dash', () => {
+test('email and phone are separate cells, each falling back to its own placeholder', () => {
   /**
    * ── RE-POINTED FROM "ONE DASH" TO "TWO", AND THAT IS THE COLUMN SPLIT ─────
    * A name-only row used to show ONE dash, because email and phone shared a cell
    * that fell back once. They are two cells now, so it shows two — and that is
    * the change working rather than a regression. A TABLE CELL MAY NOT VANISH,
    * which is why each falls back rather than emptying.
+   *
+   * ── RE-POINTED AGAIN: "—" -> NOT_SPECIFIED_LABEL ──────────────────────────
+   * Attendee email/phone became genuinely optional at intake; a blank one is
+   * no longer a display gap to paper over with a dash, it is an expected,
+   * submittable state that reads "ไม่ได้ระบุ" — see src/lib/orNotSpecified.js.
    */
   const rows = attendeeRows(FULL);
   const cells = cellsOf(rows[0]);
@@ -422,14 +428,14 @@ test('email and phone are separate cells, each falling back to its own dash', ()
   // cells — the ordering claim a page-wide dash count cannot make.
   const emailOnly = cellsOf(rows[3]);
   assert.ok(emailOnly[2].includes('@'), 'the email-only row lost its email');
-  assert.equal(textOf(emailOnly[3]), '—', 'the missing phone did not fall back to a dash');
+  assert.equal(textOf(emailOnly[3]), NOT_SPECIFIED_LABEL, 'the missing phone did not fall back to the placeholder');
 });
 
-test('a row with NO contact details renders two dashes, one per column', () => {
+test('a row with NO contact details renders the placeholder in both columns', () => {
   const blank = cellsOf(attendeeRows(FULL)[2]);
-  assert.equal(textOf(blank[2]), '—', 'the missing email did not fall back');
-  assert.equal(textOf(blank[3]), '—', 'the missing phone did not fall back');
-  // And neither cell is EMPTY, which is the defect the dash exists to prevent.
+  assert.equal(textOf(blank[2]), NOT_SPECIFIED_LABEL, 'the missing email did not fall back');
+  assert.equal(textOf(blank[3]), NOT_SPECIFIED_LABEL, 'the missing phone did not fall back');
+  // And neither cell is EMPTY, which is the defect the placeholder exists to prevent.
   assert.ok(textOf(blank[2]).length > 0 && textOf(blank[3]).length > 0);
 });
 

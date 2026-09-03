@@ -133,6 +133,26 @@ test('trainingTopicsRich is a [String] on the model, defaulting to []', () => {
   );
 });
 
+test('descriptionRich is a String on the model, defaulting to empty', () => {
+  const { code } = readSource('src/models/CourseExtension.js');
+  assert.match(
+    code, /descriptionRich:\s*\{\s*type:\s*String\s*,\s*default:\s*''\s*\}/,
+    "descriptionRich is not declared as `{ type: String, default: '' }`",
+  );
+});
+
+test('the four section-6 rich fields are each a String on the model, defaulting to empty', () => {
+  const { code } = readSource('src/models/CourseExtension.js');
+  for (const field of [
+    'objectivesRich', 'targetAudienceRich', 'prerequisitesRich', 'systemRequirementsRich',
+  ]) {
+    assert.match(
+      code, new RegExp(`${field}:\\s*\\{\\s*type:\\s*String\\s*,\\s*default:\\s*''\\s*\\}`),
+      `${field} is not declared as { type: String, default: '' }`,
+    );
+  }
+});
+
 test('every writable field the builder knows exists on the model', () => {
   // Catches the half-landed change: a field added to the builder and not to the
   // schema writes a key Mongoose silently drops (strict mode), so the save
@@ -149,5 +169,5 @@ test('every writable field the builder knows exists on the model', () => {
 test('CONTROL: that sweep would notice a field the model does not have', () => {
   const { code } = readSource('src/models/CourseExtension.js');
   assert.doesNotMatch(code, /\bnotAFieldAtAll:\s*\{/);
-  assert.ok(EXTENSION_FIELDS.length === 9, `expected 9 writable fields, found ${EXTENSION_FIELDS.length}`);
+  assert.ok(EXTENSION_FIELDS.length === 14, `expected 14 writable fields, found ${EXTENSION_FIELDS.length}`);
 });

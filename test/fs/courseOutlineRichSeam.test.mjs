@@ -189,15 +189,31 @@ test('CONTROL: the scoping sweep rejects a bare list selector', () => {
     'the scope check does not reject an unscoped or foreign selector, so it is not guarding');
 });
 
-test('CONTROL: the CSS block exists and defines three distinct depth markers', () => {
+test('CONTROL: the CSS block exists and defines six distinct depth markers', () => {
   // Guards the scoping sweep above from passing because it found no rules, and
-  // pins that all three levels actually get a marker — the cap is 3 and
-  // clampDepth lifts anything deeper, so a 4th is unreachable by construction.
+  // pins that all six levels actually get a marker — the cap is 6 (raised from
+  // 3) and clampDepth lifts anything deeper, so a 7th is unreachable by
+  // construction.
   const css = readSource('src/app/globals.css').raw;
   assert.ok(css.includes('.topic-rich'), 'the scoped block is gone');
   const markers = [...css.matchAll(/\.topic-rich[^{]*::before\s*\{[^}]*content:\s*'([^']+)'/g)]
     .map((m) => m[1]);
-  assert.equal(new Set(markers).size, 3, `expected 3 distinct depth markers, got ${JSON.stringify(markers)}`);
+  assert.equal(new Set(markers).size, 6, `expected 6 distinct depth markers, got ${JSON.stringify(markers)}`);
+});
+
+test('CONTROL: .topic-editor-body mirrors the same six distinct depth markers', () => {
+  // The public page and the live editor must show the SAME glyph at the same
+  // depth, or an admin authors against one set of markers and the page shows
+  // another.
+  const css = readSource('src/app/globals.css').raw;
+  const richMarkers = [...css.matchAll(/\.topic-rich[^{]*::before\s*\{[^}]*content:\s*'([^']+)'/g)]
+    .map((m) => m[1]);
+  const editorMarkers = [...css.matchAll(/\.topic-editor-body[^{]*::before\s*\{[^}]*content:\s*'([^']+)'/g)]
+    .map((m) => m[1]);
+  assert.equal(new Set(editorMarkers).size, 6,
+    `expected 6 distinct depth markers on .topic-editor-body, got ${JSON.stringify(editorMarkers)}`);
+  assert.deepEqual(editorMarkers, richMarkers,
+    'the admin editor and the public page disagree on which glyph belongs to which depth');
 });
 
 // ── no ceiling may come back on this path ──────────────────────────────────

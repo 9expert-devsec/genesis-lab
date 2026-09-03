@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { InvoiceFields } from '@/components/registration/InvoiceFields';
 import { createCareerPathRegistration } from '@/lib/actions/career-path-registrations';
+import { isValidThaiPhone } from '@/lib/registration/thaiPhone';
+import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 import { cn } from '@/lib/utils';
 
 // ── Constants ───────────────────────────────────────────────────
@@ -112,16 +114,15 @@ function displayType(type) {
 }
 
 // ── Validation helpers ─────────────────────────────────────────
-
-function isValidContactPhone(phone) {
-  const digits = String(phone ?? '').replace(/\D/g, '');
-  const prefix = digits.substring(0, 2);
-  if (['06', '08', '09'].includes(prefix)) return /^\d{10}$/.test(digits);
-  if (['01', '02', '03', '04', '05', '07'].includes(prefix)) {
-    return /^\d{9}(\d{1,5})?$/.test(digits);
-  }
-  return false;
-}
+//
+// Phone validation is src/lib/registration/thaiPhone.js's isValidThaiPhone —
+// imported above. This file used to carry its own copy (isValidContactPhone),
+// which duplicated the domestic mobile/landline+extension rules but never
+// handled a leading "+" at all (it stripped non-digits unconditionally, so a
+// real +66 number's digits-only view starts with "66", matches neither the
+// 06/08/09 nor 01-05/07 prefix set, and was rejected outright). Deleted
+// rather than kept as a second implementation two flows could quietly drift
+// apart on.
 
 // Invoice shape mirrors what `InvoiceFields` reads/writes via RHF.
 // Address sub-objects can be `null` (the inactive branch when country
@@ -160,7 +161,7 @@ const baseSchema = z.object({
   contactFirstName: z.string().trim().min(1, 'กรุณากรอกชื่อ'),
   contactLastName:  z.string().trim().min(1, 'กรุณากรอกนามสกุล'),
   contactEmail:     z.string().trim().email('อีเมลไม่ถูกต้อง'),
-  contactPhone:     z.string().refine(isValidContactPhone, 'รูปแบบเบอร์โทรไม่ถูกต้อง'),
+  contactPhone:     z.string().refine(isValidThaiPhone, 'รูปแบบเบอร์โทรไม่ถูกต้อง'),
   isCoordinator:    z.boolean().default(false),
   attendeeCount:    z.coerce.number().int().min(1).default(1),
   skipAttendee:     z.boolean().default(false),
@@ -1012,7 +1013,7 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isSubmitted },
   } = useForm({
     resolver: zodResolver(baseSchema),
     mode: 'onChange',
@@ -1029,6 +1030,9 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
       note:             '',
     },
   });
+
+  const contactPhoneProps = register('contactPhone');
+  const contactPhoneReveal = useRevealFieldError(isSubmitted);
 
   const attendeeCount  = Number(watch('attendeeCount')) || 1;
   const isCoordinator  = watch('isCoordinator');
@@ -1053,8 +1057,14 @@ function Step2Form({ defaultValues, selected, curriculum, onBack, onSubmit }) {
           <Field label="Email" required error={errors.contactEmail?.message}>
             <input type="email" {...register('contactEmail')} className={inputClass} />
           </Field>
-          <Field label="เบอร์ติดต่อ" required error={errors.contactPhone?.message}>
-            <input type="tel" {...register('contactPhone')} className={inputClass} placeholder="0xxxxxxxxx" />
+          <Field label="เบอร์ติดต่อ" required error={contactPhoneReveal.shouldShow ? errors.contactPhone?.message : undefined}>
+            <input
+              type="tel"
+              {...contactPhoneProps}
+              onBlur={(e) => { contactPhoneProps.onBlur(e); contactPhoneReveal.reveal(); }}
+              className={inputClass}
+              placeholder="0xxxxxxxxx"
+            />
           </Field>
         </div>
 

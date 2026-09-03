@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Check, ArrowRight, Clock, FileText } from "lucide-react";
 import { FaqAccordionSection } from "@/components/faq/FaqAccordionSection";
 import { coursePriceLabel } from "@/lib/coursePriceLabel";
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 
 function Breadcrumb({ title }) {
   return (
@@ -94,7 +95,11 @@ function AboutSection({ careerPath }) {
       {hasHtml && (
         <div
           className="prose prose-lg max-w-none text-[var(--text-secondary)] dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: careerPath.description_html }}
+          // Admin-writable via a bare <textarea>, no editor at all (see
+          // docs/audit/unsanitized-html-render-sites.md's CareerPathForm
+          // callout) and dual-written to MSDB + Mongo — sanitised again
+          // here since the store is not a trust boundary.
+          dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(careerPath.description_html) }}
         />
       )}
     </section>

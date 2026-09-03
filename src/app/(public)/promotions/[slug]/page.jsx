@@ -5,7 +5,8 @@ import { resolvePromotion } from "@/lib/resolvePromotion";
 import { getPageBuilderPageBySlugAny } from "@/lib/actions/pageBuilder";
 import { shouldRenderBuilderPromotion } from "@/lib/pageBuilder/promotionMode";
 import { PageBuilderView } from "@/components/pageBuilder/PageBuilderView";
-import { stripDraft } from '@/lib/pageBuilder/draftState';
+import { stripDraft } from "@/lib/pageBuilder/draftState";
+import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
 
 export const revalidate = 3600;
 
@@ -211,7 +212,15 @@ export default async function PromotionDetailPage({ params }) {
         {promotion.html_content ? (
           <div
             className="promotion-html-content text-[#0D1B2A] dark:text-[#F8FAFD]"
-            dangerouslySetInnerHTML={{ __html: promotion.html_content }}
+            // `html_content` is upstream (MSDB) content genesis never writes —
+            // see lib/sanitizeRichHtml.js. Sanitised HERE, at render, because
+            // that is the only point genesis controls; docs/audit/
+            // unsanitized-html-render-sites.md §1.2 measured this exact field
+            // carrying a live <script> and working onmouseover/onerror
+            // handlers in 3 of 21 stored rows.
+            dangerouslySetInnerHTML={{
+              __html: sanitizeRichHtml(promotion.html_content),
+            }}
           />
         ) : (
           <p className="text-sm text-[#465469] dark:text-[#C5CEDA]">

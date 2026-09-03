@@ -5,6 +5,7 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { getScheduleLocals } from '@/lib/actions/schedules';
 import { listInstructorsForAdmin } from '@/lib/actions/instructors';
 import { requirePage } from '@/lib/rbac/guard';
+import { siteTodayKey } from '@/lib/articlePublishTime';
 import {
   adminScheduleWindow,
   resolveAdminScheduleRange,
@@ -131,6 +132,24 @@ export default async function AdminSchedulesPage({ searchParams }) {
         filterStatus={filterStatus}
         monthFrom={monthFrom}
         monthTo={monthTo}
+        /*
+         * TODAY, DECIDED ONCE ON THE SERVER AND PASSED DOWN.
+         *
+         * The grid greys a round out once its last training day has passed, so
+         * it needs to know what day it is. It must NOT read the clock itself:
+         * SchedulesAdminClient is a client component, so a `new Date()` inside
+         * it runs on the server for the HTML and again in the browser for
+         * hydration, and the two can straddle midnight — the round that is the
+         * whole point of this feature is precisely the one at that boundary.
+         *
+         * `siteTodayKey` is Asia/Bangkok by construction (fixed offset, not the
+         * runtime's zone), which is the same currency `roundHasEnded` compares
+         * in and the same one every public surface already uses. Threaded from
+         * the `now` read at the top of this function, so the fetch window, the
+         * rendered columns and the ended/current line are all one instant's
+         * answer rather than three reads that can disagree.
+         */
+        todayKey={siteTodayKey(now)}
       />
     </div>
   );

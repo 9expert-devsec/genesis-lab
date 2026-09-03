@@ -1,11 +1,14 @@
-import { cn } from '@/lib/utils';
-import { sanitizePageHtml } from '@/lib/customPages/sanitizePageHtml';
-import { scopeCss, isValidSectionId } from '@/lib/pageBuilder/scopeCss';
-import { slotsOf, MAX_SECTION_DEPTH } from '@/lib/pageBuilder/containerSlots';
+import { cn } from "@/lib/utils";
+import { sanitizePageHtml } from "@/lib/customPages/sanitizePageHtml";
+import { scopeCss, isValidSectionId } from "@/lib/pageBuilder/scopeCss";
+import { slotsOf, MAX_SECTION_DEPTH } from "@/lib/pageBuilder/containerSlots";
 import {
-  containerWidthClass, spacingTopClass, spacingBottomClass,
-  visibilityClass, isHiddenVisibility,
-} from '@/lib/pageBuilder/presets';
+  containerWidthClass,
+  spacingTopClass,
+  spacingBottomClass,
+  visibilityClass,
+  isHiddenVisibility,
+} from "@/lib/pageBuilder/presets";
 /**
  * Round 39, ADDED beside the statement above rather than folded into it — the
  * standing rule in this repo.
@@ -19,9 +22,13 @@ import {
  * and a test asserts this file cannot reach the other.
  */
 import {
-  backgroundClassFor, backgroundStyleFor, isDarkBackgroundFor, accentVarsFor,
-  backgroundKindFor, backgroundPinFor,
-} from '@/lib/pageBuilder/presets';
+  backgroundClassFor,
+  backgroundStyleFor,
+  isDarkBackgroundFor,
+  accentVarsFor,
+  backgroundKindFor,
+  backgroundPinFor,
+} from "@/lib/pageBuilder/presets";
 /**
  * ADDED beside the statement above rather than folded into it — the standing
  * rule in this repo. Round 78: the renderer needs to know whether the author's
@@ -30,7 +37,10 @@ import {
  * uses to suppress the preset class, so the class and the text colour cannot
  * disagree about who owns the background.
  */
-import { hasCustomBackground, isBackgroundPinned } from '@/lib/pageBuilder/customColor';
+import {
+  hasCustomBackground,
+  isBackgroundPinned,
+} from "@/lib/pageBuilder/customColor";
 /**
  * Round 45, ADDED beside the statements above.
  *
@@ -40,35 +50,35 @@ import { hasCustomBackground, isBackgroundPinned } from '@/lib/pageBuilder/custo
  * the other for the same section, which is worse than neither: the author
  * would have to work out which panel is lying.
  */
-import { sectionRendersEmpty, labelOf } from '@/lib/pageBuilder/sectionLabels';
+import { sectionRendersEmpty, labelOf } from "@/lib/pageBuilder/sectionLabels";
 
-import { HeadingSection } from './sections/heading';
-import { RichTextSection } from './sections/rich_text';
-import { ImageSection } from './sections/image';
-import { CtaSection } from './sections/cta';
-import { ChecklistSection } from './sections/checklist';
-import { NoticeSection } from './sections/notice';
-import { FullWidthSection } from './sections/full_width';
-import { ContainerSection } from './sections/container';
-import { TwoColumnSection } from './sections/two_column';
-import { CardGridSection } from './sections/card_grid';
-import { HighlightGridSection } from './sections/highlight_grid';
-import { TimelineSection } from './sections/timeline';
-import { TabsSection } from './sections/tabs';
-import { AccordionSection } from './sections/accordion';
-import { PriceCardSection } from './sections/price_card';
-import { StatCardSection } from './sections/stat_card';
-import { IconCardSection } from './sections/icon_card';
-import { CustomHtmlSection } from './sections/custom_html';
-import { CustomCssSection } from './sections/custom_css';
-import { EmbedSection } from './sections/embed';
-import { DebugJsonSection } from './sections/debug_json';
-import { CourseCardSection } from './sections/course_card';
-import { InstructorCardSection } from './sections/instructor_card';
-import { CourseSelectorSection } from './sections/course_selector';
-import { BundleCoursesSection } from './sections/bundle_courses';
-import { CourseListSection } from './sections/course_list';
-import { CourseScheduleSection } from './sections/course_schedule';
+import { HeadingSection } from "./sections/heading";
+import { RichTextSection } from "./sections/rich_text";
+import { ImageSection } from "./sections/image";
+import { CtaSection } from "./sections/cta";
+import { ChecklistSection } from "./sections/checklist";
+import { NoticeSection } from "./sections/notice";
+import { FullWidthSection } from "./sections/full_width";
+import { ContainerSection } from "./sections/container";
+import { TwoColumnSection } from "./sections/two_column";
+import { CardGridSection } from "./sections/card_grid";
+import { HighlightGridSection } from "./sections/highlight_grid";
+import { TimelineSection } from "./sections/timeline";
+import { TabsSection } from "./sections/tabs";
+import { AccordionSection } from "./sections/accordion";
+import { PriceCardSection } from "./sections/price_card";
+import { StatCardSection } from "./sections/stat_card";
+import { IconCardSection } from "./sections/icon_card";
+import { CustomHtmlSection } from "./sections/custom_html";
+import { CustomCssSection } from "./sections/custom_css";
+import { EmbedSection } from "./sections/embed";
+import { DebugJsonSection } from "./sections/debug_json";
+import { CourseCardSection } from "./sections/course_card";
+import { InstructorCardSection } from "./sections/instructor_card";
+import { CourseSelectorSection } from "./sections/course_selector";
+import { BundleCoursesSection } from "./sections/bundle_courses";
+import { CourseListSection } from "./sections/course_list";
+import { CourseScheduleSection } from "./sections/course_schedule";
 
 /**
  * SectionRenderer — dispatches one section to its component and applies the
@@ -122,7 +132,7 @@ import { CourseScheduleSection } from './sections/course_schedule';
  * needs its child stretched instead, and that is done where its box is
  * composed (sections/highlight_grid.jsx) rather than here.
  */
-const FILLS_ITS_TRACK = new Set(['card_grid', 'highlight_grid']);
+const FILLS_ITS_TRACK = new Set(["card_grid", "highlight_grid"]);
 
 // type → component
 const REGISTRY = {
@@ -189,7 +199,7 @@ export const RENDERABLE_SECTION_TYPES = Object.freeze(Object.keys(REGISTRY));
 // with the editor, which walks the same tree. See that file for why.
 
 function devError(msg) {
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== "production") {
     // eslint-disable-next-line no-console
     console.error(`[pageBuilder] ${msg}`);
   }
@@ -199,7 +209,8 @@ function UnknownBlock({ type }) {
   // Dev-only — production renders nothing for an unknown type.
   return (
     <div className="my-2 rounded border border-dashed border-amber-400 bg-amber-50 p-3 text-xs text-amber-800">
-      [pageBuilder] ไม่รู้จัก section ชนิด &quot;{String(type)}&quot; — ไม่แสดงผลใน production
+      [pageBuilder] ไม่รู้จัก section ชนิด &quot;{String(type)}&quot; —
+      ไม่แสดงผลใน production
     </div>
   );
 }
@@ -235,8 +246,9 @@ function EmptyInEditor({ type }) {
       data-pb-empty=""
       className="rounded-9e-sm border border-dashed border-[var(--surface-border)] px-3 py-2 text-xs text-9e-slate-dp-50"
     >
-      <span className="rounded-full border border-[var(--surface-border)] px-1.5 py-0.5 text-[10px]">ว่าง</span>
-      {' '}
+      <span className="rounded-full border border-[var(--surface-border)] px-1.5 py-0.5 text-[10px]">
+        ว่าง
+      </span>{" "}
       {/* The tree's sentence, verbatim, with the type in front of it — so the two
           panels say the same thing about the same section rather than two things. */}
       {`${labelOf(type)} — section นี้ยังว่าง จึงไม่แสดงผลบนหน้าเว็บ`}
@@ -244,22 +256,32 @@ function EmptyInEditor({ type }) {
   );
 }
 
-export function SectionRenderer({ section, depth = 0, path = null, resolvedData = null, fillHeight = false }) {
-  if (!section || typeof section !== 'object') return null;
+export function SectionRenderer({
+  section,
+  depth = 0,
+  path = null,
+  resolvedData = null,
+  fillHeight = false,
+}) {
+  if (!section || typeof section !== "object") return null;
   if (section.enabled === false) return null;
 
   const settings = section.settings ?? {};
   if (isHiddenVisibility(settings.visibility)) return null; // never rendered anywhere
 
   if (depth > MAX_SECTION_DEPTH) {
-    devError(`section nesting exceeded depth ${MAX_SECTION_DEPTH} — dropped "${section.type}"`);
+    devError(
+      `section nesting exceeded depth ${MAX_SECTION_DEPTH} — dropped "${section.type}"`,
+    );
     return null;
   }
 
   const Component = REGISTRY[section.type];
   if (!Component) {
     devError(`unknown section type "${section.type}"`);
-    return process.env.NODE_ENV !== 'production' ? <UnknownBlock type={section.type} /> : null;
+    return process.env.NODE_ENV !== "production" ? (
+      <UnknownBlock type={section.type} />
+    ) : null;
   }
 
   const advanced = section.advanced ?? {};
@@ -274,7 +296,9 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
     if (isValidSectionId(advanced.sectionId)) {
       domId = advanced.sectionId;
     } else {
-      devError(`invalid sectionId "${advanced.sectionId}" — anchor id AND scoped customCss dropped for this section`);
+      devError(
+        `invalid sectionId "${advanced.sectionId}" — anchor id AND scoped customCss dropped for this section`,
+      );
     }
   }
 
@@ -290,7 +314,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
           key={child?.id ?? i}
           section={child}
           depth={depth + 1}
-          path={path ? [...path, 'content', slot, i] : null}
+          path={path ? [...path, "content", slot, i] : null}
           resolvedData={resolvedData}
           fillHeight={FILLS_ITS_TRACK.has(section.type)}
         />
@@ -332,10 +356,13 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
   );
 
   // advanced.customCss — scoped to #domId (needs a valid id) then injected.
-  const scopedCss = advanced.customCss && domId ? scopeCss(advanced.customCss, domId) : '';
+  const scopedCss =
+    advanced.customCss && domId ? scopeCss(advanced.customCss, domId) : "";
   // advanced.customHtml — sanitized on EVERY render, reusing the shared
   // whitelist (never a second, drift-prone copy).
-  const cleanHtml = advanced.customHtml ? sanitizePageHtml(advanced.customHtml) : '';
+  const cleanHtml = advanced.customHtml
+    ? sanitizePageHtml(advanced.customHtml)
+    : "";
 
   /**
    * ── ROUND 39: THE SAME THREE CALLS, THROUGH THE MODE-AWARE RESOLVERS ─────
@@ -381,7 +408,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
     backgroundClassFor(settings),
     spacingTopClass(settings.spacingTop),
     spacingBottomClass(settings.spacingBottom),
-    isDarkBackgroundFor(settings) && 'text-9e-ice',
+    isDarkBackgroundFor(settings) && "text-9e-ice",
     // ROUND 79 narrowed this to PINNED sections only. Round 78 added it
     // because a custom surface stayed light while `--text-primary` flipped —
     // but a DERIVED surface now goes dark with the theme, so pinning navy text
@@ -389,7 +416,9 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
     // L 0.267 and needs the theme's light text, exactly as any other dark
     // surface does. A PINNED section still does not move, so it still needs
     // the literal.
-    hasCustomBackground(settings) && isBackgroundPinned(settings) && 'text-9e-navy',
+    hasCustomBackground(settings) &&
+      isBackgroundPinned(settings) &&
+      "text-9e-navy",
     visibilityClass(settings.visibility),
     advanced.customClass || null,
   );
@@ -405,7 +434,10 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
    * disjoint properties (custom properties vs background-color/-image) and one
    * `style` attribute has to carry both.
    */
-  const outerStyle = { ...accentVarsFor(style), ...backgroundStyleFor(settings) };
+  const outerStyle = {
+    ...accentVarsFor(style),
+    ...backgroundStyleFor(settings),
+  };
   const hasOuterStyle = Object.keys(outerStyle).length > 0;
 
   /**
@@ -441,7 +473,7 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
   return (
     <section
       id={domId}
-      data-pb-path={path ? path.join('.') : undefined}
+      data-pb-path={path ? path.join(".") : undefined}
       /**
        * ROUND 79. The author's colour arrives as custom properties in `style`;
        * these two attributes tell globals.css which declaration to build from
@@ -455,11 +487,22 @@ export function SectionRenderer({ section, depth = 0, path = null, resolvedData 
       style={hasOuterStyle ? outerStyle : undefined}
     >
       {scopedCss && <style dangerouslySetInnerHTML={{ __html: scopedCss }} />}
-      <div className={cn('mx-auto px-2 md:px-4', containerWidthClass(settings.containerWidth), fillHeight && 'h-full')}>
+      <div
+        className={cn(
+          "mx-auto px-2 md:px-4",
+          containerWidthClass(settings.containerWidth),
+          fillHeight && "h-full",
+        )}
+      >
         {inner}
-        {path != null && sectionRendersEmpty(section) && <EmptyInEditor type={section.type} />}
+        {path != null && sectionRendersEmpty(section) && (
+          <EmptyInEditor type={section.type} />
+        )}
         {cleanHtml && (
-          <div className="pb-custom-html mt-6" dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+          <div
+            className="pb-custom-html mt-6"
+            dangerouslySetInnerHTML={{ __html: cleanHtml }}
+          />
         )}
       </div>
     </section>

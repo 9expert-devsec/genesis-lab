@@ -205,6 +205,117 @@ test('P2: trainingTopicsRich is coerced to strings when present', () => {
     'a present-but-wrong value still writes, and writes something valid');
 });
 
+test('P2 WIPE GUARD: a caller that omits descriptionRich does not write it', () => {
+  // The same incident class trainingTopicsRich's guard above prevents, for the
+  // course rich body: every existing caller omits this key today, and must
+  // therefore leave it alone.
+  for (const [what, payload] of CALLERS) {
+    const update = buildExtensionUpdate({
+      courseId: 'C', data: payload(), cleanAlias: 'c',
+    });
+    assert.ok(
+      !('descriptionRich' in update),
+      `${what} would WRITE descriptionRich despite never sending it — `
+      + 'that is the wipe this selection exists to prevent',
+    );
+  }
+});
+
+test('P2: descriptionRich is sanitised through sanitizeRichHtml when present', () => {
+  const update = buildExtensionUpdate({
+    courseId: 'C',
+    data: { descriptionRich: '<p>ok</p><script>alert(1)</script>' },
+    cleanAlias: '',
+  });
+  assert.equal(update.descriptionRich, '<p>ok</p>',
+    'a present value must be sanitised on the way into the update, not stored raw');
+});
+
+test('P2: descriptionRich — an image, a table and a YouTube embed all survive the save path', () => {
+  /**
+   * The course body editor's stated capabilities (images, tables, YouTube,
+   * headings, lists, links, marks — docs/audit/course-rich-body.md §4) are
+   * only real if what the editor can author actually reaches storage. This
+   * is the save-side half of that proof; CourseDescription's render-side
+   * sanitising is proven separately at the render tier.
+   */
+  const authored =
+    '<h2>Overview</h2>'
+    + '<p>Some <strong>bold</strong> text with a <a href="https://x.test">link</a>.</p>'
+    + '<img src="https://res.cloudinary.com/x/body.png" alt="diagram" width="400">'
+    + '<table><tbody><tr><th>Col</th><td>Val</td></tr></tbody></table>'
+    + '<iframe src="https://www.youtube-nocookie.com/embed/abc123"></iframe>';
+
+  const update = buildExtensionUpdate({
+    courseId: 'C', data: { descriptionRich: authored }, cleanAlias: '',
+  });
+
+  assert.match(update.descriptionRich, /<h2>Overview<\/h2>/);
+  assert.match(update.descriptionRich, /<img[^>]*src="https:\/\/res\.cloudinary\.com\/x\/body\.png"/);
+  assert.match(update.descriptionRich, /<table>/);
+  assert.match(update.descriptionRich, /<iframe[^>]*src="https:\/\/www\.youtube-nocookie\.com\/embed\/abc123"/);
+});
+
+test('P2: descriptionRich present-but-empty still writes the empty string', () => {
+  const update = buildExtensionUpdate({
+    courseId: 'C', data: { descriptionRich: '' }, cleanAlias: '',
+  });
+  assert.ok('descriptionRich' in update, 'an explicit empty string must be written, not dropped');
+  assert.equal(update.descriptionRich, '');
+});
+
+// ── P2b. SECTION 6'S FOUR — THE SAME WIPE GUARD, PER FIELD ──────────────────
+//
+// Separate tests per field rather than one loop over the four: a field whose
+// guard broke should name itself, the same discipline courseDescription.test.mjs
+// applies to its own fallback triggers.
+
+const SECTION_6_FIELDS = [
+  'objectivesRich', 'targetAudienceRich', 'prerequisitesRich', 'systemRequirementsRich',
+];
+
+for (const field of SECTION_6_FIELDS) {
+  test(`P2 WIPE GUARD: a caller that omits ${field} does not write it`, () => {
+    for (const [what, payload] of CALLERS) {
+      const update = buildExtensionUpdate({ courseId: 'C', data: payload(), cleanAlias: 'c' });
+      assert.ok(
+        !(field in update),
+        `${what} would WRITE ${field} despite never sending it — `
+        + 'that is the wipe this selection exists to prevent',
+      );
+    }
+  });
+
+  test(`P2: ${field} is sanitised through sanitizeRichHtml when present`, () => {
+    const update = buildExtensionUpdate({
+      courseId: 'C', data: { [field]: '<p>ok</p><script>alert(1)</script>' }, cleanAlias: '',
+    });
+    assert.equal(update[field], '<p>ok</p>',
+      `a present value for ${field} must be sanitised on the way into the update, not stored raw`);
+  });
+
+  test(`P2: ${field} present-but-empty still writes the empty string`, () => {
+    const update = buildExtensionUpdate({ courseId: 'C', data: { [field]: '' }, cleanAlias: '' });
+    assert.ok(field in update, `an explicit empty string for ${field} must be written, not dropped`);
+    assert.equal(update[field], '');
+  });
+}
+
+test('the four section-6 rich fields are independent of each other in one update', () => {
+  // Prove separation at the builder level: sending only ONE of the four
+  // writes only that one, exactly the property CourseDescription's render
+  // swap depends on ("one field having rich content leaves the other three
+  // on their fallback") holding true one layer earlier, at save time.
+  const update = buildExtensionUpdate({
+    courseId: 'C', data: { objectivesRich: '<p>only this one</p>' }, cleanAlias: '',
+  });
+  assert.equal(update.objectivesRich, '<p>only this one</p>');
+  assert.ok(!('targetAudienceRich' in update));
+  assert.ok(!('prerequisitesRich' in update));
+  assert.ok(!('systemRequirementsRich' in update));
+  assert.ok(!('descriptionRich' in update), 'a section-6 field must not touch the section-1 body');
+});
+
 // ── P3. C1 SEMANTICS — presence, not value ─────────────────────────────────
 
 test('P3: `{ metaTitle: undefined }` CLEARS — presence is the test, not value', () => {
@@ -267,10 +378,12 @@ test('P3 CONTROL: an inherited key does NOT count as present', () => {
 
 // ── the field list itself ──────────────────────────────────────────────────
 
-test('the writable field list is exactly the nine keys the action may set', () => {
+test('the writable field list is exactly the fourteen keys the action may set', () => {
   assert.deepEqual([...EXTENSION_FIELDS].sort(), [
-    'gallery', 'isPublished', 'metaDescription', 'metaTitle', 'ogImage',
-    'omisePaymentEnabled', 'tags', 'trainingTopicsRich', 'urlAlias',
+    'descriptionRich', 'gallery', 'isPublished', 'metaDescription', 'metaTitle',
+    'objectivesRich', 'ogImage', 'omisePaymentEnabled', 'prerequisitesRich',
+    'systemRequirementsRich', 'tags', 'targetAudienceRich', 'trainingTopicsRich',
+    'urlAlias',
   ]);
   // `upstreamId` and `formerCodes` are NOT here on purpose. The anchor is
   // decided against what is stored (resolveAnchorWrite) and added to the update

@@ -53,6 +53,8 @@
  * proves it rather than asserting it.
  */
 
+import { sanitizeRichHtml } from '@/lib/sanitizeRichHtml';
+
 /** Present means "the caller named this key", whatever value it named. */
 const has = (data, key) => Object.prototype.hasOwnProperty.call(data ?? {}, key);
 
@@ -103,6 +105,11 @@ export const EXTENSION_FIELDS = Object.freeze([
   'isPublished',
   'omisePaymentEnabled',
   'trainingTopicsRich',
+  'descriptionRich',
+  'objectivesRich',
+  'targetAudienceRich',
+  'prerequisitesRich',
+  'systemRequirementsRich',
 ]);
 
 /**
@@ -144,6 +151,27 @@ export function buildExtensionUpdate({ courseId, data, cleanAlias } = {}) {
     trainingTopicsRich:  () => (Array.isArray(data?.trainingTopicsRich)
       ? data.trainingTopicsRich.map((s) => String(s ?? ''))
       : []),
+
+    /**
+     * ── NO FALLBACK, SAME REASON AS trainingTopicsRich ABOVE ─────────────────
+     * '' is the sentinel for "no rich body exists for this course" — every row
+     * today. Sanitised HERE, on write, whatever the client did: a server action
+     * is a POST endpoint and the client is not a trust boundary. Re-sanitised
+     * again at render for the same defence-in-depth reason `sanitizeRichHtml`'s
+     * other callers are (stored bytes can predate any version of this code).
+     */
+    descriptionRich:     () => sanitizeRichHtml(String(data?.descriptionRich ?? '')),
+
+    /**
+     * ── SECTION 6'S FOUR — NO FALLBACK, SAME REASON AS descriptionRich ────────
+     * One coercion per field, each independently gated by the presence loop
+     * below: a caller can send any subset of the four (or none) and only the
+     * ones it names are written.
+     */
+    objectivesRich:         () => sanitizeRichHtml(String(data?.objectivesRich ?? '')),
+    targetAudienceRich:     () => sanitizeRichHtml(String(data?.targetAudienceRich ?? '')),
+    prerequisitesRich:      () => sanitizeRichHtml(String(data?.prerequisitesRich ?? '')),
+    systemRequirementsRich: () => sanitizeRichHtml(String(data?.systemRequirementsRich ?? '')),
   };
 
   // `courseId` is the upsert key and is always written: on an insert there is

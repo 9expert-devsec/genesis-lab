@@ -1,5 +1,5 @@
-import { cn } from '@/lib/utils';
-import { spacingBetweenClass } from '@/lib/pageBuilder/presets';
+import { cn } from "@/lib/utils";
+import { spacingBetweenClass } from "@/lib/pageBuilder/presets";
 
 /**
  * container — stacks child sections in a narrower, centred readable column.
@@ -52,7 +52,12 @@ import { spacingBetweenClass } from '@/lib/pageBuilder/presets';
  */
 export function ContainerSection({ children, settings }) {
   return (
-    <div className={cn('mx-auto flex flex-col', spacingBetweenClass(settings?.spacingBetween))}>
+    <div
+      className={cn(
+        "mx-auto flex flex-col",
+        spacingBetweenClass(settings?.spacingBetween),
+      )}
+    >
       {children}
     </div>
   );

@@ -256,13 +256,13 @@ test('the computed rank fields are NOT in the projection (asking Mongo for them 
 
 test('PUBLIC_LIST_FIELDS is NOT sufficient for /articles — do not wire it without the badge fields', () => {
   // FOUND WHILE IMPLEMENTING, and the reason the public list still reads whole
-  // documents: ArticlesPageClient calls shouldShowPinBadge(article), which reads
+  // documents: the public ArticleCard calls shouldShowPinBadge(article), which reads
   // isPinnedOnArticlePage and showPinBadge. Neither is in this projection.
   // Applying it to /articles would make `isPinnedOnArticlePage === true` false
   // for every row and delete the pin badge from the entire public list — the
   // exact silent-drop shape this commit exists to stop. This test states the gap
   // so it is discovered here rather than in production.
-  const publicClient = read('src/app/(public)/articles/_components/ArticlesPageClient.jsx');
+  const publicClient = read('src/components/articles/ArticleCard.jsx');
   assert.match(
     publicClient, /shouldShowPinBadge\(article\)/,
     'if the public list no longer calls shouldShowPinBadge, re-evaluate this test ' +

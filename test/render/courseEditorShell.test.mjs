@@ -90,10 +90,10 @@ test('the publish control is in the header', () => {
   assert.match(header, /aria-label="เผยแพร่บนเว็บสาธารณะ"/);
 });
 
-test('the save button and Preview are in the header too', () => {
+test('the save button and ดูหน้าจริง are in the header too', () => {
   const header = headerOf(renderEdit());
   assert.match(header, /<button type="submit"[^>]*>บันทึก<\/button>/, 'the save button left the header');
-  assert.match(header, /Preview/);
+  assert.match(header, /ดูหน้าจริง/);
 });
 
 test('the header carries a status badge and the link to the other four editors', () => {

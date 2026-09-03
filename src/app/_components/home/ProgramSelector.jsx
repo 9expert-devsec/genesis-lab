@@ -142,7 +142,7 @@ export function ProgramSelector({
 
         {/* ── PROGRAM TAB ──────────────────────────────────────────── */}
         {tab === "program" && (
-          <div className="flex flex-col h-[450px]  md:h-[410px] rounded-2xl bg-[#f8fafd] dark:bg-9e-border">
+          <div className="flex flex-col h-[450px]  md:h-[410px] rounded-2xl ">
             {programs.length === 0 ? (
               <EmptyState snapshotAvailable={snapshotAvailable} />
             ) : (

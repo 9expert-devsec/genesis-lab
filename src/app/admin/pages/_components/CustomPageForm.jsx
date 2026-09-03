@@ -21,6 +21,10 @@ import TextStyle from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import CharacterCount from '@tiptap/extension-character-count';
 import { IframeNode } from './extensions/IframeNode';
+import { StyleNode } from './extensions/StyleNode';
+import { RawHtmlNode } from './extensions/RawHtmlNode';
+import { wrapIfLossy } from '@/lib/customPages/wrapIfLossy';
+import { formatHTML } from '@/lib/customPages/formatHTML';
 import {
   Bold as BoldIcon, Italic as ItalicIcon, Strikethrough,
   Underline as UnderlineIcon, Subscript as SubIcon,
@@ -68,31 +72,6 @@ function autosize(el) {
   if (!el) return;
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
-}
-
-/**
- * Minimal HTML pretty-printer for the source-mode textarea — mirrors
- * ArticleForm. Tiptap emits single-line markup; this indents it so an
- * admin can hand-edit pasted iframe / Google-Form embeds comfortably.
- */
-function formatHTML(html) {
-  let indent = 0;
-  const tab = '  ';
-  return html
-    .replace(/></g, '>\n<')
-    .split('\n')
-    .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return '';
-      if (trimmed.match(/^<\/\w/)) indent = Math.max(0, indent - 1);
-      const result = tab.repeat(indent) + trimmed;
-      if (trimmed.match(/^<\w[^/]*[^/]>$/) && !trimmed.match(/^<(br|hr|img|input)/i)) {
-        indent++;
-      }
-      return result;
-    })
-    .filter(Boolean)
-    .join('\n');
 }
 
 // ── main component ───────────────────────────────────────────────
@@ -160,6 +139,16 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
       TableCell,
       Youtube.configure({ controls: true, nocookie: true, width: 640, height: 360 }),
       IframeNode,
+      // Keeps a pasted <style> through BOTH the initial `content:` parse below
+      // and setContent() on the way back from Source HTML mode. Without it
+      // ProseMirror drops the element on load, so simply opening an Advanced
+      // HTML page and saving it destroyed the stylesheet. See StyleNode.js.
+      StyleNode,
+      // Holds any other markup the schema above can't represent (a
+      // hand-written <div> wrapper, unrecognised nesting, …) as an opaque,
+      // round-trip-safe blob. See RawHtmlNode.js and the wrapIfLossy() calls
+      // below for how it gets used.
+      RawHtmlNode,
       CharacterCount,
     ],
     content: page?.body ?? '',
@@ -175,6 +164,27 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
   const titleRef = useRef(null);
   useEffect(() => autosize(titleRef.current), [title]);
 
+  /**
+   * wrapIfLossy needs a schema, which only exists once `editor` does — so the
+   * load-time fix runs here instead of inline in `content:` above. A page
+   * saved before this feature existed (or edited directly in Mongo) may carry
+   * markup the schema can't represent; without this, simply opening such a
+   * page for the first time would silently drop it, before the admin touches
+   * anything. Nothing is persisted during the brief window between mount and
+   * this effect — only `editor.commands.setContent` runs, and only when the
+   * wrap actually changes something.
+   */
+  useEffect(() => {
+    if (!editor) return;
+    const original = page?.body ?? '';
+    const wrapped = wrapIfLossy(original, editor.schema);
+    if (wrapped !== original) {
+      editor.commands.setContent(wrapped);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `page` is the
+    // record this form was opened with, not a value that changes mid-edit.
+  }, [editor]);
+
   // ── Handlers ──────────────────────────────────────────────────
 
   function handleTitleChange(v) {
@@ -185,7 +195,7 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
   function toggleSourceMode() {
     if (!editor) return;
     if (sourceMode) {
-      editor.commands.setContent(sourceHtml || '');
+      editor.commands.setContent(wrapIfLossy(sourceHtml || '', editor.schema));
       setSourceMode(false);
     } else {
       setSourceHtml(formatHTML(editor.getHTML()));
@@ -227,7 +237,11 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
       return;
     }
 
-    const html = sourceMode ? sourceHtml : editor.getHTML();
+    // Source mode can be saved directly, without ever touching the toggle —
+    // wrapIfLossy has to run here too, or the loss happens silently on the
+    // NEXT load instead of being visible now. editor.getHTML() never needs
+    // it: whatever the editor just serialised already fits its own schema.
+    const html = sourceMode ? wrapIfLossy(sourceHtml, editor.schema) : editor.getHTML();
     const trimmed = html.replace(/<p>\s*<\/p>/g, '').trim();
     if (!title.trim())     { setError('กรุณาใส่ชื่อหน้าเพจ'); return; }
     if (!slug.trim())      { setError('กรุณาใส่ slug'); return; }

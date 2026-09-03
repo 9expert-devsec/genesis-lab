@@ -3,16 +3,23 @@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { phoneInputProps } from '@/lib/registration/phoneInputProps';
+import { useRevealFieldError } from '@/lib/registration/useRevealFieldError';
 
 /**
  * Coordinator section — the person filling out the form.
  *
  * Props:
- * - register: react-hook-form register fn
- * - errors:   react-hook-form errors object (nested under `coordinator`)
+ * - register:     react-hook-form register fn
+ * - errors:       react-hook-form errors object (nested under `coordinator`)
+ * - isSubmitted:  react-hook-form formState.isSubmitted — reveals the phone
+ *                 field's error immediately on a submit attempt, same as
+ *                 every other field already does; see useRevealFieldError.
  */
-export function CoordinatorFields({ register, errors }) {
+export function CoordinatorFields({ register, errors, isSubmitted }) {
   const err = errors?.coordinator ?? {};
+  const phoneProps = phoneInputProps(register('coordinator.phone'));
+  const phoneReveal = useRevealFieldError(isSubmitted);
   return (
     <section className="rounded-9e-lg border border-[var(--surface-border)] bg-[var(--surface)] p-6">
       <h2 className="mb-1 text-base font-bold text-[var(--text-primary)]">
@@ -45,12 +52,12 @@ export function CoordinatorFields({ register, errors }) {
             aria-invalid={!!err.email}
           />
         </FieldGroup>
-        <FieldGroup label="เบอร์โทร" error={err.phone?.message} required>
+        <FieldGroup label="เบอร์โทร" error={phoneReveal.shouldShow ? err.phone?.message : undefined} required>
           <Input
-            inputMode="tel"
-            placeholder="เช่น 0812345678 หรือ 021234567123"
-            {...register('coordinator.phone')}
-            aria-invalid={!!err.phone}
+            placeholder="เช่น 0812345678 หรือ 02-219-4304 ต่อ 1234"
+            {...phoneProps}
+            onBlur={(e) => { phoneProps.onBlur(e); phoneReveal.reveal(); }}
+            aria-invalid={phoneReveal.shouldShow && !!err.phone}
           />
         </FieldGroup>
       </div>

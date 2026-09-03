@@ -1,5 +1,5 @@
 import sanitizeHtml from 'sanitize-html';
-import { clampDepth, MAX_TOPIC_DEPTH } from '@/lib/courses/topicHtml';
+import { clampDepth, MAX_TOPIC_DEPTH, separateAdjacentParagraphs } from '@/lib/courses/topicHtml';
 
 /**
  * Sanitizer for rich `training_topics` bullets. Its own allow-list, on purpose.
@@ -147,11 +147,19 @@ const SANITIZE_CONFIG = {
  * boundary — the same rule sanitizePageHtml states and the same reason: a value
  * cleaned at save is a value cleaned by whatever the rules were on the day it
  * was saved.
+ *
+ * ══ separateAdjacentParagraphs RUNS FIRST, BEFORE THE UNWRAP THAT WOULD HIDE
+ * THE BOUNDARY IT NEEDS TO SEE ═══════════════════════════════════════════════
+ * `<p>` is not in `ALLOWED_TOPIC_TAGS`, so `sanitizeHtml` below UNWRAPS every
+ * one of them — keeps the text, drops the tag. Two sibling `<p>`s would glue
+ * into one word-boundary-free string with nothing between them if that ran
+ * first. See `separateAdjacentParagraphs`'s own header (topicHtml.js) for why
+ * this protection lives here rather than in the editor's content schema.
  */
 export function sanitizeTopicHtml(html, { maxDepth = MAX_TOPIC_DEPTH } = {}) {
   if (!html) return '';
   try {
-    const clean = sanitizeHtml(String(html), SANITIZE_CONFIG);
+    const clean = sanitizeHtml(separateAdjacentParagraphs(String(html)), SANITIZE_CONFIG);
     return clampDepth(clean, maxDepth);
   } catch {
     return '';

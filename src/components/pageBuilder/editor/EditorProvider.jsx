@@ -1,11 +1,18 @@
-'use client';
+"use client";
 
-import { createContext, useContext, useEffect, useMemo, useReducer, useState } from 'react';
-import { editorReducer, initialEditorState } from './editorReducer';
-import { getAt } from './pagePath';
-import { dataRefSignature } from '@/lib/pageBuilder/dataRefs';
-import { isSaving } from '@/lib/pageBuilder/editorStatus';
-import { resolveBuilderSectionData } from '@/lib/actions/pageBuilder';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
+import { editorReducer, initialEditorState } from "./editorReducer";
+import { getAt } from "./pagePath";
+import { dataRefSignature } from "@/lib/pageBuilder/dataRefs";
+import { isSaving } from "@/lib/pageBuilder/editorStatus";
+import { resolveBuilderSectionData } from "@/lib/actions/pageBuilder";
 
 /**
  * Editor context — one state tree shared by the three panels (Structure,
@@ -32,7 +39,12 @@ import { resolveBuilderSectionData } from '@/lib/actions/pageBuilder';
 const EditorContext = createContext(null);
 
 export function EditorProvider({
-  children, page, pageId = null, updatedAt = null, tier, currentUserName = '',
+  children,
+  page,
+  pageId = null,
+  updatedAt = null,
+  tier,
+  currentUserName = "",
   courses = [],
 }) {
   const [state, dispatch] = useReducer(
@@ -41,7 +53,7 @@ export function EditorProvider({
     // here: this file is client-only and the routes already resolve the session
     // for the tier flags. See initialEditorState for what it is FOR.
     { page, pageId, updatedAt, currentUserName },
-    initialEditorState
+    initialEditorState,
   );
 
   const [resolvedData, setResolvedData] = useState({});
@@ -51,12 +63,15 @@ export function EditorProvider({
   // saved: it is not in `state` (the page tree), never enters the autosave
   // payload, and never touches the page doc. Cross-panel (the toolbar sets it, the
   // canvas reads it), so it lives here rather than as a lifted prop.
-  const [previewViewport, setPreviewViewport] = useState('desktop'); // 'desktop' | 'tablet' | 'mobile'
+  const [previewViewport, setPreviewViewport] = useState("desktop"); // 'desktop' | 'tablet' | 'mobile'
 
   const sig = dataRefSignature(state.page?.sections);
 
   useEffect(() => {
-    if (!sig) { setResolvedData({}); return undefined; }
+    if (!sig) {
+      setResolvedData({});
+      return undefined;
+    }
     let cancelled = false;
     const t = setTimeout(async () => {
       try {
@@ -66,7 +81,10 @@ export function EditorProvider({
         if (!cancelled) setResolvedData({});
       }
     }, 350);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
     // Keyed on the ref signature, not `state`: only a change to the data refs
     // themselves should refetch. state.page is read fresh inside the timeout.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,19 +121,22 @@ export function EditorProvider({
        */
       courses,
       resolvedData, // id-keyed data map for data-backed sections (2C.2a)
-      previewViewport, setPreviewViewport, // ephemeral canvas device-preview width
+      previewViewport,
+      setPreviewViewport, // ephemeral canvas device-preview width
       // The currently selected section (or null). Paths, not ids — ids are not
       // unique across the tree (see pagePath.js).
       selected: state.selection ? getAt(state.page, state.selection) : null,
     }),
-    [state, tier, resolvedData, previewViewport]
+    [state, tier, resolvedData, previewViewport],
   );
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={value}>{children}</EditorContext.Provider>
+  );
 }
 
 export function useEditor() {
   const ctx = useContext(EditorContext);
-  if (!ctx) throw new Error('useEditor must be used inside <EditorProvider>');
+  if (!ctx) throw new Error("useEditor must be used inside <EditorProvider>");
   return ctx;
 }
