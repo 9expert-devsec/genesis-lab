@@ -154,27 +154,91 @@ test('CONTROL: the height probe reads the shell, and can tell the two forms apar
 });
 
 /**
- * ── MEASURED AND DELIBERATELY NOT PINNED ───────────────────────────────────
+ * ── THE ADVANCED HTML EDITOR, PINNED AT LAST ───────────────────────────────
  *
- * `/admin/pages/new` and `/admin/pages/[id]/edit` render the older Tiptap
- * `CustomPageForm`, and that component declares `flex h-[100dvh] flex-col` —
- * the same 100dvh-inside-p-6 shape this whole file exists to prevent. So by the
- * criterion used for CourseForm and ArticleForm they LOOK like full-height
- * routes that were never listed.
+ * This block used to say the opposite: that `/admin/pages/new` and
+ * `/admin/pages/[id]/edit` had been MEASURED as the 100dvh-inside-p-6 shape
+ * this file exists to prevent, and were deliberately not asserted either way.
+ * The reasoning was sound and is kept here rather than deleted, because it is
+ * why the assertions below took this long to arrive:
  *
- * They are not asserted either way here, in either direction, on purpose:
- *
- *   · asserting they KEEP their padding would write a defect down as a
+ *   · asserting they KEPT their padding would have written a defect down as a
  *     requirement, and this file's own history is what that costs — the
  *     `/admin/courses/new` assertion above was correct when written and had to
  *     be flipped later;
- *   · asserting they LOSE it would be a layout change to a different editor,
- *     smuggled in through a Page Builder commit and verified by nobody clicking
- *     it.
+ *   · asserting they LOST it would have been a layout change to a different
+ *     editor, smuggled in through a Page Builder commit and verified by nobody
+ *     clicking it.
  *
- * Recorded here because this is where the next person will look. It wants its
- * own round, with a browser pass on the Tiptap form.
+ * So it asked for "its own round, with a browser pass on the Tiptap form". This
+ * is that round. The browser pass was done first, in Chrome at 1440×900 against
+ * the running dev server, and it is what these assertions are written from
+ * rather than the other way about:
+ *
+ *   BEFORE  wrapper `p-6`, computed 24px on all four sides,
+ *           main.scrollHeight 948 > main.clientHeight 900 — second scrollbar
+ *   AFTER   wrapper class empty, computed 0px on all four sides,
+ *           900 = 900 — no second scrollbar
+ *
+ * Nothing below is a FLIP: no assertion in this file ever claimed these two
+ * routes were padded, which is exactly what the block above bought by declining
+ * to guess. They are additions, and the controls that already pinned
+ * `/admin/pages` and `/admin/pages/builder-notes` as padded are unchanged and
+ * still pass — which is what proves the two new patterns are narrow.
  */
+
+test('the full-height matcher covers the Advanced HTML editor', () => {
+  // CustomPageForm declares `flex h-[100dvh] flex-col`, so the same arithmetic
+  // applies to it as to CourseForm, ArticleForm and EditorShell: 100dvh inside
+  // p-6 is 100dvh + 48px, and <main> grows a second scrollbar inside the one the
+  // sidebar row already pins.
+  for (const path of [
+    '/admin/pages/new',
+    '/admin/pages/6a968329b88308d8ed4afeca/edit',
+    '/admin/pages/new/',
+    '/admin/pages/6a968329b88308d8ed4afeca/edit/',
+  ]) {
+    assert.equal(padded(wrapperFor(path)), false, `${path} is still padded`);
+  }
+});
+
+test('the Tiptap form states 100dvh, and the wrapper is what makes that fit', () => {
+  // THE PAIR, for the same reason the builder's pair is asserted above: two
+  // numbers in two files with nothing mechanical holding them together.
+  // `h-[100dvh]` is only correct while this route is unpadded, and the route
+  // being unpadded is only worth doing while the form declares a viewport
+  // height. Either one changing alone is the defect.
+  const form = readSource('src/app/admin/pages/_components/CustomPageForm.jsx').code;
+  assert.match(form, /h-\[100dvh\]/,
+    'CustomPageForm no longer declares a viewport height — if it went back to auto '
+    + 'height, opting these two routes out of p-6 is now just missing padding');
+  assert.equal(padded(wrapperFor('/admin/pages/new')), false,
+    'the wrapper pads the Advanced HTML editor again — the form’s 100dvh is now '
+    + '100dvh + 48px and <main> has a second scrollbar');
+});
+
+test('CONTROL: the two new patterns are narrow, and reach nothing else', () => {
+  /**
+   * The whole risk of this change is a matcher that is one character too wide.
+   * `/admin/pages` is the list of BOTH page kinds and must keep its padding, and
+   * so must anything under it that is not one of the two editors.
+   *
+   * The first two cases are the ones a `/admin/pages/` prefix would have broken,
+   * and they are asserted here as well as in the builder control above because
+   * this commit is the one that could break them.
+   */
+  for (const path of [
+    '/admin/pages',                       // the list
+    '/admin/pages/',
+    '/admin/pages/builder-notes',         // a sibling that merely starts alike
+    '/admin/pages/6a968329b8/edit-notes', // ends alike, is not /edit
+    '/admin/pages/6a968329b8/preview',    // a future non-editor subroute
+    '/admin/pages/newsletter',            // starts with "new", is not "new"
+    '/admin/pages/a/b/edit',              // too deep for [^/]+
+  ]) {
+    assert.equal(padded(wrapperFor(path)), true, `${path} lost its padding`);
+  }
+});
 
 // ── THE CONTROL: everything else keeps its padding ──────────────────────────
 

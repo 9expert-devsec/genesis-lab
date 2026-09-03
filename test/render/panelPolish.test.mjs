@@ -51,12 +51,26 @@ const PAGE_SETTINGS = 'src/components/pageBuilder/editor/PageSettingsDialog.jsx'
 const PREVIEW = 'src/components/pageBuilder/editor/PreviewDialog.jsx';
 
 /**
+ * The page-settings dialog's PRESENTATION half, extracted so the Advanced HTML
+ * editor shares one dialog with the builder instead of growing a look-alike.
+ * The frame, the 93px header band, the menu and the 66px footer band live here
+ * now — which is most of round 28's Figma geometry, so it inherits round 28's
+ * colour ban with them.
+ */
+const SETTINGS_SHELL = 'src/components/admin/pageSettings/SettingsShell.jsx';
+
+/**
  * Every file round 28's Figma pass touched. The colour rule below applies to
- * all six; the size and radius rules keep their original, narrower list,
+ * all seven; the size and radius rules keep their original, narrower list,
  * because those were measured against the two panels and their primitives and
  * widening them would be a new claim wearing an old test's name.
+ *
+ * SEVEN, not six, since the shell extraction. The addition and the count below
+ * move in ONE commit and must never be split: a name added without the bump
+ * fails the count, and a bump without the name would silently license a
+ * seventh file nobody listed.
  */
-const ROUND_28_FILES = [SRC, SETTINGS, FIELDS, SHELL, PAGE_SETTINGS, PREVIEW];
+const ROUND_28_FILES = [SRC, SETTINGS, FIELDS, SHELL, PAGE_SETTINGS, PREVIEW, SETTINGS_SHELL];
 
 const PAGE = {
   slug: 's', title: 'T', pageType: 'general', status: 'draft', theme: 'default',
@@ -321,7 +335,7 @@ test('no file the Figma pass touched carries a raw hex colour', () => {
       `${f} carries a raw hex colour. Resolve it to a token in tailwind.config.js or a `
       + '--surface-* / --9e-* CSS variable; a hex opts the surface out of dark mode entirely.');
   }
-  assert.equal(ROUND_28_FILES.length, 6);
+  assert.equal(ROUND_28_FILES.length, 7);
 });
 
 test('CONTROL: the hex scanner sees a hex that IS there, and ignores a comment', () => {
@@ -364,7 +378,14 @@ test('the ONE surface class that replaced the dark hexes is a real, theme-aware 
     + 'are no better off in dark mode than the hex they replaced');
 
   // …and every file that dropped a hex really did take this token.
-  for (const f of [SRC, SETTINGS, PAGE_SETTINGS, PREVIEW]) {
+  //
+  // SETTINGS_SHELL stands where PAGE_SETTINGS did. The dialog's `var(--surface-hover)`
+  // was always the MENU's background, and the menu moved to the shared shell
+  // with the rest of the presentation half — so the class is still exactly one
+  // class in exactly one place, and this list follows it rather than asserting
+  // against the file it left. PageSettingsDialog.jsx keeps no surface of its
+  // own now; listing it here would pin a token it has no reason to carry.
+  for (const f of [SRC, SETTINGS, SETTINGS_SHELL, PREVIEW]) {
     assert.match(readSource(f).code, /var\(--surface-hover\)/,
       `${f} dropped its dark surface hex without taking the theme-aware token`);
   }

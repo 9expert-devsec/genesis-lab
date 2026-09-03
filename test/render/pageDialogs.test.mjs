@@ -46,8 +46,25 @@ import { readSource } from '../sourceScan.mjs';
  * ZERO BYTES under renderToStaticMarkup. So the dialogs were unreachable from
  * this tier twice over, which is why neither had any coverage. The bodies were
  * extracted for exactly this, and the extraction was verified to change no
- * rendered output — byte-identical at 4621 / 6415 / 3545 bytes across the
- * three cases below.
+ * rendered output.
+ *
+ * ── HOW THAT VERIFICATION IS DONE, AND WHY NO NUMBERS ARE WRITTEN DOWN ─────
+ * This paragraph used to name three byte counts — 4621 / 6415 / 3545 — as the
+ * sizes the three cases below render to. By the time anyone checked, all three
+ * were wrong: the file had been rewritten five times since (the left-hand menu,
+ * the preview section, the Figma geometry, version restore, the activity
+ * section), each rewrite changing the output, and NOTHING could go red because
+ * a number in a comment asserts nothing. A stored constant read as current
+ * truth is worse than no constant at all.
+ *
+ * So the check is not a number, it is a PROCEDURE, and it belongs to whichever
+ * round moves this code: render these three cases immediately BEFORE the first
+ * edit, render them again AFTER, and require the two to be byte-identical. That
+ * pair is measured inside the round that needs it and is never stale, because it
+ * is never stored. The shell extraction — which moved the frame, the header
+ * band, the menu and the footer band into
+ * src/components/admin/pageSettings/SettingsShell.jsx — was gated exactly that
+ * way, and all three matched.
  *
  * What that does NOT prove is the Dialog wrapper itself, which no render test
  * can reach. It is a visible source diff, and the one claim about it that
@@ -640,12 +657,24 @@ test('CONTROL: a dot hardcoded ON is caught, in source and in render', () => {
    *
    * The source claim: the dot's condition tests the STATUS VALUE. An
    * unconditional dot, or one gated only on the section id, would not.
+   *
+   * ── TWO FILES, BECAUSE THE MENU MOVED AND THE DEFAULT DID NOT ────────────
+   * `SettingsNav` — and with it the dot's condition — now lives in the shared
+   * shell, so that both page editors get ONE menu rather than two look-alikes.
+   * `PageSettingsBody`'s `previewStatus = null` default stayed behind, because
+   * it is the builder body's own parameter. Each claim is asserted against the
+   * file that now carries it; reading one file for both would have quietly
+   * stopped checking the half that left.
+   *
+   * The two hardcode guards run over BOTH sources joined, since a dot forced on
+   * could be planted at either the declaration or the call site.
    */
   const { code } = readSource('src/components/pageBuilder/editor/PageSettingsDialog.jsx');
-  assert.match(code, /previewStatus === 'active'/,
+  const nav = readSource('src/components/admin/pageSettings/SettingsShell.jsx').code;
+  assert.match(nav, /previewStatus === 'active'/,
     'the menu dot no longer tests the preview status against a real value');
-  assert.equal(code.includes('previewStatus={true}'), false);
-  assert.equal(code.includes("previewStatus = 'active'"), false,
+  assert.equal(`${code}\n${nav}`.includes('previewStatus={true}'), false);
+  assert.equal(`${code}\n${nav}`.includes("previewStatus = 'active'"), false,
     'the dot defaults to lit — an unread status would render as an enabled link');
   assert.match(code, /previewStatus = null/, 'the unknown state no longer defaults to "no dot"');
 
