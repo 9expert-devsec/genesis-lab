@@ -191,12 +191,41 @@ test('the tab count pin moves from 2 to 3, deliberately', () => {
 
 // ── B1 — it loads on open, not on page load ─────────────────────────────────
 
-test('B1: the history fetch is gated on the tab being ACTIVE', () => {
-  const src = code(PANEL);
-  assert.match(src, /if \(!active \|\| state\.status !== 'idle'/,
-    'the fetch is not gated on activation and a fresh state');
-  // The panel is mounted from the first paint, so a bare mount effect would
-  // fire on every page load — which is the thing B1 forbids.
+/**
+ * ── AN ASSERTION WAS DELETED HERE. DO NOT RESTORE IT. ──────────────────────
+ *
+ * This test used to open with:
+ *
+ *   assert.match(src, /if \(!active \|\| state\.status !== 'idle'/,
+ *     'the fetch is not gated on activation and a fresh state');
+ *
+ * That expression was the BUG. `state.status` in the dependency array of the
+ * effect that wrote `state.status` made the effect re-enter, cancel its own
+ * in-flight request through its cleanup, and then refuse to reissue it — the
+ * tab spun forever while the server returned 200 with correct data.
+ *
+ * The assertion did not merely miss the defect. It PINNED it, as though the
+ * deadlock were the design, and it would have gone red when the deadlock was
+ * removed.
+ *
+ * It is deleted rather than rewritten against the fixed expression, because a
+ * regex over source cannot tell a correct guard from a broken one — it sees
+ * only that some characters are present. Rewriting it would recreate exactly
+ * the failure it just caused, one expression later.
+ *
+ * WHAT COVERS THIS NOW: test/render/courseVersionHistoryLoad drives the real
+ * component through a real React root and asserts the BEHAVIOUR the deleted
+ * line was reaching for — that the tab loads once, on open, and reaches its
+ * list. That is a claim source text cannot make.
+ *
+ * The surviving assertion below is about a different file and a different
+ * claim: that the FORM tells the panel whether its tab is open. It is a wiring
+ * fact with no behavioural twin here, so it stays.
+ */
+test('B1: the form tells the panel whether its tab is open', () => {
+  // The panel is mounted from the first paint, so it cannot infer activation
+  // from being mounted — a bare mount effect would fire on every page load,
+  // which is the thing B1 forbids.
   assert.match(raw(FORM), /active=\{activeTab === TAB\.HISTORY\}/,
     'the form does not tell the panel whether its tab is open');
 });

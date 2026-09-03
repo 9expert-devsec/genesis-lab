@@ -1,7 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, FileText, AlertTriangle, ChevronRight } from 'lucide-react';
+// The retry glyph, as a SECOND lucide statement rather than an edit of the one
+// above — the standing rule in this repo.
+import { RotateCcw } from 'lucide-react';
 import { listCourseVersions, getCourseVersionDiff } from '@/lib/actions/course-versions';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
@@ -297,39 +300,142 @@ function VersionRow({ row, selected, onSelect }) {
   );
 }
 
-export function CourseVersionHistory({ courseId, active = false }) {
+export function CourseVersionHistory({
+  courseId,
+  active = false,
+  /**
+   * ── TEST SEAM ONLY. PRODUCTION PASSES NEITHER. ────────────────────────────
+   * The same `deps` idiom recordAdminAction and the version writer already use,
+   * narrowed to the two things this component does that a static render cannot
+   * observe: fetching, and what it does with the result.
+   *
+   * It exists because the spinner defect was in the effect itself, and a test
+   * that drove a COPY of that effect would be the same class of mistake that
+   * produced the defect — a check on a replica of the code rather than the
+   * code. With these props a child-process React root can drive THIS component
+   * with a controllable promise. See test/courseVersionHistoryLoad.case.mjs.
+   */
+  listVersions = listCourseVersions,
+  fetchDiff = getCourseVersionDiff,
+}) {
   const [state, setState] = useState({ status: 'idle', rows: [], reason: null });
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState({ status: 'idle', data: null });
 
   /**
-   * The load runs on the FIRST activation and never again. `status` carries
-   * that: once it leaves 'idle' this effect stops firing a fetch, so switching
-   * to another tab and back re-uses what is already here.
+   * ── WHY THESE ARE REFS AND NOT STATE. THIS IS THE BUG FIX. ────────────────
+   *
+   * The old code recorded "a load has already been started" in STATE — the
+   * effect read `state.status !== 'idle'` and listed `state.status` among its
+   * dependencies. That is a self-referential effect, and it deadlocked:
+   *
+   *   1. the tab opens; the guard passes; the fetch starts
+   *   2. the effect's own `setState('loading')` CHANGES A DEPENDENCY
+   *   3. React runs the effect's CLEANUP, which set `cancelled = true` on the
+   *      closure owning the only in-flight request
+   *   4. the effect re-runs, sees 'loading', and returns without starting a
+   *      replacement
+   *   5. the response arrives, hits `if (cancelled) return`, and is discarded
+   *
+   * The server was never wrong. The component cancelled its own request and
+   * then refused to reissue it, so the spinner ran forever — and the empty
+   * state and the error state were unreachable for the same reason.
+   *
+   * A REF fixes it at the root because writing one does not schedule a render,
+   * so it cannot change a dependency, so the effect cannot re-enter itself.
+   * Dropping `state.status` from the deps ALONE would not have been enough: the
+   * effect would then re-run whenever anything else changed and fetch again.
+   * `requestedFor` is what preserves the no-double-fetch property the old guard
+   * was reaching for — it records WHICH COURSE has been requested, so a tab
+   * flip is a no-op while a genuinely different course still loads.
+   *
+   * ── AND WHY A RUN COUNTER RATHER THAN A `cancelled` FLAG ─────────────────
+   * `cancelled` answered "was my effect instance torn down". That is NOT the
+   * question. The question is "has a NEWER request superseded mine", and the
+   * two differ exactly where this bug lived: a teardown with no replacement
+   * cancelled a request that nothing was going to reissue. `runIdRef` counts
+   * runs, so a response is discarded only when a later run actually exists.
+   */
+  const requestedFor = useRef(null);
+  const runIdRef = useRef(0);
+  const detailRunRef = useRef(0);
+
+  /**
+   * Load the list. Used by the effect AND by the retry button, so a retry
+   * follows exactly the same path as the first attempt rather than a parallel
+   * one that can drift from it.
+   */
+  const load = useCallback(async () => {
+    if (!courseId) return;
+    requestedFor.current = courseId;
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+
+    setState({ status: 'loading', rows: [], reason: null });
+
+    // Defaults to the failure outcome, so a path that somehow reaches the
+    // `finally` without having set anything still leaves the spinner.
+    let next = { status: 'error', rows: [], reason: 'error' };
+    try {
+      const res = await listVersions({ courseId });
+      next = res?.ok
+        ? { status: 'ready', rows: res.rows ?? [], reason: null }
+        : { status: 'error', rows: [], reason: res?.reason ?? 'error' };
+    } catch {
+      next = { status: 'error', rows: [], reason: 'error' };
+    } finally {
+      /**
+       * THE SPINNER CLEARS HERE, ON EVERY PATH — resolve, reject, or a throw
+       * from anywhere in the try. `next` is never 'loading', so there is no
+       * outcome of this function that leaves the panel spinning.
+       *
+       * The supersession check is the ONLY thing that can skip the write, and
+       * it is true only when a LATER load has already started — which itself
+       * set 'loading' and will itself reach a `finally`.
+       */
+      if (runId === runIdRef.current) setState(next);
+    }
+  }, [courseId, listVersions]);
+
+  /**
+   * Fire the load on the first activation for this course.
+   *
+   * Deps are `active`, `courseId` and `load` — NONE of which this effect
+   * writes. That is what makes it non-self-referential, and it is the whole
+   * difference from the version that deadlocked.
    */
   useEffect(() => {
-    if (!active || state.status !== 'idle' || !courseId) return;
-    let cancelled = false;
-    setState((s) => ({ ...s, status: 'loading' }));
-    listCourseVersions({ courseId })
-      .then((res) => {
-        if (cancelled) return;
-        setState(res?.ok
-          ? { status: 'ready', rows: res.rows ?? [], reason: null }
-          : { status: 'error', rows: [], reason: res?.reason ?? 'error' });
-      })
-      .catch(() => { if (!cancelled) setState({ status: 'error', rows: [], reason: 'error' }); });
-    return () => { cancelled = true; };
-  }, [active, courseId, state.status]);
+    if (!active || !courseId) return;
+    if (requestedFor.current === courseId) return; // already asked for this one
+    load();
+  }, [active, courseId, load]);
 
-  const select = useCallback((id) => {
+  const select = useCallback(async (id) => {
     if (id === selectedId) { setSelectedId(null); return; }
     setSelectedId(id);
+
+    /**
+     * SAME SUPERSESSION RULE AS THE LIST, and for a defect found while
+     * diagnosing that one: this had no guard at all. Clicking version A and
+     * then version B, where A's response is slower, let A's diff overwrite B's
+     * — so the admin read one version's changes under another's row, with
+     * nothing on screen to suggest anything was wrong.
+     */
+    const runId = detailRunRef.current + 1;
+    detailRunRef.current = runId;
+
     setDetail({ status: 'loading', data: null });
-    getCourseVersionDiff({ versionId: id })
-      .then((res) => setDetail(res?.ok ? { status: 'ready', data: res } : { status: 'error', data: null }))
-      .catch(() => setDetail({ status: 'error', data: null }));
-  }, [selectedId]);
+
+    let next = { status: 'error', data: null };
+    try {
+      const res = await fetchDiff({ versionId: id });
+      next = res?.ok ? { status: 'ready', data: res } : { status: 'error', data: null };
+    } catch {
+      next = { status: 'error', data: null };
+    } finally {
+      if (runId === detailRunRef.current) setDetail(next);
+    }
+  }, [selectedId, fetchDiff]);
 
   if (state.status === 'idle' || state.status === 'loading') {
     return (
@@ -340,12 +446,39 @@ export function CourseVersionHistory({ courseId, active = false }) {
   }
 
   if (state.status === 'error') {
+    /**
+     * ── AN ERROR STATE THAT SAYS SO, AND OFFERS A WAY OUT ─────────────────
+     * Before this, every failure mode looked exactly like loading: a rejected
+     * fetch, a refused permission and a slow network were one spinner. There
+     * was also nowhere for a retry to go — the old guard only fetched from
+     * 'idle', and a failure left 'error', so a retry button would have been
+     * decorative. `load()` is reachable from here because it no longer consults
+     * the status at all.
+     *
+     * A REFUSAL IS NOT A FAILURE and does not offer a retry: pressing it again
+     * cannot grant permission, and a button that always fails is worse than
+     * none. The wording differs for the same reason.
+     */
+    const refused = state.reason === 'forbidden';
     return (
-      <p className="py-8 text-sm text-red-700">
-        {state.reason === 'forbidden'
-          ? 'คุณไม่มีสิทธิ์ดูประวัติของหลักสูตรนี้'
-          : 'โหลดประวัติไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'}
-      </p>
+      <div className="py-8">
+        <p className="text-sm text-red-700">
+          {refused
+            ? 'คุณไม่มีสิทธิ์ดูประวัติของหลักสูตรนี้'
+            : 'โหลดประวัติไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'}
+        </p>
+        {!refused && (
+          <button
+            type="button"
+            data-testid="history-retry"
+            onClick={() => load()}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-xs font-medium text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-[#0D1B2A]"
+          >
+            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+            ลองอีกครั้ง
+          </button>
+        )}
+      </div>
     );
   }
 
