@@ -67,20 +67,41 @@ const FULL_HEIGHT_ROUTES = [
    * editor by construction, which is what makes this a rule rather than a
    * coincidence about today's two files.
    *
-   * THE SIBLING `/admin/pages` ROUTES ARE DELIBERATELY NOT MATCHED. `/admin/pages`
-   * is the list of both page kinds and wants its `p-6`; `/admin/pages/new` and
-   * `/admin/pages/[id]/edit` are the older Tiptap `CustomPageForm` and are left
-   * exactly as this file already treats them. Anchoring on `/admin/pages/builder/`
-   * instead of `/admin/pages/` is what keeps them out — the same
+   * `/admin/pages` ITSELF IS STILL NOT MATCHED, and that is why this entry is
+   * anchored on `/admin/pages/builder/` rather than `/admin/pages/`. The bare
+   * route is the list of both page kinds and wants its `p-6` — the same
    * three-pages-broken-to-fix-one arithmetic as the courses note above.
-   *
-   * (Measured while adding this, and NOT acted on here: `CustomPageForm` itself
-   * declares `flex h-[100dvh] flex-col`, so those two Tiptap routes are already
-   * the 100dvh-inside-p-6 shape this file exists to prevent. That is a separate
-   * finding about a different editor, not something to fix by widening a matcher
-   * in a Page Builder commit.)
    */
   (path) => path.startsWith('/admin/pages/builder/'),
+  /**
+   * …and the Advanced HTML editor: `/admin/pages/new` and
+   * `/admin/pages/[id]/edit`, which render the older Tiptap `CustomPageForm`.
+   *
+   * ── THIS WAS MEASURED SEVERAL ROUNDS AGO AND DELIBERATELY LEFT ALONE ──────
+   * The note that stood here said `CustomPageForm` declares
+   * `flex h-[100dvh] flex-col`, so these two routes were already the
+   * 100dvh-inside-p-6 shape this file exists to prevent — and then declined to
+   * act, on the grounds that changing a different editor's layout inside a Page
+   * Builder commit would be a change nobody had clicked. The test file said the
+   * same thing and asked for "its own round, with a browser pass on the Tiptap
+   * form".
+   *
+   * This is that round, and the browser pass was done. Chrome, at 1440×900, on
+   * /admin/pages/<id>/edit, BEFORE: the wrapper is `p-6` at 24px on all four
+   * sides and `main` reports scrollHeight 948 against clientHeight 900 — the
+   * 48px overflow the arithmetic predicts, and the second scrollbar with it.
+   * AFTER: no padding class, 0px on all four sides, 900 against 900, no second
+   * scrollbar.
+   *
+   * TWO EXACT PATTERNS, NOT A `/admin/pages/` PREFIX. A prefix would take the
+   * padding off the list at `/admin/pages` — see the anchor note above — and
+   * would also swallow any future non-editor subroute the moment someone added
+   * one. `new` is matched separately from `[id]/edit` for the reason the courses
+   * pair is: collapsing them into one alternation would also match a page whose
+   * id is literally the string "new".
+   */
+  (path) => /^\/admin\/pages\/new\/?$/.test(path),
+  (path) => /^\/admin\/pages\/[^/]+\/edit\/?$/.test(path),
 ];
 
 export function AdminContentWrapper({ children }) {

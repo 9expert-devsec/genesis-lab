@@ -140,6 +140,21 @@ const CASES = [
    * BOTH FORMS are registered, because they are separately droppable: the
    * static form is the settings dialog's nav and the breadcrumb card, and the
    * hover form is every row and icon button in the two panels.
+   *
+   * ── THE SETTINGS-DIALOG PAIR NOW LIVES IN THE SHARED SHELL ───────────────
+   * `bg-[var(--surface-hover)]` (the menu) and `bg-[var(--surface-muted)]` (the
+   * footer band) moved to src/components/admin/pageSettings/SettingsShell.jsx
+   * when the dialog's presentation half was extracted so the Advanced HTML
+   * editor could share it rather than grow a look-alike. The CLASSES and the
+   * variables they reference are unchanged; only the file that spells them is.
+   * Repointed in the same commit as the move, because a registry entry naming a
+   * file that no longer carries the class fails without saying which of the two
+   * facts changed.
+   *
+   * THIS BLOCK IS TRIPLICATED — it appears here and twice more below, verbatim,
+   * and that predates this round. All three copies were repointed together; the
+   * dedupe is a separate ticket, because a cleanup smuggled into an extraction
+   * commit is how the next unreviewed change gets in.
    */
   {
     what: "the page builder panels' hover surface",
@@ -150,7 +165,7 @@ const CASES = [
   },
   {
     what: "the page settings dialog's menu surface",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-hover)]",
     property: "background-color",
     referencesVar: "--surface-hover",
@@ -160,7 +175,7 @@ const CASES = [
     // the band sits one step off the dialog surface rather than at its hover
     // tint — so it is registered separately rather than assumed to follow.
     what: "the page settings dialog's footer band",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-muted)]",
     property: "background-color",
     referencesVar: "--surface-muted",
@@ -193,7 +208,7 @@ const CASES = [
   },
   {
     what: "the page settings dialog's menu surface",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-hover)]",
     property: "background-color",
     referencesVar: "--surface-hover",
@@ -203,7 +218,7 @@ const CASES = [
     // the band sits one step off the dialog surface rather than at its hover
     // tint — so it is registered separately rather than assumed to follow.
     what: "the page settings dialog's footer band",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-muted)]",
     property: "background-color",
     referencesVar: "--surface-muted",
@@ -236,7 +251,7 @@ const CASES = [
   },
   {
     what: "the page settings dialog's menu surface",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-hover)]",
     property: "background-color",
     referencesVar: "--surface-hover",
@@ -246,7 +261,7 @@ const CASES = [
     // the band sits one step off the dialog surface rather than at its hover
     // tint — so it is registered separately rather than assumed to follow.
     what: "the page settings dialog's footer band",
-    file: "src/components/pageBuilder/editor/PageSettingsDialog.jsx",
+    file: "src/components/admin/pageSettings/SettingsShell.jsx",
     className: "bg-[var(--surface-muted)]",
     property: "background-color",
     referencesVar: "--surface-muted",
