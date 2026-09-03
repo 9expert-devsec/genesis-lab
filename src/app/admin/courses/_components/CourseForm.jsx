@@ -17,6 +17,9 @@ import { PRE_IMAGE } from '@/lib/courses/courseSnapshot';
 import { CourseSeoRail } from './CourseSeoRail';
 import { CourseSearchSelect } from './CourseSearchSelect';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { CourseVersionHistory } from './CourseVersionHistory';
 import { ImageUploadField } from '@/components/admin/ImageUploadField';
 import { BulletTextarea } from '@/components/admin/BulletTextarea';
 import { TrainingTopicsEditor } from '@/components/admin/TrainingTopicsEditor';
@@ -26,6 +29,9 @@ import { CourseOutlineUpload } from '@/components/admin/CourseOutlineUpload';
 import { outlineWouldGoStale } from '@/lib/courses/courseOutline';
 import { courseSaveOutcome } from '@/lib/courses/courseSaveOutcome';
 import { courseEditorSignature, isCourseEditorDirty } from '@/lib/courses/courseFormDirty';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { TAB, DEFAULT_TAB, panelClass } from '@/lib/courses/courseEditorTabs';
 import { withListQuery } from '@/lib/courses/adminListQuery';
 /**
  * THE PUBLIC PAGE'S OWN SECTION NAMES. The form does not invent labels for
@@ -183,7 +189,21 @@ export function CourseForm({
   // refusal belongs on the alias box in the right rail — putting it on
   // course_id would point the admin at the one field that is not the problem.
   const [aliasError, setAliasError] = useState(null);
-  const [showGallery, setShowGallery] = useState(false);
+  /**
+   * WAS `showGallery`, A BOOLEAN. A boolean says everything it needs to while
+   * there are exactly two panels; it cannot express a third. The enum lives in
+   * lib/courses/courseEditorTabs so the form and its tests read the names from
+   * one place rather than passing string literals past each other — a typo'd
+   * literal is a tab that silently never activates, because every comparison
+   * against it is merely false and nothing errors.
+   *
+   * WHAT DID NOT CHANGE, and is the whole point of the conversion: a non-active
+   * panel is HIDDEN, NEVER UNMOUNTED. The save and the dirty check both read the
+   * live DOM through `new FormData(form)`, so unmounting the body would blank
+   * the course on save and blind the unsaved-changes guard — silently, in both
+   * cases. See the note on the panels below and in courseEditorTabs.
+   */
+  const [activeTab, setActiveTab] = useState(DEFAULT_TAB);
 
   // ── Unsaved-changes guard ─────────────────────────────────────────
   const formRef = useRef(null);
@@ -1680,41 +1700,86 @@ export function CourseForm({
           <div className="mb-5 flex gap-2 border-b border-[var(--surface-border)]">
             <button
               type="button"
-              onClick={() => setShowGallery(false)}
+              onClick={() => setActiveTab(TAB.CONTENT)}
               className={
                 'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
-                (showGallery
-                  ? 'border-transparent text-[var(--text-secondary)]'
-                  : 'border-9e-action text-9e-action')
+                (activeTab === TAB.CONTENT
+                  ? 'border-9e-action text-9e-action'
+                  : 'border-transparent text-[var(--text-secondary)]')
               }
             >
               เนื้อหาหลักสูตร
             </button>
             <button
               type="button"
-              onClick={() => setShowGallery(true)}
+              onClick={() => setActiveTab(TAB.GALLERY)}
               className={
                 'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
-                (showGallery
+                (activeTab === TAB.GALLERY
                   ? 'border-9e-action text-9e-action'
                   : 'border-transparent text-[var(--text-secondary)]')
               }
             >
               Gallery ({gallery.length})
             </button>
+            {/* EDIT ONLY. A course being created has no history yet and no code
+                to key one by, so the tab would open on a guaranteed empty state
+                whose explanation ("history starts at deploy") would be the
+                wrong one. */}
+            {!isCreate && (
+              <button
+                type="button"
+                onClick={() => setActiveTab(TAB.HISTORY)}
+                className={
+                  'border-b-2 px-4 py-2 text-sm font-medium transition-colors ' +
+                  (activeTab === TAB.HISTORY
+                    ? 'border-9e-action text-9e-action'
+                    : 'border-transparent text-[var(--text-secondary)]')
+                }
+              >
+                ประวัติการแก้ไข
+              </button>
+            )}
           </div>
 
-          {/* HIDDEN, NOT UNMOUNTED. `FormData(form)` reads the DOM, so
-              conditionally rendering this away would drop every course field
-              from the payload while the Gallery tab happened to be open —
-              shapePayload would then send empty strings and zeroes for the
-              whole course body. `hidden` keeps the inputs submitted. */}
-          <div className={showGallery ? 'hidden' : 'space-y-6'}>{bodySections}</div>
+          {/* HIDDEN, NOT UNMOUNTED, AND NOW ACROSS THREE PANELS RATHER THAN TWO.
+              `FormData(form)` reads the DOM, so conditionally rendering this
+              away would drop every course field from the payload while another
+              tab happened to be open — shapePayload would then send empty
+              strings and zeroes for the whole course body. `hidden` keeps the
+              inputs submitted.
+
+              The dirty check reads the SAME DOM (courseEditorSignature is built
+              from `[...new FormData(formRef.current)]`), so an unmounted body
+              would also blind the unsaved-changes guard. Both failure modes are
+              silent — nothing throws and the screen looks correct.
+
+              `panelClass` is used rather than an inline ternary so there is no
+              branch here that can produce an absent element at all. */}
+          <div className={panelClass(TAB.CONTENT, activeTab, 'space-y-6')}>{bodySections}</div>
 
           {/* The gallery is extension state, not form inputs, so unmounting it
               is harmless — but it is symmetric with the above for clarity. */}
-          <div className={showGallery ? '' : 'hidden'}>
+          <div className={panelClass(TAB.GALLERY, activeTab)}>
             <CourseGalleryEditor gallery={gallery} onChange={markTouched(setGallery)} />
+          </div>
+
+          {/* Same rule as its two siblings: MOUNTED, hidden by CSS. It reads
+              nothing from the form and writes nothing anywhere, so mounting it
+              is free — and keeping the three panels symmetric is what stops the
+              next edit here from reintroducing a conditional render.
+
+              `active` rather than a mount effect is what makes it lazy: the
+              panel exists from the first paint, so being mounted says nothing
+              about whether the admin opened the tab. The fetch fires on the
+              first transition into it and never on page load. */}
+          <div className={panelClass(TAB.HISTORY, activeTab)}>
+            {!isCreate && (
+              <CourseVersionHistory
+                courseId={courseId}
+                active={activeTab === TAB.HISTORY}
+              />
+            )}
           </div>
         </div>
 

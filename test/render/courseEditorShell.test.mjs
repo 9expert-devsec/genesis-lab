@@ -142,14 +142,23 @@ test('website_urls has no input anywhere — section 8 is gone', () => {
 
 // ── the gallery is the only tabbed region ───────────────────────────────────
 
-test('the gallery is the only tabbed region', () => {
+test('the left column is the only tabbed region', () => {
   const html = renderEdit();
   assert.match(html, /Gallery \(1\)/, 'no gallery tab, or it does not count its items');
   assert.match(html, /เนื้อหาหลักสูตร/, 'no content tab to switch back to');
-  // Exactly two tab buttons: the content column and the gallery. Any third is a
-  // tab this screen was explicitly not supposed to grow.
+  /**
+   * THREE since the version-history tab landed, and the pin moves rather than
+   * relaxes into a floor: this screen grows a tab only deliberately, and the
+   * count is what makes that deliberate. It said 2 and "any third is a tab this
+   * screen was explicitly not supposed to grow" — that was true until a third
+   * was specified, approved, and given its own panel.
+   *
+   * The invariant that matters is not the number but that every panel stays
+   * MOUNTED; that is pinned in test/render/courseEditorTabPanels and
+   * test/fs/courseVersionReadSide, not here.
+   */
   const tabs = html.match(/class="border-b-2 px-4 py-2 text-sm font-medium/g) ?? [];
-  assert.equal(tabs.length, 2, `expected exactly 2 tabs, found ${tabs.length}`);
+  assert.equal(tabs.length, 3, `expected exactly 3 tabs, found ${tabs.length}`);
 });
 
 test('the course body stays MOUNTED behind the gallery tab', () => {

@@ -21,3 +21,23 @@ export async function captureCoursePreImage() {
 export async function commitCourseVersion() {
   throw new Error('stub-course-version-actions: commitCourseVersion must not be called in a render test');
 }
+
+/**
+ * The READ side, reached through CourseVersionHistory inside CourseForm.
+ *
+ * Parity with the real module — see test/fs/stubExportParity, which asserts set
+ * EQUALITY, so an export added there and not here reddens that file.
+ *
+ * These throw like the rest, and the render tier never reaches them:
+ * `renderToStaticMarkup` runs no effects, and the history panel fetches from a
+ * `useEffect` gated on the tab being active. A render test that somehow DID
+ * call one should fail loudly rather than pass against a stub that agrees with
+ * everything. The list and diff behaviour is tested directly against the pure
+ * modules and the injected-model seams instead.
+ */
+export async function listCourseVersions() {
+  throw new Error('stub-course-version-actions: listCourseVersions must not be called in a render test');
+}
+export async function getCourseVersionDiff() {
+  throw new Error('stub-course-version-actions: getCourseVersionDiff must not be called in a render test');
+}
