@@ -143,7 +143,7 @@ export default async function PromotionsListPage() {
 
       {/* Featured banner carousel (renders nothing when banners are empty) */}
       {banners.length > 0 && (
-        <section className="mx-auto max-w-[1200px] px-4 py-6 lg:px-6">
+        <section className="mx-auto max-w-[1200px]  lg:px-6 lg:py-6">
           <PromotionBannerCarousel banners={banners} />
         </section>
       )}
