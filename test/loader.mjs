@@ -121,6 +121,13 @@ export const STUBS = {
     "test",
     "stub-course-version-actions.mjs",
   ),
+  // RedirectsAdminClient imports the redirect actions for its click handlers;
+  // same next-auth → next/headers + mongoose chain as the entries above.
+  "@/lib/actions/redirects": path.join(
+    ROOT,
+    "test",
+    "stub-redirect-actions.mjs",
+  ),
   // Reached indirectly, via CourseOutlineUpload inside CourseForm.
   "@/lib/actions/course-outlines": path.join(
     ROOT,

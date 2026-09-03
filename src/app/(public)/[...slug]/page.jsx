@@ -1,4 +1,7 @@
 import { notFound, permanentRedirect } from 'next/navigation';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { notFoundOrRedirect } from '@/lib/redirects/notFoundBoundary';
 import { listPrograms } from '@/lib/api/programs';
 import { listPublicCourses } from '@/lib/api/public-courses';
 import {
@@ -499,7 +502,16 @@ export default async function CatchAllPage({ params, searchParams }) {
   const { slug } = await params;
   const segment = segmentFromSlug(slug);
 
-  if (!segment) notFound();
+  /**
+   * ── EXIT 1: A MULTI-SEGMENT PATH ──────────────────────────────────────────
+   * `segmentFromSlug` returns null for anything containing a slash, so
+   * `/a/b/c` leaves this route HERE, before any resolver runs. That makes this
+   * the only place a multi-segment legacy URL can be caught — and a Drupal site
+   * carries a great many of them.
+   *
+   * Does not return: it either throws a redirect or throws notFound().
+   */
+  if (!segment) await notFoundOrRedirect(slug);
 
   // Program / skill pretty-URL pages (custom admin slug, no prefix).
   // Skip obvious course / career-path suffixes so we don't probe the DB
@@ -814,7 +826,21 @@ export default async function CatchAllPage({ params, searchParams }) {
     permanentRedirect(`/${historical.slug}`);
   }
 
-  notFound();
+  /**
+   * ── EXIT 2: EVERY RESOLVER MISSED ─────────────────────────────────────────
+   * The admin-managed redirect table is consulted LAST, after every resolver
+   * above — including the two historical-slug redirects immediately preceding
+   * this — has had its chance.
+   *
+   * That ordering is the mechanism behind "a rule cannot shadow a live page".
+   * It is not enforced by validating rules against a list of routes, which
+   * would go stale the day someone adds a page; it is true by construction,
+   * because this line is only reached when the app has already established it
+   * has nothing to serve.
+   *
+   * Does not return.
+   */
+  await notFoundOrRedirect(slug);
 }
 
 function CourseDetail({

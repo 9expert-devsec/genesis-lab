@@ -35,10 +35,22 @@ test('CONTROL: the files under scan exist and were really read', () => {
 
 test('the nested route resolves to the EXISTING media key, with no new page key', () => {
   assert.equal(resolvePageKey('/admin/media/webroot-documents'), 'media');
+  /**
+   * 38 → 39: the Redirect Panel added `redirects`, DELIBERATELY and with both
+   * halves — the ADMIN_PAGES entry (permission key, MENU_ENUM membership so its
+   * rule changes are auditable, and the checkbox in the role editor) and the
+   * NAV_GROUPS line, which rbacNavParity checks.
+   *
+   * This assertion is not about the total for its own sake: it is here so that a
+   * key appearing WITHOUT someone noticing is impossible. A new key means a new
+   * checkbox and a new sidebar line, and both have to be chosen rather than
+   * arrived at. Bumped in the same commit as the key, which is the whole
+   * protocol.
+   */
   assert.equal(
-    ALL_PAGE_KEYS.length, 38,
+    ALL_PAGE_KEYS.length, 39,
     'a page key was added or removed. This route is supposed to inherit `media` '
-    + 'by href prefix; a 39th key means a new checkbox in the role editor and a '
+    + 'by href prefix; another key means a new checkbox in the role editor and a '
     + 'new NAV_GROUPS line, and rbacNavParity will say so',
   );
   assert.equal(ALL_PAGE_KEYS.includes('webroot_documents'), false,

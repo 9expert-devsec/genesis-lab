@@ -38,6 +38,7 @@ import {
   History,
   PanelLeftClose,
   PanelLeftOpen,
+  Shuffle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/lib/actions/auth';
@@ -84,6 +85,8 @@ const ICONS = {
   // gets a folder rather than a picture — an Image icon would misdescribe it.
   FolderOpen,
   History,
+  // Redirect Panel — a path going somewhere other than where it points.
+  Shuffle,
 };
 
 // Nav config. Each item declares the `pageKey` it maps to (matching
@@ -141,6 +144,7 @@ const NAV_GROUPS = [
       { label: 'ประกาศงาน',     href: '/admin/recruits',       icon: 'Briefcase', pageKey: 'recruits' },
       { label: 'Cache Console', href: '/admin/cache',  icon: 'Database',  pageKey: 'landing_cache' },
       { label: 'Webhook Logs',  href: '/admin/webhook-logs',   icon: 'Webhook',   pageKey: 'webhook_logs' },
+      { label: 'Redirect & 404', href: '/admin/redirects',    icon: 'Shuffle',   pageKey: 'redirects' },
       { label: 'ความปลอดภัย',   href: '/admin/security',       icon: 'Shield',    pageKey: 'security' },
       { label: 'โปรไฟล์',       href: '/admin/profile',        icon: 'User',      pageKey: 'profile' },
       { label: 'บัญชีผู้ดูแล',   href: '/admin/accounts',       icon: 'Users',     pageKey: 'accounts' },

@@ -96,6 +96,13 @@ export const ADMIN_PAGES = [
       // through its own requirePage call (that page is now a redirect).
       { key: 'landing_cache', label: 'Cache Console', href: '/admin/cache', match: 'prefix' },
       { key: 'webhook_logs',  label: 'Webhook Logs',  href: '/admin/webhook-logs',  match: 'prefix' },
+      // Redirect Panel — per-path redirect rules and the 404 worklist. Registered
+      // HERE grants the permission key, MENU_ENUM membership (so rule changes are
+      // auditable) and the checkbox in the roles UI. The sidebar LINK is a
+      // separate list in AdminSidebar.jsx and is added there too — see
+      // test/fs/rbacNavParity for the two pages that were once registered here
+      // and reachable only by typing the URL.
+      { key: 'redirects',     label: 'Redirect & 404', href: '/admin/redirects',    match: 'prefix' },
       { key: 'security',      label: 'ความปลอดภัย',   href: '/admin/security',      match: 'prefix' },
       { key: 'profile',       label: 'โปรไฟล์',       href: '/admin/profile',       match: 'prefix' },
       { key: 'accounts',      label: 'บัญชีผู้ดูแล',  href: '/admin/accounts',      match: 'prefix' },

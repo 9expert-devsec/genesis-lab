@@ -735,7 +735,23 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // version history is a separate collection with its own writer, and the audit
 // log's rows, schema and writers were not to be touched. So the count moved and
 // no coverage case did.
-const MUTATING_EXPORT_COUNT = 177;
+//
+// REDIRECT PANEL: 177 -> 181, +4 — saveRedirectRule, deleteRedirectRule,
+// createRuleFromHit and reopenNotFoundHit added in the NEW module
+// src/lib/actions/redirects.js. All four write Mongo DIRECTLY in their own
+// body (create / findByIdAndUpdate / findByIdAndDelete / updateOne), so depth 0
+// sees all four and BOTH pins move together; REACHED_THROUGH_IMPORT is
+// unchanged and the delta stays 8.
+//
+// Deliberately NOT in this figure, and each is a result rather than an
+// omission: listRedirectRules, listNotFoundHits and checkPathIsLive only READ.
+// If one ever appears here, something on a read path started writing.
+//
+// saveRedirectRule and deleteRedirectRule both record an audit row under the
+// registered (redirects, redirect_rule) pair, so only the COUNT pins moved and
+// no coverage case did. createRuleFromHit deliberately writes NO second row:
+// it delegates to saveRedirectRule, which already recorded the create.
+const MUTATING_EXPORT_COUNT = 181;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -957,7 +973,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 169,
+    zero, 173,
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +

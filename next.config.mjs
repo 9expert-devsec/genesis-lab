@@ -78,7 +78,59 @@ const nextConfig = {
   // prompted it, and this file is where such a promise can be reviewed in a
   // diff. Renaming a skill again means adding a line here, deliberately.
   async redirects() {
+    /**
+     * ══ THE MASTERCLASS HOST MOVES ONTO www AT CUTOVER ═══════════════════════
+     *
+     * Every path on masterclass.9experttraining.com → the SAME path on www.
+     * One rule instead of hundreds, and it is here rather than in the admin
+     * redirect table for the reason this function's header already argues: a
+     * permanent redirect is a promise to search engines, and re-pointing an
+     * entire domain is a change that belongs in a diff somebody reviews — not
+     * in a database row one click can create.
+     *
+     * ── MEASURED, NOT ASSUMED (Next 15.5.15, dev server, explicit Host) ─────
+     *   Host: masterclass.9experttraining.com  /masterclass/some-slug
+     *       → 308 https://www.9experttraining.com/masterclass/some-slug
+     *   Host: masterclass.9experttraining.com  /
+     *       → 308 https://www.9experttraining.com/
+     *   Host: www.9experttraining.com          /masterclass/some-slug
+     *       → 404, NOT redirected — it falls through to normal routing
+     *   Host: localhost:3000                   /masterclass/some-slug
+     *       → 404, NOT redirected
+     *
+     * The third line is the one that matters: www serves /masterclass/<slug>
+     * itself, so a rule that also caught www would redirect the host that is
+     * supposed to answer. It does not.
+     *
+     * ── ⚠ WHY IT IS ENV-GATED, WHICH IS A DELIBERATE DEVIATION ⚠ ────────────
+     * `main` currently SERVES masterclass.9experttraining.com and takes real
+     * course payments. This file is shared between branches, so an unconditional
+     * rule here becomes live the moment this branch merges — and if that merge
+     * happens for any reason before the cutover, every payment URL on that host
+     * 308s away and the money stops.
+     *
+     * Gating it on an env var makes the rule reviewable in the diff (its whole
+     * justification) while keeping it INERT until a deployment deliberately
+     * switches it on. That is the same shape, in this same function's
+     * neighbourhood, as `BLOB_PUBLIC_BASE` gating the webroot and blob rewrites
+     * — "inert until the variable is set, because pointing at an undefined
+     * origin would turn working URLs into broken ones".
+     *
+     * TO ARM IT: set MASTERCLASS_REDIRECT_HOST to the source host on the
+     * deployment that should redirect. Unset everywhere else.
+     */
+    const masterclassRedirectHost = process.env.MASTERCLASS_REDIRECT_HOST;
+    const masterclassHostRedirect = masterclassRedirectHost
+      ? [{
+        source: '/:path*',
+        has: [{ type: 'host', value: masterclassRedirectHost }],
+        destination: 'https://www.9experttraining.com/:path*',
+        permanent: true,
+      }]
+      : [];
+
     return [
+      ...masterclassHostRedirect,
       {
         source: '/online-course',
         destination: 'https://academy.9experttraining.com',
