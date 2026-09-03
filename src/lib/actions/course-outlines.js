@@ -47,6 +47,9 @@ import {
   outlineFileName,
   outlinePublicPath,
 } from '@/lib/courses/courseOutline';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo.
+import { recordCourseFileReplacement } from '@/lib/courses/courseVersionWriter';
 import { LEGACY_PUBLIC_ID_PREFIX, legacyPathToPublicId } from '@/lib/legacyPublicId';
 import { extensionOf, refuseUpload } from '@/lib/legacyUploadPolicy.mjs';
 
@@ -191,6 +194,55 @@ export async function recordCourseOutlineUpload({ courseId, lang, bytes, content
       recordId: target.courseId,
       recordLabel: `outline ${target.lang.toUpperCase()} v${updated?.version ?? 1} — ${target.publicPath}`,
       after: { publicPath: target.publicPath, bytes: Number(bytes) || 0, version: updated?.version ?? 1 },
+      actor: { id: session.user?.id, name: session.user?.name },
+    });
+
+    /**
+     * ── A COURSE VERSION, HERE, AND NOT ONLY AT SAVE TIME ──────────────────
+     *
+     * The two uploads on this form are NOT symmetrical, and treating them the
+     * same way would lose one of them entirely.
+     *
+     * The COVER IMAGE gets a fresh Cloudinary public_id on every re-upload, so
+     * the live cover does not change until the admin presses save — the
+     * ordinary save-time snapshot catches it, and its URL visibly differs.
+     *
+     * THIS ONE OVERWRITES IN PLACE. The public_id is derived from
+     * (courseId, lang) and the upload is signed `overwrite: true`, so THE LIVE
+     * FILE CHANGES THE MOMENT IT IS PICKED — before, and regardless of, any
+     * save. An admin who replaces the PDF and then closes the form without
+     * saving has already changed what customers download, and a save-time-only
+     * hook would record nothing at all.
+     *
+     * So a version can exist here for a form that was never saved. That is
+     * correct and intended: the file really did change and it is live.
+     *
+     * A DISTINCT KIND, not a content snapshot. The stored path is byte-identical
+     * before and after, so there is nothing a diff could show; the row carries
+     * the language and the CourseOutlineFile counter/bytes/timestamp instead —
+     * which is a REFERENCE to the row just written, not a second copy of it.
+     * Never suppressed as a no-op: a replacement is never a no-op.
+     *
+     * `courseId` is the RAW argument canonicalised, not `target.courseId` —
+     * that one is lower-cased for the path, and the save path keys on the code
+     * as typed. One key space or the two writers file into two histories of one
+     * course.
+     *
+     * Awaited, and it cannot throw: the writer swallows everything. The file is
+     * already up at this point and a lost history row must not turn a landed
+     * upload into a reported failure.
+     */
+    await recordCourseFileReplacement({
+      courseId,
+      file: {
+        field: `course_outline_${target.lang}`,
+        lang: target.lang,
+        filename: target.fileName,
+        publicPath: target.publicPath,
+        bytes: Number(bytes) || 0,
+        uploadedAt: updated?.uploadedAt ?? new Date(),
+        outlineVersion: updated?.version ?? 1,
+      },
       actor: { id: session.user?.id, name: session.user?.name },
     });
     return {

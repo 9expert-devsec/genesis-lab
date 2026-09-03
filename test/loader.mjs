@@ -113,6 +113,14 @@ export const STUBS = {
     "test",
     "stub-course-extension-actions.mjs",
   ),
+  // CourseForm imports the version-history actions for the joint point after
+  // both of its saves; same next-auth → next/headers + mongoose chain as the
+  // two entries above.
+  "@/lib/actions/course-versions": path.join(
+    ROOT,
+    "test",
+    "stub-course-version-actions.mjs",
+  ),
   // Reached indirectly, via CourseOutlineUpload inside CourseForm.
   "@/lib/actions/course-outlines": path.join(
     ROOT,

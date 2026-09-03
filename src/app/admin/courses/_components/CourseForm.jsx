@@ -9,6 +9,11 @@ import {
   saveCourseExtension,
   checkAliasAvailable,
 } from '@/lib/actions/course-extensions';
+// ADDED beside the statement above rather than folded into it — the standing
+// rule in this repo (see test/fs/libImportsResolved for the two defects that
+// earned it).
+import { captureCoursePreImage, commitCourseVersion } from '@/lib/actions/course-versions';
+import { PRE_IMAGE } from '@/lib/courses/courseSnapshot';
 import { CourseSeoRail } from './CourseSeoRail';
 import { CourseSearchSelect } from './CourseSearchSelect';
 import { CourseGalleryEditor } from './CourseGalleryEditor';
@@ -584,6 +589,14 @@ export function CourseForm({
           // must anchor to the course that was actually created, never to
           // whatever the code resolves to now.
           const retryRes = await saveExtensionFor(createdCourse.code, createdCourse.id);
+          // The retry is the second half of a create landing. Same joint point,
+          // same reasoning as the edit path — and ABSENT rather than SKIPPED
+          // because this course had no earlier state to be missing.
+          await commitCourseVersion({
+            courseId: createdCourse.code,
+            upstreamId: createdCourse.id,
+            preImage: { state: PRE_IMAGE.ABSENT },
+          }).catch(() => null);
           if (retryRes?.ok === true) {
             finishCreate(createdCourse.id);
             return;
@@ -642,6 +655,22 @@ export function CourseForm({
         // `newId` is what MSDB just returned for THIS create — the anchor is
         // written from the same response the redirect is built from.
         const extRes = await saveExtensionFor(code, newId);
+
+        /**
+         * The course EXISTS from here on, whether or not the rail landed, so
+         * the version is written before the outcome is read — the same joint
+         * point the edit path uses.
+         *
+         * ABSENT, never UNAVAILABLE: there was no course a moment ago, so the
+         * baseline is legitimately empty rather than unreadable. Flagging it as
+         * missing would report a defect on every course anyone adds.
+         */
+        await commitCourseVersion({
+          courseId: code,
+          upstreamId: newId,
+          preImage: { state: PRE_IMAGE.ABSENT },
+        }).catch(() => null);
+
         if (extRes?.ok === true) {
           finishCreate(newId);
           return;
@@ -700,6 +729,24 @@ export function CourseForm({
     setAliasError(null);
     setPreviewReady(false);
     startTransition(async () => {
+      /**
+       * ── THE BASELINE, READ BEFORE EITHER WRITE ────────────────────────────
+       * The state a version history compares the first save against exists only
+       * until `updateCourse` runs: the course is upstream and written over HTTP,
+       * so there is no `new: false` to recover it afterwards.
+       *
+       * It costs a round trip ONCE PER COURSE — the action checks for existing
+       * history first and returns without reading MSDB when there is any.
+       *
+       * `.catch` rather than a guard: a version history must never be able to
+       * stop a save, and an absent baseline reads as SKIPPED, which is exactly
+       * what it is.
+       */
+      const preImage = await captureCoursePreImage({
+        courseId,
+        upstreamId: initial?._id,
+      }).catch(() => ({ state: PRE_IMAGE.SKIPPED }));
+
       const courseRes = await updateCourse(initial?._id, fd).catch((err) => ({
         ok: false,
         error: err?.message ?? 'บันทึกไม่สำเร็จ',
@@ -709,6 +756,30 @@ export function CourseForm({
       // `initial._id` is the ObjectId THIS ROUTE WAS OPENED WITH, so the edit
       // save anchors a row that has none without ever consulting the code.
       const extRes = await saveExtensionFor(courseId, initial?._id);
+
+      /**
+       * ── THE VERSION, WRITTEN WHERE BOTH HAVE COMPLETED ────────────────────
+       * Not inside either action: one press is two independent writes, and a
+       * snapshot taken inside the first would describe a state that never
+       * existed on screen.
+       *
+       * UNCONDITIONAL, and deliberately not gated on the outcome. The action
+       * re-reads both stores rather than trusting either result, so it records
+       * what actually landed — including a PARTIAL save, which is a real change
+       * and deserves a version. If neither write landed, the state is unchanged
+       * and the no-op rule drops the row on its own; no special case is needed
+       * and none can produce a phantom version.
+       *
+       * Awaited only so the promise cannot outlive the transition; the action
+       * schedules its own work with after() and returns immediately, so nothing
+       * on screen waits for it. Swallowed for the same reason as everything
+       * else on this path.
+       */
+      await commitCourseVersion({
+        courseId,
+        upstreamId: initial?._id,
+        preImage,
+      }).catch(() => null);
 
       // The joint condition lives in lib/courses/courseSaveOutcome, so the
       // "never claim success on a half-landed save" rule is one testable
