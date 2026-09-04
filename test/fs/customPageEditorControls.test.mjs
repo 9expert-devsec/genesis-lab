@@ -376,3 +376,165 @@ test('CONTROL: the post probe would notice a missing field', () => {
   assert.equal(/fd\.set\('promotionCover',/.test(planted), false,
     'the probe reports a field as posted when it is not');
 });
+
+
+// ── the slug row left the main column ───────────────────────────────────────
+
+const BODY_SRC = 'src/app/admin/pages/_components/CustomPageSettingsBody.jsx';
+const DIALOG_SRC = 'src/app/admin/pages/_components/CustomPageSettingsDialog.jsx';
+
+test('the main column no longer draws a slug input, a prefix or an error line', () => {
+  /**
+   * The whole row went: the https://9experttraining.com/ prefix, the input, the
+   * red ring and the message under it. Asserted as four separate absences
+   * because a partial removal — the input gone but the prefix left behind — is
+   * exactly the "empty container" outcome the round is measured against.
+   */
+  const { code } = form();
+  assert.equal(/placeholder="my-page-slug"/.test(code), false,
+    'the slug input is still in the editor column');
+  assert.equal(/\{SITE_URL\}\//.test(code), false,
+    'the https://9experttraining.com/ prefix span is still drawn beside the title');
+  assert.equal(/slugValid/.test(code), false,
+    'slugValid survives — a derived value the removed input was the only reader of');
+  assert.equal(/ห้ามเว้นวรรค\/อักษรไทย/.test(code), false,
+    'the main column still carries the slug error line');
+});
+
+test('CONTROL: those four probes DO fire on the pre-change markup', () => {
+  // The row as it stood, run through the same predicates. Absence checks pass
+  // against anything, so each one is proved to discriminate.
+  const before = '<span className="font-mono">{SITE_URL}/</span>'
+    + '<input placeholder="my-page-slug" className={slugValid ? "a" : "b"} />'
+    + '<p>slug ต้องเป็นตัวอักษร a-z ... (ห้ามเว้นวรรค/อักษรไทย)</p>';
+  assert.equal(/placeholder="my-page-slug"/.test(before), true);
+  assert.equal(/\{SITE_URL\}\//.test(before), true);
+  assert.equal(/slugValid/.test(before), true);
+  assert.equal(/ห้ามเว้นวรรค\/อักษรไทย/.test(before), true,
+    'a probe cannot see the thing it is asserting the absence of');
+});
+
+test('SITE_URL survives — it has two readers that are not the removed row', () => {
+  // Removing the row must not take the constant with it: the JSON-LD builder and
+  // the preview-link copy both use it.
+  const { code } = form();
+  assert.match(code, /const SITE_URL = 'https:\/\/9experttraining\.com'/);
+  assert.match(code, /}, SITE_URL\)/, 'the JSON-LD builder no longer receives the site URL');
+  assert.match(code, /writeText\(`\$\{SITE_URL\}\$\{draftPreviewUrl\}`\)/,
+    'the preview-link copy no longer uses the site URL');
+});
+
+// ── the cascade, both halves ────────────────────────────────────────────────
+
+test('the title → slug cascade survives the removal, and still stops on a hand edit', () => {
+  /**
+   * With no input in the main column this is the ONLY thing that gives a new
+   * page a slug without opening a dialog, so it is the difference between
+   * "create still works" and a blocker.
+   */
+  const { code } = form();
+  assert.match(code, /function handleTitleChange\(v\) \{[\s\S]{0,200}?if \(!slugEdited\) setSlug\(asciiSlugify\(v\)\);/,
+    'the cascade is gone, or no longer gated on slugEdited — a new page would have no slug '
+    + 'and no visible field to type one into');
+  // The other half: the dialog's field must still claim the slug by hand.
+  assert.match(code, /onSlugChange: \(v\) => \{ setSlugEdited\(true\); setSlug\(v\); \}/,
+    'editing the slug in the dialog no longer sets slugEdited, so the next keystroke in the '
+    + 'title would overwrite what the author typed');
+  // …and a NEW page starts with the cascade armed, an existing one with it off.
+  assert.match(code, /useState\(isEdit\)/,
+    'slugEdited no longer initialises from isEdit — an existing page would have its slug '
+    + 'rewritten by the first title edit');
+});
+
+test('CONTROL: the cascade probe rejects an UNGATED cascade', () => {
+  const ungated = 'function handleTitleChange(v) { setTitle(v); setSlug(asciiSlugify(v)); }';
+  assert.equal(
+    /function handleTitleChange\(v\) \{[\s\S]{0,200}?if \(!slugEdited\) setSlug\(asciiSlugify\(v\)\);/.test(ungated),
+    false, 'the probe accepts a cascade that overwrites a hand-typed slug forever');
+});
+
+// ── a refused save still reaches the author ─────────────────────────────────
+
+test('every save-path refusal goes through failSave, not setError', () => {
+  /**
+   * THE CASE THIS ROUND OWES. The slug field is behind a dialog that is SHUT
+   * when บันทึกฉบับร่าง or เผยแพร่ is pressed, so a refusal that only set the
+   * header text would name a field the author cannot see. failSave is the one
+   * place that decides whether the dialog opens.
+   */
+  const { code } = form();
+  assert.match(code, /const failSave = useCallback\(\(message\) => \{[\s\S]{0,400}?isSlugError\(text\)[\s\S]{0,200}?setSettingsOpen\(true\)/,
+    'failSave does not open the settings dialog on a slug refusal');
+  assert.match(code, /setSlugErrorAt\(\(n\) => n \+ 1\)/,
+    'the refusal does not bump the nonce, so a second bad slug in a row would do nothing');
+
+  // Both save paths, and the four client-side checks, route through it.
+  for (const call of [
+    "failSave(res?.error ?? 'บันทึกไม่สำเร็จ')",
+    "failSave(saveRes?.error ?? 'บันทึกฉบับร่างไม่สำเร็จ')",
+    "failSave(res?.error ?? 'เผยแพร่ไม่สำเร็จ')",
+    "failSave('กรุณาใส่ slug')",
+    "failSave('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น')",
+  ]) {
+    assert.ok(code.includes(call),
+      `a save refusal still calls setError directly: ${call} is missing`);
+  }
+});
+
+test('the header band still renders the message — the dialog is an ADDITION', () => {
+  // If the dialog were the only surface, a refusal an author dismissed would be
+  // unrecoverable. Both read the same `error` state.
+  const { code } = form();
+  assert.match(code, /\{error && \(/, 'the header error band is gone');
+  assert.match(code, /setError\(text\);/, 'failSave no longer sets the header message');
+});
+
+test('CONTROL: the failSave probe would MISS the pre-change shape', () => {
+  const before = "if (!res || res.ok === false) { setError(res?.error ?? 'บันทึกไม่สำเร็จ'); return; }";
+  assert.equal(/failSave\(/.test(before), false,
+    'the probe reports failSave present in source that only calls setError');
+  assert.equal(before.includes("failSave(res?.error ?? 'บันทึกไม่สำเร็จ')"), false);
+});
+
+test('the nonce is RESET on an ordinary open and on close', () => {
+  // Otherwise the slug would steal focus every later time the dialog is opened,
+  // claiming an error that is no longer being reported.
+  const { code } = form();
+  assert.match(code, /onClick=\{\(\) => \{ setSlugErrorAt\(0\); setSettingsOpen\(true\); \}\}/,
+    'the ตั้งค่าหน้า button does not clear a stale slug refusal');
+  assert.match(code, /onClose=\{\(\) => \{ setSettingsOpen\(false\); setSlugErrorAt\(0\); \}\}/,
+    'closing the dialog does not clear the slug refusal');
+});
+
+test('the dialog REMOUNTS on each refusal — the key carries the nonce', () => {
+  /**
+   * A remount is what puts the menu back on ข้อมูลหน้า (the body's section
+   * initialises from initialSection) and what re-fires autoFocus. Without the
+   * nonce in the key, a second bad slug would change nothing on screen.
+   */
+  const { code } = readSource(DIALOG_SRC);
+  assert.match(code, /key=\{`\$\{initialSection \?\? 'general'\}:\$\{slugErrorAt\}`\}/,
+    'the dialog body is not keyed on the slug-refusal nonce');
+});
+
+test('CONTROL: the key probe rejects the pre-change key', () => {
+  const before = "key={initialSection ?? 'general'}";
+  assert.equal(
+    /key=\{`\$\{initialSection \?\? 'general'\}:\$\{slugErrorAt\}`\}/.test(before), false,
+    'the probe accepts a key that cannot remount on a second refusal');
+});
+
+test('the slug field takes focus and shows the server message', () => {
+  const { code } = readSource(BODY_SRC);
+  assert.match(code, /autoFocus=\{slugErrorAt > 0\}/,
+    'the slug input does not focus on a refusal, or focuses on every open');
+  assert.match(code, /\{slugError && <Warn tone="red">\{slugError\}<\/Warn>\}/,
+    'the server refusal is not rendered beside the field it is about');
+  assert.match(code, /invalid=\{slugBadFormat \|\| slugReserved \|\| Boolean\(slugError\)\}/,
+    'a server-refused slug does not get the invalid ring');
+});
+
+test('CONTROL: the autoFocus probe rejects an UNGATED autoFocus', () => {
+  assert.equal(/autoFocus=\{slugErrorAt > 0\}/.test('<TextInput autoFocus />'), false,
+    'the probe accepts a field that grabs focus on every open');
+});

@@ -84,6 +84,15 @@ import {
   toggleCustomPageStatus,
 } from '@/lib/actions/customPages';
 import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pages/customPageDraft';
+/**
+ * Which refusals are about the slug. ADDED beside the statement above rather
+ * than folded into it — the standing rule.
+ *
+ * It is a module and not an inline check because this file cannot be imported by
+ * the test suite at all (`useEditor()` at the top of the body drags the whole
+ * Tiptap graph in), so a rule written here is a rule nothing can execute.
+ */
+import { isSlugError } from '@/lib/pages/customPageSaveError';
 
 const SITE_URL = 'https://9experttraining.com';
 
@@ -211,6 +220,40 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
   // The page-settings dialog. Open/closed only — every field it edits is one of
   // the useState values already declared above, handed down as props.
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  /**
+   * ── HOW A SLUG REFUSAL REACHES AN AUTHOR WHO CANNOT SEE THE FIELD ────────
+   * A counter, not a boolean, because two refusals in a row must both act: it is
+   * threaded into the dialog's `key`, so every increment REMOUNTS the body — and
+   * a remount is what puts the menu back on ข้อมูลหน้า (the body's `section`
+   * state initialises from `initialSection`) and what re-fires `autoFocus` on
+   * the slug input. A boolean would open the dialog on the first bad slug and
+   * silently do nothing on the second.
+   *
+   * ZERO MEANS "no slug refusal is being reported", and it is reset whenever the
+   * dialog is opened by the ตั้งค่าหน้า button or closed. Without that reset the
+   * slug would grab focus on every later open, which is a claim of an error that
+   * is no longer there.
+   */
+  const [slugErrorAt, setSlugErrorAt] = useState(0);
+
+  /**
+   * Every save-path refusal goes through here rather than through `setError`
+   * directly, so exactly one place decides whether the dialog has to open.
+   *
+   * The header band still shows the message in ALL cases — the dialog is an
+   * ADDITION for the field the author cannot otherwise see, never a replacement.
+   * A refusal about the title or the body leaves the dialog shut, because both
+   * of those fields are in the column the author is already looking at.
+   */
+  const failSave = useCallback((message) => {
+    const text = message ?? 'บันทึกไม่สำเร็จ';
+    setError(text);
+    if (isSlugError(text)) {
+      setSlugErrorAt((n) => n + 1);
+      setSettingsOpen(true);
+    }
+  }, []);
 
   // ── Tiptap ────────────────────────────────────────────────────
   const editor = useEditor({
@@ -348,10 +391,10 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
     // it: whatever the editor just serialised already fits its own schema.
     const html = sourceMode ? wrapIfLossy(sourceHtml, editor.schema) : editor.getHTML();
     const trimmed = html.replace(/<p>\s*<\/p>/g, '').trim();
-    if (!title.trim())     { setError('กรุณาใส่ชื่อหน้าเพจ'); return null; }
-    if (!slug.trim())      { setError('กรุณาใส่ slug'); return null; }
-    if (!SLUG_RE.test(slug)) { setError('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น'); return null; }
-    if (!trimmed)          { setError('กรุณาใส่เนื้อหา'); return null; }
+    if (!title.trim())     { failSave('กรุณาใส่ชื่อหน้าเพจ'); return null; }
+    if (!slug.trim())      { failSave('กรุณาใส่ slug'); return null; }
+    if (!SLUG_RE.test(slug)) { failSave('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น'); return null; }
+    if (!trimmed)          { failSave('กรุณาใส่เนื้อหา'); return null; }
 
     const fd = new FormData();
     fd.set('title',           title);
@@ -389,7 +432,7 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
     ogTitle, ogDescription, ogType, ogImage, ogImagePublicId, twitterCard,
     pageType, promotionOrder, promotionCover,
     jsonLdEnabled, schemaType, jsonLdOverrides, rawOverride, rawOverrideEnabled,
-    isSuperAdmin,
+    isSuperAdmin, failSave,
   ]);
 
   /**
@@ -419,7 +462,7 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
           ? await saveCustomPageDraft(storedPage._id, fd)
           : await createCustomPage(fd);
         if (!res || res.ok === false) {
-          setError(res?.error ?? 'บันทึกไม่สำเร็จ');
+          failSave(res?.error ?? 'บันทึกไม่สำเร็จ');
           return;
         }
         if (isEdit) {
@@ -432,10 +475,10 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
           router.refresh();
         }
       } catch (err) {
-        setError(err?.message ?? 'บันทึกไม่สำเร็จ');
+        failSave(err?.message ?? 'บันทึกไม่สำเร็จ');
       }
     });
-  }, [buildFormData, isEdit, storedPage, router]);
+  }, [buildFormData, isEdit, storedPage, router, failSave]);
 
   /**
    * เผยแพร่ — the ONE path that makes a page public.
@@ -459,12 +502,12 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
       try {
         const saveRes = await saveCustomPageDraft(storedPage._id, fd);
         if (!saveRes || saveRes.ok === false) {
-          setError(saveRes?.error ?? 'บันทึกฉบับร่างไม่สำเร็จ');
+          failSave(saveRes?.error ?? 'บันทึกฉบับร่างไม่สำเร็จ');
           return;
         }
         const res = await publishCustomPage(storedPage._id);
         if (!res || res.ok === false) {
-          setError(res?.error ?? 'เผยแพร่ไม่สำเร็จ');
+          failSave(res?.error ?? 'เผยแพร่ไม่สำเร็จ');
           return;
         }
         setHasDraft(false);
@@ -473,10 +516,10 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
         setTimeout(() => setSaved(false), 3000);
         router.refresh();
       } catch (err) {
-        setError(err?.message ?? 'เผยแพร่ไม่สำเร็จ');
+        failSave(err?.message ?? 'เผยแพร่ไม่สำเร็จ');
       }
     });
-  }, [isEdit, storedPage, buildFormData, router]);
+  }, [isEdit, storedPage, buildFormData, router, failSave]);
 
   /**
    * ทิ้งฉบับร่าง — throw the pending work away and go back to what is published.
@@ -563,7 +606,10 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
   }
 
   // ── Derived UI bits ───────────────────────────────────────────
-  const slugValid = !slug || SLUG_RE.test(slug);
+  // `slugValid` used to live here for the main column's red ring. That input is
+  // gone and the dialog computes its own validity (slugBadFormat / slugReserved
+  // in GeneralSection), so a second derivation here would be a value nothing
+  // reads. SLUG_RE is still used — buildFormData below refuses a bad slug.
   /**
    * THE BUILDER'S WORDS, not new ones.
    *
@@ -602,7 +648,22 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
      */
     pageId: isEdit ? String(storedPage._id) : '',
     title, onTitleChange: handleTitleChange,
-    slug, onSlugChange: (v) => { setSlugEdited(true); setSlug(v); },
+    slug,
+    /**
+     * EDITING THE SLUG HERE STOPS THE TITLE CASCADE, and that half is as
+     * load-bearing as the cascade itself: with the main-column input gone this
+     * is the ONLY way an author can claim the slug by hand, so if it did not set
+     * slugEdited the next keystroke in the title would overwrite what they typed.
+     */
+    onSlugChange: (v) => { setSlugEdited(true); setSlug(v); },
+    /**
+     * The slug refusal being reported, if any. `slugErrorAt` is the nonce that
+     * remounts the dialog on ข้อมูลหน้า and focuses the field; `slugError` is the
+     * message shown beside it, taken from the SAME `error` state the header band
+     * renders — one refusal, two places it can be read, not two messages.
+     */
+    slugErrorAt,
+    slugError: slugErrorAt > 0 ? error : '',
     status, setStatus,
     // The สถานะ select's ONE action in edit mode: take a published page down.
     // It cannot publish — that is เผยแพร่'s job and only its job.
@@ -705,7 +766,9 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
           */}
           <button
             type="button"
-            onClick={() => setSettingsOpen(true)}
+            // Opening by BUTTON clears any slug refusal being reported, so the
+            // field does not grab focus and claim an error that is no longer live.
+            onClick={() => { setSlugErrorAt(0); setSettingsOpen(true); }}
             className="inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice dark:text-white dark:hover:bg-9e-navy"
           >
             <Settings className="h-4 w-4" /> ตั้งค่าหน้า
@@ -792,30 +855,30 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
               className="w-full resize-none border-0 bg-transparent p-0 text-3xl font-bold leading-tight text-9e-navy outline-none placeholder:text-9e-slate-dp-50 dark:text-white"
             />
 
-            {/* Slug + live preview */}
-            <div className="mt-3">
-              <div className="flex items-center gap-2 text-sm">
-                <span className="font-mono text-9e-slate-dp-50">{SITE_URL}/</span>
-                <input
-                  type="text"
-                  value={slug}
-                  onChange={(e) => { setSlugEdited(true); setSlug(e.target.value); }}
-                  placeholder="my-page-slug"
-                  className={
-                    'flex-1 rounded-9e-md border bg-white px-3 py-1.5 font-mono text-sm text-9e-navy focus:outline-none focus:ring-1 dark:bg-[#0D1B2A] dark:text-white ' +
-                    (slugValid
-                      ? 'border-[var(--surface-border)] focus:ring-9e-action'
-                      : 'border-red-300 focus:ring-red-400')
-                  }
-                />
-              </div>
-              {!slugValid && (
-                <p className="mt-1 text-xs text-red-600">
-                  slug ต้องเป็นตัวอักษร a-z, ตัวเลข 0-9 และ - เท่านั้น (ห้ามเว้นวรรค/อักษรไทย)
-                </p>
-              )}
-            </div>
+            {/*
+              ── THE SLUG ROW IS GONE FROM THIS COLUMN ────────────────────────
+              It is edited in ตั้งค่าหน้า → ข้อมูลหน้า, where the field already
+              existed. This was a REMOVAL, not a move: the dialog's field and
+              this one were always two views of one `slug` state, so nothing was
+              duplicated and nothing was rehomed — one view simply stopped being
+              drawn. The H1 above stays; only the slug left.
 
+              WHAT KEEPS THE AUTHOR INFORMED WITHOUT IT. Two things, and both are
+              load-bearing:
+
+                · the title → slug cascade (handleTitleChange) still fills the
+                  slug on a NEW page, so a page can be created without opening
+                  this dialog at all;
+                · a save refused BECAUSE of the slug re-opens the dialog on
+                  ข้อมูลหน้า with the field focused and the message beside it —
+                  see failSave(). Without that, the reason for a refusal would be
+                  behind a closed dialog, which is worse than the crowded column
+                  this removal fixes.
+
+              The <hr> below stays. It separates the title from the body and did
+              so before the slug row was ever between them; it is a divider, not
+              the container the row lived in.
+            */}
             <hr className="my-4 border-[var(--surface-border)]" />
 
             {sourceMode ? (
@@ -842,7 +905,7 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
       {/* ── Page settings dialog ────────────────────────────── */}
       <CustomPageSettingsDialog
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => { setSettingsOpen(false); setSlugErrorAt(0); }}
         {...settingsProps}
       />
 

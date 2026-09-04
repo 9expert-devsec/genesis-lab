@@ -58,11 +58,27 @@ import { ActivityTrail } from '@/components/pageBuilder/editor/ActivityTrail';
  * reason, as PageSettingsBody (round 27) and SectionPickerBody (rounds 9/13).
  *
  * ── NO STATE OF ITS OWN, DELIBERATELY ──────────────────────────────────────
- * Every value below is CustomPageForm's existing `useState` handed down. The H1
- * title textarea and the slug bar stay in the editor column and edit the SAME
- * `title` / `slug` — two inputs over one piece of state, not two copies that can
- * disagree. A second state here would be the classic two-authorities defect: the
- * dialog and the editor column each believing they own the title.
+ * Every value below is CustomPageForm's existing `useState` handed down. A
+ * second state here would be the classic two-authorities defect: the dialog and
+ * the editor column each believing they own the value.
+ *
+ * ── THE TITLE IS STILL IN TWO PLACES; THE SLUG IS NOT ANY MORE ─────────────
+ * This note used to say "the H1 title textarea and the slug bar stay in the
+ * editor column and edit the SAME title / slug — two inputs over one piece of
+ * state". Half of that is now false, and the half that changed is the half a
+ * reader would act on.
+ *
+ * `title` is still two inputs over one state: the H1 textarea in the main column
+ * and the ชื่อหน้า field here. That is fine precisely BECAUSE they share the
+ * state — they cannot disagree.
+ *
+ * `slug` is now edited HERE AND NOWHERE ELSE. The main column's row was removed,
+ * so this field is the only way to type one by hand, and two things depend on
+ * that being true: the title → slug cascade in CustomPageForm (which is what
+ * fills the slug on a new page without anyone opening this dialog), and
+ * `onSlugChange` setting `slugEdited` (which is what stops the cascade once an
+ * author claims the slug). Re-adding an input elsewhere would put that pair back
+ * into two places.
  */
 
 /**
@@ -104,6 +120,7 @@ function GeneralSection({
   isEdit, onUnpublish,
   pageType, setPageType, promotionOrder, setPromotionOrder,
   promotionCover, setPromotionCover,
+  slugErrorAt = 0, slugError = '',
 }) {
   const slugStr = String(slug ?? '');
   const slugBadFormat = slugStr !== '' && !/^[a-z0-9-]+$/.test(slugStr);
@@ -117,15 +134,51 @@ function GeneralSection({
       </Field>
       {titleEmpty && <Warn tone="red">ต้องมีชื่อหน้า — บันทึกไม่ได้ถ้าเว้นว่าง</Warn>}
 
+      {/*
+        ── THIS IS NOW THE ONLY SLUG INPUT IN THE EDITOR ────────────────────
+        The main column's row — the https://9experttraining.com/ prefix, the
+        input, the red ring and the error line — was REMOVED, not duplicated:
+        the two were always views of one `slug` state, and one view stopped
+        being drawn. Everything that depended on being able to SEE the field
+        while saving now depends on this one, which is why the two additions
+        below exist.
+
+        `autoFocus` fires because a refused save REMOUNTS this body (the dialog
+        keys on slugErrorAt), so it lands on the field rather than merely on the
+        section. Gated on the nonce: an ordinary open must not steal focus.
+      */}
       <Field label="URL (slug)" hint="a-z, 0-9 และ - เท่านั้น">
-        <TextInput value={slug} onChange={onSlugChange} invalid={slugBadFormat || slugReserved} />
+        <TextInput
+          value={slug}
+          onChange={onSlugChange}
+          invalid={slugBadFormat || slugReserved || Boolean(slugError)}
+          autoFocus={slugErrorAt > 0}
+          data-testid="custom-page-slug-input"
+        />
       </Field>
       {slugBadFormat && <Warn tone="red">slug ต้องเป็น a-z, 0-9 และ - เท่านั้น</Warn>}
       {slugReserved && <Warn tone="red">slug นี้ถูกสงวนไว้สำหรับหน้าระบบ — ใช้ไม่ได้</Warn>}
-      {/* Cross-collection collisions (PageBuilder ↔ CustomPage, including each
-          one's slugHistory) can only be checked server-side — slugGuard imports
-          both models. The save surfaces that as an error without dropping the
-          draft; it is not knowable here. */}
+      {/*
+        THE SERVER'S REFUSAL, SHOWN WHERE THE FIELD IS.
+        Cross-collection collisions (PageBuilder ↔ CustomPage, including each
+        one's slugHistory) and MSDB promotion collisions can only be checked
+        server-side — slugGuard imports four models — so they are not knowable
+        from here and the two local warnings above cannot cover them.
+
+        Before the main-column input was removed, a refusal like "Slug นี้ถูกใช้แล้ว"
+        was readable in the header band NEXT TO the field it was about. Now the
+        field is behind a dialog that is shut when บันทึกฉบับร่าง is pressed, so
+        the message is carried in and rendered here as well. The header band
+        still shows it too — this is an addition, not a relocation, and both read
+        the same `error` state so they cannot disagree.
+      */}
+      {/*
+        No data-testid: `Warn` does not spread unknown props onto its <p>, so one
+        would be dropped silently and a test hunting for it would fail for a
+        reason that has nothing to do with this field. It already renders
+        role="alert", which is both the accessible answer and the honest hook.
+      */}
+      {slugError && <Warn tone="red">{slugError}</Warn>}
 
       {/*
         ── สถานะ IS A TAKEDOWN CONTROL, NOT A SECOND PUBLISH PATH ─────────────
