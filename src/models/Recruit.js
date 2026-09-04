@@ -11,6 +11,14 @@ const RecruitSchema = new mongoose.Schema(
       enum: ['full-time', 'part-time', 'contract', 'internship'],
       default: 'full-time',
     },
+    // How many people are wanted for this posting. OPTIONAL, and `null` is the
+    // only thing that means "not given" — see src/lib/recruitHeadcount.js, which
+    // is the one place that decides. No default and no `min` here on purpose:
+    // a schema default would write a value onto every posting that never had
+    // one, and a validator would reject a payload the action has already
+    // normalised to null. Documents written before this field existed simply do
+    // not have it, which reads as `undefined` and normalises to null.
+    headcount:    { type: Number, default: null },
     description:  { type: String, required: true }, // rich HTML
     responsibilities: [{ type: String }],
     qualifications:   [{ type: String }],

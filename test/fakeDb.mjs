@@ -313,12 +313,30 @@ export function makeModel(name) {
     async findByIdAndUpdate(id, update, options = {}) {
       const row = rows(name).find((r) => String(r._id) === String(id));
       if (!row) return null;
-      const set = update?.$set ?? {};
-      const inc = update?.$inc ?? {};
-      const unsupported = Object.keys(update ?? {}).filter((k) => k !== '$set' && k !== '$inc');
+      /**
+       * A BARE UPDATE OBJECT IS `$set`, WHICH IS WHAT MONGOOSE DOES.
+       *
+       * Added when the recruits actions became the first callers here that
+       * write `findByIdAndUpdate(id, { title, headcount })` rather than
+       * `{ $set: {...} }`. Both are real Mongoose: an update document with no
+       * top-level operator is treated as $set. Until now this fake threw on
+       * that shape and called it "unsupported", which would have made a
+       * correctly-written action look broken.
+       *
+       * The keys are split on the `$` prefix rather than on an allow-list, so
+       * an update mixing `{ $inc: {...}, title: 'x' }` still works and a genuine
+       * unsupported operator ($unset, $push) still throws by name instead of
+       * being silently written as a field called "$push".
+       */
+      const keys = Object.keys(update ?? {});
+      const operators = keys.filter((k) => k.startsWith('$'));
+      const bare = keys.filter((k) => !k.startsWith('$'));
+      const unsupported = operators.filter((k) => k !== '$set' && k !== '$inc');
       if (unsupported.length) {
         throw new Error(`fakeDb: unsupported update operator(s) ${unsupported.join(', ')}`);
       }
+      const set = { ...Object.fromEntries(bare.map((k) => [k, update[k]])), ...(update?.$set ?? {}) };
+      const inc = update?.$inc ?? {};
       /**
        * `$inc` — round 35's publish counter.
        *

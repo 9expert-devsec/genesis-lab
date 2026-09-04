@@ -251,6 +251,7 @@ module.exports = {
       //   9000  SitePopup                (promotional image overlay)
       //   9500  chat panel               (ChatPanel, portalled to <body>)
       //   9600  article image lightbox   (ArticleImageLightbox, portalled)
+      //   9700  job detail dialog        (JobDetailModal, portalled)
       //   9998  mobile drawer backdrop
       //   9999  mobile drawer            (portalled to <body>)
       // The chat panel sits ABOVE SitePopup because a promo image must not
@@ -262,6 +263,17 @@ module.exports = {
       // reason the drawer is: it is rendered from inside the z-50 dock, and a
       // `fixed` + `z-50` ancestor is a stacking context that would confine
       // z-[9500] beneath SitePopup's 9000 while the source looked correct.
+      // The /join-us job dialog takes 9700 on the lightbox's argument, word for
+      // word — modal, opened on purpose, above promo and chat, below
+      // navigation. It gets its OWN rung rather than sharing 9600 because this
+      // ladder is documented per occupant and the z-30 guard below exists
+      // precisely because a rung once claimed one user while having four; two
+      // modals on one rung would also leave their relative order undefined.
+      // MEASURED before it moved: at z-50 it lost to the header (60) — the
+      // panel's top sat behind the header band, which is the clipped
+      // department badge that was reported — and tied with the floating dock
+      // (also 50, but mounted later from the root layout, so the dock won and
+      // both its buttons painted bright over the dim).
       zIndex: {
         60: '60',
         70: '70',

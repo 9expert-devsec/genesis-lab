@@ -100,6 +100,24 @@ const popupTok = firstZ(
     file: 'SitePopup.jsx',
   }),
 );
+const lightboxTok = firstZ(
+  classLiteral(read('src/components/ui/ImageLightbox.jsx'), {
+    label: 'ImageLightbox overlay',
+    re: /className="fixed inset-0 z-\[\d+\][^"]*"/,
+    file: 'ImageLightbox.jsx',
+  }),
+);
+// THE /join-us JOB DIALOG. Extracted the same way as its neighbours rather than
+// written down as a number: the point of this file is that a tier is asserted
+// against the source, so a literal here would be exactly the "someone nudges
+// the number" hole the extraction exists to close.
+const jobDialogTok = firstZ(
+  classLiteral(read('src/components/join-us/OpenPositionsSection.jsx'), {
+    label: 'JobDetailModal overlay',
+    re: /className="fixed inset-0 z-\[\d+\][^"]*"/,
+    file: 'OpenPositionsSection.jsx',
+  }),
+);
 const drawerTok = 'z-[9999]'; // panel  (PublicHeaderClient.jsx:1179)
 const backdropTok = 'z-[9998]'; // backdrop (PublicHeaderClient.jsx:1168)
 
@@ -111,6 +129,8 @@ test('every layered element ships a z token that generates', () => {
     ['bar', barTok],
     ['chat overlay', chatTok],
     ['site popup', popupTok],
+    ['image lightbox', lightboxTok],
+    ['job dialog', jobDialogTok],
   ]) {
     assert.ok(tok, `${name} has a z token in source`);
     assert.notEqual(resolveZ(tok, EXTRA), null, `${name} z (${tok}) generates`);
@@ -122,6 +142,8 @@ test('every layered element ships a z token that generates', () => {
   assert.equal(barTok, 'z-40');
   assert.equal(chatTok, 'z-[9500]', 'chat overlay sits in the arbitrary overlay tier');
   assert.equal(popupTok, 'z-[9000]', 'and SitePopup is where the ladder says it is');
+  assert.equal(lightboxTok, 'z-[9600]', 'the image lightbox is on its documented rung');
+  assert.equal(jobDialogTok, 'z-[9700]', 'the /join-us job dialog is on its documented rung');
   assert.ok(HEADER.includes('z-[9999]') && HEADER.includes('z-[9998]'), 'drawer tokens present');
 });
 
@@ -149,6 +171,8 @@ test('resolved z-order matches the intended stack (top → bottom)', () => {
     header: resolveZ(headerTok(), EXTRA),
     popup: resolveZ(popupTok, EXTRA),
     chat: resolveZ(chatTok, EXTRA),
+    lightbox: resolveZ(lightboxTok, EXTRA),
+    jobDialog: resolveZ(jobDialogTok, EXTRA),
     backdrop: resolveZ(backdropTok, EXTRA),
     drawer: resolveZ(drawerTok, EXTRA),
   };
@@ -175,6 +199,88 @@ test('resolved z-order matches the intended stack (top → bottom)', () => {
   assert.ok(z.chat > z.header, 'chat overlay above the header');
   assert.ok(z.backdrop > z.chat, 'drawer backdrop above the chat overlay');
   assert.ok(z.drawer > z.chat, 'mobile drawer above the chat overlay');
+
+  // 6. THE TWO DELIBERATE MODALS. Both follow the same rule — the visitor
+  // opened them on purpose, so a promo and a chat window must not cover them,
+  // and primary navigation still wins. Each relation is asserted for BOTH,
+  // because a single "above the chat" check would stay green with either one
+  // sitting at the wrong end of the tier.
+  for (const [name, value] of [['image lightbox', z.lightbox], ['job dialog', z.jobDialog]]) {
+    assert.ok(value > z.chat, `${name} above the chat overlay`);
+    assert.ok(value > z.popup, `${name} above SitePopup`);
+    assert.ok(value > z.header, `${name} above the header`);
+    assert.ok(value > z.dock, `${name} above the floating dock`);
+    assert.ok(z.backdrop > value, `drawer backdrop above the ${name}`);
+    assert.ok(z.drawer > value, `mobile drawer above the ${name}`);
+  }
+  // …and they are on rungs of their own, so their order is defined rather than
+  // decided by which one happens to be later in the DOM.
+  assert.notEqual(z.lightbox, z.jobDialog, 'two modals sharing one rung tie on paint order');
+});
+
+test('the ladder in tailwind.config.js names every overlay-tier occupant', () => {
+  // The z-30 lesson one tier up: a rung documented as having fewer users than
+  // it has is prose pretending to be measurement. These are arbitrary values,
+  // so they need no config ENTRY — which is exactly why the comment is the only
+  // record of them, and why it has to be checked rather than trusted.
+  for (const [component, rung] of [
+    ['SitePopup', 9000],
+    ['ChatPanel', 9500],
+    ['ImageLightbox', 9600],
+    ['JobDetailModal', 9700],
+  ]) {
+    assert.ok(
+      CONFIG.includes(component),
+      `${component} occupies the overlay tier but the ladder in tailwind.config.js `
+      + 'does not name it',
+    );
+    assert.ok(
+      CONFIG.includes(String(rung)),
+      `the ladder does not mention rung ${rung}, which ${component} occupies`,
+    );
+  }
+});
+
+test('CONTROL: the job dialog extractor fails LOUDLY if its anchor moves', () => {
+  // Same defect class as the header's: an unguarded match returning null, or
+  // returning '' for a renamed class, would make every assertion above pass
+  // over nothing. classLiteral throws by name instead.
+  assert.throws(
+    () => classLiteral('<div className="fixed inset-0 flex">', {
+      label: 'JobDetailModal overlay',
+      re: /className="fixed inset-0 z-\[\d+\][^"]*"/,
+      file: 'OpenPositionsSection.jsx',
+    }),
+    /could not locate the className for "JobDetailModal overlay"/,
+  );
+  assert.equal(jobDialogTok, 'z-[9700]');
+});
+
+// ── The dialog is PORTALLED to <body> ───────────────────────────────────────
+test('the job dialog is portalled, like every other overlay-tier surface', () => {
+  // Not because the tier needs it today — the section it renders from creates
+  // no stacking context, which is why raising the z-index alone was enough to
+  // fix the reported paint order. It is here because `position: fixed` is
+  // defeated outright by a transformed ancestor and a high z-index is confined
+  // by any ancestor that forms a stacking context, and this subtree is one
+  // `will-change` away from either. The chat panel is the case that actually
+  // bit this repo: rendered from inside the `fixed z-50` dock, its z-[9500]
+  // was trapped below SitePopup's 9000 while the source read correctly.
+  // TWO FORMS, AND EACH ASSERTION SAYS WHICH — test/sourceScan.mjs's rule.
+  // `code` strips imports, so the import check has to read `withImports`; the
+  // CALL check reads `code`, because an import line alone would satisfy it
+  // (defect 5 in that file's header) and a portal that is imported but never
+  // used is exactly the bug this guard is about.
+  const { code, withImports } = readSource('src/components/join-us/OpenPositionsSection.jsx');
+  assert.match(withImports, /import \{ createPortal \} from "react-dom"/,
+    'createPortal is not imported');
+  assert.match(code, /createPortal\(\s*overlay\s*,\s*document\.body\s*\)/,
+    'the dialog is not portalled to <body>');
+  const src = code;
+  // The SSR branch, which is what makes the portal safe in a client component
+  // Next still renders on the server — createPortal throws there.
+  assert.match(src, /typeof document === "undefined"/,
+    'the portal has no server-render fallback; createPortal throws on the server');
 });
 
 // ── The hero cover is not promoted above the header by a stacking context ────

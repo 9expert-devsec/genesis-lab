@@ -177,6 +177,10 @@ export const STUBS = {
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
   "@/models/Admin": path.join(ROOT, "test", "stub-model-admin.mjs"),
+  // The recruits actions are executed by test/pure/recruitHeadcountWrite, which
+  // is the tier that can answer "does the SERVER normalise a payload that
+  // bypassed the input" — a question no source scan can.
+  "@/models/Recruit": path.join(ROOT, "test", "stub-model-recruit.mjs"),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",

@@ -9,9 +9,16 @@ import {
   X,
   MapPin,
   Clock,
+  // ALIASED. `Users` is a plural common noun and this file keeps a `rows` /
+  // `row` vocabulary around the admin list; an unaliased import of that name is
+  // one `const Users = …` away from a module-scope shadow that resolves at
+  // runtime to a React component. Same reason AdminSidebar imports lucide's
+  // `Image as ImageIcon`.
+  Users as UsersIcon,
 } from 'lucide-react';
 import { useDragReorder } from '@/hooks/useDragReorder';
 import { DragHandle } from '@/components/ui/DragHandle';
+import { MAX_HEADCOUNT, headcountLabel, normalizeHeadcount } from '@/lib/recruitHeadcount';
 import {
   createRecruit,
   updateRecruit,
@@ -33,6 +40,12 @@ const EMPTY_FORM = {
   department:      '',
   location:        '',
   employmentType:  'full-time',
+  // A STRING, like every other text field here, and '' rather than null: this
+  // is the value of a controlled <input>, and React warns (then switches the
+  // input to uncontrolled) the moment it becomes null or undefined. The
+  // conversion to `number | null` happens once, in the server action, through
+  // the same normaliser the public card uses.
+  headcount:       '',
   applyEmail:      '',
   active:          true,
   description:     '',
@@ -192,6 +205,16 @@ export function RecruitsAdminClient({ initialRecruits }) {
                     <Clock size={12} />
                     {TYPE_LABEL[row.employmentType] ?? row.employmentType}
                   </span>
+                  {/* Between งานประจำ and the slug, so the admin can confirm
+                      what they entered without opening the form. Whole chip
+                      inside the condition, `!== null` not `&&` — the same two
+                      rules as the public card, for the same two reasons. */}
+                  {headcountLabel(row.headcount) !== null && (
+                    <span className="inline-flex items-center gap-1">
+                      <UsersIcon size={12} />
+                      {headcountLabel(row.headcount)}
+                    </span>
+                  )}
                   <span className="text-[11px]">slug: {row.slug}</span>
                 </div>
               </div>
@@ -292,6 +315,12 @@ function RecruitForm({ mode, initial, onSubmit, onCancel }) {
       department:     form.department.trim(),
       location:       form.location.trim(),
       employmentType: form.employmentType,
+      // SENT RAW, as the string the input holds. Not normalised here, and that
+      // is deliberate rather than lazy: normalising on the client would make
+      // this the second place that decides, and the server would still have to
+      // do it anyway for payloads that never came from this form. One decision,
+      // one place. `''` is a perfectly good "unset" for the action to read.
+      headcount:      form.headcount,
       applyEmail:     form.applyEmail.trim(),
       active:         Boolean(form.active),
       description,
@@ -341,6 +370,23 @@ function RecruitForm({ mode, initial, onSubmit, onCancel }) {
             <option value="contract">สัญญาจ้าง (contract)</option>
             <option value="internship">ฝึกงาน (internship)</option>
           </select>
+        </Field>
+        {/* Same grid, same shape as its neighbours. min/step/max are a
+            convenience for whoever is typing and are NOT the guard — the server
+            action runs normalizeHeadcount on whatever arrives, because this
+            payload can be built by hand. The hint reads like slug's
+            ("เว้นว่าง = สร้างจากชื่อ") and อีเมลรับใบสมัคร's: it says what
+            leaving it blank DOES, rather than describing the field. */}
+        <Field label="จำนวนที่รับ" hint="เว้นว่าง = ไม่แสดงจำนวน">
+          <Input
+            type="number"
+            min="1"
+            step="1"
+            max={MAX_HEADCOUNT}
+            value={form.headcount}
+            onChange={setField('headcount')}
+            placeholder="เช่น 2"
+          />
         </Field>
         <Field label="อีเมลรับใบสมัคร" hint="เว้นว่าง = training@9expert.co.th">
           <Input
@@ -429,6 +475,12 @@ function normalizeForm(initial) {
     department:      initial.department ?? '',
     location:        initial.location ?? '',
     employmentType:  initial.employmentType ?? 'full-time',
+    // `?? ''` would not be enough on its own: a stored `0` is not nullish, so
+    // it would survive into the input as "0" and the admin would be shown a
+    // headcount the public page refuses to render. normalizeHeadcount is the
+    // one place that decides what counts, so the form asks IT rather than
+    // re-deciding — and `null` becomes '', the empty controlled input.
+    headcount:       normalizeHeadcount(initial.headcount) ?? '',
     applyEmail:      initial.applyEmail ?? '',
     active:          initial.active ?? true,
     description:     initial.description ?? '',
