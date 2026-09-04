@@ -88,16 +88,44 @@ test('expanded: both lines render, "Expert" then "Admin Panel"', () => {
   assert.ok(expert < panel, 'the two lines are in the wrong order');
 });
 
-test('expanded: both lines are bold and take the brand token', () => {
-  // Not "a colour" — the specific token round C added for the wordmark. A line
-  // painted with --admin-rail-item would still be visible and would still pass
-  // a presence check while being the wrong thing.
-  const lines = tags(header(false), 'p');
-  assert.equal(lines.length, 2, `expected two lines, found ${lines.length}`);
-  for (const line of lines) {
-    assert.match(line, /font-bold/, line);
-    assert.match(line, /text-\[var\(--admin-rail-brand\)\]/, line);
-  }
+test('expanded: line one takes the brand token, line two the accent token — both bold', () => {
+  // Not "a colour" — the specific tokens. A line painted with --admin-rail-item
+  // would still be visible and would still pass a presence check while being the
+  // wrong thing.
+  //
+  // THE TWO LINES NO LONGER SHARE A TOKEN. "Expert" keeps --admin-rail-brand;
+  // "Admin Panel" takes --admin-rail-brand-accent. So this cannot stay a loop over
+  // both lines: a loop that accepted either token on either line would sit green on
+  // a header that painted the wordmark lime and the accent line ice, which is the
+  // one mistake the split newly makes possible. Each line is asserted SEPARATELY,
+  // and each is found BY ITS TEXT rather than by its index — the order is pinned by
+  // the sibling test above, and a guard leaning on it would go quietly wrong the
+  // day that order changed.
+  const markup = header(false);
+  const lineFor = (text) => {
+    const m = markup.match(new RegExp(String.raw`<p\b[^>]*>` + text + '<'));
+    assert.ok(m, `no <p> renders the text "${text}"`);
+    return m[0];
+  };
+
+  assert.equal(tags(markup, 'p').length, 2, 'expected exactly two lines');
+  const wordmark = lineFor('Expert');
+  const accent = lineFor('Admin Panel');
+
+  assert.match(wordmark, /font-bold/, wordmark);
+  assert.match(accent, /font-bold/, accent);
+
+  assert.match(wordmark, /text-\[var\(--admin-rail-brand\)\]/, wordmark);
+  assert.match(accent, /text-\[var\(--admin-rail-brand-accent\)\]/, accent);
+
+  // …and neither line carries the other one's token. Without this the two matchers
+  // above are one claim stated twice: --admin-rail-brand-accent CONTAINS the string
+  // --admin-rail-brand, so a bracket lost from the first matcher would make it match
+  // both lines and a swap of the two would go unseen.
+  assert.doesNotMatch(wordmark, /--admin-rail-brand-accent/,
+    `the wordmark line took the accent token: ${wordmark}`);
+  assert.doesNotMatch(accent, /text-\[var\(--admin-rail-brand\)\]/,
+    `the accent line took the brand token: ${accent}`);
 });
 
 test('collapsed: neither line renders — there is no room for them', () => {

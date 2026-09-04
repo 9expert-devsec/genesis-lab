@@ -20,7 +20,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
-import { courseHref } from "@/lib/utils";
+import { courseLinkHref } from "@/lib/courses/courseLinkHref";
 import { siteDateParts } from "@/lib/articlePublishTime";
 import {
   INHOUSE_ONLY_LABEL,
@@ -1073,7 +1073,7 @@ const FROZEN_CELLS = {
     tdClass: "px-4 py-2 align-middle",
     cell: (c) => (
       <Link
-        href={courseHref(c.course_id ? String(c.course_id).toLowerCase() : "")}
+        href={courseLinkHref(c)}
         className="text-sm font-medium text-9e-navy transition-colors hover:text-9e-action dark:text-white dark:hover:text-9e-air"
       >
         {c.course_name}
@@ -1651,9 +1651,8 @@ function ProgramTable({
 function CourseCard({ course, rounds, ebScheduleId, currentYear }) {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
-  const href = courseHref(
-    course.course_id ? String(course.course_id).toLowerCase() : "",
-  );
+  // Canonical path, from the shared rule — the row carries urlAlias.
+  const href = courseLinkHref(course);
 
   const collapsible = rounds.length > ROUND_COLLAPSE_THRESHOLD;
   const shown =

@@ -24,7 +24,8 @@ import {
 import { Logo } from '@/components/brand/Logo';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { mainNav, skills, careerPaths, siteConfig } from '@/config/site';
-import { cn, courseHref, programHref, skillHref } from '@/lib/utils';
+import { cn, programHref, skillHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import {
   HERO_OVERLAY_SENTINEL_ID,
   OVERLAY_SUBPIXEL_TOLERANCE_PX,
@@ -1226,7 +1227,7 @@ function DesktopMega({
                       col3Courses.map((course) => (
                         <a
                           key={course.course_id}
-                          href={courseHref(course.urlAlias || course.course_id)}
+                          href={courseLinkHref(course)}
                           onMouseEnter={() => handleCourseHover(course)}
                           onClick={closeMegaMenu}
                           className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--text-primary)] no-underline transition-colors hover:bg-[var(--surface-muted)] hover:text-9e-action dark:hover:text-9e-air"
@@ -1257,7 +1258,7 @@ function DesktopMega({
                       preview={{
                         name: col4Preview.course_name,
                         imageUrl: col4Preview.course_cover_url ?? null,
-                        href: courseHref(col4Preview.urlAlias || col4Preview.course_id),
+                        href: courseLinkHref(col4Preview),
                         external: false,
                       }}
                       onClose={closeMegaMenu}

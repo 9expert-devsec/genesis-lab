@@ -390,18 +390,51 @@ test('the panel is its own scroll region, and the apply button is pinned to it',
   // own internal scroll, not run off either edge. dvh rather than vh because on
   // mobile `vh` is the URL-bar-hidden viewport, and 90vh of that can put the
   // pinned button under the browser chrome.
+  //
+  // ── THIS ASSERTION USED TO NAME THE WRONG ELEMENT ─────────────────────────
+  // It read `overflow-y-auto` off the PANEL, which was true when the panel was
+  // one scrolling box. The panel has since become a flex COLUMN with four
+  // children — accent bar, header, body, footer — and the scrolling moved to
+  // the body: the panel is `overflow-hidden` and clips, the body is
+  // `min-h-0 flex-1 overflow-y-auto` and scrolls.
+  //
+  // That is a better structure and the test was simply pointing at the old one,
+  // so the fix is to follow the behaviour rather than to argue with it. The
+  // CLAIM is unchanged and is what the name still says: the dialog scrolls
+  // inside itself. Only the element carrying it moved.
   withDom((m) => {
     m.render();
     const panel = overlayEl(m.doc).firstElementChild;
     const cls = panel.getAttribute('class');
-    assert.match(cls, /overflow-y-auto/, 'the panel does not scroll internally');
+
+    // The panel is the CAP and the clip — it must not scroll itself, or the
+    // header and the pinned footer scroll away with the content.
     assert.match(cls, /max-h-\[90dvh\]/, `the panel is capped with "${cls}"`);
     assert.ok(!/max-h-\[90vh\]/.test(cls),
       'vh is the large viewport on mobile — the pinned button can land under the URL bar');
+    assert.match(cls, /overflow-hidden/, `the panel no longer clips: "${cls}"`);
+    assert.match(cls, /flex-col/, 'the panel is not a column, so nothing can be pinned below the scroller');
+
+    // The BODY is the scroll region. Located as the panel's own child carrying
+    // `flex-1`, not by index: a fifth child added to the column would silently
+    // move an index-based selector onto the wrong element.
+    const body = [...panel.children].find((el) =>
+      /(^|\s)flex-1(\s|$)/.test(el.getAttribute('class') ?? ''));
+    assert.ok(body, 'no growing child in the panel — nothing is the scroll region');
+    const bodyCls = body.getAttribute('class');
+    assert.match(bodyCls, /overflow-y-auto/, `the body does not scroll: "${bodyCls}"`);
+    assert.match(bodyCls, /min-h-0/,
+      'without min-h-0 a flex child refuses to shrink below its content and the panel overflows instead');
+
+    // The apply button is pinned BECAUSE it is a sibling of the scroller rather
+    // than inside it — that is what the column buys. The `sticky` class is still
+    // on it and is asserted, but it is no longer what does the pinning.
     const apply = [...panel.querySelectorAll('a')].find((a) => (a.getAttribute('href') ?? '').startsWith('mailto:'));
     assert.ok(apply, 'no apply link in the dialog');
-    assert.match(apply.parentElement.getAttribute('class'), /sticky/,
-      'the apply button scrolls away with the content instead of staying pinned');
+    const footer = apply.parentElement;
+    assert.equal(footer.parentElement, panel,
+      'the apply button moved INSIDE the scroll region — it will scroll away with the content');
+    assert.match(footer.getAttribute('class'), /sticky/);
   });
 });
 

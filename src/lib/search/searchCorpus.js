@@ -178,6 +178,10 @@ async function buildSearchCorpus() {
               _id: String(c._id),
               course_id: c.course_id ?? null,
               course_name: c.course_name ?? null,
+              // The alias, so a schedule result links to the same URL the
+              // course page declares canonical. listPublicCourses attaches it
+              // to `c`; this projection is what would otherwise drop it.
+              urlAlias: c.urlAlias ?? null,
               course_price: c.course_price ?? null,
             }
           : null,

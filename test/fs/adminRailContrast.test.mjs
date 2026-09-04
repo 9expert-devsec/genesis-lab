@@ -126,6 +126,10 @@ test('rail tokens: the parse found the whole set', () => {
     'admin-rail-card-muted',
     // Round D3: the nav list's scrollbar.
     'admin-rail-scroll-track', 'admin-rail-scroll-thumb',
+    // The lockup's SECOND line. It shared --admin-rail-brand with the wordmark
+    // until the two were split; it is bound to --9e-lime, and the split is what
+    // the header render test now asserts line by line.
+    'admin-rail-brand-accent',
   ];
   assert.deepEqual(Object.keys(TOKENS).sort(), [...expected].sort());
 });
@@ -136,6 +140,10 @@ test('rail tokens: the parse found the whole set', () => {
 // brief names, in its order, so a reader can check it off against the spec.
 const TEXT_PAIRS = [
   ['brand wordmark',   'admin-rail-brand',      'admin-rail-surface'],
+  // The lockup's second line, which takes its own token rather than the
+  // wordmark's. 11px and bold, so AA_LARGE would not apply even generously —
+  // it is held to the same 4.5 floor as every other line of text on the rail.
+  ['lockup accent line', 'admin-rail-brand-accent', 'admin-rail-surface'],
   ['active label',     'admin-rail-active-fg',  'admin-rail-active-bg'],
   ['inactive label',   'admin-rail-item',       'admin-rail-surface'],
   ['group header',     'admin-rail-group',      'admin-rail-surface'],
@@ -330,6 +338,7 @@ const REBOUND = {
   'admin-rail-surface': '9e-navy',
   'admin-rail-divider': '9e-border',
   'admin-rail-brand': '9e-ice',
+  'admin-rail-brand-accent': '9e-lime',
   'admin-rail-active-bg': '9e-action',
   'admin-rail-active-fg': '9e-ice',
   'admin-rail-focus': '9e-air',
@@ -450,6 +459,10 @@ test('D1: the rebinding changed NO computed value', () => {
     // same reason as the rest: so a change to them is a decision, not a drift.
     'admin-rail-scroll-track': '#1A2D42',
     'admin-rail-scroll-thumb': '#7E8898',
+    // Added later still, when the lockup's two lines stopped sharing one
+    // token. Same reason as the two above: pinned so a change to it is a
+    // decision rather than a drift.
+    'admin-rail-brand-accent': '#D4F73F',
   });
 });
 

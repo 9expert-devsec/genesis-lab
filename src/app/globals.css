@@ -155,6 +155,7 @@
                                       * this fill, focus is the ring below, active is the
                                       * solid blue pill. */
   --admin-rail-brand:      var(--9e-ice);     /* wordmark.                         16.64:1 */
+  --admin-rail-brand-accent: var(--9e-lime);
   --admin-rail-item:       #9EA6B2;  /* LITERAL, category 3 = --9e-slate-dp-400, which is
                                       * declared on :root AND again in .dark with the same
                                       * value. Inactive label.               7.08:1 */

@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { courseHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * Skill / program chips under the course hero.
@@ -21,9 +21,10 @@ export function SkillBreadcrumb({ course, skillHrefs = {}, programHref: programU
   const previous = course?.previous_course;
   if (!skills.length && !program && !previous) return null;
 
-  const previousHref = previous?.course_id
-    ? courseHref(String(previous.course_id).toLowerCase())
-    : null;
+  // Canonical path, from the shared rule. The route attaches urlAlias to
+  // previous_course before rendering — it is embedded in upstream's detail
+  // response and never passes through listPublicCourses, so nothing else would.
+  const previousHref = previous?.course_id ? courseLinkHref(previous) : null;
 
   // Shared between the <span> and <Link> branches so a linked chip is
   // pixel-identical to an unlinked one apart from its hover/focus affordance.

@@ -121,21 +121,35 @@ const CourseExtensionSchema = new mongoose.Schema(
      * custom URL must be able to store null, and under a NON-sparse unique index
      * the second such row collides with the first on the null key.
      *
-     * ── THIS DECLARATION DOES NOT REACH THE DATABASE BY ITSELF ──────────────
-     * Nothing in this repo applies index CHANGES. `dbConnect()` leaves Mongoose's
-     * `autoIndex` at its default, so models do call `createIndexes()` on first
-     * use — but that only CREATES MISSING indexes. `urlAlias_1` already exists as
-     * non-unique, and MongoDB rejects a same-key/different-options create with
-     * IndexOptionsConflict rather than altering it. `syncIndexes()`, which would
-     * drop and rebuild the mismatch, is called nowhere.
+     * ── THE INDEX IS LIVE. THIS PARAGRAPH USED TO SAY IT WAS NOT ────────────
+     * VERIFIED 2026-09-04 via `db.course_extensions.getIndexes()`:
      *
-     * So the index must be dropped and recreated BY HAND, once:
+     *     { v: 2, key: { urlAlias: 1 }, name: 'urlAlias_1',
+     *       unique: true, sparse: true }
+     *
+     * The hand migration this comment used to prescribe has been done. The
+     * database enforces uniqueness, and the application-level check in
+     * `saveCourseExtension` is the FRIENDLIER of two guards rather than the only
+     * one — it refuses before the MSDB write and names the course that already
+     * owns the alias, where the index would refuse afterwards with an E11000.
+     *
+     * KEPT AS A WARNING RATHER THAN DELETED, because the mechanism it described
+     * is still true and still bites: nothing in this repo applies index
+     * CHANGES. `dbConnect()` leaves Mongoose's `autoIndex` at its default, so
+     * models call `createIndexes()` on first use — but that only CREATES
+     * MISSING indexes. MongoDB rejects a same-key/different-options create with
+     * IndexOptionsConflict rather than altering it, and `syncIndexes()`, which
+     * would drop and rebuild a mismatch, is called nowhere. So the NEXT change
+     * to these options will also need doing by hand, and will also sit here
+     * looking applied until someone does it:
+     *
      *     db.course_extensions.dropIndex('urlAlias_1')
      *     db.course_extensions.createIndex({ urlAlias: 1 }, { unique: true, sparse: true })
-     * Until that is done this line is documentation, and the application-level
-     * check in saveCourseExtension is the only thing standing between two
-     * courses and one alias. Verify with `db.course_extensions.getIndexes()`:
-     * the goal state is `urlAlias_1 unique: true, sparse: true`.
+     *
+     * The reason this correction matters: a reader trusting the old text would
+     * believe two courses could still take one alias if the application check
+     * were bypassed — by a direct database edit, a restored backup, or a race
+     * between two admins — and would design around a hole that is closed.
      */
     urlAlias: { type: String, default: '', trim: true, index: true, unique: true, sparse: true },
 

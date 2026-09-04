@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readSource, countCallSites } from '../sourceScan.mjs';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * The wiring the pure tier cannot reach: the catch-all route is an async Server
@@ -108,10 +109,30 @@ test('the Preview button appends ?preview=1 only while the course is hidden', ()
 test('Preview still opens the course’s REAL public URL, both shapes', () => {
   // The alias when there is one, the derived legacy path when there is not.
   // A preview that opened some other URL would not be a preview of the page.
-  const { code } = readSource(FORM);
-  assert.match(code, /urlAlias\.trim\(\)\s*\?\s*`\/\$\{urlAlias\.trim\(\)\.replace\(\/\^\\\/\/, ''\)\}`/);
-  assert.match(code, /`\/\$\{String\(courseId \?\? ''\)\.toLowerCase\(\)\}-training-course`/);
+  //
+  // ── THE TWO BRANCHES MOVED INTO THE SHARED HELPER (ROUND U3) ─────────────
+  // This used to pin the form's own copy of the rule: a ternary on
+  // `urlAlias.trim()` that stripped a leading slash and re-added one, else a
+  // template building `/<code>-training-course`. Both branches now live in
+  // `courseCanonicalPath`, which every public link, the canonical tag, the
+  // JSON-LD and the sitemap also use — so the admin's preview and the page the
+  // site actually publishes cannot name different URLs any more.
+  //
+  // The CLAIM is unchanged and is what the test name still says. What it
+  // asserts is now the delegation plus the behaviour, rather than a copy of
+  // the rule.
+  const { code, withImports } = readSource(FORM);
+  assert.match(withImports, /import \{ courseLinkHref \}/, 'the form lost the shared helper');
+  assert.match(code, /const previewPath = courseLinkHref\(\{ course_id: courseId, urlAlias \}\)/,
+    'the form builds its own preview path again');
   assert.match(code, /href=\{previewHref\}/);
+
+  // Both shapes, behaviourally, against the same function the form calls.
+  assert.equal(courseLinkHref({ course_id: 'DA-PBI', urlAlias: '/pretty-course' }), '/pretty-course');
+  assert.equal(courseLinkHref({ course_id: 'DA-PBI', urlAlias: '' }), '/da-pbi-training-course');
+  // …and the leading-slash strip the old copy needed is not needed here: the
+  // helper never prepends, so a stored `/pretty` cannot become `//pretty`.
+  assert.ok(!courseLinkHref({ course_id: 'DA-PBI', urlAlias: '/pretty' }).startsWith('//'));
 });
 
 // ── the second half of the original defect ─────────────────────────────────

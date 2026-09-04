@@ -112,8 +112,14 @@ test('the scan is NOT vacuous: it classifies loadOrder as db-backed', () => {
   // selected by a name it owns rather than by position.
   const set = depsOf('src/lib/api/public-courses.js', 'listPublicCourses', 'loadOrder');
   assert.ok(set, 'listPublicCourses no longer declares a deps object');
-  assert.deepEqual([...set.deps].sort(), ['fetchUpstream', 'loadHidden', 'loadOrder']);
-  assert.deepEqual([...set.dbBacked].sort(), ['loadHidden', 'loadOrder']);
+  // `loadAliases` joined the set in round U3 — it carries the admin's urlAlias
+  // onto every list row so internal links can emit the canonical URL. It is
+  // db-backed for the same reason `loadHidden` is: its default reads
+  // course_extensions, and it FAILS OPEN, so an unstubbed harness passes while
+  // sitting on mongoose's buffering timeout. That is the exact shape this whole
+  // guard was built from.
+  assert.deepEqual([...set.deps].sort(), ['fetchUpstream', 'loadAliases', 'loadHidden', 'loadOrder']);
+  assert.deepEqual([...set.dbBacked].sort(), ['loadAliases', 'loadHidden', 'loadOrder']);
 });
 
 test('the db reach is TRANSITIVE and follows `await import()`', () => {

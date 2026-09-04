@@ -4,7 +4,7 @@
  * ── WHAT THIS IS KEYED ON, AND WHAT IT DELIBERATELY IGNORES ─────────────────
  *
  * ONLY `CourseExtension.isPublished`. That is the field the edit form's rail
- * control writes — labelled "แสดงผลในเว็บสาธารณะ (alias resolution)" — and the
+ * control writes — labelled "เผยแพร่หลักสูตรบนเว็บสาธารณะ" — and the
  * field the form header already renders as เผยแพร่ / ซ่อน
  * (CourseForm.jsx:1108). The labels here match that badge on purpose: one field,
  * one vocabulary, two places.

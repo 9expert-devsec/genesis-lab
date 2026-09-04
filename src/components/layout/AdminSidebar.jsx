@@ -411,7 +411,7 @@ export function AdminSidebarHeader({ collapsed = false, onToggleCollapsed }) {
           <p className="truncate text-base font-bold text-[var(--admin-rail-brand)]">
             Expert
           </p>
-          <p className="truncate text-[11px] font-bold text-[var(--admin-rail-brand)]">
+          <p className="truncate text-[11px] font-bold text-[var(--admin-rail-brand-accent)]">
             Admin Panel
           </p>
         </div>

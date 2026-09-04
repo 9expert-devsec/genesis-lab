@@ -19,7 +19,8 @@ import {
   Tag,
   TriangleAlert,
 } from 'lucide-react';
-import { courseHref, careerPathHref } from '@/lib/utils';
+import { careerPathHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
 import { coursePriceLabel } from '@/lib/coursePriceLabel';
 import { scheduleRegistrationHref } from '@/lib/schedule/scheduleRegistrationHref';
@@ -426,7 +427,8 @@ function MatchSnippet({ snippet, term }) {
 
 function CourseResultCard({ course, term }) {
   const id = course.course_id ?? '';
-  const href = courseHref(id ? String(id).toLowerCase() : '');
+  // Canonical path, from the shared rule — the row carries urlAlias.
+  const href = courseLinkHref(course);
   const cover = course.course_cover_url;
 
   return (
@@ -936,7 +938,7 @@ function ScheduleResultRow({ schedule, term }) {
       <div className="min-w-0 flex-1">
         {courseId ? (
           <Link
-            href={courseHref(String(courseId).toLowerCase())}
+            href={courseLinkHref(course)}
             className="line-clamp-1 text-sm font-semibold text-[#0D1B2A] hover:text-[#005CFF]"
           >
             {highlightText(courseName, term)}

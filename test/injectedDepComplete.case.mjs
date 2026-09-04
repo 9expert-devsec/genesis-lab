@@ -14,6 +14,7 @@ export function harness({ hidden = [], upstream = { items: [] } } = {}) {
   return {
     fetchUpstream: async () => upstream,
     loadHidden: async () => new Set(hidden),
+    loadAliases: async () => new Map(),
     loadOrder: async () => null,
   };
 }

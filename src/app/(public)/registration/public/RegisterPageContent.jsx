@@ -15,7 +15,7 @@ import {
   startedRounds,
 } from '@/lib/schedule/roundHasStarted';
 import { RegisterWizard } from '@/components/registration/RegisterWizard';
-import { courseHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * Base path for the public registration wizard. The wizard pushes
@@ -141,18 +141,28 @@ export async function RegisterPageContent({ searchParams, step }) {
   // Back-link target for step 1 — the detail page of the course being
   // registered for, not the catalog.
   //
-  // Legacy "<course_id lowercased>-training-course" slug, matching CourseCard.
-  // Deliberately NOT `ext.urlAlias`: aliases are stored WITH a leading slash
-  // (normalizeAlias in course-extensions.js) and are not required to carry the
+  // ── THIS USED TO REFUSE THE ALIAS, AND THE REASON HAS BEEN REMOVED ────────
+  // The note here said, correctly at the time: "Deliberately NOT ext.urlAlias:
+  // aliases are stored WITH a leading slash and are not required to carry the
   // '-training-course' suffix, so courseHref would turn `/foo` into
   // `//foo-training-course` — a URL resolveCourse cannot match by either of its
-  // two paths. The legacy slug always resolves via resolveCourse's path 2.
+  // two paths."
   //
-  // courseHref('') already returns '/training-course', so a course with no id
-  // falls back to the catalog without a second guard here.
-  const courseDetailHref = courseHref(
-    course.course_id ? String(course.course_id).toLowerCase() : ''
-  );
+  // Every clause of that is about what `courseHref` DOES TO an alias, not about
+  // whether the alias is the right destination. `courseLinkHref` performs no
+  // join — it returns `courseCanonicalPath`'s answer, which already carries
+  // exactly one leading slash — so the malformed URL the note was avoiding
+  // cannot be produced. The decision was sound and its premise is gone.
+  //
+  // It costs no query: `ext` is already fetched above, in the same Promise.all,
+  // for the Omise toggle.
+  //
+  // The fallback is unchanged — a course with no id yields '/training-course',
+  // the catalogue, exactly as `courseHref('')` did.
+  const courseDetailHref = courseLinkHref({
+    course_id: course.course_id,
+    urlAlias: ext?.urlAlias,
+  });
 
   // ── Omise online-payment inputs ────────────────────────────────
   // The toggle lives on the CourseExtension sidecar; per-round price

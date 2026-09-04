@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { cn, courseHref, formatDuration, formatPrice } from '@/lib/utils';
+import { cn, formatDuration, formatPrice } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * CourseCard — summary tile for a public course.
@@ -43,7 +44,9 @@ export function CourseCard({ course, className, showPrice = true }) {
   } = course;
 
   const duration = formatDuration(course);
-  const href = courseHref(id ? String(id).toLowerCase() : '');
+  // Canonical path, from the shared rule. This card is also what
+  // RelatedCourses and the four PageBuilder course sections render.
+  const href = courseLinkHref(course);
   const icon = program?.programiconurl;
   const programLabel = program?.program_name;
 

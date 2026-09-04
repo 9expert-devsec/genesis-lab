@@ -163,10 +163,16 @@ test('the rail actually uses the rail tokens — the guards are not vacuous', ()
   const used = new Set([...code.matchAll(/var\(--(admin-rail-[\w-]+)\)/g)].map((m) => m[1]));
   for (const token of [
     'admin-rail-surface', 'admin-rail-divider', 'admin-rail-hover',
-    'admin-rail-brand', 'admin-rail-item', 'admin-rail-group',
+    'admin-rail-brand', 'admin-rail-brand-accent',
+    'admin-rail-item', 'admin-rail-group',
     'admin-rail-active-bg', 'admin-rail-active-fg', 'admin-rail-focus',
     'admin-rail-card', 'admin-rail-card-hover', 'admin-rail-card-fg',
     'admin-rail-card-muted',
+    // --admin-rail-scroll-track and --admin-rail-scroll-thumb are absent on
+    // purpose and must stay absent: the scrollbar is painted by rules in
+    // globals.css, not by this component, so they never appear in `code` and
+    // adding them here would go red for the wrong reason. Their positive claim
+    // lives in test/fs/adminRailScrollbar instead.
   ]) {
     assert.ok(used.has(token), `--${token} is declared but never used by the rail`);
   }

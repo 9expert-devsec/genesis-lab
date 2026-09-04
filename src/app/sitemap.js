@@ -2,6 +2,9 @@ import { siteConfig } from '@/config/site';
 import { dbConnect } from '@/lib/db/connect';
 import Article from '@/models/Article';
 import CustomPage from '@/models/CustomPage';
+import CourseExtension from '@/models/CourseExtension';
+import { listPublicCourses } from '@/lib/api/public-courses';
+import { courseSitemapEntries } from '@/lib/courses/courseSitemapEntries';
 
 // Regenerate hourly — fresh enough for new articles, cheap enough that
 // crawlers don't trigger a Mongo round-trip on every hit.
@@ -74,5 +77,42 @@ export default async function sitemap() {
     // swallow — static + article entries still ship
   }
 
-  return [...staticEntries, ...articleEntries, ...customPageEntries];
+  /**
+   * ── COURSES, ONE URL EACH ────────────────────────────────────────────────
+   * They were absent entirely until this round: the sitemap listed twelve
+   * static routes, articles and custom pages, and said nothing about the
+   * ~77 course detail pages that are the site's reason for existing.
+   *
+   * ONE entry per course, in the canonical form — the same
+   * `courseCanonicalPath` the page's <link rel="canonical"> and the JSON-LD
+   * use. A course has two working URLs, and emitting both would be this file
+   * telling Google to index exactly the duplicate the canonical tag is trying
+   * to stop declaring.
+   *
+   * `listPublicCourses()` with its default `includeHidden: false` is what
+   * excludes the hidden ones (`extension.isPublished === false`), through the
+   * one hidden-set loader every other listing uses. Iterating COURSES rather
+   * than extensions is what excludes the orphans — an extension whose courseId
+   * matches no upstream course is simply never reached, so the three known
+   * dead rows cannot appear. Both exclusions matter because a published URL
+   * that answers 404 spends crawl budget and, repeated, reads as a quality
+   * problem with the whole site.
+   *
+   * Best-effort, in the same defensive style as the two blocks above: the
+   * upstream API is a network hop and a sitemap without courses is far better
+   * than a 500 at /sitemap.xml.
+   */
+  let courseEntries = [];
+  try {
+    await dbConnect();
+    const [{ items: courses }, extensions] = await Promise.all([
+      listPublicCourses(),
+      CourseExtension.find({}).select('courseId urlAlias isPublished updatedAt').lean(),
+    ]);
+    courseEntries = courseSitemapEntries({ courses, extensions, base });
+  } catch {
+    // swallow — static + article + custom-page entries still ship
+  }
+
+  return [...staticEntries, ...articleEntries, ...customPageEntries, ...courseEntries];
 }

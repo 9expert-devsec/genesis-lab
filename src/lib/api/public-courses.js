@@ -11,7 +11,12 @@
 import { aiFetch, unwrap } from './client';
 import { loadCourseOrder } from '@/lib/courses/courseOrderStore';
 import { orderCoursesInCategory, orderCoursesGlobally } from '@/lib/courses/courseOrder';
-import { dropHiddenCourses, loadHiddenCourseIds } from '@/lib/courses/hiddenCourses';
+import {
+  dropHiddenCourses,
+  loadHiddenCourseIds,
+  loadCourseAliasMap,
+  attachAliases,
+} from '@/lib/courses/hiddenCourses';
 
 const PATH = '/public-course';
 
@@ -60,7 +65,19 @@ export async function listPublicCourses(
    * called" is what let the original gate sit here, green, covering one surface
    * out of twelve. Production callers pass nothing.
    */
-  { fetchUpstream = aiFetch, loadHidden = loadHiddenCourseIds, loadOrder = loadCourseOrder } = {}
+  {
+    fetchUpstream = aiFetch,
+    loadHidden = loadHiddenCourseIds,
+    loadOrder = loadCourseOrder,
+    /**
+     * The alias map, injectable for the same reason the three above are: what
+     * this function now does is decide WHICH rows come back AND what each one
+     * is named, and neither is observable from source text. An fs guard
+     * asserting "attachAliases is called" is the shape that let the original
+     * hidden filter cover one surface out of twelve while staying green.
+     */
+    loadAliases = loadCourseAliasMap,
+  } = {}
 ) {
   const raw = await fetchUpstream(PATH, {
     params: { skill, program },
@@ -112,6 +129,29 @@ export async function listPublicCourses(
       }) };
     }
   }
+
+  /**
+   * ── THE ALIAS IS ATTACHED HERE, ABOVE THE includeHidden RETURN ────────────
+   * ROUND U3, and the position is the whole of it. Thirteen of the twenty-five
+   * call sites take the `includeHidden` path — syncNavMenuData, which builds
+   * the mega menu, and syncLandingData, which builds the home page's cached
+   * course strip, among them. Attaching below the early return would give the
+   * alias to the catalogue and the schedule page and silently withhold it from
+   * the two highest-traffic surfaces, which would then keep emitting the code
+   * form while every test on the other surfaces passed. Exactly the ordering
+   * argument the course-order block above makes, for the same reason.
+   *
+   * COSTS NO EXTRA QUERY. `loadCourseAliasMap` is a projection of the same
+   * per-request read `loadHidden` already performs, memoised by React.cache, so
+   * whichever is called first pays for both.
+   *
+   * The alias travels as `urlAlias` on the row, exactly as stored — leading
+   * slash included. `courseCanonicalPath` is what interprets it; nothing on the
+   * way strips or re-adds a slash, because doing that at a call site is how
+   * `//alias` shipped twice.
+   */
+  const aliasByCode = await loadAliases();
+  result = { ...result, items: attachAliases(result.items, aliasByCode) };
 
   if (includeHidden) return result;
 

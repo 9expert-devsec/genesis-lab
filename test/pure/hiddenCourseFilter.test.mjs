@@ -55,7 +55,7 @@ test('codes compare uppercased, so a stored casing that lags upstream still hide
   // exact-match set would silently stop hiding that course.
   const hidden = await loadHiddenCourseIds({
     connect: async () => {},
-    model: fakeModel([{ courseId: 'Power-Apps' }]),
+    model: fakeModel([{ courseId: 'Power-Apps', isPublished: false }]),
   });
   assert.equal(isHiddenCourse(hidden, 'POWER-APPS'), true);
   assert.equal(isHiddenCourse(hidden, 'power-apps'), true);
@@ -158,19 +158,42 @@ test('CONTROL: the same group is present when its course is visible', () => {
 
 // ── the read itself ─────────────────────────────────────────────────────────
 
-test('the read asks for EXPLICIT false and projects only the code', async () => {
-  // Two claims, both load-bearing. `{isPublished:false}` and not
-  // `{$ne:true}`: a row with the field absent is PUBLISHED, which is what the
-  // schema default and resolveCourse's `isPublished !== false` both say, and
-  // the three must not drift. The projection keeps the payload independent of
-  // how large the catalog grows.
+test('EXPLICIT false still decides — the test moved from the query to the rows', async () => {
+  /**
+   * ── THE CLAIM IS UNCHANGED; WHERE IT IS ENFORCED MOVED ────────────────────
+   * This used to assert `find({ isPublished: false }, { courseId: 1, _id: 0 })`
+   * — the filter did the deciding, server-side.
+   *
+   * ROUND U3 widened that read to ALL rows, because internal links needed each
+   * course's `urlAlias` and a hidden-only filter cannot see the published
+   * majority where almost every alias lives. So the same one read now feeds two
+   * structures, and the hidden decision happens on the rows instead.
+   *
+   * `=== false` and NOT `!isPublished` is the half that must not drift: a row
+   * with the field ABSENT is PUBLISHED, which is what the schema default and
+   * resolveCourse's `isPublished !== false` both say. Asserting it against the
+   * rows is strictly stronger than asserting it against the query string was —
+   * a wrong filter and a wrong predicate both show up here now.
+   */
   let seen = null;
-  await loadHiddenCourseIds({
+  const hidden = await loadHiddenCourseIds({
     connect: async () => {},
-    model: fakeModel([], { onQuery: (q) => { seen = q; } }),
+    model: fakeModel(
+      [
+        { courseId: 'FLAG-FALSE', isPublished: false },
+        { courseId: 'FLAG-TRUE', isPublished: true },
+        { courseId: 'FLAG-ABSENT' },
+      ],
+      { onQuery: (q) => { seen = q; } },
+    ),
   });
-  assert.deepEqual(seen.filter, { isPublished: false });
-  assert.deepEqual(seen.projection, { courseId: 1, _id: 0 });
+  assert.deepEqual([...hidden], ['FLAG-FALSE'],
+    'only an explicit false hides; absent and true are both published');
+
+  // The read is unfiltered now, and projects the three fields the two derived
+  // structures need — no more. The payload is 81 small rows, not the catalog.
+  assert.deepEqual(seen.filter, {});
+  assert.deepEqual(seen.projection, { courseId: 1, urlAlias: 1, isPublished: 1, _id: 0 });
 });
 
 test('ONE read, whatever the size of the catalog', async () => {
@@ -179,7 +202,7 @@ test('ONE read, whatever the size of the catalog', async () => {
   const hidden = await loadHiddenCourseIds({
     connect: async () => {},
     model: fakeModel(
-      Array.from({ length: 40 }, (_, i) => ({ courseId: `C-${i}` })),
+      Array.from({ length: 40 }, (_, i) => ({ courseId: `C-${i}`, isPublished: false })),
       { onQuery: () => { queries += 1; } }
     ),
   });
@@ -208,7 +231,7 @@ test('CONTROL: the failure log is silent on the happy path', () => {
   const logs = [];
   return loadHiddenCourseIds({
     connect: async () => {},
-    model: fakeModel([{ courseId: 'X' }]),
+    model: fakeModel([{ courseId: 'X', isPublished: false }]),
     error: (msg) => logs.push(msg),
   }).then((hidden) => {
     assert.equal(hidden.size, 1);

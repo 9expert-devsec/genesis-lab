@@ -48,7 +48,7 @@ import {
   warnBlockedBannerLink,
 } from '@/lib/bannerLinkUrl';
 import { coursePriceLabel, isInhouseOnlyPrice } from '@/lib/coursePriceLabel';
-import { courseHref } from '@/lib/utils';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 import { onlineCourseHref } from '@/lib/onlineCourseHref';
 
 /** The section's own chrome. Not from the database — there is no field for it. */
@@ -491,7 +491,7 @@ function toItem(banner, resolved) {
   if (!detailsUrl && isCourse) {
     detailsUrl = online
       ? onlineCourseHref(course)
-      : courseHref(String(course.course_id ?? '').trim().toLowerCase());
+      : courseLinkHref(course);
   }
   if (!detailsUrl && isArticle) {
     detailsUrl = '/articles/' + article.slug;

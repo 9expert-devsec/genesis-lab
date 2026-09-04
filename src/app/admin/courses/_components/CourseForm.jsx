@@ -40,6 +40,7 @@ import { withListQuery } from '@/lib/courses/adminListQuery';
  */
 import { COURSE_SECTION_LABELS } from '@/lib/courseSectionNav';
 import { UnsavedChangesDialog } from './UnsavedChangesDialog';
+import { courseLinkHref } from '@/lib/courses/courseLinkHref';
 
 /**
  * Genesis course editor — MSDB field parity.
@@ -1455,9 +1456,11 @@ export function CourseForm({
    * on a published course, and the preview arm serves a published one too. So
    * neither an unsaved toggle nor a stale one produces a broken link.
    */
-  const previewPath = urlAlias.trim()
-    ? `/${urlAlias.trim().replace(/^\//, '')}`
-    : `/${String(courseId ?? '').toLowerCase()}-training-course`;
+  // The SAME rule the public links, the canonical tag and the sitemap use, so
+  // an admin previewing a course sees the URL the site will actually publish.
+  // The local copy this replaces stripped a leading slash and re-added one;
+  // courseLinkHref performs no join, so there is nothing to strip.
+  const previewPath = courseLinkHref({ course_id: courseId, urlAlias });
   const previewHref = isPublished ? previewPath : `${previewPath}?preview=1`;
 
   return (

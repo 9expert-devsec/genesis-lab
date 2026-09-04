@@ -381,9 +381,9 @@ async function runRevert(db, runId) {
   const expectOriginal = new Set(
     decided
       .filter((d) => d.action === REVERT.RESTORE || d.action === REVERT.ALREADY_REVERTED)
-      .map((d) => d.rec._id?.toString() ?? `${d.rec.collection} ${d.rec.documentId} ${d.rec.fieldPath}`),
+      .map((d) => d.rec._id?.toString() ?? `${d.rec.collection}\x00${d.rec.documentId}\x00${d.rec.fieldPath}`),
   );
-  const idOf = (rec) => rec._id?.toString() ?? `${rec.collection} ${rec.documentId} ${rec.fieldPath}`;
+  const idOf = (rec) => rec._id?.toString() ?? `${rec.collection}\x00${rec.documentId}\x00${rec.fieldPath}`;
 
   const failures = [];
   let verified = 0;

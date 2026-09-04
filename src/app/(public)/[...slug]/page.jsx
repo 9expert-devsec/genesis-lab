@@ -61,6 +61,8 @@ import { getOrderedPrograms } from '@/lib/actions/program-order';
 import { ProgramPageClient } from '@/app/(public)/program/[slug]/_components/ProgramPageClient';
 import { SkillPageClient } from '@/app/(public)/skill/[slug]/_components/SkillPageClient';
 import { buildCourseJsonLd } from '@/lib/courses/buildCourseJsonLd';
+import { courseCanonicalUrl } from '@/lib/courses/courseCanonicalPath';
+import { attachAliases, loadCourseAliasMap } from '@/lib/courses/hiddenCourses';
 import {
   getCustomPageBySlug,
   getCustomPageBySlugAny,
@@ -404,14 +406,38 @@ export async function generateMetadata({ params, searchParams }) {
     const ogImage =
       extension?.ogImage?.trim() || course.course_cover_url || '';
 
+    /**
+     * ── THE COURSE CANONICAL DOES NOT FOLLOW THE REQUEST ──────────────────
+     * Every other branch in this function uses `pageUrl`, which is the URL the
+     * visitor arrived at, and that is correct for them: a career path, a
+     * program, a skill, a custom page and a builder page each have ONE URL, so
+     * self-canonicalising says something true.
+     *
+     * A course has two — the admin's alias and the derived
+     * /<code>-training-course — and both serve 200. Self-canonicalising there
+     * meant each of the 77 aliased courses shipped two pages that each declared
+     * THEMSELVES canonical, which is the site telling a crawler to pick for us.
+     *
+     * So this branch, and only this branch, asks courseCanonicalPath. Reaching
+     * the code URL now emits the alias; reaching the alias emits the same
+     * alias. `pageUrl` remains the fallback for the case the helper cannot name
+     * — no course_id and no alias — because the old behaviour is the right
+     * thing to degrade to.
+     *
+     * NOTHING ABOUT RESOLUTION CHANGES. Both URLs still serve 200. This is a
+     * declaration, not a redirect.
+     */
+    const canonicalUrl =
+      courseCanonicalUrl(course, extension, process.env.NEXT_PUBLIC_SITE_URL) || pageUrl;
+
     return {
       title,
       description,
-      alternates: { canonical: pageUrl },
+      alternates: { canonical: canonicalUrl },
       openGraph: {
         title,
         description,
-        url: pageUrl,
+        url: canonicalUrl,
         images: ogImage ? [{ url: ogImage }] : [],
       },
     };
@@ -690,9 +716,13 @@ export default async function CatchAllPage({ params, searchParams }) {
       schedules,
       siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
     });
-    const courseSlug =
-      extension?.urlAlias || `${course.course_id?.toLowerCase?.()}-training-course`;
-    const courseUrl = `${process.env.NEXT_PUBLIC_SITE_URL}/${courseSlug}`;
+    // The BreadcrumbList's last item is the course itself, so it is the same
+    // claim as the canonical tag and must be the same URL. This was a fourth
+    // copy of the rule — `${SITE}/${extension.urlAlias}` — and carried the same
+    // double-slash defect buildCourseJsonLd had, since an alias already starts
+    // with one.
+    const courseUrl =
+      courseCanonicalUrl(course, extension, process.env.NEXT_PUBLIC_SITE_URL);
     const breadcrumbJsonLd = {
       '@context': 'https://schema.org',
       '@type': 'BreadcrumbList',
@@ -749,6 +779,10 @@ export default async function CatchAllPage({ params, searchParams }) {
             RelatedCourses, whose cards carry capsules of their own. */}
         <CourseDetail
           course={course}
+          relatedCoursesWithAliases={attachAliases(
+            Array.isArray(course.related_courses) ? course.related_courses : [],
+            await loadCourseAliasMap(),
+          )}
           skillHrefs={skillHrefs}
           skillSlugs={linkability.skillSlugs}
           courseProgramHref={courseProgramHref}
@@ -845,6 +879,15 @@ export default async function CatchAllPage({ params, searchParams }) {
 
 function CourseDetail({
   course,
+  /**
+   * `course.related_courses` with each row's `urlAlias` attached.
+   *
+   * Attached by the async page rather than here: those rows are EMBEDDED in
+   * upstream's detail response and never pass through `listPublicCourses`, so
+   * nothing else would have given them an alias — and the lookup is async while
+   * this component is not.
+   */
+  relatedCoursesWithAliases = [],
   skillHrefs = {},
   skillSlugs = {},
   courseProgramHref = null,
@@ -864,9 +907,29 @@ function CourseDetail({
   const stickyInhouseHref = isInhouseOnly
     ? inhouseRegistrationHref(course.course_id)
     : null;
-  const relatedCourses = Array.isArray(course.related_courses)
-    ? course.related_courses
-    : [];
+  /**
+   * ── ALIASES FOR THE COURSES THIS PAGE LINKS TO, BUT DID NOT FETCH ─────────
+   * `related_courses` and `previous_course` are EMBEDDED in upstream's detail
+   * response — they never pass through `listPublicCourses`, so nothing has
+   * attached `urlAlias` to them and the related-course cards and the
+   * breadcrumb's prerequisite chip would both emit the code form while every
+   * list surface emitted the alias.
+   *
+   * COSTS NO EXTRA QUERY. `loadCourseAliasMap` is a projection of the one
+   * per-request read `loadHiddenCourseIds` already performs, and the public
+   * header calls that on every page through getNavMenuData — so by the time
+   * this runs, React.cache is answering from memory.
+   */
+  // Attached by the async page above and passed in, because THIS COMPONENT IS
+  // SYNCHRONOUS — an `await` here compiles to "await isn't allowed in a
+  // non-async function" and only `next build` says so, since no test tier
+  // compiles this route.
+  const relatedCourses = relatedCoursesWithAliases;
+  // NOT plumbed to SkillBreadcrumb, and that is a finding rather than an
+  // omission: its prerequisite <Link> is COMMENTED OUT (SkillBreadcrumb.jsx:97),
+  // so `previousHref` is computed there and never rendered. Attaching an alias
+  // for it would be plumbing a dead path. The component calls the shared helper
+  // anyway, so it emits the canonical URL if that block is ever revived.
   const hasRelated = relatedCourses.length > 0;
   const gallery = Array.isArray(extension?.gallery) ? extension.gallery : [];
   // `getEarlyBirdByCourse` joins the linked Promotion as `promotion` so
