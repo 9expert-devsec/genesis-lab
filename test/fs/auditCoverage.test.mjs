@@ -752,7 +752,26 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // ประวัติการดำเนินการ section reads — rather than an AdminAuditLog row, which is
 // the same system pageBuilder.js uses and is likewise outside the sweep. The
 // recordAdminAction sweep of this file remains a separate open ticket.
-const MUTATING_EXPORT_COUNT = 180;
+// ── 180 → 183: managing Early Bird from the promotion side ─────────────────
+// THREE new exports in course-promos.js — savePromotionEarlyBird,
+// releaseEarlyBirdFromPromotion and deletePromotionEarlyBird. All three write
+// in their own body (the first through the file-local writeEarlyBird, the other
+// two through EarlyBirdConfig directly), so the file-local classifier sees all
+// three and the depth-0 figure in W2-b moves with them, 172 → 175. Both numbers
+// move together and the delta stays 8 — MEASURED, not summed: the sum assertion
+// below is what confirmed none of the three needed a REACHED_THROUGH_IMPORT
+// entry.
+//
+// The round's other new exports are READ-ONLY and correctly absent from both
+// figures: getEarlyBirdsForPromotion, getEarlyBirdClaimForPromotion,
+// getCourseRoundsForPromotion and getEarlyBirdClaim.
+//
+// course-promos.js is NOT in SWEPT_FILES, and this round does not change that.
+// It records no audit row at all — which is precisely why the Early Bird
+// overwrites this round makes impossible were, historically, unrecoverable:
+// nothing recorded them. Sweeping this file is a separate open ticket
+// (docs/early-bird-audit-trail.md), deliberately not folded in here.
+const MUTATING_EXPORT_COUNT = 183;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -974,7 +993,7 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 172,
+    zero, 175,
     'ROUND: the CustomPage draft split, 169 → 172 — saveCustomPageDraft, ' +
     'publishCustomPage and discardCustomPageDraft all call ' +
     'CustomPage.findByIdAndUpdate in their own body, so depth 0 sees all three. ' +
@@ -1018,7 +1037,13 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'commitCourseVersion (course-versions.js, a NEW module) writes only through ' +
     'the imported recordCourseContentVersion, so depth 0 cannot see it and the ' +
     'DELTA moved instead, 7 -> 8. Its sibling captureCoursePreImage is in ' +
-    'neither figure because it only reads.'
+    'neither figure because it only reads. ' +
+    'EARLY BIRD FROM THE PROMOTION SIDE: 172 -> 175, +3 — savePromotionEarlyBird, ' +
+    'releaseEarlyBirdFromPromotion and deletePromotionEarlyBird added to ' +
+    'course-promos.js. Each writes in its OWN body (the first via the file-local ' +
+    'writeEarlyBird, the other two via EarlyBirdConfig directly), so depth 0 sees ' +
+    'all three, both pins move together and the delta stays 8. The round\'s four ' +
+    'other new exports only read and are in neither figure.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),

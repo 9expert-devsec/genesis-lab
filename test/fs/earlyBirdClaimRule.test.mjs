@@ -42,6 +42,14 @@ const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const OWNED_PROMOS = ['PROMO-A', 'PROMO-B'];
 
 /**
+ * The course codes this file owns. Deletes are SCOPED to them rather than
+ * clearing the collection, because the EarlyBirdConfig store — private to the
+ * stub, not to a file — is shared with test/fs/promotionEarlyBirdActions, which
+ * runs concurrently. A wholesale clear there wiped rows here and vice versa.
+ */
+const OWNED_COURSES = ['MSE-AI', 'PYTHON-1'];
+
+/**
  * EarlyBirdConfig is private to this file, so it clears wholesale. `Promotion`
  * is the SHARED global store, so only the ids this file creates are removed —
  * clearing it wholesale would delete another file's fixtures. Without this the
@@ -49,7 +57,7 @@ const OWNED_PROMOS = ['PROMO-A', 'PROMO-B'];
  * the wrong promotion, which is a fixture leak, not a defect in the rule.
  */
 async function reset() {
-  await EarlyBirdConfig.deleteMany({});
+  await EarlyBirdConfig.deleteMany({ course_id: { $in: OWNED_COURSES } });
   await Promotion.deleteMany({ promotion_id: { $in: OWNED_PROMOS } });
 }
 
