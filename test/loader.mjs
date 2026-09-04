@@ -176,11 +176,18 @@ export const STUBS = {
   // a hang rather than a kill.
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
-  "@/models/Admin": path.join(ROOT, "test", "stub-model-admin.mjs"),
-  // The recruits actions are executed by test/pure/recruitHeadcountWrite, which
-  // is the tier that can answer "does the SERVER normalise a payload that
-  // bypassed the input" — a question no source scan can.
-  "@/models/Recruit": path.join(ROOT, "test", "stub-model-recruit.mjs"),
+  // course-promos imports both at module scope; EarlyBirdConfig carries the
+  // unique course_id index its refusal path depends on.
+  "@/models/EarlyBirdConfig": path.join(
+    ROOT,
+    "test",
+    "stub-model-early-bird-config.mjs",
+  ),
+  "@/models/CoursePromoLink": path.join(
+    ROOT,
+    "test",
+    "stub-model-course-promo-link.mjs",
+  ),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",
@@ -243,6 +250,18 @@ export const STUBS = {
   // a hang rather than a kill.
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
+  // course-promos imports both at module scope; EarlyBirdConfig carries the
+  // unique course_id index its refusal path depends on.
+  "@/models/EarlyBirdConfig": path.join(
+    ROOT,
+    "test",
+    "stub-model-early-bird-config.mjs",
+  ),
+  "@/models/CoursePromoLink": path.join(
+    ROOT,
+    "test",
+    "stub-model-course-promo-link.mjs",
+  ),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",

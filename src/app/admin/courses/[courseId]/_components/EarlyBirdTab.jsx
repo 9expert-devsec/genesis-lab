@@ -61,14 +61,38 @@ export function EarlyBirdTab({
     e.preventDefault();
     setSaving(true);
     setMessage(null);
-    const result = await saveEarlyBird(courseId, {
+    const payload = {
       promotion_id: promotionId,
       schedule_id: scheduleId,
       label_th: labelTh,
       special_price: specialPrice === '' ? null : Number(specialPrice),
       deadline: deadline ? new Date(deadline).toISOString() : null,
       is_active: isActive,
-    });
+    };
+    let result = await saveEarlyBird(courseId, payload);
+
+    /**
+     * ADOPTION IS CONFIRMED, NEVER A SIDE EFFECT.
+     *
+     * The row exists and belongs to no promotion; picking one here moves it
+     * under that promotion. The writer refuses to do that silently and asks
+     * for `adopt`, so the author is told what is about to change before it
+     * does. Declining leaves the row exactly as it was.
+     *
+     * Nothing is carried into the form on this path because the form was
+     * already seeded from THIS row — the values on screen are the row's own.
+     */
+    if (result?.code === 'EB_NEEDS_ADOPTION') {
+      const agreed = typeof window !== 'undefined' &&
+        window.confirm(`${result.error}\n\n(${courseId})`);
+      if (!agreed) {
+        setSaving(false);
+        setMessage({ type: 'error', text: 'ยกเลิกแล้ว — ยังไม่ได้ผูกกับโปรโมชัน' });
+        return;
+      }
+      result = await saveEarlyBird(courseId, { ...payload, adopt: true });
+    }
+
     setSaving(false);
     if (result?.ok) {
       setMessage({ type: 'ok', text: 'บันทึกเรียบร้อย ✓' });
