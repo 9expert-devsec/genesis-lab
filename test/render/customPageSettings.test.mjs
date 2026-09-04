@@ -454,3 +454,108 @@ test('the Advanced HTML menu is IMPORTED, never retyped', () => {
       `the menu label "${label}" is declared here as well as in the shell`);
   }
 });
+
+
+// ── 6. the slug is now the editor's ONLY slug input ────────────────────────
+
+/**
+ * The main column's slug row was removed this round, so this field stopped
+ * being one of two views of `slug` and became the only one. Everything an
+ * author could previously do without opening the dialog — see the slug, see it
+ * go red, read why a save was refused — now has to work HERE.
+ *
+ * These are render assertions rather than source ones because this body is the
+ * half that renders in this tier, and "the message appears next to the field"
+ * is a claim about output.
+ */
+
+test('the slug field is present, and is the only slug input in the dialog', () => {
+  const html = customBody({ initialSection: 'general' });
+  const doc = docOf(html);
+  const inputs = [...doc.querySelectorAll('input[data-testid="custom-page-slug-input"]')];
+  assert.equal(inputs.length, 1,
+    `expected exactly one slug input, found ${inputs.length}`);
+  assert.equal(inputs[0].getAttribute('value'), 'test-page',
+    'the slug input does not show the current slug');
+});
+
+test('with NO refusal the field does not steal focus and shows no server error', () => {
+  const html = customBody({ initialSection: 'general' });
+  assert.equal(/autofocus/i.test(html), false,
+    'the slug field grabs focus on an ordinary open, claiming an error that is not there');
+  assert.equal(html.includes('Slug นี้ถูกใช้แล้ว'), false,
+    'a server refusal renders when none was passed');
+});
+
+test('a REFUSED save focuses the field and renders the reason beside it', () => {
+  /**
+   * The failure this guards is specific: บันทึกฉบับร่าง is pressed with the
+   * dialog SHUT, the server refuses because the slug is taken, and the author
+   * is told nothing they can act on. Both halves are asserted — the focus, so
+   * the caret lands on the field, and the message, so they know why.
+   */
+  const html = customBody({
+    initialSection: 'general',
+    slugErrorAt: 1,
+    slugError: 'Slug นี้ถูกใช้แล้ว',
+  });
+  assert.match(html, /autofocus/i,
+    'the slug field does not take focus after a refusal — the dialog opens on the right '
+    + 'section but the author still has to hunt for the field');
+  assert.ok(html.includes('Slug นี้ถูกใช้แล้ว'),
+    'the server refusal is not rendered beside the field it is about');
+
+  // …and it is rendered as an ALERT, not as quiet grey helper text.
+  const doc = docOf(html);
+  const alerts = [...doc.querySelectorAll('[role="alert"]')]
+    .map((n) => n.textContent.trim());
+  assert.ok(alerts.some((t) => t.includes('Slug นี้ถูกใช้แล้ว')),
+    `the refusal is not in an alert. Alerts present: ${JSON.stringify(alerts)}`);
+});
+
+test('the MSDB promotion refusal reaches the same place', () => {
+  // The guard added two rounds ago produces its own message, and it must land
+  // beside the field like every other slug refusal.
+  const html = customBody({
+    initialSection: 'general',
+    slugErrorAt: 2,
+    slugError: 'Slug นี้ชนกับโปรโมชันใน MSDB — ใช้ไม่ได้',
+  });
+  assert.ok(html.includes('Slug นี้ชนกับโปรโมชันใน MSDB'),
+    'the MSDB collision refusal never reaches the author');
+});
+
+test('CONTROL: the two states really are different renders', () => {
+  /**
+   * Both assertions above would pass against a body that ignored the props
+   * entirely if the "no refusal" case were also asserting absence. This
+   * requires the SAME component to produce different output for the two, so
+   * neither case is describing a constant.
+   */
+  const quiet = customBody({ initialSection: 'general' });
+  const refused = customBody({
+    initialSection: 'general', slugErrorAt: 1, slugError: 'Slug นี้ถูกใช้แล้ว',
+  });
+  assert.notEqual(quiet, refused,
+    'the refusal props change nothing in the output — the field is inert');
+  assert.equal(/autofocus/i.test(quiet), false);
+  assert.equal(/autofocus/i.test(refused), true);
+});
+
+test('an invalid-FORMAT slug reddens the field without any server round trip', () => {
+  // The client-side half, unchanged by the move but now the only place it shows.
+  const html = customBody({ initialSection: 'general', slug: 'Bad Slug!' });
+  assert.ok(html.includes('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น'),
+    'a malformed slug no longer says so in the dialog');
+  const doc = docOf(html);
+  const input = doc.querySelector('input[data-testid="custom-page-slug-input"]');
+  assert.equal(input.getAttribute('aria-invalid'), 'true',
+    'the malformed slug does not carry the invalid ring');
+});
+
+test('CONTROL: a VALID slug is not marked invalid', () => {
+  const doc = docOf(customBody({ initialSection: 'general', slug: 'fine-slug' }));
+  const input = doc.querySelector('input[data-testid="custom-page-slug-input"]');
+  assert.equal(input.getAttribute('aria-invalid'), null,
+    'every slug renders as invalid, so the assertion above proves nothing');
+});
