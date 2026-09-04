@@ -27,6 +27,7 @@ export function ExtensionEditor({
   initialData,
   initialPromoLinks = [],
   initialEarlyBird = null,
+  initialEarlyBirdClaim = null,
   initialPromos = [],
   initialFaqs = [],
 }) {
@@ -145,6 +146,7 @@ export function ExtensionEditor({
         <EarlyBirdTab
           courseId={courseId}
           initialData={initialEarlyBird}
+          initialClaim={initialEarlyBirdClaim}
           initialPromos={initialPromos}
         />
       )}

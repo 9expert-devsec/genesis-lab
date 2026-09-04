@@ -24,6 +24,7 @@ function toDatetimeLocal(date) {
 export function EarlyBirdTab({
   courseId,
   initialData = null,
+  initialClaim = null,
   initialPromos = [],
 }) {
   const router = useRouter();
@@ -113,6 +114,8 @@ export function EarlyBirdTab({
         เปิดใช้งาน Early Bird
       </label>
 
+      <ClaimNotice claim={initialClaim} selectedPromotionId={promotionId} />
+
       <Field label="โปรโมชันที่แสดง (ใช้ thumbnail จากโปรโมชันนี้)">
         <select
           value={promotionId}
@@ -195,6 +198,51 @@ export function EarlyBirdTab({
       </div>
     </form>
   );
+}
+
+/**
+ * Says up front who holds this course's Early Bird, so the author learns it
+ * before pressing บันทึก rather than from a red message afterwards.
+ *
+ * ADVISORY ONLY, and derived entirely from a snapshot the page already loaded —
+ * `initialClaim` plus whatever is selected right now. It runs no query and
+ * decides nothing: `writeEarlyBird` refuses independently, because this snapshot
+ * is stale the moment another admin saves. A notice that agreed with a save the
+ * writer then refused would be confusing; a notice that DISAGREES is harmless,
+ * because the writer is what settles it.
+ */
+function ClaimNotice({ claim, selectedPromotionId }) {
+  if (!claim || claim.status === 'free') return null;
+
+  const selected = String(selectedPromotionId ?? '').trim();
+  const holder = claim.promotion_title || claim.promotion_id;
+
+  if (claim.status === 'held' && selected && selected !== claim.promotion_id) {
+    return (
+      <p className="rounded-9e-md border border-red-400 bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">
+        หลักสูตรนี้อยู่ใน Early Bird ของ «{holder}» อยู่แล้ว —
+        หนึ่งหลักสูตรมีได้เพียง Early Bird เดียว การบันทึกด้วยโปรโมชันอื่นจะถูกปฏิเสธ
+      </p>
+    );
+  }
+
+  if (claim.status === 'held') {
+    return (
+      <p className="rounded-9e-md border border-[var(--surface-border)] bg-[var(--surface-muted)] p-3 text-xs text-[var(--text-secondary)]">
+        Early Bird นี้อยู่ใต้โปรโมชัน «{holder}» — แก้ไขจากหน้าโปรโมชันก็ได้เช่นกัน
+      </p>
+    );
+  }
+
+  if (claim.status === 'unowned' && selected) {
+    return (
+      <p className="rounded-9e-md border border-amber-400 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        Early Bird นี้ยังไม่ผูกโปรโมชัน — บันทึกแล้วจะขอให้ยืนยันก่อนย้ายไปอยู่ใต้โปรโมชันที่เลือก
+      </p>
+    );
+  }
+
+  return null;
 }
 
 function Field({ label, children }) {
