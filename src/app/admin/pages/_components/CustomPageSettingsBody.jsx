@@ -9,6 +9,14 @@ import {
 import {
   Field, Group, TextInput, TextArea, Warn, INPUT_CLASS,
 } from '@/components/pageBuilder/editor/fields';
+/**
+ * The builder's activity list, reused rather than reimplemented. ADDED beside
+ * the statements above rather than folded into any — the standing rule.
+ *
+ * `getPageAuditLog` filters on pageId alone, so this component renders a
+ * CustomPage's rows with no change to either side. See ActivitySection.
+ */
+import { ActivityTrail } from '@/components/pageBuilder/editor/ActivityTrail';
 
 /**
  * The Advanced HTML editor's page settings — THE SAME DIALOG as the Page
@@ -56,6 +64,7 @@ import {
  */
 function GeneralSection({
   title, onTitleChange, slug, onSlugChange, status, setStatus,
+  isEdit, onUnpublish,
 }) {
   const slugStr = String(slug ?? '');
   const slugBadFormat = slugStr !== '' && !/^[a-z0-9-]+$/.test(slugStr);
@@ -79,13 +88,60 @@ function GeneralSection({
           both models. The save surfaces that as an error without dropping the
           draft; it is not knowable here. */}
 
+      {/*
+        ── สถานะ IS A TAKEDOWN CONTROL, NOT A SECOND PUBLISH PATH ─────────────
+        The draft split made exactly one thing able to publish: the เผยแพร่
+        button, which promotes the pending draft. If this select could also
+        publish, it would publish the STALE live content while the new content
+        sat in the draft — the precise defect the split removes.
+        `saveCustomPageDraft` refuses to write `status` at all, so the defect is
+        already impossible server-side; this is the UI half saying so.
+
+        IT IS NOT DELETED, AND THAT IS THE POINT. The Page Builder can drop its
+        status control because PublishDialog is that concept's home. This form
+        has no such home, so removing the select would silently delete the only
+        way to take a published page back DOWN — the button pair offers no way
+        down, only up. Losing a working capability is worse than the defect.
+
+        So: taking it to ฉบับร่าง unpublishes IMMEDIATELY (a takedown that waits
+        for a publish step is a takedown that does not work), and it does NOT
+        touch the draft — a page taken down keeps its pending work, and
+        discarding that is ทิ้งฉบับร่าง's job and nothing else's.
+
+        The เผยแพร่ option is DISABLED rather than removed while the page is not
+        published, with a hint naming the button that does it. A disabled option
+        with a reason teaches the model; a removed one just puzzles.
+
+        CREATE MODE keeps the plain two-way control: there is no live page to
+        protect and no document to unpublish, so `status` simply rides along in
+        the create payload as it always did.
+      */}
       <Field label="สถานะ">
-        <select className={INPUT_CLASS} value={status}
-          onChange={(e) => setStatus(e.target.value)}>
+        <select
+          className={INPUT_CLASS}
+          value={status}
+          data-testid="custom-page-status-select"
+          onChange={(e) => {
+            const next = e.target.value;
+            if (!isEdit) { setStatus(next); return; }
+            if (next === 'draft' && status === 'published') onUnpublish();
+          }}
+        >
           <option value="draft">ฉบับร่าง (Draft)</option>
-          <option value="published">เผยแพร่ (Published)</option>
+          <option value="published" disabled={isEdit && status !== 'published'}>
+            เผยแพร่ (Published)
+          </option>
         </select>
       </Field>
+      {isEdit && status !== 'published' && (
+        <Warn>
+          การเผยแพร่ทำได้จากปุ่ม “เผยแพร่” ด้านบนเท่านั้น — เพื่อให้หน้าจริงได้เนื้อหาฉบับร่างล่าสุด
+          ไม่ใช่เนื้อหาเดิมที่ค้างอยู่
+        </Warn>
+      )}
+      {isEdit && status === 'published' && (
+        <Warn>เลือก “ฉบับร่าง” เพื่อนำหน้านี้ออกจากการเผยแพร่ทันที — ฉบับร่างที่ค้างอยู่จะไม่ถูกลบ</Warn>
+      )}
     </Group>
   );
 }
@@ -519,15 +575,12 @@ function PreviewSection({
 }
 
 /**
- * ประวัติการเผยแพร่ and ประวัติการดำเนินการ — RENDERED, TRUTHFUL, AND EMPTY.
+ * ประวัติการเผยแพร่ — STILL RENDERED, TRUTHFUL, AND EMPTY.
  *
- * ── WHY THE ITEMS ARE NOT HIDDEN ──────────────────────────────────────────
- * Neither history is recorded for this page type. `PageVersion` snapshots
+ * ── WHY THE ITEM IS NOT HIDDEN ────────────────────────────────────────────
+ * No version history is recorded for this page type. `PageVersion` snapshots
  * PageBuilder pages only and there is no CustomPage equivalent anywhere in the
- * repo; `lib/actions/customPages.js` has five mutating actions and calls
- * `recordAdminAction` zero times, against an audit-contract pair
- * (auditContract.js, 'pages'/'custom') that has existed for rounds with nothing
- * writing rows for it.
+ * repo.
  *
  * The honest response is the one the builder's JSON-LD section already
  * establishes: keep the menu item, and say in words what is not there. Hiding
@@ -535,6 +588,14 @@ function PreviewSection({
  * yet" — and an author who goes looking for history deserves to learn which of
  * the two it is. Never a list, never a spinner, never a fabricated row, and
  * never a control that would imply the data exists.
+ *
+ * ── ITS SIBLING BELOW NO LONGER SAYS THIS, AND THAT IS THE POINT ───────────
+ * ประวัติการดำเนินการ carried the same paragraph until this round, for the same
+ * good reason: nothing wrote rows for it. That is now false — customPages.js
+ * records a PageAuditLog row per mutation — so the placeholder was replaced by
+ * the real list rather than left to become the kind of stale sentence this
+ * work has had to correct three times. THIS section keeps its paragraph
+ * because ITS claim is still true.
  */
 function HistorySection() {
   return (
@@ -551,17 +612,33 @@ function HistorySection() {
   );
 }
 
-function ActivitySection() {
+/**
+ * ประวัติการดำเนินการ — the placeholder becomes the real list.
+ *
+ * ── THE READER FOR THE ROWS THIS ROUND STARTED WRITING ────────────────────
+ * customPages.js now records a PageAuditLog row for every mutation, tagged
+ * `pageType: 'advanced_html'` — the half of that enum that was modelled from
+ * the start and had never been written to. This section is what reads them.
+ *
+ * IT IS THE BUILDER'S COMPONENT, NOT A SECOND ONE. `getPageAuditLog` filters on
+ * `pageId` alone with no pageType clause, so `ActivityTrail` renders a
+ * CustomPage's rows unchanged — no fork, no parallel reader, and one
+ * vocabulary across the two page editors. The same reasoning that made the
+ * settings shell shared last round.
+ *
+ * NO `editor` PROP, exactly as the builder's ActivitySection takes none: this
+ * list writes nothing and decides nothing from local state. It renders server
+ * rows and stops.
+ *
+ * AN UNSAVED PAGE passes `pageId: ''`, and ActivityTrail answers that itself —
+ * it tells the author there is nothing yet BECAUSE the page has not been saved,
+ * rather than rendering an empty trail that looks like a page nobody has
+ * touched.
+ */
+function ActivitySection({ pageId, open }) {
   return (
     <Group title="ประวัติการดำเนินการ">
-      <p className="mb-2 text-xs text-9e-slate-dp-50">
-        ยังไม่มีการบันทึกประวัติการดำเนินการสำหรับหน้าเพจแบบ HTML ขั้นสูง — การสร้าง
-        แก้ไข ลบ และเปลี่ยนสถานะของหน้านี้ยังไม่ถูกเขียนลงบันทึกการใช้งาน
-      </p>
-      <p className="text-xs text-9e-slate-dp-50">
-        เมื่อระบบบันทึกให้แล้ว ส่วนนี้จะแสดงว่าใครทำอะไรกับหน้านี้เมื่อไร
-        แบบเดียวกับหน้าที่สร้างด้วย Page Builder
-      </p>
+      <ActivityTrail pageId={pageId} open={open} />
     </Group>
   );
 }
@@ -570,12 +647,28 @@ function ActivitySection() {
  * The footer band's sentence for THIS editor.
  *
  * The builder's band says the system saves automatically, because it does. This
- * one does not, because this form persists nothing until the save button in its
- * header bar is pressed. Same band, same geometry, opposite fact — which is the
- * whole reason the band takes its text as children.
+ * one does not, because this form persists nothing until a button in its header
+ * bar is pressed. Same band, same geometry, opposite fact — which is the whole
+ * reason the band takes its text as children.
+ *
+ * ── IT NAMES BOTH BUTTONS NOW, BECAUSE THERE ARE TWO ──────────────────────
+ * It used to name บันทึกอัปเดต, which was the single save button. The draft
+ * split replaced that button with a pair, and a band still naming it would send
+ * an author looking for a control that no longer exists — and, worse, would
+ * imply that saving is what makes a change public. It is not: บันทึกฉบับร่าง
+ * stores the work and เผยแพร่ is the only thing that moves the live page. The
+ * band says both, in that order, because that is the order they are used in.
+ *
+ * CREATE mode keeps one sentence and one button: there is no draft to save on a
+ * document that does not exist yet, so บันทึก writes the live fields and there
+ * is nothing to publish separately.
  */
 export function customPageSaveStateText(isEdit) {
-  return `การตั้งค่าจะถูกบันทึกเมื่อกดปุ่ม “${isEdit ? 'บันทึกอัปเดต' : 'บันทึก'}” — หน้านี้ไม่มีการบันทึกอัตโนมัติ`;
+  if (!isEdit) {
+    return 'การตั้งค่าจะถูกบันทึกเมื่อกดปุ่ม “บันทึก” — หน้านี้ไม่มีการบันทึกอัตโนมัติ';
+  }
+  return 'กด “บันทึกฉบับร่าง” เพื่อเก็บการตั้งค่าไว้ก่อน หรือ “เผยแพร่” เพื่อให้มีผลกับหน้าจริง'
+    + ' — หน้านี้ไม่มีการบันทึกอัตโนมัติ';
 }
 
 /**
@@ -591,7 +684,7 @@ export function customPageSaveStateText(isEdit) {
  *     nowhere. One overlay, one mount point, either opener.
  */
 export function CustomPageSettingsBody(props) {
-  const { initialSection, isEdit } = props;
+  const { initialSection, isEdit, pageId = '', open = false } = props;
   const [section, setSection] = useState(initialSection ?? PAGE_SETTINGS_SECTIONS[0].id);
 
   return (
@@ -617,7 +710,7 @@ export function CustomPageSettingsBody(props) {
           {section === 'jsonld' && <JsonLdSection {...props} />}
           {section === 'preview' && <PreviewSection {...props} />}
           {section === 'history' && <HistorySection />}
-          {section === 'activity' && <ActivitySection />}
+          {section === 'activity' && <ActivitySection pageId={pageId} open={open} />}
         </div>
       </div>
 

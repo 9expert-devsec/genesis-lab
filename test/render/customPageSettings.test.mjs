@@ -9,6 +9,11 @@ import {
   CustomPageSettingsBody, customPageSaveStateText,
 } from '@/app/admin/pages/_components/CustomPageSettingsBody';
 import { PAGE_SETTINGS_SECTIONS } from '@/components/admin/pageSettings/SettingsShell';
+// ADDED beside the statements above rather than folded into any — the standing
+// rule. The activity section delegates to the builder's, so the delegation is
+// asserted against the builder's own render rather than a transcription of it.
+import { ActivitySection as BuilderActivitySection } from '@/components/pageBuilder/editor/PageSettingsDialog';
+import { AUDIT_TRAIL_EMPTY } from '@/lib/pageBuilder/auditTrail';
 import { readSource } from '../sourceScan.mjs';
 
 /**
@@ -160,17 +165,45 @@ test('the footer band is the same band, and says different things', () => {
     'both bands now say the same thing; one of the two is claiming the wrong save behaviour');
 });
 
-test('the Advanced HTML band names the button that actually saves', () => {
-  // Not merely "different from the builder's" — different in the specific way
-  // that is true. The button label changes between create and edit, so the
-  // sentence follows it rather than naming one of the two and being wrong on
-  // the other half of the time.
-  assert.match(customPageSaveStateText(true), /บันทึกอัปเดต/);
-  assert.match(customPageSaveStateText(false), /บันทึก/);
-  assert.doesNotMatch(customPageSaveStateText(true), /อัตโนมัติ(?!\s*$)|จะบันทึกให้อัตโนมัติ/,
-    'the band promises an automatic save this form does not perform');
+test('the Advanced HTML band names the buttons that actually save and publish', () => {
+  /**
+   * Not merely "different from the builder's" — different in the specific way
+   * that is true, and the truth changed with the draft split.
+   *
+   * It used to name บันทึกอัปเดต, the single save button. That button no longer
+   * exists: EDIT mode now has a PAIR, and a band naming the old one would send
+   * an author looking for a control that is gone and imply that saving is what
+   * makes a change public. It is not — บันทึกฉบับร่าง stores the work and
+   * เผยแพร่ is the only thing that moves the live page, so the band names both.
+   *
+   * CREATE mode still has one button, and the sentence still names only it:
+   * there is no draft to save on a document that does not exist yet.
+   */
+  assert.match(customPageSaveStateText(true), /บันทึกฉบับร่าง/,
+    'the edit-mode band does not name the button that stores the work');
+  assert.match(customPageSaveStateText(true), /เผยแพร่/,
+    'the edit-mode band does not name the button that makes a change public');
+  assert.doesNotMatch(customPageSaveStateText(true), /บันทึกอัปเดต/,
+    'the band still names the single save button the draft split removed');
+
+  assert.match(customPageSaveStateText(false), /“บันทึก”/,
+    'the create-mode band no longer names its one button');
+  assert.doesNotMatch(customPageSaveStateText(false), /เผยแพร่/,
+    'create mode offers no publish button, so the band must not name one');
+
+  // Neither mode may promise an automatic save this form does not perform.
+  for (const isEdit of [true, false]) {
+    assert.match(customPageSaveStateText(isEdit), /ไม่มีการบันทึกอัตโนมัติ/,
+      'the band stopped saying there is no autosave, which is still true');
+  }
   assert.match(footerOf(customBody()).textContent, /ไม่มีการบันทึกอัตโนมัติ/);
   assert.match(footerOf(builderBody()).textContent, /บันทึกแล้ว|อัตโนมัติ|กำลังบันทึก/);
+});
+
+test('CONTROL: the band’s two modes really do differ', () => {
+  // Without this, a function returning one string for both would satisfy every
+  // "match" above that the shared tail happens to cover.
+  assert.notEqual(customPageSaveStateText(true), customPageSaveStateText(false));
 });
 
 // ── 3. the union set survived the move out of the sidebar ─────────────────
@@ -236,29 +269,79 @@ test('CONTROL: the union reader would NOTICE a dropped field', () => {
 
 // ── 4. the two empty histories state the truth and build nothing ──────────
 
-test('the history sections say what is not recorded, and offer no control', () => {
+test('ประวัติการเผยแพร่ says what is not recorded, and offers no control', () => {
   /**
-   * `CustomPage` has no version model and lib/actions/customPages.js calls
-   * recordAdminAction zero times. So these two sections have nothing to show,
-   * and the honest response — the one the builder's JSON-LD tab already
-   * establishes — is to keep the menu item and say so in words.
+   * `CustomPage` has no version model — `PageVersion` snapshots builder pages
+   * only and there is no equivalent anywhere in the repo. So this section has
+   * nothing to show, and the honest response — the one the builder's JSON-LD
+   * tab already establishes — is to keep the menu item and say so in words.
    *
    * A spinner would claim a fetch, a table header would claim a shape, and an
    * empty list would claim the query ran and found nothing. All three would be
    * false, so none of them is here.
+   *
+   * ── ONE SECTION NOW, NOT TWO ──────────────────────────────────────────────
+   * ประวัติการดำเนินการ was asserted by this same loop until the audit round,
+   * on the stated grounds that customPages.js "calls recordAdminAction zero
+   * times". That is no longer the claim: the file records a PageAuditLog row per
+   * mutation and the section renders the builder's real ActivityTrail. The loop
+   * kept PASSING across that change — ActivityTrail's unsaved-page message also
+   * contains "ยังไม่มีการ" — which is precisely why it had to be split rather
+   * than left: it would have gone on reporting green about a claim it had
+   * stopped testing. The activity section's own case is below.
    */
-  for (const section of ['history', 'activity']) {
-    // SCOPED TO THE SECTION BODY, past the nav. The menu is itself a <ul> of
-    // <button>s, so a document-wide list or control count would report the
-    // navigation as the section's content and this check would be about nothing.
-    const afterNav = customBody({ initialSection: section }).split('</nav>')[1];
-    const doc = docOf(afterNav);
-    assert.equal(doc.querySelectorAll('table, ul, ol').length, 0,
-      `the ${section} section renders a list — there is no data behind it`);
-    assert.equal(doc.querySelectorAll('input, select, textarea, button').length, 0,
-      `the ${section} section renders a control for data that is not recorded`);
-    assert.match(afterNav, /ยังไม่มีการ/, `the ${section} section renders no statement at all`);
-  }
+  const afterNav = customBody({ initialSection: 'history' }).split('</nav>')[1];
+  const doc = docOf(afterNav);
+  assert.equal(doc.querySelectorAll('table, ul, ol').length, 0,
+    'the history section renders a list — there is no data behind it');
+  assert.equal(doc.querySelectorAll('input, select, textarea, button').length, 0,
+    'the history section renders a control for data that is not recorded');
+  assert.match(afterNav, /ยังไม่มีการเก็บประวัติเวอร์ชัน/,
+    'the history section no longer states that no version history is kept');
+});
+
+test('ประวัติการดำเนินการ delegates to the builder’s trail, and is not a second one', () => {
+  /**
+   * The section stopped being a placeholder when customPages.js started writing
+   * PageAuditLog rows tagged `pageType: 'advanced_html'` — the half of that enum
+   * that was modelled from the start and had never been written to.
+   *
+   * It renders the BUILDER's component. `getPageAuditLog` filters on pageId
+   * alone with no pageType clause, so no fork was needed on either side, and
+   * this asserts that no fork was made: the section's markup must be the same
+   * markup the builder's ActivitySection produces for the same props.
+   */
+  const custom = customBody({ initialSection: 'activity' }).split('</nav>')[1];
+  const builder = renderToStaticMarkup(
+    createElement(BuilderActivitySection, { pageId: '', open: false })
+  );
+  assert.ok(custom.includes(builder),
+    'the activity section no longer renders the builder’s ActivitySection markup — '
+    + 'one of the two grew its own trail, which is the fork this delegation exists to prevent');
+});
+
+test('an UNSAVED page is told why the trail is empty, not shown an empty trail', () => {
+  // The render tier always sees pageId:'' (a page that has never been saved),
+  // and that state must not read as "nobody has touched this page".
+  const afterNav = customBody({ initialSection: 'activity' }).split('</nav>')[1];
+  assert.match(afterNav, /ยังไม่ได้บันทึกหน้านี้/,
+    'an unsaved page no longer explains why there is nothing — it just looks empty');
+  assert.equal(docOf(afterNav).querySelectorAll('table, ul, ol').length, 0,
+    'a page with no id renders a list, which would claim a query that never ran');
+});
+
+test('CONTROL: the activity assertions distinguish the two empty states', () => {
+  /**
+   * Both messages contain "ยังไม่มีการ", which is exactly how the old loop kept
+   * passing across the change. So the control proves the two readers above
+   * separate them rather than both matching whichever string is present.
+   */
+  const unsaved = 'ยังไม่ได้บันทึกหน้านี้ — ยังไม่มีการดำเนินการที่บันทึกไว้';
+  const savedButEmpty = AUDIT_TRAIL_EMPTY;
+  assert.match(unsaved, /ยังไม่มีการ/);                 // both contain the loose token…
+  assert.match(savedButEmpty, /ยังไม่มีการ/);
+  assert.match(unsaved, /ยังไม่ได้บันทึกหน้านี้/);        // …only the probe used above separates them
+  assert.doesNotMatch(savedButEmpty, /ยังไม่ได้บันทึกหน้านี้/);
 });
 
 test('CONTROL: the no-list reader DOES see a list when one is planted', () => {

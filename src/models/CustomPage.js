@@ -68,6 +68,48 @@ const CustomPageSchema = new mongoose.Schema(
     // Draft preview — random token lets admins view a draft without publishing.
     previewToken: { type: String, default: '' },
 
+    // ── The unpublished draft ─────────────────────────────────────────
+    // A published page must not change when the author edits it.
+    // บันทึกฉบับร่าง writes the CONTENT surface here; pressing เผยแพร่ promotes
+    // it onto the live fields above. It holds exactly CUSTOM_PAGE_DRAFT_KEYS —
+    //
+    //   title, body, metaTitle, metaDescription, canonicalUrl, noIndex,
+    //   ogTitle, ogDescription, ogImage, ogImagePublicId, ogType,
+    //   twitterCard, jsonLd
+    //
+    // — plus the server-set stamps savedAt/savedBy. Everything else in the
+    // editable surface is LIVE-ONLY and keeps taking effect immediately;
+    // lib/schemas/customPage.js owns that partition and the reasoning.
+    //
+    // THIRTEEN KEYS, where PageBuilder's draft holds nine. The two page types
+    // store different things; the SEMANTICS are shared through
+    // lib/pages/draftState.js, which takes the key list as a parameter, and the
+    // LIST is not.
+    //
+    // NULL MEANS "nothing unpublished here". Existing pages are NOT
+    // backfilled — there is no migration — so a draft appears lazily on first
+    // save and most documents will simply lack the key. Readers must treat
+    // absent and null identically (lib/pages/draftState.js does).
+    //
+    // WHY Mixed, not a typed sub-schema: Zod is the authoritative validator —
+    // customPageDraftContentSchema is PICKED from customPageSchema, so retyping
+    // the thirteen fields here would duplicate that and let the two drift. The
+    // model's job is to persist the validated blob.
+    //
+    // TWO EXCEPTIONS ON CREATE, and they are this schema's doing: `title` AND
+    // `body` are both `required`, so a brand-new page cannot hold either only
+    // inside the draft — create() would reject the document. createCustomPage
+    // therefore seeds the live values from the authored ones (nothing is
+    // published yet, so there is nothing for them to contradict) and every later
+    // edit goes to the draft like the other eleven keys. PageBuilder has this
+    // problem once, for `title`; here it is twice.
+    //
+    // NEVER in a public projection. The draft is unpublished by definition; a
+    // public read that carries it leaks unreleased content, which is the one
+    // failure this whole split exists to prevent. Reads that must not carry it
+    // go through stripDraft().
+    draft: { type: mongoose.Schema.Types.Mixed, default: null },
+
     // Audit
     createdBy: { id: { type: String }, name: { type: String } },
     updatedBy: { id: { type: String }, name: { type: String } },

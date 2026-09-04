@@ -25,9 +25,15 @@ export function CustomPageSettingsDialog({ open, onClose, initialSection = null,
         that opening from a different trigger really lands on that section rather
         than depending on whether Radix unmounts its content on close.
       */}
+      {/*
+        `open` is threaded to the BODY as well as to the shell. The activity
+        list fetches on open and must not fetch while the dialog is closed —
+        the same contract the builder's dialog gives ActivityTrail.
+      */}
       <CustomPageSettingsBody
         key={initialSection ?? 'general'}
         initialSection={initialSection}
+        open={open}
         {...bodyProps}
       />
     </SettingsShell>

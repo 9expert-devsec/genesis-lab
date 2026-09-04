@@ -204,3 +204,137 @@ test('the banner states WHICH case the reader is looking at', () => {
   assert.match(code, /const pending = hasUnpublishedDraft\(page\);/, 'the banner is not driven by the stored draft');
   assert.match(code, /previewBanner\(\{ mode, pending \}\)/, 'the route no longer selects the banner by mode + pending');
 });
+
+// ── CustomPage: EVERY read that returns a document, enumerated ──────────────
+
+/**
+ * The Advanced HTML half of the same rule, and the reason it is an ENUMERATION
+ * rather than a list of the reads someone remembered.
+ *
+ * A projection that happens to be safe today is safe by LUCK. `sitemap.js` is
+ * the case in point: it never carried a draft, not because anything strips one,
+ * but because it asks for two fields — and one careless `.select()` widening
+ * would put unpublished bodies into a public sitemap without a single guard
+ * going red. So this scans for every CustomPage read in the codebase and
+ * requires each one to be REGISTERED below with a verdict and a reason. A read
+ * that nobody classified fails the sweep; it is not silently assumed safe.
+ *
+ * Two reads are deliberately UNSTRIPPED and both are correct:
+ *   · getCustomPageBySlugAny backs ?preview=<token>, whose whole purpose is to
+ *     show what is not public yet;
+ *   · getCustomPageById is what the editor opens, and stripping it would show
+ *     the author the published content their next save would then write back.
+ */
+const CUSTOM_PAGE_READS = {
+  // exported reads in lib/actions/customPages.js
+  getCustomPages: {
+    verdict: 'stripped',
+    why: 'admin list; no projection, so it would ship a second full copy of every body',
+  },
+  getCustomPageById: {
+    verdict: 'unstripped',
+    why: 'the EDITOR opens this and must see the pending draft; admin-gated by the route',
+  },
+  getCustomPageBySlug: {
+    verdict: 'stripped',
+    why: 'THE public read — a draft here reaches a visitor',
+  },
+  getCustomPageBySlugAny: {
+    verdict: 'unstripped',
+    why: 'backs ?preview=<token>; gated on the token by the caller, and showing the draft is its job',
+  },
+  findCustomPageByHistoricalSlug: {
+    verdict: 'projected',
+    why: "selects 'slug' only — the draft cannot be in the result",
+  },
+};
+
+/** Exported functions of a scrubbed module, bounded by the next `export`. */
+function exportedFns(src) {
+  const re = /export\s+async\s+function\s+([A-Za-z0-9_]+)/g;
+  const marks = [...src.matchAll(re)].map((m) => ({ name: m[1], at: m.index }));
+  return marks.map((m, i) => ({
+    name: m.name,
+    body: src.slice(m.at, i + 1 < marks.length ? marks[i + 1].at : src.length),
+  }));
+}
+
+const READS_A_DOC = /CustomPage\.(find|findOne|findById)\s*\(/;
+
+test('every CustomPage read is registered with a verdict, and none is unclassified', () => {
+  const { code } = readSource('src/lib/actions/customPages.js');
+  const found = exportedFns(code)
+    .filter((f) => READS_A_DOC.test(f.body))
+    // Mutating actions read the document to write it; they are not read paths
+    // and never return one to a caller.
+    .filter((f) => !/findByIdAndUpdate|findByIdAndDelete|CustomPage\.create/.test(f.body))
+    .map((f) => f.name)
+    .sort();
+
+  assert.deepEqual(found, Object.keys(CUSTOM_PAGE_READS).sort(),
+    'a CustomPage read appeared or disappeared without being classified. Add it to '
+    + 'CUSTOM_PAGE_READS with a verdict and a REASON — an unregistered read is the '
+    + 'projection-safe-by-luck failure this sweep exists to catch');
+});
+
+test('every read marked `stripped` actually calls stripDraft', () => {
+  const { code } = readSource('src/lib/actions/customPages.js');
+  const bodies = Object.fromEntries(exportedFns(code).map((f) => [f.name, f.body]));
+  for (const [name, { verdict }] of Object.entries(CUSTOM_PAGE_READS)) {
+    if (verdict !== 'stripped') continue;
+    assert.match(bodies[name] ?? '', /stripDraft\(/,
+      `${name} is registered as stripped but does not call stripDraft`);
+  }
+});
+
+test('every read marked `unstripped` really does NOT strip — the register is not decorative', () => {
+  // The other direction. Without this, marking everything `unstripped` would
+  // make the assertion above vacuous.
+  const { code } = readSource('src/lib/actions/customPages.js');
+  const bodies = Object.fromEntries(exportedFns(code).map((f) => [f.name, f.body]));
+  for (const [name, { verdict }] of Object.entries(CUSTOM_PAGE_READS)) {
+    if (verdict !== 'unstripped') continue;
+    assert.doesNotMatch(bodies[name] ?? '', /stripDraft\(/,
+      `${name} is registered as unstripped but strips — the register and the code disagree`);
+  }
+});
+
+test('every read has a stated REASON, not just a verdict', () => {
+  for (const [name, entry] of Object.entries(CUSTOM_PAGE_READS)) {
+    assert.ok(typeof entry.why === 'string' && entry.why.length > 20,
+      `${name} is classified with no reason worth reading`);
+    assert.ok(['stripped', 'unstripped', 'projected'].includes(entry.verdict),
+      `${name} has an unknown verdict`);
+  }
+});
+
+test('the sitemap read is safe BY PROJECTION, and says so where it is written', () => {
+  /**
+   * The one CustomPage read outside the actions module. It takes no stripDraft
+   * and does not need one — but only while the projection stays two fields, so
+   * the comment saying that is load-bearing and is asserted here.
+   */
+  const { code, raw } = readSource('src/app/sitemap.js');
+  assert.match(code, /\.select\('slug updatedAt'\)/,
+    'the sitemap projection changed. If it now takes more than a URL and a date, '
+    + 'it must take stripDraft() with it — an unpublished body in a public sitemap');
+  assert.equal(/stripDraft/.test(code), false,
+    'the sitemap now strips, so this case is asserting the wrong mechanism');
+  assert.match(raw, /THE PROJECTION IS WHAT KEEPS THE DRAFT OUT/,
+    'the load-bearing comment is gone — the next person widening the select has no warning');
+});
+
+test('CONTROL: the sweep DOES catch an unregistered read, and a stripped one that stopped stripping', () => {
+  // Both halves, against planted source rather than the real file.
+  const planted = `
+    export async function getCustomPageBySlug(slug) { const d = await CustomPage.findOne({}).lean(); return d; }
+    export async function getSomethingNew(slug) { const d = await CustomPage.findOne({}).lean(); return d; }
+  `;
+  const names = exportedFns(planted).filter((f) => READS_A_DOC.test(f.body)).map((f) => f.name).sort();
+  assert.deepEqual(names, ['getCustomPageBySlug', 'getSomethingNew'],
+    'the scanner cannot see a newly added read, so the enumeration proves nothing');
+
+  const bodies = Object.fromEntries(exportedFns(planted).map((f) => [f.name, f.body]));
+  assert.doesNotMatch(bodies.getCustomPageBySlug, /stripDraft\(/,
+    'the planted leak still looks stripped to the reader — the strip check is not live');
+});

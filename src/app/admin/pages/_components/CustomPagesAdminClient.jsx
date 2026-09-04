@@ -6,6 +6,7 @@ import { ExternalLink, Eye, EyeOff, Pencil, Plus, Search, Trash2, X } from 'luci
 import {
   deleteCustomPage,
   toggleCustomPageStatus,
+  publishCustomPage,
 } from '@/lib/actions/customPages';
 import {
   deletePageBuilderPage,
@@ -99,15 +100,37 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
   // WIPE a scheduled page's window on an unrelated status toggle. The list
   // reads whole documents, so it already holds both.
   //
-  // The advanced_html branch is untouched: CustomPage has no draft, no
-  // snapshot and no conflict token, and toggleCustomPageStatus stays its path.
+  // ── THE advanced_html BRANCH SPLITS, BECAUSE CustomPage NOW HAS A DRAFT ────
+  //
+  // The note that stood here said "CustomPage has no draft, no snapshot and no
+  // conflict token, and toggleCustomPageStatus stays its path". The first clause
+  // stopped being true when the draft split landed, and the consequence is
+  // exactly the one the builder branch above was rewritten to avoid:
+  // toggleCustomPageStatus sets `status` and nothing else, so publishing from
+  // this list would make the STALE live content public while the author's
+  // pending draft sat unpromoted beside it.
+  //
+  // So the two directions now take different paths, mirroring the split the
+  // editor's own controls make:
+  //
+  //   draft -> published   publishCustomPage    promotes the draft, then flips
+  //                        the status. The ONE path that makes a page public.
+  //   published -> draft   toggleCustomPageStatus  a takedown. Writes `status`
+  //                        alone and leaves the pending draft untouched, because
+  //                        unpublishing and abandoning your work are different
+  //                        decisions.
+  //
+  // No conflict token is passed on either: CustomPage has no updatedAt guard, so
+  // this list is exactly as safe as it was — that gap is unchanged by this round
+  // and is not silently claimed to be fixed.
   function handleToggleStatus(p) {
     const next = p.status === 'published' ? 'draft' : 'published';
     setBusyId(p._id);
     setActionError(null);
     startTransition(async () => {
-      const res = p._type === 'builder'
-        ? await publishPageStatus(
+      let res;
+      if (p._type === 'builder') {
+        res = await publishPageStatus(
           p._id,
           {
             status: next,
@@ -115,8 +138,12 @@ export function CustomPagesAdminClient({ pages: initial, canCreateAdvanced = fal
             publishEndDate: p.publishEndDate ?? null,
           },
           p.updatedAt,
-        )
-        : await toggleCustomPageStatus(p._id, next);
+        );
+      } else {
+        res = next === 'published'
+          ? await publishCustomPage(p._id)
+          : await toggleCustomPageStatus(p._id, next);
+      }
       if (res?.ok) {
         // publishPageStatus COERCES a publish the actor's tier does not allow
         // rather than erroring (it preserves their other edits). The old

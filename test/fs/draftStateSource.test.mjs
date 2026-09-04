@@ -12,6 +12,10 @@ import { readSource } from '../sourceScan.mjs';
  */
 
 const DRAFT_STATE = readSource('src/lib/pageBuilder/draftState.js');
+// The collection-neutral module the four helpers moved to when CustomPage
+// needed the same semantics with a different key list. ADDED beside the
+// statement above rather than folded into it — the standing rule.
+const SHARED = readSource('src/lib/pages/draftState.js');
 const SCHEMA = readSource('src/lib/schemas/pageBuilder.js');
 const MODEL = readSource('src/models/PageBuilder.js');
 
@@ -85,28 +89,74 @@ test('draftContentSchema is picked from pageBuilderSchema, not rebuilt', () => {
 
 // ── The pure module stays client-importable ─────────────────────────────────
 
+/**
+ * ── THE IMPORT LIST MOVED WHEN THE SEMANTICS DID ──────────────────────────
+ * The four helpers now live in lib/pages/draftState.js, which is
+ * collection-neutral, and this module binds them to PageBuilder's partition. So
+ * the builder module imports TWO things — the key list and the binder — where it
+ * used to import one, and the shared module is where "imports nothing that
+ * cannot reach the browser" has to be asserted now, because that is the file
+ * with the helpers in it.
+ *
+ * Both are pinned, not just the one that used to be. The shared module is the
+ * riskier of the two: it has two importers and neither owns it.
+ */
 test('draftState imports nothing that cannot reach the browser', () => {
-  // The editor and the admin list both import this in round 3. One mongoose
-  // import here drags the model into the client bundle.
+  // The editor and the admin list both import this. One mongoose import here
+  // drags the model into the client bundle.
   const sources = [...DRAFT_STATE.withImports.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-  assert.deepEqual(sources, ['@/lib/schemas/pageBuilder'], 'draftState grew an import');
+  assert.deepEqual(
+    sources.sort(),
+    ['@/lib/pages/draftState', '@/lib/pages/draftState', '@/lib/schemas/pageBuilder'],
+    'the builder binding grew an import — it should reach the key list and the shared helpers, and nothing else'
+  );
+});
+
+test('the SHARED module imports nothing at all', () => {
+  // Stronger than the binding's rule, and it can be: the neutral module takes
+  // its key list as a parameter, so it has no reason to import anything. An
+  // empty list here is the strongest possible form of "client-importable", and
+  // it is checkable exactly because the module was made neutral.
+  const sources = [...SHARED.withImports.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(sources, [],
+    'lib/pages/draftState.js grew an import. It is imported by two collections and '
+    + 'must stay pure — a key list belongs in its parameters, not its imports');
 });
 
 test('CONTROL: that import scan actually sees a source — it is not matching an empty list', () => {
-  // A regex that finds nothing makes "no forbidden import" trivially true. This
-  // pins that the scan found the one import there really is.
+  // A regex that finds nothing makes "no forbidden import" trivially true. The
+  // shared module's expected list IS empty, so the scanner is proven against the
+  // binding, which has imports, and then against a planted string.
   const sources = [...DRAFT_STATE.withImports.matchAll(/from '([^']+)'/g)].map((m) => m[1]);
-  assert.equal(sources.length, 1, 'the import scan found nothing to check');
+  assert.equal(sources.length, 3, 'the import scan found nothing to check');
+  assert.deepEqual(
+    [...`import x from 'mongoose';`.matchAll(/from '([^']+)'/g)].map((m) => m[1]),
+    ['mongoose'],
+    'the scanner does not see an import that is definitely there');
 });
 
-test('draftState has no db, model, React or next/* reach', () => {
-  for (const forbidden of ['mongoose', '@/models/', '@/lib/db', 'react', 'next/']) {
-    assert.equal(
-      DRAFT_STATE.withImports.includes(`from '${forbidden}`),
-      false,
-      `draftState imports ${forbidden}, which makes it unusable from a client component`
-    );
+test('neither draftState module has db, model, React or next/* reach', () => {
+  for (const [name, src] of [['the builder binding', DRAFT_STATE], ['the shared module', SHARED]]) {
+    for (const forbidden of ['mongoose', '@/models/', '@/lib/db', 'react', 'next/']) {
+      assert.equal(
+        src.withImports.includes(`from '${forbidden}`),
+        false,
+        `${name} imports ${forbidden}, which makes it unusable from a client component`
+      );
+    }
   }
+});
+
+test('the SHARED module restates no collection’s key names', () => {
+  // The neutral module must not know either partition. PageBuilder's nine are
+  // checked here; CustomPage's are checked by its own binding's guard when that
+  // lands. A key name appearing here would mean the parameterisation is
+  // decorative.
+  const restated = DRAFT_KEY_NAMES.filter(
+    (k) => SHARED.code.includes(`'${k}'`) || SHARED.code.includes(`"${k}"`)
+  );
+  assert.deepEqual(restated, [],
+    'the collection-neutral module hard-codes PageBuilder key names — it is not neutral');
 });
 
 // ── The model field ─────────────────────────────────────────────────────────
