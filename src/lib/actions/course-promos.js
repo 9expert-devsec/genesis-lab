@@ -199,10 +199,36 @@ export async function getEarlyBirdAdminByCourse(courseId) {
   return serialize(doc);
 }
 
-export async function saveEarlyBird(courseId, data) {
-  await requireAdmin('courses');
-  await dbConnect();
-  const update = {
+// ── ONE COURSE, ONE EARLY BIRD ─────────────────────────────────────────────
+//
+// The rule, and the defect it closes. `saveEarlyBird` used to be a blind
+// upsert filtered on `{ course_id }` alone, with `promotion_id` inside the
+// `$set`. Saving an Early Bird for a course another promotion already held
+// REPLACED that promotion's row — owner, label, price, deadline and schedule —
+// with no error, no confirmation and no trace. Nothing anywhere warned, and
+// there is no audit write on this path, so the overwrites were unrecoverable.
+//
+// THREE OUTCOMES, not two. A UI check on top of an upserting writer is a sign,
+// not a rule, so the refusal lives here and the screens only mirror it:
+//
+//   free      — no row for this course        → write
+//   unowned   — a row with no promotion_id    → ADOPTABLE, but only on an
+//                                               explicit `adopt`, because
+//                                               taking ownership must never be
+//                                               a side effect of saving
+//   held      — a row owned by ANOTHER        → REFUSED, naming the holder
+//
+// An unowned row is adopted rather than refused on purpose: refusing would
+// strand it, since a course claimed by nobody would appear in no promotion and
+// could only be freed from the course's own tab — the tedium this round exists
+// to remove.
+
+export const EB_CLAIMED = 'EB_CLAIMED';
+export const EB_NEEDS_ADOPTION = 'EB_NEEDS_ADOPTION';
+
+/** The field set a save may write. Everything else on the row is untouchable. */
+function earlyBirdUpdate(data) {
+  return {
     promotion_id:  String(data?.promotion_id ?? '').trim(),
     schedule_id:   String(data?.schedule_id ?? '').trim(),
     label_th:      String(data?.label_th ?? 'Early Bird').trim() || 'Early Bird',
@@ -210,11 +236,161 @@ export async function saveEarlyBird(courseId, data) {
     deadline:      data?.deadline ? new Date(data.deadline) : null,
     is_active:     Boolean(data?.is_active),
   };
-  await EarlyBirdConfig.findOneAndUpdate(
-    { course_id: courseId },
-    { $set: update },
-    { upsert: true, new: true, runValidators: true }
-  );
+}
+
+/** Resolve a promotion's title for a message. Falls back to the bare id. */
+async function promotionTitle(promotionId) {
+  if (!promotionId) return '';
+  const promo = await Promotion
+    .findOne({ promotion_id: promotionId })
+    .select('title')
+    .lean();
+  return promo?.title || promotionId;
+}
+
+async function claimedRefusal(courseId, holderId) {
+  const title = await promotionTitle(holderId);
+  return {
+    ok: false,
+    code: EB_CLAIMED,
+    error: `หลักสูตร ${courseId} อยู่ใน Early Bird ของ «${title}» แล้ว — ` +
+      'หนึ่งหลักสูตรมีได้เพียง Early Bird เดียว',
+    claim: { course_id: courseId, promotion_id: holderId, promotion_title: title },
+  };
+}
+
+/**
+ * Who holds this course's Early Bird, if anyone.
+ *
+ * Runs in TWO places, and they are not the same thing. The SCREENS call it
+ * before the author commits, so a claimed course can be named up front — that
+ * use is advisory and nothing rests on it. The WRITER below calls it as the
+ * actual refusal, because two admins can race the screen's check.
+ */
+export async function getEarlyBirdClaim(courseId) {
+  await requireAdmin('courses');
+  return readEarlyBirdClaim(courseId);
+}
+
+/** The claim read itself, un-gated — every exported caller gates first. */
+async function readEarlyBirdClaim(courseId) {
+  if (!courseId) return { status: 'free', course_id: courseId, config: null };
+  await dbConnect();
+  const doc = await EarlyBirdConfig.findOne({ course_id: courseId }).lean();
+  if (!doc) return { status: 'free', course_id: courseId, config: null };
+
+  const holder = String(doc.promotion_id ?? '').trim();
+  if (!holder) {
+    return {
+      status: 'unowned',
+      course_id: courseId,
+      promotion_id: '',
+      promotion_title: '',
+      config: serialize(doc),
+    };
+  }
+  return {
+    status: 'held',
+    course_id: courseId,
+    promotion_id: holder,
+    promotion_title: await promotionTitle(holder),
+    config: serialize(doc),
+  };
+}
+
+/**
+ * The single writer. Both screens funnel here, so neither carries a copy of
+ * the rule and both get the same refusal.
+ *
+ * `data.adopt === true` is the author's explicit consent to take an unowned
+ * row. It is NOT a licence to rewrite that row's other fields — the callers
+ * carry the existing values into their form so an ownership change cannot ride
+ * a silent edit in with it.
+ */
+async function writeEarlyBird(courseId, data) {
+  await dbConnect();
+  const incoming = String(data?.promotion_id ?? '').trim();
+  const claim = await readEarlyBirdClaim(courseId);
+
+  /**
+   * ── TWO REFUSALS, AND NEITHER IS REDUNDANT ─────────────────────────────────
+   * MEASURED: breaking this read alone reddens nothing, and breaking the
+   * guarded filter alone reddens only a source probe — each covers for the
+   * other under test, because the fake has both. That looks like redundancy and
+   * is not, because they fail in different worlds:
+   *
+   *   · this READ is the only refusal if `course_id`'s unique index is missing
+   *     from the PRODUCTION collection. Mongoose `unique: true` builds an index
+   *     only via autoIndex; that it exists on the deployed collection has NOT
+   *     been verified here (production is read-only this round, and an index
+   *     build is a write). Without the index there is no E11000, ever.
+   *   · the E11000 below is the only refusal when two admins race, because this
+   *     read is already stale by the time the write lands.
+   *
+   * PREMISE, to re-read if it changes: "the production unique index is
+   * unverified". If it is ever confirmed present, this read becomes a fast path
+   * rather than a safety property — and only then is collapsing to one
+   * mechanism a real option.
+   */
+  if (claim.status === 'held' && claim.promotion_id !== incoming) {
+    return claimedRefusal(courseId, claim.promotion_id);
+  }
+  if (claim.status === 'unowned' && incoming && data?.adopt !== true) {
+    return {
+      ok: false,
+      code: EB_NEEDS_ADOPTION,
+      error: `หลักสูตร ${courseId} มี Early Bird อยู่แล้วแต่ยังไม่ผูกโปรโมชัน — ` +
+        'ยืนยันเพื่อย้ายมาอยู่ใต้โปรโมชันนี้',
+      claim,
+    };
+  }
+
+  /**
+   * THE GUARDED WRITE — the belt to the read's braces.
+   *
+   * The filter names the course AND the only owners this save may edit, so the
+   * three cases fall out of one atomic call: a missing row upserts, a row we
+   * own (or that nobody owns) updates, and a row another promotion holds MISSES
+   * — which sends the upsert down the insert path, straight into `course_id`'s
+   * unique index. That E11000 is the refusal surviving the race the read above
+   * cannot see, because it is the database refusing rather than a check that
+   * ran a moment ago.
+   *
+   * The `''` in the filter is the schema default and every write here sets it,
+   * so an unowned row is `''` rather than missing.
+   */
+  try {
+    await EarlyBirdConfig.findOneAndUpdate(
+      {
+        course_id: courseId,
+        $or: [{ promotion_id: '' }, { promotion_id: incoming }],
+      },
+      { $set: earlyBirdUpdate(data), $setOnInsert: { course_id: courseId } },
+      { upsert: true, new: true, runValidators: true }
+    );
+  } catch (err) {
+    if (err?.code === 11000) {
+      const raced = await readEarlyBirdClaim(courseId);
+      return claimedRefusal(courseId, raced.promotion_id || incoming);
+    }
+    throw err;
+  }
+
   revalidateCourse(courseId);
   return { ok: true };
+}
+
+/**
+ * The COURSE TAB's entry point — /admin/courses/<id> → EarlyBirdTab.
+ *
+ * Keeps `requireAdmin('courses')`. Its sibling on the promotion screen holds
+ * the `promotions` key instead: two entry points onto one row with two
+ * different gates, which is deliberate — each action asks for the permission
+ * matching the door the author came through, and `pages` is a flat allowlist
+ * with no implication between keys (lib/rbac/access.js). Neither gate is what
+ * stops a cross-promotion write; `writeEarlyBird` is.
+ */
+export async function saveEarlyBird(courseId, data) {
+  await requireAdmin('courses');
+  return writeEarlyBird(courseId, data);
 }

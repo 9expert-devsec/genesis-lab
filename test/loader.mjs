@@ -169,6 +169,18 @@ export const STUBS = {
   // a hang rather than a kill.
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
+  // course-promos imports both at module scope; EarlyBirdConfig carries the
+  // unique course_id index its refusal path depends on.
+  "@/models/EarlyBirdConfig": path.join(
+    ROOT,
+    "test",
+    "stub-model-early-bird-config.mjs",
+  ),
+  "@/models/CoursePromoLink": path.join(
+    ROOT,
+    "test",
+    "stub-model-course-promo-link.mjs",
+  ),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",
@@ -231,6 +243,18 @@ export const STUBS = {
   // a hang rather than a kill.
   "@/models/CustomPage": path.join(ROOT, "test", "stub-model-custom-page.mjs"),
   "@/models/Promotion": path.join(ROOT, "test", "stub-model-promotion.mjs"),
+  // course-promos imports both at module scope; EarlyBirdConfig carries the
+  // unique course_id index its refusal path depends on.
+  "@/models/EarlyBirdConfig": path.join(
+    ROOT,
+    "test",
+    "stub-model-early-bird-config.mjs",
+  ),
+  "@/models/CoursePromoLink": path.join(
+    ROOT,
+    "test",
+    "stub-model-course-promo-link.mjs",
+  ),
   "@/models/PromotionConfig": path.join(
     ROOT,
     "test",
