@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   customPageSchema, customPageDraftContentSchema,
-  CUSTOM_PAGE_DRAFT_KEYS, CUSTOM_PAGE_LIVE_ONLY_KEYS,
+  CUSTOM_PAGE_DRAFT_KEYS, CUSTOM_PAGE_LIVE_ONLY_KEYS, CUSTOM_PAGE_TYPES,
 } from '@/lib/schemas/customPage';
 import {
   effectiveContent, composeWorkingView, hasUnpublishedDraft, stripDraft,
@@ -27,26 +27,70 @@ import {
 const DRAFT_NAMES = [
   'title', 'body', 'metaTitle', 'metaDescription', 'canonicalUrl', 'noIndex',
   'ogTitle', 'ogDescription', 'ogImage', 'ogImagePublicId', 'ogType',
-  'twitterCard', 'jsonLd',
+  'twitterCard', 'jsonLd', 'promotionCover',
 ];
 
 // ── 1. the partition ────────────────────────────────────────────────────────
 
-test('CUSTOM_PAGE_DRAFT_KEYS is exactly the thirteen content keys', () => {
+test('CUSTOM_PAGE_DRAFT_KEYS is exactly the fourteen content keys', () => {
   // Transcribed by hand, not derived from the constant — a set computed from the
   // thing under test agrees with whatever it finds.
   assert.deepEqual([...CUSTOM_PAGE_DRAFT_KEYS].sort(), [...DRAFT_NAMES].sort());
-  assert.equal(CUSTOM_PAGE_DRAFT_KEYS.length, 13);
+  assert.equal(CUSTOM_PAGE_DRAFT_KEYS.length, 14);
 });
 
-test('CUSTOM_PAGE_LIVE_ONLY_KEYS is exactly the three that take effect at once', () => {
+test('CUSTOM_PAGE_LIVE_ONLY_KEYS is exactly the five that take effect at once', () => {
   /**
    * slug is identity (unique index, slugHistory trail, cross-collection guard,
    * a public route); status decides visibility, and drafting it would mean a
    * page could not be unpublished without publishing; slugHistory is
    * server-computed on a rename and is never part of a client patch.
+   *
+   * pageType is ROUTING — the grid query cannot see inside a Mixed draft blob,
+   * the redirect reads the stripped page, and the promotion slug guard is GATED
+   * on it, so a drafted type would be checked at save and applied at publish
+   * with no re-check. promotionOrder is an arrangement of the grid rather than
+   * content of this page.
    */
-  assert.deepEqual([...CUSTOM_PAGE_LIVE_ONLY_KEYS].sort(), ['slug', 'slugHistory', 'status']);
+  assert.deepEqual([...CUSTOM_PAGE_LIVE_ONLY_KEYS].sort(),
+    ['pageType', 'promotionOrder', 'slug', 'slugHistory', 'status']);
+});
+
+/**
+ * The two promotion fields land on OPPOSITE sides, and that is the assignment
+ * this round had to make by hand. Asserted as a pair so a later "tidy" that
+ * moved either one has to come through this case and read the reason.
+ */
+test('the promotion trio splits: the cover drafts, the type and order do not', () => {
+  assert.ok(CUSTOM_PAGE_DRAFT_KEYS.includes('promotionCover'),
+    'promotionCover left the draft side — the live card would change before เผยแพร่');
+  assert.ok(CUSTOM_PAGE_LIVE_ONLY_KEYS.includes('pageType'),
+    'pageType became draft content — the grid query cannot read a Mixed draft blob, '
+    + 'and the promotion slug guard is gated on it');
+  assert.ok(CUSTOM_PAGE_LIVE_ONLY_KEYS.includes('promotionOrder'),
+    'promotionOrder became draft content — reordering would need a publish');
+});
+
+test('CUSTOM_PAGE_TYPES is the two values something reads, and promotion is one', () => {
+  /**
+   * Outside 'promotion', nothing in src/ reads a specific pageType value — the
+   * sweep is recorded at the constant. The builder's six other types are
+   * section-composition vocabularies an Advanced HTML page has no sections to
+   * express, so they are not offered and cannot be stored.
+   */
+  assert.deepEqual([...CUSTOM_PAGE_TYPES].sort(), ['general', 'promotion']);
+  assert.equal(customPageSchema.shape.pageType.safeParse('promotion').success, true);
+  assert.equal(customPageSchema.shape.pageType.safeParse('bundle').success, false,
+    'a builder-only type is storable on a CustomPage — the enum was shared, not narrowed');
+});
+
+test('promotionOrder coerces a form STRING, and refuses one that is not a number', () => {
+  // It crosses the wire as FormData, so it always arrives as a string. The
+  // coercion lives in the schema rather than in parseFormData so a bad value is
+  // an error the author sees, not a silent 0.
+  assert.equal(customPageSchema.shape.promotionOrder.parse('12'), 12);
+  assert.equal(customPageSchema.shape.promotionOrder.safeParse('abc').success, false,
+    'a non-numeric order parses — it would silently become 0 and reorder the grid');
 });
 
 test('the two sets are disjoint and together cover the editable surface exactly', () => {
@@ -119,7 +163,7 @@ test('the slug regex is ABSENT from the draft schema, because slug is live-only'
 
 // ── 3. the binding really points at THIS partition ──────────────────────────
 
-test('effectiveContent returns the draft’s content, restricted to the thirteen', () => {
+test('effectiveContent returns the draft’s content, restricted to the fourteen', () => {
   const page = {
     slug: 'live-slug', status: 'published', title: 'live', body: '<p>live</p>',
     draft: {

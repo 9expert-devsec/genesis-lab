@@ -6,6 +6,18 @@ import { isReservedSlug } from '@/lib/pages/reservedSlugs';
 import {
   PAGE_SETTINGS_SECTIONS, SettingsNav, SettingsFooterBand,
 } from '@/components/admin/pageSettings/SettingsShell';
+/**
+ * The ชนิดหน้า labels and the promotion cover uploader — THE SAME ONES the
+ * builder's dialog uses, not a second pair. ADDED beside the statement above
+ * rather than folded into it — the standing rule.
+ *
+ * PAGE_TYPE_LABELS is a superset keyed by value; this editor maps over
+ * CUSTOM_PAGE_TYPES (two) and looks up only those.
+ */
+import {
+  PAGE_TYPE_LABELS, PromoCoverField,
+} from '@/components/admin/pageSettings/SettingsShell';
+import { CUSTOM_PAGE_TYPES } from '@/lib/schemas/customPage';
 import {
   Field, Group, TextInput, TextArea, Warn, INPUT_CLASS,
 } from '@/components/pageBuilder/editor/fields';
@@ -54,17 +66,44 @@ import { ActivityTrail } from '@/components/pageBuilder/editor/ActivityTrail';
  */
 
 /**
- * ── WHAT IS NOT HERE, AND WHY ──────────────────────────────────────────────
- * ชนิดหน้า and ธีม. The builder's ข้อมูลหน้า group carries both because
- * PageBuilder stores `pageType` and `theme` and the render path reads them.
- * `CustomPage` has NEITHER field. A disabled control, or one wired to a value
- * nothing stores, would be exactly the claim-with-no-source this dialog's own
- * JSON-LD note refuses. So the group has three fields and says nothing about
- * the two it does not have.
+ * ── ชนิดหน้า IS HERE NOW; ธีม STILL IS NOT ─────────────────────────────────
+ * This note used to say both were absent "because `CustomPage` has NEITHER
+ * field". That was true when it was written and half of it is now false:
+ * CustomPage stores `pageType`, and three things read it — the /promotions grid
+ * query, the catch-all's bare-slug redirect, and the promotion slug guard. So
+ * the control ships, with the two fields that are only meaningful beside it.
+ *
+ * ธีม IS STILL ABSENT, and the original reasoning is what keeps it out rather
+ * than an oversight: `CustomPageView` reads no theme at all — it renders one
+ * sanitised body inside a fixed `prose` wrapper. A ธีม select here would be a
+ * control wired to a value nothing renders, which is exactly the
+ * claim-with-no-source this dialog's own JSON-LD note refuses. It ships when a
+ * render path reads it, not before.
+ *
+ * ── THE PROMOTION FIELDS ARE CONDITIONAL, MATCHING THE BUILDER ────────────
+ * ลำดับในหน้าโปรโมชัน and ภาพปกโปรโมชัน appear only while ชนิดหน้า is
+ * โปรโมชัน — the same shape as PageSettingsDialog's own promotion block, so an
+ * admin who knows one editor knows this one. The VALUES are kept when the type
+ * flips back (the actions store them unconditionally), so hiding the controls
+ * never destroys an arrangement; only the display is conditional.
+ *
+ * There is deliberately no Promotion ID (MSDB) field. An Advanced HTML promotion
+ * is always standalone, and lib/schemas/customPage.js holds the reason — the
+ * one-page-per-promotion invariant `setPromotionPageLink` enforces with a
+ * collection-wide updateMany — plus what would have to change first.
+ *
+ * ── THE TWO FIELDS SIT ON OPPOSITE SIDES OF THE DRAFT PARTITION ───────────
+ * ชนิดหน้า and ลำดับ are LIVE-ONLY: บันทึกฉบับร่าง writes them straight to the
+ * live document, so a published page flipped to โปรโมชัน starts redirecting at
+ * once. ภาพปก is DRAFTED like the body. The warning below says so, because an
+ * author pressing one button and getting two different timings deserves to be
+ * told rather than to discover it on the live site.
  */
 function GeneralSection({
   title, onTitleChange, slug, onSlugChange, status, setStatus,
   isEdit, onUnpublish,
+  pageType, setPageType, promotionOrder, setPromotionOrder,
+  promotionCover, setPromotionCover,
 }) {
   const slugStr = String(slug ?? '');
   const slugBadFormat = slugStr !== '' && !/^[a-z0-9-]+$/.test(slugStr);
@@ -141,6 +180,47 @@ function GeneralSection({
       )}
       {isEdit && status === 'published' && (
         <Warn>เลือก “ฉบับร่าง” เพื่อนำหน้านี้ออกจากการเผยแพร่ทันที — ฉบับร่างที่ค้างอยู่จะไม่ถูกลบ</Warn>
+      )}
+
+      <Field label="ชนิดหน้า" hint="โปรโมชัน = ย้ายหน้านี้ไปอยู่ที่ /promotions/<slug> และแสดงการ์ดในหน้าโปรโมชัน">
+        <select
+          className={INPUT_CLASS}
+          value={pageType ?? 'general'}
+          data-testid="custom-page-type-select"
+          onChange={(e) => setPageType(e.target.value)}
+        >
+          {CUSTOM_PAGE_TYPES.map((t) => (
+            <option key={t} value={t}>{PAGE_TYPE_LABELS[t] ?? t}</option>
+          ))}
+        </select>
+      </Field>
+
+      {pageType === 'promotion' && (
+        <>
+          {/*
+            LIVE-ONLY, and the author is told so here rather than finding out on
+            the live site. ชนิดหน้า and ลำดับ are written straight to the live
+            document by บันทึกฉบับร่าง — that is what makes the grid query and the
+            redirect able to see them at all — while ภาพปก drafts like the body.
+            One button, two timings, said out loud.
+          */}
+          {isEdit && status === 'published' && (
+            <Warn>
+              ชนิดหน้าและลำดับมีผลทันทีที่กดบันทึกฉบับร่าง — URL เดิม (/{String(slug ?? '')})
+              จะเปลี่ยนเส้นทางไปที่ /promotions/{String(slug ?? '')} และการ์ดจะขึ้นหน้าโปรโมชันเลย
+              ส่วน “ภาพปกโปรโมชัน” จะยังไม่เปลี่ยนบนหน้าจริงจนกว่าจะกดเผยแพร่
+            </Warn>
+          )}
+
+          <Field label="ลำดับในหน้าโปรโมชัน" hint="ตัวเลขน้อยแสดงก่อน (เรียงรวมกับโปรโมชันจาก Page Builder)">
+            <TextInput
+              value={promotionOrder ?? 0}
+              onChange={(v) => setPromotionOrder(Number.parseInt(v, 10) || 0)}
+            />
+          </Field>
+
+          <PromoCoverField value={promotionCover} onChange={setPromotionCover} />
+        </>
       )}
     </Group>
   );

@@ -48,7 +48,7 @@ export const effectiveContent = bound.effectiveContent;
 
 /**
  * The stored document unwrapped into the ONE tree the editor edits and the
- * ?preview=<token> route renders: the effective content for the thirteen
+ * ?preview=<token> route renders: the effective content for the fourteen
  * content keys, the document's own values for slug, status and slugHistory.
  *
  * `.draft` is NOT carried through — it has been unwrapped INTO the result, and

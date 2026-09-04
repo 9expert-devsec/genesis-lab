@@ -224,28 +224,57 @@ test('the banner states WHICH case the reader is looking at', () => {
  *     show what is not public yet;
  *   · getCustomPageById is what the editor opens, and stripping it would show
  *     the author the published content their next save would then write back.
+ *
+ * ── THE SWEEP SPANS TWO MODULES, AND THAT IS THE POINT ────────────────────
+ * It scanned lib/actions/customPages.js alone until the /promotions grid gained
+ * an Advanced HTML half, whose loader lives in lib/promotions/getPromotions.js.
+ * A read in a different file is not a read outside the rule — living elsewhere
+ * is exactly how the sitemap read stayed unexamined — so the enumeration was
+ * WIDENED rather than a second sweep written beside it. One register, one set of
+ * verdicts, one place to look.
+ *
+ * Each entry names its `file`, and the enumeration below runs per file, so a new
+ * read in EITHER module is caught by the same assertion.
  */
+const CUSTOM_PAGE_MODULES = [
+  'src/lib/actions/customPages.js',
+  'src/lib/promotions/getPromotions.js',
+];
+
 const CUSTOM_PAGE_READS = {
   // exported reads in lib/actions/customPages.js
   getCustomPages: {
+    file: 'src/lib/actions/customPages.js',
     verdict: 'stripped',
     why: 'admin list; no projection, so it would ship a second full copy of every body',
   },
   getCustomPageById: {
+    file: 'src/lib/actions/customPages.js',
     verdict: 'unstripped',
     why: 'the EDITOR opens this and must see the pending draft; admin-gated by the route',
   },
   getCustomPageBySlug: {
+    file: 'src/lib/actions/customPages.js',
     verdict: 'stripped',
-    why: 'THE public read — a draft here reaches a visitor',
+    why: 'THE public read — a draft here reaches a visitor. Also the /promotions/<slug> '
+      + 'Advanced HTML branch, which takes no second strip because this one is inside',
   },
   getCustomPageBySlugAny: {
+    file: 'src/lib/actions/customPages.js',
     verdict: 'unstripped',
     why: 'backs ?preview=<token>; gated on the token by the caller, and showing the draft is its job',
   },
   findCustomPageByHistoricalSlug: {
+    file: 'src/lib/actions/customPages.js',
     verdict: 'projected',
     why: "selects 'slug' only — the draft cannot be in the result",
+  },
+  // exported reads in lib/promotions/getPromotions.js
+  getActiveCustomPagePromotions: {
+    file: 'src/lib/promotions/getPromotions.js',
+    verdict: 'projected',
+    why: 'the /promotions grid loader; selects the seven fields the card pipeline reads, '
+      + 'so the unpublished draft — body AND promotionCover — cannot be in the result',
   },
 };
 
@@ -261,25 +290,42 @@ function exportedFns(src) {
 
 const READS_A_DOC = /CustomPage\.(find|findOne|findById)\s*\(/;
 
+/** Every read in every scanned module, as `{ name, file, body }`. */
+function allCustomPageReads() {
+  return CUSTOM_PAGE_MODULES.flatMap((file) => {
+    const { code } = readSource(file);
+    return exportedFns(code)
+      .filter((f) => READS_A_DOC.test(f.body))
+      // Mutating actions read the document to write it; they are not read paths
+      // and never return one to a caller.
+      .filter((f) => !/findByIdAndUpdate|findByIdAndDelete|CustomPage\.create/.test(f.body))
+      .map((f) => ({ ...f, file }));
+  });
+}
+
 test('every CustomPage read is registered with a verdict, and none is unclassified', () => {
-  const { code } = readSource('src/lib/actions/customPages.js');
-  const found = exportedFns(code)
-    .filter((f) => READS_A_DOC.test(f.body))
-    // Mutating actions read the document to write it; they are not read paths
-    // and never return one to a caller.
-    .filter((f) => !/findByIdAndUpdate|findByIdAndDelete|CustomPage\.create/.test(f.body))
-    .map((f) => f.name)
-    .sort();
+  const found = allCustomPageReads().map((f) => f.name).sort();
 
   assert.deepEqual(found, Object.keys(CUSTOM_PAGE_READS).sort(),
     'a CustomPage read appeared or disappeared without being classified. Add it to '
-    + 'CUSTOM_PAGE_READS with a verdict and a REASON — an unregistered read is the '
-    + 'projection-safe-by-luck failure this sweep exists to catch');
+    + 'CUSTOM_PAGE_READS with a file, a verdict and a REASON — an unregistered read is '
+    + 'the projection-safe-by-luck failure this sweep exists to catch');
+});
+
+test('every registered read names the module it was actually found in', () => {
+  // Without this, a register entry could name the wrong file and the per-file
+  // scan below would look in a module that never contained the function.
+  const foundIn = Object.fromEntries(allCustomPageReads().map((f) => [f.name, f.file]));
+  for (const [name, entry] of Object.entries(CUSTOM_PAGE_READS)) {
+    assert.ok(CUSTOM_PAGE_MODULES.includes(entry.file),
+      `${name} is registered against a module this sweep does not scan: ${entry.file}`);
+    assert.equal(entry.file, foundIn[name],
+      `${name} is registered in ${entry.file} but was found in ${foundIn[name]}`);
+  }
 });
 
 test('every read marked `stripped` actually calls stripDraft', () => {
-  const { code } = readSource('src/lib/actions/customPages.js');
-  const bodies = Object.fromEntries(exportedFns(code).map((f) => [f.name, f.body]));
+  const bodies = Object.fromEntries(allCustomPageReads().map((f) => [f.name, f.body]));
   for (const [name, { verdict }] of Object.entries(CUSTOM_PAGE_READS)) {
     if (verdict !== 'stripped') continue;
     assert.match(bodies[name] ?? '', /stripDraft\(/,
@@ -290,12 +336,31 @@ test('every read marked `stripped` actually calls stripDraft', () => {
 test('every read marked `unstripped` really does NOT strip — the register is not decorative', () => {
   // The other direction. Without this, marking everything `unstripped` would
   // make the assertion above vacuous.
-  const { code } = readSource('src/lib/actions/customPages.js');
-  const bodies = Object.fromEntries(exportedFns(code).map((f) => [f.name, f.body]));
+  const bodies = Object.fromEntries(allCustomPageReads().map((f) => [f.name, f.body]));
   for (const [name, { verdict }] of Object.entries(CUSTOM_PAGE_READS)) {
     if (verdict !== 'unstripped') continue;
     assert.doesNotMatch(bodies[name] ?? '', /stripDraft\(/,
       `${name} is registered as unstripped but strips — the register and the code disagree`);
+  }
+});
+
+test('every read marked `projected` really has a .select(), and it excludes the draft', () => {
+  /**
+   * `projected` is the only verdict that claims safety WITHOUT a strip, so it is
+   * the one that can rot silently: widen the select and nothing else in this file
+   * would notice. Both halves are asserted — that a projection exists at all, and
+   * that it does not name `draft`.
+   */
+  const bodies = Object.fromEntries(allCustomPageReads().map((f) => [f.name, f.body]));
+  for (const [name, { verdict }] of Object.entries(CUSTOM_PAGE_READS)) {
+    if (verdict !== 'projected') continue;
+    const body = bodies[name] ?? '';
+    const select = body.match(/\.select\((['"])([^'"]*)\1\)/);
+    assert.ok(select,
+      `${name} is registered as safe BY PROJECTION but has no .select() — it ships whole `
+      + 'documents, draft included');
+    assert.equal(/\bdraft\b/.test(select[2]), false,
+      `${name}'s projection names the draft: ${select[2]}`);
   }
 });
 

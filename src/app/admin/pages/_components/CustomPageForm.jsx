@@ -175,6 +175,19 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
   const [ogImagePublicId, setOgImagePublicId] = useState(page?.ogImagePublicId ?? '');
   const [twitterCard,     setTwitterCard]     = useState(page?.twitterCard ?? 'summary_large_image');
 
+  /**
+   * Promotion mode.
+   *
+   * ALL THREE READ FROM `page`, the COMPOSED view, and that is right for all
+   * three even though they sit on opposite sides of the draft partition:
+   * composeWorkingView carries the live values for the live-only keys and the
+   * draft's value for promotionCover, so each control opens showing exactly what
+   * the next save would keep.
+   */
+  const [pageType,       setPageType]       = useState(page?.pageType ?? 'general');
+  const [promotionOrder, setPromotionOrder] = useState(page?.promotionOrder ?? 0);
+  const [promotionCover, setPromotionCover] = useState(page?.promotionCover ?? '');
+
   // JSON-LD
   const [jsonLdEnabled,      setJsonLdEnabled]      = useState(page?.jsonLd?.enabled ?? true);
   const [schemaType,         setSchemaType]         = useState(page?.jsonLd?.schemaType ?? 'WebPage');
@@ -355,6 +368,9 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
     fd.set('ogImage',         ogImage);
     fd.set('ogImagePublicId', ogImagePublicId);
     fd.set('twitterCard',     twitterCard);
+    fd.set('pageType',        pageType);
+    fd.set('promotionOrder',  String(promotionOrder));
+    fd.set('promotionCover',  promotionCover);
     fd.set('jsonLd', JSON.stringify({
       enabled:    jsonLdEnabled,
       schemaType,
@@ -371,6 +387,7 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
     title, slug, status,
     metaTitle, metaDescription, canonicalUrl, noIndex,
     ogTitle, ogDescription, ogType, ogImage, ogImagePublicId, twitterCard,
+    pageType, promotionOrder, promotionCover,
     jsonLdEnabled, schemaType, jsonLdOverrides, rawOverride, rawOverrideEnabled,
     isSuperAdmin,
   ]);
@@ -603,6 +620,11 @@ export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
     // would strand the asset.
     onOgImageChange: (url, publicId) => { setOgImage(url); setOgImagePublicId(publicId ?? ''); },
     twitterCard, setTwitterCard,
+    // Promotion mode. pageType/promotionOrder are LIVE-ONLY and promotionCover
+    // DRAFTS — the split is the schema's, and the dialog says so to the author.
+    pageType, setPageType,
+    promotionOrder, setPromotionOrder,
+    promotionCover, setPromotionCover,
     jsonLdEnabled, setJsonLdEnabled,
     schemaType, setSchemaType,
     jsonLdOverrides, setJsonLdOverrides,

@@ -46,17 +46,50 @@ function branches() {
   assert.notEqual(fnAt, -1, 'the page component was renamed — this test cannot locate the render');
   const body = code.slice(fnAt);
 
-  const at = body.indexOf('shouldRenderBuilderPromotion');
-  assert.notEqual(at, -1, 'the builder-branch guard is gone from the render — file restructured');
-  const msdbAt = body.indexOf('resolvePromotion(segment)');
-  assert.notEqual(msdbAt, -1, 'the MSDB branch is gone from the render — file restructured');
-  assert.ok(msdbAt > at, 'the branches are no longer in the order this test assumes');
+  /**
+   * ── EVERY ANCHOR MUST MATCH EXACTLY ONCE IN THE SLICED BODY ──────────────
+   * `indexOf` returns the FIRST match and says nothing about how many there
+   * are. Each of these strings ALSO appears in `generateMetadata` earlier in the
+   * file — which is why the body is sliced from the default export first — and
+   * an edit that reintroduced one inside the render would silently move a
+   * bracket to an arbitrary occurrence. "The first of three identical anchors"
+   * is not an anchor, so each is counted, printed and required to be unique.
+   *
+   * ── THE ANCHORS MOVED WHEN THE ROUTE STOPPED RE-DERIVING ITS PRECEDENCE ──
+   * They used to be the inlined `shouldRenderPromotionPage` guard and the
+   * `resolvePromotion(segment)` call. The route now delegates to
+   * `promotionDetailTarget` and resolves all three sources up front, so neither
+   * brackets a branch any more — and this file went red saying so, which is the
+   * exactly-once check doing its job rather than an inconvenience. Re-anchored
+   * on the three `target === …` arms, which ARE the branch boundaries.
+   */
+  const anchorAt = (needle, what) => {
+    const hits = body.split(needle).length - 1;
+    assert.ok(Number.isInteger(hits), `anchor count is not an integer: ${hits}`);
+    assert.equal(hits, 1,
+      `the anchor ${JSON.stringify(needle)} matches ${hits} times in the render body, `
+      + `not once — indexOf would bracket an arbitrary one and this test would measure `
+      + `the wrong slice (${what})`);
+    const at = body.indexOf(needle);
+    assert.ok(at >= 0 && Number.isInteger(at), `the anchor index is not a usable offset: ${at}`);
+    return at;
+  };
 
-  const builder = body.slice(at, msdbAt);
-  // The slice must contain the thing it is a slice OF, or it is measuring air.
+  const at = anchorAt('if (target === "builder")', 'the builder branch is gone — file restructured');
+  const customAt = anchorAt('if (target === "custom")', 'the Advanced HTML branch is gone');
+  const msdbAt = anchorAt('if (!resolved) notFound();', 'the MSDB branch is gone');
+  assert.ok(customAt > at && msdbAt > customAt,
+    'the branches are no longer in the order this test assumes '
+    + `(builder ${at}, custom ${customAt}, msdb ${msdbAt})`);
+
+  const builder = body.slice(at, customAt);
+  const custom = body.slice(customAt, msdbAt);
+  // Each slice must contain the thing it is a slice OF, or it is measuring air.
   assert.match(builder, /PageBuilderView/,
     'the builder slice contains no PageBuilderView — the anchors no longer bracket the branch');
-  return { builder, msdb: body.slice(msdbAt), whole: code };
+  assert.match(custom, /CustomPageView/,
+    'the custom slice contains no CustomPageView — the anchors no longer bracket the branch');
+  return { builder, custom, msdb: body.slice(msdbAt), whole: code };
 }
 
 const BACK_TEXT = 'กลับไปหน้าโปรโมชัน';
@@ -113,4 +146,33 @@ test('the MSDB branch KEEPS its back link — the removal was scoped on purpose'
   assert.ok(msdb.includes(BACK_TEXT),
     'the MSDB promotion branch lost its back link too. That layout is contained and shows a '
     + 'title header — round 79 scoped the removal to the full-bleed builder branch deliberately.');
+});
+
+/**
+ * ── THE ADVANCED HTML BRANCH FOLLOWS THE BUILDER, NOT THE MSDB ────────────
+ * Both page branches render onto the same route-colour surface and both are
+ * reached from a card the visitor just clicked; the MSDB branch keeps its link
+ * because it sits inside a contained <article> under a title/date/tags header,
+ * which is a different layout with a different problem. A link this page did not
+ * have at its old bare-slug URL should not appear merely because the URL moved.
+ */
+test('the Advanced HTML branch renders no back link either', () => {
+  const { custom } = branches();
+  assert.equal(custom.includes(BACK_TEXT), false,
+    'the Advanced HTML promotion branch grew a back link. Round 79 removed the builder’s '
+    + 'for a reason that applies here too — three other links to /promotions remain in the '
+    + 'site chrome, and the browser has back.');
+  assert.equal(/href="\/promotions"/.test(custom), false,
+    'the custom branch links to /promotions, by href if not by that label');
+});
+
+test('CONTROL: the custom-branch check is live — it sees the label when planted', () => {
+  // An absence check passes against an empty string or a slice that stopped
+  // matching, so the predicate is proved against markup that DOES carry the link.
+  const restored = `<Link href="/promotions">← ${BACK_TEXT}</Link>`;
+  assert.equal(restored.includes(BACK_TEXT), true, 'the control string lost its label');
+  assert.equal(/href="\/promotions"/.test(restored), true, 'the control string lost its href');
+  const { custom } = branches();
+  assert.notEqual(custom, restored, 'the real branch IS the control string');
+  assert.ok(custom.length > 40, 'the custom slice is too short to be a real branch');
 });

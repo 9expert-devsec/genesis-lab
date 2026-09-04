@@ -1,8 +1,13 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { getActivePromotions, getSlugMap, getActiveBuilderPromotions } from '@/lib/promotions/getPromotions';
+import {
+  getActivePromotions, getSlugMap, getActiveBuilderPromotions,
+  getActiveCustomPagePromotions,
+} from '@/lib/promotions/getPromotions';
 import { getActivePromotionBanners } from '@/lib/actions/promotion-banner';
-import { builderPromotionToCard, orderedPromotionCards } from '@/lib/pageBuilder/promotionMode';
+import {
+  promotionPageToCard, orderedPromotionCards, selectVisiblePromotionPages,
+} from '@/lib/pages/promotionMode';
 import { PromotionBannerCarousel } from '@/components/promotions/PromotionBannerCarousel';
 // ROUND 43, ADDED beside the statements above rather than folded into one —
 // the standing rule in this repo. The two date helpers that used to live in
@@ -35,10 +40,12 @@ export const metadata = {
  * defect was a rendered string.
  */
 
-// ONE card for both sources — fed a uniform view-model (see cardFromMsdb /
-// builderPromotionToCard). NOT forked into builder/MSDB variants: the two are
-// mapped to the same { href, title, cover, alt, start, end } shape upstream, so
-// they render identically.
+// ONE card for all three sources — fed a uniform view-model (see cardFromMsdb /
+// promotionPageToCard). NOT forked per source: builder pages, Advanced HTML
+// pages and MSDB rows are mapped to the same
+// { href, title, cover, alt, start, end } shape upstream, so they render
+// identically. A CustomPage has no publish window, so its card simply carries no
+// date pill — an absent value, not an invented one.
 function PromotionCard({ card }) {
   const range = dateRangeLabel(card.start, card.end);
   const cover = card.cover;
@@ -86,7 +93,7 @@ function PromotionCard({ card }) {
   );
 }
 
-// MSDB promotion → the same card view-model as builderPromotionToCard. slug
+// MSDB promotion → the same card view-model as promotionPageToCard. slug
 // resolves via the config slugMap, falling back to the raw promotion_id.
 function cardFromMsdb(promotion, slugMap) {
   const slug = slugMap[promotion.promotion_id] || promotion.promotion_id;
@@ -103,19 +110,47 @@ function cardFromMsdb(promotion, slugMap) {
 }
 
 export default async function PromotionsListPage() {
-  const [promotions, slugMap, banners, builderPromotions] = await Promise.all([
-    getActivePromotions(),
-    getSlugMap(),
-    getActivePromotionBanners(),
-    getActiveBuilderPromotions(),
-  ]);
+  const [promotions, slugMap, banners, builderPromotions, customPromotions] =
+    await Promise.all([
+      getActivePromotions(),
+      getSlugMap(),
+      getActivePromotionBanners(),
+      getActiveBuilderPromotions(),
+      getActiveCustomPagePromotions(),
+    ]);
 
-  // Read-time union (§6 — neither collection is written). Builder promotions form
-  // ONE block BEFORE the MSDB promotions (orderedPromotionCards); within the
-  // builder block, promotionOrder asc (already sorted by the loader). The two
-  // sources are NOT interleaved by a shared key — unified ordering is future work.
+  /**
+   * Read-time union (§6 — no collection is written).
+   *
+   * ── THE GENESIS HALF IS ONE BLOCK, SORTED ACROSS BOTH COLLECTIONS ────────
+   * Builder promotions and Advanced HTML promotions INTERLEAVE on
+   * `promotionOrder`. They are both Genesis-owned pages carrying the same
+   * admin-controlled order field, so the admin arranges them himself rather than
+   * the code deciding which collection outranks the other — a builder promo at
+   * order 2 sits between two Advanced HTML promos at 1 and 3.
+   *
+   * That requires ONE `selectVisiblePromotionPages` call over the UNION. Each
+   * loader already gates and sorts its own half, and sorting two sorted lists
+   * separately then concatenating them is two blocks by construction, which is
+   * exactly what this is not. The gate is idempotent, so re-running it over the
+   * union costs a filter pass and buys one ordering.
+   *
+   * The `promotionSource` tag is attached HERE, where the two loaders are named,
+   * and read back by `promotionPageToCard` — which takes the source as a
+   * required argument because it namespaces the React key, and an `_id` is
+   * unique within a collection but not across two.
+   *
+   * MSDB still follows as its own block. `promotionOrder` and MSDB
+   * `display_order` are independent scales nobody has reconciled; see
+   * orderedPromotionCards.
+   */
+  const genesisPages = [
+    ...builderPromotions.map((p) => ({ ...p, promotionSource: 'builder' })),
+    ...customPromotions.map((p) => ({ ...p, promotionSource: 'custom' })),
+  ];
   const cards = orderedPromotionCards(
-    builderPromotions.map(builderPromotionToCard),
+    selectVisiblePromotionPages(genesisPages)
+      .map((p) => promotionPageToCard(p, p.promotionSource)),
     promotions.map((p) => cardFromMsdb(p, slugMap)),
   );
 

@@ -22,6 +22,9 @@ import { requireAdmin } from '@/lib/actions/auth';
 import { auth } from '@/lib/auth/options';
 import { deleteFromCloudinary } from '@/lib/cloudinary';
 import { checkSlugAvailable } from '@/lib/pages/slugGuard';
+// The EXTRA guard a promotion page needs. ADDED beside the statement above
+// rather than folded into it — the standing rule in this repo.
+import { checkPromotionSlugAvailable } from '@/lib/pages/slugGuard';
 // ADDED beside the statements above rather than folded into any — the standing
 // rule in this repo.
 import { recordAudit } from '@/lib/pages/pageAudit';
@@ -160,6 +163,15 @@ function parseFormData(formData) {
     twitterCard:     String(formData.get('twitterCard') ?? 'summary_large_image'),
     jsonLd,
     slugHistory,
+    // Promotion mode. `pageType` and `promotionOrder` are LIVE-ONLY and
+    // `promotionCover` is DRAFTED — lib/schemas/customPage.js owns that split
+    // and the reasoning; this function only unpacks the wire.
+    pageType:        String(formData.get('pageType') ?? 'general'),
+    // Left as the raw string: `z.coerce.number().int()` in customPageSchema does
+    // the conversion, so a non-numeric value becomes a validation ERROR the
+    // author sees rather than a silent 0 parsed here.
+    promotionOrder:  String(formData.get('promotionOrder') ?? '0'),
+    promotionCover:  String(formData.get('promotionCover') ?? '').trim(),
   };
 }
 
@@ -296,6 +308,29 @@ export async function createCustomPage(formData) {
   const slugCheck = await checkSlugAvailable(parsed.data.slug);
   if (!slugCheck.ok) return slugCheck;
 
+  /**
+   * Promotion mode: a promotion page also owns /promotions/<slug>, a namespace
+   * the shared guard above does not cover, so its slug must additionally not
+   * collide with a PromotionConfig.url_slug or a raw Promotion.promotion_id.
+   * Scoped to promotion pages — a ทั่วไป page skips it entirely.
+   *
+   * GATED ON THE SUBMITTED TYPE, NOT THE STORED ONE. That is what makes a page
+   * which BECOMES a promotion get checked: the save that flips ทั่วไป →
+   * โปรโมชัน carries pageType: 'promotion', so the guard runs on that save even
+   * though the slug itself did not change. Reading the stored type instead would
+   * let an existing slug walk into promotion mode unchecked, which is the one
+   * hole this guard exists to close.
+   *
+   * Same shape and same placement as the three call sites in
+   * lib/actions/pageBuilder.js — one guard, called the same way from both
+   * collections, so the two page types cannot disagree about which slugs a
+   * promotion may take.
+   */
+  if (parsed.data.pageType === 'promotion') {
+    const promoSlugCheck = await checkPromotionSlugAvailable(parsed.data.slug);
+    if (!promoSlugCheck.ok) return promoSlugCheck;
+  }
+
   const stamp = await currentUserStamp();
 
   try {
@@ -339,6 +374,14 @@ export async function updateCustomPage(id, formData) {
 
   const slugCheck = await checkSlugAvailable(parsed.data.slug, { excludeCustomId: id });
   if (!slugCheck.ok) return slugCheck;
+
+  // Promotion mode — see createCustomPage for why this is gated on the SUBMITTED
+  // pageType, which is what catches a page becoming a promotion under an
+  // existing slug.
+  if (parsed.data.pageType === 'promotion') {
+    const promoSlugCheck = await checkPromotionSlugAvailable(parsed.data.slug);
+    if (!promoSlugCheck.ok) return promoSlugCheck;
+  }
 
   const update = { ...parsed.data };
 
@@ -398,7 +441,7 @@ export async function updateCustomPage(id, formData) {
  * divergence from the builder — the divergence is the point.
  *
  * ── WHAT GOES WHERE ───────────────────────────────────────────────────────
- * The thirteen CUSTOM_PAGE_DRAFT_KEYS go into `draft`, so a published page does
+ * The fourteen CUSTOM_PAGE_DRAFT_KEYS go into `draft`, so a published page does
  * not change. `slug` and its history are LIVE-ONLY and are written immediately:
  * slug is identity, with a unique index, a cross-collection guard and a public
  * route, and a "draft slug" is a slug the unique index cannot protect. That is
@@ -430,10 +473,40 @@ export async function saveCustomPageDraft(id, formData) {
   const slugCheck = await checkSlugAvailable(parsed.data.slug, { excludeCustomId: id });
   if (!slugCheck.ok) return slugCheck;
 
+  /**
+   * Promotion mode — see createCustomPage for the reasoning. It matters MOST on
+   * this path: บันทึกฉบับร่าง is the editor's primary save, and pageType is
+   * live-only, so this is the action that actually flips a published page into
+   * promotion mode. A guard that ran only on the other two would be a guard the
+   * real flow walks past.
+   */
+  if (parsed.data.pageType === 'promotion') {
+    const promoSlugCheck = await checkPromotionSlugAvailable(parsed.data.slug);
+    if (!promoSlugCheck.ok) return promoSlugCheck;
+  }
+
   const actor = await currentUserStamp();
 
-  // The live half: identity only. `status` is deliberately absent — see above.
-  const set = { slug: parsed.data.slug, updatedBy: actor };
+  /**
+   * The live half: identity and routing. `status` is deliberately absent — see
+   * above.
+   *
+   * `pageType` and `promotionOrder` are here because they are LIVE-ONLY, and
+   * writing them from บันทึกฉบับร่าง is the whole point of that assignment: the
+   * grid query and the redirect read the stored live value, so a drafted one
+   * would be unqueryable and the control would do nothing until publish. The
+   * visible consequence — flipping a published page to โปรโมชัน redirects its
+   * bare URL immediately while the body edits stay in the draft — is documented
+   * at the partition in lib/schemas/customPage.js.
+   *
+   * `promotionCover` is NOT here. It is content and it drafts, like the body.
+   */
+  const set = {
+    slug: parsed.data.slug,
+    pageType: parsed.data.pageType,
+    promotionOrder: parsed.data.promotionOrder,
+    updatedBy: actor,
+  };
   if (parsed.data.slug !== existing.slug) {
     const history = new Set(existing.slugHistory ?? []);
     history.add(existing.slug);

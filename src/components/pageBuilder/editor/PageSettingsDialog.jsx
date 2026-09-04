@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Upload, Loader2 } from 'lucide-react';
 import { getPreviewState } from '@/lib/actions/pageBuilder';
 import { cn } from '@/lib/utils';
 import { PAGE_TYPES, PAGE_THEMES } from '@/lib/schemas/pageBuilder';
 import { isReservedSlug } from '@/lib/pages/reservedSlugs';
-import { isStandalonePromotion } from '@/lib/pageBuilder/promotionMode';
+import { isStandalonePromotion } from '@/lib/pages/promotionMode';
 import { Field, Group, TextInput, TextArea, Warn, INPUT_CLASS } from './fields';
 import { useEditor } from './EditorProvider';
 import { VersionHistory } from './VersionHistory';
@@ -23,6 +22,18 @@ import { ActivityTrail } from './ActivityTrail';
  */
 import {
   PAGE_SETTINGS_SECTIONS, SettingsNav, SettingsFooterBand, SettingsShell,
+} from '@/components/admin/pageSettings/SettingsShell';
+/**
+ * The ชนิดหน้า labels and the promotion cover uploader, which moved to the
+ * shared shell when the Advanced HTML editor gained a promotion mode of its
+ * own. ADDED beside the statement above rather than folded into it — the
+ * standing rule in this directory.
+ *
+ * PAGE_TYPE_LABELS is a superset keyed by value; this dialog maps over its own
+ * PAGE_TYPES and looks up only those eight.
+ */
+import {
+  PAGE_TYPE_LABELS, PromoCoverField,
 } from '@/components/admin/pageSettings/SettingsShell';
 
 /**
@@ -58,11 +69,6 @@ export { PAGE_SETTINGS_SECTIONS, SettingsNav };
  * generateMetadata in the catch-all reads every field of it.
  */
 
-const PAGE_TYPE_LABELS = {
-  promotion: 'โปรโมชัน', landing: 'แลนดิ้ง', course_landing: 'แลนดิ้งคอร์ส', bundle: 'แพ็กเกจ',
-  masterclass: 'มาสเตอร์คลาส', event: 'อีเวนต์', general: 'ทั่วไป', thank_you: 'ขอบคุณ',
-};
-
 const THEME_LABELS = {
   default: '9Expert Blue (ค่าเริ่มต้น)', promotion_blue: 'โปรโมชัน (น้ำเงิน)',
   early_bird_orange: 'Early Bird (ส้ม)', ai_purple: 'AI (ม่วง)',
@@ -70,63 +76,6 @@ const THEME_LABELS = {
 };
 
 const SLUG_RE = /^[a-z0-9-]+$/;
-
-/**
- * Promotion cover uploader (promotion mode, Phase 1). Reuses the shared admin
- * upload endpoint — no second upload path to secure — but stores ONLY the
- * returned secure URL into `promotionCover`. It DELIBERATELY discards any
- * `publicId` the endpoint returns: storing an ownership token would wake the
- * item-5 Cloudinary GC before it is ready (option B). Uploads to the
- * `promotion-covers` folder, a sibling of `page-builder` that sits OUTSIDE the
- * GC's scope, so an untracked cover is also a safe one.
- */
-function PromoCoverField({ value, onChange }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-  const src = String(value ?? '').trim();
-
-  const upload = async (file) => {
-    if (!file) return;
-    setBusy(true); setErr('');
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('folder', 'promotion-covers');
-      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? 'อัปโหลดไม่สำเร็จ');
-      // URL ONLY — json.publicId is intentionally ignored (option B, see above).
-      onChange(json.url);
-    } catch (e) {
-      setErr(e?.message ?? 'อัปโหลดไม่สำเร็จ');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Field label="ภาพปกโปรโมชัน" hint="ใช้เป็นรูปการ์ดในหน้า /promotions (เฟสถัดไป)">
-      {src && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt="" className="mb-1.5 aspect-square w-24 rounded-9e-md object-cover" />
-      )}
-      <label className={cn(
-        'flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed',
-        'border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50',
-        'hover:border-9e-action/40 hover:text-9e-action',
-        busy && 'pointer-events-none opacity-50'
-      )}>
-        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-        {busy ? 'กำลังอัปโหลด…' : src ? 'เปลี่ยนภาพปก' : 'อัปโหลดภาพปก'}
-        <input
-          type="file" accept="image/*" className="sr-only" disabled={busy}
-          onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }}
-        />
-      </label>
-      {err && <Warn tone="red">{err}</Warn>}
-    </Field>
-  );
-}
 
 /**
  * The dialog's BODY, taking plain props.
