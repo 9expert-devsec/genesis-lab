@@ -61,6 +61,23 @@ export default async function sitemap() {
       status: 'published',
       noIndex: { $ne: true },
     })
+      /**
+       * THE PROJECTION IS WHAT KEEPS THE DRAFT OUT OF THIS READ — do not widen
+       * it casually.
+       *
+       * CustomPage carries an unpublished `draft` subdocument holding the whole
+       * content surface, body included. This read is safe today because it asks
+       * for exactly two fields, NOT because anything strips one: there is no
+       * stripDraft() below. Add a field here and you are one careless `.select()`
+       * away from putting unpublished bodies into a public sitemap — the failure
+       * the draft split exists to prevent, arriving through the one file nobody
+       * thinks of as a page read.
+       *
+       * If this ever needs more than a URL and a date, take stripDraft() with it.
+       * `noIndex` is a DRAFT key, so the filter above deliberately reads the LIVE
+       * value: de-indexing takes effect when it is published, not when it is
+       * typed.
+       */
       .select('slug updatedAt')
       .limit(500)
       .lean();

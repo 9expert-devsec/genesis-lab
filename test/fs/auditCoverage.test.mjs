@@ -735,7 +735,24 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // version history is a separate collection with its own writer, and the audit
 // log's rows, schema and writers were not to be touched. So the count moved and
 // no coverage case did.
-const MUTATING_EXPORT_COUNT = 177;
+//
+// ── 177 → 180: the CustomPage draft/publish split ──────────────────────────
+// THREE new exports in customPages.js — saveCustomPageDraft, publishCustomPage
+// and discardCustomPageDraft — so that editing a published Advanced HTML page
+// no longer changes the live page. All three write Mongo directly in their own
+// body (CustomPage.findByIdAndUpdate), so the FILE-LOCAL classifier sees them
+// and the depth-0 figure in W2-b moves with them, 169 → 172. Both numbers move
+// together for the reason the articles.js and media.js changes did: 180 is 172
+// plus the eight exports only the import walk can see, and W2-b asserts exactly
+// that sum. Bumping only the total would leave the delta assertion red and
+// teach the next reader that the sum is decorative.
+//
+// customPages.js is NOT in SWEPT_FILES and that is unchanged by this round. It
+// records a PageAuditLog row per mutation — the per-page trail the editor's
+// ประวัติการดำเนินการ section reads — rather than an AdminAuditLog row, which is
+// the same system pageBuilder.js uses and is likewise outside the sweep. The
+// recordAdminAction sweep of this file remains a separate open ticket.
+const MUTATING_EXPORT_COUNT = 180;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -957,7 +974,10 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 169,
+    zero, 172,
+    'ROUND: the CustomPage draft split, 169 → 172 — saveCustomPageDraft, ' +
+    'publishCustomPage and discardCustomPageDraft all call ' +
+    'CustomPage.findByIdAndUpdate in their own body, so depth 0 sees all three. ' +
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +

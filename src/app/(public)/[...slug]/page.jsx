@@ -64,6 +64,10 @@ import {
   findCustomPageByHistoricalSlug,
 } from '@/lib/actions/customPages';
 import { buildPageJsonLd } from '@/lib/customPages/buildPageJsonLd';
+// The draft split's read side for CustomPage. ADDED beside the statements above
+// rather than folded into any — the standing rule in this repo.
+import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pages/customPageDraft';
+import { customPagePreviewBanner } from '@/lib/pages/customPagePreview';
 import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
 import { isPromotionPage } from '@/lib/pageBuilder/promotionMode';
 import { CustomPageView } from './_components/CustomPageView';
@@ -109,20 +113,45 @@ function segmentFromSlug(slug) {
   return segment;
 }
 
-// Resolve a custom page for either public (published) or preview (any status
-// with a matching token) access. Returns { page, isPreview } or null.
+/**
+ * Resolve a custom page for either public (published) or preview access.
+ * Returns { page, isPreview, banner } or null.
+ *
+ * ── WHAT THE TOKEN MEANS NOW ──────────────────────────────────────────────
+ * It used to mean "show this UNPUBLISHED page". Since the draft split it means
+ * "show this page's DRAFT, published or not" — the token authenticates, and the
+ * draft decides which content. Those are two different jobs and separating them
+ * is what lets an author preview pending edits to a page that is already live,
+ * which is the whole point of the split.
+ *
+ * `composeWorkingView` is what makes that one line instead of a branch: it takes
+ * the draft's values for the thirteen content keys when a draft exists and the
+ * document's own otherwise, and never carries `.draft` through. A published page
+ * with nothing pending therefore previews exactly what the public sees, which is
+ * the honest answer rather than an empty page.
+ *
+ * The banner is decided HERE, where both facts are known, and by a pure function
+ * so every branch is reachable from a test.
+ */
 async function resolveCustomPageForRequest(segment, searchParams) {
   const sp = await searchParams;               // App Router: searchParams is a promise
   const token = sp?.preview ? String(sp.preview) : '';
   if (token) {
-    const draft = await getCustomPageBySlugAny(segment);
-    if (draft && draft.previewToken && draft.previewToken === token) {
-      return { page: draft, isPreview: true };
+    const stored = await getCustomPageBySlugAny(segment);
+    if (stored && stored.previewToken && stored.previewToken === token) {
+      return {
+        page: composeWorkingView(stored),
+        isPreview: true,
+        banner: customPagePreviewBanner({
+          published: stored.status === 'published',
+          hasDraft: hasUnpublishedDraft(stored),
+        }),
+      };
     }
     // token present but wrong/!match → fall through to published-only
   }
   const published = await getCustomPageBySlug(segment);
-  if (published) return { page: published, isPreview: false };
+  if (published) return { page: published, isPreview: false, banner: '' };
   return null;
 }
 
@@ -786,8 +815,11 @@ export default async function CatchAllPage({ params, searchParams }) {
           />
         )}
         {cp.isPreview && (
-          <div className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]">
-            ตัวอย่างหน้าฉบับร่าง (ยังไม่เผยแพร่) — เฉพาะผู้ดูแลระบบ
+          <div
+            data-testid="custom-page-preview-banner"
+            className="bg-9e-lime/20 border-b border-9e-lime px-4 py-2 text-center text-sm font-medium text-[var(--text-primary)]"
+          >
+            {cp.banner}
           </div>
         )}
         <CustomPageView page={customPage} />

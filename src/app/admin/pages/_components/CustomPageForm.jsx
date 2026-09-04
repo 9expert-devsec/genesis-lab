@@ -65,9 +65,25 @@ import { JsonLdPreviewOverlay } from './CustomPageSettingsBody';
 import { buildPageJsonLd, validatePageJsonLd } from '@/lib/customPages/buildPageJsonLd';
 import {
   createCustomPage,
-  updateCustomPage,
   regeneratePreviewToken,
 } from '@/lib/actions/customPages';
+/**
+ * The draft/publish trio. ADDED beside the statement above rather than folded
+ * into it — the standing rule.
+ *
+ * `updateCustomPage` is deliberately NO LONGER IMPORTED: it writes content
+ * straight to the live fields, which is the behaviour this work removes. It
+ * survives in the actions module because nothing else should call it either,
+ * and deleting an exported server action is a wider change than this commit
+ * needs — but the editor no longer has a path to it.
+ */
+import {
+  saveCustomPageDraft,
+  publishCustomPage,
+  discardCustomPageDraft,
+  toggleCustomPageStatus,
+} from '@/lib/actions/customPages';
+import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pages/customPageDraft';
 
 const SITE_URL = 'https://9experttraining.com';
 
@@ -98,12 +114,42 @@ function autosize(el) {
 
 // ── main component ───────────────────────────────────────────────
 
-export function CustomPageForm({ page, isSuperAdmin = false }) {
+export function CustomPageForm({ page: storedPage, isSuperAdmin = false }) {
   const router = useRouter();
-  const isEdit = Boolean(page?._id);
+  const isEdit = Boolean(storedPage?._id);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+
+  /**
+   * WHAT THE EDITOR OPENS — the draft when there is one, the live fields when
+   * there is not.
+   *
+   * Every `useState` below reads from THIS, not from the stored document. That
+   * is the whole editor-facing half of the draft split: an author who saved a
+   * draft and came back must find their pending work, not the published page.
+   * composeWorkingView also drops `.draft` itself, so nothing downstream can
+   * accidentally read two answers to "what is the body".
+   *
+   * A page with no draft composes to exactly its live content, which is why
+   * this is safe for every page that predates the split — there is no migration
+   * and most documents simply lack the key.
+   *
+   * Computed once per mounted document rather than memoised: these are useState
+   * INITIALISERS, read on the first render only, so a recomputation would be
+   * work whose result nothing reads.
+   */
+  const page = composeWorkingView(storedPage ?? {});
+
+  /**
+   * Does the STORED document carry unpublished work? Read from `storedPage`,
+   * never from `page` — the composed view has already unwrapped the draft, so
+   * asking it would always answer no.
+   *
+   * Held in state because the buttons change it: saving sets it, publishing and
+   * discarding clear it, and the chip and the ทิ้งฉบับร่าง button follow.
+   */
+  const [hasDraft, setHasDraft] = useState(() => hasUnpublishedDraft(storedPage));
 
   // Content
   const [title,  setTitle]  = useState(page?.title ?? '');
@@ -139,7 +185,14 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
   const [jsonLdStatus,       setJsonLdStatus]       = useState({ status: 'unchecked', message: '' });
 
   // Preview-token regeneration (edit mode only)
-  const [previewToken, setPreviewToken] = useState(page?.previewToken ?? '');
+  /**
+   * FROM THE STORED DOCUMENT, not the composed view. `previewToken` is a
+   * credential and is on NEITHER side of the content partition — it is not in
+   * customPageSchema at all — so composeWorkingView does not carry it and
+   * reading `page.previewToken` here would silently be undefined, emptying the
+   * ลิงก์พรีวิว section on every page that has a token.
+   */
+  const [previewToken, setPreviewToken] = useState(storedPage?.previewToken ?? '');
   const [copied, setCopied] = useState(false);
 
   // The page-settings dialog. Open/closed only — every field it edits is one of
@@ -237,14 +290,18 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
    */
   function buildJsonLdPreview() {
     return buildPageJsonLd({
-      ...(page ?? {}),
+      // The STORED document as the base — it is the only one carrying the
+      // server-managed fields buildPageJsonLd reads (createdAt, updatedAt, _id).
+      // Every AUTHORED value is overridden below from live form state, so the
+      // preview still describes what is on screen rather than what is saved.
+      ...(storedPage ?? {}),
       slug,
       title,
       metaDescription,
       ogImage,
       canonicalUrl,
       status: 'published',
-      createdAt: page?.createdAt ?? new Date().toISOString(),
+      createdAt: storedPage?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       jsonLd: {
         enabled:    jsonLdEnabled,
@@ -256,11 +313,20 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
     }, SITE_URL);
   }
 
-  const submit = useCallback(() => {
-    setError(null);
+  /**
+   * The posted payload, built ONCE and shared by บันทึกฉบับร่าง and เผยแพร่.
+   *
+   * Both buttons send the same thing — the difference is what the server does
+   * with it, not what the client sends. Two builders would be two chances for
+   * the publish path to post a field the save path does not, which is the
+   * drift a single builder makes impossible.
+   *
+   * Returns null after setting the error, so a caller can simply bail.
+   */
+  const buildFormData = useCallback(() => {
     if (!editor) {
       setError('Editor ยังไม่พร้อม');
-      return;
+      return null;
     }
 
     // Source mode can be saved directly, without ever touching the toggle —
@@ -269,10 +335,10 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
     // it: whatever the editor just serialised already fits its own schema.
     const html = sourceMode ? wrapIfLossy(sourceHtml, editor.schema) : editor.getHTML();
     const trimmed = html.replace(/<p>\s*<\/p>/g, '').trim();
-    if (!title.trim())     { setError('กรุณาใส่ชื่อหน้าเพจ'); return; }
-    if (!slug.trim())      { setError('กรุณาใส่ slug'); return; }
-    if (!SLUG_RE.test(slug)) { setError('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น'); return; }
-    if (!trimmed)          { setError('กรุณาใส่เนื้อหา'); return; }
+    if (!title.trim())     { setError('กรุณาใส่ชื่อหน้าเพจ'); return null; }
+    if (!slug.trim())      { setError('กรุณาใส่ slug'); return null; }
+    if (!SLUG_RE.test(slug)) { setError('slug ต้องเป็น a-z, 0-9 และ - เท่านั้น'); return null; }
+    if (!trimmed)          { setError('กรุณาใส่เนื้อหา'); return null; }
 
     const fd = new FormData();
     fd.set('title',           title);
@@ -299,17 +365,48 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
       rawOverrideEnabled: isSuperAdmin && rawOverrideEnabled,
     }));
     // slugHistory / previewToken / audit fields are server-managed — not sent.
+    return fd;
+  }, [
+    editor, sourceMode, sourceHtml,
+    title, slug, status,
+    metaTitle, metaDescription, canonicalUrl, noIndex,
+    ogTitle, ogDescription, ogType, ogImage, ogImagePublicId, twitterCard,
+    jsonLdEnabled, schemaType, jsonLdOverrides, rawOverride, rawOverrideEnabled,
+    isSuperAdmin,
+  ]);
+
+  /**
+   * บันทึกฉบับร่าง (edit) / บันทึก (create).
+   *
+   * In EDIT mode this writes a draft and the live page does not move — the
+   * behaviour this whole round exists for. It cannot publish and it cannot
+   * unpublish: saveCustomPageDraft refuses to write `status` at all, so the
+   * button's label is the whole truth about what it does.
+   */
+  const submit = useCallback(() => {
+    setError(null);
+    const fd = buildFormData();
+    if (!fd) return;
 
     startTransition(async () => {
       try {
+        /**
+         * CREATE writes the live fields; EDIT writes a draft.
+         *
+         * The asymmetry is the model's, not a special case: `title` and `body`
+         * are `required`, so a brand-new document cannot hold either only in its
+         * draft — create() would reject it. Nothing is published yet, so there is
+         * nothing for the live values to contradict.
+         */
         const res = isEdit
-          ? await updateCustomPage(page._id, fd)
+          ? await saveCustomPageDraft(storedPage._id, fd)
           : await createCustomPage(fd);
         if (!res || res.ok === false) {
           setError(res?.error ?? 'บันทึกไม่สำเร็จ');
           return;
         }
         if (isEdit) {
+          setHasDraft(true);
           setSaved(true);
           setTimeout(() => setSaved(false), 3000);
           router.refresh();
@@ -321,18 +418,114 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
         setError(err?.message ?? 'บันทึกไม่สำเร็จ');
       }
     });
-  }, [
-    editor, sourceMode, sourceHtml,
-    title, slug, status,
-    metaTitle, metaDescription, canonicalUrl, noIndex,
-    ogTitle, ogDescription, ogType, ogImage, ogImagePublicId, twitterCard,
-    jsonLdEnabled, schemaType, jsonLdOverrides, rawOverride, rawOverrideEnabled,
-    isSuperAdmin, isEdit, page, router,
-  ]);
+  }, [buildFormData, isEdit, storedPage, router]);
+
+  /**
+   * เผยแพร่ — the ONE path that makes a page public.
+   *
+   * It saves first, then publishes, and the order matters: an author who edits
+   * and presses เผยแพร่ without pressing บันทึกฉบับร่าง expects to publish what
+   * is on screen. Publishing without saving would promote the PREVIOUS draft and
+   * silently drop the edits in front of them — the same class of quiet wrongness
+   * the round removed from the save path.
+   *
+   * The save is skipped only when there is nothing to save it from: a page whose
+   * editor is not ready. `publishCustomPage` treats a null draft as a valid
+   * republish, so the second call is correct either way.
+   */
+  const publish = useCallback(() => {
+    if (!isEdit) return;
+    setError(null);
+    const fd = buildFormData();
+    if (!fd) return;                    // buildFormData set the error itself
+    startTransition(async () => {
+      try {
+        const saveRes = await saveCustomPageDraft(storedPage._id, fd);
+        if (!saveRes || saveRes.ok === false) {
+          setError(saveRes?.error ?? 'บันทึกฉบับร่างไม่สำเร็จ');
+          return;
+        }
+        const res = await publishCustomPage(storedPage._id);
+        if (!res || res.ok === false) {
+          setError(res?.error ?? 'เผยแพร่ไม่สำเร็จ');
+          return;
+        }
+        setHasDraft(false);
+        setStatus('published');
+        setSaved(true);
+        setTimeout(() => setSaved(false), 3000);
+        router.refresh();
+      } catch (err) {
+        setError(err?.message ?? 'เผยแพร่ไม่สำเร็จ');
+      }
+    });
+  }, [isEdit, storedPage, buildFormData, router]);
+
+  /**
+   * ทิ้งฉบับร่าง — throw the pending work away and go back to what is published.
+   *
+   * Confirmed first, because it is irreversible and there is no version history
+   * for this page type to recover from. Same copy as the builder's confirm, for
+   * the same reason the rest of this round borrows its vocabulary.
+   */
+  /**
+   * Take a published page DOWN, immediately.
+   *
+   * The one thing the button pair cannot do — it only goes up — and the reason
+   * the สถานะ select survives the draft split instead of being deleted.
+   *
+   * It writes `status` and nothing else. The pending draft is deliberately left
+   * alone: unpublishing and abandoning your work are different decisions, and a
+   * takedown that also destroyed the draft would be the more destructive of the
+   * two wearing the label of the milder one.
+   */
+  const unpublish = useCallback(() => {
+    if (!isEdit) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await toggleCustomPageStatus(storedPage._id, 'draft');
+        if (!res || res.ok === false) {
+          setError(res?.error ?? 'นำออกจากการเผยแพร่ไม่สำเร็จ');
+          return;
+        }
+        setStatus('draft');
+        router.refresh();
+      } catch (err) {
+        setError(err?.message ?? 'นำออกจากการเผยแพร่ไม่สำเร็จ');
+      }
+    });
+  }, [isEdit, storedPage, router]);
+
+  const discardDraft = useCallback(() => {
+    if (!isEdit) return;
+    const ok = typeof window === 'undefined' || window.confirm(
+      'ทิ้งฉบับร่างที่ยังไม่เผยแพร่ทั้งหมด และกลับไปใช้เนื้อหาที่เผยแพร่อยู่ตอนนี้ใช่หรือไม่? การกระทำนี้ย้อนกลับไม่ได้'
+    );
+    if (!ok) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        const res = await discardCustomPageDraft(storedPage._id);
+        if (!res || res.ok === false) {
+          setError(res?.error ?? 'ยกเลิกฉบับร่างไม่สำเร็จ');
+          return;
+        }
+        setHasDraft(false);
+        // The editor is now showing content the server no longer has. A reload
+        // is the only honest way back — re-seeding every useState from the live
+        // document by hand is a second composeWorkingView that could disagree
+        // with the first.
+        router.refresh();
+      } catch (err) {
+        setError(err?.message ?? 'ยกเลิกฉบับร่างไม่สำเร็จ');
+      }
+    });
+  }, [isEdit, storedPage, router]);
 
   async function handleRegenerateToken() {
     if (!isEdit) return;
-    const res = await regeneratePreviewToken(page._id);
+    const res = await regeneratePreviewToken(storedPage._id);
     if (res?.ok && res.token) {
       setPreviewToken(res.token);
       setCopied(false);
@@ -354,9 +547,18 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
 
   // ── Derived UI bits ───────────────────────────────────────────
   const slugValid = !slug || SLUG_RE.test(slug);
+  /**
+   * THE BUILDER'S WORDS, not new ones.
+   *
+   * EditorTopBar's STATUS_LABEL map reads
+   * `{ draft: 'ฉบับร่าง', published: 'เผยแพร่แล้ว', … }`, and this bar used to
+   * say "Draft"/"Published" in English. One vocabulary across the two page
+   * editors beats a better phrase in one of them, so these now match — an author
+   * who learns the word in one editor reads it in the other.
+   */
   const statusBadge = status === 'published'
-    ? { label: 'Published', cls: 'bg-green-50 text-green-700 border-green-100' }
-    : { label: 'Draft',     cls: 'bg-amber-50 text-amber-700 border-amber-100' };
+    ? { label: 'เผยแพร่แล้ว', cls: 'bg-green-50 text-green-700 border-green-100' }
+    : { label: 'ฉบับร่าง',     cls: 'bg-amber-50 text-amber-700 border-amber-100' };
 
   /**
    * EVERYTHING THE SETTINGS DIALOG EDITS, IN ONE BAG — and it is this
@@ -376,9 +578,18 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
   const settingsProps = {
     isEdit,
     isSuperAdmin,
+    /**
+     * The page's id, for the ประวัติการดำเนินการ list. Empty on a page that has
+     * never been saved, and ActivityTrail answers that state itself rather than
+     * rendering an empty trail that would read as "nobody has touched this".
+     */
+    pageId: isEdit ? String(storedPage._id) : '',
     title, onTitleChange: handleTitleChange,
     slug, onSlugChange: (v) => { setSlugEdited(true); setSlug(v); },
     status, setStatus,
+    // The สถานะ select's ONE action in edit mode: take a published page down.
+    // It cannot publish — that is เผยแพร่'s job and only its job.
+    onUnpublish: unpublish,
     metaTitle, setMetaTitle,
     metaDescription, setMetaDescription,
     canonicalUrl, setCanonicalUrl,
@@ -444,6 +655,26 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
           </span>
 
           {/*
+            THE THIRD STATE — "published, and what you are editing is not what is
+            live". A SEPARATE CHIP beside the badge rather than a third badge
+            string, which is how the builder draws it (EditorTopBar's
+            pending-draft chip): the status and the pending-work question are two
+            different facts, and one combined label would have to answer both in
+            one phrase.
+
+            Same words, same indigo treatment and the same data-testid as the
+            builder's, so the two editors are legible to the same eye.
+          */}
+          {hasDraft && (
+            <span
+              data-testid="pending-draft-chip"
+              className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700"
+            >
+              มีฉบับร่างที่ยังไม่เผยแพร่
+            </span>
+          )}
+
+          {/*
             THE SAME BUTTON THE BUILDER HAS — same lucide glyph at the same size,
             same Thai label, beside the status badge. EditorTopBar draws it with
             the page-builder editor's own button styling; this bar has its own,
@@ -458,14 +689,56 @@ export function CustomPageForm({ page, isSuperAdmin = false }) {
             <Settings className="h-4 w-4" /> ตั้งค่าหน้า
           </button>
 
+          {/*
+            ── THE PAIR, ORDERED LEAST- TO MOST-CONSEQUENTIAL ─────────────────
+            Saving a draft moves nothing the public can see; publishing does. The
+            builder's top bar groups its actions the same way and for the same
+            reason, and the labels here are ITS labels — บันทึกฉบับร่าง,
+            ทิ้งฉบับร่าง, เผยแพร่ — rather than a second vocabulary.
+
+            ทิ้งฉบับร่าง appears only when there IS pending work to throw away,
+            exactly as the builder's does. In CREATE mode neither it nor เผยแพร่
+            is drawn: there is no document yet to publish or to discard from, and
+            the single บันทึก below writes the live fields because the model's
+            required title/body cannot live in a draft on a document that does
+            not exist.
+          */}
+          {isEdit && hasDraft && (
+            <button
+              type="button"
+              data-testid="discard-draft-button"
+              onClick={discardDraft}
+              disabled={pending}
+              className="inline-flex items-center gap-1 rounded-9e-md border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" /> ทิ้งฉบับร่าง
+            </button>
+          )}
+
           <button
             type="button"
             onClick={submit}
             disabled={pending}
-            className="rounded-9e-md bg-9e-action px-3 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+            className={
+              isEdit
+                ? 'inline-flex items-center gap-1 rounded-9e-md border border-[var(--surface-border)] px-3 py-1.5 text-sm text-9e-navy hover:bg-9e-ice disabled:opacity-50 dark:text-white dark:hover:bg-9e-navy'
+                : 'rounded-9e-md bg-9e-action px-3 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50'
+            }
           >
-            {pending ? 'กำลังบันทึก…' : (isEdit ? 'บันทึกอัปเดต' : 'บันทึก')}
+            {pending ? 'กำลังบันทึก…' : (isEdit ? 'บันทึกฉบับร่าง' : 'บันทึก')}
           </button>
+
+          {isEdit && (
+            <button
+              type="button"
+              data-testid="publish-button"
+              onClick={publish}
+              disabled={pending}
+              className="rounded-9e-md bg-9e-action px-3 py-1.5 text-sm font-bold text-white hover:bg-9e-brand disabled:opacity-50"
+            >
+              เผยแพร่
+            </button>
+          )}
         </div>
       </header>
 
