@@ -91,15 +91,53 @@
    * `--admin-rail-*` is ever declared under `.dark`.
    *
    * ── NOTHING HERE MINTS A COLOUR ────────────────────────────────────────
-   * Same discipline as the Page Builder block below: every value is a hex this
-   * file already declares elsewhere, re-bound under a name that says what it is
-   * for. The source of each is named so a palette change can find it.
+   * Same discipline as the Page Builder block below: every value is a colour
+   * this file already declares elsewhere, re-bound under a name that says what
+   * it is for. The source of each is named so a palette change can find it.
    *
    * Contrast is a REQUIREMENT of this set, not a hope — test/fs/adminRailContrast
    * computes every text/background pair below from these declarations and
-   * asserts >= 4.5:1. Measured ratios are in the comments. */
-  --admin-rail-surface:    #0D1B2A;  /* = --9e-navy  : the rail itself */
-  --admin-rail-divider:    #1A2D42;  /* = --9e-border: right edge + collapsed group rules.
+   * asserts >= 4.5:1. Measured ratios are in the comments.
+   *
+   * ══ HOW EACH TOKEN IS BOUND — THREE CATEGORIES, AND WHY ═════════════════
+   * ROUND D. Round C declared all thirteen by COPYING a hex out of the palette
+   * at the top of this file. That is a silent-drift shape: the day --9e-navy
+   * changes, the rail keeps the OLD navy, nothing renders wrong enough to
+   * notice, and no test says a word. Naming the source in a comment does not
+   * fix that — a comment cannot resolve. `var()` can, so most of these now do.
+   *
+   * The three categories below are decided by ONE question: is the source
+   * declared once on :root, or does it also have a declaration inside `.dark`?
+   *
+   *   1. REBOUND — 8 tokens. Source is declared ONCE, on :root, and nowhere
+   *      else in this file (--9e-navy, --9e-border, --9e-ice, --9e-action,
+   *      --9e-air). There is no second value it could resolve to, so `var()`
+   *      is safe and the rail follows the palette from here on.
+   *
+   *   2. THEME-AWARE SOURCE — 2 tokens: --admin-rail-hover and
+   *      --admin-rail-card-hover. Their values were borrowed from tokens that
+   *      HAVE a `.dark` counterpart, so a var() would bind the rail to a
+   *      variable that flips — reintroducing precisely the half-theming this
+   *      set exists to prevent. They stay literal, and each says below which
+   *      declaration it was borrowed from and why it cannot be a var().
+   *
+   *   3. REDUNDANTLY DECLARED SOURCE — 3 tokens: --admin-rail-item, -group and
+   *      -card-muted, whose source is the --9e-slate-dp-* scale. That scale is
+   *      declared TWICE: once here on :root and again, byte for byte identical,
+   *      inside the `.dark` block. Identical today — but a variable that has a
+   *      `.dark` declaration is a theme-aware variable whatever its current
+   *      value, and one edit to that second copy would flip three rail colours
+   *      with nothing in the rail to explain it. So these stay literal too.
+   *      NOT on trust: test/fs/adminRailContrast asserts each of the three
+   *      still equals its named source in BOTH blocks, so a palette change that
+   *      fails to reach the rail goes RED rather than going unnoticed — which
+   *      is the whole complaint this rebinding answers, reached the only way it
+   *      can be reached for a source that is not theme-invariant.
+   *
+   * THE REBINDING CHANGED NO COMPUTED VALUE. All thirteen are pinned, resolved,
+   * against the values they had before it, in the same test. */
+  --admin-rail-surface:    var(--9e-navy);    /* the rail itself */
+  --admin-rail-divider:    var(--9e-border);  /* right edge + collapsed group rules.
                                       * NOT a light hairline. On a dark rail that reads as
                                       * a white stripe; and in DARK mode --page-bg is also
                                       * #0D1B2A, so without this line the rail and the main
@@ -107,28 +145,41 @@
                                       * a white main column, 1.24:1 against a dark one —
                                       * quiet where it can afford to be, present where it
                                       * is load-bearing. */
-  --admin-rail-hover:      #1E3A5F;  /* = .dark --surface-raised. A LIFT, not a tint: the
+  --admin-rail-hover:      #1E3A5F;  /* LITERAL, category 2. Borrowed from the `.dark`
+                                      * declaration of --surface-raised, ~line 350. It
+                                      * CANNOT be `var(--surface-raised)`: that token is
+                                      * #FFFFFF on :root, so the reference would paint the
+                                      * hover fill WHITE in light mode and every rail label
+                                      * on it would drop to ~1:1. A LIFT, not a tint: the
                                       * three states must stay distinguishable — hover is
                                       * this fill, focus is the ring below, active is the
                                       * solid blue pill. */
-  --admin-rail-brand:      #F8FAFD;  /* = --9e-ice   : wordmark.            16.64:1 */
-  --admin-rail-item:       #9EA6B2;  /* = --9e-slate-dp-400: inactive label. 7.08:1 */
-  --admin-rail-group:      #8E97A5;  /* = --9e-slate-dp-300: group header.   5.90:1
+  --admin-rail-brand:      var(--9e-ice);     /* wordmark.                         16.64:1 */
+  --admin-rail-item:       #9EA6B2;  /* LITERAL, category 3 = --9e-slate-dp-400, which is
+                                      * declared on :root AND again in .dark with the same
+                                      * value. Inactive label.               7.08:1 */
+  --admin-rail-group:      #8E97A5;  /* LITERAL, category 3 = --9e-slate-dp-300, same
+                                      * double declaration. Group header.    5.90:1
                                       * DIMMER than the item label (5.90 vs 7.08) so the
                                       * hierarchy still reads, but nowhere near the
                                       * mockup's grey, which measures 3.66:1 and fails AA
                                       * outright at 11px. The rest of the "header, not an
                                       * item" signal is carried by size, weight, uppercase
                                       * and letter-spacing — never by faintness. */
-  --admin-rail-active-bg:  #005CFF;  /* = --9e-action: the active pill */
-  --admin-rail-active-fg:  #F8FAFD;  /* = --9e-ice   : label on the pill.    5.05:1 */
-  --admin-rail-focus:      #48B0FF;  /* = --9e-air   : focus ring.           7.40:1
+  --admin-rail-active-bg:  var(--9e-action);  /* the active pill */
+  --admin-rail-active-fg:  var(--9e-ice);     /* label on the pill.                 5.05:1 */
+  --admin-rail-focus:      var(--9e-air);     /* focus ring.                        7.40:1
                                       * NOT --9e-action, which is the ring colour used
                                       * everywhere else in the admin: tuned for a white
                                       * background, it scores 3.29:1 on this rail and all
                                       * but vanishes. */
-  --admin-rail-card:       #F8FAFD;  /* = --9e-ice   : the user card surface */
-  --admin-rail-card-hover: #FFFFFF;  /* = :root --surface: the card's hover lift.
+  --admin-rail-card:       var(--9e-ice);     /* the user card surface */
+  --admin-rail-card-hover: #FFFFFF;  /* LITERAL, category 2. Borrowed from the :root
+                                      * declaration of --surface. It CANNOT be
+                                      * `var(--surface)`: that token is #0D1B2A under
+                                      * `.dark`, so the reference would invert the card to
+                                      * the rail's own navy the moment someone switched the
+                                      * theme — the exact flip the rail is exempt from.
                                       * ADDED ONE COMMIT LATER THAN THE REST, and named
                                       * here rather than quietly folded in: it was found
                                       * while styling the card, and the rail's hover fill
@@ -138,8 +189,35 @@
                                       * forbidden on this branch, so it lands with the
                                       * component that needs it. Both card pairs still
                                       * clear AA on it: name 17.39:1, email 5.47:1. */
-  --admin-rail-card-fg:    #0D1B2A;  /* = --9e-navy  : user name on it.     16.64:1 */
-  --admin-rail-card-muted: #5E6A7E;  /* = --9e-slate-dp-50: user email.      5.23:1 */
+  --admin-rail-card-fg:    var(--9e-navy);    /* user name on it.                  16.64:1 */
+  --admin-rail-card-muted: #5E6A7E;  /* LITERAL, category 3 = --9e-slate-dp-50, same
+                                      * double declaration. User email.      5.23:1 */
+
+  /* ── The nav list's scrollbar ─────────────────────────────────────────
+   * ROUND D3. The nav list scrolls, and until this round the browser's default
+   * scrollbar rendered a pale track down the dark rail — the last obviously
+   * unthemed thing in the admin. The rules live at `.admin-rail-scroll`, near
+   * the other scrollbar utilities at the bottom of this file; these are the two
+   * colours they read.
+   *
+   * THE THUMB IS THE AFFORDANCE AND THE TRACK IS A GROOVE, deliberately, and
+   * the ratios say which is which. The thumb has to be FOUND — WCAG 2.1 1.4.11
+   * puts the floor for a non-text control at 3:1 and it measures 4.86:1 — while
+   * a track loud enough to match would draw a permanent stripe down a 240px
+   * rail whether or not anything was scrolling. So the track sits at the rail's
+   * own structural line colour, the same one the dividers use.
+   *
+   * NOTHING WAS MINTED FOR THIS: both are colours this file already declares,
+   * and both are measured in test/fs/adminRailContrast alongside the text
+   * pairs. */
+  --admin-rail-scroll-track: var(--9e-border);  /* the groove.       1.24:1 on the rail */
+  --admin-rail-scroll-thumb: #7E8898;  /* LITERAL, category 3 = --9e-slate-dp-200, same
+                                        * double declaration as the other three.
+                                        * The thumb.       4.86:1 on the rail,
+                                        *                  3.91:1 on its own track.
+                                        * Dimmer than the inactive label (7.08:1) on
+                                        * purpose: it must be findable, not louder than
+                                        * the menu it is scrolling. */
 
   /* ── Page Builder section surfaces (settings.background) ──────────────
    * ROUND 78. BACKGROUND_CLASS in src/lib/pageBuilder/presets.js used to
@@ -1090,6 +1168,85 @@ html:not(.dark) .article-content [data-authored-bg] { background-color: var(--au
    ────────────────────────────────────────────────────────────── */
 .no-native-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-native-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ──────────────────────────────────────────────────────────────
+   THE ADMIN RAIL'S SCROLL CONTAINER  (round D3)
+
+   The nav list scrolls, and the default scrollbar renders a pale track against
+   the dark rail. These rules dress it in the rail's own tokens.
+
+   ══ SCOPED TO A CLASS, AND THAT IS THE WHOLE DESIGN ═══════════════════════
+   `::-webkit-scrollbar` is a pseudo-element like any other: written bare, or
+   on `*` / `html` / `body`, it restyles EVERY scrollbar in the application —
+   every admin table, every dialog, and eventually the public site, all in the
+   colours of a dark sidebar they have nothing to do with. That is a defect
+   with a wide blast radius and no error message, so the selector is the point
+   rather than an implementation detail, and test/fs/adminRailScrollbar asserts
+   no scrollbar rule in this file is ever declared globally.
+
+   ══ IT STAYS AS OBVIOUS AS THE DEFAULT WAS ════════════════════════════════
+   Same affordance, different clothes. Not auto-hiding, not 2px, not a thumb
+   that only appears on hover: an admin has to be able to see at a glance that
+   the list scrolls and where in it they are. 10px, permanently visible, thumb
+   at 4.86:1 against the rail — see the token comments for the measurements.
+
+   ── scrollbar-gutter, and why the two states differ ───────────────────────
+   `stable` reserves the bar's width whether or not it is showing, so rows do
+   not jump sideways as the list crosses the scrolling threshold. Expanded that
+   is straightforwardly right: folding a nav group changes the content height,
+   which is exactly the moment the bar appears or disappears, and 10px of a
+   240px rail is invisible.
+
+   COLLAPSED IT HAS TO BE `both-edges` INSTEAD. At 64px the rail is a single
+   column of centred 36px tiles, and a gutter reserved on one edge only shifts
+   that column 5px off the rail's centre line — permanently, and out of line
+   with the header and footer above and below it, which is the imbalance this
+   round is fixing rather than a new one to introduce. `both-edges` reserves
+   10px on each side, so the content box stays centred on the rail and the
+   tiles land on the same centre line as everything else.
+
+   Safari does not implement scrollbar-gutter and ignores both; it also uses
+   overlay scrollbars, so there is no reserved width to be off-centre about.
+   ────────────────────────────────────────────────────────────── */
+.admin-rail-scroll {
+  /* Firefox. `thin` rather than `auto`: a full-width bar on a 240px rail is a
+     lot of furniture, and `thin` is the only width Firefox offers below it. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--admin-rail-scroll-thumb) var(--admin-rail-scroll-track);
+  scrollbar-gutter: stable;
+}
+
+/* Collapsed. See the note above — a one-edge gutter puts the icon column 5px
+   off the rail's centre line. */
+.admin-rail-scroll-centred {
+  scrollbar-gutter: stable both-edges;
+}
+
+/* Chromium / WebKit. */
+.admin-rail-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.admin-rail-scroll::-webkit-scrollbar-track {
+  background: var(--admin-rail-scroll-track);
+}
+.admin-rail-scroll::-webkit-scrollbar-thumb {
+  background: var(--admin-rail-scroll-thumb);
+  border-radius: 8px;
+  /* The inset. A 2px border in the TRACK's colour plus `padding-box` clipping
+     leaves the thumb reading as a 6px pill floating in a 10px groove, rather
+     than as a slab filling the gutter edge to edge. Deliberately not
+     `transparent`: every colour in these rules resolves to a rail token, and a
+     transparent border here would leave the inset depending on whatever paints
+     behind the container instead. */
+  border: 2px solid var(--admin-rail-scroll-track);
+  background-clip: padding-box;
+}
+/* Both axes can scroll — `overflow-y: auto` promotes overflow-x to auto too —
+   so the corner is reachable, and unstyled it is a pale square on a dark rail. */
+.admin-rail-scroll::-webkit-scrollbar-corner {
+  background: var(--admin-rail-scroll-track);
+}
 
 /* ──────────────────────────────────────────────────────────────
    FEATURE CONTENT SECTION — the one place its colours are defined

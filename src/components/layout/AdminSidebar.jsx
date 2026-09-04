@@ -73,6 +73,52 @@ const GROUPS_KEY = 'admin-sidebar-groups';
 const AVATAR_PX = 36;
 
 /**
+ * The brand mark in the rail header.
+ *
+ * ── WHY THIS FILE AND NOT src/components/brand/Logo ─────────────────────────
+ * Logo renders the horizontal LOCKUP (/brand/logo-*.png, 7776x2550 — the mark
+ * with "Expert" already set beside it) inside a <Link href="/">, through
+ * next/image, with a variant chosen from `resolvedTheme`. Every one of those is
+ * wrong here: the rail draws its own two lines of text so a second copy of the
+ * word "Expert" would be baked into the image; the rail header is not a link
+ * and this round does not make it one; and a theme-derived variant is the one
+ * thing the rail is exempt from. So the rail reaches for the MARK, directly.
+ *
+ * ── WHICH ASSET, AND WHY THIS ONE ───────────────────────────────────────────
+ * /logo/9exp-stand.png is the only standalone mark in the repo — 400x400, RGBA
+ * with a fully transparent ground, one opaque colour (#2486FF = --9e-brand)
+ * measuring 4.91:1 on the rail surface, comfortably past the 3:1 floor for a
+ * non-text graphic. The three /brand/logo-{white,blue,navy}.png files and
+ * /brand/Layer1.png are all full horizontal lockups, not marks; cropping one to
+ * its glyph would be re-cropping the mark, which the round forbids. Nothing is
+ * recoloured: the file is used exactly as it ships, and the transparent ground
+ * is what lets the navy show through instead of a white plate.
+ *
+ * It is ALSO the favicon, the apple-touch icon and the Organization JSON-LD
+ * logo (src/app/layout.jsx, src/app/page.jsx). That is the point — those are
+ * claims about the organisation and so is this. Not to be confused with the
+ * chat agent's mark, which is deliberately a different file; see
+ * src/lib/chat/branding.js.
+ */
+const RAIL_MARK_SRC = '/logo/9exp-stand.png';
+
+/** 36px, the same tile the avatar and every collapsed row use. */
+const RAIL_MARK_PX = 36;
+
+/**
+ * The product name, as one string, because it has to survive the rail
+ * collapsing.
+ *
+ * EXPANDED the mark is decorative: "Expert" and "Admin Panel" are right there
+ * as text, and an alt saying the same thing would make a screen reader announce
+ * the product twice. COLLAPSED both lines are gone and the mark is the only
+ * thing left in the header — so it stops being decorative and takes this as its
+ * alt. One constant rather than a literal in each branch: the two states must
+ * name the same product, and written twice they would eventually not.
+ */
+const RAIL_PRODUCT_NAME = '9Expert Admin Panel';
+
+/**
  * The focus ring every interactive element in the rail wears.
  *
  * ONE CONSTANT, because A2 and B5 both depend on this ring existing and there
@@ -95,6 +141,48 @@ const RAIL_FOCUS = cn(
   'focus-visible:ring-[var(--admin-rail-focus)]',
   'focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--admin-rail-surface)]'
 );
+
+/**
+ * ══ ONE BOX FOR EVERY ROW IN THE RAIL, IN BOTH STATES ═══════════════════════
+ *
+ * ROUND D4, and these three constants exist because the alternative already
+ * failed. Round C wrote the mockup's geometry literally at each call site: the
+ * active nav row got py-2.5 and an 18px icon, an inactive one py-1.5 and 16px,
+ * the footer rows py-2 and 16px, the collapsed rows py-2.5. Four boxes, four
+ * places, and the consequences were invisible in a screenshot and obvious in
+ * use — THE LIST SHIFTED AS YOU NAVIGATED, because the row you landed on grew
+ * by 8px and pushed everything below it down.
+ *
+ * As literals that is a rule nothing states and nothing can check. As three
+ * constants it is a rule with one definition, and test/render/adminRailRows
+ * asserts every row resolves to it in both states.
+ *
+ * 36px is not an arbitrary pick: it is the avatar's size, which is fixed by
+ * avatarUrl's allowlist and by the footer card, and it is the size the brand
+ * mark and the collapse toggle already render at. Choosing anything else would
+ * have meant one of those sitting out of line at 64px.
+ *
+ * WEIGHT WITHOUT SIZE. The active row still reads as the active row — a solid
+ * pill and font-medium — but nothing that changes its box. That is the whole
+ * of the fix.
+ */
+
+/** 36px. Every nav row, the theme toggle, logout, and the collapsed avatar. */
+const RAIL_ROW_H = 'h-9';
+
+/** 18px. Every icon in the rail, active or not, collapsed or not. */
+const RAIL_ICON = 'h-[18px] w-[18px]';
+
+/**
+ * The collapsed row: a 36px SQUARE, centred on the rail's centre line.
+ *
+ * `mx-auto` rather than `w-full` is the difference between a tile and a
+ * stretched capsule, and it is the visible half of round C's defect — the
+ * active row's pill was being squeezed into a 64px rail instead of becoming a
+ * tile. With RAIL_ROW_H's 36px height and an 18px icon centred in it, the
+ * padding is 9px on all four sides.
+ */
+const RAIL_TILE = 'w-9 mx-auto justify-center px-0';
 
 // Icon name → component map. Group config below references icons by
 // string so the data shape stays serializable / easy to scan.
@@ -259,6 +347,96 @@ const GROUP_ID_BY_HREF = Object.fromEntries(
 );
 
 /**
+ * The rail header: the brand lockup, and the control that collapses the rail.
+ *
+ * ── THE LOCKUP ──────────────────────────────────────────────────────────────
+ * The 36px mark, then two lines beside it — "Expert" over "Admin Panel", both
+ * bold in --admin-rail-brand. Round C left this as two lines of TEXT and said
+ * why: swapping a <p> for an <img> is structure, not colour, and that round
+ * changed neither. This one does.
+ *
+ * ── COLLAPSED IT STACKS, RATHER THAN DROPPING THE MARK ──────────────────────
+ * 36px of mark beside 36px of toggle does not fit across a 64px rail, so they
+ * go one above the other, centred on the same line every collapsed row is
+ * centred on. Dropping the mark instead would have been tidier and wrong: both
+ * text lines are already hidden at that width, so the header would be left with
+ * NO accessible name at all — a product panel that does not say what it is.
+ *
+ * The toggle is untouched apart from where it sits: same padding, same 18px
+ * glyph, same labels, same ring.
+ *
+ * ── WHY THIS IS ITS OWN EXPORTED COMPONENT ──────────────────────────────────
+ * The same reason AdminSidebarFooter is, and the reasoning there applies word
+ * for word: `collapsed` is post-mount state read from localStorage, so it is
+ * ALWAYS false in a server render and the collapsed header could not be
+ * rendered by a test at all — only read as source, which this suite has
+ * repeatedly found to be the weaker guard. Taking it as a PROP costs nothing at
+ * runtime (AdminSidebar passes exactly the state it already had) and turns
+ * "the collapsed header still has an accessible name" into a real assertion.
+ */
+export function AdminSidebarHeader({ collapsed = false, onToggleCollapsed }) {
+  return (
+    // 16 horizontal / 24 vertical expanded, and mb-8 = the mockup's 32px gap
+    // down to the first group. Collapsed drops to px-2 — a 36px tile does not
+    // fit between two 16px paddings on a 64px rail — and to mb-4, because 32px
+    // of empty rail under a stacked header reads as a gap rather than a gutter.
+    <div
+      className={cn(
+        'flex',
+        collapsed
+          ? 'flex-col items-center gap-2 px-2 py-3 mb-4'
+          : 'items-center justify-between gap-2 px-4 py-6 mb-8'
+      )}
+    >
+      {/* PLAIN <img>, NOT next/image, for the same two reasons SidebarAvatar
+          gives: the asset is already the right size at a fixed 36px box, and
+          next/image would drag the `Image` identifier into a file that imports
+          a lucide icon of that name (aliased to ImageIcon) and where a
+          module-scope shadow has cost this layout once already. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={RAIL_MARK_SRC}
+        // Decorative beside the text, and the accessible name once the text is
+        // gone. See RAIL_PRODUCT_NAME.
+        alt={collapsed ? RAIL_PRODUCT_NAME : ''}
+        width={RAIL_MARK_PX}
+        height={RAIL_MARK_PX}
+        className="shrink-0 object-contain"
+        style={{ width: RAIL_MARK_PX, height: RAIL_MARK_PX }}
+      />
+      {!collapsed && (
+        // `flex-1 min-w-0` + truncate: at 240px the mark, this block and the
+        // toggle share one row, and neither line may push the toggle off it.
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-base font-bold text-[var(--admin-rail-brand)]">
+            Expert
+          </p>
+          <p className="truncate text-[11px] font-bold text-[var(--admin-rail-brand)]">
+            Admin Panel
+          </p>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onToggleCollapsed}
+        aria-label={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+        aria-expanded={!collapsed}
+        title={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
+        className={cn(
+          'shrink-0 rounded-9e-sm p-1.5 text-[var(--admin-rail-item)] transition-colors',
+          'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
+          RAIL_FOCUS
+        )}
+      >
+        {collapsed
+          ? <PanelLeftOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
+          : <PanelLeftClose className="h-[18px] w-[18px]" strokeWidth={1.75} />}
+      </button>
+    </div>
+  );
+}
+
+/**
  * The signed-in identity: name, email, role badge.
  *
  * Extracted so the linked and the unlinked footer cards render IDENTICAL
@@ -373,7 +551,18 @@ export function AdminSidebarFooter({
     // 16px horizontal to match the nav above it; the rule across the top is the
     // rail's own divider, not --surface-border, which flips with the theme and
     // is a near-invisible 12%-alpha navy on this surface in light mode.
-    <div className="border-t border-[var(--admin-rail-divider)] px-4 py-3">
+    //
+    // COLLAPSED IT DROPS TO 8px, because 16px on each side of a 64px rail
+    // leaves 32px — less than the 36px tile every collapsed control is. The
+    // remaining 8px + the tile still centres on the rail's centre line, which
+    // is the same line the nav's tiles land on (their inset comes from the
+    // scroll gutter rather than from padding; see globals.css).
+    <div
+      className={cn(
+        'border-t border-[var(--admin-rail-divider)] py-3',
+        collapsed ? 'px-2' : 'px-4'
+      )}
+    >
       {!collapsed && (userName || userEmail) && (
         canReachProfile ? (
           // The identity card IS the link to /admin/profile — โปรไฟล์ gave up
@@ -453,8 +642,13 @@ export function AdminSidebarFooter({
             aria-label="โปรไฟล์ของฉัน"
             // Collapsed there is no card — the avatar sits directly on the
             // rail, so this row takes the RAIL's hover fill, not the card's.
+            // The same 36px tile as every collapsed row, on the same centre
+            // line — the avatar happens to fill it exactly, so the hover fill
+            // shows in the tile's four corners rather than around the photo.
             className={cn(
-              'mb-1 flex w-full items-center justify-center rounded-9e-sm px-0 py-2 transition-colors',
+              'mb-1 flex items-center rounded-9e-sm transition-colors',
+              RAIL_ROW_H,
+              RAIL_TILE,
               'hover:bg-[var(--admin-rail-hover)]',
               RAIL_FOCUS
             )}
@@ -462,7 +656,7 @@ export function AdminSidebarFooter({
             <SidebarAvatar publicId={userImagePublicId} />
           </Link>
         ) : (
-          <div className="mb-1 flex w-full items-center justify-center px-0 py-2">
+          <div className={cn('mb-1 flex items-center', RAIL_ROW_H, RAIL_TILE)}>
             <SidebarAvatar publicId={userImagePublicId} />
           </div>
         )
@@ -473,15 +667,21 @@ export function AdminSidebarFooter({
         type="button"
         onClick={onLogout}
         title={collapsed ? 'ออกจากระบบ' : undefined}
+        // Collapsed the label is gone and the glyph is aria-hidden, so without
+        // this the button's accessible name falls back to `title`. Same
+        // reasoning as the nav rows, and omitted when expanded for the same
+        // reason: it would override the visible label rather than add to it.
+        aria-label={collapsed ? 'ออกจากระบบ' : undefined}
         className={cn(
-          'flex w-full items-center rounded-9e-sm py-2 text-[13px] transition-colors',
+          'flex items-center rounded-9e-sm text-[13px] transition-colors',
+          RAIL_ROW_H,
           'text-[var(--admin-rail-item)]',
           'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
           RAIL_FOCUS,
-          collapsed ? 'justify-center px-0' : 'gap-3 px-3'
+          collapsed ? RAIL_TILE : 'w-full gap-3 px-3'
         )}
       >
-        <LogOut className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+        <LogOut className={cn('shrink-0', RAIL_ICON)} strokeWidth={1.75} />
         {!collapsed && 'ออกจากระบบ'}
       </button>
     </div>
@@ -560,15 +760,19 @@ function AdminThemeToggle({ collapsed = false }) {
       // The control that switches the REST of the admin, styled like every
       // other rail row — and it does not switch the rail itself, which is the
       // point of C2's ruling. Icon inherits currentColor.
+      // Same box as a nav row, in both states — see RAIL_ROW_H. It sits
+      // directly under the nav list and is the same kind of thing, so a
+      // different height would read as a different kind of control.
       className={cn(
-        'flex w-full items-center gap-3 rounded-9e-sm px-3 py-2 text-[13px] transition-colors',
+        'flex items-center rounded-9e-sm text-[13px] transition-colors',
+        RAIL_ROW_H,
         'text-[var(--admin-rail-item)]',
         'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
         RAIL_FOCUS,
-        collapsed && 'justify-center'
+        collapsed ? RAIL_TILE : 'w-full gap-3 px-3'
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+      <Icon className={cn('shrink-0', RAIL_ICON)} strokeWidth={1.75} />
       {/* During SSR / pre-mount, render a stable placeholder so the
           initial markup doesn't depend on theme. Hidden when collapsed. */}
       {!collapsed && (mounted ? label : 'Theme')}
@@ -594,14 +798,19 @@ function AdminThemeToggle({ collapsed = false }) {
  * that one case says so in its tooltip rather than leaving the user to wonder.
  */
 function GroupHeader({ label, collapsed, expanded, forcedOpen, listId, onToggle }) {
-  // Rail collapsed: the text label would overflow the narrow rail, so drop it
-  // and keep a thin divider so groups stay visually separated. There is no
-  // per-group toggle here either — the items are icon-only and a folded group
-  // would leave no way to unfold it (see the nav loop, which ignores per-group
-  // state entirely while the rail is collapsed).
-  if (collapsed) {
-    return <div className="mx-2 mt-6 mb-2 border-t border-[var(--admin-rail-divider)]" aria-hidden />;
-  }
+  // ── COLLAPSED, THERE IS NO HEADER AT ALL ─────────────────────────────────
+  // The label would overflow a 64px rail, and there is no per-group toggle
+  // either: the items are icon-only, so a folded group would leave no way to
+  // unfold it (see the nav loop, which ignores per-group state entirely while
+  // the rail is collapsed).
+  //
+  // A RULE STILL SEPARATES THE GROUPS — the menu has six of them and without
+  // one the collapsed rail is a single undifferentiated column of thirty icons,
+  // which throws away structure the expanded rail spends a header on. But it is
+  // drawn by the group CONTAINER now (see the nav loop) rather than returned
+  // from here, so `first:` can suppress it: a rule immediately under the header
+  // block would be separating the first group from nothing.
+  if (collapsed) return null;
   return (
     <button
       type="button"
@@ -646,20 +855,50 @@ function GroupHeader({ label, collapsed, expanded, forcedOpen, listId, onToggle 
   );
 }
 
-// `isActive` is decided ONCE for the whole sidebar and handed down — see
-// src/lib/admin/activeNavItem.js for why a per-item `startsWith` cannot be
-// right (it lit both Masterclass and MC — ผู้ลงทะเบียน at the same time).
-function SidebarItem({ item, isActive, collapsed }) {
+/**
+ * `isActive` is decided ONCE for the whole sidebar and handed down — see
+ * src/lib/admin/activeNavItem.js for why a per-item `startsWith` cannot be
+ * right (it lit both Masterclass and MC — ผู้ลงทะเบียน at the same time).
+ *
+ * ══ THE ROW BOX IS THE SAME FOR EVERY ROW, IN BOTH STATES ═══════════════════
+ * ROUND D4, AND IT IS A DEFECT ROUND C INTRODUCED. That round copied the
+ * mockup's geometry literally: the active row got py-2.5 and an 18px icon, an
+ * inactive row py-1.5 and a 16px one. On a static mockup that reads as emphasis.
+ * In a live menu it means THE WHOLE LIST SHIFTS AS YOU NAVIGATE — the row you
+ * are on grows by 8px, every row below it moves, and the row you were about to
+ * click is no longer under the pointer. Weight is worth having; a list that
+ * reflows on every navigation is not.
+ *
+ * So the box is fixed — RAIL_ROW_H tall, RAIL_ICON icons, both states, all
+ * rows — and the active state is carried by SURFACE AND WEIGHT ONLY: the solid
+ * pill, and font-medium. Nothing that changes the row's size.
+ *
+ * ── COLLAPSED, THE ACTIVE ROW IS A SQUARE TILE ──────────────────────────────
+ * Not the expanded pill with the label clipped off. RAIL_TILE is w-9 h-9 with
+ * `mx-auto`, so the fill is a 36px square centred on the rail's centre line
+ * with the 18px icon optically centred in it — 9px of padding on all four
+ * sides. The radius is the pill's radius (rounded-9e-sm, 8px), so the two
+ * states read as the same component at two widths rather than as two designs.
+ * The expanded row's own box (w-full, gap-3, px-3) is what makes a full-width
+ * capsule out of a 64px rail, and it is not applied here.
+ */
+export function SidebarItem({ item, isActive, collapsed }) {
   const Icon = ICONS[item.icon];
 
   return (
     <li>
       <Link
         href={item.href}
-        // Collapsed: icon-only, centred, with the label as a native tooltip so
-        // the rail stays usable. The active left-border is dropped when centred
-        // (it would sit oddly under a lone icon); the tinted bg still marks it.
+        // Collapsed: icon-only, so the label becomes a native tooltip.
         title={collapsed ? item.label : undefined}
+        // ── AND AN ACCESSIBLE NAME, WHICH THE TOOLTIP IS NOT A SUBSTITUTE FOR
+        // Collapsed, this link's only child is an aria-hidden <svg>, so without
+        // this its accessible name falls back to `title` — which works today in
+        // most screen readers and is not a name, it is a description that
+        // happens to be used as one. Stated outright instead. Expanded it is
+        // omitted deliberately: an aria-label there would OVERRIDE the visible
+        // Thai label rather than add to it, and the two would drift.
+        aria-label={collapsed ? item.label : undefined}
         // The active row was marked by colour alone. `aria-current` states it in
         // the accessibility tree as well — and gives the guard in
         // test/render/adminSidebarActiveItem a hook that survives a restyle.
@@ -671,18 +910,13 @@ function SidebarItem({ item, isActive, collapsed }) {
         // The old left-border-plus-10%-tint active marker is gone: a 10% tint of
         // --9e-action on a navy rail is nearly invisible, and it was carrying the
         // "you are here" signal that aria-current only states.
-        //
-        // The mockup's geometry gives the active row more vertical padding and a
-        // larger icon than an inactive one — it is the only row that is meant to
-        // have weight. Collapsed, both go to the same box: with no label there is
-        // nothing for the extra height to balance.
         className={cn(
           'flex items-center rounded-9e-sm text-[13px] transition-colors',
+          RAIL_ROW_H,
           RAIL_FOCUS,
-          collapsed
-            ? 'justify-center px-0 py-2.5'
-            : cn('gap-3 px-3', isActive ? 'py-2.5' : 'py-1.5'),
+          collapsed ? RAIL_TILE : 'w-full gap-3 px-3',
           isActive
+            // Surface and weight, and nothing that changes the box.
             ? 'bg-[var(--admin-rail-active-bg)] font-medium text-[var(--admin-rail-active-fg)]'
             : cn(
               'text-[var(--admin-rail-item)]',
@@ -692,13 +926,8 @@ function SidebarItem({ item, isActive, collapsed }) {
       >
         {/* currentColor — the icon takes the row's label colour, so it is white
             on the active pill and slate otherwise with nothing to keep in sync. */}
-        {Icon ? (
-          <Icon
-            className={cn('shrink-0', isActive || collapsed ? 'h-[18px] w-[18px]' : 'h-4 w-4')}
-            strokeWidth={1.75}
-          />
-        ) : null}
-        {!collapsed && item.label}
+        {Icon ? <Icon className={cn('shrink-0', RAIL_ICON, isActive ? 'text-[var(--9e-lime)]' : 'text-[var(--admin-rail-item)]')} strokeWidth={1.75} /> : null}
+        {!collapsed && <span className="truncate">{item.label}</span>}
       </Link>
     </li>
   );
@@ -824,40 +1053,21 @@ export function AdminSidebar({
         collapsed ? 'md:w-16' : 'md:w-60'
       )}
     >
-      {/* Header: ADMIN PANEL title + collapse toggle. Collapsed → just the
-          toggle, centred (the title text would overflow the rail). */}
-      {/* 16 horizontal / 24 vertical, and mb-8 = the mockup's 32px gap down to
-          the first group. The wordmark stays TEXT — the mockup draws a brand
-          lockup, but swapping a <p> for an <img> is structure, not colour, and
-          this round changes neither. */}
-      <div className={cn('flex items-start gap-2', collapsed ? 'justify-center p-3' : 'justify-between px-4 py-6 mb-8')}>
-        {!collapsed && (
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--admin-rail-group)]">
-              Admin Panel
-            </p>
-            <p className="mt-1 text-base font-bold text-[var(--admin-rail-brand)]">9Expert</p>
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
-          aria-expanded={!collapsed}
-          title={collapsed ? 'ขยายเมนู' : 'ย่อเมนู'}
-          className={cn(
-            'shrink-0 rounded-9e-sm p-1.5 text-[var(--admin-rail-item)] transition-colors',
-            'hover:bg-[var(--admin-rail-hover)] hover:text-[var(--admin-rail-brand)]',
-            RAIL_FOCUS
-          )}
-        >
-          {collapsed
-            ? <PanelLeftOpen className="h-[18px] w-[18px]" strokeWidth={1.75} />
-            : <PanelLeftClose className="h-[18px] w-[18px]" strokeWidth={1.75} />}
-        </button>
-      </div>
+      <AdminSidebarHeader collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
 
-      <nav className="flex-1 min-h-0 overflow-y-auto px-4 pb-4" aria-label="Admin">
+      {/* THE ONE SCROLL CONTAINER IN THE RAIL, and the only element carrying
+          the scrollbar rules. `admin-rail-scroll` is defined in globals.css; a
+          bare ::-webkit-scrollbar rule there would have restyled every
+          scrollbar in the admin, so the class is what keeps the blast radius to
+          this element. `-centred` swaps the reserved gutter to both edges when
+          the rail is 64px wide — see the block in globals.css for why. */}
+      <nav
+        className={cn(
+          'admin-rail-scroll flex-1 min-h-0 overflow-y-auto pb-4',
+          collapsed ? 'admin-rail-scroll-centred px-0' : 'px-4'
+        )}
+        aria-label="Admin"
+      >
         {NAV_GROUPS.map((group) => {
           const visibleItems = group.items.filter((item) => canAccess(user, item.pageKey));
           if (visibleItems.length === 0) return null;
@@ -873,7 +1083,26 @@ export function AdminSidebar({
             // 24px between groups, per the mockup. `first:mt-0` because the
             // brand block above already owns the 32px gap down to the first
             // group, and stacking the two would make that gap 56px.
-            <div key={group.id} className="mt-6 first:mt-0">
+            //
+            // ── COLLAPSED, THE GAP IS SMALLER AND CARRIES A RULE ───────────
+            // 24px of empty rail between two 36px tiles reads as a mistake at
+            // 64px wide — it is expanded spacing with the text cut out, which
+            // is the thing this round is fixing. 12px above a rule and 12px
+            // below it says "these are two groups" in a fifth of the height,
+            // and the rule is the only signal left once the header text is
+            // gone (GroupHeader renders nothing at this width).
+            //
+            // The rule is on the CONTAINER rather than on an element inside it
+            // so `first:` can suppress it — a rule immediately under the header
+            // block would be separating the first group from nothing.
+            <div
+              key={group.id}
+              className={cn(
+                collapsed
+                  ? 'mt-3 border-t border-[var(--admin-rail-divider)] pt-3 first:mt-0 first:border-t-0 first:pt-0'
+                  : 'mt-6 first:mt-0'
+              )}
+            >
               <GroupHeader
                 label={group.label}
                 collapsed={collapsed}
@@ -885,8 +1114,11 @@ export function AdminSidebar({
               {/* Hidden rather than unmounted: `aria-controls` above names this
                   element, and pointing it at something that is not in the DOM
                   describes nothing. */}
-              {/* 8px between rows inside a group, per the mockup. */}
-              <ul id={listId} hidden={!expanded} className="space-y-2">
+              {/* 8px between rows inside a group, per the mockup — 4px
+                  collapsed, so a column of 36px tiles reads as one column
+                  rather than as scattered icons, and more of the menu fits
+                  above the fold at the width where scrolling costs most. */}
+              <ul id={listId} hidden={!expanded} className={collapsed ? 'space-y-1' : 'space-y-2'}>
                 {visibleItems.map((item) => (
                   <SidebarItem
                     key={item.href}
