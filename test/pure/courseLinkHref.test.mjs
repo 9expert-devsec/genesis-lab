@@ -69,26 +69,32 @@ test('NO DOUBLE SLASH — this function never concatenates', () => {
   }
 });
 
-test('A STORED `//x` PASSES THROUGH — and that is deliberate, not an oversight', () => {
+test('A STORED `//x` NO LONGER PASSES THROUGH — U4 closed the gap', () => {
   /**
-   * ── A FINDING, RECORDED RATHER THAN PAPERED OVER ─────────────────────────
-   * `normaliseAlias` strips TRAILING slashes and adds a leading one if missing.
-   * It does not collapse leading ones, so `//pretty` is storable and survives
-   * to here unchanged.
+   * ── THE FINDING THIS TEST USED TO RECORD, NOW REPAIRED ───────────────────
+   * `normaliseAlias` stripped TRAILING slashes and added a leading one if
+   * missing, but did not collapse leading ones — so `//pretty` was storable and
+   * survived to here unchanged. A browser reads `//pretty` as a
+   * protocol-relative URL, `https://pretty`, so it was not a path on this site
+   * at all.
    *
-   * NOT REPAIRED IN THIS FUNCTION, on purpose. Collapsing it here would make
-   * the link disagree with `courseCanonicalPath` — and therefore with the
-   * canonical tag, the JSON-LD, the BreadcrumbList and the sitemap, all of
-   * which would still emit `//pretty`. A link that quietly differs from the
-   * page's own canonical is the precise defect this round removes; being
-   * consistently wrong is strictly better than being inconsistently right,
-   * because only one of those is visible.
+   * U3 deliberately did NOT fix it in this function: collapsing it here alone
+   * would have made the link disagree with `courseCanonicalPath`, and therefore
+   * with the canonical tag, the JSON-LD, the BreadcrumbList and the sitemap,
+   * all of which would still have emitted `//pretty`. Round U4 fixed it in
+   * `normaliseAlias` instead — the one function all five read through — so all
+   * five moved in the same commit.
    *
-   * MEASURED: 0 of the 80 stored aliases have this shape. Changing
-   * `normaliseAlias` is explicitly out of scope for this round; this test is
-   * the record that the gap is known and where it lives.
+   * MEASURED against the live collection before the change: 0 of the 80 stored
+   * aliases have this shape, so nothing needed migrating.
    */
-  assert.equal(courseLinkHref(row('CODE', '//pretty')), '//pretty');
+  assert.equal(courseLinkHref(row('CODE', '//pretty')), '/pretty');
+
+  // THE ASSERTION THAT MATTERS, and it is unchanged in intent: whatever this
+  // function returns, the canonical tag returns the same thing. It was true
+  // when both emitted `//pretty` and it is true now that both emit `/pretty`.
+  // A link that quietly differs from the page's own canonical is the precise
+  // defect these two functions exist to prevent.
   assert.equal(
     courseLinkHref(row('CODE', '//pretty')),
     courseCanonicalPath({ course_id: 'CODE' }, { urlAlias: '//pretty' }),

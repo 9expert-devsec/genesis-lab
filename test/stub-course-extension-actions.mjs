@@ -50,3 +50,17 @@ export async function findCourseExtensionCodeInsensitive() {
 export async function getCourseExtensionByFormerCode() {
   throw new Error('stub-course-extension-actions: getCourseExtensionByFormerCode must not be called');
 }
+
+/**
+ * Round U4.2's history lookup. Same link-time reasoning as
+ * getCourseExtensionByFormerCode above: `resolveCourse` imports it, so this
+ * stub must export it or that module fails to LINK and every importing test
+ * file contributes zero tests rather than a red one.
+ *
+ * Tests that exercise the former-alias path pass their own
+ * `fetchExtensionByFormerAlias` through the resolver's `deps` seam and never
+ * reach this.
+ */
+export async function getCourseExtensionByFormerAlias() {
+  throw new Error('stub-course-extension-actions: getCourseExtensionByFormerAlias must not be called');
+}

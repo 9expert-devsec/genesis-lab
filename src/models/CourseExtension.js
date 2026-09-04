@@ -105,6 +105,34 @@ const CourseExtensionSchema = new mongoose.Schema(
     formerCodes: { type: [String], default: [] },
 
     /**
+     * THE ALIASES THIS COURSE USED TO HAVE — the URL half of formerCodes.
+     *
+     * Round U4.2. Once the derived /<code>-training-course redirects to the
+     * alias (U4.1), the alias is the ONE url a course has, so changing it
+     * kills every link to the old one. Recording the previous value lets
+     * resolveCourse fall back to it and redirect to the CURRENT canonical
+     * path — in one hop, never chaining through the history.
+     *
+     * NOT BACKFILLED, and there is nothing to backfill: course_versions shows
+     * no course has ever changed its alias. Zero rows carried this field when
+     * it was added, so it is safe on a live collection for the same reason
+     * trainingTopicsRich was — every existing caller omits the key, and
+     * buildExtensionUpdate writes only the keys a caller names.
+     *
+     * Stored in the same normalised form as urlAlias (leading slash,
+     * lower-case), most recent LAST, capped — see lib/courses/aliasHistory for
+     * the cap, the revert rule, and what overflow costs.
+     *
+     * NO UNIQUE INDEX, and that is a limitation rather than an oversight: the
+     * rule that matters is "a former alias of course A must not become the
+     * CURRENT alias of course B", which spans two different fields on two
+     * different documents. A unique index covers one key, so MongoDB cannot
+     * express it. It is enforced at write time in checkAliasAvailable, with
+     * the same concurrency window every application-level check has.
+     */
+    formerAliases: { type: [String], default: [] },
+
+    /**
      * Stored with a leading slash, e.g. "/excel-ai-business-training-course".
      * Falsy → falls back to "/{course_id}-training-course" via resolveCourse.
      *

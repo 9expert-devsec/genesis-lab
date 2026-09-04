@@ -28,8 +28,10 @@ import {
   getCourseExtension,
   getCourseExtensionByAlias,
   getCourseExtensionByFormerCode,
+  getCourseExtensionByFormerAlias,
 } from '@/lib/actions/course-extensions';
 import { getCourseByCodeInsensitive } from '@/lib/api/public-courses';
+import { normaliseAlias } from '@/lib/courses/aliasAvailability';
 
 const SUFFIX = '-training-course';
 
@@ -47,6 +49,7 @@ export async function resolveCourse(
     fetchExtensionByAlias = getCourseExtensionByAlias,
     fetchExtension = getCourseExtension,
     fetchExtensionByFormerCode = getCourseExtensionByFormerCode,
+    fetchExtensionByFormerAlias = getCourseExtensionByFormerAlias,
     fetchCourse = getCourseByCodeInsensitive,
     /**
      * ── THE ADMIN PREVIEW BYPASS, AND THE ONLY THING THAT OPENS IT ───────────
@@ -76,8 +79,25 @@ export async function resolveCourse(
   if (!seg) return null;
 
   // 1) Custom URL alias.
-  const alias = seg.startsWith('/') ? seg : `/${seg}`;
-  const byAlias = await fetchExtensionByAlias(alias).catch(() => null);
+  //
+  // ── NORMALISED HERE, NOT ONLY INSIDE THE FETCHER (U4 D3) ────────────────
+  // `normaliseAlias` lower-cases, so this is what makes the alias lookup
+  // case-INSENSITIVE — matching how course codes have always been looked up,
+  // and ending the split where /Pretty and /pretty were two pages while
+  // /CODE-training-course and /code-training-course were one.
+  //
+  // It is applied HERE rather than left to getCourseExtensionByAlias, which
+  // also calls it, for a reason that is about testability and is load-bearing:
+  // `fetchExtensionByAlias` is an injected dependency, so a test that passes a
+  // double would otherwise be exercising a resolver that hands the double a RAW
+  // segment while production hands the real fetcher a raw segment it normalises
+  // internally. The case-insensitivity would live in a module the test never
+  // runs. Normalising at the seam makes the resolver ITSELF case-insensitive,
+  // and the fetcher's own call becomes a second application of an idempotent
+  // function — which test/pure/aliasAvailability pins as idempotent precisely
+  // so this double application is provably a no-op.
+  const alias = normaliseAlias(seg);
+  const byAlias = alias ? await fetchExtensionByAlias(alias).catch(() => null) : null;
   if (byAlias && (includeHidden || byAlias.isPublished !== false)) {
     /**
      * CASE-TOLERANT, because the stored key can LAG AN UPSTREAM RENAME.
@@ -135,6 +155,39 @@ export async function resolveCourse(
       if (!former) continue;
       const legacy = await fetchCourse(former, { includeHidden }).catch(() => null);
       if (legacy) return { course: legacy, extension: byAlias, mode: 'alias-former-code' };
+    }
+  }
+
+  // 1b) A FORMER alias — a URL this course used to live at.
+  //
+  // NUMBERED 1b RATHER THAN 2 ON PURPOSE: this module's header and half a
+  // dozen comments below refer to "path 2" meaning the code path, and
+  // renumbering would quietly make all of that prose wrong.
+  //
+  // ── IT REDIRECTS TO THE CURRENT ALIAS, IN ONE HOP ────────────────────────
+  // The extension returned here is the course's CURRENT row, so
+  // `courseCanonicalPath` reads its CURRENT `urlAlias` — not the one that was
+  // requested, and not the next entry in the history. A course that went
+  // A → B → C therefore sends both /a and /b straight to /c. There is no
+  // chaining to remove because there was never a chain: the history is a set
+  // of URLs that all point at one destination, not a linked list.
+  //
+  // AFTER the current alias, so a course reachable at its current alias never
+  // reaches here — and the revert cleanup in aliasHistory guarantees the two
+  // lookups can never both match the same URL for the same course.
+  //
+  // KNOWN ASYMMETRY, recorded rather than fixed: the current-alias branch above
+  // falls back through `formerCodes` when the stored courseId misses upstream
+  // mid-rename. This branch does not, so during that interval a FORMER alias
+  // 404s while the current one resolves. Out of scope for this round; it needs
+  // the same loop and a reason to justify the second upstream read.
+  if (alias) {
+    const byFormer = await fetchExtensionByFormerAlias(alias).catch(() => null);
+    if (byFormer && (includeHidden || byFormer.isPublished !== false)) {
+      const course = await fetchCourse(byFormer.courseId, { includeHidden }).catch(
+        () => null
+      );
+      if (course) return { course, extension: byFormer, mode: 'alias-former' };
     }
   }
 

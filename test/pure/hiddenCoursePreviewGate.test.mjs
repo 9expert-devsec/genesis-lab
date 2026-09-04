@@ -41,6 +41,12 @@ function resolverDeps(ext) {
     // getCourseExtensionByFormerCode: the branch at resolveCourse.js:165 is
     // one unmatched extension away, and the day a fixture reaches it this file
     // would start querying Mongo without a single assertion changing.
+    // U4.2 added a FORMER-ALIAS lookup to resolveCourse. Supplied for the
+    // same reason as fetchExtensionByFormerCode below: left at its
+    // production default it reaches Mongo, and no fixture here goes near
+    // the branch that calls it — which is exactly the latent shape
+    // test/fs/injectedDepCoverage exists to catch before it costs a hang.
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
   };
 }

@@ -1,4 +1,4 @@
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 // ADDED beside the statement above rather than folded into it — the standing
 // rule in this repo.
 import { notFoundOrRedirect } from '@/lib/redirects/notFoundBoundary';
@@ -9,6 +9,7 @@ import {
   listSchedulesByCourse,
 } from '@/lib/api/schedules';
 import { resolveCourse } from '@/lib/resolveCourse';
+import { courseRedirectTarget, courseRedirectFn } from '@/lib/courses/courseRedirect';
 import { resolveHiddenCourseForAdmin } from '@/lib/courses/adminCoursePreview';
 import { inhouseRegistrationHref } from '@/lib/courseRegistrationHref';
 import { getCareerPathBySlug } from '@/lib/career-paths/getCareerPaths';
@@ -638,6 +639,51 @@ export default async function CatchAllPage({ params, searchParams }) {
   if (resolved) {
     const { course, extension } = resolved;
     const isHiddenPreview = publicResolved === null;
+
+    /**
+     * ══ THE CANONICAL REDIRECT IS RAISED HERE, IN THE PAGE ═════════════════
+     *
+     * `resolveCourse` is called by BOTH `generateMetadata` and this render, so
+     * the redirect had to be raised in exactly one of them. It is raised here,
+     * for three reasons:
+     *
+     *   · THE PAGE IS THE THING THAT REDIRECTS. `generateMetadata` exists to
+     *     describe a document; a request that redirects has no document to
+     *     describe. Raising it there would make a description function control
+     *     the response, which is not what it is for.
+     *   · IT IS THE CHEAPER PLACE. Sitting above the Promise.allSettled below,
+     *     a redirected request skips seven upstream fetches — schedules,
+     *     programs, early bird, promos, FAQs, skills, linkability — that would
+     *     be discarded.
+     *   · ONE RAISER, ONE STATUS. Raising in both would be two call sites for
+     *     one rule, which is how the two would eventually disagree about the
+     *     status the switch selects.
+     *
+     * WHAT THE OTHER PATH DOES: `generateMetadata` still runs and still returns
+     * metadata, computing the same canonical it always did. It does not throw,
+     * does not redirect, and cannot double-redirect. Next discards that metadata
+     * when the render redirects, so the cost is one wasted resolve and the
+     * benefit is that the metadata path keeps exactly the behaviour U2 gave it.
+     *
+     * ── NOT FOR THE ADMIN PREVIEW ARM ────────────────────────────────────────
+     * `isHiddenPreview` means the public resolve returned null and an
+     * authenticated admin is previewing an unpublished course. Redirecting that
+     * would drop `?preview=1` — `redirect()` takes a path, not the query — and
+     * the destination would then resolve as a public request, find the course
+     * unpublished, and 404. So preview renders where it was asked for, exactly
+     * as before this round.
+     */
+    if (!isHiddenPreview) {
+      const canonicalRedirect = courseRedirectTarget({
+        requestedPath: `/${segment}`,
+        course,
+        extension,
+      });
+      // Throws NEXT_REDIRECT — nothing below runs when a target is returned.
+      if (canonicalRedirect) {
+        courseRedirectFn({ redirect, permanentRedirect })(canonicalRedirect);
+      }
+    }
 
     // Parallelise schedules + programs. `/programs` carries `programcolor`
     // which the hero gradient uses; the course detail response doesn't

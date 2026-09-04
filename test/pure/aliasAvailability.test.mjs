@@ -35,10 +35,42 @@ test('an empty alias normalises to NULL, not to an empty string', () => {
   }
 });
 
-test('a double slash is not invented or collapsed', () => {
-  // '//x' is already slash-prefixed, so it passes through. Documenting rather
-  // than asserting a cleanup this function does not do.
-  assert.equal(normaliseAlias('//x'), '//x');
+test('duplicate leading slashes collapse to exactly one (U4 D4)', () => {
+  // '//x' used to pass through untouched, and this test used to say so. It is
+  // already slash-prefixed, so the old prefix rule had nothing to add — but a
+  // browser reads '//x' as a PROTOCOL-RELATIVE url, https://x, a different
+  // origin entirely. It was never a path on this site.
+  //
+  // Closed in this one function rather than at any single consumer, so the
+  // link, the canonical tag, the og:url, the JSON-LD and the sitemap all move
+  // together; U3 left it open for exactly that reason.
+  assert.equal(normaliseAlias('//x'), '/x');
+  assert.equal(normaliseAlias('///x'), '/x');
+  // Only the LEADING run collapses. An interior slash is a path separator and
+  // a multi-segment alias is legal, so collapsing those would change meaning.
+  assert.equal(normaliseAlias('//a/b'), '/a/b');
+  assert.equal(normaliseAlias('/a//b'), '/a//b');
+});
+
+test('an alias is stored LOWER-CASED (U4 D3)', () => {
+  // Aliases were matched case-sensitively while course codes were matched
+  // case-insensitively, so /Excel-Course and /excel-course were two pages while
+  // /EXCEL-training-course and /excel-training-course were one. Lower-casing
+  // here — not at the lookup — is what makes it one rule for both kinds of URL.
+  assert.equal(normaliseAlias('/Excel-Course'), '/excel-course');
+  assert.equal(normaliseAlias('EXCEL-COURSE'), '/excel-course');
+  assert.equal(normaliseAlias('/MiXeD/Case/Path'), '/mixed/case/path');
+});
+
+test('normalising a stored form returns it unchanged — the function is idempotent', () => {
+  // Load-bearing for the read path: a request segment is normalised and then
+  // compared against a stored alias that was itself normalised on write. If the
+  // function were not idempotent that comparison would differ from itself and
+  // every aliased URL would redirect to itself forever.
+  for (const raw of ['/Excel-Course', '//X/', 'plain', '/a/b/', '///Q///']) {
+    const once = normaliseAlias(raw);
+    assert.equal(normaliseAlias(once), once, `not idempotent for ${JSON.stringify(raw)}`);
+  }
 });
 
 // ── the decision ───────────────────────────────────────────────────────────

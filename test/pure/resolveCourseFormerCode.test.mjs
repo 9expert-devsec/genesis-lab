@@ -37,6 +37,12 @@ const fetchCourse = async (code) =>
 const deps = (over = {}) => ({
   fetchExtensionByAlias: async (a) => (a === EXT.urlAlias ? EXT : null),
   fetchExtension: async (code) => (code === EXT.courseId ? EXT : null),
+  // U4.2 added a FORMER-ALIAS lookup to resolveCourse. Supplied for the
+  // same reason as fetchExtensionByFormerCode below: left at its
+  // production default it reaches Mongo, and no fixture here goes near
+  // the branch that calls it — which is exactly the latent shape
+  // test/fs/injectedDepCoverage exists to catch before it costs a hang.
+  fetchExtensionByFormerAlias: async () => null,
   fetchExtensionByFormerCode: async (code) =>
     (EXT.formerCodes.some((f) => f.toLowerCase() === String(code).toLowerCase()) ? EXT : null),
   fetchCourse,
@@ -60,6 +66,7 @@ test('a course whose CURRENT code resolves never reaches the former-code branch'
   let formerCalls = 0;
   const r = await resolveCourse('excel-intermediate-training-course', deps({
     fetchCourse: async () => UPSTREAM,           // current code resolves
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => { formerCalls += 1; return EXT; },
   }));
   assert.equal(r.mode, 'alias');
@@ -85,6 +92,7 @@ test('A HIDDEN course stays hidden on the old derived url', async () => {
   const hidden = { ...EXT, isPublished: false };
   const r = await resolveCourse('mse-l1-training-course', deps({
     fetchExtension: async () => null,
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => hidden,
   }));
   assert.equal(r, null, 'a hidden course resolved publicly during the rename interval');
@@ -94,6 +102,7 @@ test('an admin preview still reaches the hidden course', async () => {
   const hidden = { ...EXT, isPublished: false };
   const r = await resolveCourse('mse-l1-training-course', deps({
     fetchExtension: async () => null,
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => hidden,
     includeHidden: true,
   }));
@@ -108,6 +117,7 @@ test('a course with NO formerCodes behaves exactly as before', async () => {
   const d = {
     fetchExtensionByAlias: async (a) => (a === plain.urlAlias ? plain : null),
     fetchExtension: async (c) => (c === 'MSE-L1' ? plain : null),
+    fetchExtensionByFormerAlias: async () => null,
     fetchExtensionByFormerCode: async () => null,
     fetchCourse,
   };

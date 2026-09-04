@@ -137,23 +137,37 @@ test('Preview still opens the course’s REAL public URL, both shapes', () => {
 
 // ── the second half of the original defect ─────────────────────────────────
 
-test('resolveCourse gates BOTH url shapes on isPublished', () => {
+test('resolveCourse gates EVERY url shape on isPublished', () => {
   /**
    * The alias path always had the check. The derived
    * /<code>-training-course path had NONE, so un-publishing stopped one of a
    * course's two public URLs and left the other serving the whole page. Pinned
-   * in source as well as behaviour because the two checks are in different
+   * in source as well as behaviour because the checks are in different
    * branches and it is the second one that was missing for a long time.
+   *
+   * ROUND U4.2 ADDED A THIRD URL SHAPE — a FORMER alias — and with it a third
+   * gate. It is not a branch nobody reasoned about: an unpublished course must
+   * 404 at every URL that reaches it, and a former alias is one of those. A
+   * course hidden after a rename would otherwise stay fully readable at its old
+   * address, which is the original defect reached by a newer route.
    */
   const { code } = readSource('src/lib/resolveCourse.js');
   assert.match(code, /if \(byAlias && \(includeHidden \|\| byAlias\.isPublished !== false\)\)/);
+  assert.match(code, /if \(byFormer && \(includeHidden \|\| byFormer\.isPublished !== false\)\)/);
   assert.match(code, /if \(!includeHidden && extension\?\.isPublished === false\) return null;/);
 });
 
-test('CONTROL: both gates read isPublished, and the file has exactly two', () => {
-  // A third would mean a branch nobody has reasoned about; one would mean this
-  // regressed to the shape the round started from.
+test('CONTROL: the gates read isPublished, one per URL shape and no more', () => {
+  // A FOURTH would mean a branch nobody has reasoned about; fewer than three
+  // would mean this regressed towards the shape a round started from.
+  //
+  // The expected count is derived from the URL shapes rather than written as a
+  // bare number, so that adding a shape without its gate cannot be made to pass
+  // by editing one digit.
   const { code } = readSource('src/lib/resolveCourse.js');
+  const SHAPES = ['a current alias', 'a former alias', 'a derived code path'];
   const hits = code.match(/isPublished/g) ?? [];
-  assert.equal(hits.length, 2, 'two gates, one per URL shape');
+  assert.equal(hits.length, SHAPES.length,
+    `one gate per URL shape — resolveCourse resolves ${SHAPES.join(', ')}, and an `
+    + 'unpublished course must 404 at every one of them');
 });
