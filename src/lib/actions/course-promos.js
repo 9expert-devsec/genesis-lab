@@ -13,6 +13,10 @@ import CoursePromoLink from '@/models/CoursePromoLink';
 import EarlyBirdConfig from '@/models/EarlyBirdConfig';
 import Promotion from '@/models/Promotion';
 import { requireAdmin } from '@/lib/actions/auth';
+import {
+  listSchedulesByCourse,
+  PUBLIC_SCHEDULE_STATUSES,
+} from '@/lib/api/schedules';
 
 function serialize(value) {
   if (value == null) return value;
@@ -393,4 +397,107 @@ async function writeEarlyBird(courseId, data) {
 export async function saveEarlyBird(courseId, data) {
   await requireAdmin('courses');
   return writeEarlyBird(courseId, data);
+}
+
+// ── The promotion side: /admin/promotions/<id>/early-bird ───────────────────
+//
+// A second VIEW of the same rows, not a second authority. Every write below
+// funnels into `writeEarlyBird`, so the rule and its refusal are identical
+// whichever screen the author came from.
+//
+// These hold `requireAdmin('promotions')` rather than `'courses'` — see the
+// note on `saveEarlyBird`. Each one also verifies the row it touches actually
+// belongs to THIS promotion before touching it, so holding the promotions key
+// is not a licence to edit an arbitrary course's Early Bird.
+
+/** Every Early Bird row this promotion owns, newest first. */
+export async function getEarlyBirdsForPromotion(promotionId) {
+  await requireAdmin('promotions');
+  if (!promotionId) return [];
+  await dbConnect();
+  const docs = await EarlyBirdConfig
+    .find({ promotion_id: String(promotionId) })
+    .sort({ updatedAt: -1 })
+    .lean();
+  return serialize(docs);
+}
+
+/**
+ * The ADVISORY check, for the screen's course picker.
+ *
+ * Nothing rests on it — it exists so an author is told a course is taken
+ * before filling in a form, not to decide the write. `writeEarlyBird` refuses
+ * independently, because two admins can race this.
+ */
+export async function getEarlyBirdClaimForPromotion(promotionId, courseId) {
+  await requireAdmin('promotions');
+  const claim = await readEarlyBirdClaim(courseId);
+  // Relative to THIS promotion: a row we already own is not a claim to warn about.
+  if (claim.status === 'held' && claim.promotion_id === String(promotionId)) {
+    return { ...claim, status: 'mine' };
+  }
+  return claim;
+}
+
+/** The rounds an admin may attach — same list the course detail page shows. */
+export async function getCourseRoundsForPromotion(courseObjectId) {
+  await requireAdmin('promotions');
+  if (!courseObjectId) return [];
+  const res = await listSchedulesByCourse(courseObjectId, {
+    status: PUBLIC_SCHEDULE_STATUSES,
+  });
+  return serialize(res?.items ?? []);
+}
+
+/**
+ * Add or edit one course's Early Bird from the promotion screen.
+ *
+ * `promotionId` comes from the ROUTE, never from the form, so this cannot be
+ * pointed at another promotion's set by a crafted payload.
+ */
+export async function savePromotionEarlyBird(promotionId, courseId, data) {
+  await requireAdmin('promotions');
+  if (!promotionId) return { ok: false, error: 'ไม่พบโปรโมชัน' };
+  if (!courseId) return { ok: false, error: 'ยังไม่ได้เลือกหลักสูตร' };
+  const result = await writeEarlyBird(courseId, {
+    ...data,
+    promotion_id: String(promotionId),
+  });
+  if (result.ok) revalidatePath(`/admin/promotions/${promotionId}/early-bird`);
+  return result;
+}
+
+/**
+ * Take a course OUT of this promotion without deleting its Early Bird.
+ *
+ * Distinct from deleting, and worded differently in the UI, because they are
+ * different acts: this leaves the row configured and unowned — exactly the
+ * state the course tab produces — while delete removes the Early Bird outright.
+ */
+export async function releaseEarlyBirdFromPromotion(promotionId, courseId) {
+  await requireAdmin('promotions');
+  await dbConnect();
+  const updated = await EarlyBirdConfig.findOneAndUpdate(
+    { course_id: courseId, promotion_id: String(promotionId) },
+    { $set: { promotion_id: '' } },
+    { new: true }
+  );
+  if (!updated) return { ok: false, error: 'ไม่พบ Early Bird ของหลักสูตรนี้ในโปรโมชันนี้' };
+  revalidateCourse(courseId);
+  revalidatePath(`/admin/promotions/${promotionId}/early-bird`);
+  return { ok: true };
+}
+
+/** Delete this promotion's Early Bird for one course, row and all. */
+export async function deletePromotionEarlyBird(promotionId, courseId) {
+  await requireAdmin('promotions');
+  await dbConnect();
+  const { deletedCount } = await EarlyBirdConfig.deleteMany({
+    course_id: courseId,
+    promotion_id: String(promotionId),
+  });
+  if (!deletedCount) return { ok: false, error: 'ไม่พบ Early Bird ของหลักสูตรนี้ในโปรโมชันนี้' };
+  revalidateCourse(courseId);
+  revalidatePath(`/admin/promotions/${promotionId}/early-bird`);
+  return { ok: true };
 }

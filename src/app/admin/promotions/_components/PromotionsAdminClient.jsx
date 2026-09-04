@@ -187,6 +187,7 @@ export function PromotionsAdminClient({ promotions: initial, configMap, builderP
               const slug = slugFor(p.promotion_id);
               const linkedPage = linkedPageFor(p.promotion_id);
               const configHref = `/admin/promotions/${encodeURIComponent(p.promotion_id)}/config`;
+              const earlyBirdHref = `/admin/promotions/${encodeURIComponent(p.promotion_id)}/early-bird`;
               const busy = busyId === p.promotion_id;
               return (
                 <tr
@@ -278,6 +279,12 @@ export function PromotionsAdminClient({ promotions: initial, configMap, builderP
                       className="inline-block rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-action hover:bg-9e-ice"
                     >
                       {slug ? 'SEO ✓' : 'ตั้งค่า SEO'}
+                    </Link>
+                    <Link
+                      href={earlyBirdHref}
+                      className="ml-2 inline-block rounded border border-[var(--surface-border)] px-2 py-1 text-xs font-medium text-9e-action hover:bg-9e-ice"
+                    >
+                      Early Bird
                     </Link>
                   </td>
                 </tr>

@@ -736,36 +736,42 @@ test('CONTROL: those three are invisible to the Mongo half of the pattern alone'
 // log's rows, schema and writers were not to be touched. So the count moved and
 // no coverage case did.
 //
-// REDIRECT PANEL: 177 -> 181, +4 — saveRedirectRule, deleteRedirectRule,
-// createRuleFromHit and reopenNotFoundHit added in the NEW module
-// src/lib/actions/redirects.js. All four write Mongo DIRECTLY in their own
-// body (create / findByIdAndUpdate / findByIdAndDelete / updateOne), so depth 0
-// sees all four and BOTH pins move together; REACHED_THROUGH_IMPORT is
-// unchanged and the delta stays 8.
+// ── 177 → 180: the CustomPage draft/publish split ──────────────────────────
+// THREE new exports in customPages.js — saveCustomPageDraft, publishCustomPage
+// and discardCustomPageDraft — so that editing a published Advanced HTML page
+// no longer changes the live page. All three write Mongo directly in their own
+// body (CustomPage.findByIdAndUpdate), so the FILE-LOCAL classifier sees them
+// and the depth-0 figure in W2-b moves with them, 169 → 172. Both numbers move
+// together for the reason the articles.js and media.js changes did: 180 is 172
+// plus the eight exports only the import walk can see, and W2-b asserts exactly
+// that sum. Bumping only the total would leave the delta assertion red and
+// teach the next reader that the sum is decorative.
 //
-// Deliberately NOT in this figure, and each is a result rather than an
-// omission: listRedirectRules, listNotFoundHits and checkPathIsLive only READ.
-// If one ever appears here, something on a read path started writing.
+// customPages.js is NOT in SWEPT_FILES and that is unchanged by this round. It
+// records a PageAuditLog row per mutation — the per-page trail the editor's
+// ประวัติการดำเนินการ section reads — rather than an AdminAuditLog row, which is
+// the same system pageBuilder.js uses and is likewise outside the sweep. The
+// recordAdminAction sweep of this file remains a separate open ticket.
+// ── 180 → 183: managing Early Bird from the promotion side ─────────────────
+// THREE new exports in course-promos.js — savePromotionEarlyBird,
+// releaseEarlyBirdFromPromotion and deletePromotionEarlyBird. All three write
+// in their own body (the first through the file-local writeEarlyBird, the other
+// two through EarlyBirdConfig directly), so the file-local classifier sees all
+// three and the depth-0 figure in W2-b moves with them, 172 → 175. Both numbers
+// move together and the delta stays 8 — MEASURED, not summed: the sum assertion
+// below is what confirmed none of the three needed a REACHED_THROUGH_IMPORT
+// entry.
 //
-// saveRedirectRule and deleteRedirectRule both record an audit row under the
-// registered (redirects, redirect_rule) pair, so only the COUNT pins moved and
-// no coverage case did. createRuleFromHit deliberately writes NO second row:
-// it delegates to saveRedirectRule, which already recorded the create.
+// The round's other new exports are READ-ONLY and correctly absent from both
+// figures: getEarlyBirdsForPromotion, getEarlyBirdClaimForPromotion,
+// getCourseRoundsForPromotion and getEarlyBirdClaim.
 //
-// AVATAR ROUND: 181 → 182, +1 — setOwnAvatar in the NEW module
-// src/lib/actions/admin-avatar.js. It writes Mongo directly in its own body
-// (`admin.save()`), so depth 0 sees it, BOTH pins move together, and
-// REACHED_THROUGH_IMPORT is unchanged so the delta stays 8.
-//
-// NO COVERAGE CASE MOVED, and that is a ruling rather than an omission. The
-// file is not in SWEPT_FILES, deliberately: its sibling `updateOwnProfile` in
-// admin-accounts.js records nothing, and that whole file contains no audit call
-// at all — a self-service NAME change and a self-service PASSWORD change both
-// go unrecorded today. Instrumenting the profile PHOTO alone would make the
-// avatar the most closely watched thing on that screen, which is not a coherent
-// policy. If self-service profile edits should be audited, that is one round
-// covering all three, not a rider on the least sensitive of them.
-const MUTATING_EXPORT_COUNT = 182;
+// course-promos.js is NOT in SWEPT_FILES, and this round does not change that.
+// It records no audit row at all — which is precisely why the Early Bird
+// overwrites this round makes impossible were, historically, unrecoverable:
+// nothing recorded them. Sweeping this file is a separate open ticket
+// (docs/early-bird-audit-trail.md), deliberately not folded in here.
+const MUTATING_EXPORT_COUNT = 183;
 
 /** The exports only the import walk can see, and the chain that decides each. */
 const REACHED_THROUGH_IMPORT = Object.freeze({
@@ -987,7 +993,10 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
   // Without this, W2-a passes for a walk that ignores `depth` entirely.
   const zero = actionModules().reduce((n, rel) => n + mutatingExports(rel, 0).length, 0);
   assert.equal(
-    zero, 174,
+    zero, 175,
+    'ROUND: the CustomPage draft split, 169 → 172 — saveCustomPageDraft, ' +
+    'publishCustomPage and discardCustomPageDraft all call ' +
+    'CustomPage.findByIdAndUpdate in their own body, so depth 0 sees all three. ' +
     'depth 0 must reproduce the file-local classifier exactly. 157 was the pinned ' +
     'count before this walk existed; it then moved for moveArticleToRank ' +
     '(articles.js, mutates through a file-local helper), deleteMediaFile ' +
@@ -1029,11 +1038,12 @@ test('W2-b — CONTROL: the depth parameter is live, and depth 0 reproduces the 
     'the imported recordCourseContentVersion, so depth 0 cannot see it and the ' +
     'DELTA moved instead, 7 -> 8. Its sibling captureCoursePreImage is in ' +
     'neither figure because it only reads. ' +
-    'AVATAR ROUND: 173 -> 174, +1 — setOwnAvatar (admin-avatar.js, a NEW module) ' +
-    'calls admin.save() in its own body, so depth 0 sees it and both pins move ' +
-    'together; REACHED_THROUGH_IMPORT is untouched and the delta stays 8. Its ' +
-    'deleteFromCloudinary call is not a Mongo write and does not enter either ' +
-    'figure.'
+    'EARLY BIRD FROM THE PROMOTION SIDE: 172 -> 175, +3 — savePromotionEarlyBird, ' +
+    'releaseEarlyBirdFromPromotion and deletePromotionEarlyBird added to ' +
+    'course-promos.js. Each writes in its OWN body (the first via the file-local ' +
+    'writeEarlyBird, the other two via EarlyBirdConfig directly), so depth 0 sees ' +
+    'all three, both pins move together and the delta stays 8. The round\'s four ' +
+    'other new exports only read and are in neither figure.'
   );
   assert.equal(
     zero + Object.values(REACHED_THROUGH_IMPORT).reduce((n, m) => n + Object.keys(m).length, 0),
