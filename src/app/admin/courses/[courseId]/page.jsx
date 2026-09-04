@@ -17,6 +17,7 @@ import { courseListQuery, withListQuery } from '@/lib/courses/adminListQuery';
 import {
   getAllCoursePromoLinks,
   getEarlyBirdAdminByCourse,
+  getEarlyBirdClaim,
 } from '@/lib/actions/course-promos';
 import { getActivePromotionsForAdmin } from '@/lib/actions/promotions';
 import { getAllLocalFaqsForCourse } from '@/lib/local-faqs/getLocalFaqs';
@@ -44,12 +45,13 @@ export default async function AdminCourseExtensionPage({ params, searchParams })
   // Don't 404 if the upstream call fails — let the editor still work
   // so admins can fix data even when the API is down. We just won't
   // show the friendly course name.
-  const [courseResult, extension, promoLinks, earlyBirdAdmin, activePromos, faqs] =
+  const [courseResult, extension, promoLinks, earlyBirdAdmin, earlyBirdClaim, activePromos, faqs] =
     await Promise.allSettled([
       getCourseByCode(courseId),
       getCourseExtension(courseId),
       getAllCoursePromoLinks(courseId),
       getEarlyBirdAdminByCourse(courseId),
+      getEarlyBirdClaim(courseId),
       getActivePromotionsForAdmin(),
       getAllLocalFaqsForCourse('public', courseId),
     ]).then((results) =>
@@ -102,6 +104,7 @@ export default async function AdminCourseExtensionPage({ params, searchParams })
         initialData={extension}
         initialPromoLinks={promoLinks ?? []}
         initialEarlyBird={earlyBirdAdmin ?? null}
+        initialEarlyBirdClaim={earlyBirdClaim ?? null}
         initialPromos={activePromos ?? []}
         initialFaqs={faqs ?? []}
       />

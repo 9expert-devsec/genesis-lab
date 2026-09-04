@@ -378,4 +378,56 @@ test('one course, one Early Bird', async (t) => {
     assert.match(SRC, /err\?\.code === 11000/);
   });
   });
+
+  await t.test('the course tab says up front what the writer would do', async (t) => {
+    const TAB = readFileSync(
+      path.join(
+        ROOT, 'src', 'app', 'admin', 'courses', '[courseId]',
+        '_components', 'EarlyBirdTab.jsx'
+      ),
+      'utf8'
+    );
+    const PAGE = readFileSync(
+      path.join(ROOT, 'src', 'app', 'admin', 'courses', '[courseId]', 'page.jsx'),
+      'utf8'
+    );
+
+    await t.test('the page reads the claim and hands it down', () => {
+      assert.match(PAGE, /getEarlyBirdClaim\(courseId\)/, 'the shell never reads the claim');
+      assert.match(PAGE, /initialEarlyBirdClaim=\{/, 'the claim is read and then dropped');
+    });
+
+    await t.test('the notice is derived, not re-queried on every keystroke', () => {
+      const notice = TAB.slice(TAB.indexOf('function ClaimNotice'));
+      assert.ok(notice.length > 0, 'ClaimNotice is gone');
+      assert.doesNotMatch(
+        notice,
+        /await |getEarlyBirdClaim/,
+        'the advisory notice issues its own query — it must read the snapshot'
+      );
+    });
+
+    await t.test('all three states are distinguished, and `free` says nothing', () => {
+      const notice = TAB.slice(TAB.indexOf('function ClaimNotice'));
+      assert.match(notice, /claim\.status === 'free'/);
+      assert.match(notice, /claim\.status === 'held'/);
+      assert.match(notice, /claim\.status === 'unowned'/);
+    });
+
+    await t.test('CONTROL: the probes are live — none of them match an empty component', () => {
+      const empty = 'function ClaimNotice() { return null; }';
+      assert.doesNotMatch(empty, /claim\.status === 'held'/);
+      assert.doesNotMatch(empty, /claim\.status === 'unowned'/);
+    });
+
+    await t.test('the tab still confirms before adopting, and passes adopt on retry', () => {
+      assert.match(TAB, /EB_NEEDS_ADOPTION/, 'the tab no longer handles the adoption refusal');
+      assert.match(TAB, /adopt: true/, 'the confirmed retry does not carry adopt');
+      assert.match(TAB, /window\.confirm/);
+    });
+
+    await t.test('a refusal still reaches the author as a message, not a swallowed error', () => {
+      assert.match(TAB, /result\?\.error \?\? 'บันทึกไม่สำเร็จ'/);
+    });
+  });
 });
