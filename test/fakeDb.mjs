@@ -48,9 +48,40 @@ const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)
 /** Collections, by the name the model stub asks for. */
 const store = new Map();
 
+/**
+ * A PRIVATE set of collections, immune to `resetFakeDb()`.
+ *
+ * ── WHY THIS EXISTS, MEASURED ───────────────────────────────────────────────
+ * The suite runs `run({ isolation: 'none', concurrency: true })` — ONE process,
+ * files interleaved at every `await`. `store` above is module-global and
+ * `resetFakeDb()` clears ALL of it, so any two files that both own fakeDb state
+ * can wipe each other mid-test. The header's "single fakeDb owner" convention
+ * is what keeps that from happening, and it is a convention, not a mechanism.
+ *
+ * This was not theoretical: the fakeDb mechanics tests added alongside upsert
+ * passed alone and failed inside `npm test`, cleared by another file's reset
+ * while awaiting an async model method.
+ *
+ * A test that hands `makeModel` its own store is unaffected by every other
+ * file, and needs no reset of its own. Callers that pass nothing keep the
+ * global store and behave exactly as before — this widens nothing.
+ *
+ * NOTE, deliberately not fixed here: the two pre-existing owners
+ * (test/fs/pageBuilderDraftActions, test/fs/customPageDraftActions) still share
+ * the global store and are still ordered only by luck. Migrating them is a
+ * separate change with its own blast radius, not a rider on this one.
+ */
+export function makeStore() {
+  return new Map();
+}
+
+function rowsIn(targetStore, name) {
+  if (!targetStore.has(name)) targetStore.set(name, []);
+  return targetStore.get(name);
+}
+
 function rows(name) {
-  if (!store.has(name)) store.set(name, []);
-  return store.get(name);
+  return rowsIn(store, name);
 }
 
 /** Wipe every collection and reset the clock. Call in a beforeEach. */
@@ -61,8 +92,14 @@ export function resetFakeDb() {
   idSeq = 0;
 }
 
-/** Insert a document directly, bypassing the action layer. Returns the raw row. */
-export function seed(name, doc) {
+/**
+ * Insert a document directly, bypassing the action layer. Returns the raw row.
+ *
+ * Deliberately does NOT check unique constraints: this is the test author's own
+ * hand placing a fixture, and a fixture that needs to violate an index (to
+ * prove the reader copes with data that predates it) must stay possible.
+ */
+export function seed(name, doc, targetStore = store) {
   const stamp = now();
   const row = {
     _id: doc._id ?? nextId(),
@@ -71,7 +108,7 @@ export function seed(name, doc) {
     ...doc,
   };
   row._id = String(row._id);
-  rows(name).push(row);
+  rowsIn(targetStore, name).push(row);
   return row;
 }
 
@@ -81,12 +118,12 @@ export function recordCloudinaryDelete(publicId) { cloudinaryDeleted.push(public
 export function cloudinaryDeletes() { return [...cloudinaryDeleted]; }
 
 /** Every row in a collection, as plain objects. For assertions. */
-export function all(name) {
-  return rows(name).map((r) => clone(r));
+export function all(name, targetStore = store) {
+  return rowsIn(targetStore, name).map((r) => clone(r));
 }
 
-export function count(name) {
-  return rows(name).length;
+export function count(name, targetStore = store) {
+  return rowsIn(targetStore, name).length;
 }
 
 // ── matching ────────────────────────────────────────────────────────────────
@@ -267,34 +304,88 @@ function hydrate(row) {
   return doc;
 }
 
-export function makeModel(name) {
+/**
+ * The error Mongo raises when an insert collides with a unique index.
+ *
+ * `code === 11000` is the whole contract callers use — `createCoursePromoLink`
+ * already branches on it, and `saveEarlyBird` now does too. The message is
+ * shaped like the real one so a test that prints it is not misleading.
+ */
+function duplicateKeyError(name, field, value) {
+  const err = new Error(
+    `E11000 duplicate key error collection: test.${name} index: ${field}_1 ` +
+      `dup key: { ${field}: "${String(value)}" }`
+  );
+  err.code = 11000;
+  err.keyPattern = { [field]: 1 };
+  err.keyValue = { [field]: value };
+  return err;
+}
+
+/**
+ * @param {string} name
+ * @param {object} [options]
+ * @param {string[]} [options.unique] — fields carrying a unique index.
+ *
+ * ── WHY UNIQUENESS IS OPT-IN AND NOT INFERRED ───────────────────────────────
+ * A fake that enforced uniqueness on every field it happened to see would be
+ * guessing, and a fake that enforced none of it cannot exercise the branch that
+ * makes a claim RULE rather than a claim CHECK: `saveEarlyBird` is race-proof
+ * only because a losing insert hits `course_id`'s unique index and throws
+ * E11000. With no index in the fake that catch block is unreachable, and an
+ * unreachable branch ships unproven.
+ *
+ * Opt-in also bounds the blast radius. Every existing caller passes no options,
+ * so every existing collection behaves exactly as before.
+ */
+export function makeModel(name, { unique = [], store: ownStore = null } = {}) {
+  /**
+   * Every row access in this model goes through here, so a model handed its own
+   * store never touches the global one — including on the paths that `resetFakeDb`
+   * would otherwise clear out from under it.
+   */
+  const rowsFor = () => rowsIn(ownStore ?? store, name);
+
+  /** Throw if `doc` would collide with an existing row on a unique field. */
+  function assertUnique(doc, exceptId = null) {
+    for (const field of unique) {
+      const value = doc[field];
+      if (value === undefined) continue;
+      const clash = rowsFor().find(
+        (r) => String(r._id) !== String(exceptId) &&
+          String(valueAt(r, field)) === String(value)
+      );
+      if (clash) throw duplicateKeyError(name, field, value);
+    }
+  }
+
   return {
     modelName: name,
 
     findById(id) {
-      return new Query(() => rows(name).find((r) => String(r._id) === String(id)) ?? null);
+      return new Query(() => rowsFor().find((r) => String(r._id) === String(id)) ?? null);
     },
 
     findOne(filter) {
-      return new Query(() => rows(name).find((r) => matches(r, filter)) ?? null);
+      return new Query(() => rowsFor().find((r) => matches(r, filter)) ?? null);
     },
 
     find(filter) {
-      return new Query(() => rows(name).filter((r) => matches(r, filter ?? {})));
+      return new Query(() => rowsFor().filter((r) => matches(r, filter ?? {})));
     },
 
     async countDocuments(filter) {
-      return rows(name).filter((r) => matches(r, filter ?? {})).length;
+      return rowsFor().filter((r) => matches(r, filter ?? {})).length;
     },
 
     /** Mongoose returns { _id } or null — slugGuard treats it as a boolean. */
     async exists(filter) {
-      const hit = rows(name).find((r) => matches(r, filter ?? {}));
+      const hit = rowsFor().find((r) => matches(r, filter ?? {}));
       return hit ? { _id: hit._id } : null;
     },
 
     async distinct(field) {
-      return [...new Set(rows(name).map((r) => valueAt(r, field)).filter((v) => v != null))];
+      return [...new Set(rowsFor().map((r) => valueAt(r, field)).filter((v) => v != null))];
     },
 
     async create(doc) {
@@ -306,12 +397,13 @@ export function makeModel(name) {
         updatedAt: stamp,
       };
       row._id = String(row._id);
-      rows(name).push(row);
+      assertUnique(row);
+      rowsFor().push(row);
       return hydrate(row);
     },
 
     async findByIdAndUpdate(id, update, options = {}) {
-      const row = rows(name).find((r) => String(r._id) === String(id));
+      const row = rowsFor().find((r) => String(r._id) === String(id));
       if (!row) return null;
       const set = update?.$set ?? {};
       const inc = update?.$inc ?? {};
@@ -354,9 +446,71 @@ export function makeModel(name) {
       return options.new === false ? hydrate(row) : hydrate(row);
     },
 
-    async findOneAndUpdate(filter, update) {
-      const row = rows(name).find((r) => matches(r, filter));
-      if (!row) return null;
+    /**
+     * ── `upsert` IS HONOURED HERE, AND USED TO BE IGNORED ───────────────────
+     * This returned `null` and inserted nothing whenever the filter missed, no
+     * matter what `options` said. Every caller passing `{upsert:true}` was
+     * therefore testing against a fake that silently declined to create — the
+     * exact "fake that answers every question" this file's own header refuses,
+     * inverted: a fake that quietly answers NO.
+     *
+     * That matters for more than tidiness. `saveEarlyBird`'s rule is carried by
+     * ONE atomic call whose filter names both the course and the promotions
+     * allowed to own it, so:
+     *   · no row            → filter misses → upsert INSERTS         (create)
+     *   · row owned by us
+     *     or owned by nobody→ filter matches → $set applies          (edit)
+     *   · row owned by ANOTHER promotion
+     *                       → filter misses → insert hits course_id's
+     *                         unique index → E11000                  (REFUSED)
+     * The third line is the rule. Against the old fake it could not run at all:
+     * the insert never happened, so the collision never happened, so the catch
+     * block that turns it into a refusal was dead code under test.
+     *
+     * `$setOnInsert` is supported for the same reason — it is how the insert
+     * branch gets the key fields the `$set` does not carry.
+     */
+    async findOneAndUpdate(filter, update, options = {}) {
+      const unsupported = Object.keys(update ?? {}).filter(
+        (k) => k !== '$set' && k !== '$setOnInsert'
+      );
+      if (unsupported.length) {
+        throw new Error(
+          `fakeDb: unsupported update operator(s) ${unsupported.join(', ')} — add it deliberately`
+        );
+      }
+
+      const row = rowsFor().find((r) => matches(r, filter));
+      if (!row) {
+        if (!options.upsert) return null;
+        /**
+         * Mongo seeds an upsert-insert from the filter's EQUALITY fields only.
+         * `$or` and operator objects (`$in`, `$ne`, `$lt`) constrain which row
+         * would have matched and say nothing about what to create, so they are
+         * skipped here exactly as the database skips them — a fake that folded
+         * `$or` into the new document would invent a row Mongo would not.
+         */
+        const seedDoc = {};
+        for (const [k, v] of Object.entries(filter ?? {})) {
+          if (k.startsWith('$')) continue;
+          if (v !== null && typeof v === 'object' && !(v instanceof Date) && !Array.isArray(v)) {
+            continue;
+          }
+          seedDoc[k] = clone(v);
+        }
+        const stamp = tick();
+        const created = {
+          _id: nextId(),
+          ...seedDoc,
+          ...clone(update?.$setOnInsert ?? {}),
+          ...clone(update?.$set ?? {}),
+          createdAt: stamp,
+          updatedAt: stamp,
+        };
+        assertUnique(created);
+        rowsFor().push(created);
+        return options.new === false ? null : hydrate(created);
+      }
       for (const [k, v] of Object.entries(update?.$set ?? {})) {
         if (k.includes('.')) {
           const parts = k.split('.');
@@ -370,20 +524,24 @@ export function makeModel(name) {
           row[k] = clone(v);
         }
       }
+      // An update that moves a unique field ONTO another row's value collides
+      // in Mongo exactly as an insert does. Enforced here too, so the fake does
+      // not hold uniqueness on one write path and drop it on the other.
+      assertUnique(row, row._id);
       row.updatedAt = tick();
       return hydrate(row);
     },
 
     async deleteMany(filter) {
-      const list = rows(name);
+      const list = rowsFor();
       const keep = list.filter((r) => !matches(r, filter));
       const removed = list.length - keep.length;
-      store.set(name, keep);
+      (ownStore ?? store).set(name, keep);
       return { deletedCount: removed };
     },
 
     async findByIdAndDelete(id) {
-      const list = rows(name);
+      const list = rowsFor();
       const idx = list.findIndex((r) => String(r._id) === String(id));
       if (idx < 0) return null;
       const [row] = list.splice(idx, 1);
