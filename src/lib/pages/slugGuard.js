@@ -18,7 +18,7 @@ import CustomPage from '@/models/CustomPage';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
 import { isReservedSlug } from '@/lib/pages/reservedSlugs';
-import { slugMatchesPromotion } from '@/lib/pageBuilder/promotionMode';
+import { slugMatchesPromotion } from '@/lib/pages/promotionMode';
 
 /**
  * @param {string} slug
@@ -46,17 +46,28 @@ export async function checkSlugAvailable(slug, opts = {}) {
 }
 
 /**
- * EXTRA slug guard for a PROMOTION-type builder page (promotion mode, Phase 1).
+ * EXTRA slug guard for a PROMOTION-type page, of EITHER collection.
  *
- * A Genesis promotion will own `/promotions/<slug>` in Phase 2, a namespace the
- * shared `checkSlugAvailable` guard does not cover. That URL is also how an MSDB
+ * A Genesis promotion owns `/promotions/<slug>`, a namespace the shared
+ * `checkSlugAvailable` guard does not cover. That URL is also how an MSDB
  * promotion resolves — via `PromotionConfig.url_slug` (the admin pretty-URL) or a
  * raw `Promotion.promotion_id` (the id-fallback, see resolvePromotion.js). So a
  * promotion page's slug must additionally not collide with either, or two sources
  * would claim one `/promotions/<slug>`.
  *
- * SCOPED: the caller invokes this ONLY when `pageType === 'promotion'`, so
- * non-promotion builder pages are unaffected. READ-ONLY against both collections —
+ * ── SIX CALLERS, ACROSS TWO COLLECTIONS ───────────────────────────────────
+ * Three in lib/actions/pageBuilder.js and three in lib/actions/customPages.js.
+ * It was builder-only when written; an Advanced HTML page can now be a promotion
+ * too, and it reaches the same URL by the same route, so it is checked by the
+ * same guard rather than by a second one that could disagree.
+ *
+ * SCOPED, AND ON THE SUBMITTED TYPE: every caller invokes this ONLY when the
+ * pageType being SAVED is `'promotion'` — not the stored one. That is deliberate
+ * and it is what catches a page which becomes a promotion under a slug it
+ * already had: the flipping save carries the new type, so the guard runs on it
+ * even though the slug is unchanged. Non-promotion pages are unaffected.
+ *
+ * READ-ONLY against both collections —
  * `PromotionConfig` is frozen legacy (slated for retirement); this adds no write
  * coupling, only defensive reads. Slugs are lowercase kebab (schema-enforced) and
  * Next paths are case-sensitive, so an exact lowercase match mirrors how the route

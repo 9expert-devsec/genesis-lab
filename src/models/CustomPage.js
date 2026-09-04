@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { CUSTOM_PAGE_TYPES } from '@/lib/schemas/customPage';
 
 /**
  * CustomPage — admin-authored standalone pages (e.g. a landing page that
@@ -65,6 +66,37 @@ const CustomPageSchema = new mongoose.Schema(
     // Slug history for 301 redirects (consumed by the public route later).
     slugHistory: [String],  // previously-used slugs
 
+    // ── Promotion mode ────────────────────────────────────────────────
+    // `pageType` is ROUTING: 'promotion' moves this page's public home to
+    // /promotions/<slug>, puts a card on the /promotions grid, and turns the
+    // bare slug into a 308 to that home. TWO values only, and
+    // lib/schemas/customPage.js owns both the list and the measurement behind
+    // it — including why there is deliberately no `promotionId` here and what
+    // would have to change before a linked promotion could exist.
+    //
+    // NOT THE SAME FIELD AS PageAuditLog.pageType, which is a different
+    // vocabulary ('builder' | 'advanced_html') on a different model. Both names
+    // appear in lib/actions/customPages.js; the audit rows write AUDIT_TYPE,
+    // never this.
+    //
+    // The enum is IMPORTED, not retyped, for the same reason PageBuilder imports
+    // PAGE_TYPES: the schema module is the single source and mongoose must not
+    // hold a second copy that can drift.
+    pageType:       { type: String, enum: CUSTOM_PAGE_TYPES, default: 'general' },
+
+    // Grid order, ascending (lower shows first). Only meaningful for
+    // pageType === 'promotion'. Sorted ACROSS both collections — a builder
+    // promotion and an Advanced HTML promotion with neighbouring values
+    // interleave, because both are Genesis-owned pages on one admin-controlled
+    // scale. See orderedPromotionCards in lib/pages/promotionMode.js.
+    promotionOrder: { type: Number, default: 0 },
+
+    // Card image for the /promotions grid. URL only — no publicId, matching the
+    // builder's promotionCover, so nothing here owns a Cloudinary asset the way
+    // ogImagePublicId does. DRAFTED (it is in CUSTOM_PAGE_DRAFT_KEYS): the live
+    // card keeps the published cover until เผยแพร่.
+    promotionCover: { type: String, default: '' },
+
     // Draft preview — random token lets admins view a draft without publishing.
     previewToken: { type: String, default: '' },
 
@@ -75,13 +107,14 @@ const CustomPageSchema = new mongoose.Schema(
     //
     //   title, body, metaTitle, metaDescription, canonicalUrl, noIndex,
     //   ogTitle, ogDescription, ogImage, ogImagePublicId, ogType,
-    //   twitterCard, jsonLd
+    //   twitterCard, jsonLd, promotionCover
     //
     // — plus the server-set stamps savedAt/savedBy. Everything else in the
-    // editable surface is LIVE-ONLY and keeps taking effect immediately;
+    // editable surface is LIVE-ONLY and keeps taking effect immediately —
+    // slug, status, slugHistory, and now pageType and promotionOrder;
     // lib/schemas/customPage.js owns that partition and the reasoning.
     //
-    // THIRTEEN KEYS, where PageBuilder's draft holds nine. The two page types
+    // FOURTEEN KEYS, where PageBuilder's draft holds nine. The two page types
     // store different things; the SEMANTICS are shared through
     // lib/pages/draftState.js, which takes the key list as a parameter, and the
     // LIST is not.
@@ -93,7 +126,7 @@ const CustomPageSchema = new mongoose.Schema(
     //
     // WHY Mixed, not a typed sub-schema: Zod is the authoritative validator —
     // customPageDraftContentSchema is PICKED from customPageSchema, so retyping
-    // the thirteen fields here would duplicate that and let the two drift. The
+    // the fourteen fields here would duplicate that and let the two drift. The
     // model's job is to persist the validated blob.
     //
     // TWO EXCEPTIONS ON CREATE, and they are this schema's doing: `title` AND
@@ -101,7 +134,7 @@ const CustomPageSchema = new mongoose.Schema(
     // inside the draft — create() would reject the document. createCustomPage
     // therefore seeds the live values from the authored ones (nothing is
     // published yet, so there is nothing for them to contradict) and every later
-    // edit goes to the draft like the other eleven keys. PageBuilder has this
+    // edit goes to the draft like the other twelve keys. PageBuilder has this
     // problem once, for `title`; here it is twice.
     //
     // NEVER in a public projection. The draft is unpublished by definition; a
@@ -119,5 +152,9 @@ const CustomPageSchema = new mongoose.Schema(
 
 CustomPageSchema.index({ slugHistory: 1 });
 CustomPageSchema.index({ status: 1 });
+// The /promotions grid loader queries { pageType, status } and sorts on
+// promotionOrder — the same shape, and the same index, PageBuilder declares for
+// the builder half of that union.
+CustomPageSchema.index({ status: 1, pageType: 1 });
 
 export default mongoose.models.CustomPage || mongoose.model('CustomPage', CustomPageSchema);

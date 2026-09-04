@@ -12,7 +12,12 @@ import { FileText, Search, CodeXml, Lock, History } from 'lucide-react';
 // Round 38's glyph, ADDED beside the statements above rather than folded into
 // any — the same standing rule.
 import { ScrollText } from 'lucide-react';
+// The promotion cover uploader's two glyphs, ADDED beside the statements above
+// rather than folded into any — the same standing rule.
+import { Upload, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { Field, Warn } from '@/components/pageBuilder/editor/fields';
 
 /**
  * THE ONE PAGE-SETTINGS DIALOG SHELL, shared by both page editors.
@@ -33,10 +38,27 @@ import { cn } from '@/lib/utils';
  *
  * ── WHAT IS DELIBERATELY *NOT* HERE ────────────────────────────────────────
  * Everything page-builder-bound stays in PageSettingsDialog.jsx: `useEditor()`,
- * `PATCH_PAGE`, the five-second autosave, VersionHistory, ActivityTrail,
- * getPreviewState/PreviewBody, PAGE_TYPES/PAGE_THEMES, the promotion trio. None
- * of it has a CustomPage equivalent, and dragging any of it in would make this
- * file unimportable from an /admin/pages route.
+ * `PATCH_PAGE`, the five-second autosave, VersionHistory, getPreviewState/
+ * PreviewBody, PAGE_THEMES and the `promotionId` MSDB link. None of it has a
+ * CustomPage equivalent, and dragging any of it in would make this file
+ * unimportable from an /admin/pages route.
+ *
+ * ── WHAT MOVED HERE WHEN THAT STOPPED BEING TRUE ──────────────────────────
+ * That list once included "PAGE_TYPES/PAGE_THEMES, the promotion trio. None of
+ * it has a CustomPage equivalent." Half of it now does: an Advanced HTML page
+ * can be a promotion, with its own ชนิดหน้า, ลำดับในหน้าโปรโมชัน and
+ * ภาพปกโปรโมชัน. So `PAGE_TYPE_LABELS` and `PromoCoverField` moved here and both
+ * dialogs import them — the same move, for the same reason, as
+ * PAGE_SETTINGS_SECTIONS: a second copy of a Thai label set or a second uploader
+ * is a drift nothing can report.
+ *
+ * The VOCABULARIES stay separate and that is not an oversight: PAGE_TYPES has
+ * eight values and CUSTOM_PAGE_TYPES has two, because outside `'promotion'`
+ * nothing reads a specific type and the builder's other six name a layout of
+ * sections a raw-HTML page has none of. `PAGE_TYPE_LABELS` is a superset keyed
+ * by value, so each caller maps only over its own list. PAGE_THEMES stays
+ * builder-only, because CustomPageView reads no theme — a theme control here
+ * would be read by nothing.
  *
  * ── THE TWO PROPS THAT ARE NEW ─────────────────────────────────────────────
  * `sections` on SettingsNav, so a second caller can pass its own menu; and the
@@ -64,6 +86,83 @@ import { cn } from '@/lib/utils';
  * nothing is downloaded. The one that is a JUDGEMENT rather than a match is
  * named where it is chosen — see the icon map note in the round report.
  */
+/**
+ * ชนิดหน้า labels for BOTH dialogs. A SUPERSET keyed by value: the builder maps
+ * over PAGE_TYPES (eight) and the Advanced HTML editor over CUSTOM_PAGE_TYPES
+ * (two), and each looks up only the keys its own list contains. Extracted here
+ * rather than copied, so renaming a Thai label renames it in both and there is
+ * no second array anyone can edit alone.
+ */
+export const PAGE_TYPE_LABELS = {
+  promotion: 'โปรโมชัน', landing: 'แลนดิ้ง', course_landing: 'แลนดิ้งคอร์ส', bundle: 'แพ็กเกจ',
+  masterclass: 'มาสเตอร์คลาส', event: 'อีเวนต์', general: 'ทั่วไป', thank_you: 'ขอบคุณ',
+};
+
+/**
+ * Promotion cover uploader, shared by both page editors. Reuses the shared admin
+ * upload endpoint — no second upload path to secure — but stores ONLY the
+ * returned secure URL into `promotionCover`. It DELIBERATELY discards any
+ * `publicId` the endpoint returns: storing an ownership token would wake the
+ * item-5 Cloudinary GC before it is ready (option B). Uploads to the
+ * `promotion-covers` folder, a sibling of `page-builder` that sits OUTSIDE the
+ * GC's scope, so an untracked cover is also a safe one.
+ *
+ * ── WHY IT IS SHARED RATHER THAN COPIED ───────────────────────────────────
+ * The publicId decision above is load-bearing and invisible: a second copy that
+ * "helpfully" stored the token would hand the GC an asset it is not ready to
+ * own, and nothing would report the divergence. One uploader, one decision.
+ *
+ * The hint names /promotions in the present tense because that grid now reads
+ * this field for both page types.
+ */
+export function PromoCoverField({ value, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const src = String(value ?? '').trim();
+
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true); setErr('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('folder', 'promotion-covers');
+      const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? 'อัปโหลดไม่สำเร็จ');
+      // URL ONLY — json.publicId is intentionally ignored (option B, see above).
+      onChange(json.url);
+    } catch (e) {
+      setErr(e?.message ?? 'อัปโหลดไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Field label="ภาพปกโปรโมชัน" hint="ใช้เป็นรูปการ์ดในหน้า /promotions">
+      {src && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="mb-1.5 aspect-square w-24 rounded-9e-md object-cover" />
+      )}
+      <label className={cn(
+        'flex cursor-pointer items-center justify-center gap-1.5 rounded-9e-md border border-dashed',
+        'border-[var(--surface-border)] px-2.5 py-2 text-xs text-9e-slate-dp-50',
+        'hover:border-9e-action/40 hover:text-9e-action',
+        busy && 'pointer-events-none opacity-50'
+      )}>
+        {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+        {busy ? 'กำลังอัปโหลด…' : src ? 'เปลี่ยนภาพปก' : 'อัปโหลดภาพปก'}
+        <input
+          type="file" accept="image/*" className="sr-only" disabled={busy}
+          onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }}
+        />
+      </label>
+      {err && <Warn tone="red">{err}</Warn>}
+    </Field>
+  );
+}
+
 export const PAGE_SETTINGS_SECTIONS = [
   { id: 'general', label: 'ข้อมูลหน้า',        Icon: FileText },
   { id: 'seo',     label: 'SEO',               Icon: Search },

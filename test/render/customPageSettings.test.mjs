@@ -218,7 +218,14 @@ test('CONTROL: the band’s two modes really do differ', () => {
  * in NO section, which looks like nothing at all from inside every section.
  */
 const UNION = {
-  general: ['ชื่อหน้า', 'URL (slug)', 'สถานะ'],
+  // ชนิดหน้า was NOT in the sidebar — it did not exist. It is listed here
+  // anyway, because the point of this union is "every field the dialog is
+  // supposed to carry is reachable from a section", and a field that landed in
+  // no section looks like nothing at all from inside every section. The two
+  // fields it gates (ลำดับ / ภาพปก) are deliberately absent: they render only
+  // while the type is โปรโมชัน, and this reader opens the dialog on a ทั่วไป
+  // page. Their gating is asserted in test/fs/customPageEditorControls.
+  general: ['ชื่อหน้า', 'URL (slug)', 'สถานะ', 'ชนิดหน้า'],
   seo: [
     'Meta title', 'Meta description', 'Canonical URL',
     'OG title', 'OG description', 'OG type', 'OG image', 'Twitter card',
@@ -258,10 +265,25 @@ test('the two checkbox controls and the superadmin gate are reachable too', () =
 });
 
 test('CONTROL: the union reader would NOTICE a dropped field', () => {
-  // The failure mode this file exists for, proved rather than assumed: a label
-  // that is not rendered must not be found.
+  /**
+   * The failure mode this file exists for, proved rather than assumed: a label
+   * that is not rendered must not be found.
+   *
+   * ── THE NEGATIVE EXAMPLE MOVED, AND THAT IS THE POINT OF A CONTROL ───────
+   * It used to be ชนิดหน้า, described as "a field that is deliberately not
+   * built". That stopped being true the moment CustomPage gained a `pageType`
+   * three things read, and this control WENT RED naming it — which is the
+   * control working, not the control breaking. It is rewritten to a field that
+   * is still deliberately absent rather than amended to keep passing.
+   *
+   * ธีม is that field, and it is a durable choice rather than a convenient one:
+   * `CustomPageView` renders one sanitised body in a fixed `prose` wrapper and
+   * reads no theme at all, so a ธีม control would be wired to nothing. If this
+   * line ever goes red, the right response is to check whether a render path
+   * started reading a theme — not to pick another absent label.
+   */
   const labels = labelsIn(customBody({ initialSection: 'general' }));
-  assert.equal(labels.some((l) => l.startsWith('ชนิดหน้า')), false,
+  assert.equal(labels.some((l) => l.startsWith('ธีม')), false,
     'the reader claims to see a field that is deliberately not built');
   assert.equal(labels.some((l) => l.startsWith('ชื่อหน้า')), true,
     'the reader cannot see a field that IS there, so every assertion above is vacuous');

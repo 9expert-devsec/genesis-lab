@@ -3,10 +3,24 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { resolvePromotion } from "@/lib/resolvePromotion";
 import { getPageBuilderPageBySlugAny } from "@/lib/actions/pageBuilder";
-import { shouldRenderBuilderPromotion } from "@/lib/pageBuilder/promotionMode";
+import { promotionDetailTarget } from "@/lib/pages/promotionMode";
 import { PageBuilderView } from "@/components/pageBuilder/PageBuilderView";
 import { stripDraft } from "@/lib/pageBuilder/draftState";
 import { sanitizeRichHtml } from "@/lib/sanitizeRichHtml";
+/**
+ * The Advanced HTML branch. ADDED beside the statements above rather than folded
+ * into any — the standing rule in this repo.
+ *
+ * `getCustomPageBySlug` is the PUBLISHED-only read and it strips the draft
+ * INSIDE the action (registered `stripped` in the CUSTOM_PAGE_READS sweep), so
+ * there is deliberately no second stripDraft() at the call sites below —
+ * double-stripping would contradict the register. The builder read is different:
+ * getPageBuilderPageBySlugAny is any-status and shared with the preview route,
+ * which is why ITS guard sits here at the call site.
+ */
+import { getCustomPageBySlug } from "@/lib/actions/customPages";
+import { CustomPageView } from "@/app/(public)/[...slug]/_components/CustomPageView";
+import { buildPageJsonLd } from "@/lib/customPages/buildPageJsonLd";
 
 export const revalidate = 3600;
 
@@ -45,14 +59,23 @@ export async function generateMetadata({ params }) {
   const { slug } = await params;
   const segment = String(slug);
 
-  // Builder promotion FIRST (Phase 2). Mirrors the catch-all's builder metadata
-  // shape, but canonical is FORCED to /promotions/<slug> (auto-derived — the
-  // author never types it, and seo.canonicalUrl is deliberately ignored here so a
-  // promotion's one home is always /promotions/<slug>).
-  // stripDraft on a PUBLIC read — getPageBuilderPageBySlugAny is shared with
-  // the preview route, which may see a draft, so the guard belongs here.
+  // ONE precedence decision, shared with the render below and defined once in
+  // promotionDetailTarget: builder → custom → msdb → 404.
+  //
+  // Canonical is FORCED to /promotions/<slug> on BOTH page branches (auto-derived
+  // — the author never types it, and seo.canonicalUrl / canonicalUrl are
+  // deliberately ignored here so a promotion's one home is always
+  // /promotions/<slug>).
+  //
+  // stripDraft on the BUILDER read only — getPageBuilderPageBySlugAny is shared
+  // with the preview route, which may see a draft, so the guard belongs at this
+  // call site. getCustomPageBySlug strips inside the action and is published-only.
   const builderPage = stripDraft(await getPageBuilderPageBySlugAny(segment));
-  if (shouldRenderBuilderPromotion(builderPage)) {
+  const customPage = await getCustomPageBySlug(segment);
+  const resolved = await resolvePromotion(segment);
+  const target = promotionDetailTarget(builderPage, customPage, resolved);
+
+  if (target === "builder") {
     const seo = builderPage.seo ?? {};
     const base = process.env.NEXT_PUBLIC_SITE_URL;
     const canonical = `${base}/promotions/${segment}`;
@@ -83,7 +106,48 @@ export async function generateMetadata({ params }) {
     };
   }
 
-  const resolved = await resolvePromotion(segment);
+  /**
+   * The Advanced HTML branch. Same shape as the builder's above, read off the
+   * page's own flat SEO fields rather than a nested `seo` object — CustomPage
+   * stores them at the top level and has two the builder does not (ogType,
+   * twitterCard), which is why this is a branch and not a shared mapper.
+   *
+   * `canonicalUrl` IS DELIBERATELY IGNORED, exactly as `seo.canonicalUrl` is on
+   * the builder branch: a promotion has one home and the route derives it. An
+   * author who typed a canonical for the bare slug — back when that was this
+   * page's URL — must not be able to point search engines at a URL that now 308s
+   * back here.
+   */
+  if (target === "custom") {
+    const base = process.env.NEXT_PUBLIC_SITE_URL;
+    const canonical = `${base}/promotions/${segment}`;
+    const title = customPage.metaTitle || customPage.title;
+    const description = customPage.metaDescription || "";
+    const ogTitle = customPage.ogTitle || title;
+    const ogDesc = customPage.ogDescription || description;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      robots: customPage.noIndex ? { index: false, follow: false } : undefined,
+      openGraph: {
+        title: ogTitle,
+        description: ogDesc,
+        url: canonical,
+        type: customPage.ogType || "website",
+        images: customPage.ogImage ? [{ url: customPage.ogImage }] : [],
+        siteName: "9Expert Training",
+        locale: "th_TH",
+      },
+      twitter: {
+        card: customPage.twitterCard || "summary_large_image",
+        title: ogTitle,
+        description: ogDesc,
+        images: customPage.ogImage ? [customPage.ogImage] : [],
+      },
+    };
+  }
+
   if (!resolved) return {};
 
   const { promotion, config } = resolved;
@@ -111,16 +175,28 @@ export default async function PromotionDetailPage({ params }) {
   const { slug } = await params;
   const segment = String(slug);
 
-  // ── Precedence (Phase 2): builder promotion FIRST, then MSDB html_content,
-  //    then 404. A visible promotion-type builder page renders its authored
-  //    sections; an expired/unpublished one does NOT fall through to MSDB (a
-  //    builder slug won't resolve there) — it 404s, matching what its bare-slug
-  //    render would have done, which the Phase-3 grid relies on. See
-  //    promotionDetailTarget in lib/pageBuilder/promotionMode.js. ──
-  // stripDraft on a PUBLIC read — getPageBuilderPageBySlugAny is shared with
-  // the preview route, which may see a draft, so the guard belongs here.
+  /**
+   * ── Precedence: builder → custom → MSDB html_content → 404 ────────────────
+   * ONE decision, made by `promotionDetailTarget` and NOT re-derived here. It
+   * used to be an inlined `shouldRenderPromotionPage` check in this function and
+   * another in generateMetadata, with the pure function exported and called by
+   * nothing — three sources would have made that three places to keep in step.
+   *
+   * A promotion-type page that is not publicly visible falls THROUGH to the
+   * MSDB resolve and then to 404, matching what its bare-slug render would have
+   * done, which the grid relies on: a visible card always implies a live detail.
+   *
+   * stripDraft on the BUILDER read — getPageBuilderPageBySlugAny is any-status
+   * and shared with the preview route, which may see a draft, so the guard
+   * belongs at this call site. getCustomPageBySlug is published-only and strips
+   * inside the action, so it takes no second strip here.
+   */
   const builderPage = stripDraft(await getPageBuilderPageBySlugAny(segment));
-  if (shouldRenderBuilderPromotion(builderPage)) {
+  const customPage = await getCustomPageBySlug(segment);
+  const resolved = await resolvePromotion(segment);
+  const target = promotionDetailTarget(builderPage, customPage, resolved);
+
+  if (target === "builder") {
     // FULL-BLEED (Phase 3): only the back link sits in a contained strip; the
     // PageBuilderView below runs edge-to-edge so authored heroes / full_width
     // sections can break out of the 1200px column. PageBuilderView manages its
@@ -165,7 +241,38 @@ export default async function PromotionDetailPage({ params }) {
     );
   }
 
-  const resolved = await resolvePromotion(segment);
+  /**
+   * ── The Advanced HTML branch ───────────────────────────────────────────────
+   * CONTAINED, not full-bleed, and that is a property of the view rather than a
+   * choice made here: `CustomPageView` renders its own `mx-auto max-w-[1200px]`
+   * <article> with an H1, so wrapping it in another column would nest two. The
+   * builder branch above runs edge-to-edge only because PageBuilderView manages
+   * its own per-section widths.
+   *
+   * NO BACK LINK, matching the builder branch rather than the MSDB one. The
+   * route-colour surface is the same, three other links to /promotions remain in
+   * the site chrome, and a link this page did not have at its old bare-slug URL
+   * should not appear just because the URL moved.
+   *
+   * The JSON-LD <script> is emitted here for the same reason the catch-all emits
+   * it: `buildPageJsonLd` is the page's own document, it is keyed off the page's
+   * fields, and CustomPageView deliberately renders neither meta nor JSON-LD.
+   */
+  if (target === "custom") {
+    const jsonLdData = buildPageJsonLd(customPage, process.env.NEXT_PUBLIC_SITE_URL);
+    return (
+      <div className="bg-[#F8FAFD] dark:bg-[#0D1B2A]">
+        {jsonLdData && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
+          />
+        )}
+        <CustomPageView page={customPage} />
+      </div>
+    );
+  }
+
   if (!resolved) notFound();
 
   const { promotion } = resolved;

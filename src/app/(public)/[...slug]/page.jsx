@@ -69,7 +69,7 @@ import { buildPageJsonLd } from '@/lib/customPages/buildPageJsonLd';
 import { composeWorkingView, hasUnpublishedDraft } from '@/lib/pages/customPageDraft';
 import { customPagePreviewBanner } from '@/lib/pages/customPagePreview';
 import { isPubliclyVisible } from '@/lib/pageBuilder/visibility';
-import { isPromotionPage } from '@/lib/pageBuilder/promotionMode';
+import { isPromotionPage } from '@/lib/pages/promotionMode';
 import { CustomPageView } from './_components/CustomPageView';
 import {
   getPageBuilderPageBySlugAny,
@@ -125,7 +125,7 @@ function segmentFromSlug(slug) {
  * which is the whole point of the split.
  *
  * `composeWorkingView` is what makes that one line instead of a branch: it takes
- * the draft's values for the thirteen content keys when a draft exists and the
+ * the draft's values for the fourteen content keys when a draft exists and the
  * document's own otherwise, and never carries `.draft` through. A published page
  * with nothing pending therefore previews exactly what the public sees, which is
  * the honest answer rather than an empty page.
@@ -491,7 +491,17 @@ export async function generateMetadata({ params, searchParams }) {
   if (cp) {
     const customPage = cp.page;
     const base = process.env.NEXT_PUBLIC_SITE_URL;
-    const canonical = customPage.canonicalUrl || `${base}/${segment}`;
+    /**
+     * Promotion mode: a promotion page's one home is /promotions/<slug>, so the
+     * canonical points THERE even on this URL, which the render then 308s away.
+     * Mirrors the builder arm above, including that it OVERRIDES an authored
+     * `canonicalUrl` — an author who typed one back when the bare slug was this
+     * page's home must not be able to point search engines at a URL that now
+     * redirects. Non-promotion pages keep canonicalUrl ‖ bare, unchanged.
+     */
+    const canonical = isPromotionPage(customPage)
+      ? `${base}/promotions/${segment}`
+      : (customPage.canonicalUrl || `${base}/${segment}`);
     const title = customPage.metaTitle || customPage.title;
     const description = customPage.metaDescription || '';
     const ogTitle = customPage.ogTitle || title;
@@ -805,6 +815,36 @@ export default async function CatchAllPage({ params, searchParams }) {
   const cp = await resolveCustomPageForRequest(segment, searchParams);
   if (cp) {
     const customPage = cp.page;
+
+    /**
+     * ── Promotion mode: the bare slug is not this page's home any more ───────
+     * A promotion-type CustomPage lives ONLY at /promotions/<slug> — one public
+     * home, no duplicate content. Same rule, same 308, as the builder arm above.
+     * `permanentRedirect` throws, so this is the last thing before the render and
+     * sits outside any try/catch, like the historical-slug redirects below.
+     *
+     * ── GATED ON !cp.isPreview, AND THIS IS THE LOAD-BEARING PART ────────────
+     * THE CUSTOMPAGE PREVIEW *IS* THIS ROUTE. Unlike the builder, which previews
+     * on its own /preview/[slug], an author previews an Advanced HTML page by
+     * hitting this bare slug with `?preview=<token>`. An UNGATED redirect would
+     * carry that request to /promotions/<slug> — a route with no CustomPage
+     * preview handling at all — so it would either 404 the pending draft or
+     * silently serve the PUBLISHED page while the author believed they were
+     * looking at their edits. Either way the preview of every promotion page
+     * would be broken, and broken in a way that looks like it works.
+     *
+     * Nothing is lost by not redirecting there: a preview URL is private, tokened
+     * and already forced to `noIndex` in generateMetadata, so the duplicate-
+     * content reason for the redirect does not apply to it.
+     *
+     * `isPromotionPage` reads the COMPOSED view here, which for a live-only key
+     * is the stored live value — the same one the grid query and the /promotions
+     * route see. pageType is live-only precisely so these three cannot disagree.
+     */
+    if (!cp.isPreview && isPromotionPage(customPage)) {
+      permanentRedirect(`/promotions/${customPage.slug}`);
+    }
+
     const jsonLdData = buildPageJsonLd(customPage, process.env.NEXT_PUBLIC_SITE_URL);
     return (
       <>

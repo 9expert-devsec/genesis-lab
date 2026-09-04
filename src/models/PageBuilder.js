@@ -87,7 +87,7 @@ const PageBuilderSchema = new mongoose.Schema(
     // Promotion mode (Phase 1): pageType === 'promotion' with an EMPTY promotionId
     // is a Genesis-originated (standalone) promotion — it owns its own card + slug;
     // a NON-EMPTY promotionId is the MSDB-anchored detail link. See
-    // lib/pageBuilder/promotionMode.js for the discriminator.
+    // lib/pages/promotionMode.js for the discriminator.
     promotionId: { type: String, default: '', trim: true, index: true },
 
     // Shared sort key for the Phase-3 /promotions grid union, so Genesis promos

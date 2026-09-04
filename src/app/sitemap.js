@@ -60,6 +60,18 @@ export default async function sitemap() {
     const pages = await CustomPage.find({
       status: 'published',
       noIndex: { $ne: true },
+      /**
+       * A PROMOTION page's bare slug 308s to /promotions/<slug>, so listing it
+       * here would publish a list of permanent redirects to crawlers. Excluded
+       * rather than rewritten: /promotions is already a static entry above, and
+       * emitting the new URL from here would put this file in the business of
+       * knowing where another route lives.
+       *
+       * THIS IS A FILTER, NOT A PROJECTION. The `.select()` below stays exactly
+       * two fields, so the note under it — the one that says the projection is
+       * what keeps the draft out — is still true and still the whole guard.
+       */
+      pageType: { $ne: 'promotion' },
     })
       /**
        * THE PROJECTION IS WHAT KEEPS THE DRAFT OUT OF THIS READ — do not widen

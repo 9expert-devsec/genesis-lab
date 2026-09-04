@@ -10,7 +10,10 @@ import { dbConnect } from '@/lib/db/connect';
 import Promotion from '@/models/Promotion';
 import PromotionConfig from '@/models/PromotionConfig';
 import PageBuilder from '@/models/PageBuilder';
-import { selectVisiblePromotionPages } from '@/lib/pageBuilder/promotionMode';
+// The second Genesis-owned page type. ADDED beside the statements above rather
+// than folded into any — the standing rule in this repo.
+import CustomPage from '@/models/CustomPage';
+import { selectVisiblePromotionPages } from '@/lib/pages/promotionMode';
 
 function serialize(value) {
   if (value == null) return value;
@@ -39,7 +42,7 @@ export async function getActivePromotions() {
  * with the shared `isPubliclyVisible` (the date-window part can't be expressed in
  * the Mongo query alone — same pattern as resolveBuilderPageForRequest) and sorts
  * by promotionOrder. Returns raw pages; the grid maps them via
- * builderPromotionToCard.
+ * promotionPageToCard.
  */
 export async function getActiveBuilderPromotions() {
   await dbConnect();
@@ -57,8 +60,52 @@ export async function getActiveBuilderPromotions() {
     //   pageType                                    -> isPromotionPage
     //   status, publishStartDate, publishEndDate    -> isPubliclyVisible
     //   promotionOrder, createdAt                   -> the sort
-    //   _id, slug, title, promotionCover            -> builderPromotionToCard
+    //   _id, slug, title, promotionCover            -> promotionPageToCard
     .select('slug title pageType status promotionOrder promotionCover publishStartDate publishEndDate createdAt')
+    .lean();
+  return serialize(selectVisiblePromotionPages(docs));
+}
+
+/**
+ * Advanced HTML (CustomPage) promotions for the public /promotions grid. The
+ * EXACT MIRROR of getActiveBuilderPromotions above — same prefilter, same JS
+ * gate through the shared predicate, same sort, same projection discipline — so
+ * the two halves of the Genesis block cannot be selected by two different rules.
+ *
+ * Read-only. NEVER touches the `promotions` collection.
+ *
+ * ── THE STATUS PREFILTER IS SHORTER, AND THAT IS THE MODEL'S DOING ────────
+ * `CustomPage.status` is `enum: ['draft','published']` — there is no
+ * `scheduled`, and no publishStartDate/publishEndDate either. So the query asks
+ * for `published` alone, and `isPubliclyVisible` inside
+ * selectVisiblePromotionPages reduces to exactly that for these documents (both
+ * date windows read as null). The gate is not redundant: it is the SAME gate the
+ * builder half runs, which is what keeps one rule over both collections.
+ *
+ * ── SAFE BY PROJECTION, NOT BY stripDraft ────────────────────────────────
+ * There is deliberately no stripDraft() below. `draft` holds the whole content
+ * surface — body included, and since promotion mode the unpublished
+ * promotionCover too — and this read is safe because it asks for exactly the
+ * fields the pipeline reads and no others. Widen the select and you are one
+ * careless field away from putting an unpublished cover on the live grid.
+ *
+ * The list is exactly what the pipeline below reads, and nothing else:
+ *   pageType, status                            -> isPromotionPage / isPubliclyVisible
+ *   promotionOrder, createdAt                   -> the sort
+ *   _id, slug, title, promotionCover            -> promotionPageToCard
+ *
+ * This read is registered in test/fs/draftVisibilityWiring's CUSTOM_PAGE_READS
+ * sweep, which enumerates BOTH this module and lib/actions/customPages.js — an
+ * unregistered CustomPage read is the projection-safe-by-luck failure that sweep
+ * exists to catch, and living in a different file is not an exemption from it.
+ */
+export async function getActiveCustomPagePromotions() {
+  await dbConnect();
+  const docs = await CustomPage.find({
+    pageType: 'promotion',
+    status: 'published',
+  })
+    .select('slug title pageType status promotionOrder promotionCover createdAt')
     .lean();
   return serialize(selectVisiblePromotionPages(docs));
 }

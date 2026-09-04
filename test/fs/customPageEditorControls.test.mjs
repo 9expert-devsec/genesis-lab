@@ -99,7 +99,7 @@ test('hasDraft is read from the STORED document, never the composed view', () =>
 
 test('every server-managed field is read from the STORED document', () => {
   /**
-   * The composed view carries the thirteen content keys plus slug/status/
+   * The composed view carries the fourteen content keys plus slug/status/
    * slugHistory — and NOTHING else. `_id`, `previewToken` and `createdAt` are
    * not in it, so reading them off `page` is silently undefined: a broken
    * preview-link section and actions called with an undefined id.
@@ -244,4 +244,135 @@ test('the list’s stale comment is gone — it claimed CustomPage has no draft'
     'the list still claims its advanced_html branch is untouched, which is now false');
   assert.match(raw, /BECAUSE CustomPage NOW HAS A DRAFT/,
     'nothing in the list explains why the two directions take different paths');
+});
+
+// ── promotion mode: the four controls, and the two that are shared ──────────
+
+const BODY = 'src/app/admin/pages/_components/CustomPageSettingsBody.jsx';
+const SHELL = 'src/components/admin/pageSettings/SettingsShell.jsx';
+const BUILDER_DIALOG = 'src/components/pageBuilder/editor/PageSettingsDialog.jsx';
+
+test('ชนิดหน้า offers CUSTOM_PAGE_TYPES, never the builder’s eight', () => {
+  const { code, withImports } = readSource(BODY);
+  assert.match(withImports, /import \{ CUSTOM_PAGE_TYPES \} from '@\/lib\/schemas\/customPage'/,
+    'the dialog does not import the Advanced HTML type list');
+  assert.doesNotMatch(withImports,
+    /import \{[^}]*\bPAGE_TYPES\b[^}]*\} from '@\/lib\/schemas\/pageBuilder'/,
+    'the dialog imports the BUILDER’s eight-value list — six of them are storable '
+    + 'values nothing reads on a CustomPage');
+  assert.match(code, /CUSTOM_PAGE_TYPES\.map\(/,
+    'the select does not map over CUSTOM_PAGE_TYPES');
+});
+
+test('CONTROL: that probe would CATCH the builder list being used here', () => {
+  const planted = "import { PAGE_TYPES } from '@/lib/schemas/pageBuilder';\nPAGE_TYPES.map((t) => t)";
+  assert.match(planted, /import \{[^}]*\bPAGE_TYPES\b[^}]*\} from '@\/lib\/schemas\/pageBuilder'/,
+    'the probe cannot see the builder import even when it is plainly there');
+  assert.equal(/CUSTOM_PAGE_TYPES\.map\(/.test(planted), false,
+    'the map probe matches source that does not contain it');
+});
+
+test('the promotion fields are GATED on the type, not always rendered', () => {
+  const { code } = readSource(BODY);
+  // The gate and the fields in ONE expression, so an ungated block cannot pass.
+  assert.match(code, /pageType === 'promotion' && \([\s\S]{0,1600}?ลำดับในหน้าโปรโมชัน/,
+    'ลำดับในหน้าโปรโมชัน is missing, or renders on every page type');
+  assert.match(code, /pageType === 'promotion' && \([\s\S]{0,1600}?<PromoCoverField/,
+    'the cover field is missing, or renders on every page type');
+});
+
+test('CONTROL: the gate probe rejects an UNGATED promotion block', () => {
+  const ungated = '<Field label="ลำดับในหน้าโปรโมชัน"><TextInput /></Field>';
+  assert.equal(
+    /pageType === 'promotion' && \([\s\S]{0,1600}?ลำดับในหน้าโปรโมชัน/.test(ungated), false,
+    'the probe accepts a promotion field that always renders');
+});
+
+test('the labels and the uploader are the SHARED ones — not a second copy', () => {
+  /**
+   * The uploader carries a load-bearing, invisible decision: it discards the
+   * endpoint's publicId, because storing an ownership token would wake the
+   * Cloudinary GC before it is ready. A second copy that "helpfully" kept the
+   * token would hand the GC an asset it cannot own, and nothing would report
+   * the divergence. So the count of DEFINITIONS is asserted, not just the use.
+   */
+  const shell = readSource(SHELL);
+  assert.match(shell.code, /export function PromoCoverField\(/,
+    'the shared shell does not define the uploader');
+  assert.match(shell.code, /export const PAGE_TYPE_LABELS = \{/,
+    'the shared shell does not define the labels');
+
+  for (const rel of [BODY, BUILDER_DIALOG]) {
+    const { code, withImports } = readSource(rel);
+    assert.equal(/function PromoCoverField\(/.test(code), false,
+      `${rel} defines its OWN uploader — the publicId decision now lives in two places`);
+    assert.equal(/const PAGE_TYPE_LABELS = \{/.test(code), false,
+      `${rel} defines its OWN label map — renaming a Thai label would rename it in one dialog`);
+    assert.match(withImports,
+      /import \{[\s\S]*?PAGE_TYPE_LABELS[\s\S]*?PromoCoverField[\s\S]*?\} from '@\/components\/admin\/pageSettings\/SettingsShell'/,
+      `${rel} does not import both from the shared shell`);
+  }
+});
+
+test('CONTROL: the duplicate-definition probe DOES fire on a second copy', () => {
+  const planted = 'function PromoCoverField({ value, onChange }) { return null; }';
+  assert.equal(/function PromoCoverField\(/.test(planted), true,
+    'the probe cannot see a locally defined uploader, so the assertion above is vacuous');
+});
+
+test('ธีม is still absent, and the file says why rather than staying silent', () => {
+  /**
+   * The premise that kept BOTH controls out — "CustomPage has NEITHER field" —
+   * became half false when pageType landed. Amending it would have left a note
+   * that reads as an oversight; it was rewritten. This pins the half that is
+   * still true, and pins that the reason travels with it.
+   */
+  const { code, raw } = readSource(BODY);
+  assert.equal(raw.includes('CustomPage` has NEITHER field'), false,
+    'the stale premise is still in the file — pageType exists now, and the note guards '
+    + 'a decision the next reader will otherwise re-litigate or reverse');
+  assert.equal(/PAGE_THEMES/.test(code), false,
+    'a ธีม control shipped — CustomPageView reads no theme, so it would be wired to nothing');
+  assert.match(raw, /CustomPageView` reads no theme/,
+    'nothing explains why ธีม is absent while ชนิดหน้า is present');
+});
+
+test('the author is told the two timings, and the warning is gated on a LIVE page', () => {
+  /**
+   * One button, two destinations: pageType and promotionOrder are live-only and
+   * apply on บันทึกฉบับร่าง, while the cover drafts. An author who is not told
+   * discovers it by watching a published URL start redirecting.
+   */
+  const { code } = readSource(BODY);
+  assert.match(code, /isEdit && status === 'published' && \([\s\S]{0,700}?ชนิดหน้าและลำดับมีผลทันทีที่กดบันทึกฉบับร่าง/,
+    'the live-effect warning is missing, or is not gated on an already-published page');
+  assert.match(code, /ภาพปกโปรโมชัน” จะยังไม่เปลี่ยนบนหน้าจริงจนกว่าจะกดเผยแพร่/,
+    'the warning does not say the cover behaves differently from the other two');
+});
+
+test('CONTROL: the warning probe rejects an UNGATED warning', () => {
+  const ungated = '<Warn>ชนิดหน้าและลำดับมีผลทันทีที่กดบันทึกฉบับร่าง</Warn>';
+  assert.equal(
+    /isEdit && status === 'published' && \([\s\S]{0,700}?ชนิดหน้าและลำดับมีผลทันทีที่กดบันทึกฉบับร่าง/.test(ungated),
+    false, 'the probe accepts a warning shown on a page that was never published');
+});
+
+test('the form posts all three fields and threads them into the dialog', () => {
+  const { code } = form();
+  for (const f of ['pageType', 'promotionOrder', 'promotionCover']) {
+    assert.match(code, new RegExp(`fd\\.set\\('${f}',`),
+      `${f} is never posted — the control edits state the server never receives`);
+  }
+  // …and the state is seeded from the COMPOSED view, like every other field.
+  assert.match(code, /useState\(page\?\.pageType \?\? 'general'\)/);
+  assert.match(code, /useState\(page\?\.promotionCover \?\? ''\)/);
+  assert.match(code, /promotionCover, setPromotionCover,/,
+    'the cover is not handed to the settings dialog');
+});
+
+test('CONTROL: the post probe would notice a missing field', () => {
+  const planted = "fd.set('pageType', pageType);";
+  assert.match(planted, /fd\.set\('pageType',/);
+  assert.equal(/fd\.set\('promotionCover',/.test(planted), false,
+    'the probe reports a field as posted when it is not');
 });

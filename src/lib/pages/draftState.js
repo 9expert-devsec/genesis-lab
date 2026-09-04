@@ -12,7 +12,7 @@
  *
  * ── WHY IT IS COLLECTION-NEUTRAL ───────────────────────────────────────────
  * Two collections now need these semantics: PageBuilder (nine content keys) and
- * CustomPage (thirteen). The semantics are IDENTICAL and only the key list
+ * CustomPage (fourteen). The semantics are IDENTICAL and only the key list
  * differs, so the key list became a parameter and everything else moved
  * unchanged. The alternative — a second module with the same four functions —
  * would have duplicated four pieces of reasoning that were expensive to get
